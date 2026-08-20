@@ -27,12 +27,12 @@
 //! NOTE: `diag!` is reached by textual macro scope (the parent defines it before
 //! the `mod settings_local_ai;` declaration); only the crate-root items are
 //! imported explicitly below (`active_stack_label` stays in `overlay_host.rs`).
-use super::{SettingsWindow, SharedString};
 #[cfg(windows)]
 use super::{
     active_stack_label, refresh_local_model_resource_warning, ComponentHandle, ModelRc,
     OverlayBarWindow, VecModel,
 };
+use super::{SettingsWindow, SharedString};
 
 pub(crate) fn refresh_local_context_controls(
     win: &SettingsWindow,

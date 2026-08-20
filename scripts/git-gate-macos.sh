@@ -40,6 +40,7 @@ for test in \
   macos_text_ask_guard \
   macos_tile_manager_guard \
   macos_ui_callbacks_guard \
+  mlx_lifecycle_guard \
   native_lifecycle_guard \
   native_macos_status_guard \
   native_macos_window_guard \
@@ -54,6 +55,11 @@ for test in \
 do
   cargo test --locked --test "$test" --manifest-path slint-experiment/Cargo.toml
 done
+
+echo "=== macOS MLX sidecar (locked) ==="
+test -f suflyor-mlx/Package.resolved
+swift test --package-path suflyor-mlx --disable-automatic-resolution
+swift build --package-path suflyor-mlx -c release --disable-automatic-resolution
 
 echo "=== macOS TTS sidecar ==="
 cargo fmt --manifest-path suflyor-tts/Cargo.toml --all -- --check

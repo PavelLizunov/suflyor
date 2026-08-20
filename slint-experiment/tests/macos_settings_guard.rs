@@ -67,13 +67,16 @@ fn macos_provider_catalogs_and_components_keep_platform_indices_honest() {
     let vision = read("src/bin/overlay_host/settings_vision.rs");
     let ui = read("ui/settings_panel.slint");
 
-    assert!(ai.contains("4 if !cfg!(target_os = \"macos\") => \"codex\""));
+    assert!(ai.contains("cfg!(target_os = \"macos\") && idx == 4"));
+    assert!(ai.contains("4 => \"codex\""));
     assert!(ai.contains("provider == \"local\" && !cfg!(target_os = \"macos\")"));
     assert!(vision.contains("\"codex\" if !cfg!(target_os = \"macos\") => 6"));
     assert!(vision.contains("\"codex\" => -1"));
     assert!(stt.contains("\"gigaam\" => 1"));
+    assert!(vision.contains("\"mlx\" if cfg!(target_os = \"macos\") => 6"));
     assert!(settings.contains("(\"codex\", true) => -1"));
-    assert!(vision.contains("6 if !cfg!(target_os = \"macos\") => \"codex\""));
+    assert!(vision.contains("cfg!(target_os = \"macos\") && idx == 6"));
+    assert!(vision.contains("6 => \"codex\""));
     assert!(settings.contains("ComponentKind::Engine | ComponentKind::LocalModel"));
     assert!(settings.contains("if cfg!(target_os = \"macos\") { 1 } else { 3 }"));
     assert!(settings.contains("c.detail = \"Apple Vision\".into()"));
@@ -111,4 +114,28 @@ fn macos_gigaam_is_coreml_backed_and_primary_on_fresh_config() {
     assert!(stt.contains("transcribe_rs::OrtAccelerator::CoreMl"));
     assert!(config.contains("if cfg!(target_os = \"macos\") {\n        \"gigaam\".into()"));
     assert!(config.contains("gigaam_default_dir(&crate::local_ai::default_root())"));
+}
+
+#[test]
+fn macos_mlx_models_are_opt_in_downloads_with_honest_state() {
+    let settings = read("src/bin/overlay_host/settings_controller.rs");
+    let mlx = read("src/bin/overlay_host/settings_mlx.rs");
+    let ui = read("ui/settings_panel.slint");
+
+    assert!(settings.contains("include!(\"settings_mlx.rs\")"));
+    assert!(settings.contains("settings_mlx::wire(&win, cfg);"));
+    assert!(settings.contains("settings_mlx::populate(win);"));
+    assert!(mlx.contains("overlay_backend::mlx_install::install("));
+    assert!(mlx.contains("super::super::activate_mlx_model(role.model())"));
+    assert!(mlx.contains("cancel.store(true, Ordering::Release)"));
+    assert!(ui.contains("@tr(\"Managed MLX text model\")"));
+    assert!(ui.contains("@tr(\"Managed MLX Vision model\")"));
+    assert!(ui.contains("@tr(\"Download / Resume\")"));
+    assert!(ui.contains("@tr(\"Enable for text\")"));
+    assert!(ui.contains("@tr(\"Enable for Vision\")"));
+    assert!(ui.contains("4,851,993,338 bytes (4.52 GiB)"));
+    assert!(ui.contains("1,749,079,691 bytes (1.63 GiB)"));
+    assert!(ui.contains("Russian response quality is not guaranteed"));
+    assert!(ui.contains("One managed MLX model stays active at a time"));
+    assert!(!mlx.contains("install(role.model(), &cancel, &|_, _| {})"));
 }

@@ -417,6 +417,30 @@ export component SettingsWindow inherits Window {
     in-out property <bool> ai-prompt-cache: false;
     // Local AI provider (Phase 1): 0 = cloud bridge, 1 = local (Ollama/llama.cpp).
     in-out property <int> ai-provider-index: 0;
+    in-out property <bool> mlx-text-busy: false;
+    in-out property <bool> mlx-text-checking: false;
+    in-out property <bool> mlx-text-installed: false;
+    in-out property <bool> mlx-text-active: false;
+    in-out property <bool> mlx-text-failed: false;
+    in-out property <bool> mlx-text-cancelled: false;
+    in-out property <float> mlx-text-progress: 0.0;
+    in-out property <string> mlx-text-done: "0";
+    in-out property <string> mlx-text-total: "4851993338";
+    callback mlx-text-download();
+    callback mlx-text-cancel();
+    callback mlx-text-enable();
+    in-out property <bool> mlx-vision-busy: false;
+    in-out property <bool> mlx-vision-checking: false;
+    in-out property <bool> mlx-vision-installed: false;
+    in-out property <bool> mlx-vision-active: false;
+    in-out property <bool> mlx-vision-failed: false;
+    in-out property <bool> mlx-vision-cancelled: false;
+    in-out property <float> mlx-vision-progress: 0.0;
+    in-out property <string> mlx-vision-done: "0";
+    in-out property <string> mlx-vision-total: "1749079691";
+    callback mlx-vision-download();
+    callback mlx-vision-cancel();
+    callback mlx-vision-enable();
     // V4 — vision (screenshot · F8) channel, resolved separately from the text model.
     in-out property <int> vision-provider-index: 3; // 0=off, 1=same, then the text-provider catalog
     in-out property <bool> vision-same-available: false;
@@ -2221,6 +2245,7 @@ export component SettingsWindow inherits Window {
                                 @tr("Local OpenAI-compatible"),
                                 @tr("OpenAI API (Responses)"),
                                 @tr("Anthropic API (Messages)"),
+                                @tr("Managed MLX (Apple silicon)"),
                             ] : [
                                 @tr("Custom OpenAI-compatible bridge"),
                                 @tr("Local OpenAI-compatible"),
@@ -2239,6 +2264,76 @@ export component SettingsWindow inherits Window {
                             font-size: 10px;
                             color: Theme.warning;
                             wrap: word-wrap;
+                        }
+                        if Platform.is-macos : SettingsCard {
+                            title: @tr("Managed MLX text model");
+                            Text {
+                                text: @tr("MLX runs locally on Apple-silicon Macs only. Models are downloaded only when you ask.");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            SettingsComboBox {
+                                model: [@tr("LFM2.5-8B-A1B MLX 4-bit")];
+                                current-index: 0;
+                            }
+                            Text {
+                                text: @tr("Download size: 4,851,993,338 bytes (4.52 GiB).");
+                                font-size: 10px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: @tr("[!] LFM Open License v1.0 has commercial-use conditions. Review the license before commercial use. Russian response quality is not guaranteed.");
+                                font-size: 10px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: root.mlx-text-checking ? @tr("Checking installation…")
+                                    : root.mlx-text-busy ? @tr("Downloading and verifying…")
+                                    : root.mlx-text-active ? @tr("Active")
+                                    : root.mlx-text-installed ? @tr("Installed")
+                                    : root.mlx-text-failed ? @tr("Download or activation failed. Retry when ready.")
+                                    : root.mlx-text-cancelled ? @tr("Download cancelled. Resume keeps verified files.")
+                                    : @tr("Not installed");
+                                font-size: 11px;
+                                color: root.mlx-text-failed ? Theme.danger : (root.mlx-text-active ? Theme.success : Theme.text-secondary);
+                                wrap: word-wrap;
+                            }
+                            if root.mlx-text-busy : Text {
+                                text: @tr("{} / {} downloaded bytes", root.mlx-text-done, root.mlx-text-total);
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                            }
+                            if root.mlx-text-busy : Rectangle {
+                                height: 6px;
+                                border-radius: 3px;
+                                background: Theme.border;
+                                Rectangle {
+                                    height: parent.height;
+                                    width: parent.width * root.mlx-text-progress;
+                                    border-radius: 3px;
+                                    background: Theme.accent;
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: @tr("Download / Resume");
+                                    enabled: !root.mlx-text-checking && !root.mlx-text-busy && !root.mlx-vision-busy && !root.mlx-text-installed;
+                                    clicked => { root.mlx-text-download(); }
+                                }
+                                if root.mlx-text-busy : Button {
+                                    text: @tr("Cancel");
+                                    clicked => { root.mlx-text-cancel(); }
+                                }
+                                Button {
+                                    text: @tr("Enable for text");
+                                    enabled: root.mlx-text-installed && !root.mlx-text-checking && !root.mlx-text-busy && !root.mlx-text-active;
+                                    clicked => { root.mlx-text-enable(); }
+                                }
+                            }
                         }
                         Rectangle { background: Theme.border; height: 1px; }
 
@@ -3123,6 +3218,7 @@ export component SettingsWindow inherits Window {
                                 @tr("Local OpenAI-compatible"),
                                 @tr("OpenAI API (Responses)"),
                                 @tr("Anthropic API (Messages)"),
+                                @tr("Managed MLX (Apple silicon)"),
                             ] : [
                                 @tr("Off"),
                                 root.vision-same-available
@@ -3145,6 +3241,76 @@ export component SettingsWindow inherits Window {
                             font-size: 10px;
                             color: Theme.warning;
                             wrap: word-wrap;
+                        }
+                        if Platform.is-macos : SettingsCard {
+                            title: @tr("Managed MLX Vision model");
+                            Text {
+                                text: @tr("Separate image-capable model for screenshots. MLX runs locally on Apple-silicon Macs only.");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            SettingsComboBox {
+                                model: [@tr("Qwen3.5-2B MLX 4-bit (Vision)")];
+                                current-index: 0;
+                            }
+                            Text {
+                                text: @tr("Download size: 1,749,079,691 bytes (1.63 GiB). Supports image input. License: Apache-2.0.");
+                                font-size: 10px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: @tr("One managed MLX model stays active at a time. The app switches between the selected text and Vision models when a request needs the other one.");
+                                font-size: 10px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: root.mlx-vision-checking ? @tr("Checking installation…")
+                                    : root.mlx-vision-busy ? @tr("Downloading and verifying…")
+                                    : root.mlx-vision-active ? @tr("Active")
+                                    : root.mlx-vision-installed ? @tr("Installed")
+                                    : root.mlx-vision-failed ? @tr("Download or activation failed. Retry when ready.")
+                                    : root.mlx-vision-cancelled ? @tr("Download cancelled. Resume keeps verified files.")
+                                    : @tr("Not installed");
+                                font-size: 11px;
+                                color: root.mlx-vision-failed ? Theme.danger : (root.mlx-vision-active ? Theme.success : Theme.text-secondary);
+                                wrap: word-wrap;
+                            }
+                            if root.mlx-vision-busy : Text {
+                                text: @tr("{} / {} downloaded bytes", root.mlx-vision-done, root.mlx-vision-total);
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                            }
+                            if root.mlx-vision-busy : Rectangle {
+                                height: 6px;
+                                border-radius: 3px;
+                                background: Theme.border;
+                                Rectangle {
+                                    height: parent.height;
+                                    width: parent.width * root.mlx-vision-progress;
+                                    border-radius: 3px;
+                                    background: Theme.accent;
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: @tr("Download / Resume");
+                                    enabled: !root.mlx-vision-checking && !root.mlx-vision-busy && !root.mlx-text-busy && !root.mlx-vision-installed;
+                                    clicked => { root.mlx-vision-download(); }
+                                }
+                                if root.mlx-vision-busy : Button {
+                                    text: @tr("Cancel");
+                                    clicked => { root.mlx-vision-cancel(); }
+                                }
+                                Button {
+                                    text: @tr("Enable for Vision");
+                                    enabled: root.mlx-vision-installed && !root.mlx-vision-checking && !root.mlx-vision-busy && !root.mlx-vision-active;
+                                    clicked => { root.mlx-vision-enable(); }
+                                }
+                            }
                         }
                         if !root.vision-same-available : Text {
                             text: @tr("Same as text model is unavailable because the selected text model does not declare image input. Choose another Vision provider or model.");

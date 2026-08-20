@@ -9,12 +9,13 @@
 //! NOTE (§7): the crate-root symbols this module uses are imported below.
 use super::{
     ai, apply_tile_hwnd_with_monitor, audio, classify_ai_error, fire_followup_ask, fire_regenerate,
-    grab_hwnd, journal, live_route, markdown, present_tile_window, refresh_open_tiles, stt,
-    toggle_tile_maximize, warn_if_over_cost_cap, wire_copy, wire_escalate, wire_speak,
-    wire_tile_drag, wire_voice_followup, Arc, AskRoute, AtomicBool, ComponentHandle, Duration,
-    MarkdownBlock, ModelRc, Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink,
-    RuntimeEvents, SharedSlintRuntime, SharedString, TileWindow, TileWindows, VecModel,
-    AI_STREAM_MAX_TOKENS, CONVO_SEQ, TILE_DISPLAY_SEQ,
+    grab_hwnd, journal, live_route, markdown, present_tile_window, refresh_open_tiles,
+    resolve_route_endpoint, route_needs_mlx, show_mlx_runtime_error, stt, toggle_tile_maximize,
+    warn_if_over_cost_cap, wire_copy, wire_escalate, wire_speak, wire_tile_drag,
+    wire_voice_followup, Arc, AskRoute, AtomicBool, ComponentHandle, Duration, MarkdownBlock,
+    ModelRc, Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink, RuntimeEvents,
+    SharedSlintRuntime, SharedString, TileWindow, TileWindows, VecModel, AI_STREAM_MAX_TOKENS,
+    CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
 /// Phase E6 v42 — hard cap on a push-to-record hold (30 s). Backstop for a
 /// lost pointer-up (alt-tab / focus loss mid-hold): without it the record
@@ -257,28 +258,13 @@ pub(crate) fn fire_ptt_ask(
     // slot. No supersede, no abort — rapid PTTs no longer clobber each other.
 
     // ===== 3. Snapshot config + rolling transcript (context) =====
-    let (
-        protocol,
-        base_url,
-        bearer,
-        model,
-        reasoning_effort,
-        meeting_context,
-        response_language,
-        is_local,
-    ) = {
+    let (meeting_context, response_language, endpoint_hint, needs_mlx) = {
         let c = cfg.read();
-        let ep = c.ai_endpoint(false);
-        let is_unmetered = ep.is_unmetered();
         (
-            ep.protocol,
-            ep.base_url,
-            ep.bearer,
-            ep.model,
-            ep.reasoning_effort,
             c.meeting_context.clone(),
             c.response_language.clone(),
-            is_unmetered,
+            c.ai_endpoint(false),
+            route_needs_mlx(AskRoute::Text, &c),
         )
     };
     let (stt_backend, stt_is_local, groq_key, stt_language, trigger_keywords) = {
@@ -302,17 +288,6 @@ pub(crate) fn fire_ptt_ask(
         let s = slint_replay::runtime_state::lock(slint_rt);
         (s.journal.clone(), s.health.clone())
     };
-
-    // ===== 4. Cost closure (NO abort — PTT streams run independently, so a
-    // second PTT must not cancel the first's in-flight answer) =====
-    let rt_for_cost = slint_rt.clone();
-    let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
-        // Local inference is free — don't bill it (and don't trip the cap).
-        let micro = if is_local { 0 } else { micro };
-        let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
-        s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-        overlay_backend::ai::microcents_to_usd(s.session_cost_microcents)
-    });
 
     // ===== 5. Spawn transcribe → ask (detached: never stored in ai_task, so a
     // later F9/PTT/followup can't abort it) =====
@@ -368,6 +343,28 @@ pub(crate) fn fire_ptt_ask(
                 return;
             }
         };
+        let endpoint = if needs_mlx {
+            let cfg_for_resolve = cfg_for_task.clone();
+            match tokio::task::spawn_blocking(move || {
+                resolve_route_endpoint(AskRoute::Text, &cfg_for_resolve)
+            })
+            .await
+            {
+                Ok(Ok(endpoint)) => endpoint,
+                Ok(Err(())) | Err(_) => {
+                    show_mlx_runtime_error(weak_for_title.clone(), ui_is_ru);
+                    return;
+                }
+            }
+        } else {
+            endpoint_hint
+        };
+        let protocol = endpoint.protocol;
+        let base_url = endpoint.base_url;
+        let bearer = endpoint.bearer;
+        let model = endpoint.model;
+        let reasoning_effort = endpoint.reasoning_effort;
+        let is_local = endpoint.is_unmetered();
         // Reflect the recognised question in the tile chrome.
         {
             let q = question.clone();
@@ -446,6 +443,14 @@ pub(crate) fn fire_ptt_ask(
             is_local,
             "ptt_ask",
         );
+        // PTT streams are independent, so each owns its own cost closure.
+        let rt_for_cost = slint_rt_for_task.clone();
+        let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
+            let micro = if is_local { 0 } else { micro };
+            let mut state = slint_replay::runtime_state::lock(&rt_for_cost);
+            state.session_cost_microcents = state.session_cost_microcents.saturating_add(micro);
+            overlay_backend::ai::microcents_to_usd(state.session_cost_microcents)
+        });
         let t0 = std::time::Instant::now();
         let ai_rx = ai::stream_chat_endpoint(
             ai::AiEndpoint {

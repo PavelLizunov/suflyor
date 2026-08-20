@@ -32,6 +32,7 @@ pub(crate) fn vision_provider_index_from_id(provider: &str) -> i32 {
         "anthropic" => 5,
         "codex" if !cfg!(target_os = "macos") => 6,
         "codex" => -1,
+        "mlx" if cfg!(target_os = "macos") => 6,
         _ => 0,
     }
 }
@@ -50,6 +51,15 @@ pub(crate) fn wire_vision_settings(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_vision_provider_changed(move |idx| {
+            // Selecting the catalog entry does not start or route to MLX. The
+            // explicit Vision enable button owns that state change.
+            if cfg!(target_os = "macos") && idx == 6 {
+                if let Some(window) = weak.upgrade() {
+                    let current = cfg_c.read().vision_provider.clone();
+                    window.set_vision_provider_index(vision_provider_index_from_id(&current));
+                }
+                return;
+            }
             if idx == 1 {
                 let Some(window) = weak.upgrade() else {
                     return;
@@ -67,9 +77,25 @@ pub(crate) fn wire_vision_settings(
                 3 => "local",
                 4 => "openai",
                 5 => "anthropic",
-                6 if !cfg!(target_os = "macos") => "codex",
+                6 => "codex",
                 _ => "off",
             };
+            let (leaving_mlx, text_uses_mlx) = {
+                let current = cfg_c.read();
+                (
+                    current.vision_provider == "mlx" && provider != "mlx",
+                    current.ai_provider == "mlx",
+                )
+            };
+            if leaving_mlx
+                && !text_uses_mlx
+                && !overlay_backend::mlx_runtime::stop_if_idle()
+            {
+                if let Some(window) = weak.upgrade() {
+                    window.set_vision_provider_index(6);
+                }
+                return;
+            }
             let saved_provider = {
                 let mut c = cfg_c.write();
                 c.vision_provider = provider.to_string();

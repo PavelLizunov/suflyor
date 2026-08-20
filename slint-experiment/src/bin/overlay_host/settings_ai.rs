@@ -743,13 +743,40 @@ pub(crate) fn wire_ai_settings(
         let weak = win.as_weak();
         let overlay = overlay_weak.clone();
         win.on_ai_provider_changed(move |idx| {
+            // Selecting the catalog entry only reveals it; activation stays
+            // behind the explicit "Enable for text" action.
+            if cfg!(target_os = "macos") && idx == 4 {
+                if let Some(window) = weak.upgrade() {
+                    let current = cfg_c.read().ai_provider.clone();
+                    window.set_ai_provider_index(
+                        super::settings_controller::ai_provider_index(&current, true),
+                    );
+                }
+                return;
+            }
             let provider = match idx {
                 1 => "local",
                 2 => "openai",
                 3 => "anthropic",
-                4 if !cfg!(target_os = "macos") => "codex",
+                4 => "codex",
                 _ => "cloud",
             };
+            let (leaving_mlx, vision_uses_mlx) = {
+                let current = cfg_c.read();
+                (
+                    current.ai_provider == "mlx" && provider != "mlx",
+                    current.vision_provider == "mlx",
+                )
+            };
+            if leaving_mlx
+                && !vision_uses_mlx
+                && !overlay_backend::mlx_runtime::stop_if_idle()
+            {
+                if let Some(window) = weak.upgrade() {
+                    window.set_ai_provider_index(4);
+                }
+                return;
+            }
             let mut c = cfg_c.write();
             if provider == "local" && !cfg!(target_os = "macos") {
                 overlay_backend::local_ai::select_local_provider(

@@ -108,10 +108,13 @@ fn script_builds_and_ad_hoc_signs_the_app() {
         "cargo build --locked --release --bin overlay-host",
         "cargo build --locked --release --manifest-path \"$crate_root/../suflyor-tts/Cargo.toml\"",
         "cargo build --locked --release --manifest-path \"$crate_root/../suflyor-teratts/Cargo.toml\"",
+        "swift build --package-path \"$mlx_root\" -c release --disable-automatic-resolution",
+        "mlx_root=\"$crate_root/../suflyor-mlx\"",
+        "if [[ ! -f \"$mlx_root/Package.resolved\" ]]",
         "--manifest-path \"$crate_root/Cargo.toml\"",
         "sidecar_binary=\"$target_dir/release/suflyor-tts\"",
         "tera_binary=\"$target_dir/release/suflyor-teratts\"",
-        "for executable in \"$binary\" \"$sidecar_binary\" \"$tera_binary\"",
+        "for executable in \"$binary\" \"$sidecar_binary\" \"$tera_binary\" \"$mlx_binary\"",
         "[[ ! -x \"$executable\" ]]",
         "plutil -lint \"$crate_root/macos/Info.plist\"",
         "plutil -lint \"$crate_root/macos/entitlements.plist\"",
@@ -121,11 +124,22 @@ fn script_builds_and_ad_hoc_signs_the_app() {
         "install -m 755 \"$binary\" \"$macos_dir/overlay-host\"",
         "install -m 755 \"$sidecar_binary\" \"$macos_dir/suflyor-tts\"",
         "install -m 755 \"$tera_binary\" \"$macos_dir/suflyor-teratts\"",
+        "install -m 755 \"$mlx_binary\" \"$macos_dir/suflyor-mlx\"",
+        "install_name_tool -add_rpath '@executable_path/../Frameworks'",
+        "xcrun swift-stdlib-tool --copy --platform macosx",
+        "find \"$mlx_bin_dir\" -maxdepth 1 -type d -name '*.bundle'",
+        "otool -L \"$macos_dir/suflyor-mlx\"",
+        "verify_bundle_dependency",
+        "unresolved bundled dependency",
+        "lipo -archs \"$mlx_binary\"",
         "[[ ! -s \"$resources_dir/AppIcon.icns\" ]]",
         "--entitlements \"$crate_root/macos/entitlements.plist\"",
         "codesign --verify --strict --verbose=2 \"$macos_dir/suflyor-tts\"",
         "codesign --verify --strict --verbose=2 \"$macos_dir/suflyor-teratts\"",
+        "codesign --verify --strict --verbose=2 \"$macos_dir/suflyor-mlx\"",
         "codesign --verify --deep --strict --verbose=2 \"$app_dir\"",
+        "if \"$macos_dir/suflyor-mlx\" </dev/null >/dev/null 2>&1",
+        "suflyor-mlx packaged launch smoke failed",
     ] {
         assert!(SCRIPT.contains(required), "missing script step: {required}");
     }
@@ -145,13 +159,16 @@ fn script_builds_and_ad_hoc_signs_the_app() {
     let tera_sign = SCRIPT
         .find("codesign --force --sign - --options runtime \"$macos_dir/suflyor-teratts\"")
         .expect("missing Tera sidecar signature");
+    let mlx_sign = SCRIPT
+        .find("codesign --force --sign - --options runtime \"$macos_dir/suflyor-mlx\"")
+        .expect("missing MLX sidecar signature");
     let app_sign = SCRIPT
         .find(
             "codesign --force --sign - --options runtime \\\n  --entitlements \"$crate_root/macos/entitlements.plist\" \\\n  \"$app_dir\"",
         )
         .expect("missing app entitlements signature");
     assert!(
-        tts_sign < tera_sign && tera_sign < app_sign,
+        mlx_sign < tts_sign && tts_sign < tera_sign && tera_sign < app_sign,
         "nested executables must be signed before the outer app"
     );
     assert!(SCRIPT.trim_end().ends_with("echo \"$app_dir\""));

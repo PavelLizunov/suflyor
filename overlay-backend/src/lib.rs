@@ -42,6 +42,8 @@ pub mod journal;
 pub mod kb;
 pub mod local_ai;
 pub mod memory;
+pub mod mlx_install;
+pub mod mlx_runtime;
 pub mod ocr;
 pub mod ocr_install;
 pub mod paths;

@@ -37,8 +37,9 @@
 use super::{
     ai, apply_tile_hwnd_with_monitor, fire_followup_ask, fire_regenerate, grab_hwnd, journal,
     live_route, markdown, present_tile_window, ptt_tile_error, refresh_open_tiles,
-    set_always_on_top, set_stealth, surface_stealth_unavailable, toggle_tile_maximize, vision,
-    wire_copy, wire_speak, wire_tile_drag, wire_voice_followup, Arc, AskRoute, CaptureOverlay,
+    resolve_route_endpoint, route_needs_mlx, set_always_on_top, set_stealth,
+    show_mlx_runtime_error, surface_stealth_unavailable, toggle_tile_maximize, vision, wire_copy,
+    wire_speak, wire_tile_drag, wire_voice_followup, Arc, AskRoute, CaptureOverlay,
     ComponentHandle, MarkdownBlock, ModelRc, MonitorHint, Ordering, OverlayBarBridge,
     OverlayBarWindow, PttStreamSink, Rc, RefCell, RuntimeEvents, SharedSlintRuntime, SharedString,
     TileKind, TileSpec, TileWindow, TileWindows, VecModel, CONVO_SEQ, TILE_DISPLAY_SEQ,
@@ -131,8 +132,14 @@ pub(crate) fn fire_f8_vision_capture(
     // local engine (Tesseract on Windows, Apple Vision on macOS), so it remains
     // available when the VLM route is off.
     let ocr_ready = matches!(mode, vision::VisionMode::Ocr) && local_ocr_available();
-    let ep = cfg.read().vision_endpoint();
-    if ep.is_none() && !ocr_ready {
+    let (ep, mlx_pending) = {
+        let config = cfg.read();
+        (
+            config.vision_endpoint(),
+            route_needs_mlx(AskRoute::Vision, &config),
+        )
+    };
+    if ep.is_none() && !ocr_ready && !mlx_pending {
         let (is_ru, preferred_monitor, stealth) = {
             let c = cfg.read();
             (c.ui_is_ru(), c.tile_monitor_name.clone(), c.stealth_enabled)
@@ -430,6 +437,10 @@ pub(crate) fn launch_vision_for_bgra(
     tiles: &TileWindows,
     weak_overlay: &slint::Weak<OverlayBarWindow>,
 ) {
+    let mlx_pending = {
+        let config = cfg.read();
+        route_needs_mlx(AskRoute::Vision, &config)
+    };
     // ===== Placeholder vision tile (mirrors the PTT tile setup) =====
     let tile = match TileWindow::new() {
         Ok(t) => t,
@@ -556,7 +567,7 @@ pub(crate) fn launch_vision_for_bgra(
     // is a no-op) AND a cloud bearer exists (no dead affordance), and never on
     // the OCR path (platform-local text has no cloud upgrade; also covers the
     // OCR→VLM fallback, which still enters this fn with mode == Ocr).
-    if ep.as_ref().is_some_and(|e| e.is_local)
+    if (mlx_pending || ep.as_ref().is_some_and(|e| e.is_local))
         && !cfg.read().ai_bearer.trim().is_empty()
         && !matches!(mode, vision::VisionMode::Ocr)
     {
@@ -635,7 +646,7 @@ pub(crate) fn launch_vision_for_bgra(
     // `fire_f8` check (TOCTOU — e.g. an AV quarantine of the user-writable
     // engine dir mid-drag). Show a generic tile instead of calling the VLM with
     // empty credentials.
-    let Some(ep) = ep else {
+    if ep.is_none() && !mlx_pending {
         ptt_tile_error(
             weak_for_title.clone(),
             if ui_is_ru {
@@ -646,8 +657,11 @@ pub(crate) fn launch_vision_for_bgra(
             ui_is_ru,
         );
         return;
-    };
-    if !ep.accepts_images() {
+    }
+    if ep
+        .as_ref()
+        .is_some_and(|endpoint| !endpoint.accepts_images())
+    {
         ptt_tile_error(
             weak_for_title.clone(),
             if ui_is_ru {
@@ -661,8 +675,6 @@ pub(crate) fn launch_vision_for_bgra(
     }
 
     // ===== 4. Snapshot what the streaming task needs =====
-    let model = ep.model.clone();
-    let is_local = ep.is_unmetered();
     // Feature #3/#4 — describe vs translate prompt (translate appends the IPA
     // phonetics suffix when the user enabled it). Computed sync (UI thread) so the
     // async task below just sends the finished string.
@@ -693,20 +705,40 @@ pub(crate) fn launch_vision_for_bgra(
         let s = slint_replay::runtime_state::lock(slint_rt);
         (s.journal.clone(), s.health.clone())
     };
-    let rt_for_cost = slint_rt.clone();
-    let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
-        // Local vision is free; cloud vision bills (image tokens under-counted
-        // by the text pricing table — acceptable for the MVP).
-        let micro = if is_local { 0 } else { micro };
-        let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
-        s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
-        overlay_backend::ai::microcents_to_usd(s.session_cost_microcents)
-    });
     let bridge_for_task = bridge.clone();
     let events_inner = events.clone();
+    let cfg_for_task = cfg.clone();
+    let slint_rt_for_cost = slint_rt.clone();
 
     // ===== 5. Encode the frame off-thread, then stream the vision answer =====
     rt_handle.spawn(async move {
+        let ep = if mlx_pending {
+            let cfg_for_resolve = cfg_for_task.clone();
+            match tokio::task::spawn_blocking(move || {
+                resolve_route_endpoint(AskRoute::Vision, &cfg_for_resolve)
+            })
+            .await
+            {
+                Ok(Ok(endpoint)) => endpoint,
+                Ok(Err(())) | Err(_) => {
+                    show_mlx_runtime_error(weak_for_title.clone(), ui_is_ru);
+                    return;
+                }
+            }
+        } else if let Some(endpoint) = ep {
+            endpoint
+        } else {
+            return;
+        };
+        let model = ep.model.clone();
+        let is_local = ep.is_unmetered();
+        let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
+            // Local vision is free; cloud vision bills.
+            let micro = if is_local { 0 } else { micro };
+            let mut state = slint_replay::runtime_state::lock(&slint_rt_for_cost);
+            state.session_cost_microcents = state.session_cost_microcents.saturating_add(micro);
+            overlay_backend::ai::microcents_to_usd(state.session_cost_microcents)
+        });
         let (bgra, w, h) = (shot.bgra, shot.width, shot.height);
         let data_url = match tokio::task::spawn_blocking(move || {
             // Stringify the error inside the closure: Box<dyn Error> isn't Send,

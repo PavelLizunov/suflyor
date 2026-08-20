@@ -14,11 +14,11 @@
 //!
 //! NOTE (§7): the crate-root symbols this module uses are imported below.
 use super::{
-    ai, audio, gated_events, install_streaming_tile, journal, message_text, spawn_ptt_watchdog,
-    strip_followup_directives, stt, to_md_blocks, tokio_mpsc, try_acquire_mic,
-    warn_if_over_cost_cap, Arc, AskRoute, AtomicBool, ComponentHandle, LiveRoute, ModelRc,
-    Ordering, OverlayBarBridge, Rc, RefCell, RuntimeEvents, SharedSlintRuntime, SharedString,
-    StreamingTile, TileWindow, VecModel,
+    ai, audio, gated_events, install_streaming_tile, journal, message_text, resolve_route_endpoint,
+    route_needs_mlx, show_mlx_runtime_error, spawn_ptt_watchdog, strip_followup_directives, stt,
+    to_md_blocks, tokio_mpsc, try_acquire_mic, warn_if_over_cost_cap, Arc, AskRoute, AtomicBool,
+    ComponentHandle, LiveRoute, ModelRc, Ordering, OverlayBarBridge, Rc, RefCell, RuntimeEvents,
+    SharedSlintRuntime, SharedString, StreamingTile, TileWindow, VecModel,
 };
 // ============================================================================
 // Follow-up reframe — root cause of the escalate→follow-up bug.
@@ -449,6 +449,7 @@ pub(crate) fn fire_followup_ask(
         let shown = format!("{prefix}…");
         tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&shown))));
     }
+    let weak_for_mlx_error = tile_weak.clone();
     let generation = install_streaming_tile(
         bridge,
         StreamingTile {
@@ -463,36 +464,28 @@ pub(crate) fn fire_followup_ask(
     // Snapshot config + journal/health and abort any in-flight task on the UI
     // thread; the blocking approved-memory read + reframe then run on a worker
     // (mirrors fire_f9_ask's tail — audit C2/G2).
-    let (
-        protocol,
-        base_url,
-        bearer,
-        model,
-        reasoning_effort,
-        is_local,
-        max_tokens,
-        response_language,
-        meeting_context,
-    ) = {
+    let (endpoint_hint, max_tokens, response_language, meeting_context, ui_is_ru, needs_mlx) = {
         let c = cfg.read();
         let ep = route.endpoint(&c);
-        let is_unmetered = ep.is_unmetered();
         (
-            ep.protocol,
-            ep.base_url,
-            ep.bearer,
-            ep.model,
-            ep.reasoning_effort,
-            is_unmetered,
+            ep,
             route.max_tokens(),
             c.response_language.clone(),
             c.meeting_context.clone(),
+            c.ui_is_ru(),
+            route_needs_mlx(route, &c),
         )
     };
     let attached_screenshot = route.attaches_screenshot();
     // v0.8.2 (MAJOR-2) — a sticky-cloud follow-up is billable; warn if the
     // session cost cap is already exceeded (mirrors fire_f9_ask).
-    warn_if_over_cost_cap(events, cfg, slint_rt, is_local, "followup_ask");
+    warn_if_over_cost_cap(
+        events,
+        cfg,
+        slint_rt,
+        endpoint_hint.is_unmetered(),
+        "followup_ask",
+    );
     let (journal_for_loop, health_for_stream) = {
         let s = slint_replay::runtime_state::lock(slint_rt);
         (s.journal.clone(), s.health.clone())
@@ -508,9 +501,27 @@ pub(crate) fn fire_followup_ask(
     // ТЗ 2026-07-06 (A) — the follow-up question selects the RELEVANT facts.
     let bridge_for_work = bridge.clone();
     let events_for_work = events.clone();
+    let cfg_for_work = cfg.clone();
     let slint_rt_for_work = slint_rt.clone();
     let rt_handle_for_work = rt_handle.clone();
     std::thread::spawn(move || {
+        let endpoint = if needs_mlx {
+            match resolve_route_endpoint(route, &cfg_for_work) {
+                Ok(endpoint) => endpoint,
+                Err(()) => {
+                    show_mlx_runtime_error(weak_for_mlx_error, ui_is_ru);
+                    return;
+                }
+            }
+        } else {
+            endpoint_hint
+        };
+        let protocol = endpoint.protocol;
+        let base_url = endpoint.base_url;
+        let bearer = endpoint.bearer;
+        let model = endpoint.model;
+        let reasoning_effort = endpoint.reasoning_effort;
+        let is_local = endpoint.is_unmetered();
         // BLOCKING — off the event loop. The reframe builds a fresh neutral system
         // prompt (no double-add of memory).
         let meeting_context =
@@ -642,35 +653,27 @@ pub(crate) fn fire_regenerate(
         let n = messages.len() - 1;
         strip_followup_directives(&mut messages[..n]);
     }
-    let (
-        protocol,
-        base_url,
-        bearer,
-        model,
-        reasoning_effort,
-        is_local,
-        max_tokens,
-        response_language,
-        meeting_context,
-    ) = {
+    let (endpoint_hint, max_tokens, response_language, meeting_context, ui_is_ru, needs_mlx) = {
         let c = cfg.read();
         let ep = route.endpoint(&c);
-        let is_unmetered = ep.is_unmetered();
         (
-            ep.protocol,
-            ep.base_url,
-            ep.bearer,
-            ep.model,
-            ep.reasoning_effort,
-            is_unmetered,
+            ep,
             route.max_tokens(),
             c.response_language.clone(),
             c.meeting_context.clone(),
+            c.ui_is_ru(),
+            route_needs_mlx(route, &c),
         )
     };
     let attached_screenshot = route.attaches_screenshot();
     // v0.8.2 (MAJOR-2) — a sticky-cloud regenerate is billable; warn over cap.
-    warn_if_over_cost_cap(events, cfg, slint_rt, is_local, "regenerate");
+    warn_if_over_cost_cap(
+        events,
+        cfg,
+        slint_rt,
+        endpoint_hint.is_unmetered(),
+        "regenerate",
+    );
     if let Some(t) = tile_weak.upgrade() {
         t.set_followup_busy(true);
         t.set_source_label(SharedString::from("ai · перегенерация…"));
@@ -686,6 +689,7 @@ pub(crate) fn fire_regenerate(
     // conversation in a divergent, ungated state, so the 2nd follow-up after an
     // escalation re-sent stale history and re-emitted the escalation answer
     // verbatim.
+    let weak_for_mlx_error = tile_weak.clone();
     let generation = install_streaming_tile(
         bridge,
         StreamingTile {
@@ -713,9 +717,27 @@ pub(crate) fn fire_regenerate(
     // re-asked turn (last user TEXT) selects the facts; a Parts turn → recency.
     let bridge_for_work = bridge.clone();
     let events_for_work = events.clone();
+    let cfg_for_work = cfg.clone();
     let slint_rt_for_work = slint_rt.clone();
     let rt_handle_for_work = rt_handle.clone();
     std::thread::spawn(move || {
+        let endpoint = if needs_mlx {
+            match resolve_route_endpoint(route, &cfg_for_work) {
+                Ok(endpoint) => endpoint,
+                Err(()) => {
+                    show_mlx_runtime_error(weak_for_mlx_error, ui_is_ru);
+                    return;
+                }
+            }
+        } else {
+            endpoint_hint
+        };
+        let protocol = endpoint.protocol;
+        let base_url = endpoint.base_url;
+        let bearer = endpoint.bearer;
+        let model = endpoint.model;
+        let reasoning_effort = endpoint.reasoning_effort;
+        let is_local = endpoint.is_unmetered();
         // BLOCKING — off the event loop, and ONLY on the ≥2-user-turn branch.
         let send_messages = if messages.iter().filter(|m| m.role == "user").count() >= 2 {
             let last_user_q =

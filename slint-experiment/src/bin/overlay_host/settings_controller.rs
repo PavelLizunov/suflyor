@@ -44,6 +44,10 @@
 // `set_global_stealth`, `populate_diagnostics` / `build_diag_report`,
 // `open_wizard`, `try_acquire_mic` / `release_mic`, and `active_stack_label`
 // through it). That is intentional for the move; imports narrow in a later pass.
+mod settings_mlx {
+    include!("settings_mlx.rs");
+}
+
 #[cfg(windows)]
 use super::open_wizard;
 #[cfg(windows)]
@@ -64,13 +68,14 @@ use super::{
     SharedString, TileWindows, VecModel, WindowRegistry,
 };
 
-fn ai_provider_index(provider: &str, is_macos: bool) -> i32 {
+pub(crate) fn ai_provider_index(provider: &str, is_macos: bool) -> i32 {
     match (provider, is_macos) {
         ("local", _) => 1,
         ("openai", _) => 2,
         ("anthropic", _) => 3,
         ("codex", false) => 4,
         ("codex", true) => -1,
+        ("mlx", true) => 4,
         _ => 0,
     }
 }
@@ -461,6 +466,7 @@ pub(crate) fn open_settings(
     // (`ModelTarget` + `fetch_models` moved with it). The install/updater
     // closures below stay in open_settings (separate later wave).
     wire_ai_settings(&win, cfg, overlay_weak);
+    settings_mlx::wire(&win, cfg);
     crate::settings_hermes::wire_hermes_settings(&win, cfg);
 
     // ===== V4 — vision (screenshot) channel: provider switch + field saves + test =====
@@ -1584,6 +1590,7 @@ pub(crate) fn populate_token_status(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
 ) {
+    settings_mlx::populate(win);
     win.set_tts_test_status(SharedString::from(""));
     let codex_login_busy = win.get_codex_auth_busy();
     invalidate_codex_snapshot_ui();
@@ -1758,10 +1765,7 @@ pub(crate) fn populate_token_status(
     win.set_component_busy_label(blank());
     win.set_component_busy_index(-1);
     win.set_ai_prompt_cache(c.ai_prompt_cache);
-    win.set_ai_provider_index(ai_provider_index(
-        &c.ai_provider,
-        cfg!(target_os = "macos"),
-    ));
+    win.set_ai_provider_index(ai_provider_index(&c.ai_provider, cfg!(target_os = "macos")));
     win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));
     let managed_local_server =
         overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url);

@@ -93,6 +93,12 @@ pub struct Config {
     /// picker fills this only from catalog entries advertising `image` input.
     #[serde(default)]
     pub codex_vision_model: String,
+    /// Managed macOS MLX text model. Runtime endpoint/token are process-local.
+    #[serde(default = "default_ai_mlx_model")]
+    pub ai_mlx_model: String,
+    /// Independently selected image-capable managed macOS MLX model.
+    #[serde(default = "default_vision_mlx_model")]
+    pub vision_mlx_model: String,
     /// Local server base URL (OpenAI-compatible). Default is llama.cpp's
     /// "http://127.0.0.1:8080/v1" (the shipped setup pipeline); Ollama uses
     /// "http://127.0.0.1:11434/v1".
@@ -629,6 +635,8 @@ impl Config {
             codex_model: String::new(),
             codex_reasoning_effort: String::new(),
             codex_vision_model: String::new(),
+            ai_mlx_model: default_ai_mlx_model(),
+            vision_mlx_model: default_vision_mlx_model(),
             ai_local_base_url: default_ai_local_base_url(),
             ai_local_bearer: String::new(),
             ai_local_model: String::new(),
@@ -736,6 +744,21 @@ impl Config {
     #[must_use]
     pub fn ai_endpoint(&self, prep: bool) -> AiEndpoint {
         match self.ai_provider.as_str() {
+            "mlx" => {
+                let endpoint = crate::mlx_runtime::active_endpoint_for_model(&self.ai_mlx_model);
+                AiEndpoint {
+                    protocol: AiProtocol::OpenAiCompatible,
+                    base_url: endpoint
+                        .as_ref()
+                        .map_or_else(String::new, |e| e.base_url.clone()),
+                    bearer: endpoint
+                        .as_ref()
+                        .map_or_else(String::new, |e| e.bearer.clone()),
+                    model: self.ai_mlx_model.clone(),
+                    reasoning_effort: None,
+                    is_local: true,
+                }
+            }
             "local" => {
                 let model = if prep && !self.ai_local_prep_model.trim().is_empty() {
                     self.ai_local_prep_model.clone()
@@ -841,6 +864,8 @@ impl Config {
     #[must_use]
     pub fn same_text_model_accepts_images_declared(&self) -> bool {
         match self.ai_provider.as_str() {
+            "mlx" => crate::mlx_install::catalog_model(&self.ai_mlx_model)
+                .is_some_and(|model| model.supports_images),
             "local" => self.ai_local_vision,
             "codex" if cfg!(windows) => {
                 !self.codex_model.trim().is_empty() && self.codex_model == self.codex_vision_model
@@ -869,6 +894,23 @@ impl Config {
                 reasoning_effort: None,
                 is_local: false,
             }),
+            "mlx" => {
+                let selected = crate::mlx_install::catalog_model(&self.vision_mlx_model)
+                    .filter(|model| model.supports_images)?;
+                let endpoint = crate::mlx_runtime::active_endpoint_for_model(selected.id);
+                Some(AiEndpoint {
+                    protocol: AiProtocol::OpenAiCompatible,
+                    base_url: endpoint
+                        .as_ref()
+                        .map_or_else(String::new, |endpoint| endpoint.base_url.clone()),
+                    bearer: endpoint
+                        .as_ref()
+                        .map_or_else(String::new, |endpoint| endpoint.bearer.clone()),
+                    model: selected.id.to_string(),
+                    reasoning_effort: None,
+                    is_local: true,
+                })
+            }
             "local" => Some(AiEndpoint {
                 protocol: AiProtocol::OpenAiCompatible,
                 base_url: pick(&self.vision_local_base_url, &self.ai_local_base_url),
@@ -1073,6 +1115,14 @@ impl Config {
 
 fn default_ai_provider() -> String {
     "cloud".into()
+}
+
+fn default_ai_mlx_model() -> String {
+    crate::mlx_install::DEFAULT_TEXT_MODEL.to_string()
+}
+
+fn default_vision_mlx_model() -> String {
+    crate::mlx_install::DEFAULT_VISION_MODEL.to_string()
 }
 
 fn default_openai_base_url() -> String {
@@ -1465,7 +1515,9 @@ fn migrate_legacy_vision_same(cfg: &mut Config) -> bool {
         "cloud" => "cloud",
         "openai" => "openai",
         "anthropic" => "anthropic",
-        "local" | "codex" if cfg.same_text_model_accepts_images_declared() => return false,
+        "local" | "codex" | "mlx" if cfg.same_text_model_accepts_images_declared() => {
+            return false;
+        }
         _ => "off",
     };
     cfg.vision_provider = replacement.to_string();
@@ -1629,6 +1681,8 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     if !imported.codex_vision_model.trim().is_empty() {
         next.codex_vision_model = imported.codex_vision_model;
     }
+    next.ai_mlx_model = imported.ai_mlx_model;
+    next.vision_mlx_model = imported.vision_mlx_model;
     // Local AI provider/endpoint.
     next.ai_local_base_url = imported.ai_local_base_url;
     next.ai_local_bearer = imported.ai_local_bearer;

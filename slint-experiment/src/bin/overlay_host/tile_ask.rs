@@ -42,7 +42,8 @@
 use super::{
     ai, apply_tile_hwnd_with_monitor, cost_cap_reason, fire_followup_ask, fire_regenerate,
     gated_events, grab_hwnd, install_streaming_tile, journal, live_route, markdown,
-    present_tile_window, refresh_open_tiles, select_recent_labeled, toggle_tile_maximize,
+    present_tile_window, refresh_open_tiles, resolve_route_endpoint, route_needs_mlx,
+    select_recent_labeled, show_mlx_runtime_error, spawn_mlx_runtime_error, toggle_tile_maximize,
     wire_copy, wire_escalate, wire_speak, wire_tile_drag, wire_voice_followup, Arc, AskRoute,
     ComponentHandle, MarkdownBlock, ModelRc, MonitorHint, Ordering, OverlayBarBridge,
     OverlayBarWindow, RuntimeEvents, SharedSlintRuntime, SharedString, StreamingTile, TileKind,
@@ -90,6 +91,23 @@ pub(crate) fn fire_f3_reask(
     let cfg_c = cfg.clone();
     let rt_c = slint_rt.clone();
     rt_handle.spawn(async move {
+        let needs_mlx = {
+            let config = cfg_c.read();
+            route_needs_mlx(AskRoute::Text, &config)
+        };
+        let cfg_for_resolve = cfg_c.clone();
+        if needs_mlx
+            && !matches!(
+                tokio::task::spawn_blocking(move || {
+                    resolve_route_endpoint(AskRoute::Text, &cfg_for_resolve)
+                })
+                .await,
+                Ok(Ok(_))
+            )
+        {
+            spawn_mlx_runtime_error(&events_c, &cfg_c);
+            return;
+        }
         let outcome = overlay_backend::runtime::reask_last(events_c.clone(), cfg_c, inputs).await;
         if let Some(out) = outcome {
             let total = {
@@ -135,6 +153,23 @@ pub(crate) fn fire_f6_manual_spawn(
     let cfg_c = cfg.clone();
     let rt_c = slint_rt.clone();
     rt_handle.spawn(async move {
+        let needs_mlx = {
+            let config = cfg_c.read();
+            route_needs_mlx(AskRoute::Text, &config)
+        };
+        let cfg_for_resolve = cfg_c.clone();
+        if needs_mlx
+            && !matches!(
+                tokio::task::spawn_blocking(move || {
+                    resolve_route_endpoint(AskRoute::Text, &cfg_for_resolve)
+                })
+                .await,
+                Ok(Ok(_))
+            )
+        {
+            spawn_mlx_runtime_error(&events_c, &cfg_c);
+            return;
+        }
         let outcome =
             overlay_backend::runtime::manual_spawn_tile(events_c.clone(), cfg_c, inputs).await;
         if let Some(out) = outcome {
@@ -395,6 +430,7 @@ pub(crate) fn fire_f9_ask(
     present_tile_window(&tile);
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
+    let weak_for_mlx_error = weak_for_stream.clone();
     tiles.borrow_mut().push(tile);
     refresh_open_tiles(weak_overlay, tiles);
 
@@ -414,38 +450,38 @@ pub(crate) fn fire_f9_ask(
 
     // ===== 3. Snapshot cfg + cost-cap + transcript + screenshot =====
     let (
-        protocol,
-        base_url,
-        bearer,
-        model,
-        reasoning_effort,
+        endpoint_hint,
         meeting_context,
         response_language,
         cap_usd,
-        is_local,
         local_vision,
+        ui_is_ru,
+        needs_mlx,
     ) = {
         let c = cfg.read();
         // V0.8.0 (Поток D) — route picks the endpoint: normal F9 = Text (local
         // or cloud per provider), Shift+F9 = Cloud (smart model, one-shot).
-        let ep = route.endpoint(&c);
-        let is_unmetered = ep.is_unmetered();
-        (
-            ep.protocol,
-            ep.base_url,
-            ep.bearer,
-            ep.model,
-            ep.reasoning_effort,
-            c.meeting_context.clone(),
-            c.response_language.clone(),
-            c.max_session_cost_usd,
-            is_unmetered,
+        let endpoint = route.endpoint(&c);
+        let needs_mlx = route_needs_mlx(route, &c);
+        let local_vision = if needs_mlx {
+            c.same_text_model_accepts_images_declared()
+        } else {
             overlay_backend::local_ai::local_vision_enabled(
                 &c,
                 &overlay_backend::local_ai::default_root(),
-            ),
+            )
+        };
+        (
+            endpoint,
+            c.meeting_context.clone(),
+            c.response_language.clone(),
+            c.max_session_cost_usd,
+            local_vision,
+            c.ui_is_ru(),
+            needs_mlx,
         )
     };
+    let is_local_hint = endpoint_hint.is_unmetered();
     let current_micro = slint_replay::runtime_state::lock(slint_rt).session_cost_microcents;
     if let Some(reason) = cost_cap_reason(cap_usd, current_micro) {
         events.emit(
@@ -470,12 +506,13 @@ pub(crate) fn fire_f9_ask(
     };
     // A local TEXT model can't accept an image_url part — drop the
     // screenshot unless the user flagged the local model as vision-capable.
-    let screenshot =
-        if matches!(protocol, ai::AiProtocol::CodexSubscription) || (is_local && !local_vision) {
-            None
-        } else {
-            screenshot
-        };
+    let screenshot = if matches!(endpoint_hint.protocol, ai::AiProtocol::CodexSubscription)
+        || (is_local_hint && !local_vision)
+    {
+        None
+    } else {
+        screenshot
+    };
     let attached_screenshot = screenshot.is_some();
 
     let (journal_for_loop, health_for_stream) = {
@@ -497,9 +534,27 @@ pub(crate) fn fire_f9_ask(
     // F9 keeps the recency block.
     let bridge_for_work = bridge.clone();
     let events_for_work = events.clone();
+    let cfg_for_work = cfg.clone();
     let slint_rt_for_work = slint_rt.clone();
     let rt_handle_for_work = rt_handle.clone();
     std::thread::spawn(move || {
+        let endpoint = if needs_mlx {
+            match resolve_route_endpoint(route, &cfg_for_work) {
+                Ok(endpoint) => endpoint,
+                Err(()) => {
+                    show_mlx_runtime_error(weak_for_mlx_error, ui_is_ru);
+                    return;
+                }
+            }
+        } else {
+            endpoint_hint
+        };
+        let protocol = endpoint.protocol;
+        let base_url = endpoint.base_url;
+        let bearer = endpoint.bearer;
+        let model = endpoint.model;
+        let reasoning_effort = endpoint.reasoning_effort;
+        let is_local = endpoint.is_unmetered();
         // BLOCKING — off the event loop: fold in approved memory + build prompt.
         let meeting_context = overlay_backend::memory::context_for_meeting(
             &meeting_context,

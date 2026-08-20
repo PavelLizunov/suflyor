@@ -23,9 +23,11 @@ fi
 contents_dir="$app_dir/Contents"
 macos_dir="$contents_dir/MacOS"
 resources_dir="$contents_dir/Resources"
+frameworks_dir="$contents_dir/Frameworks"
 binary="$target_dir/release/overlay-host"
 sidecar_binary="$target_dir/release/suflyor-tts"
 tera_binary="$target_dir/release/suflyor-teratts"
+mlx_root="$crate_root/../suflyor-mlx"
 
 export CARGO_INCREMENTAL=0
 cargo build --locked --release --bin overlay-host \
@@ -33,23 +35,91 @@ cargo build --locked --release --bin overlay-host \
 
 cargo build --locked --release --manifest-path "$crate_root/../suflyor-tts/Cargo.toml"
 cargo build --locked --release --manifest-path "$crate_root/../suflyor-teratts/Cargo.toml"
+if [[ ! -f "$mlx_root/Package.resolved" ]]; then
+  echo "required MLX Package.resolved is missing" >&2
+  exit 1
+fi
+swift build --package-path "$mlx_root" -c release --disable-automatic-resolution
+mlx_bin_dir="$(swift build --package-path "$mlx_root" -c release \
+  --disable-automatic-resolution --show-bin-path)"
+mlx_binary="$mlx_bin_dir/suflyor-mlx"
 
-for executable in "$binary" "$sidecar_binary" "$tera_binary"; do
+for executable in "$binary" "$sidecar_binary" "$tera_binary" "$mlx_binary"; do
   if [[ ! -x "$executable" ]]; then
     echo "required executable missing after build: $executable" >&2
     exit 1
   fi
 done
+if [[ "$(lipo -archs "$mlx_binary")" != "arm64" ]]; then
+  echo "suflyor-mlx must be a thin arm64 executable" >&2
+  exit 1
+fi
 
 plutil -lint "$crate_root/macos/Info.plist"
 plutil -lint "$crate_root/macos/entitlements.plist"
 
 rm -rf -- "$app_dir"
-mkdir -p "$macos_dir" "$resources_dir"
+mkdir -p "$macos_dir" "$resources_dir" "$frameworks_dir"
 cp "$crate_root/macos/Info.plist" "$contents_dir/Info.plist"
 install -m 755 "$binary" "$macos_dir/overlay-host"
 install -m 755 "$sidecar_binary" "$macos_dir/suflyor-tts"
 install -m 755 "$tera_binary" "$macos_dir/suflyor-teratts"
+install -m 755 "$mlx_binary" "$macos_dir/suflyor-mlx"
+if ! otool -l "$macos_dir/suflyor-mlx" | grep -q '@executable_path/../Frameworks'; then
+  install_name_tool -add_rpath '@executable_path/../Frameworks' "$macos_dir/suflyor-mlx"
+fi
+xcrun swift-stdlib-tool --copy --platform macosx \
+  --scan-executable "$macos_dir/suflyor-mlx" \
+  --destination "$frameworks_dir"
+while IFS= read -r bundle; do
+  cp -R "$bundle" "$resources_dir/"
+done < <(find "$mlx_bin_dir" -maxdepth 1 -type d -name '*.bundle' -print)
+bad_mlx_deps="$(otool -L "$macos_dir/suflyor-mlx" | tail -n +2 | awk '{print $1}' \
+  | grep -Ev '^(@rpath/|@loader_path/|@executable_path/|/usr/lib/|/System/Library/)' || true)"
+if [[ -n "$bad_mlx_deps" ]]; then
+  echo "suflyor-mlx has non-bundle dependencies" >&2
+  exit 1
+fi
+while IFS= read -r library; do
+  if [[ " $(lipo -archs "$library") " != *" arm64 "* ]]; then
+    echo "bundled Swift runtime library does not contain arm64" >&2
+    exit 1
+  fi
+done < <(find "$frameworks_dir" -type f -name '*.dylib' -print)
+
+verify_bundle_dependency() {
+  local owner="$1"
+  local dependency="$2"
+  case "$dependency" in
+    /usr/lib/*|/System/Library/*)
+      return 0
+      ;;
+    @rpath/*)
+      local relative="${dependency#@rpath/}"
+      if [[ -e "$frameworks_dir/$relative" || -e "$frameworks_dir/$(basename "$relative")" ]]; then
+        return 0
+      fi
+      ;;
+    @loader_path/*)
+      if [[ -e "$(dirname "$owner")/${dependency#@loader_path/}" ]]; then
+        return 0
+      fi
+      ;;
+    @executable_path/*)
+      if [[ -e "$macos_dir/${dependency#@executable_path/}" ]]; then
+        return 0
+      fi
+      ;;
+  esac
+  echo "unresolved bundled dependency for $(basename "$owner"): $dependency" >&2
+  return 1
+}
+
+while IFS= read -r owner; do
+  while IFS= read -r dependency; do
+    verify_bundle_dependency "$owner" "$dependency"
+  done < <(otool -L "$owner" | tail -n +2 | awk '{print $1}')
+done < <(printf '%s\n' "$macos_dir/suflyor-mlx"; find "$frameworks_dir" -type f -name '*.dylib' -print)
 
 # Package AppIcon.icns
 icon_source="$crate_root/assets/icon-source.png"
@@ -84,6 +154,13 @@ trap - EXIT
 
 # Local-only ad-hoc signatures. Public distribution requires a separate owner-
 # authorized Developer ID and notarization flow; this script never publishes.
+while IFS= read -r library; do
+  codesign --force --sign - --options runtime "$library"
+done < <(find "$frameworks_dir" -type f -name '*.dylib' -print)
+while IFS= read -r framework; do
+  codesign --force --sign - --options runtime "$framework"
+done < <(find "$frameworks_dir" -depth -type d -name '*.framework' -print)
+codesign --force --sign - --options runtime "$macos_dir/suflyor-mlx"
 codesign --force --sign - --options runtime "$macos_dir/suflyor-tts"
 codesign --force --sign - --options runtime "$macos_dir/suflyor-teratts"
 codesign --force --sign - --options runtime \
@@ -91,7 +168,18 @@ codesign --force --sign - --options runtime \
   "$app_dir"
 codesign --verify --strict --verbose=2 "$macos_dir/suflyor-tts"
 codesign --verify --strict --verbose=2 "$macos_dir/suflyor-teratts"
+codesign --verify --strict --verbose=2 "$macos_dir/suflyor-mlx"
 codesign --verify --deep --strict --verbose=2 "$app_dir"
 plutil -lint "$contents_dir/Info.plist"
+if "$macos_dir/suflyor-mlx" </dev/null >/dev/null 2>&1; then
+  echo "suflyor-mlx accepted an empty startup command" >&2
+  exit 1
+else
+  mlx_smoke_status=$?
+fi
+if [[ "$mlx_smoke_status" -ne 1 ]]; then
+  echo "suflyor-mlx packaged launch smoke failed" >&2
+  exit 1
+fi
 
 echo "$app_dir"

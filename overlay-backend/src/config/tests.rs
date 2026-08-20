@@ -1057,6 +1057,58 @@ fn vision_endpoint_default_provider_is_cloud() {
 }
 
 #[test]
+fn mlx_defaults_are_additive_and_fail_closed_until_owned_runtime_is_ready() {
+    crate::mlx_runtime::stop();
+    let mut cfg = Config::defaults();
+    assert_eq!(cfg.ai_provider, "cloud");
+    assert_eq!(cfg.ai_mlx_model, crate::mlx_install::DEFAULT_TEXT_MODEL);
+    assert_eq!(
+        cfg.vision_mlx_model,
+        crate::mlx_install::DEFAULT_VISION_MODEL
+    );
+
+    cfg.ai_provider = "mlx".into();
+    let text = cfg.ai_endpoint(false);
+    assert!(text.is_local);
+    assert!(text.base_url.is_empty());
+    assert!(text.bearer.is_empty());
+    assert_eq!(text.model, crate::mlx_install::DEFAULT_TEXT_MODEL);
+
+    cfg.vision_provider = "mlx".into();
+    let vision = cfg.vision_endpoint().expect("managed Vision intent");
+    assert!(vision.base_url.is_empty());
+    assert!(vision.bearer.is_empty());
+    assert_eq!(vision.model, crate::mlx_install::DEFAULT_VISION_MODEL);
+    cfg.vision_mlx_model = crate::mlx_install::DEFAULT_TEXT_MODEL.into();
+    assert!(
+        cfg.vision_endpoint().is_none(),
+        "text-only catalog entry must never route images"
+    );
+}
+
+#[test]
+fn server_merge_copies_only_persisted_mlx_model_choices() {
+    let mut current = Config::defaults();
+    current.ai_mlx_model = "old-text".into();
+    current.vision_mlx_model = "old-vision".into();
+    let mut imported = Config::defaults();
+    imported.ai_mlx_model = "new-text".into();
+    imported.vision_mlx_model = "new-vision".into();
+    let merged = merge_server_settings(&current, imported);
+    assert_eq!(merged.ai_mlx_model, "new-text");
+    assert_eq!(merged.vision_mlx_model, "new-vision");
+    let json = serde_json::to_string(&merged).unwrap();
+    assert!(
+        !json.contains("mlx_endpoint"),
+        "no ephemeral MLX endpoint is persisted"
+    );
+    assert!(
+        !json.contains("mlx_bearer"),
+        "no runtime MLX bearer field exists in config"
+    );
+}
+
+#[test]
 fn ai_endpoint_local_uses_local_fields_and_prep_fallback() {
     let mut d = Config::defaults();
     d.ai_provider = "local".into();

@@ -193,6 +193,10 @@ use tile_cost::*;
 mod tile_routes;
 use tile_routes::*;
 
+#[path = "overlay_host/mlx_lifecycle.rs"]
+mod mlx_lifecycle;
+use mlx_lifecycle::*;
+
 // `tile_ptt.rs` — push-to-talk ask flow (the 30s watchdog + the PTT tile-error
 // helper + `fire_ptt_ask`) split out of `tile_ask.rs` (P1 split). `use
 // tile_ptt::*;` re-exports it so `main`'s PTT hotkey dispatch reaches
@@ -4237,6 +4241,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     let weak_stop = weak_for_lock.clone();
                     let busy_stop = busy_for_lock.clone();
                     std::thread::spawn(move || {
+                        stop_mlx_model();
                         let root = overlay_backend::local_ai::default_root();
                         let lifecycle_lock = {
                             let s = state_stop.lock().unwrap_or_else(|p| p.into_inner());
@@ -4310,6 +4315,72 @@ fn main() -> Result<(), slint::PlatformError> {
                     let events_unlock = events_for_lock.clone();
                     let busy_unlock = busy_for_lock.clone();
                     std::thread::spawn(move || {
+                        #[cfg(target_os = "macos")]
+                        if {
+                            let config = cfg_unlock.read();
+                            config.ai_provider == "mlx"
+                        } {
+                            // The lifecycle lock prevents a normal ask start from
+                            // slipping through while the backend deep-lock guard
+                            // is briefly lowered for this explicit transition.
+                            let started = start_mlx_for_unlock(&cfg_unlock).is_ok();
+                            let ready = if started {
+                                let mut config = cfg_unlock.write();
+                                config.deep_lock = false;
+                                config.suppress_tiles = target_listening;
+                                match overlay_backend::config::save(&config) {
+                                    Ok(()) => {
+                                        overlay_backend::deep_lock::set_deep_lock_active(false);
+                                        Some((
+                                            config.ui_is_ru(),
+                                            active_stack_label(&config),
+                                            target_listening,
+                                        ))
+                                    }
+                                    Err(_) => {
+                                        config.deep_lock = true;
+                                        config.suppress_tiles = true;
+                                        overlay_backend::mlx_runtime::stop();
+                                        None
+                                    }
+                                }
+                            } else {
+                                None
+                            };
+                            busy_unlock.store(false, std::sync::atomic::Ordering::Release);
+                            let _ = slint::invoke_from_event_loop(move || {
+                                let Some(overlay) = weak_unlock.upgrade() else {
+                                    return;
+                                };
+                                refresh_lock_chip(&overlay, &cfg_unlock);
+                                match ready {
+                                    Some((ru, label, listening)) => {
+                                        overlay.set_active_stack(SharedString::from(label));
+                                        overlay.set_status_text(SharedString::from(
+                                            overlay_backend::deep_lock::status_text(
+                                                ru,
+                                                if listening {
+                                                    LockStatus::ListeningOn
+                                                } else {
+                                                    LockStatus::UnlockReady
+                                                },
+                                            ),
+                                        ));
+                                    }
+                                    None => {
+                                        let ru = cfg_unlock.read().ui_is_ru();
+                                        overlay.set_status_text(SharedString::from(
+                                            overlay_backend::deep_lock::status_text(
+                                                ru,
+                                                LockStatus::UnlockFailed,
+                                            ),
+                                        ));
+                                        spawn_mlx_runtime_error(&events_unlock, &cfg_unlock);
+                                    }
+                                }
+                            });
+                            return;
+                        }
                         let root = overlay_backend::local_ai::default_root();
                         let choice = {
                             let mut c = cfg_unlock.write();
@@ -4863,6 +4934,10 @@ fn main() -> Result<(), slint::PlatformError> {
     TRAY_AVAILABLE.store(false, Ordering::Relaxed);
     // All event-loop exits share the normal session stop path.
     let _ = slint_session::stop_session(slint_rt.clone(), &cfg);
+    // MLX owns exactly one child and stdin pipe process-wide. Clear its
+    // endpoint before the general async-runtime teardown can leave a stale
+    // request route visible.
+    stop_mlx_model();
     // E10.4 — kill any local-AI servers the in-app installer launched so they
     // do not outlive the app (best-effort; clean-exit path only).
     let local_ai_servers = {
@@ -5363,9 +5438,10 @@ pub(crate) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
         "whisper" => ("Whisper".to_string(), true),
         _ => ("Groq".to_string(), false),
     };
-    let ai_local = c.ai_provider == "local";
+    let ai_local = matches!(c.ai_provider.as_str(), "local" | "mlx");
     let model_full = match c.ai_provider.as_str() {
         "local" => c.ai_local_model.as_str(),
+        "mlx" => c.ai_mlx_model.as_str(),
         "openai" => c.openai_model.as_str(),
         "anthropic" => c.anthropic_model.as_str(),
         "codex" => c.codex_model.as_str(),
@@ -5374,7 +5450,9 @@ pub(crate) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
     // For a LOCAL model show the friendly "Gemma 12B" / "Gemma 26B-A4B" so the user
     // can tell the fallback vs primary model apart at a glance (the user asked to see
     // the selected model more explicitly); cloud models keep the short id.
-    let model = if ai_local {
+    let model = if c.ai_provider == "mlx" {
+        model_full.rsplit('/').next().unwrap_or(model_full).to_string()
+    } else if ai_local {
         overlay_backend::local_ai::local_model_label(model_full)
     } else if c.ai_provider == "codex" {
         model_full.to_string()

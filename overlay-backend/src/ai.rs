@@ -82,6 +82,37 @@ impl AiEndpoint {
     }
 }
 
+fn is_managed_mlx_endpoint(endpoint: &AiEndpoint) -> bool {
+    endpoint.protocol == AiProtocol::OpenAiCompatible
+        && endpoint.is_local
+        && crate::mlx_install::catalog_model(&endpoint.model).is_some()
+        && (endpoint.base_url.trim().is_empty()
+            || crate::mlx_runtime::is_owned_endpoint(&endpoint.base_url))
+}
+
+async fn resolve_managed_mlx_endpoint(
+    mut endpoint: AiEndpoint,
+) -> Result<(AiEndpoint, Option<crate::mlx_runtime::MlxRequestLease>)> {
+    if !is_managed_mlx_endpoint(&endpoint) {
+        return Ok((endpoint, None));
+    }
+    let model = endpoint.model.clone();
+    let acquired = tokio::task::spawn_blocking(move || crate::mlx_runtime::acquire_request(&model))
+        .await
+        .map_err(|_| anyhow!("MLX model unavailable"))?;
+    let (owned, lease) = match acquired {
+        Ok(acquired) => acquired,
+        Err(_) => {
+            log::warn!("MLX model activation failed");
+            return Err(anyhow!("MLX model unavailable"));
+        }
+    };
+    endpoint.base_url = owned.base_url;
+    endpoint.bearer = owned.bearer;
+    endpoint.model = owned.model;
+    Ok((endpoint, Some(lease)))
+}
+
 impl std::fmt::Debug for AiEndpoint {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
@@ -301,6 +332,17 @@ pub fn stream_chat_endpoint(
     let (tx, rx) = mpsc::channel::<AiEvent>(64);
 
     tokio::spawn(async move {
+        let (endpoint, _mlx_lease) = match resolve_managed_mlx_endpoint(endpoint).await {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                let _ = tx
+                    .send(AiEvent::Error {
+                        message: error.to_string(),
+                    })
+                    .await;
+                return;
+            }
+        };
         if endpoint.protocol == AiProtocol::CodexSubscription {
             let model = endpoint.model.clone();
             let worker_tx = tx.clone();
@@ -461,6 +503,7 @@ pub async fn test_connection_messages(
         }
         return Err(anyhow!("Codex account unavailable"));
     }
+    let (endpoint, _mlx_lease) = resolve_managed_mlx_endpoint(endpoint).await?;
     // Deep-lock guard (see crate::deep_lock): refuse managed-local traffic
     // while the bar's lock chip holds the deep lock. Cloud/external pass.
     if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), &endpoint.base_url)
@@ -548,6 +591,7 @@ pub async fn list_models_endpoint(endpoint: &AiEndpoint) -> Result<Vec<String>> 
     if !endpoint.protocol.supports_model_listing() {
         return Ok(Vec::new());
     }
+    let (endpoint, _mlx_lease) = resolve_managed_mlx_endpoint(endpoint.clone()).await?;
     if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), &endpoint.base_url)
     {
         return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
@@ -752,6 +796,12 @@ async fn stream_inner(
                 }
             }
         }
+    }
+
+    // The owned MLX sidecar always emits a terminal frame. Its abrupt EOF is a
+    // connection failure, never a successful partial answer.
+    if crate::mlx_runtime::is_owned_endpoint(&endpoint.base_url) {
+        return Err(anyhow!("AI connection error"));
     }
 
     // The stream ended WITHOUT a `[DONE]` sentinel or a finish_reason — some
@@ -970,6 +1020,7 @@ pub async fn complete_with_usage_endpoint(
         .await
         .map_err(|_| anyhow!("Codex answer unavailable"))?;
     }
+    let (endpoint, _mlx_lease) = resolve_managed_mlx_endpoint(endpoint.clone()).await?;
     complete_with_usage_inner(
         endpoint.protocol,
         &endpoint.base_url,
@@ -1222,6 +1273,7 @@ pub async fn complete_endpoint(
             .await
             .map(|(text, _)| text);
     }
+    let (endpoint, _mlx_lease) = resolve_managed_mlx_endpoint(endpoint.clone()).await?;
     let (text, _usage) = complete_with_usage_inner(
         endpoint.protocol,
         &endpoint.base_url,
@@ -1439,6 +1491,27 @@ pub fn build_request(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
+
+    #[test]
+    fn managed_mlx_intent_is_exact_and_does_not_capture_external_local_servers() {
+        let managed = AiEndpoint {
+            protocol: AiProtocol::OpenAiCompatible,
+            base_url: String::new(),
+            bearer: String::new(),
+            model: crate::mlx_install::DEFAULT_TEXT_MODEL.into(),
+            reasoning_effort: None,
+            is_local: true,
+        };
+        assert!(is_managed_mlx_endpoint(&managed));
+
+        let mut external = managed.clone();
+        external.base_url = "http://external.invalid/v1".into();
+        assert!(!is_managed_mlx_endpoint(&external));
+
+        let mut unknown = managed;
+        unknown.model = "user/model".into();
+        assert!(!is_managed_mlx_endpoint(&unknown));
+    }
 
     #[test]
     fn managed_gemma_uses_the_handoff_sampler_without_forced_seed() {
