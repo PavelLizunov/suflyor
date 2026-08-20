@@ -158,10 +158,9 @@ pub(crate) fn spawn_mlx_runtime_error(
             config.stealth_enabled,
         )
     };
-    let monitor = if monitor.trim().is_empty() {
-        MonitorHint::Auto
-    } else {
-        MonitorHint::Named(monitor)
+    let monitor = match monitor {
+        Some(name) if !name.trim().is_empty() => MonitorHint::Named(name),
+        _ => MonitorHint::Auto,
     };
     let _ = events.spawn_tile_full(
         TileSpec {
