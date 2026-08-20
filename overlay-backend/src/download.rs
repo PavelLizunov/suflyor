@@ -11,12 +11,13 @@ use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Download `url` → `dest` via `curl.exe`. RETRIES transient failures — the GitHub
-/// release CDN resets open-ended GETs (`curl: (35) Connection was reset`), so
-/// `--retry … --retry-all-errors` is essential. Follows redirects, fails on HTTP
-/// error, no console window. Blocking. Removes a partial file on failure.
+/// SECURITY: Download `url` → `dest` via System32-pinned `curl.exe` (p1-path-hijack guard).
+/// RETRIES transient failures — the GitHub release CDN resets open-ended GETs
+/// (`curl: (35) Connection was reset`), so `--retry … --retry-all-errors` is essential.
+/// Follows redirects, fails on HTTP error, no console window. Blocking. Removes a partial
+/// file on failure.
 pub(crate) fn curl_download(url: &str, dest: &Path) -> Result<()> {
-    let status = no_window(Command::new("curl.exe").args([
+    let status = no_window(Command::new(system_curl()).args([
         "-L",
         "--fail",
         "--silent",
@@ -55,6 +56,15 @@ pub(crate) fn extract_tar_bz2(tarball: &Path, dest_dir: &Path) -> Result<()> {
         bail!("bsdtar exited with {status}");
     }
     Ok(())
+}
+
+/// SECURITY: Full path to `curl.exe` under System32 (Win10 1803+), so PATH
+/// order can't substitute a different `curl` binary. Falls back to a bare `curl.exe`.
+pub(crate) fn system_curl() -> PathBuf {
+    std::env::var_os("SystemRoot")
+        .map(|r| PathBuf::from(r).join("System32").join("curl.exe"))
+        .filter(|p| p.is_file())
+        .unwrap_or_else(|| PathBuf::from("curl.exe"))
 }
 
 /// Full path to the libarchive `tar.exe` under System32 (Win10 1803+), so PATH
@@ -103,10 +113,18 @@ pub(crate) fn no_window(cmd: &mut Command) -> &mut Command {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
     use super::*;
 
     #[test]
     fn hex_is_lowercase_and_padded() {
         assert_eq!(hex(&[0x00, 0x0f, 0xa0, 0xff]), "000fa0ff");
+    }
+
+    #[test]
+    fn system_curl_returns_path_or_fallback() {
+        let p = system_curl();
+        assert!(p.ends_with("curl.exe") || p.as_os_str() == "curl.exe");
     }
 }
