@@ -94,6 +94,7 @@ pub(crate) fn resolve_route_endpoint(
 /// Start the selected text model as part of an explicit Deep Lock -> unlocked
 /// transition. Holding the same host lock as normal asks prevents a request
 /// start from slipping through while the backend guard is temporarily lowered.
+#[cfg(target_os = "macos")]
 pub(crate) fn start_mlx_for_unlock(
     config: &overlay_backend::config::SharedConfig,
 ) -> Result<(), ()> {
