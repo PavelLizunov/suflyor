@@ -56,13 +56,6 @@ private enum GenerationPhase: String {
     case reasoningFilter = "reasoning_filter"
 }
 
-private enum RequestPhase: String {
-    case decode
-    case modelCheck = "model_check"
-    case consume
-    case encode
-}
-
 func generationDiagnosticToken(_ value: String) -> String {
     let allowed = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
     return String(value.map { allowed.contains($0) ? $0 : "_" }.prefix(96))
@@ -275,50 +268,39 @@ public struct SidecarServer: Sendable {
         }
         router.post("/v1/chat/completions") { request, context -> Response in
             try authorize(request, bearer: bearer)
-            var phase = RequestPhase.decode
-            do {
-                let completion = try await request.decode(as: ChatCompletionRequest.self, context: context)
-                phase = .modelCheck
-                guard startup.accepts(completion.model) else { throw HTTPError(.badRequest) }
-                let id = "chatcmpl-\(UUID().uuidString.lowercased())"
-                phase = .consume
-                if completion.stream {
-                    return Response(
-                        status: .ok,
-                        headers: [.contentType: "text/event-stream", .cacheControl: "no-cache"],
-                        body: .init { writer in
-                            let encoder = JSONEncoder()
-                            for try await text in engine.events(for: completion) {
-                                let chunk = ChunkEnvelope(
-                                    id: id, model: completion.model.rawValue,
-                                    choices: [.init(delta: .init(content: text), finishReason: nil)]
-                                )
-                                try await writer.write(ByteBuffer(string: sseData(try encoder.encode(chunk))))
-                            }
-                            let end = ChunkEnvelope(
+            let completion = try await request.decode(as: ChatCompletionRequest.self, context: context)
+            guard startup.accepts(completion.model) else { throw HTTPError(.badRequest) }
+            let id = "chatcmpl-\(UUID().uuidString.lowercased())"
+            if completion.stream {
+                return Response(
+                    status: .ok,
+                    headers: [.contentType: "text/event-stream", .cacheControl: "no-cache"],
+                    body: .init { writer in
+                        let encoder = JSONEncoder()
+                        for try await text in engine.events(for: completion) {
+                            let chunk = ChunkEnvelope(
                                 id: id, model: completion.model.rawValue,
-                                choices: [.init(delta: .init(content: nil), finishReason: "stop")]
+                                choices: [.init(delta: .init(content: text), finishReason: nil)]
                             )
-                            try await writer.write(ByteBuffer(string: sseData(try encoder.encode(end))))
-                            try await writer.write(ByteBuffer(string: "data: [DONE]\n\n"))
-                            try await writer.finish(nil)
+                            try await writer.write(ByteBuffer(string: sseData(try encoder.encode(chunk))))
                         }
-                    )
-                }
-                var answer = ""
-                for try await text in engine.events(for: completion) { answer += text }
-                phase = .encode
-                let envelope = CompletionEnvelope(
-                    id: id, model: completion.model.rawValue,
-                    choices: [.init(message: .init(content: answer))]
+                        let end = ChunkEnvelope(
+                            id: id, model: completion.model.rawValue,
+                            choices: [.init(delta: .init(content: nil), finishReason: "stop")]
+                        )
+                        try await writer.write(ByteBuffer(string: sseData(try encoder.encode(end))))
+                        try await writer.write(ByteBuffer(string: "data: [DONE]\n\n"))
+                        try await writer.finish(nil)
+                    }
                 )
-                return try context.responseEncoder.encode(envelope, from: request, context: context)
-            } catch {
-                if !(error is CancellationError) {
-                    logFailure(scope: "request", phase: phase.rawValue, error: error)
-                }
-                throw error
             }
+            var answer = ""
+            for try await text in engine.events(for: completion) { answer += text }
+            let envelope = CompletionEnvelope(
+                id: id, model: completion.model.rawValue,
+                choices: [.init(message: .init(content: answer))]
+            )
+            return try context.responseEncoder.encode(envelope, from: request, context: context)
         }
 
         let app = Application(

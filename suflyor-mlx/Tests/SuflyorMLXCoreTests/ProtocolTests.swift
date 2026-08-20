@@ -122,6 +122,8 @@ private func firstImageData(in request: ChatCompletionRequest) throws -> Data {
     #expect(try filter.feed("</think>answer", finished: true) == "answer")
     var disabled = ReasoningFilter(required: false)
     #expect(try disabled.feed("<think>unexpected</think>answer", finished: true) == "answer")
+    var truncatedOptional = ReasoningFilter(required: false)
+    #expect(try truncatedOptional.feed("<think>unfinished", finished: true) == "")
     var ordinary = ReasoningFilter(required: SupportedModel.lfm.requiresReasoningBoundary)
     #expect(try ordinary.feed("plain answer", finished: true) == "plain answer")
     var incomplete = ReasoningFilter(required: true)

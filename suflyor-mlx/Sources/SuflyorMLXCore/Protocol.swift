@@ -222,7 +222,10 @@ public struct ReasoningFilter: Sendable {
                 continue
             case .reasoning:
                 guard let end = buffer.range(of: "</think>") else {
-                    if finished { throw SidecarError.reasoningBoundaryMissing }
+                    if finished {
+                        if required { throw SidecarError.reasoningBoundaryMissing }
+                        buffer = ""
+                    }
                     return ""
                 }
                 buffer = String(buffer[end.upperBound...])
