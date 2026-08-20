@@ -4560,7 +4560,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // do not outlive the app (best-effort; clean-exit path only).
     let local_ai_servers = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
-        s.local_ai_servers.drain(..).collect::<Vec<_>>()
+        std::mem::take(&mut s.local_ai_servers)
     };
     overlay_backend::local_ai::stop_managed_servers(
         &overlay_backend::local_ai::default_root(),

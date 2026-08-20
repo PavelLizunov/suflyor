@@ -245,7 +245,7 @@ pub(crate) fn wire_local_ai(
                 };
                 let old_servers = {
                     let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
-                    s.local_ai_servers.drain(..).collect::<Vec<_>>()
+                    std::mem::take(&mut s.local_ai_servers)
                 };
                 overlay_backend::local_ai::stop_managed_servers(&opts.root, old_servers);
                 match overlay_backend::local_ai::install(&opts, &cancel, &on) {

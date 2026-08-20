@@ -538,7 +538,7 @@ impl PlaybackTracker {
     }
 
     fn drain_generations(&mut self) -> Vec<u64> {
-        let mut generations: Vec<u64> = self.pending.drain(..).collect();
+        let mut generations = std::mem::take(&mut self.pending);
         generations.extend(std::mem::take(&mut self.utterances).into_values());
         generations
     }
