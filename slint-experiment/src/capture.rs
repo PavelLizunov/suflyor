@@ -62,6 +62,7 @@ pub fn bgra_to_jpeg_data_url(
     }
     // BGRA → RGB (drop alpha, swap B/R).
     let mut rgb: Vec<u8> = Vec::with_capacity((width as usize) * (height as usize) * 3);
+    #[allow(clippy::chunks_exact_to_as_chunks)]
     for px in bgra.chunks_exact(4) {
         rgb.push(px[2]);
         rgb.push(px[1]);
