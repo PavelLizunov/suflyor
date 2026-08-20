@@ -20,6 +20,9 @@ pub const DEFAULT_TEXT_MODEL: &str = "LiquidAI/LFM2.5-8B-A1B-MLX-4bit";
 pub const DEFAULT_VISION_MODEL: &str = "mlx-community/Qwen3.5-2B-4bit";
 const MARKER: &str = ".suflyor-mlx-ready-v1";
 
+#[cfg(any(target_os = "macos", test))]
+type DownloadFn = dyn Fn(&str, &Path, &AtomicBool, &dyn Fn(u64)) -> Result<()>;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModelRole {
     Text,
@@ -233,7 +236,7 @@ fn install_in(
     id: &str,
     cancel: &AtomicBool,
     progress: &dyn Fn(u64, u64),
-    download: &dyn Fn(&str, &Path, &AtomicBool, &dyn Fn(u64)) -> Result<()>,
+    download: &DownloadFn,
 ) -> Result<PathBuf> {
     let model = catalog_model(id).context("unsupported MLX model")?;
     install_model_in(data_root, model, cancel, progress, download)
@@ -245,7 +248,7 @@ fn install_model_in(
     model: &CatalogModel,
     cancel: &AtomicBool,
     progress: &dyn Fn(u64, u64),
-    download: &dyn Fn(&str, &Path, &AtomicBool, &dyn Fn(u64)) -> Result<()>,
+    download: &DownloadFn,
 ) -> Result<PathBuf> {
     validate_catalog_model(model)?;
     let final_dir = snapshot_path_in(data_root, model);
