@@ -4316,10 +4316,12 @@ fn main() -> Result<(), slint::PlatformError> {
                     let busy_unlock = busy_for_lock.clone();
                     std::thread::spawn(move || {
                         #[cfg(target_os = "macos")]
-                        if {
+                        let uses_mlx = {
                             let config = cfg_unlock.read();
                             config.ai_provider == "mlx"
-                        } {
+                        };
+                        #[cfg(target_os = "macos")]
+                        if uses_mlx {
                             // The lifecycle lock prevents a normal ask start from
                             // slipping through while the backend deep-lock guard
                             // is briefly lowered for this explicit transition.
