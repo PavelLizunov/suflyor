@@ -273,7 +273,7 @@ fn install_model_in(
     let total = model.files.iter().try_fold(0_u64, |sum, f| {
         sum.checked_add(f.size).context("MLX catalog size overflow")
     })?;
-    let mut done = model
+    let mut done: u64 = model
         .files
         .iter()
         .filter(|file| file_matches(&staging.join(file.path), file))
