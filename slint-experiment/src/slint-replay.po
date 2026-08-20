@@ -2200,7 +2200,6 @@ msgstr "Shift+Option+2"
 
 msgid "Shift+Option+3"
 msgstr "Shift+Option+3"
-+
 
 # === macOS managed MLX models ===
 
