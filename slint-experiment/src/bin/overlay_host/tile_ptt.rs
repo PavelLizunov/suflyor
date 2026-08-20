@@ -359,12 +359,12 @@ pub(crate) fn fire_ptt_ask(
         } else {
             endpoint_hint
         };
+        let is_local = endpoint.is_unmetered();
         let protocol = endpoint.protocol;
         let base_url = endpoint.base_url;
         let bearer = endpoint.bearer;
         let model = endpoint.model;
         let reasoning_effort = endpoint.reasoning_effort;
-        let is_local = endpoint.is_unmetered();
         // Reflect the recognised question in the tile chrome.
         {
             let q = question.clone();

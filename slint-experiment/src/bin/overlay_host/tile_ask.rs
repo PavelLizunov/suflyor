@@ -549,12 +549,12 @@ pub(crate) fn fire_f9_ask(
         } else {
             endpoint_hint
         };
+        let is_local = endpoint.is_unmetered();
         let protocol = endpoint.protocol;
         let base_url = endpoint.base_url;
         let bearer = endpoint.bearer;
         let model = endpoint.model;
         let reasoning_effort = endpoint.reasoning_effort;
-        let is_local = endpoint.is_unmetered();
         // BLOCKING — off the event loop: fold in approved memory + build prompt.
         let meeting_context = overlay_backend::memory::context_for_meeting(
             &meeting_context,

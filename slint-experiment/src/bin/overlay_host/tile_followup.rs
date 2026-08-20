@@ -516,12 +516,12 @@ pub(crate) fn fire_followup_ask(
         } else {
             endpoint_hint
         };
+        let is_local = endpoint.is_unmetered();
         let protocol = endpoint.protocol;
         let base_url = endpoint.base_url;
         let bearer = endpoint.bearer;
         let model = endpoint.model;
         let reasoning_effort = endpoint.reasoning_effort;
-        let is_local = endpoint.is_unmetered();
         // BLOCKING — off the event loop. The reframe builds a fresh neutral system
         // prompt (no double-add of memory).
         let meeting_context =
@@ -732,12 +732,12 @@ pub(crate) fn fire_regenerate(
         } else {
             endpoint_hint
         };
+        let is_local = endpoint.is_unmetered();
         let protocol = endpoint.protocol;
         let base_url = endpoint.base_url;
         let bearer = endpoint.bearer;
         let model = endpoint.model;
         let reasoning_effort = endpoint.reasoning_effort;
-        let is_local = endpoint.is_unmetered();
         // BLOCKING — off the event loop, and ONLY on the ≥2-user-turn branch.
         let send_messages = if messages.iter().filter(|m| m.role == "user").count() >= 2 {
             let last_user_q =
