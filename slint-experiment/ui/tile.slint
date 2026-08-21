@@ -732,8 +732,35 @@ export component TileWindow inherits Window {
                                 clicked(shift) => { root.toggle-block-marked(i, shift); }
                             }
                         }
+                        // User turn. Reuses a fenced `user` block from the
+                        // conversation renderer, but looks like a chat bubble
+                        // instead of source code.
+                        if block.kind == 5 && block.lang == "user" : Rectangle {
+                            background: Theme.accent.with-alpha(0.14);
+                            border-radius: 7px;
+                            border-width: 1px;
+                            border-color: Theme.accent.with-alpha(0.55);
+                            VerticalLayout {
+                                padding: Metrics.space-sm;
+                                spacing: 4px;
+                                Text {
+                                    text: @tr("You");
+                                    font-size: 10px;
+                                    font-weight: 700;
+                                    color: Theme.accent;
+                                }
+                                SelectableText {
+                                    text: block.display-text;
+                                    source-text: block.text;
+                                    font-size: Metrics.font-body;
+                                    text-color: Theme.text-primary;
+                                    wrap: word-wrap;
+                                    capture(a, c) => { root.capture-selection(i, a, c); }
+                                }
+                            }
+                        }
                         // Code block
-                        if block.kind == 5 : Rectangle {
+                        if block.kind == 5 && block.lang != "user" : Rectangle {
                             background: Theme.code-bg;
                             border-radius: 4px;
                             border-width: 1px;
@@ -826,28 +853,28 @@ export component TileWindow inherits Window {
                 }
             }
 
-            // R1/RS2 (retest v0.28.0) — «Выделить текст» VIEW: the whole answer as ONE selectable field
-            // to drag-select / Ctrl+C-copy / right-click «Выделенное в память» ACROSS blocks. Hidden
+            // R1/RS2 — whole-answer selection uses the standard scrollable TextEdit.
+            // Its cursor-position tracking auto-scrolls while the mouse is dragged
+            // below the viewport; the old SelectableText inside an outer ScrollView
+            // could only select the currently visible part. Hidden
             // while EDITING a captured selection (capture-pending) — the editor below then gets the
             // full space, so its «В память» save button can't be pushed off (the real RS2 bug: the
             // big field + the editor + the button stacked past the window). min-height:0 so it takes
             // only the leftover space here.
-            if root.select-mode && !root.capture-pending : ScrollView {
+            if root.select-mode && !root.capture-pending : TextEdit {
                 vertical-stretch: 1;
                 horizontal-stretch: 1;
-                viewport-width: self.width;
                 min-height: 0px;
-                VerticalLayout {
-                    padding-right: 14px;
-                    SelectableText {
-                        text: root.select-text;
-                        font-size: Metrics.font-body;
-                        text-color: Theme.text-secondary;
-                        wrap: word-wrap;
-                        capture(a, c) => {
-                            root.capture-selection(-1, a, c);
-                        }
+                text: root.select-text;
+                read-only: true;
+                wrap: word-wrap;
+                font-size: Metrics.font-body;
+                key-pressed(e) => {
+                    if (e.modifiers.control && !e.modifiers.shift) {
+                        if (e.text == "с" || e.text == "С") { self.copy(); return accept; }
+                        if (e.text == "ф" || e.text == "Ф") { self.select-all(); return accept; }
                     }
+                    return reject;
                 }
             }
 

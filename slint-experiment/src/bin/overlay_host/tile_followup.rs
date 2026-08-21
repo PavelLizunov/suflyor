@@ -20,6 +20,20 @@ use super::{
     ComponentHandle, LiveRoute, ModelRc, Ordering, OverlayBarBridge, Rc, RefCell, RuntimeEvents,
     SharedSlintRuntime, SharedString, StreamingTile, TileWindow, VecModel,
 };
+
+/// Render one user turn as a fenced role block. The markdown adapter already
+/// preserves fenced block languages, so `tile.slint` can give `user` blocks a
+/// real bubble without adding a second conversation renderer. Pick a fence
+/// longer than any run inside the user's text so pasted code fences stay exact.
+pub(crate) fn user_turn_markdown(question: &str) -> String {
+    let longest = question
+        .split(|ch| ch != '~')
+        .map(str::len)
+        .max()
+        .unwrap_or(0);
+    let fence = "~".repeat(longest.max(2) + 1);
+    format!("{fence}user\n{}\n{fence}\n\n", question.trim())
+}
 // ============================================================================
 // Follow-up reframe — root cause of the escalate→follow-up bug.
 // ============================================================================
@@ -438,7 +452,10 @@ pub(crate) fn fire_followup_ask(
 
     // Visible thread = prior thread + the new question header; the streamed
     // answer renders after this prefix.
-    let prefix = format!("{prior_rendered}\n\n---\n\n**You: {question}**\n\n");
+    let prefix = format!(
+        "{prior_rendered}\n\n---\n\n{}",
+        user_turn_markdown(&question)
+    );
 
     // Show the question immediately + mark busy; register the slot so the
     // ai:event deltas land in this tile.
@@ -843,6 +860,13 @@ mod tests {
     //! user(new question)]` — one user turn, no prior "conversation" to continue.
     //! Vision dialogs stay multi-turn. Pure: no UI, no network.
     use super::*;
+
+    #[test]
+    fn user_turn_uses_a_fence_longer_than_pasted_code() {
+        let rendered = user_turn_markdown("вопрос\n~~~bash\necho ok\n~~~");
+        assert!(rendered.starts_with("~~~~user\n"));
+        assert!(rendered.contains("~~~bash\necho ok\n~~~"));
+    }
 
     fn msg(role: &str, text: &str) -> ai::ChatMessage {
         ai::ChatMessage {

@@ -38,8 +38,8 @@ use super::{
     ai, apply_tile_hwnd_with_monitor, fire_followup_ask, fire_regenerate, grab_hwnd, journal,
     live_route, markdown, present_tile_window, ptt_tile_error, refresh_open_tiles,
     resolve_route_endpoint, route_needs_mlx, set_always_on_top, set_stealth,
-    show_mlx_runtime_error, surface_stealth_unavailable, toggle_tile_maximize, vision, wire_copy,
-    wire_speak, wire_tile_drag, wire_voice_followup, Arc, AskRoute, CaptureOverlay,
+    show_mlx_runtime_error, surface_stealth_unavailable, toggle_tile_maximize, user_turn_markdown,
+    vision, wire_copy, wire_speak, wire_tile_drag, wire_voice_followup, Arc, AskRoute, CaptureOverlay,
     ComponentHandle, MarkdownBlock, ModelRc, MonitorHint, Ordering, OverlayBarBridge,
     OverlayBarWindow, PttStreamSink, Rc, RefCell, RuntimeEvents, SharedSlintRuntime, SharedString,
     TileKind, TileSpec, TileWindow, TileWindows, VecModel, CONVO_SEQ, TILE_DISPLAY_SEQ,
@@ -484,6 +484,12 @@ pub(crate) fn launch_vision_for_bgra(
     tiles: &TileWindows,
     weak_overlay: &slint::Weak<OverlayBarWindow>,
 ) {
+    let uses_local_ocr = matches!(mode, vision::VisionMode::Ocr) && local_ocr_available();
+    let conversation_route = if uses_local_ocr {
+        AskRoute::Text
+    } else {
+        AskRoute::Vision
+    };
     let mlx_pending = {
         let config = cfg.read();
         route_needs_mlx(AskRoute::Vision, &config)
@@ -578,7 +584,7 @@ pub(crate) fn launch_vision_for_bgra(
                 &cfg_fu,
                 &slint_rt_fu,
                 &rt_handle_fu,
-                AskRoute::Vision,
+                conversation_route,
             );
         });
     }
@@ -646,7 +652,7 @@ pub(crate) fn launch_vision_for_bgra(
     // V5 — 🎤 voice follow-up (record → STT → ask via the VISION endpoint, so
     // the spoken question stays about the screenshot; escalate above is one-shot
     // and does not re-route this).
-    wire_voice_followup(&tile, convo_id, live_route(AskRoute::Vision), cfg);
+    wire_voice_followup(&tile, convo_id, live_route(conversation_route), cfg);
     wire_copy(&tile, convo_id, bridge);
     wire_speak(&tile, convo_id, bridge);
     present_tile_window(&tile);
@@ -659,7 +665,7 @@ pub(crate) fn launch_vision_for_bgra(
     // ===== OCR (read-aloud) — platform-local engine, NOT the VLM =====
     // Keep both native engines off the UI thread. Windows still falls through
     // to the configured VLM when Tesseract is absent; Apple Vision is built in.
-    if matches!(mode, vision::VisionMode::Ocr) && local_ocr_available() {
+    if uses_local_ocr {
         let weak_ocr = weak_for_stream.clone();
         let bridge_ocr = bridge.clone();
         let (bgra, w, h) = (shot.bgra, shot.width, shot.height);
@@ -851,6 +857,7 @@ pub(crate) fn launch_vision_for_bgra(
             events_inner.clone(),
             weak_for_stream,
             convo_id,
+            user_turn_markdown(&usr_full),
             messages.clone(),
         ));
         // Audit D1 — the SAME purpose must tag the paired AiResponse that

@@ -175,6 +175,7 @@ struct Controller<P: Player> {
     player: Option<P>,
     chunks_total: usize,
     chunks_settled: usize,
+    chunks_failed: usize,
     playing_emitted: bool,
     /// Cancellation generation, shared with the synth worker thread.
     generation: Arc<AtomicU64>,
@@ -212,6 +213,7 @@ impl<P: Player> Controller<P> {
         }
         self.chunks_total = 0;
         self.chunks_settled = 0;
+        self.chunks_failed = 0;
         self.playing_emitted = false;
         let previous = self.active.take();
         self.generation.store(0, Ordering::Release);
@@ -254,6 +256,7 @@ impl<P: Player> Controller<P> {
                 self.generation.store(id, Ordering::Release);
                 self.chunks_total = chunks.len();
                 self.chunks_settled = 0;
+                self.chunks_failed = 0;
                 self.playing_emitted = false;
                 let scale = self.duration_scale();
                 let mut dispatch_failed = false;
@@ -317,16 +320,26 @@ impl<P: Player> Controller<P> {
                 }
             }
             Err(reason) => {
-                eprintln!("[suflyor-teratts] synth failed ({reason})");
-                if let Some(player) = self.player.take() {
-                    player.stop();
+                self.chunks_failed += 1;
+                eprintln!("[suflyor-teratts] synth chunk skipped ({reason})");
+                if self.chunks_settled == self.chunks_total {
+                    if self.chunks_failed == self.chunks_total {
+                        if let Some(player) = self.player.take() {
+                            player.stop();
+                        }
+                        self.active = None;
+                        self.chunks_total = 0;
+                        self.chunks_settled = 0;
+                        self.chunks_failed = 0;
+                        self.playing_emitted = false;
+                        self.generation.store(0, Ordering::Release);
+                        self.emit_event(Event::Failed { id: active, reason });
+                    } else if let Some(player) = self.player.as_mut() {
+                        // One bad browser-copied fragment must not stop all the
+                        // already synthesized speech. Drain the good chunks.
+                        player.end_of_stream();
+                    }
                 }
-                self.active = None;
-                self.chunks_total = 0;
-                self.chunks_settled = 0;
-                self.playing_emitted = false;
-                self.generation.store(0, Ordering::Release);
-                self.emit_event(Event::Failed { id: active, reason });
             }
         }
     }
@@ -344,6 +357,7 @@ impl<P: Player> Controller<P> {
         self.active = None;
         self.chunks_total = 0;
         self.chunks_settled = 0;
+        self.chunks_failed = 0;
         self.playing_emitted = false;
         self.generation.store(0, Ordering::Release);
         self.emit_event(Event::Done { id });
@@ -620,6 +634,7 @@ fn main() {
         player: None,
         chunks_total: 0,
         chunks_settled: 0,
+        chunks_failed: 0,
         playing_emitted: false,
         generation,
         make_player: Box::new(make_player),
@@ -755,6 +770,7 @@ mod tests {
                 player: None,
                 chunks_total: 0,
                 chunks_settled: 0,
+                chunks_failed: 0,
                 playing_emitted: false,
                 generation: generation.clone(),
                 make_player: Box::new(make_player),
@@ -921,6 +937,30 @@ mod tests {
         // A late duplicate result for the failed utterance is dropped.
         h.controller.on_synth_result(ok_audio(1));
         assert!(take_events(&h).is_empty());
+    }
+
+    #[test]
+    fn one_bad_chunk_does_not_stop_a_long_read() {
+        let mut h = harness();
+        h.controller.on_cmd(Cmd::Speak(long_text()));
+        let total = h.jobs.borrow().len();
+        assert!(total >= 3);
+        take_events(&h);
+
+        h.controller.on_synth_result(ok_audio(1));
+        h.controller.on_synth_result(SynthOutcome {
+            utterance: 1,
+            audio: Err("invalid-text".into()),
+        });
+        for _ in 2..total {
+            h.controller.on_synth_result(ok_audio(1));
+        }
+
+        assert_eq!(take_events(&h), vec![Event::Playing { id: 1 }]);
+        assert!(h.player_log.borrow().iter().any(|event| event == "eos:1"));
+        assert!(!h.player_log.borrow().iter().any(|event| event == "stop:1"));
+        h.controller.on_playback_done(1);
+        assert_eq!(take_events(&h), vec![Event::Done { id: 1 }]);
     }
 
     #[test]

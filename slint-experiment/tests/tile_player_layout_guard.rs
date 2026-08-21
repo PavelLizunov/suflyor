@@ -33,3 +33,19 @@ fn active_player_keeps_status_transport_and_secondary_controls_separate() {
     assert!(player.contains("label: \"+15\";"));
     assert!(player.contains("border-radius: 15px;"));
 }
+
+#[test]
+fn tile_conversation_fixes_stay_wired() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let tile = fs::read_to_string(root.join("ui/tile.slint")).expect("read tile.slint");
+    let overlay =
+        fs::read_to_string(root.join("ui/overlay_bar.slint")).expect("read overlay_bar.slint");
+    let host = fs::read_to_string(root.join("src/bin/overlay_host_windows.rs"))
+        .expect("read overlay_host_windows.rs");
+
+    assert!(tile.contains("if root.select-mode && !root.capture-pending : TextEdit"));
+    assert!(tile.contains("block.kind == 5 && block.lang == \"user\""));
+    assert!(overlay.contains("callback restore-tile-clicked();"));
+    assert!(host.contains("tile.on_followup_submitted"));
+    assert!(host.contains("LAST_CLOSED_READ_TILE"));
+}

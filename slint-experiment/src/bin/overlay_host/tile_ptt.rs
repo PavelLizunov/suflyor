@@ -11,7 +11,7 @@ use super::{
     ai, apply_tile_hwnd_with_monitor, audio, classify_ai_error, fire_followup_ask, fire_regenerate,
     grab_hwnd, journal, live_route, markdown, present_tile_window, refresh_open_tiles,
     resolve_route_endpoint, route_needs_mlx, show_mlx_runtime_error, stt, toggle_tile_maximize,
-    warn_if_over_cost_cap, wire_copy, wire_escalate, wire_speak, wire_tile_drag,
+    user_turn_markdown, warn_if_over_cost_cap, wire_copy, wire_escalate, wire_speak, wire_tile_drag,
     wire_voice_followup, Arc, AskRoute, AtomicBool, ComponentHandle, Duration, MarkdownBlock,
     ModelRc, Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink, RuntimeEvents,
     SharedSlintRuntime, SharedString, TileWindow, TileWindows, VecModel, AI_STREAM_MAX_TOKENS,
@@ -400,6 +400,7 @@ pub(crate) fn fire_ptt_ask(
             events_inner.clone(),
             weak_for_stream,
             convo_id,
+            user_turn_markdown(&question),
             messages.clone(),
         ));
         let sys_full = messages

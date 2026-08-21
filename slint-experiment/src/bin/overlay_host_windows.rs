@@ -342,6 +342,13 @@ use aux_windows::*;
 
 pub(crate) type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
 
+thread_local! {
+    /// One bounded strong handle: closing a read-aloud tile hides it instead of
+    /// destroying the only copy of a long browser selection. Replacing the slot
+    /// drops the previous conversation, so this cannot grow without bound.
+    static LAST_CLOSED_READ_TILE: RefCell<Option<TileWindow>> = const { RefCell::new(None) };
+}
+
 fn restore_text_clipboard(saved: &Option<String>) {
     // ponytail: SA1 preserves only UTF-8 text; snapshot every pasteboard item
     // and format if non-text clipboard parity becomes a product requirement.
@@ -361,9 +368,16 @@ fn spawn_text_tile(
     title: &str,
     trigger: &str,
     bridge: &Arc<OverlayBarBridge>,
+    runtime: (
+        &Arc<dyn RuntimeEvents>,
+        &overlay_backend::config::SharedConfig,
+        &SharedSlintRuntime,
+        &tokio::runtime::Handle,
+    ),
     tiles: &TileWindows,
     weak_overlay: &slint::Weak<OverlayBarWindow>,
 ) {
+    let (events, cfg, slint_rt, rt_handle) = runtime;
     let tile = match TileWindow::new() {
         Ok(t) => t,
         Err(e) => {
@@ -379,7 +393,8 @@ fn spawn_text_tile(
     tile.set_trigger_label(SharedString::from(trigger));
     tile.set_trigger_color(slint::Color::from_rgb_u8(0x22, 0xd3, 0xee));
     tile.set_convo_id(convo_id);
-    tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(text))));
+    let rendered = user_turn_markdown(text);
+    tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&rendered))));
     wire_tile_drag(&tile);
 
     // Seed the conversation directly — there's no AI call to do it, and
@@ -388,10 +403,10 @@ fn spawn_text_tile(
         convo_id,
         ConvoState {
             messages: vec![ai::ChatMessage {
-                role: "assistant".to_string(),
+                role: "user".to_string(),
                 content: ai::MessageContent::Text(text.to_string()),
             }],
-            rendered: text.to_string(),
+            rendered,
         },
     );
 
@@ -403,7 +418,6 @@ fn spawn_text_tile(
         tile.on_close_clicked(move || {
             if let Some(t) = weak_close.upgrade() {
                 stop_if_speaking(t.get_convo_id());
-                bridge_for_close.drop_conversation(t.get_convo_id());
                 let close_hwnd = grab_hwnd(t.window()).ok();
                 let _ = t.hide();
                 slint_replay::win32::force_hide(t.window());
@@ -412,6 +426,13 @@ fn spawn_text_tile(
                         .borrow_mut()
                         .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
                     refresh_open_tiles(&weak_overlay_close, &vec_for_close);
+                }
+                let replaced = LAST_CLOSED_READ_TILE.with(|slot| slot.borrow_mut().replace(t));
+                if let Some(old) = replaced {
+                    bridge_for_close.drop_conversation(old.get_convo_id());
+                }
+                if let Some(o) = weak_overlay_close.upgrade() {
+                    o.set_can_restore_tile(true);
                 }
             }
         });
@@ -435,6 +456,31 @@ fn spawn_text_tile(
             }
         });
     }
+    // A selected-text tile is a real Text conversation: the selected passage
+    // becomes reference context and the next typed/voice turn asks about it.
+    let live = live_route(AskRoute::Text);
+    {
+        let weak_fu = tile.as_weak();
+        let bridge_fu = bridge.clone();
+        let events_fu = events.clone();
+        let cfg_fu = cfg.clone();
+        let slint_rt_fu = slint_rt.clone();
+        let rt_handle_fu = rt_handle.clone();
+        let live_fu = live.clone();
+        tile.on_followup_submitted(move |q| {
+            fire_followup_ask(
+                (convo_id, q.to_string()),
+                weak_fu.clone(),
+                &bridge_fu,
+                &events_fu,
+                &cfg_fu,
+                &slint_rt_fu,
+                &rt_handle_fu,
+                live_fu.get(),
+            );
+        });
+    }
+    wire_voice_followup(&tile, convo_id, live, cfg);
     wire_copy(&tile, convo_id, bridge);
     wire_speak(&tile, convo_id, bridge);
     present_tile_window(&tile);
@@ -2859,6 +2905,9 @@ fn main() -> Result<(), slint::PlatformError> {
                     let saved = slint_replay::win32::clipboard_read_text();
                     let bridge_sa1 = hp_bridge.clone();
                     let events_sa1 = hp_events.clone();
+                    let cfg_sa1 = hp_cfg.clone();
+                    let slint_rt_sa1 = hp_rt.clone();
+                    let rt_sa1 = hp_rt_handle.clone();
                     let tiles_sa1 = hp_tiles.clone();
                     let overlay_sa1 = hp_weak_overlay.clone();
                     let is_ru = hp_cfg.read().ui_is_ru();
@@ -2902,6 +2951,10 @@ fn main() -> Result<(), slint::PlatformError> {
                         }
                         let saved = saved.clone();
                         let bridge_sa1 = bridge_sa1.clone();
+                        let events_sa1 = events_sa1.clone();
+                        let cfg_sa1 = cfg_sa1.clone();
+                        let slint_rt_sa1 = slint_rt_sa1.clone();
+                        let rt_sa1 = rt_sa1.clone();
                         let tiles_sa1 = tiles_sa1.clone();
                         let overlay_sa1 = overlay_sa1.clone();
                         let title = title.clone();
@@ -2922,6 +2975,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                     &title,
                                     "Shift+Alt+1",
                                     &bridge_sa1,
+                                    (&events_sa1, &cfg_sa1, &slint_rt_sa1, &rt_sa1),
                                     &tiles_sa1,
                                     &overlay_sa1,
                                 );
@@ -3296,14 +3350,39 @@ fn main() -> Result<(), slint::PlatformError> {
                 v.clear();
                 count
             };
+            if let Some(hidden) =
+                LAST_CLOSED_READ_TILE.with(|slot| slot.borrow_mut().take())
+            {
+                bridge_for_close_all.drop_conversation(hidden.get_convo_id());
+            }
             eprintln!("[overlay-host] close-all-tiles: closed {n} tile(s)");
             if let Ok(mut st) = s.lock() {
                 st.tiles_spawned = 0;
             }
             if let Some(o) = weak.upgrade() {
                 o.set_tiles_spawned(0);
+                o.set_can_restore_tile(false);
                 // #B1 — vec was just cleared; sync the live open-tile count to 0.
                 registry_close_all.refresh_tiles_chip(&o);
+            }
+        });
+    }
+
+    // A single-click undo for the read-aloud tile's close button. The same
+    // component and conversation are restored; no AI/TTS request is repeated.
+    {
+        let tiles_ref = tiles.clone();
+        let weak = overlay.as_weak();
+        overlay.on_restore_tile_clicked(move || {
+            let restored = LAST_CLOSED_READ_TILE.with(|slot| slot.borrow_mut().take());
+            if let Some(tile) = restored {
+                present_tile_window(&tile);
+                apply_tile_hwnd_with_monitor(&tile);
+                tiles_ref.borrow_mut().push(tile);
+                refresh_open_tiles(&weak, &tiles_ref);
+            }
+            if let Some(o) = weak.upgrade() {
+                o.set_can_restore_tile(false);
             }
         });
     }

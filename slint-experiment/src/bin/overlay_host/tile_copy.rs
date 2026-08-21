@@ -664,13 +664,26 @@ pub(crate) fn convo_speak_text(bridge: &OverlayBarBridge, convo_id: i32) -> Stri
 
 /// Pure: the latest assistant turn's text, or the rendered body if none yet.
 pub(crate) fn speak_answer_text(messages: &[ai::ChatMessage], rendered: &str) -> String {
-    messages
+    let answer = messages
         .iter()
         .rev()
         .find(|m| m.role == "assistant")
         .map(|m| message_text(&m.content).trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| rendered.trim().to_string())
+        .filter(|s| !s.is_empty());
+    if let Some(answer) = answer {
+        return answer;
+    }
+    // A read-aloud tile is seeded with exactly one user turn and has no model
+    // answer. Speak that original selection, not its fenced visual rendering.
+    if messages.len() == 1 && messages[0].role == "user" {
+        let selected = message_text(&messages[0].content).trim().to_string();
+        if !selected.is_empty() && rendered.contains("user\n") {
+            return selected;
+        }
+    }
+    // During a normal streamed answer there is also no stored assistant turn
+    // yet; its live rendered body is the correct thing to read.
+    rendered.trim().to_string()
 }
 
 // Which tile is currently being read aloud. TTS is process-global +
@@ -1239,6 +1252,15 @@ mod copy_tests {
             "частичный ответ"
         );
         assert_eq!(speak_answer_text(&[], "RENDERED"), "RENDERED");
+    }
+
+    #[test]
+    fn speak_read_aloud_tile_uses_raw_selected_text_not_visual_fence() {
+        let msgs = vec![msg("user", "выбранный текст")];
+        assert_eq!(
+            speak_answer_text(&msgs, "~~~user\nвыбранный текст\n~~~\n"),
+            "выбранный текст"
+        );
     }
 
     #[test]

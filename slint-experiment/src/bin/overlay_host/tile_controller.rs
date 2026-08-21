@@ -210,6 +210,7 @@ pub(crate) struct PttStreamSink {
 
 struct PttSinkState {
     accumulated: String,
+    prefix: String,
     request_messages: Vec<ai::ChatMessage>,
 }
 
@@ -219,6 +220,7 @@ impl PttStreamSink {
         inner: Arc<dyn RuntimeEvents>,
         tile: slint::Weak<TileWindow>,
         convo_id: i32,
+        prefix: String,
         request_messages: Vec<ai::ChatMessage>,
     ) -> Self {
         // Seed last_render in the past so the first delta paints immediately.
@@ -232,6 +234,7 @@ impl PttStreamSink {
             convo_id,
             state: std::sync::Mutex::new(PttSinkState {
                 accumulated: String::new(),
+                prefix,
                 request_messages,
             }),
             last_render: std::sync::Mutex::new(seeded),
@@ -269,7 +272,7 @@ impl RuntimeEvents for PttStreamSink {
                 }
                 let body = {
                     let st = self.state.lock().unwrap_or_else(|p| p.into_inner());
-                    st.accumulated.clone()
+                    format!("{}{}", st.prefix, st.accumulated)
                 };
                 let weak = self.tile.clone();
                 let _ = slint::invoke_from_event_loop(move || {
@@ -280,32 +283,37 @@ impl RuntimeEvents for PttStreamSink {
             }
             ai::AiEvent::Done { reason } => {
                 self.bridge.dec_ai_in_flight();
-                let (final_body, messages) = {
+                let (answer, prefix, messages) = {
                     let st = self.state.lock().unwrap_or_else(|p| p.into_inner());
-                    (st.accumulated.clone(), st.request_messages.clone())
+                    (
+                        st.accumulated.clone(),
+                        st.prefix.clone(),
+                        st.request_messages.clone(),
+                    )
                 };
+                let rendered = format!("{prefix}{answer}");
                 if self.convo_id >= 0 {
                     let mut messages = messages;
                     messages.push(ai::ChatMessage {
                         role: "assistant".into(),
-                        content: ai::MessageContent::Text(final_body.clone()),
+                        content: ai::MessageContent::Text(answer.clone()),
                     });
                     // FIX #8 — bounded insert (caps + half-evicts the map).
                     self.bridge.store_conversation(
                         self.convo_id,
                         ConvoState {
                             messages,
-                            rendered: final_body.clone(),
+                            rendered: rendered.clone(),
                         },
                     );
                 }
                 // A zero-token Done (some vision servers do this on an
                 // unsupported image, or a content filter) would replace the
                 // placeholder with an empty body — show a note, not a blank tile.
-                let final_body = if final_body.trim().is_empty() {
-                    "_(модель не вернула ответ)_".to_string()
+                let final_body = if answer.trim().is_empty() {
+                    format!("{prefix}_(модель не вернула ответ)_")
                 } else {
-                    final_body
+                    rendered
                 };
                 let weak = self.tile.clone();
                 let _ = slint::invoke_from_event_loop(move || {

@@ -48,6 +48,9 @@ msgstr "+ тайл ({})"
 msgid "close all"
 msgstr "закрыть все"
 
+msgid "Restore last tile"
+msgstr "Вернуть последний тайл"
+
 # Phase E6 v45 — two-step quit confirm (X arms "Quit? Yes/No").
 msgid "Quit?"
 msgstr "Выйти?"
@@ -1010,6 +1013,9 @@ msgstr "Выделить текст"
 
 msgid "Rich view"
 msgstr "Обычный вид"
+
+msgid "You"
+msgstr "Вы"
 
 msgid "local model — e.g. qwen2.5:7b-instruct"
 msgstr "локальная модель — напр. qwen2.5:7b-instruct"

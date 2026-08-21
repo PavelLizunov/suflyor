@@ -41,11 +41,12 @@
 //! glob).
 use super::{
     ai, apply_tile_hwnd_with_monitor, cost_cap_reason, fire_followup_ask, fire_regenerate,
-    gated_events, grab_hwnd, install_streaming_tile, journal, live_route, markdown,
+    gated_events, grab_hwnd, install_streaming_tile, journal, live_route,
     present_tile_window, refresh_open_tiles, resolve_route_endpoint, route_needs_mlx,
     select_recent_labeled, show_mlx_runtime_error, spawn_mlx_runtime_error, toggle_tile_maximize,
-    wire_copy, wire_escalate, wire_speak, wire_tile_drag, wire_voice_followup, Arc, AskRoute,
-    ComponentHandle, MarkdownBlock, ModelRc, MonitorHint, Ordering, OverlayBarBridge,
+    to_md_blocks, user_turn_markdown, wire_copy, wire_escalate, wire_speak, wire_tile_drag,
+    wire_voice_followup, Arc, AskRoute,
+    ComponentHandle, ModelRc, MonitorHint, Ordering, OverlayBarBridge,
     OverlayBarWindow, RuntimeEvents, SharedSlintRuntime, SharedString, StreamingTile, TileKind,
     TileSpec, TileWindow, TileWindows, VecModel, AI_STREAM_MAX_TOKENS, CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
@@ -317,14 +318,13 @@ pub(crate) fn fire_f9_ask(
     tile.set_followup_busy(true);
     wire_tile_drag(&tile);
     // Plain text, no hourglass glyph (tofu on the skia font fallback).
-    let placeholder = vec![MarkdownBlock {
-        kind: markdown::kind::PARAGRAPH,
-        text: SharedString::from("Asking AI…"),
-        display_text: SharedString::from("Asking AI…"),
-        lang: SharedString::from(""),
-        marked: false,
-    }];
-    tile.set_blocks(ModelRc::new(VecModel::from(placeholder)));
+    let initial_prefix = typed_question
+        .as_deref()
+        .map(user_turn_markdown)
+        .unwrap_or_default();
+    tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&format!(
+        "{initial_prefix}Asking AI…"
+    )))));
     let weak_close = tile.as_weak();
     let vec_for_close = tiles.clone();
     let weak_overlay_close = weak_overlay.clone();
@@ -442,7 +442,7 @@ pub(crate) fn fire_f9_ask(
         StreamingTile {
             weak: weak_for_stream,
             accumulated: String::new(),
-            prefix: String::new(),
+            prefix: initial_prefix,
             convo_id,
             request_messages: Vec::new(),
         },

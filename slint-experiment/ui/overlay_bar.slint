@@ -542,6 +542,8 @@ export component OverlayBarWindow inherits Window {
     // updates the bar (tiles-spawned is a CUMULATIVE counter and must NOT be
     // used for these — it never decrements except on close-all).
     in-out property <int> open-tiles: 0;
+    // One bounded recovery slot for a read-aloud tile closed by mistake.
+    in-out property <bool> can-restore-tile: false;
 
     // Phase E6 v10 — aggressive (every-line) auto-tile mode flag.
     // When true, the bar shows the "🔥 auto" chip lit; user can
@@ -657,6 +659,7 @@ export component OverlayBarWindow inherits Window {
     // V0.8.3 — "Написать": open the typed-question input window.
     callback text-ask-clicked();
     callback close-all-tiles-clicked();
+    callback restore-tile-clicked();
     callback capture-clicked(); // 📷 screenshot -> vision (same as F8)
     callback stealth-toggle-clicked();
     callback aggressive-toggle-clicked();
@@ -917,6 +920,13 @@ export component OverlayBarWindow inherits Window {
                 a11y: @tr("close all");
                 accent: #fb7185;
                 clicked => { root.close-all-tiles-clicked(); }
+            }
+            if root.can-restore-tile && !root.confirming : Chip {
+                icon: @image-url("../assets/icons/restore.svg");
+                has-icon: true;
+                a11y: @tr("Restore last tile");
+                accent: #34d399;
+                clicked => { root.restore-tile-clicked(); }
             }
             // V0.8.3 — ✏ Написать: type a question when speaking aloud isn't an
             // option. Opens a small stealth-aware input window.
