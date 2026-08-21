@@ -29,6 +29,20 @@ use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+/// Constant-time byte slice comparison to prevent timing side-channel attacks
+/// when validating authentication tokens or secret tokens.
+#[must_use]
+pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut result = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        result |= x ^ y;
+    }
+    result == 0
+}
+
 /// Max accepted request body (a profile context is ≤ ~20k chars; 256 KiB is
 /// far above any legitimate payload).
 const MAX_BODY_BYTES: usize = 256 * 1024;
@@ -148,11 +162,12 @@ pub fn start(cfg: SharedConfig) -> Result<BridgeHandle, String> {
 /// failure path answers with a generic JSON error.
 fn handle_request(mut req: tiny_http::Request, cfg: &SharedConfig, token: &str) {
     // Auth FIRST (before reading the body): constant shape, generic error.
+    let expected_auth = format!("Bearer {token}");
     let authed = req
         .headers()
         .iter()
         .find(|h| h.field.equiv("Authorization"))
-        .map(|h| h.value.as_str() == format!("Bearer {token}"))
+        .map(|h| constant_time_eq(h.value.as_str().as_bytes(), expected_auth.as_bytes()))
         .unwrap_or(false);
     let (status, body, needs_save) = if !authed {
         (401, serde_json::json!({"error": "unauthorized"}), false)
@@ -690,5 +705,15 @@ mod tests {
         // «влад» percent-encoded (UTF-8) + '+' as space.
         let (_, q) = split_query("/search?q=%D0%B2%D0%BB%D0%B0%D0%B4+%D0%BA");
         assert_eq!(q[0].1, "влад к");
+    }
+
+    #[test]
+    fn constant_time_eq_behavior() {
+        assert!(constant_time_eq(b"Bearer token123", b"Bearer token123"));
+        assert!(!constant_time_eq(b"Bearer token123", b"Bearer token124"));
+        assert!(!constant_time_eq(b"Bearer token123", b"Bearer token12"));
+        assert!(!constant_time_eq(b"Bearer token123", b"Bearer token1234"));
+        assert!(constant_time_eq(b"", b""));
+        assert!(!constant_time_eq(b"", b"a"));
     }
 }
