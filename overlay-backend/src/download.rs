@@ -16,8 +16,10 @@ use std::process::Command;
 /// `--retry … --retry-all-errors` is essential. Follows redirects, fails on HTTP
 /// error, no console window. Blocking. Removes a partial file on failure.
 pub(crate) fn curl_download(url: &str, dest: &Path) -> Result<()> {
-    let curl_bin = if cfg!(windows) { "curl.exe" } else { "curl" };
-    let status = no_window(Command::new(curl_bin).args([
+    if !url.trim().starts_with("https://") {
+        bail!("refusing to download from a non-HTTPS URL");
+    }
+    let status = no_window(Command::new(system_curl()).args([
         "-L",
         "--fail",
         "--silent",
@@ -40,6 +42,21 @@ pub(crate) fn curl_download(url: &str, dest: &Path) -> Result<()> {
         bail!("curl exited with {status}");
     }
     Ok(())
+}
+
+/// Full path to `curl.exe` under System32 on Windows, or `curl` on POSIX systems.
+pub(crate) fn system_curl() -> PathBuf {
+    #[cfg(windows)]
+    {
+        std::env::var_os("SystemRoot")
+            .map(|r| PathBuf::from(r).join("System32").join("curl.exe"))
+            .filter(|p| p.is_file())
+            .unwrap_or_else(|| PathBuf::from("curl.exe"))
+    }
+    #[cfg(not(windows))]
+    {
+        PathBuf::from("curl")
+    }
 }
 
 /// Extract a `.tar.bz2` into `dest_dir` using system `tar`
@@ -109,10 +126,25 @@ pub(crate) fn no_window(cmd: &mut Command) -> &mut Command {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
     use super::*;
 
     #[test]
     fn hex_is_lowercase_and_padded() {
         assert_eq!(hex(&[0x00, 0x0f, 0xa0, 0xff]), "000fa0ff");
+    }
+
+    #[test]
+    fn curl_download_rejects_non_https_urls() {
+        let dest = std::env::temp_dir().join("suflyor-non-https-test");
+        for url in ["http://example.com/model", "file:///tmp/model", ""] {
+            assert!(curl_download(url, &dest).is_err());
+        }
+    }
+
+    #[test]
+    fn system_curl_is_not_empty() {
+        assert!(!system_curl().as_os_str().is_empty());
     }
 }
