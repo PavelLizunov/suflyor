@@ -1,0 +1,50 @@
+name: Package Windows
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install NSIS
+        shell: powershell
+        run: choco install nsis --no-progress -y
+
+      - name: Build installer
+        shell: powershell
+        run: ./scripts/build-slint-release.ps1 -Installer
+
+      - name: Record artifact identity
+        shell: powershell
+        run: |
+          $installer = "slint-experiment/target/release/bundle/suflyor-slint-setup.exe"
+          $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          $length = (Get-Item -LiteralPath $installer).Length
+          @(
+            "commit=${{ github.sha }}"
+            "length=$length"
+            "sha256=$hash"
+          ) | Set-Content -LiteralPath "slint-experiment/target/release/bundle/SHA256SUMS.txt" -Encoding ascii
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: suflyor-v0.38.0-windows-${{ github.sha }}
+          path: |
+            slint-experiment/target/release/bundle/suflyor-slint-setup.exe
+            slint-experiment/target/release/bundle/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
