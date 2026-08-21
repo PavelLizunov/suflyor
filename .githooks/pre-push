@@ -1,4 +1,7 @@
 #!/bin/sh
 # Agent-agnostic selective gate: docs-only, affected crate, or full CI.
 root="$(git rev-parse --show-toplevel)" || exit 1
+if [ "$(uname -s)" = "Darwin" ]; then
+    exec bash "$root/scripts/git-gate-macos.sh"
+fi
 exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/git-gate-native.ps1" push

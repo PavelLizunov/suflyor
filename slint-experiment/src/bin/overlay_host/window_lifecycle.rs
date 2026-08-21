@@ -31,6 +31,15 @@ use super::{
 static TILE_BODY_OPACITY_BITS: std::sync::atomic::AtomicU32 =
     std::sync::atomic::AtomicU32::new(0x3F80_0000); // 1.0_f32
 
+/// Place a shared Slint window using the coordinate units returned by the
+/// platform geometry adapter: physical pixels on Windows, logical points on macOS.
+pub(crate) fn set_platform_window_position(window: &slint::Window, x: i32, y: i32) {
+    #[cfg(windows)]
+    window.set_position(slint::PhysicalPosition::new(x, y));
+    #[cfg(target_os = "macos")]
+    window.set_position(slint::LogicalPosition::new(x as f32, y as f32));
+}
+
 /// Store the current global tile body opacity (clamped 0.5..=1.0).
 pub(crate) fn set_global_tile_opacity(value: f32) {
     let clamped = value.clamp(0.5, 1.0);
@@ -150,7 +159,7 @@ pub(crate) fn apply_bar_stealth(
 /// Apply WDA to a single registry/realize window, logging (never swallowing)
 /// a failure (I1): a window whose exclusion failed stays capturable, and the
 /// user must be able to diagnose it from the log.
-fn apply_stealth_one(hwnd: windows::Win32::Foundation::HWND, on: bool) {
+fn apply_stealth_one(hwnd: slint_replay::win32::HWND, on: bool) {
     if let Err(e) = set_stealth(hwnd, on) {
         diag!("[overlay-host] stealth apply failed (window stays capturable): {e}");
     }
@@ -242,7 +251,7 @@ pub(crate) fn clamp_scheme(n: i32) -> i32 {
 pub(crate) fn present_window_stealth_aware<W, F>(win: &W, decorate: F)
 where
     W: slint::ComponentHandle + 'static,
-    F: Fn(windows::Win32::Foundation::HWND) + 'static,
+    F: Fn(slint_replay::win32::HWND) + 'static,
 {
     present_window_stealth_aware_at(win, None, decorate);
 }
@@ -271,7 +280,7 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
     decorate: F,
 ) where
     W: slint::ComponentHandle + 'static,
-    F: Fn(windows::Win32::Foundation::HWND) + 'static,
+    F: Fn(slint_replay::win32::HWND) + 'static,
 {
     // G1 — layout-independent Ctrl+C/V/X/A/Z/Y for every editable field on this window
     // (winit key filter; idempotent). Covers Settings / palette / text_ask / wizard /
@@ -281,8 +290,7 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
     // tick decorates + (under stealth) WDAs, then moves it on-screen, so the
     // first visible frame is complete. Unconditional so a stealth toggle
     // mid-realize can't strand the window off the desktop either.
-    win.window()
-        .set_position(slint::PhysicalPosition::new(-32000, -32000));
+    set_platform_window_position(win.window(), -32000, -32000);
     let _ = win.show();
     // V0.8.4 — reveal as soon as the HWND realizes (~1-2 frames) instead of a
     // fixed 200ms blind wait, so on-demand windows (Settings/help/palette/wizard/
@@ -294,6 +302,10 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
         let Ok(hwnd) = grab_hwnd(w.window()) else {
             return false;
         };
+        #[cfg(target_os = "macos")]
+        if let Err(error) = slint_replay::native::window::configure_floating(w.window()) {
+            diag!("[overlay-host] macOS floating-window configuration failed: {error}");
+        }
         decorate(hwnd);
         if global_stealth() {
             // I1 — a failed exclusion is logged, never silently swallowed.
@@ -307,12 +319,19 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
         let monitors = enum_monitors();
         if let Some((sx, sy)) = saved_pos.filter(|p| pos_on_visible_monitor(*p, &monitors)) {
             let _ = move_window_pos_only(hwnd, sx, sy);
+            set_platform_window_position(w.window(), sx, sy);
         } else if let Some(mon) = pick_monitor(&monitors) {
             let cx = (mon.left + (mon.width() - w_px) / 2).max(mon.left + 8);
             let cy = (mon.top + (mon.height() - h_px) / 2).max(mon.top + 8);
             let _ = move_window_pos_only(hwnd, cx, cy);
+            set_platform_window_position(w.window(), cx, cy);
         } else {
             let _ = move_window_pos_only(hwnd, 100, 100);
+            set_platform_window_position(w.window(), 100, 100);
+        }
+        #[cfg(target_os = "macos")]
+        if let Err(error) = slint_replay::native::window::raise_key_front(w.window()) {
+            diag!("[overlay-host] macOS window raise failed: {error}");
         }
         true
     });
@@ -339,16 +358,13 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
         );
         let monitors = enum_monitors();
         if let Some((sx, sy)) = saved_pos.filter(|p| pos_on_visible_monitor(*p, &monitors)) {
-            w.window()
-                .set_position(slint::PhysicalPosition::new(sx, sy));
+            set_platform_window_position(w.window(), sx, sy);
         } else if let Some(mon) = pick_monitor(&monitors) {
             let cx = (mon.left + (mon.width() - 460) / 2).max(mon.left + 8);
             let cy = (mon.top + (mon.height() - 360) / 2).max(mon.top + 8);
-            w.window()
-                .set_position(slint::PhysicalPosition::new(cx, cy));
+            set_platform_window_position(w.window(), cx, cy);
         } else {
-            w.window()
-                .set_position(slint::PhysicalPosition::new(100, 100));
+            set_platform_window_position(w.window(), 100, 100);
         }
     });
     realize_with_retries(win, do_reveal, fallback_reveal);

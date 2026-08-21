@@ -1,0 +1,197 @@
+component ActionButton inherits Rectangle {
+    in property <string> label;
+    callback clicked;
+
+    min-width: 132px;
+    height: 34px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: #5b5568;
+    background: touch.has-hover ? #3b3545 : #2b2731;
+
+    Text {
+        text: root.label;
+        color: #eee9f2;
+        font-size: 12px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component CaptureRow inherits Rectangle {
+    in property <string> title-text;
+    in property <string> status-text;
+    in property <string> detail-text;
+    in property <string> primary-text;
+    in property <string> secondary-text;
+    in property <string> settings-text;
+    in property <bool> show-settings;
+    callback primary;
+    callback secondary;
+    callback settings;
+
+    height: 138px;
+    border-radius: 12px;
+    border-width: 1px;
+    border-color: #45404d;
+    background: #211e26;
+
+    VerticalLayout {
+        padding: 14px;
+        spacing: 8px;
+        Text {
+            text: root.title-text;
+            color: #f2edf5;
+            font-size: 15px;
+            font-weight: 700;
+        }
+        Text {
+            text: root.status-text;
+            color: #c9c1d0;
+            font-size: 12px;
+            overflow: elide;
+        }
+        Text {
+            text: root.detail-text;
+            color: #9e96a6;
+            font-size: 11px;
+            overflow: elide;
+        }
+        Rectangle { vertical-stretch: 1; }
+        HorizontalLayout {
+            spacing: 8px;
+            ActionButton {
+                label: root.primary-text;
+                clicked => { root.primary(); }
+            }
+            ActionButton {
+                label: root.secondary-text;
+                clicked => { root.secondary(); }
+            }
+            if root.show-settings: ActionButton {
+                label: root.settings-text;
+                clicked => { root.settings(); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+    }
+}
+
+export component GateCapture inherits Window {
+    in property <string> title-text;
+    in property <string> subtitle-text;
+    in property <string> mic-title-text;
+    in property <string> mic-status-text;
+    in property <string> mic-detail-text;
+    in property <string> mic-request-text;
+    in property <string> mic-start-text;
+    in property <string> mic-stop-text;
+    in property <string> system-title-text;
+    in property <string> system-status-text;
+    in property <string> system-detail-text;
+    in property <string> system-start-text;
+    in property <string> system-stop-text;
+    in property <string> screen-title-text;
+    in property <string> screen-status-text;
+    in property <string> screen-detail-text;
+    in property <string> screen-capture-text;
+    in property <string> settings-text;
+    in property <string> refresh-text;
+    in property <string> event-text;
+
+    callback request-microphone;
+    callback start-microphone;
+    callback stop-microphone;
+    callback start-system;
+    callback stop-system;
+    callback open-system-settings;
+    callback capture-screen;
+    callback open-mic-settings;
+    callback open-screen-settings;
+    callback refresh;
+
+    title: root.title-text;
+    width: 820px;
+    height: 700px;
+    background: #18161c;
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+        Text {
+            text: root.title-text;
+            color: #f4eff7;
+            font-size: 22px;
+            font-weight: 700;
+        }
+        Text {
+            text: root.subtitle-text;
+            color: #aaa2b2;
+            font-size: 12px;
+        }
+        CaptureRow {
+            title-text: root.mic-title-text;
+            status-text: root.mic-status-text;
+            detail-text: root.mic-detail-text;
+            primary-text: root.mic-request-text;
+            secondary-text: root.mic-start-text;
+            settings-text: root.settings-text;
+            show-settings: true;
+            primary => { root.request-microphone(); }
+            secondary => { root.start-microphone(); }
+            settings => { root.open-mic-settings(); }
+        }
+        HorizontalLayout {
+            height: 34px;
+            ActionButton {
+                label: root.mic-stop-text;
+                clicked => { root.stop-microphone(); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        CaptureRow {
+            title-text: root.system-title-text;
+            status-text: root.system-status-text;
+            detail-text: root.system-detail-text;
+            primary-text: root.system-start-text;
+            secondary-text: root.system-stop-text;
+            settings-text: root.settings-text;
+            show-settings: true;
+            primary => { root.start-system(); }
+            secondary => { root.stop-system(); }
+            settings => { root.open-system-settings(); }
+        }
+        CaptureRow {
+            title-text: root.screen-title-text;
+            status-text: root.screen-status-text;
+            detail-text: root.screen-detail-text;
+            primary-text: root.screen-capture-text;
+            secondary-text: root.refresh-text;
+            settings-text: root.settings-text;
+            show-settings: true;
+            primary => { root.capture-screen(); }
+            secondary => { root.refresh(); }
+            settings => { root.open-screen-settings(); }
+        }
+        Rectangle {
+            height: 44px;
+            border-radius: 8px;
+            background: #24202a;
+            Text {
+                x: 12px;
+                width: parent.width - 24px;
+                text: root.event-text;
+                color: #b7a8db;
+                font-size: 11px;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+}

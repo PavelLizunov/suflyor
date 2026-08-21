@@ -180,7 +180,10 @@ pub fn validate_language_tags(text: &str) -> Result<()> {
             i += 1;
             continue;
         }
-        // Parse one tag-shaped token, or fail.
+        // Parse one tag-shaped token. A literal `<` from copied prose/code
+        // (`a < b`, `Vector<T>`, HTML) is ordinary text, not a malformed
+        // language tag. Only exact two-letter tag-shaped tokens participate in
+        // the language-tag grammar below.
         let mut j = i + 1;
         let closing = chars.get(j) == Some(&'/');
         if closing {
@@ -191,9 +194,8 @@ pub fn validate_language_tags(text: &str) -> Result<()> {
             && chars[j + 1].is_ascii_lowercase()
             && chars.get(j + 2) == Some(&'>');
         if !valid_shape {
-            return Err(anyhow!(
-                "invalid language tags; use only <ru>...</ru> or <en>...</en>"
-            ));
+            i += 1;
+            continue;
         }
         let lang = [chars[j], chars[j + 1]];
         let lang_str: String = lang.iter().collect();
@@ -421,7 +423,8 @@ mod tests {
         assert!(validate_language_tags("текст</ru>").is_err());
         assert!(validate_language_tags("<de>текст</de>").is_err());
         assert!(validate_language_tags("<ru>текст</en>").is_err());
-        assert!(validate_language_tags("<ru>а < б</ru>").is_err());
+        assert!(validate_language_tags("<ru>а < б</ru>").is_ok());
+        assert!(validate_language_tags("<ru>Vector<T> и <div></ru>").is_ok());
     }
 
     #[test]

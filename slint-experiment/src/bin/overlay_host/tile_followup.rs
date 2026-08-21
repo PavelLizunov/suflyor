@@ -14,12 +14,26 @@
 //!
 //! NOTE (§7): the crate-root symbols this module uses are imported below.
 use super::{
-    ai, audio, gated_events, install_streaming_tile, journal, message_text, spawn_ptt_watchdog,
-    strip_followup_directives, stt, to_md_blocks, tokio_mpsc, try_acquire_mic,
-    warn_if_over_cost_cap, Arc, AskRoute, AtomicBool, ComponentHandle, LiveRoute, ModelRc,
-    Ordering, OverlayBarBridge, Rc, RefCell, RuntimeEvents, SharedSlintRuntime, SharedString,
-    StreamingTile, TileWindow, VecModel,
+    ai, audio, gated_events, install_streaming_tile, journal, message_text, resolve_route_endpoint,
+    route_needs_mlx, show_mlx_runtime_error, spawn_ptt_watchdog, strip_followup_directives, stt,
+    to_md_blocks, tokio_mpsc, try_acquire_mic, warn_if_over_cost_cap, Arc, AskRoute, AtomicBool,
+    ComponentHandle, LiveRoute, ModelRc, Ordering, OverlayBarBridge, Rc, RefCell, RuntimeEvents,
+    SharedSlintRuntime, SharedString, StreamingTile, TileWindow, VecModel,
 };
+
+/// Render one user turn as a fenced role block. The markdown adapter already
+/// preserves fenced block languages, so `tile.slint` can give `user` blocks a
+/// real bubble without adding a second conversation renderer. Pick a fence
+/// longer than any run inside the user's text so pasted code fences stay exact.
+pub(crate) fn user_turn_markdown(question: &str) -> String {
+    let longest = question
+        .split(|ch| ch != '~')
+        .map(str::len)
+        .max()
+        .unwrap_or(0);
+    let fence = "~".repeat(longest.max(2) + 1);
+    format!("{fence}user\n{}\n{fence}\n\n", question.trim())
+}
 // ============================================================================
 // Follow-up reframe — root cause of the escalate→follow-up bug.
 // ============================================================================
@@ -438,7 +452,10 @@ pub(crate) fn fire_followup_ask(
 
     // Visible thread = prior thread + the new question header; the streamed
     // answer renders after this prefix.
-    let prefix = format!("{prior_rendered}\n\n---\n\n**You: {question}**\n\n");
+    let prefix = format!(
+        "{prior_rendered}\n\n---\n\n{}",
+        user_turn_markdown(&question)
+    );
 
     // Show the question immediately + mark busy; register the slot so the
     // ai:event deltas land in this tile.
@@ -449,6 +466,7 @@ pub(crate) fn fire_followup_ask(
         let shown = format!("{prefix}…");
         tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&shown))));
     }
+    let weak_for_mlx_error = tile_weak.clone();
     let generation = install_streaming_tile(
         bridge,
         StreamingTile {
@@ -463,36 +481,28 @@ pub(crate) fn fire_followup_ask(
     // Snapshot config + journal/health and abort any in-flight task on the UI
     // thread; the blocking approved-memory read + reframe then run on a worker
     // (mirrors fire_f9_ask's tail — audit C2/G2).
-    let (
-        protocol,
-        base_url,
-        bearer,
-        model,
-        reasoning_effort,
-        is_local,
-        max_tokens,
-        response_language,
-        meeting_context,
-    ) = {
+    let (endpoint_hint, max_tokens, response_language, meeting_context, ui_is_ru, needs_mlx) = {
         let c = cfg.read();
         let ep = route.endpoint(&c);
-        let is_unmetered = ep.is_unmetered();
         (
-            ep.protocol,
-            ep.base_url,
-            ep.bearer,
-            ep.model,
-            ep.reasoning_effort,
-            is_unmetered,
+            ep,
             route.max_tokens(),
             c.response_language.clone(),
             c.meeting_context.clone(),
+            c.ui_is_ru(),
+            route_needs_mlx(route, &c),
         )
     };
     let attached_screenshot = route.attaches_screenshot();
     // v0.8.2 (MAJOR-2) — a sticky-cloud follow-up is billable; warn if the
     // session cost cap is already exceeded (mirrors fire_f9_ask).
-    warn_if_over_cost_cap(events, cfg, slint_rt, is_local, "followup_ask");
+    warn_if_over_cost_cap(
+        events,
+        cfg,
+        slint_rt,
+        endpoint_hint.is_unmetered(),
+        "followup_ask",
+    );
     let (journal_for_loop, health_for_stream) = {
         let s = slint_replay::runtime_state::lock(slint_rt);
         (s.journal.clone(), s.health.clone())
@@ -508,9 +518,27 @@ pub(crate) fn fire_followup_ask(
     // ТЗ 2026-07-06 (A) — the follow-up question selects the RELEVANT facts.
     let bridge_for_work = bridge.clone();
     let events_for_work = events.clone();
+    let cfg_for_work = cfg.clone();
     let slint_rt_for_work = slint_rt.clone();
     let rt_handle_for_work = rt_handle.clone();
     std::thread::spawn(move || {
+        let endpoint = if needs_mlx {
+            match resolve_route_endpoint(route, &cfg_for_work) {
+                Ok(endpoint) => endpoint,
+                Err(()) => {
+                    show_mlx_runtime_error(weak_for_mlx_error, ui_is_ru);
+                    return;
+                }
+            }
+        } else {
+            endpoint_hint
+        };
+        let is_local = endpoint.is_unmetered();
+        let protocol = endpoint.protocol;
+        let base_url = endpoint.base_url;
+        let bearer = endpoint.bearer;
+        let model = endpoint.model;
+        let reasoning_effort = endpoint.reasoning_effort;
         // BLOCKING — off the event loop. The reframe builds a fresh neutral system
         // prompt (no double-add of memory).
         let meeting_context =
@@ -642,35 +670,27 @@ pub(crate) fn fire_regenerate(
         let n = messages.len() - 1;
         strip_followup_directives(&mut messages[..n]);
     }
-    let (
-        protocol,
-        base_url,
-        bearer,
-        model,
-        reasoning_effort,
-        is_local,
-        max_tokens,
-        response_language,
-        meeting_context,
-    ) = {
+    let (endpoint_hint, max_tokens, response_language, meeting_context, ui_is_ru, needs_mlx) = {
         let c = cfg.read();
         let ep = route.endpoint(&c);
-        let is_unmetered = ep.is_unmetered();
         (
-            ep.protocol,
-            ep.base_url,
-            ep.bearer,
-            ep.model,
-            ep.reasoning_effort,
-            is_unmetered,
+            ep,
             route.max_tokens(),
             c.response_language.clone(),
             c.meeting_context.clone(),
+            c.ui_is_ru(),
+            route_needs_mlx(route, &c),
         )
     };
     let attached_screenshot = route.attaches_screenshot();
     // v0.8.2 (MAJOR-2) — a sticky-cloud regenerate is billable; warn over cap.
-    warn_if_over_cost_cap(events, cfg, slint_rt, is_local, "regenerate");
+    warn_if_over_cost_cap(
+        events,
+        cfg,
+        slint_rt,
+        endpoint_hint.is_unmetered(),
+        "regenerate",
+    );
     if let Some(t) = tile_weak.upgrade() {
         t.set_followup_busy(true);
         t.set_source_label(SharedString::from("ai · перегенерация…"));
@@ -686,6 +706,7 @@ pub(crate) fn fire_regenerate(
     // conversation in a divergent, ungated state, so the 2nd follow-up after an
     // escalation re-sent stale history and re-emitted the escalation answer
     // verbatim.
+    let weak_for_mlx_error = tile_weak.clone();
     let generation = install_streaming_tile(
         bridge,
         StreamingTile {
@@ -713,9 +734,27 @@ pub(crate) fn fire_regenerate(
     // re-asked turn (last user TEXT) selects the facts; a Parts turn → recency.
     let bridge_for_work = bridge.clone();
     let events_for_work = events.clone();
+    let cfg_for_work = cfg.clone();
     let slint_rt_for_work = slint_rt.clone();
     let rt_handle_for_work = rt_handle.clone();
     std::thread::spawn(move || {
+        let endpoint = if needs_mlx {
+            match resolve_route_endpoint(route, &cfg_for_work) {
+                Ok(endpoint) => endpoint,
+                Err(()) => {
+                    show_mlx_runtime_error(weak_for_mlx_error, ui_is_ru);
+                    return;
+                }
+            }
+        } else {
+            endpoint_hint
+        };
+        let is_local = endpoint.is_unmetered();
+        let protocol = endpoint.protocol;
+        let base_url = endpoint.base_url;
+        let bearer = endpoint.bearer;
+        let model = endpoint.model;
+        let reasoning_effort = endpoint.reasoning_effort;
         // BLOCKING — off the event loop, and ONLY on the ≥2-user-turn branch.
         let send_messages = if messages.iter().filter(|m| m.role == "user").count() >= 2 {
             let last_user_q =
@@ -821,6 +860,13 @@ mod tests {
     //! user(new question)]` — one user turn, no prior "conversation" to continue.
     //! Vision dialogs stay multi-turn. Pure: no UI, no network.
     use super::*;
+
+    #[test]
+    fn user_turn_uses_a_fence_longer_than_pasted_code() {
+        let rendered = user_turn_markdown("вопрос\n~~~bash\necho ok\n~~~");
+        assert!(rendered.starts_with("~~~~user\n"));
+        assert!(rendered.contains("~~~bash\necho ok\n~~~"));
+    }
 
     fn msg(role: &str, text: &str) -> ai::ChatMessage {
         ai::ChatMessage {

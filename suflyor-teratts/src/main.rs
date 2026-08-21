@@ -35,6 +35,10 @@ mod indexer;
 mod manifest;
 mod npy;
 mod num2words;
+#[cfg(windows)]
+mod playback;
+#[cfg(not(windows))]
+#[path = "playback_macos.rs"]
 mod playback;
 mod protocol;
 mod rng;
@@ -51,7 +55,19 @@ use protocol::{Cmd, Event, RejectReason};
 /// `%APPDATA%\suflyor\tts` — shared TTS root (Piper voices live in their own
 /// subdirectories; Tera owns `teratts-v2-<revision>`).
 fn tts_root() -> Option<PathBuf> {
-    std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("suflyor").join("tts"))
+    if let Some(a) = std::env::var_os("APPDATA") {
+        return Some(PathBuf::from(a).join("suflyor").join("tts"));
+    }
+    if let Some(h) = std::env::var_os("HOME") {
+        return Some(
+            PathBuf::from(h)
+                .join("Library")
+                .join("Application Support")
+                .join("suflyor")
+                .join("tts"),
+        );
+    }
+    None
 }
 
 fn emit(out: &mut impl Write, event: &Event) {
@@ -106,7 +122,7 @@ trait Player {
 /// Where [`SynthJob`]s go. Real builds hand them to the synth worker thread;
 /// tests record them and inject results by hand.
 trait SynthDispatch {
-    fn dispatch(&mut self, job: SynthJob);
+    fn dispatch(&mut self, job: SynthJob) -> Result<(), SynthJob>;
 }
 
 /// Voice preference when none is configured: the recommended Russian prompts
@@ -159,6 +175,7 @@ struct Controller<P: Player> {
     player: Option<P>,
     chunks_total: usize,
     chunks_settled: usize,
+    chunks_failed: usize,
     playing_emitted: bool,
     /// Cancellation generation, shared with the synth worker thread.
     generation: Arc<AtomicU64>,
@@ -196,6 +213,7 @@ impl<P: Player> Controller<P> {
         }
         self.chunks_total = 0;
         self.chunks_settled = 0;
+        self.chunks_failed = 0;
         self.playing_emitted = false;
         let previous = self.active.take();
         self.generation.store(0, Ordering::Release);
@@ -238,17 +256,32 @@ impl<P: Player> Controller<P> {
                 self.generation.store(id, Ordering::Release);
                 self.chunks_total = chunks.len();
                 self.chunks_settled = 0;
+                self.chunks_failed = 0;
                 self.playing_emitted = false;
                 let scale = self.duration_scale();
+                let mut dispatch_failed = false;
                 for (chunk_index, chunk_text) in chunks.into_iter().enumerate() {
-                    self.dispatch.dispatch(SynthJob {
+                    if self
+                        .dispatch
+                        .dispatch(SynthJob {
+                            utterance: id,
+                            chunk_index,
+                            text: chunk_text,
+                            voice: voice.clone(),
+                            lang: self.lang.clone(),
+                            duration_scale: scale,
+                            seed: tera::SEED.wrapping_add(id),
+                        })
+                        .is_err()
+                    {
+                        dispatch_failed = true;
+                        break;
+                    }
+                }
+                if dispatch_failed {
+                    self.on_synth_result(SynthOutcome {
                         utterance: id,
-                        chunk_index,
-                        text: chunk_text,
-                        voice: voice.clone(),
-                        lang: self.lang.clone(),
-                        duration_scale: scale,
-                        seed: tera::SEED.wrapping_add(id),
+                        audio: Err("worker".to_string()),
                     });
                 }
             }
@@ -287,16 +320,26 @@ impl<P: Player> Controller<P> {
                 }
             }
             Err(reason) => {
-                eprintln!("[suflyor-teratts] synth failed ({reason})");
-                if let Some(player) = self.player.take() {
-                    player.stop();
+                self.chunks_failed += 1;
+                eprintln!("[suflyor-teratts] synth chunk skipped ({reason})");
+                if self.chunks_settled == self.chunks_total {
+                    if self.chunks_failed == self.chunks_total {
+                        if let Some(player) = self.player.take() {
+                            player.stop();
+                        }
+                        self.active = None;
+                        self.chunks_total = 0;
+                        self.chunks_settled = 0;
+                        self.chunks_failed = 0;
+                        self.playing_emitted = false;
+                        self.generation.store(0, Ordering::Release);
+                        self.emit_event(Event::Failed { id: active, reason });
+                    } else if let Some(player) = self.player.as_mut() {
+                        // One bad browser-copied fragment must not stop all the
+                        // already synthesized speech. Drain the good chunks.
+                        player.end_of_stream();
+                    }
                 }
-                self.active = None;
-                self.chunks_total = 0;
-                self.chunks_settled = 0;
-                self.playing_emitted = false;
-                self.generation.store(0, Ordering::Release);
-                self.emit_event(Event::Failed { id: active, reason });
             }
         }
     }
@@ -314,6 +357,7 @@ impl<P: Player> Controller<P> {
         self.active = None;
         self.chunks_total = 0;
         self.chunks_settled = 0;
+        self.chunks_failed = 0;
         self.playing_emitted = false;
         self.generation.store(0, Ordering::Release);
         self.emit_event(Event::Done { id });
@@ -393,8 +437,8 @@ struct ThreadDispatch {
 }
 
 impl SynthDispatch for ThreadDispatch {
-    fn dispatch(&mut self, job: SynthJob) {
-        let _ = self.jobs.send(job);
+    fn dispatch(&mut self, job: SynthJob) -> Result<(), SynthJob> {
+        self.jobs.send(job).map_err(|error| error.0)
     }
 }
 
@@ -406,11 +450,12 @@ struct FailingDispatch {
 }
 
 impl SynthDispatch for FailingDispatch {
-    fn dispatch(&mut self, job: SynthJob) {
+    fn dispatch(&mut self, job: SynthJob) -> Result<(), SynthJob> {
         let _ = self.events.send(Message::Synth(SynthOutcome {
             utterance: job.utterance,
             audio: Err("load".to_string()),
         }));
+        Ok(())
     }
 }
 
@@ -419,55 +464,39 @@ impl SynthDispatch for FailingDispatch {
 /// observable while one chunk is synthesizing. Jobs for superseded
 /// generations are skipped before spending CPU.
 fn synth_worker(
-    root: PathBuf,
+    mut engine: tera::TeraEngine,
     generation: Arc<AtomicU64>,
     jobs: mpsc::Receiver<SynthJob>,
     events: mpsc::Sender<Message>,
 ) {
-    let mut engine = match tera::TeraEngine::load(&root) {
-        Ok(loaded) => Some(loaded),
-        Err(err) => {
-            eprintln!(
-                "[suflyor-teratts] background warm-up failed ({})",
-                reason_token(&err, "load")
-            );
-            None
-        }
-    };
     while let Ok(job) = jobs.recv() {
         if generation.load(Ordering::Acquire) != job.utterance {
             continue;
         }
-        if engine.is_none() {
-            match tera::TeraEngine::load(&root) {
-                Ok(loaded) => engine = Some(loaded),
-                Err(err) => {
-                    let reason = reason_token(&err, "load");
-                    let _ = events.send(Message::Synth(SynthOutcome {
-                        utterance: job.utterance,
-                        audio: Err(reason),
-                    }));
-                    continue;
-                }
-            }
-        }
-        let audio = match engine.as_mut() {
-            Some(loaded) => loaded
-                .synthesize(
-                    &job.text,
-                    &job.voice,
-                    &job.lang,
-                    job.duration_scale,
-                    job.seed,
-                )
-                .map(|output| output.chunks)
-                .map_err(|err| reason_token(&err, "synth")),
-            None => Err("load".to_string()),
+        let (audio, panicked) = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            engine.synthesize(
+                &job.text,
+                &job.voice,
+                &job.lang,
+                job.duration_scale,
+                job.seed,
+            )
+        })) {
+            Ok(result) => (
+                result
+                    .map(|output| output.chunks)
+                    .map_err(|err| reason_token(&err, "synth")),
+                false,
+            ),
+            Err(_) => (Err("synth".to_string()), true),
         };
         let _ = events.send(Message::Synth(SynthOutcome {
             utterance: job.utterance,
             audio,
         }));
+        if panicked {
+            break;
+        }
     }
 }
 
@@ -517,6 +546,31 @@ fn main() {
         Err(_) => (String::new(), Vec::new(), "error"),
     };
 
+    let mut engine = None;
+    let state = if state == "ready" {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            tera::TeraEngine::load(&root)
+        })) {
+            Ok(Ok(loaded)) => {
+                engine = Some(loaded);
+                "ready"
+            }
+            Ok(Err(error)) => {
+                eprintln!(
+                    "[suflyor-teratts] startup load failed ({})",
+                    reason_token(&error, "load")
+                );
+                "error"
+            }
+            Err(_) => {
+                eprintln!("[suflyor-teratts] startup load failed (panic)");
+                "error"
+            }
+        }
+    } else {
+        state
+    };
+
     let mut out = std::io::stdout();
     emit(
         &mut out,
@@ -532,6 +586,10 @@ fn main() {
         std::process::exit(if state == "ready" { 0 } else { 2 });
     }
 
+    let Some(engine) = engine else {
+        std::process::exit(1);
+    };
+
     let generation = Arc::new(AtomicU64::new(0));
     let (events_tx, events_rx) = mpsc::channel::<Message>();
     let (jobs_tx, jobs_rx) = mpsc::channel::<SynthJob>();
@@ -539,10 +597,9 @@ fn main() {
     let dispatch: Box<dyn SynthDispatch> = match std::thread::Builder::new()
         .name("teratts-synth".into())
         .spawn({
-            let root = root.clone();
             let generation = generation.clone();
             let events = events_tx.clone();
-            move || synth_worker(root, generation, jobs_rx, events)
+            move || synth_worker(engine, generation, jobs_rx, events)
         }) {
         Ok(_) => Box::new(ThreadDispatch { jobs: jobs_tx }),
         Err(err) => {
@@ -577,6 +634,7 @@ fn main() {
         player: None,
         chunks_total: 0,
         chunks_settled: 0,
+        chunks_failed: 0,
         playing_emitted: false,
         generation,
         make_player: Box::new(make_player),
@@ -663,9 +721,18 @@ mod tests {
         jobs: Rc<RefCell<Vec<SynthJob>>>,
     }
 
+    struct ClosedDispatch;
+
+    impl SynthDispatch for ClosedDispatch {
+        fn dispatch(&mut self, job: SynthJob) -> Result<(), SynthJob> {
+            Err(job)
+        }
+    }
+
     impl SynthDispatch for RecordingDispatch {
-        fn dispatch(&mut self, job: SynthJob) {
+        fn dispatch(&mut self, job: SynthJob) -> Result<(), SynthJob> {
             self.jobs.borrow_mut().push(job);
+            Ok(())
         }
     }
 
@@ -703,6 +770,7 @@ mod tests {
                 player: None,
                 chunks_total: 0,
                 chunks_settled: 0,
+                chunks_failed: 0,
                 playing_emitted: false,
                 generation: generation.clone(),
                 make_player: Box::new(make_player),
@@ -869,6 +937,51 @@ mod tests {
         // A late duplicate result for the failed utterance is dropped.
         h.controller.on_synth_result(ok_audio(1));
         assert!(take_events(&h).is_empty());
+    }
+
+    #[test]
+    fn one_bad_chunk_does_not_stop_a_long_read() {
+        let mut h = harness();
+        h.controller.on_cmd(Cmd::Speak(long_text()));
+        let total = h.jobs.borrow().len();
+        assert!(total >= 3);
+        take_events(&h);
+
+        h.controller.on_synth_result(ok_audio(1));
+        h.controller.on_synth_result(SynthOutcome {
+            utterance: 1,
+            audio: Err("invalid-text".into()),
+        });
+        for _ in 2..total {
+            h.controller.on_synth_result(ok_audio(1));
+        }
+
+        assert_eq!(take_events(&h), vec![Event::Playing { id: 1 }]);
+        assert!(h.player_log.borrow().iter().any(|event| event == "eos:1"));
+        assert!(!h.player_log.borrow().iter().any(|event| event == "stop:1"));
+        h.controller.on_playback_done(1);
+        assert_eq!(take_events(&h), vec![Event::Done { id: 1 }]);
+    }
+
+    #[test]
+    fn closed_worker_channel_fails_instead_of_leaving_started_active() {
+        let mut h = harness();
+        h.controller.dispatch = Box::new(ClosedDispatch);
+        h.controller.on_cmd(Cmd::Speak("Текст.".into()));
+
+        assert_eq!(
+            take_events(&h),
+            vec![
+                Event::Started { id: 1 },
+                Event::Failed {
+                    id: 1,
+                    reason: "worker".into()
+                }
+            ]
+        );
+        assert_eq!(h.controller.active, None);
+        assert_eq!(h.generation.load(Ordering::Acquire), 0);
+        assert!(h.player_log.borrow().iter().any(|event| event == "stop:1"));
     }
 
     #[test]

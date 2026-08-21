@@ -1,3 +1,4 @@
+import { Platform } from "platform.slint";
 // Single compilation root for build.rs — slint_build::compile() only
 // emits one output file, so multiple compile() calls clobber each other.
 // Importing each component file here and re-exporting them lets each
@@ -14,6 +15,7 @@ import { SettingsWindow, MemoryRow } from "settings_panel.slint";
 import { PaletteWindow, PaletteResult } from "palette.slint";
 import { CaptureOverlay } from "capture_overlay.slint";
 import { TextAskWindow } from "text_ask.slint";
+import { MacAiSetupWindow } from "macos_ai_setup.slint";
 import { WizardWindow } from "wizard.slint";
 import { HelpWindow } from "help.slint";
 import { RecoverOfferWindow } from "recover_offer.slint";
@@ -39,6 +41,7 @@ export {
     PaletteWindow, PaletteResult,
     CaptureOverlay,
     TextAskWindow,
+    MacAiSetupWindow,
     WizardWindow,
     HelpWindow,
     RecoverOfferWindow,
@@ -46,4 +49,5 @@ export {
     TranscriptWindow, TranscriptLine,
     Theme,
     Metrics,
+    Platform,
 }

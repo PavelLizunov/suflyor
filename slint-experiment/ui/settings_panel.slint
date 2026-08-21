@@ -18,6 +18,7 @@
 
 import { Button, LineEdit, ScrollView, SpinBox, ComboBox, Slider, TextEdit, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { Platform } from "platform.slint";
 import { Metrics } from "metrics.slint";
 import { CloseButton } from "controls.slint";
 
@@ -416,6 +417,30 @@ export component SettingsWindow inherits Window {
     in-out property <bool> ai-prompt-cache: false;
     // Local AI provider (Phase 1): 0 = cloud bridge, 1 = local (Ollama/llama.cpp).
     in-out property <int> ai-provider-index: 0;
+    in-out property <bool> mlx-text-busy: false;
+    in-out property <bool> mlx-text-checking: false;
+    in-out property <bool> mlx-text-installed: false;
+    in-out property <bool> mlx-text-active: false;
+    in-out property <bool> mlx-text-failed: false;
+    in-out property <bool> mlx-text-cancelled: false;
+    in-out property <float> mlx-text-progress: 0.0;
+    in-out property <string> mlx-text-done: "0";
+    in-out property <string> mlx-text-total: "4627";
+    callback mlx-text-download();
+    callback mlx-text-cancel();
+    callback mlx-text-enable();
+    in-out property <bool> mlx-vision-busy: false;
+    in-out property <bool> mlx-vision-checking: false;
+    in-out property <bool> mlx-vision-installed: false;
+    in-out property <bool> mlx-vision-active: false;
+    in-out property <bool> mlx-vision-failed: false;
+    in-out property <bool> mlx-vision-cancelled: false;
+    in-out property <float> mlx-vision-progress: 0.0;
+    in-out property <string> mlx-vision-done: "0";
+    in-out property <string> mlx-vision-total: "1668";
+    callback mlx-vision-download();
+    callback mlx-vision-cancel();
+    callback mlx-vision-enable();
     // V4 — vision (screenshot · F8) channel, resolved separately from the text model.
     in-out property <int> vision-provider-index: 3; // 0=off, 1=same, then the text-provider catalog
     in-out property <bool> vision-same-available: false;
@@ -446,6 +471,7 @@ export component SettingsWindow inherits Window {
     in-out property <int> tts-voice-index: 0;
     in-out property <int> tts-rate-index: 1; // 0..4 preset, default «1.0×»
     in-out property <bool> tts-available: false;
+    in-out property <string> tts-test-status;
     in-out property <bool> tts-installing: false;
     in-out property <int> tts-install-phase: 0;
     in-out property <string> tts-install-label;
@@ -603,13 +629,22 @@ export component SettingsWindow inherits Window {
     // Phase E6 v27 — connection test buttons (AI bridge + STT).
     in-out property <string> ai-bridge-test-result: "";
     in-out property <string> stt-test-result: "";
-    // STT provider (Phase E10): 0=cloud Groq, 1=local GigaAM, 2=local whisper-server.
+    // STT provider: 0=cloud, 1=GigaAM, 2=Whisper/external Whisper.
     in-out property <int> stt-provider-index: 0;
     // Recognition language (stt_language): 0=auto-detect, 1=Russian, 2=English.
     in-out property <int> stt-language-index: 0;
     // Cloud recognition model (stt_model): 0=turbo (fast), 1=large-v3 (accurate).
     in-out property <int> stt-cloud-model-index: 0;
     in-out property <string> stt-gigaam-dir-input: "";
+    in-out property <bool> stt-gigaam-installed: false;
+    in-out property <bool> stt-gigaam-installing: false;
+    in-out property <bool> stt-gigaam-install-failed: false;
+    in-out property <bool> stt-gigaam-install-cancelled: false;
+    in-out property <float> stt-gigaam-install-progress: 0.0;
+    in-out property <string> stt-gigaam-install-done: "0";
+    in-out property <string> stt-gigaam-install-total: "214";
+    callback stt-gigaam-install();
+    callback stt-gigaam-install-cancel();
     // GigaAM GPU acceleration via the ONNX Runtime DirectML EP (default on).
     in-out property <bool> stt-gigaam-gpu: true;
     in-out property <string> stt-whisper-url-input: "";
@@ -722,6 +757,7 @@ export component SettingsWindow inherits Window {
     callback journal-retention-changed(string, string);
     callback open-recordings-clicked();
     callback open-data-folder-clicked();
+    callback open-groq-keys-clicked();
     in-out property <bool> auto-tiles-enabled: true;
     callback auto-tiles-enabled-changed(bool);
     // "Listening mode" — mute auto-detected AI tiles (TileKind::Ai) so the user
@@ -920,7 +956,7 @@ export component SettingsWindow inherits Window {
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
-                    label: @tr("Updates"); icon: @image-url("../assets/icons/update.svg"); tab-index: 4;
+                    label: Platform.is-macos ? @tr("Backup") : @tr("Updates"); icon: @image-url("../assets/icons/update.svg"); tab-index: 4;
                     active: root.active-tab == 4;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
@@ -1004,7 +1040,9 @@ export component SettingsWindow inherits Window {
 
                     // Header
                     Text {
-                        text: tab-name-for(root.active-tab);
+                        text: root.active-tab == 4 && Platform.is-macos
+                            ? @tr("Backup")
+                            : tab-name-for(root.active-tab);
                         font-size: Metrics.font-heading;
                         font-weight: 700;
                         color: Theme.text-primary;
@@ -1017,17 +1055,19 @@ export component SettingsWindow inherits Window {
                         SettingsCard {
                             title: @tr("Window behaviour");
                             Text {
-                                text: @tr("Stealth mode hides the overlay window from screen capture (Print Screen, Teams/Meet, OBS). Uses WDA_EXCLUDEFROMCAPTURE on Windows 10/11.");
+                                text: Platform.is-macos
+                                    ? @tr("macOS has no public API that can hide the overlay from other screen-sharing apps. Suflyor only excludes its own windows from its own screenshots.")
+                                    : @tr("Stealth mode hides the overlay window from screen capture (Print Screen, Teams/Meet, OBS). Uses WDA_EXCLUDEFROMCAPTURE on Windows 10/11.");
                                 font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
                             DarkCheck {
-                                text: @tr("Always on top (HWND_TOPMOST)");
+                                text: Platform.is-macos ? @tr("Always on top") : @tr("Always on top (HWND_TOPMOST)");
                                 checked <=> root.always-on-top-toggle;
                                 toggled(v) => { root.always-on-top-changed(v); }
                             }
-                            DarkCheck {
+                            if !Platform.is-macos : DarkCheck {
                                 text: @tr("Stealth (hide from screen capture)");
                                 checked <=> root.stealth-toggle;
                                 toggled(v) => { root.stealth-changed(v); }
@@ -1035,7 +1075,7 @@ export component SettingsWindow inherits Window {
                             // I1 — verified (effective) stealth state: translated
                             // here (@tr) and driven by the verified flag + toggle
                             // intent; ASCII status markers only (skia-safe glyphs).
-                            Text {
+                            if !Platform.is-macos : Text {
                                 text: root.stealth-effective
                                     ? @tr("[ok] active - verify with a screen-share preview")
                                     : root.stealth-toggle
@@ -1131,7 +1171,12 @@ export component SettingsWindow inherits Window {
                                 padding: 4px;
                                 spacing: 12px;
                                 Text {
-                                    text: entry[0];
+                                    text: Platform.is-macos ? (
+                                        entry[0] == "Ctrl+F8" ? @tr("Control+F8") :
+                                        entry[0] == "Shift+Alt+1" ? @tr("Shift+Option+1") :
+                                        entry[0] == "Shift+Alt+2" ? @tr("Shift+Option+2") :
+                                        entry[0] == "Shift+Alt+3" ? @tr("Shift+Option+3") : entry[0]
+                                    ) : entry[0];
                                     font-size: 11px;
                                     font-weight: 700;
                                     color: Theme.accent;
@@ -1389,7 +1434,7 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
-                        SettingsCard {
+                        if !Platform.is-macos : SettingsCard {
                             title: @tr("Setup");
                             // First-run setup wizard — relaunchable any time.
                             Text {
@@ -1412,7 +1457,9 @@ export component SettingsWindow inherits Window {
                         SettingsCard {
                             title: @tr("Read aloud");
                         Text {
-                            text: @tr("Read selected text (Shift+Alt+1) or a screen region (Shift+Alt+2) aloud. Pause or resume with Shift+Alt+3.");
+                            text: Platform.is-macos
+                                ? @tr("Read selected text (Shift+Option+1) or a screen region (Shift+Option+2) aloud. Pause or resume with Shift+Option+3.")
+                                : @tr("Read selected text (Shift+Alt+1) or a screen region (Shift+Alt+2) aloud. Pause or resume with Shift+Alt+3.");
                             font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -1585,11 +1632,17 @@ export component SettingsWindow inherits Window {
                                 clicked => { root.tts-test-clicked(); }
                             }
                         }
+                        if root.tts-test-status != "" : Text {
+                            text: root.tts-test-status;
+                            font-size: 11px;
+                            color: Theme.danger;
+                            wrap: word-wrap;
+                        }
                         }
                     }
                     if root.active-tab == 4 : VerticalLayout {
                         spacing: 10px;
-                        SettingsCard {
+                        if !Platform.is-macos : SettingsCard {
                             title: @tr("Updates");
                         Text {
                             text: @tr("Check GitHub for a newer release. If one is found you can download + install it in one click (the app restarts).");
@@ -1659,7 +1712,9 @@ export component SettingsWindow inherits Window {
                         // servers, keeps local profiles/devices/UI/snippets.
                         // Import shows a redacted preview before applying.
                         Text {
-                            text: @tr("Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in Windows Credential Manager on this PC. Local UI, profiles, devices and snippets stay unchanged.");
+                            text: Platform.is-macos
+                                ? @tr("Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in this user's local credentials file. Local UI, profiles, devices and snippets stay unchanged.")
+                                : @tr("Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in Windows Credential Manager on this PC. Local UI, profiles, devices and snippets stay unchanged.");
                             font-size: 10px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -1751,7 +1806,9 @@ export component SettingsWindow inherits Window {
                         SettingsCard {
                             title: @tr("Microphone");
                         Text {
-                            text: @tr("Microphone device selection. List is live from WASAPI capture endpoints.");
+                            text: Platform.is-macos
+                                ? @tr("Microphone device selection. The list comes from the audio devices available to macOS.")
+                                : @tr("Microphone device selection. List is live from WASAPI capture endpoints.");
                             font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -2191,7 +2248,13 @@ export component SettingsWindow inherits Window {
                         }
                         // ===== TYPE selector — gates everything below =====
                         SettingsComboBox {
-                            model: [
+                            model: Platform.is-macos ? [
+                                @tr("Custom OpenAI-compatible bridge"),
+                                @tr("Local OpenAI-compatible"),
+                                @tr("OpenAI API (Responses)"),
+                                @tr("Anthropic API (Messages)"),
+                                @tr("Managed MLX (Apple silicon)"),
+                            ] : [
                                 @tr("Custom OpenAI-compatible bridge"),
                                 @tr("Local OpenAI-compatible"),
                                 @tr("OpenAI API (Responses)"),
@@ -2202,6 +2265,84 @@ export component SettingsWindow inherits Window {
                             selected => {
                                 root.ai-provider-index = self.current-index;
                                 root.ai-provider-changed(self.current-index);
+                            }
+                        }
+                        if Platform.is-macos && root.ai-provider-index < 0 : Text {
+                            text: @tr("The saved Codex provider is unavailable on macOS. Choose a supported provider.");
+                            font-size: 10px;
+                            color: Theme.warning;
+                            wrap: word-wrap;
+                        }
+                        if Platform.is-macos && root.ai-provider-index == 4 : SettingsCard {
+                            title: @tr("Managed MLX text model");
+                            Text {
+                                text: @tr("MLX runs locally on Apple-silicon Macs only. Models are downloaded only when you ask.");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            SettingsComboBox {
+                                model: [@tr("LFM2.5-8B-A1B MLX 4-bit")];
+                                current-index: 0;
+                            }
+                            Text {
+                                text: @tr("Download size: 4.52 GiB.");
+                                font-size: 10px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: @tr("[!] LFM Open License v1.0 has commercial-use conditions. Review the license before commercial use. Russian response quality is not guaranteed.");
+                                font-size: 10px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: root.mlx-text-checking ? @tr("Checking installation…")
+                                    : root.mlx-text-busy ? @tr("Downloading and verifying…")
+                                    : root.mlx-text-active ? @tr("Active")
+                                    : root.mlx-text-installed ? @tr("Installed")
+                                    : root.mlx-text-failed ? @tr("Download or activation failed. Retry when ready.")
+                                    : root.mlx-text-cancelled ? @tr("Download cancelled. Resume keeps verified files.")
+                                    : @tr("Not installed");
+                                font-size: 11px;
+                                color: root.mlx-text-failed ? Theme.danger : (root.mlx-text-active ? Theme.success : Theme.text-secondary);
+                                wrap: word-wrap;
+                            }
+                            if root.mlx-text-busy : Text {
+                                text: @tr("{} / {} MB downloaded", root.mlx-text-done, root.mlx-text-total);
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                            }
+                            if root.mlx-text-busy : Rectangle {
+                                height: 6px;
+                                border-radius: 3px;
+                                background: Theme.border;
+                                Rectangle {
+                                    x: 0;
+                                    y: 0;
+                                    height: parent.height;
+                                    width: parent.width * root.mlx-text-progress;
+                                    border-radius: 3px;
+                                    background: Theme.accent;
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: @tr("Download / Resume");
+                                    enabled: !root.mlx-text-checking && !root.mlx-text-busy && !root.mlx-vision-busy && !root.mlx-text-installed;
+                                    clicked => { root.mlx-text-download(); }
+                                }
+                                if root.mlx-text-busy : Button {
+                                    text: @tr("Cancel");
+                                    clicked => { root.mlx-text-cancel(); }
+                                }
+                                Button {
+                                    text: @tr("Enable for text");
+                                    enabled: root.mlx-text-installed && !root.mlx-text-checking && !root.mlx-text-busy && !root.mlx-text-active;
+                                    clicked => { root.mlx-text-enable(); }
+                                }
                             }
                         }
                         Rectangle { background: Theme.border; height: 1px; }
@@ -2324,7 +2465,9 @@ export component SettingsWindow inherits Window {
                                 SettingsLineEdit { placeholder-text: @tr("paste OpenAI API key"); text <=> root.openai-key-input; input-type: password; horizontal-stretch: 1; }
                                 Button { text: @tr("Save"); clicked => { root.openai-key-save(root.openai-key-input); root.openai-key-input = ""; } }
                             }
-                            Text { text: @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: 10px; color: Theme.text-muted; wrap: word-wrap; }
+                            Text { text: Platform.is-macos
+                                ? @tr("Stored in a user-only local credentials file and excluded from configuration exports.")
+                                : @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: 10px; color: Theme.text-muted; wrap: word-wrap; }
                             HorizontalLayout {
                                 spacing: 6px;
                                 SettingsLineEdit { placeholder-text: "https://api.openai.com/v1"; text <=> root.openai-base-url-input; horizontal-stretch: 1; }
@@ -2353,7 +2496,9 @@ export component SettingsWindow inherits Window {
                                 SettingsLineEdit { placeholder-text: @tr("paste Anthropic API key"); text <=> root.anthropic-key-input; input-type: password; horizontal-stretch: 1; }
                                 Button { text: @tr("Save"); clicked => { root.anthropic-key-save(root.anthropic-key-input); root.anthropic-key-input = ""; } }
                             }
-                            Text { text: @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: 10px; color: Theme.text-muted; wrap: word-wrap; }
+                            Text { text: Platform.is-macos
+                                ? @tr("Stored in a user-only local credentials file and excluded from configuration exports.")
+                                : @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: 10px; color: Theme.text-muted; wrap: word-wrap; }
                             HorizontalLayout {
                                 spacing: 6px;
                                 SettingsLineEdit { placeholder-text: "https://api.anthropic.com/v1"; text <=> root.anthropic-base-url-input; horizontal-stretch: 1; }
@@ -2377,7 +2522,7 @@ export component SettingsWindow inherits Window {
                         }
 
                         // ============================ CODEX SUBSCRIPTION ============================
-                        if root.ai-provider-index == 4 : VerticalLayout {
+                        if !Platform.is-macos && root.ai-provider-index == 4 : VerticalLayout {
                             spacing: 8px;
                             vertical-stretch: 0;
                             Text { text: @tr("Codex safe models (ChatGPT subscription)"); font-size: 12px; font-weight: 700; color: Theme.text-primary; }
@@ -2511,7 +2656,7 @@ export component SettingsWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 6px;
                                 SettingsLineEdit {
-                                    placeholder-text: @tr("local URL — http://127.0.0.1:8080/v1 (llama.cpp) or :11434 (Ollama)");
+                                    placeholder-text: @tr("local URL — http://127.0.0.1:8080/v1 (llama.cpp)");
                                     text <=> root.ai-local-base-url-input;
                                     horizontal-stretch: 1;
                                 }
@@ -2569,13 +2714,13 @@ export component SettingsWindow inherits Window {
                                     root.ai-local-vision-changed(v);
                                 }
                             }
-                            if root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index != 2 : Text {
+                            if !Platform.is-macos && root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index != 2 : Text {
                                 text: @tr("Local Vision requires the installed 12B model and its projector. Use the separate Vision section below for cloud or another server.");
                                 font-size: 10px;
                                 color: Theme.warning;
                                 wrap: word-wrap;
                             }
-                            if root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index == 2 : Text {
+                            if !Platform.is-macos && root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index == 2 : Text {
                                 text: root.quality-vision-supported
                                     ? @tr("Vision for 26B requires its matching ~1.1 GiB projector.")
                                     : @tr("Update the local engine before installing Vision for 26B.");
@@ -2583,7 +2728,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.warning;
                                 wrap: word-wrap;
                             }
-                            if root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index == 2 && root.quality-vision-supported : HorizontalLayout {
+                            if !Platform.is-macos && root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index == 2 && root.quality-vision-supported : HorizontalLayout {
                                 spacing: 6px;
                                 vertical-stretch: 0;
                                 Button {
@@ -2604,7 +2749,7 @@ export component SettingsWindow inherits Window {
                                     }
                                 }
                             }
-                            if root.vision12b-status != "" : Text {
+                            if !Platform.is-macos && root.vision12b-status != "" : Text {
                                 text: root.vision12b-status;
                                 font-size: 11px;
                                 color: Theme.accent;
@@ -2617,6 +2762,8 @@ export component SettingsWindow inherits Window {
                                     root.ai-local-thinking-changed(v);
                                 }
                             }
+                            if !Platform.is-macos : VerticalLayout {
+                            spacing: 6px;
                             // ----- bundled local model: 4B / 12B / 26B -----
                             Rectangle { background: Theme.border; height: 1px; }
                             Text {
@@ -2855,6 +3002,7 @@ export component SettingsWindow inherits Window {
                                     background: Theme.accent;
                                 }
                             }
+                            }
                             HorizontalLayout {
                                 spacing: 6px;
                                 height: 32px;
@@ -2875,56 +3023,59 @@ export component SettingsWindow inherits Window {
                                 color: Theme.accent;
                                 wrap: word-wrap;
                             }
-                            // ----- one-click in-app local-AI installer -----
-                            Rectangle { background: Theme.border; height: 1px; }
-                            Text {
-                                text: @tr("Installs or completes the local stack: llama.cpp, the 12B fallback, speech components, and 26B on supported hardware. Complete verified files are reused; partial downloads resume. The optional 4B profile is kept when already present.");
-                                font-size: 11px;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            HorizontalLayout {
+                            if !Platform.is-macos : VerticalLayout {
                                 spacing: 6px;
-                                height: 32px;
-                                Button {
-                                    text: root.local-ai-installing ? @tr("Installing…") : @tr("Install / complete local AI");
-                                    enabled: !root.local-ai-installing && !root.quality-downloading && !root.model-switching && !root.engine-updating && !root.vision12b-downloading;
-                                    clicked => {
-                                        root.install-local-ai-clicked();
-                                    }
-                                }
-                                if root.local-ai-installing : Button {
-                                    text: @tr("Cancel");
-                                    clicked => {
-                                        root.cancel-local-ai-clicked();
-                                    }
-                                }
-                                if root.local-ai-gpu != "" : Text {
-                                    text: root.local-ai-gpu;
+                                // ----- one-click in-app local-AI installer -----
+                                Rectangle { background: Theme.border; height: 1px; }
+                                Text {
+                                    text: @tr("Installs or completes the local stack: llama.cpp, the 12B fallback, speech components, and 26B on supported hardware. Complete verified files are reused; partial downloads resume. The optional 4B profile is kept when already present.");
                                     font-size: 11px;
-                                    color: root.local-ai-on-gpu ? Theme.success : Theme.warning;
-                                    vertical-alignment: center;
+                                    color: Theme.text-muted;
                                     wrap: word-wrap;
-                                    horizontal-stretch: 1;
                                 }
-                            }
-                            if root.local-ai-status != "" : Text {
-                                text: root.local-ai-status;
-                                font-size: 11px;
-                                color: Theme.accent;
-                                wrap: word-wrap;
-                            }
-                            if root.local-ai-installing : Rectangle {
-                                height: 6px;
-                                border-radius: 3px;
-                                background: Theme.border;
-                                Rectangle {
-                                    x: 0;
-                                    y: 0;
-                                    height: parent.height;
-                                    width: parent.width * root.local-ai-progress;
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    height: 32px;
+                                    Button {
+                                        text: root.local-ai-installing ? @tr("Installing…") : @tr("Install / complete local AI");
+                                        enabled: !root.local-ai-installing && !root.quality-downloading && !root.model-switching && !root.engine-updating && !root.vision12b-downloading;
+                                        clicked => {
+                                            root.install-local-ai-clicked();
+                                        }
+                                    }
+                                    if root.local-ai-installing : Button {
+                                        text: @tr("Cancel");
+                                        clicked => {
+                                            root.cancel-local-ai-clicked();
+                                        }
+                                    }
+                                    if root.local-ai-gpu != "" : Text {
+                                        text: root.local-ai-gpu;
+                                        font-size: 11px;
+                                        color: root.local-ai-on-gpu ? Theme.success : Theme.warning;
+                                        vertical-alignment: center;
+                                        wrap: word-wrap;
+                                        horizontal-stretch: 1;
+                                    }
+                                }
+                                if root.local-ai-status != "" : Text {
+                                    text: root.local-ai-status;
+                                    font-size: 11px;
+                                    color: Theme.accent;
+                                    wrap: word-wrap;
+                                }
+                                if root.local-ai-installing : Rectangle {
+                                    height: 6px;
                                     border-radius: 3px;
-                                    background: Theme.accent;
+                                    background: Theme.border;
+                                    Rectangle {
+                                        x: 0;
+                                        y: 0;
+                                        height: parent.height;
+                                        width: parent.width * root.local-ai-progress;
+                                        border-radius: 3px;
+                                        background: Theme.accent;
+                                    }
                                 }
                             }
                         }
@@ -2932,7 +3083,7 @@ export component SettingsWindow inherits Window {
                         // Keep engine maintenance in its own card. The local-AI
                         // card is intentionally long and Slint can under-report
                         // the final conditional rows when sizing its ScrollView.
-                        if root.ai-provider-index == 1 : SettingsCard {
+                        if !Platform.is-macos && root.ai-provider-index == 1 : SettingsCard {
                             title: @tr("Engine (llama.cpp)");
                             Text {
                                 text: @tr("The app checks it weekly and verifies a new build before replacing the current one.");
@@ -2972,7 +3123,7 @@ export component SettingsWindow inherits Window {
                         // outer, the card's VerticalLayout constrains its width and
                         // word-wrap finally kicks in.
                         Text {
-                            text: @tr("Tip: Save writes to %APPDATA%\\suflyor\\config.json. Restart binary to re-load.");
+                            text: @tr("Tip: Save writes to suflyor/config.json in application configuration folder. Restart binary to re-load.");
                             font-size: 10px;
                             color: Theme.accent;
                             wrap: word-wrap;
@@ -2996,39 +3147,48 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        // Local OCR engine (Tesseract) for Shift+Alt+2 / Ctrl+F8
-                        // text recognition. Installed on demand (~53 MB), not
-                        // bundled in the app installer.
-                        Text {
-                            text: @tr("Text recognition (OCR) — Shift+Alt+2 reads on-screen text aloud / copies it via a local engine. Without it, OCR falls back to the slower vision model.");
+                        if Platform.is-macos : Text {
+                            text: @tr("Text recognition (OCR) - Apple Vision is built into macOS; no download is required.");
                             font-size: 11px;
-                            color: Theme.text-muted;
+                            color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
-                        if !root.ocr-installed : HorizontalLayout {
-                            alignment: start;
-                            Button {
-                                text: root.ocr-installing ? @tr("Installing…") : @tr("Install text recognition (OCR)");
-                                enabled: !root.ocr-installing;
-                                clicked => { root.ocr-install-clicked(); }
+                        if !Platform.is-macos : VerticalLayout {
+                            spacing: 6px;
+                            // Local OCR engine (Tesseract) for Shift+Alt+2 / Ctrl+F8
+                            // text recognition. Installed on demand (~53 MB), not
+                            // bundled in the app installer.
+                            Text {
+                                text: @tr("Text recognition (OCR) — Shift+Alt+2 reads on-screen text aloud / copies it via a local engine. Without it, OCR falls back to the slower vision model.");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
                             }
-                        }
-                        if root.ocr-installed && root.ocr-install-phase == 0 : Text {
-                            text: @tr("Text recognition is installed.");
-                            font-size: 11px;
-                            color: Theme.text-secondary;
-                        }
-                        if root.ocr-install-phase != 0 : Text {
-                            text: root.ocr-install-phase == 1 ? @tr("Preparing…")
-                                : root.ocr-install-phase == 2 ? @tr("Downloading the engine (~53 MB)…")
-                                : root.ocr-install-phase == 3 ? @tr("Verifying…")
-                                : root.ocr-install-phase == 4 ? @tr("Unpacking…")
-                                : root.ocr-install-phase == 5 ? @tr("Text recognition already installed")
-                                : root.ocr-install-phase == 6 ? @tr("Text recognition installed")
-                                : @tr("Couldn't install text recognition — check the connection and retry.");
-                            font-size: 11px;
-                            color: Theme.text-secondary;
-                            wrap: word-wrap;
+                            if !root.ocr-installed : HorizontalLayout {
+                                alignment: start;
+                                Button {
+                                    text: root.ocr-installing ? @tr("Installing…") : @tr("Install text recognition (OCR)");
+                                    enabled: !root.ocr-installing;
+                                    clicked => { root.ocr-install-clicked(); }
+                                }
+                            }
+                            if root.ocr-installed && root.ocr-install-phase == 0 : Text {
+                                text: @tr("Text recognition is installed.");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                            }
+                            if root.ocr-install-phase != 0 : Text {
+                                text: root.ocr-install-phase == 1 ? @tr("Preparing…")
+                                    : root.ocr-install-phase == 2 ? @tr("Downloading the engine (~53 MB)…")
+                                    : root.ocr-install-phase == 3 ? @tr("Verifying…")
+                                    : root.ocr-install-phase == 4 ? @tr("Unpacking…")
+                                    : root.ocr-install-phase == 5 ? @tr("Text recognition already installed")
+                                    : root.ocr-install-phase == 6 ? @tr("Text recognition installed")
+                                    : @tr("Couldn't install text recognition — check the connection and retry.");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
                         }
                         // ── Speaker-diarization models (for «Определить говорящих») ──
                         Rectangle { background: Theme.border; height: 1px; }
@@ -3059,7 +3219,17 @@ export component SettingsWindow inherits Window {
                         }
                         Rectangle { background: Theme.border; height: 1px; }
                         SettingsComboBox {
-                            model: [
+                            model: Platform.is-macos ? [
+                                @tr("Off"),
+                                root.vision-same-available
+                                    ? @tr("Same as text model above")
+                                    : @tr("Same as text model above (unavailable)"),
+                                @tr("Custom OpenAI-compatible bridge"),
+                                @tr("Local OpenAI-compatible"),
+                                @tr("OpenAI API (Responses)"),
+                                @tr("Anthropic API (Messages)"),
+                                @tr("Managed MLX (Apple silicon)"),
+                            ] : [
                                 @tr("Off"),
                                 root.vision-same-available
                                     ? @tr("Same as text model above")
@@ -3074,6 +3244,84 @@ export component SettingsWindow inherits Window {
                             selected => {
                                 root.vision-provider-index = self.current-index;
                                 root.vision-provider-changed(self.current-index);
+                            }
+                        }
+                        if Platform.is-macos && root.vision-provider-index < 0 : Text {
+                            text: @tr("The saved Codex Vision provider is unavailable on macOS. Choose another Vision provider.");
+                            font-size: 10px;
+                            color: Theme.warning;
+                            wrap: word-wrap;
+                        }
+                        if Platform.is-macos && root.vision-provider-index == 6 : SettingsCard {
+                            title: @tr("Managed MLX Vision model");
+                            Text {
+                                text: @tr("Separate image-capable model for screenshots. MLX runs locally on Apple-silicon Macs only.");
+                                font-size: 11px;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            SettingsComboBox {
+                                model: [@tr("Qwen3.5-2B MLX 4-bit (Vision)")];
+                                current-index: 0;
+                            }
+                            Text {
+                                text: @tr("Download size: 1.63 GiB. Supports image input. License: Apache-2.0.");
+                                font-size: 10px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: @tr("One managed MLX model stays active at a time. The app switches between the selected text and Vision models when a request needs the other one.");
+                                font-size: 10px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: root.mlx-vision-checking ? @tr("Checking installation…")
+                                    : root.mlx-vision-busy ? @tr("Downloading and verifying…")
+                                    : root.mlx-vision-active ? @tr("Active")
+                                    : root.mlx-vision-installed ? @tr("Installed")
+                                    : root.mlx-vision-failed ? @tr("Download or activation failed. Retry when ready.")
+                                    : root.mlx-vision-cancelled ? @tr("Download cancelled. Resume keeps verified files.")
+                                    : @tr("Not installed");
+                                font-size: 11px;
+                                color: root.mlx-vision-failed ? Theme.danger : (root.mlx-vision-active ? Theme.success : Theme.text-secondary);
+                                wrap: word-wrap;
+                            }
+                            if root.mlx-vision-busy : Text {
+                                text: @tr("{} / {} MB downloaded", root.mlx-vision-done, root.mlx-vision-total);
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                            }
+                            if root.mlx-vision-busy : Rectangle {
+                                height: 6px;
+                                border-radius: 3px;
+                                background: Theme.border;
+                                Rectangle {
+                                    x: 0;
+                                    y: 0;
+                                    height: parent.height;
+                                    width: parent.width * root.mlx-vision-progress;
+                                    border-radius: 3px;
+                                    background: Theme.accent;
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: @tr("Download / Resume");
+                                    enabled: !root.mlx-vision-checking && !root.mlx-vision-busy && !root.mlx-text-busy && !root.mlx-vision-installed;
+                                    clicked => { root.mlx-vision-download(); }
+                                }
+                                if root.mlx-vision-busy : Button {
+                                    text: @tr("Cancel");
+                                    clicked => { root.mlx-vision-cancel(); }
+                                }
+                                Button {
+                                    text: @tr("Enable for Vision");
+                                    enabled: root.mlx-vision-installed && !root.mlx-vision-checking && !root.mlx-vision-busy && !root.mlx-vision-active;
+                                    clicked => { root.mlx-vision-enable(); }
+                                }
                             }
                         }
                         if !root.vision-same-available : Text {
@@ -3168,7 +3416,7 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        if root.vision-provider-index == 6 : VerticalLayout {
+                        if !Platform.is-macos && root.vision-provider-index == 6 : VerticalLayout {
                             spacing: 8px;
                             Text {
                                 text: @tr("Choose a separate Codex model for screenshots. Only account models that advertise image input are shown.");
@@ -3502,7 +3750,9 @@ export component SettingsWindow inherits Window {
                             wrap: word-wrap;
                         }
                         SettingsComboBox {
-                            model: [@tr("Cloud (Groq Whisper)"), @tr("Local GigaAM-v3 (Russian)"), @tr("Local Whisper (whisper.cpp)")];
+                            model: Platform.is-macos
+                                ? [@tr("Cloud (Groq Whisper)"), @tr("Local GigaAM-v3 (Russian)"), @tr("External Whisper (whisper-server)")]
+                                : [@tr("Cloud (Groq Whisper)"), @tr("Local GigaAM-v3 (Russian)"), @tr("Local Whisper (whisper.cpp)")];
                             current-index: root.stt-provider-index;
                             selected => {
                                 // Write the index back so the conditional engine
@@ -3528,7 +3778,9 @@ export component SettingsWindow inherits Window {
                             wrap: word-wrap;
                         }
                         if root.stt-provider-index == 2 : Text {
-                            text: @tr("Local: runs on your whisper-server. Multilingual. Configure the server URL and model below.");
+                            text: Platform.is-macos
+                                ? @tr("External: sends audio to the whisper-server URL below. Multilingual; no Groq key required.")
+                                : @tr("Local: runs on your whisper-server. Multilingual. Configure the server URL and model below.");
                             font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
@@ -3578,8 +3830,54 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
+                        if Platform.is-macos && root.stt-provider-index == 1 : VerticalLayout {
+                            spacing: 6px;
+                            Text {
+                                text: root.stt-gigaam-installing ? @tr("Downloading and verifying…")
+                                    : root.stt-gigaam-installed ? @tr("Installed")
+                                    : root.stt-gigaam-install-failed ? @tr("Download or activation failed. Retry when ready.")
+                                    : root.stt-gigaam-install-cancelled ? @tr("Download cancelled. Resume keeps verified files.")
+                                    : @tr("Not installed");
+                                font-size: 11px;
+                                color: root.stt-gigaam-install-failed ? Theme.danger
+                                    : root.stt-gigaam-installed ? Theme.success
+                                    : Theme.text-secondary;
+                            }
+                            if root.stt-gigaam-installing : Text {
+                                text: @tr("{} / {} MB downloaded", root.stt-gigaam-install-done, root.stt-gigaam-install-total);
+                                font-size: 10px;
+                                color: Theme.text-muted;
+                            }
+                            if root.stt-gigaam-installing : Rectangle {
+                                height: 6px;
+                                border-radius: 3px;
+                                background: Theme.border;
+                                Rectangle {
+                                    x: 0;
+                                    y: 0;
+                                    height: parent.height;
+                                    width: parent.width * root.stt-gigaam-install-progress;
+                                    border-radius: 3px;
+                                    background: Theme.accent;
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Button {
+                                    text: @tr("Download / Resume");
+                                    enabled: !root.stt-gigaam-installing && !root.stt-gigaam-installed;
+                                    clicked => { root.stt-gigaam-install(); }
+                                }
+                                if root.stt-gigaam-installing : Button {
+                                    text: @tr("Cancel");
+                                    clicked => { root.stt-gigaam-install-cancel(); }
+                                }
+                            }
+                        }
                         if root.stt-provider-index == 1 : DarkCheck {
-                            text: @tr("Use GPU (DirectML) — faster on long audio, ~1s warm-up on first use");
+                            text: Platform.is-macos
+                                ? @tr("Use Apple Core ML — faster on Apple Silicon")
+                                : @tr("Use GPU (DirectML) — faster on long audio, ~1s warm-up on first use");
                             checked <=> root.stt-gigaam-gpu;
                             toggled(v) => {
                                 root.stt-gigaam-gpu-changed(v);
@@ -3632,6 +3930,8 @@ export component SettingsWindow inherits Window {
                             }
                         }
 
+                        if root.stt-provider-index == 0 : VerticalLayout {
+                        spacing: 6px;
                         Rectangle { background: Theme.border; height: 1px; }
 
                         Text {
@@ -3664,6 +3964,11 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
+                        Button {
+                            text: @tr("Get Groq API Key (console.groq.com)");
+                            clicked => { root.open-groq-keys-clicked(); }
+                        }
+                        }
 
                         Rectangle { background: Theme.border; height: 1px; }
 
@@ -3691,7 +3996,7 @@ export component SettingsWindow inherits Window {
                         // outer, the card's VerticalLayout constrains its width and
                         // word-wrap finally kicks in.
                         Text {
-                            text: @tr("Tip: Save writes to %APPDATA%\\suflyor\\config.json. Restart binary to re-load.");
+                            text: @tr("Tip: Save writes to suflyor/config.json in application configuration folder. Restart binary to re-load.");
                             font-size: 10px;
                             color: Theme.accent;
                             wrap: word-wrap;
@@ -3709,7 +4014,7 @@ export component SettingsWindow inherits Window {
                         SettingsCard {
                             title: @tr("Personal memory");
                         Text {
-                            text: @tr("Personal memory: approve useful fragments from your sessions. Only APPROVED items are mixed into new AI requests. Stored locally; nothing leaves your machine.");
+                            text: @tr("Personal memory is stored locally. Approved items are added to new AI requests and may be sent to your configured AI provider.");
                             font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;

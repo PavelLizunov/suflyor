@@ -16,7 +16,10 @@ use std::process::Command;
 /// `--retry … --retry-all-errors` is essential. Follows redirects, fails on HTTP
 /// error, no console window. Blocking. Removes a partial file on failure.
 pub(crate) fn curl_download(url: &str, dest: &Path) -> Result<()> {
-    let status = no_window(Command::new("curl.exe").args([
+    if !url.trim().starts_with("https://") {
+        bail!("refusing to download from a non-HTTPS URL");
+    }
+    let status = no_window(Command::new(system_curl()).args([
         "-L",
         "--fail",
         "--silent",
@@ -33,7 +36,7 @@ pub(crate) fn curl_download(url: &str, dest: &Path) -> Result<()> {
     .arg(dest)
     .arg(url)
     .status()
-    .context("spawn curl.exe")?;
+    .context("spawn curl")?;
     if !status.success() {
         let _ = std::fs::remove_file(dest);
         bail!("curl exited with {status}");
@@ -41,8 +44,22 @@ pub(crate) fn curl_download(url: &str, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Extract a `.tar.bz2` into `dest_dir` using the system `bsdtar`
-/// (`%SystemRoot%\System32\tar.exe`, libarchive — decompresses bz2 in-process).
+/// Full path to `curl.exe` under System32 on Windows, or `curl` on POSIX systems.
+pub(crate) fn system_curl() -> PathBuf {
+    #[cfg(windows)]
+    {
+        std::env::var_os("SystemRoot")
+            .map(|r| PathBuf::from(r).join("System32").join("curl.exe"))
+            .filter(|p| p.is_file())
+            .unwrap_or_else(|| PathBuf::from("curl.exe"))
+    }
+    #[cfg(not(windows))]
+    {
+        PathBuf::from("curl")
+    }
+}
+
+/// Extract a `.tar.bz2` into `dest_dir` using system `tar`
 pub(crate) fn extract_tar_bz2(tarball: &Path, dest_dir: &Path) -> Result<()> {
     let status = no_window(&mut Command::new(system_bsdtar()))
         .arg("-xf")
@@ -57,13 +74,19 @@ pub(crate) fn extract_tar_bz2(tarball: &Path, dest_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Full path to the libarchive `tar.exe` under System32 (Win10 1803+), so PATH
-/// order can't substitute a different `tar`. Falls back to a bare `tar.exe`.
+/// Full path to the libarchive `tar` under System32 on Windows, or `tar` on POSIX systems.
 pub(crate) fn system_bsdtar() -> PathBuf {
-    std::env::var_os("SystemRoot")
-        .map(|r| PathBuf::from(r).join("System32").join("tar.exe"))
-        .filter(|p| p.is_file())
-        .unwrap_or_else(|| PathBuf::from("tar.exe"))
+    #[cfg(windows)]
+    {
+        std::env::var_os("SystemRoot")
+            .map(|r| PathBuf::from(r).join("System32").join("tar.exe"))
+            .filter(|p| p.is_file())
+            .unwrap_or_else(|| PathBuf::from("tar.exe"))
+    }
+    #[cfg(not(windows))]
+    {
+        PathBuf::from("tar")
+    }
 }
 
 /// Verify a file's SHA-256 against `expected_hex`; delete + error on mismatch.
@@ -103,10 +126,25 @@ pub(crate) fn no_window(cmd: &mut Command) -> &mut Command {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
     use super::*;
 
     #[test]
     fn hex_is_lowercase_and_padded() {
         assert_eq!(hex(&[0x00, 0x0f, 0xa0, 0xff]), "000fa0ff");
+    }
+
+    #[test]
+    fn curl_download_rejects_non_https_urls() {
+        let dest = std::env::temp_dir().join("suflyor-non-https-test");
+        for url in ["http://example.com/model", "file:///tmp/model", ""] {
+            assert!(curl_download(url, &dest).is_err());
+        }
+    }
+
+    #[test]
+    fn system_curl_is_not_empty() {
+        assert!(!system_curl().as_os_str().is_empty());
     }
 }

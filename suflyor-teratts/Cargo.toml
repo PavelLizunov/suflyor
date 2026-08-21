@@ -19,13 +19,18 @@ path = "src/main.rs"
 
 [dependencies]
 ort = "=2.0.0-rc.13"
-wasapi = "0.23"
 anyhow = "1"
 base64 = "0.23"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 unicode-normalization = "0.1"
 suflyor-wsola = { path = "../suflyor-wsola" }
+
+[target.'cfg(windows)'.dependencies]
+wasapi = "0.23"
+
+[target.'cfg(not(windows))'.dependencies]
+cpal = "0.15"
 
 [dev-dependencies]
 tempfile = "3"

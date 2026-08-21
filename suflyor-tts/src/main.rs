@@ -16,6 +16,13 @@
 
 mod diar;
 mod engine;
+#[cfg(windows)]
+mod playback;
+#[cfg(target_os = "macos")]
+#[path = "playback_macos.rs"]
+mod playback;
+#[cfg(not(any(windows, target_os = "macos")))]
+#[path = "playback_unavailable.rs"]
 mod playback;
 
 use std::collections::VecDeque;

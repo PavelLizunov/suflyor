@@ -93,6 +93,12 @@ pub struct Config {
     /// picker fills this only from catalog entries advertising `image` input.
     #[serde(default)]
     pub codex_vision_model: String,
+    /// Managed macOS MLX text model. Runtime endpoint/token are process-local.
+    #[serde(default = "default_ai_mlx_model")]
+    pub ai_mlx_model: String,
+    /// Independently selected image-capable managed macOS MLX model.
+    #[serde(default = "default_vision_mlx_model")]
+    pub vision_mlx_model: String,
     /// Local server base URL (OpenAI-compatible). Default is llama.cpp's
     /// "http://127.0.0.1:8080/v1" (the shipped setup pipeline); Ollama uses
     /// "http://127.0.0.1:11434/v1".
@@ -208,19 +214,18 @@ pub struct Config {
     /// Default: large-v3 — accuracy beats latency for interview use.
     pub stt_model: String,
 
-    /// STT provider: "cloud" (default — Groq Whisper), "gigaam" (local
-    /// in-process GigaAM-v3 via ONNX — Russian-specialised, runs on CPU), or
+    /// STT provider: "cloud" (Groq Whisper), "gigaam" (local in-process
+    /// GigaAM-v3 via ONNX — the macOS default), or
     /// "whisper" (local whisper.cpp server, OpenAI-compatible — multilingual,
-    /// best for mixed RU+EN). `#[serde(default)]` → old configs stay "cloud".
+    /// best for mixed RU+EN). Missing fields follow the platform default.
     #[serde(default = "default_stt_provider")]
     pub stt_provider: String,
     /// Directory holding the local GigaAM model (`model.int8.onnx` + `vocab.txt`).
-    /// Used when `stt_provider == "gigaam"`. Empty until the user sets it.
-    #[serde(default)]
+    /// Defaults to the same `~/suflyor-local-ai/gigaam-v3` path the installer uses.
+    #[serde(default = "default_stt_gigaam_dir")]
     pub stt_gigaam_dir: String,
-    /// Run the local GigaAM model on the GPU via the ONNX Runtime DirectML
-    /// execution provider (Windows, vendor-agnostic DX12). Falls back to CPU
-    /// automatically if no compatible GPU / DirectML runtime is present.
+    /// Run GigaAM through DirectML on Windows or Core ML on macOS. Falls back
+    /// to ONNX Runtime CPU when the platform provider cannot load the model.
     /// ~7x faster on long audio; ~1s one-time shader-compile on first use.
     #[serde(default = "default_stt_gigaam_gpu")]
     pub stt_gigaam_gpu: bool,
@@ -630,6 +635,8 @@ impl Config {
             codex_model: String::new(),
             codex_reasoning_effort: String::new(),
             codex_vision_model: String::new(),
+            ai_mlx_model: default_ai_mlx_model(),
+            vision_mlx_model: default_vision_mlx_model(),
             ai_local_base_url: default_ai_local_base_url(),
             ai_local_bearer: String::new(),
             ai_local_model: String::new(),
@@ -656,7 +663,7 @@ impl Config {
             stt_language: Some("ru".into()),
             stt_model: "whisper-large-v3".into(),
             stt_provider: default_stt_provider(),
-            stt_gigaam_dir: String::new(),
+            stt_gigaam_dir: default_stt_gigaam_dir(),
             stt_gigaam_gpu: default_stt_gigaam_gpu(),
             stt_whisper_url: default_stt_whisper_url(),
             stt_whisper_bearer: String::new(),
@@ -737,6 +744,21 @@ impl Config {
     #[must_use]
     pub fn ai_endpoint(&self, prep: bool) -> AiEndpoint {
         match self.ai_provider.as_str() {
+            "mlx" => {
+                let endpoint = crate::mlx_runtime::active_endpoint_for_model(&self.ai_mlx_model);
+                AiEndpoint {
+                    protocol: AiProtocol::OpenAiCompatible,
+                    base_url: endpoint
+                        .as_ref()
+                        .map_or_else(String::new, |e| e.base_url.clone()),
+                    bearer: endpoint
+                        .as_ref()
+                        .map_or_else(String::new, |e| e.bearer.clone()),
+                    model: self.ai_mlx_model.clone(),
+                    reasoning_effort: None,
+                    is_local: true,
+                }
+            }
             "local" => {
                 let model = if prep && !self.ai_local_prep_model.trim().is_empty() {
                     self.ai_local_prep_model.clone()
@@ -768,13 +790,25 @@ impl Config {
                 reasoning_effort: None,
                 is_local: false,
             },
-            "codex" => AiEndpoint {
+            "codex" if cfg!(windows) => AiEndpoint {
                 protocol: AiProtocol::CodexSubscription,
                 base_url: String::new(),
                 bearer: String::new(),
                 model: self.codex_model.clone(),
                 reasoning_effort: (!self.codex_reasoning_effort.trim().is_empty())
                     .then(|| self.codex_reasoning_effort.clone()),
+                is_local: false,
+            },
+            // The current Codex subscription adapter launches `codex.exe` and
+            // writes a Windows sandbox profile. Keep an imported/saved choice
+            // fail-closed on other platforms instead of silently billing the
+            // configured cloud bridge.
+            "codex" => AiEndpoint {
+                protocol: AiProtocol::OpenAiCompatible,
+                base_url: String::new(),
+                bearer: String::new(),
+                model: String::new(),
+                reasoning_effort: None,
                 is_local: false,
             },
             _ => AiEndpoint {
@@ -823,15 +857,17 @@ impl Config {
     }
 
     /// Resolve the SEPARATE vision endpoint, or `None` when vision is "off".
-    /// Legacy "same" reuses the text endpoint except for Codex, which requires
-    /// a catalog-verified image model. Bridge/local fields fall back to their
-    /// corresponding text fields; direct providers reuse their protected
-    /// profiles. Cloud model falls back to [`DEFAULT_VISION_MODEL`].
+    /// "Same" reuses the text endpoint only when image input was explicitly
+    /// declared. Bridge/local fields fall back to their corresponding text
+    /// fields; direct providers reuse their protected profiles. Cloud model
+    /// falls back to [`DEFAULT_VISION_MODEL`].
     #[must_use]
     pub fn same_text_model_accepts_images_declared(&self) -> bool {
         match self.ai_provider.as_str() {
+            "mlx" => crate::mlx_install::catalog_model(&self.ai_mlx_model)
+                .is_some_and(|model| model.supports_images),
             "local" => self.ai_local_vision,
-            "codex" => {
+            "codex" if cfg!(windows) => {
                 !self.codex_model.trim().is_empty() && self.codex_model == self.codex_vision_model
             }
             _ => false,
@@ -858,6 +894,23 @@ impl Config {
                 reasoning_effort: None,
                 is_local: false,
             }),
+            "mlx" => {
+                let selected = crate::mlx_install::catalog_model(&self.vision_mlx_model)
+                    .filter(|model| model.supports_images)?;
+                let endpoint = crate::mlx_runtime::active_endpoint_for_model(selected.id);
+                Some(AiEndpoint {
+                    protocol: AiProtocol::OpenAiCompatible,
+                    base_url: endpoint
+                        .as_ref()
+                        .map_or_else(String::new, |endpoint| endpoint.base_url.clone()),
+                    bearer: endpoint
+                        .as_ref()
+                        .map_or_else(String::new, |endpoint| endpoint.bearer.clone()),
+                    model: selected.id.to_string(),
+                    reasoning_effort: None,
+                    is_local: true,
+                })
+            }
             "local" => Some(AiEndpoint {
                 protocol: AiProtocol::OpenAiCompatible,
                 base_url: pick(&self.vision_local_base_url, &self.ai_local_base_url),
@@ -882,14 +935,16 @@ impl Config {
                 reasoning_effort: None,
                 is_local: false,
             }),
-            "codex" if !self.codex_vision_model.trim().is_empty() => Some(AiEndpoint {
-                protocol: AiProtocol::CodexSubscription,
-                base_url: String::new(),
-                bearer: String::new(),
-                model: self.codex_vision_model.clone(),
-                reasoning_effort: None,
-                is_local: false,
-            }),
+            "codex" if cfg!(windows) && !self.codex_vision_model.trim().is_empty() => {
+                Some(AiEndpoint {
+                    protocol: AiProtocol::CodexSubscription,
+                    base_url: String::new(),
+                    bearer: String::new(),
+                    model: self.codex_vision_model.clone(),
+                    reasoning_effort: None,
+                    is_local: false,
+                })
+            }
             _ => None, // "off" (or unknown) → feature disabled
         }
     }
@@ -1062,6 +1117,14 @@ fn default_ai_provider() -> String {
     "cloud".into()
 }
 
+fn default_ai_mlx_model() -> String {
+    crate::mlx_install::DEFAULT_TEXT_MODEL.to_string()
+}
+
+fn default_vision_mlx_model() -> String {
+    crate::mlx_install::DEFAULT_VISION_MODEL.to_string()
+}
+
 fn default_openai_base_url() -> String {
     "https://api.openai.com/v1".into()
 }
@@ -1087,7 +1150,6 @@ fn protected_provider_secret(slot: SecretSlot) -> String {
 }
 
 fn default_vision_provider() -> String {
-    // F8 capture works out of the box via the already-configured cloud bridge.
     "cloud".into()
 }
 
@@ -1102,7 +1164,17 @@ fn default_ai_local_context() -> String {
 }
 
 fn default_stt_provider() -> String {
-    "cloud".into()
+    if cfg!(target_os = "macos") {
+        "gigaam".into()
+    } else {
+        "cloud".into()
+    }
+}
+
+fn default_stt_gigaam_dir() -> String {
+    crate::local_ai::gigaam_default_dir(&crate::local_ai::default_root())
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn default_stt_gigaam_gpu() -> bool {
@@ -1399,6 +1471,11 @@ pub fn load() -> Config {
     // so migrate only the untouched legacy state.
     dirty |= migrate_legacy_tts_default(&mut cfg);
     dirty |= migrate_legacy_vision_same(&mut cfg);
+    let managed_gigaam_ready = cfg!(target_os = "macos")
+        && crate::local_ai::gigaam_model_present(&crate::local_ai::gigaam_default_dir(
+            &crate::local_ai::default_root(),
+        ));
+    dirty |= migrate_macos_gigaam_default(&mut cfg, managed_gigaam_ready);
     // P1.3 — schema-versioning anchor. Stamp the file with the current schema
     // version so a FUTURE release can detect an older layout (config_version <
     // CURRENT) and run a one-time, number-keyed migration right here. Every
@@ -1438,11 +1515,34 @@ fn migrate_legacy_vision_same(cfg: &mut Config) -> bool {
         "cloud" => "cloud",
         "openai" => "openai",
         "anthropic" => "anthropic",
-        "local" | "codex" if cfg.same_text_model_accepts_images_declared() => return false,
+        "local" | "codex" | "mlx" if cfg.same_text_model_accepts_images_declared() => {
+            return false;
+        }
         _ => "off",
     };
     cfg.vision_provider = replacement.to_string();
     true
+}
+
+fn migrate_macos_gigaam_default(cfg: &mut Config, managed_ready: bool) -> bool {
+    if !cfg!(target_os = "macos") {
+        return false;
+    }
+    let unknown_provider = !matches!(cfg.stt_provider.as_str(), "cloud" | "gigaam" | "whisper");
+    let unconfigured_cloud = cfg.stt_provider == "cloud" && cfg.groq_api_key.trim().is_empty();
+    if managed_ready && (unconfigured_cloud || unknown_provider) {
+        cfg.stt_provider = "gigaam".into();
+        cfg.stt_gigaam_dir = default_stt_gigaam_dir();
+        return true;
+    }
+    let saved = cfg.stt_gigaam_dir.trim();
+    let windows_path = saved.as_bytes().get(1) == Some(&b':');
+    if cfg.stt_provider == "gigaam" && (saved.is_empty() || windows_path) {
+        cfg.stt_gigaam_dir = default_stt_gigaam_dir();
+        true
+    } else {
+        false
+    }
 }
 
 pub fn save(cfg: &Config) -> Result<()> {
@@ -1581,6 +1681,8 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     if !imported.codex_vision_model.trim().is_empty() {
         next.codex_vision_model = imported.codex_vision_model;
     }
+    next.ai_mlx_model = imported.ai_mlx_model;
+    next.vision_mlx_model = imported.vision_mlx_model;
     // Local AI provider/endpoint.
     next.ai_local_base_url = imported.ai_local_base_url;
     next.ai_local_bearer = imported.ai_local_bearer;

@@ -30,8 +30,10 @@ pub(crate) fn vision_provider_index_from_id(provider: &str) -> i32 {
         "local" => 3,
         "openai" => 4,
         "anthropic" => 5,
-        "codex" => 6,
-        _ => 2,
+        "codex" if !cfg!(target_os = "macos") => 6,
+        "codex" => -1,
+        "mlx" if cfg!(target_os = "macos") => 6,
+        _ => 0,
     }
 }
 
@@ -49,6 +51,15 @@ pub(crate) fn wire_vision_settings(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_vision_provider_changed(move |idx| {
+            // Selecting the catalog entry does not start or route to MLX. The
+            // explicit Vision enable button owns that state change.
+            if cfg!(target_os = "macos") && idx == 6 {
+                if let Some(window) = weak.upgrade() {
+                    let current = cfg_c.read().vision_provider.clone();
+                    window.set_vision_provider_index(vision_provider_index_from_id(&current));
+                }
+                return;
+            }
             if idx == 1 {
                 let Some(window) = weak.upgrade() else {
                     return;
@@ -69,6 +80,22 @@ pub(crate) fn wire_vision_settings(
                 6 => "codex",
                 _ => "off",
             };
+            let (leaving_mlx, text_uses_mlx) = {
+                let current = cfg_c.read();
+                (
+                    current.vision_provider == "mlx" && provider != "mlx",
+                    current.ai_provider == "mlx",
+                )
+            };
+            if leaving_mlx
+                && !text_uses_mlx
+                && !overlay_backend::mlx_runtime::stop_if_idle()
+            {
+                if let Some(window) = weak.upgrade() {
+                    window.set_vision_provider_index(6);
+                }
+                return;
+            }
             let saved_provider = {
                 let mut c = cfg_c.write();
                 c.vision_provider = provider.to_string();
@@ -234,6 +261,7 @@ pub(crate) fn wire_vision_settings(
     // Mirrors the voice installer: download + SHA-verify + extract on a worker
     // thread (the ~53 MB engine is NOT bundled). On success the OCR path
     // (Shift+Alt+2 / Ctrl+F8) starts using Tesseract instead of the VLM.
+    #[cfg(windows)]
     {
         let weak = win.as_weak();
         win.on_ocr_install_clicked(move || {
@@ -362,6 +390,10 @@ mod tests {
         assert_eq!(vision_provider_index_from_id("local"), 3);
         assert_eq!(vision_provider_index_from_id("openai"), 4);
         assert_eq!(vision_provider_index_from_id("anthropic"), 5);
-        assert_eq!(vision_provider_index_from_id("codex"), 6);
+        assert_eq!(
+            vision_provider_index_from_id("codex"),
+            if cfg!(target_os = "macos") { -1 } else { 6 }
+        );
+        assert_eq!(vision_provider_index_from_id("retired-provider"), 0);
     }
 }

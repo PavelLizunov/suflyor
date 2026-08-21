@@ -718,17 +718,33 @@ fn codex_subscription_profile_round_trips_selected_model_without_secrets() {
     cfg.codex_reasoning_effort = "xhigh".into();
     cfg.codex_vision_model = "gpt-vision".into();
     let endpoint = cfg.ai_endpoint(false);
-    assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
-    assert!(endpoint.protocol.supports_live_answers());
-    assert_eq!(endpoint.model, "gpt-5.4-codex");
-    assert_eq!(endpoint.reasoning_effort.as_deref(), Some("xhigh"));
+    assert_eq!(
+        endpoint.protocol,
+        if cfg!(windows) {
+            crate::ai::AiProtocol::CodexSubscription
+        } else {
+            crate::ai::AiProtocol::OpenAiCompatible
+        }
+    );
+    assert_eq!(
+        endpoint.model,
+        if cfg!(windows) { "gpt-5.4-codex" } else { "" }
+    );
+    assert_eq!(
+        endpoint.reasoning_effort.as_deref(),
+        if cfg!(windows) { Some("xhigh") } else { None }
+    );
     assert!(endpoint.base_url.is_empty());
     assert!(endpoint.bearer.is_empty());
 
     let cloud_endpoint = cfg.ai_endpoint_cloud();
     assert_eq!(
         cloud_endpoint.protocol,
-        crate::ai::AiProtocol::CodexSubscription
+        if cfg!(windows) {
+            crate::ai::AiProtocol::CodexSubscription
+        } else {
+            crate::ai::AiProtocol::OpenAiCompatible
+        }
     );
     assert!(cloud_endpoint.base_url.is_empty());
     assert!(cloud_endpoint.bearer.is_empty());
@@ -866,20 +882,30 @@ fn vision_endpoint_off_is_none() {
 }
 
 #[test]
-fn vision_endpoint_same_reuses_text_endpoint() {
+fn vision_endpoint_same_honors_external_local_declaration() {
     let mut d = Config::defaults();
     d.vision_provider = "same".into();
     d.ai_provider = "local".into();
-    d.ai_local_base_url = "http://127.0.0.1:8080/v1".into();
-    d.ai_local_model = "gemma".into();
+    d.ai_local_base_url = "http://127.0.0.1:11434/v1".into();
+    d.ai_local_model = "user-selected-model".into();
+    assert!(d.vision_endpoint().is_none());
+
     d.ai_local_vision = true;
     let v = d.vision_endpoint();
     assert_eq!(v.as_ref().map(|e| e.is_local), Some(true));
     assert_eq!(
         v.as_ref().map(|e| e.base_url.clone()),
-        Some("http://127.0.0.1:8080/v1".to_string())
+        Some("http://127.0.0.1:11434/v1".to_string())
     );
-    assert_eq!(v.map(|e| e.model), Some("gemma".to_string()));
+    assert_eq!(v.map(|e| e.model), Some("user-selected-model".to_string()));
+}
+
+#[test]
+fn vision_endpoint_same_rejects_unknown_text_provider() {
+    let mut d = Config::defaults();
+    d.vision_provider = "same".into();
+    d.ai_provider = "custom-text-provider".into();
+    assert!(d.vision_endpoint().is_none());
 }
 
 #[test]
@@ -898,9 +924,13 @@ fn vision_endpoint_same_uses_only_catalog_confirmed_codex_model() {
     d.ai_provider = "codex".into();
     d.codex_model = "gpt-image".into();
     d.codex_vision_model = "gpt-image".into();
-    let endpoint = d.vision_endpoint().expect("confirmed same Codex model");
-    assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
-    assert_eq!(endpoint.model, "gpt-image");
+    if cfg!(windows) {
+        let endpoint = d.vision_endpoint().expect("confirmed same Codex model");
+        assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
+        assert_eq!(endpoint.model, "gpt-image");
+    } else {
+        assert!(d.vision_endpoint().is_none());
+    }
 
     d.codex_vision_model = "other-image-model".into();
     assert!(d.vision_endpoint().is_none());
@@ -950,6 +980,11 @@ fn vision_endpoint_codex_requires_an_explicit_image_capable_selection() {
     d.vision_provider = "codex".into();
     assert!(d.vision_endpoint().is_none());
     d.codex_vision_model = "gpt-account-vision".into();
+    if !cfg!(windows) {
+        assert!(d.vision_endpoint().is_none());
+        assert!(!d.readiness().vision.configured);
+        return;
+    }
     let endpoint = d.vision_endpoint().expect("codex vision endpoint");
     assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
     assert_eq!(endpoint.model, "gpt-account-vision");
@@ -1022,6 +1057,58 @@ fn vision_endpoint_default_provider_is_cloud() {
 }
 
 #[test]
+fn mlx_defaults_are_additive_and_fail_closed_until_owned_runtime_is_ready() {
+    crate::mlx_runtime::stop();
+    let mut cfg = Config::defaults();
+    assert_eq!(cfg.ai_provider, "cloud");
+    assert_eq!(cfg.ai_mlx_model, crate::mlx_install::DEFAULT_TEXT_MODEL);
+    assert_eq!(
+        cfg.vision_mlx_model,
+        crate::mlx_install::DEFAULT_VISION_MODEL
+    );
+
+    cfg.ai_provider = "mlx".into();
+    let text = cfg.ai_endpoint(false);
+    assert!(text.is_local);
+    assert!(text.base_url.is_empty());
+    assert!(text.bearer.is_empty());
+    assert_eq!(text.model, crate::mlx_install::DEFAULT_TEXT_MODEL);
+
+    cfg.vision_provider = "mlx".into();
+    let vision = cfg.vision_endpoint().expect("managed Vision intent");
+    assert!(vision.base_url.is_empty());
+    assert!(vision.bearer.is_empty());
+    assert_eq!(vision.model, crate::mlx_install::DEFAULT_VISION_MODEL);
+    cfg.vision_mlx_model = crate::mlx_install::DEFAULT_TEXT_MODEL.into();
+    assert!(
+        cfg.vision_endpoint().is_none(),
+        "text-only catalog entry must never route images"
+    );
+}
+
+#[test]
+fn server_merge_copies_only_persisted_mlx_model_choices() {
+    let mut current = Config::defaults();
+    current.ai_mlx_model = "old-text".into();
+    current.vision_mlx_model = "old-vision".into();
+    let mut imported = Config::defaults();
+    imported.ai_mlx_model = "new-text".into();
+    imported.vision_mlx_model = "new-vision".into();
+    let merged = merge_server_settings(&current, imported);
+    assert_eq!(merged.ai_mlx_model, "new-text");
+    assert_eq!(merged.vision_mlx_model, "new-vision");
+    let json = serde_json::to_string(&merged).unwrap();
+    assert!(
+        !json.contains("mlx_endpoint"),
+        "no ephemeral MLX endpoint is persisted"
+    );
+    assert!(
+        !json.contains("mlx_bearer"),
+        "no runtime MLX bearer field exists in config"
+    );
+}
+
+#[test]
 fn ai_endpoint_local_uses_local_fields_and_prep_fallback() {
     let mut d = Config::defaults();
     d.ai_provider = "local".into();
@@ -1071,14 +1158,29 @@ fn ai_endpoint_cloud_always_uses_cloud_bridge_and_prep_model() {
 }
 
 #[test]
-fn stt_backend_defaults_to_cloud() {
+fn stt_backend_uses_the_platform_default() {
     let d = Config::defaults();
-    assert_eq!(d.stt_provider, "cloud");
-    assert!(!d.stt_is_local());
-    match d.stt_backend() {
-        SttBackendCfg::Cloud { model, .. } => assert_eq!(model, "whisper-large-v3"),
-        other => panic!("expected Cloud, got {other:?}"),
+    if cfg!(target_os = "macos") {
+        assert_eq!(d.stt_provider, "gigaam");
+        assert!(d.stt_is_local());
+        assert!(d.stt_gigaam_dir.ends_with("gigaam-v3"));
+        assert!(matches!(d.stt_backend(), SttBackendCfg::Gigaam { .. }));
+    } else {
+        assert_eq!(d.stt_provider, "cloud");
+        assert!(!d.stt_is_local());
+        match d.stt_backend() {
+            SttBackendCfg::Cloud { model, .. } => assert_eq!(model, "whisper-large-v3"),
+            other => panic!("expected Cloud, got {other:?}"),
+        }
     }
+}
+
+#[test]
+fn unknown_stt_provider_falls_back_to_cloud() {
+    let mut config = Config::defaults();
+    config.stt_provider = "retired-provider".into();
+    assert!(!config.stt_is_local());
+    assert!(matches!(config.stt_backend(), SttBackendCfg::Cloud { .. }));
 }
 
 #[test]
@@ -1117,17 +1219,64 @@ fn stt_backend_whisper_uses_url_bearer_model_and_is_local() {
 
 #[test]
 fn stt_provider_defaults_from_partial_json() {
-    // Old config without the STT provider fields → cloud + whisper-server
-    // default URL, and thinking-off for local AI.
+    // Old config without STT fields follows the platform default.
     let cfg: Config = serde_json::from_str(r#"{"ai_model":"x"}"#).expect("parse");
-    assert_eq!(cfg.stt_provider, "cloud");
+    assert_eq!(
+        cfg.stt_provider,
+        if cfg!(target_os = "macos") {
+            "gigaam"
+        } else {
+            "cloud"
+        }
+    );
     assert_eq!(cfg.stt_whisper_url, "http://127.0.0.1:8081/v1");
-    assert!(!cfg.stt_is_local());
+    assert_eq!(cfg.stt_is_local(), cfg!(target_os = "macos"));
+    assert!(cfg.stt_gigaam_dir.ends_with("gigaam-v3"));
     assert!(!cfg.ai_local_thinking);
     // GigaAM GPU (DirectML) is on by default; old configs opt in on upgrade.
     assert!(cfg.stt_gigaam_gpu);
     // Colour scheme defaults to 0 (Glacier) for configs predating the field.
     assert_eq!(cfg.color_scheme, 0);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_migrates_an_empty_saved_gigaam_dir_to_the_managed_path() {
+    let mut cfg = Config::defaults();
+    cfg.stt_provider = "gigaam".into();
+    cfg.stt_gigaam_dir.clear();
+
+    assert!(migrate_macos_gigaam_default(&mut cfg, true));
+    assert!(cfg.stt_gigaam_dir.ends_with("gigaam-v3"));
+    assert!(!migrate_macos_gigaam_default(&mut cfg, true));
+
+    cfg.stt_gigaam_dir = r"C:\imported\gigaam-v3".into();
+    assert!(migrate_macos_gigaam_default(&mut cfg, true));
+    assert!(!cfg.stt_gigaam_dir.contains(r"C:\"));
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_promotes_an_unconfigured_cloud_stt_when_managed_gigaam_is_ready() {
+    let mut cfg = Config::defaults();
+    cfg.stt_provider = "cloud".into();
+    cfg.groq_api_key.clear();
+
+    assert!(!migrate_macos_gigaam_default(&mut cfg, false));
+    assert!(migrate_macos_gigaam_default(&mut cfg, true));
+    assert_eq!(cfg.stt_provider, "gigaam");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_replaces_a_retired_stt_provider_when_managed_gigaam_is_ready() {
+    let mut cfg = Config::defaults();
+    cfg.stt_provider = "uap".into();
+
+    assert!(!migrate_macos_gigaam_default(&mut cfg, false));
+    assert!(migrate_macos_gigaam_default(&mut cfg, true));
+    assert_eq!(cfg.stt_provider, "gigaam");
+    assert!(cfg.stt_gigaam_dir.ends_with("gigaam-v3"));
 }
 
 #[test]

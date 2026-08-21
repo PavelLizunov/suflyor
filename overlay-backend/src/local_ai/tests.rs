@@ -105,8 +105,54 @@ fn llama_readiness_requires_nonempty_text_message_content() {
     }
 }
 
+#[cfg(windows)]
+fn mark_sparse(file: &std::fs::File) -> std::io::Result<()> {
+    use std::ffi::c_void;
+    use std::os::windows::io::{AsRawHandle, RawHandle};
+
+    const FSCTL_SET_SPARSE: u32 = 0x0009_00C4;
+    #[link(name = "kernel32")]
+    extern "system" {
+        #[link_name = "DeviceIoControl"]
+        fn device_io_control(
+            handle: RawHandle,
+            control_code: u32,
+            input: *mut c_void,
+            input_len: u32,
+            output: *mut c_void,
+            output_len: u32,
+            bytes_returned: *mut u32,
+            overlapped: *mut c_void,
+        ) -> i32;
+    }
+
+    let mut bytes_returned = 0_u32;
+    // SAFETY: `file` owns this synchronous handle for the whole call; no
+    // ownership is transferred and every optional buffer is intentionally null.
+    let succeeded = unsafe {
+        device_io_control(
+            file.as_raw_handle(),
+            FSCTL_SET_SPARSE,
+            std::ptr::null_mut(),
+            0,
+            std::ptr::null_mut(),
+            0,
+            &mut bytes_returned,
+            std::ptr::null_mut(),
+        )
+    };
+    if succeeded == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
 fn make_complete(path: &Path, size: u64) {
     let file = std::fs::File::create(path).unwrap();
+    #[cfg(windows)]
+    mark_sparse(&file)
+        .unwrap_or_else(|error| panic!("mark sparse test fixture {}: {error}", path.display()));
     file.set_len(size).unwrap();
 }
 
@@ -203,7 +249,21 @@ fn stat_only_presence_accepts_an_exact_size_fixture_without_hashing() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     std::fs::create_dir_all(root.join("llama.cpp")).unwrap();
-    make_complete(&quality_gguf_path(root), GEMMA26_SIZE);
+    let fixture = quality_gguf_path(root);
+    make_complete(&fixture, GEMMA26_SIZE);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+
+        const FILE_ATTRIBUTE_SPARSE_FILE: u32 = 0x0000_0200;
+        let metadata = std::fs::metadata(&fixture).unwrap();
+        assert_eq!(metadata.len(), GEMMA26_SIZE);
+        assert_ne!(
+            metadata.file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE,
+            0,
+            "large test fixture must remain sparse"
+        );
+    }
     assert!(quality_model_present(root));
 }
 
@@ -426,6 +486,8 @@ fn legacy_4b_install_survives_upgrade_until_12b_is_installed() {
         ai_local_model: GEMMA26_FILE.to_string(),
         ai_local_prep_model: "stale-prep".to_string(),
         ai_local_quality: true,
+        ai_local_vision: true,
+        vision_provider: "same".to_string(),
         ..Default::default()
     };
     assert!(repair_managed_model_state(&mut cfg, tmp.path()));
@@ -433,6 +495,9 @@ fn legacy_4b_install_survives_upgrade_until_12b_is_installed() {
     assert!(!cfg.ai_local_quality);
     assert_eq!(cfg.ai_local_model, LEGACY_GEMMA_FILE);
     assert!(cfg.ai_local_prep_model.is_empty());
+    assert!(!local_vision_available(&cfg, tmp.path()));
+    assert!(!cfg.ai_local_vision);
+    assert_eq!(cfg.vision_provider, "off");
 
     make_complete(&llama_dir.join(GEMMA_FILE), GEMMA_SIZE);
     assert!(
@@ -843,7 +908,10 @@ fn launcher_uses_fixed_context_with_the_confirmed_hardware_matrix() {
         LocalContextPreset::Auto,
         false,
     );
+    #[cfg(windows)]
     assert!(!unknown.iter().any(|arg| arg == "-ngl"));
+    #[cfg(target_os = "macos")]
+    assert!(unknown.windows(2).any(|pair| pair == ["-ngl", "99"]));
     assert!(unknown.windows(2).any(|pair| pair == ["--alias", "alias"]));
     let cpu = llama_server_args(
         "model.gguf",
@@ -1245,6 +1313,7 @@ fn cuda_version_parse() {
 }
 
 #[test]
+#[cfg(windows)]
 fn pick_newest_cuda_and_matching_cudart() {
     let assets = vec![
         asset("llama-b9410-bin-win-cpu-x64.zip"),
@@ -1267,6 +1336,7 @@ fn pick_newest_cuda_and_matching_cudart() {
 }
 
 #[test]
+#[cfg(windows)]
 fn pick_cpu_when_forced() {
     let assets = vec![
         asset("llama-b9410-bin-win-cuda-13.3-x64.zip"),
@@ -1280,6 +1350,7 @@ fn pick_cpu_when_forced() {
 }
 
 #[test]
+#[cfg(windows)]
 fn pick_vulkan_for_non_nvidia_gpu() {
     // AMD/Intel (GpuKind::Other) → the Vulkan build, no cudart (Баг2).
     let assets = vec![
@@ -1297,6 +1368,7 @@ fn pick_vulkan_for_non_nvidia_gpu() {
 }
 
 #[test]
+#[cfg(windows)]
 fn pick_cpu_when_non_nvidia_but_no_vulkan_asset() {
     // AMD/Intel machine but the release has no Vulkan build → CPU fallthrough.
     let assets = vec![
@@ -1311,6 +1383,20 @@ fn pick_cpu_when_non_nvidia_but_no_vulkan_asset() {
 }
 
 #[test]
+#[cfg(target_os = "macos")]
+fn pick_llama_macos_metal() {
+    let assets = vec![
+        asset("llama-b9410-bin-macos-arm64.zip"),
+        asset("llama-b9410-bin-macos-x64.zip"),
+    ];
+    let pick = pick_llama(&assets, GpuKind::Other).unwrap();
+    assert_eq!(pick.version.as_deref(), Some("Metal"));
+    assert!(pick.cudart_url.is_none());
+    assert!(pick.build_url.ends_with("llama-b9410-bin-macos-arm64.zip"));
+}
+
+#[test]
+#[cfg(windows)]
 fn pick_whisper_cpu_takes_plain_build() {
     let assets = vec![
         asset("whisper-bin-Win32.zip"),
@@ -1326,6 +1412,7 @@ fn pick_whisper_cpu_takes_plain_build() {
 }
 
 #[test]
+#[cfg(windows)]
 fn pick_whisper_gpu_takes_highest_cublas() {
     let assets = vec![
         asset("whisper-bin-x64.zip"),
@@ -1341,6 +1428,7 @@ fn pick_whisper_gpu_takes_highest_cublas() {
 }
 
 #[test]
+#[cfg(windows)]
 fn pick_whisper_gpu_falls_back_to_cpu_when_no_cublas() {
     let assets = vec![
         asset("whisper-bin-Win32.zip"),
@@ -1352,6 +1440,17 @@ fn pick_whisper_gpu_falls_back_to_cpu_when_no_cublas() {
         .unwrap()
         .0
         .ends_with("whisper-bin-x64.zip"));
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn pick_whisper_macos() {
+    let assets = vec![
+        asset("whisper-bin-macos-arm64.zip"),
+        asset("whisper-bin-x64.zip"),
+    ];
+    let pick = pick_whisper(&assets, false).unwrap();
+    assert!(pick.0.contains("whisper"));
 }
 
 #[test]

@@ -689,7 +689,9 @@ fn play_test_clip(stop: Arc<AtomicBool>) -> Result<()> {
     let render_client = client.get_audiorenderclient()?;
     let buffer_frames = client.get_buffer_size()?;
     let clip: Vec<i16> = DIAG_CHIME_S16
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|b| i16::from_le_bytes([b[0], b[1]]))
         .collect();
     let mut cursor = 0_usize;

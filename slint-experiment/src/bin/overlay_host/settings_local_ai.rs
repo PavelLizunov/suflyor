@@ -27,10 +27,12 @@
 //! NOTE: `diag!` is reached by textual macro scope (the parent defines it before
 //! the `mod settings_local_ai;` declaration); only the crate-root items are
 //! imported explicitly below (`active_stack_label` stays in `overlay_host.rs`).
+#[cfg(windows)]
 use super::{
     active_stack_label, refresh_local_model_resource_warning, ComponentHandle, ModelRc,
-    OverlayBarWindow, SettingsWindow, SharedString, VecModel,
+    OverlayBarWindow, VecModel,
 };
+use super::{SettingsWindow, SharedString};
 
 pub(crate) fn refresh_local_context_controls(
     win: &SettingsWindow,
@@ -106,6 +108,7 @@ fn refresh_local_context_preview(
 /// active-stack readout on success); the Cancel closure captures `state` (to
 /// flip the cancel flag). Those are threaded through as extra params, matching
 /// the names `open_settings` used.
+#[cfg(windows)]
 pub(crate) fn wire_local_ai(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
@@ -245,7 +248,7 @@ pub(crate) fn wire_local_ai(
                 };
                 let old_servers = {
                     let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
-                    s.local_ai_servers.drain(..).collect::<Vec<_>>()
+                    std::mem::take(&mut s.local_ai_servers)
                 };
                 overlay_backend::local_ai::stop_managed_servers(&opts.root, old_servers);
                 match overlay_backend::local_ai::install(&opts, &cancel, &on) {

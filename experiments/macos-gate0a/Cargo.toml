@@ -1,0 +1,21 @@
+[package]
+name = "suflyor-macos-gate0a"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[features]
+ui-mcp = ["slint/mcp"]
+
+[build-dependencies]
+cc = "1"
+slint-build = "1.17"
+
+[dependencies]
+raw-window-handle = "0.6"
+slint = { version = "1.17", features = ["raw-window-handle-06"] }
+
+[lints.clippy]
+expect_used = "deny"
+panic = "deny"
+unwrap_used = "deny"

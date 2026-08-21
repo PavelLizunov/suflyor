@@ -13,9 +13,11 @@ pub mod lock_menu;
 pub mod logging;
 pub mod markdown;
 pub mod math_display;
+pub mod native;
 pub mod runtime_state;
 pub mod session_namer;
 pub mod slint_events;
 pub mod slint_session;
+#[cfg(windows)]
 pub mod tray;
 pub mod win32;

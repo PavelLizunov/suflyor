@@ -1,10 +1,8 @@
 //! Screen capture for the vision feature (V2).
 //!
-//! Grabs a monitor (later: a region) via the Win32 BitBlt helpers in
-//! [`crate::win32`], converts the top-down BGRA buffer to a downscaled JPEG,
-//! and base64-encodes it into a `data:image/jpeg;base64,…` URI ready for the
-//! vision endpoint. The only Win32 lives in `win32`; this module is the
-//! image-processing + monitor-pick orchestration.
+//! On Windows, grabs a monitor via the native GDI screen adapter.
+//! The shared portion converts top-down BGRA to a downscaled JPEG and crops
+//! frozen frames without depending on an OS capture API.
 
 use base64::Engine;
 
@@ -24,7 +22,8 @@ pub struct CapturedBgra {
 
 /// Capture the full monitor currently under the mouse cursor. The caller is
 /// responsible for hiding our own windows first
-/// ([`crate::win32::hide_own_windows`]) so they don't appear in the shot.
+/// (`crate::win32::hide_own_windows`) so they don't appear in the shot.
+#[cfg(windows)]
 pub fn capture_monitor_under_cursor() -> Result<CapturedBgra, Box<dyn std::error::Error>> {
     let monitors = crate::win32::enum_monitors();
     if monitors.is_empty() {
@@ -38,11 +37,24 @@ pub fn capture_monitor_under_cursor() -> Result<CapturedBgra, Box<dyn std::error
         .or_else(|| monitors.first())
         .ok_or("no monitor under cursor")?;
     let (w, h) = (mon.width(), mon.height());
-    let bgra = crate::win32::capture_rect_bgra(mon.left, mon.top, w, h)?;
+    let bgra = crate::native::screen::capture_rect_bgra(mon.left, mon.top, w, h)?;
     Ok(CapturedBgra {
         bgra,
         width: w as u32,
         height: h as u32,
+    })
+}
+
+/// Capture the display under the cursor on macOS via ScreenCaptureKit. The
+/// native filter excludes every window owned by this process.
+#[cfg(target_os = "macos")]
+pub fn capture_monitor_under_cursor() -> Result<CapturedBgra, Box<dyn std::error::Error>> {
+    let (bgra, width, height, _display) =
+        crate::native::screen::capture_display_bgra_with_dimensions()?;
+    Ok(CapturedBgra {
+        bgra,
+        width,
+        height,
     })
 }
 
@@ -62,7 +74,7 @@ pub fn bgra_to_jpeg_data_url(
     }
     // BGRA → RGB (drop alpha, swap B/R).
     let mut rgb: Vec<u8> = Vec::with_capacity((width as usize) * (height as usize) * 3);
-    for px in bgra.chunks_exact(4) {
+    for px in bgra.as_chunks::<4>().0 {
         rgb.push(px[2]);
         rgb.push(px[1]);
         rgb.push(px[0]);
@@ -98,12 +110,13 @@ pub fn bgra_to_jpeg_data_url(
 /// the region-select overlay. Returns the frame plus the virtual-desktop origin
 /// (vx, vy) — NEGATIVE on multi-monitor — which the caller needs to position the
 /// fullscreen overlay window. Hide our own windows first (caller's job).
+#[cfg(windows)]
 pub fn capture_virtual_desktop() -> Result<(CapturedBgra, i32, i32), Box<dyn std::error::Error>> {
     let (vx, vy, vw, vh) = crate::win32::virtual_screen_bounds();
     if vw <= 0 || vh <= 0 {
         return Err(format!("virtual desktop has zero size {vw}x{vh}").into());
     }
-    let bgra = crate::win32::capture_rect_bgra(vx, vy, vw, vh)?;
+    let bgra = crate::native::screen::capture_rect_bgra(vx, vy, vw, vh)?;
     Ok((
         CapturedBgra {
             bgra,
@@ -112,6 +125,25 @@ pub fn capture_virtual_desktop() -> Result<(CapturedBgra, i32, i32), Box<dyn std
         },
         vx,
         vy,
+    ))
+}
+
+/// Freeze the one macOS display currently under the cursor for region select.
+/// The tuple origin is that display's actual global CoreGraphics origin.
+#[cfg(target_os = "macos")]
+pub fn capture_virtual_desktop() -> Result<(CapturedBgra, i32, i32), Box<dyn std::error::Error>> {
+    // macOS intentionally freezes only the display under the cursor for now;
+    // composing mixed-scale displays into one BGRA frame is a separate feature.
+    let (bgra, width, height, display) =
+        crate::native::screen::capture_display_bgra_with_dimensions()?;
+    Ok((
+        CapturedBgra {
+            bgra,
+            width,
+            height,
+        },
+        display.left,
+        display.top,
     ))
 }
 

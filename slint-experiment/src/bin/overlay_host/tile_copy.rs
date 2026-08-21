@@ -255,7 +255,7 @@ pub(crate) fn wire_copy(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayBa
         if text.is_empty() {
             return;
         }
-        match clipboard_win::set_clipboard_string(&text) {
+        match slint_replay::native::clipboard::set_text(&text) {
             Ok(()) => {
                 let Some(t) = weak.upgrade() else {
                     return;
@@ -286,7 +286,7 @@ pub(crate) fn wire_code_copy(tile: &TileWindow) {
         if code.is_empty() {
             return;
         }
-        match clipboard_win::set_clipboard_string(code.as_str()) {
+        match slint_replay::native::clipboard::set_text(code.as_str()) {
             Ok(()) => {
                 let Some(t) = weak.upgrade() else {
                     return;
@@ -527,7 +527,7 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
             if text.trim().is_empty() {
                 return;
             }
-            if let Err(e) = clipboard_win::set_clipboard_string(&text) {
+            if let Err(e) = slint_replay::native::clipboard::set_text(&text) {
                 eprintln!("[overlay-host] copy marked failed: {e}");
             }
         });
@@ -664,13 +664,26 @@ pub(crate) fn convo_speak_text(bridge: &OverlayBarBridge, convo_id: i32) -> Stri
 
 /// Pure: the latest assistant turn's text, or the rendered body if none yet.
 pub(crate) fn speak_answer_text(messages: &[ai::ChatMessage], rendered: &str) -> String {
-    messages
+    let answer = messages
         .iter()
         .rev()
         .find(|m| m.role == "assistant")
         .map(|m| message_text(&m.content).trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| rendered.trim().to_string())
+        .filter(|s| !s.is_empty());
+    if let Some(answer) = answer {
+        return answer;
+    }
+    // A read-aloud tile is seeded with exactly one user turn and has no model
+    // answer. Speak that original selection, not its fenced visual rendering.
+    if messages.len() == 1 && messages[0].role == "user" {
+        let selected = message_text(&messages[0].content).trim().to_string();
+        if !selected.is_empty() && rendered.contains("user\n") {
+            return selected;
+        }
+    }
+    // During a normal streamed answer there is also no stored assistant turn
+    // yet; its live rendered body is the correct thing to read.
+    rendered.trim().to_string()
 }
 
 // Which tile is currently being read aloud. TTS is process-global +
@@ -735,19 +748,28 @@ pub(crate) fn mark_speaking(convo_id: i32) {
     start_speaking_state_timer();
 }
 
-/// Auto-read a newly opened tile only when no existing player is active. A
-/// paused read remains active, so preparing the next tile cannot steal its
-/// controls; an explicit click on the new tile may still replace it.
-fn auto_speak_allowed(is_speaking: bool) -> bool {
-    !is_speaking
+fn set_speak_error(convo_id: i32, failed: bool) {
+    SPEAK_TILES.with(|tiles| {
+        for (id, weak) in tiles.borrow().iter() {
+            if *id == convo_id {
+                if let Some(tile) = weak.upgrade() {
+                    tile.set_speak_error(failed);
+                    tile.set_can_speak(overlay_backend::tts::is_available());
+                }
+            }
+        }
+    });
 }
 
-pub(crate) fn auto_speak_if_idle(text: &str, convo_id: i32) -> bool {
-    if !auto_speak_allowed(overlay_backend::tts::is_speaking())
-        || !overlay_backend::tts::speak(text)
-    {
+/// Start a user-requested read immediately. The backend replaces any current
+/// utterance, so explicit SA1/SA2 requests never wait for the existing player
+/// to become idle.
+pub(crate) fn speak_explicit(text: &str, convo_id: i32) -> bool {
+    if !overlay_backend::tts::speak(text) {
+        set_speak_error(convo_id, true);
         return false;
     }
+    set_speak_error(convo_id, false);
     reset_pause();
     mark_speaking(convo_id);
     true
@@ -824,6 +846,7 @@ pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayB
     // Only advertise a working 🔊 when a voice + the sidecar are actually
     // installed; a missing engine must not show a usable action (F2).
     tile.set_can_speak(overlay_backend::tts::is_available());
+    tile.set_speak_error(false);
     SPEAK_TILES.with(|tiles| {
         let mut tiles = tiles.borrow_mut();
         tiles.retain(|(id, weak)| *id != convo_id && weak.upgrade().is_some());
@@ -847,14 +870,13 @@ pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayB
             // window ONLY when playback is accepted. Gate the tile's speaking
             // state on that result so a missing engine neither shows as speaking
             // nor falsely silences the mic (F2).
-            if !overlay_backend::tts::speak(&text) {
+            if !speak_explicit(&text, convo_id) {
+                diag!("[overlay-host] read-aloud unavailable");
                 return;
             }
-            reset_pause();
             if let Some(t) = weak.upgrade() {
                 t.set_speak_paused(false);
             }
-            mark_speaking(convo_id);
         });
     }
     let weak_p = tile.as_weak();
@@ -1233,6 +1255,15 @@ mod copy_tests {
     }
 
     #[test]
+    fn speak_read_aloud_tile_uses_raw_selected_text_not_visual_fence() {
+        let msgs = vec![msg("user", "выбранный текст")];
+        assert_eq!(
+            speak_answer_text(&msgs, "~~~user\nвыбранный текст\n~~~\n"),
+            "выбранный текст"
+        );
+    }
+
+    #[test]
     fn strip_directives_cleans_user_turns_only() {
         let mut msgs = [
             msg("system", &format!("{FOLLOWUP_DIRECTIVE}sys")),
@@ -1276,11 +1307,5 @@ mod copy_tests {
             message_text(&msgs[2].content),
             format!("{FOLLOWUP_DIRECTIVE}перезапрашиваемый вопрос")
         );
-    }
-
-    #[test]
-    fn auto_read_policy_keeps_an_active_or_paused_player() {
-        assert!(auto_speak_allowed(false));
-        assert!(!auto_speak_allowed(true));
     }
 }

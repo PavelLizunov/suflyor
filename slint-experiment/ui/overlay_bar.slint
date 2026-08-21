@@ -489,7 +489,7 @@ export component OverlayBarWindow inherits Window {
     // ≈ 30 px) with the same RU worst-case slack (review-agent finding).
     // v0.36.1-rc.2 — 1200 → 1280 so the permanent RU deep-lock label still
     // leaves room for Pause + Close all in the running/open-tile worst case.
-    preferred-width: 1280px;
+    preferred-width: root.bootstrap-mode ? 560px : 1280px;
     // 64px (was 86) — the chip row is only 22px, so 86 left a wide empty band
     // around one status line (design review #1). Kept in sync with apply_bar_size
     // in overlay_host.rs.
@@ -500,7 +500,7 @@ export component OverlayBarWindow inherits Window {
     // захватить + timer + the persistent deep-lock label + expand in one row,
     // so 660 (not the old 300 reader pill). Full bar keeps 720 so its chip row
     // never collapses. Kept in sync with apply_bar_size in overlay_host.rs.
-    min-width: root.compact-bar ? 660px : 720px;
+    min-width: root.bootstrap-mode ? 440px : (root.compact-bar ? 660px : 720px);
 
     // Status pill text (idle / recording / etc).
     in-out property <string> status-text: "idle";
@@ -542,6 +542,8 @@ export component OverlayBarWindow inherits Window {
     // updates the bar (tiles-spawned is a CUMULATIVE counter and must NOT be
     // used for these — it never decrements except on close-all).
     in-out property <int> open-tiles: 0;
+    // One bounded recovery slot for a read-aloud tile closed by mistake.
+    in-out property <bool> can-restore-tile: false;
 
     // Phase E6 v10 — aggressive (every-line) auto-tile mode flag.
     // When true, the bar shows the "🔥 auto" chip lit; user can
@@ -616,6 +618,14 @@ export component OverlayBarWindow inherits Window {
     // захватить + timer + Expand). Persisted via config.compact_bar; Rust resizes
     // the bar window on toggle.
     in-out property <bool> compact-bar: false;
+    // macOS production bootstrap: keep the real product bar/window while its
+    // platform adapters are connected, but never expose dead AI/audio controls.
+    in property <bool> bootstrap-mode: false;
+    // macOS bootstrap only: raw AVFoundation authorization status
+    // (0 not determined, 1 restricted, 2 denied, 3 authorized, 4 requesting).
+    in-out property <int> mic-permission-state: 0;
+    // macOS bootstrap only: 0 stopped, 1 receiving native audio, 2 start failed.
+    in-out property <int> mic-capture-state: 0;
     // The hide action is exposed only after Windows accepted the tray icon;
     // otherwise hiding the bar would remove the only restore surface.
     in property <bool> tray-available: false;
@@ -649,6 +659,7 @@ export component OverlayBarWindow inherits Window {
     // V0.8.3 — "Написать": open the typed-question input window.
     callback text-ask-clicked();
     callback close-all-tiles-clicked();
+    callback restore-tile-clicked();
     callback capture-clicked(); // 📷 screenshot -> vision (same as F8)
     callback stealth-toggle-clicked();
     callback aggressive-toggle-clicked();
@@ -690,7 +701,7 @@ export component OverlayBarWindow inherits Window {
         // сразу стал не кликабельным". Now only the ~80px status
         // pill is the drag zone; every chip is freely clickable.
 
-        if !root.compact-bar : VerticalLayout {
+        if !root.compact-bar && !root.bootstrap-mode : VerticalLayout {
             padding: 6px;
             spacing: 4px;
 
@@ -909,6 +920,13 @@ export component OverlayBarWindow inherits Window {
                 a11y: @tr("close all");
                 accent: #fb7185;
                 clicked => { root.close-all-tiles-clicked(); }
+            }
+            if root.can-restore-tile && !root.confirming : Chip {
+                icon: @image-url("../assets/icons/restore.svg");
+                has-icon: true;
+                a11y: @tr("Restore last tile");
+                accent: #34d399;
+                clicked => { root.restore-tile-clicked(); }
             }
             // V0.8.3 — ✏ Написать: type a question when speaking aloud isn't an
             // option. Opens a small stealth-aware input window.
@@ -1145,7 +1163,7 @@ export component OverlayBarWindow inherits Window {
         // the full bar. The full action set returns on Expand. Read-aloud is
         // unaffected — the global Shift+Alt+1/2/3 hotkeys work regardless of this
         // layout (there is no on-bar Stop here, by design).
-        if root.compact-bar : VerticalLayout {
+        if root.compact-bar && !root.bootstrap-mode : VerticalLayout {
             padding: 6px;
             spacing: 4px;
 
@@ -1326,6 +1344,118 @@ export component OverlayBarWindow inherits Window {
                     vertical-alignment: center;
                     horizontal-stretch: 0;
                 }
+                Rectangle {
+                    width: 8px;
+                    height: 8px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 4px;
+                    background: root.last-transcript-source == "mic"
+                        ? Theme.success
+                        : (root.last-transcript-source == "sys" ? Theme.accent : Theme.border-strong);
+                }
+                Text {
+                    text: root.last-transcript-line == ""
+                        ? @tr("waiting for transcript... (mic/sys → STT)")
+                        : root.last-transcript-line;
+                    font-size: 11px;
+                    color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;
+                    overflow: elide;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+
+        // First honest production surface on macOS. The normal product bar is
+        // hidden in this mode until its callbacks have real platform adapters.
+        if root.bootstrap-mode : VerticalLayout {
+            padding: Metrics.space-sm;
+            spacing: 4px;
+
+            HorizontalLayout {
+                spacing: Metrics.space-md;
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                    accessible-role: text;
+                    accessible-label: @tr("Suflyor for macOS") + ". "
+                        + @tr("Native overlay ready; product features are being connected.");
+                    TouchArea {
+                        mouse-cursor: grab;
+                        pointer-event(ev) => {
+                            if (ev.button == PointerEventButton.left
+                                && ev.kind == PointerEventKind.down) {
+                                root.drag-start-requested();
+                            }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: Metrics.space-sm;
+                        BrandStateMark { mark-size: 26px; }
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: @tr("Suflyor for macOS");
+                                color: Theme.text-primary;
+                                font-size: Metrics.font-body;
+                                font-weight: 700;
+                            }
+                            Text {
+                                text: @tr("Native overlay ready; product features are being connected.");
+                                color: Theme.text-secondary;
+                                font-size: Metrics.font-label;
+                                overflow: elide;
+                            }
+                        }
+                    }
+                }
+
+                // The only product controls with real macOS adapters so far.
+                Chip {
+                    label: root.mic-permission-state == 3
+                        ? (root.mic-capture-state == 1 ? @tr("Mic live")
+                        : (root.mic-capture-state == 2 ? @tr("Mic failed") : @tr("Start mic")))
+                        : (root.mic-permission-state == 4 ? @tr("Requesting...")
+                        : ((root.mic-permission-state == 1 || root.mic-permission-state == 2)
+                        ? @tr("Mic denied") : @tr("Allow mic")));
+                    a11y: self.label;
+                    height: 24px;
+                    active: root.mic-capture-state == 1;
+                    accent: (root.mic-permission-state == 1 || root.mic-permission-state == 2)
+                        || root.mic-capture-state == 2 ? Theme.danger
+                        : (root.mic-capture-state == 1 ? Theme.success : Theme.accent);
+                    accessible-action-default => { root.mic-toggle-clicked(); }
+                    clicked => { root.mic-toggle-clicked(); }
+                }
+                Chip {
+                    label: @tr("Ask");
+                    height: 24px;
+                    accessible-action-default => { root.text-ask-clicked(); }
+                    clicked => { root.text-ask-clicked(); }
+                }
+                Chip {
+                    label: @tr("AI setup");
+                    height: 24px;
+                    accessible-action-default => { root.open-settings-clicked(); }
+                    clicked => { root.open-settings-clicked(); }
+                }
+
+                Chip {
+                    label: @tr("Quit");
+                    accent: Theme.danger;
+                    height: 24px;
+                    accessible-action-default => { root.quit-confirm(); }
+                    clicked => { root.quit-confirm(); }
+                }
+            }
+
+            // One compact transcript/status row — the same latest-line
+            // readout the normal bars show (dot = source tag, text = the
+            // newest STT line; the placeholder stays until the first line).
+            HorizontalLayout {
+                padding-left: 4px;
+                padding-right: 4px;
+                spacing: 6px;
                 Rectangle {
                     width: 8px;
                     height: 8px;

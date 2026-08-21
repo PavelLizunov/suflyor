@@ -1,0 +1,257 @@
+import { LineEdit } from "std-widgets.slint";
+
+component GateChip inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    callback clicked;
+
+    min-width: 92px;
+    height: 36px;
+    border-radius: 9px;
+    border-width: 1px;
+    border-color: active ? #9b87f5 : #575363;
+    background: touch.has-hover ? #383341 : (active ? #312a4a : #28252d);
+
+    Text {
+        text: root.label;
+        color: active ? #cfc4ff : #e8e4ed;
+        font-size: 13px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component GateOverlay inherits Window {
+    in property <string> title-text;
+    in property <string> state-text;
+    in property <string> test-button-text;
+    in property <string> tile-button-text;
+    in property <string> settings-button-text;
+    in property <string> hide-button-text;
+    in-out property <bool> chip-active;
+
+    callback drag-start-requested;
+    callback chip-clicked;
+    callback toggle-tile;
+    callback open-settings;
+    callback hide-overlay;
+
+    title: root.title-text;
+    background: transparent;
+    no-frame: true;
+    always-on-top: true;
+    width: 760px;
+    height: 72px;
+
+    Rectangle {
+        x: 1px;
+        y: 1px;
+        width: parent.width - 2px;
+        height: parent.height - 2px;
+        border-radius: 14px;
+        border-width: 1px;
+        border-color: #4b4655;
+        background: #17151ceb;
+
+        HorizontalLayout {
+            padding: 11px;
+            spacing: 9px;
+
+            Rectangle {
+                min-width: 232px;
+                horizontal-stretch: 1;
+
+                Text {
+                    x: 13px;
+                    y: 3px;
+                    width: parent.width - 13px;
+                    text: root.title-text;
+                    color: #f1edf5;
+                    font-size: 15px;
+                    font-weight: 700;
+                    overflow: elide;
+                }
+                Text {
+                    x: 13px;
+                    y: 27px;
+                    width: parent.width - 13px;
+                    text: root.state-text;
+                    color: #aaa3b2;
+                    font-size: 11px;
+                    overflow: elide;
+                }
+                Rectangle {
+                    x: 0;
+                    y: 20px;
+                    width: 4px;
+                    height: 18px;
+                    border-radius: 2px;
+                    background: #a78bfa;
+                }
+                drag-area := TouchArea {
+                    mouse-cursor: grab;
+                    pointer-event(ev) => {
+                        if (ev.button == PointerEventButton.left
+                            && ev.kind == PointerEventKind.down) {
+                            root.drag-start-requested();
+                        }
+                    }
+                }
+            }
+
+            GateChip {
+                label: root.test-button-text;
+                active: root.chip-active;
+                clicked => {
+                    root.chip-active = !root.chip-active;
+                    root.chip-clicked();
+                }
+            }
+            GateChip {
+                label: root.tile-button-text;
+                clicked => { root.toggle-tile(); }
+            }
+            GateChip {
+                label: root.settings-button-text;
+                clicked => { root.open-settings(); }
+            }
+            GateChip {
+                label: root.hide-button-text;
+                clicked => { root.hide-overlay(); }
+            }
+        }
+    }
+}
+
+export component GateTile inherits Window {
+    in property <string> title-text;
+    in property <string> body-text;
+    in property <string> move-hint-text;
+    in property <string> hide-button-text;
+
+    callback drag-start-requested;
+    callback hide-tile;
+
+    title: root.title-text;
+    background: transparent;
+    no-frame: true;
+    always-on-top: true;
+    width: 420px;
+    height: 220px;
+
+    Rectangle {
+        x: 1px;
+        y: 1px;
+        width: parent.width - 2px;
+        height: parent.height - 2px;
+        border-radius: 14px;
+        border-width: 1px;
+        border-color: #494352;
+        background: #19171eef;
+
+        VerticalLayout {
+            padding: 14px;
+            spacing: 10px;
+
+            Rectangle {
+                height: 34px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        Text {
+                            text: root.title-text;
+                            color: #f1edf5;
+                            font-size: 15px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        drag-area := TouchArea {
+                            mouse-cursor: grab;
+                            pointer-event(ev) => {
+                                if (ev.button == PointerEventButton.left
+                                    && ev.kind == PointerEventKind.down) {
+                                    root.drag-start-requested();
+                                }
+                            }
+                        }
+                    }
+                    GateChip {
+                        label: root.hide-button-text;
+                        min-width: 64px;
+                        height: 30px;
+                        clicked => { root.hide-tile(); }
+                    }
+                }
+            }
+
+            Text {
+                text: root.body-text;
+                color: #d3ced8;
+                font-size: 13px;
+                wrap: word-wrap;
+                vertical-stretch: 1;
+            }
+            Text {
+                text: root.move-hint-text;
+                color: #a78bfa;
+                font-size: 11px;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+export component GateSettings inherits Window {
+    in property <string> title-text;
+    in property <string> explanation-text;
+    in property <string> input-placeholder-text;
+    in property <string> close-button-text;
+    in-out property <string> input-text;
+
+    callback hide-settings;
+
+    title: root.title-text;
+    width: 520px;
+    height: 300px;
+    background: #1c1921;
+
+    VerticalLayout {
+        padding: 22px;
+        spacing: 14px;
+
+        Text {
+            text: root.title-text;
+            color: #f1edf5;
+            font-size: 20px;
+            font-weight: 700;
+        }
+        Text {
+            text: root.explanation-text;
+            color: #b8b1bf;
+            font-size: 13px;
+            wrap: word-wrap;
+        }
+        LineEdit {
+            text <=> root.input-text;
+            placeholder-text: root.input-placeholder-text;
+            height: 38px;
+        }
+        Rectangle { vertical-stretch: 1; }
+        HorizontalLayout {
+            alignment: end;
+            GateChip {
+                label: root.close-button-text;
+                clicked => { root.hide-settings(); }
+            }
+        }
+    }
+}

@@ -34,9 +34,9 @@
 use super::{
     apply_scheme_tile, drag_begin, drag_update, enum_monitors, get_window_rect, global_scheme,
     global_stealth, global_tile_monitor, global_tile_opacity, grab_hwnd, make_transparent_tile,
-    move_window_pos_only, pick_monitor, set_always_on_top, set_skip_taskbar, set_stealth,
-    work_area_for_window, ComponentHandle, Duration, TileWindow, Timer, HWND_GRAB_DELAY_MS,
-    TILE_DEFAULT_H, TILE_DEFAULT_W,
+    move_window_pos_only, pick_monitor, set_always_on_top, set_platform_window_position,
+    set_skip_taskbar, set_stealth, work_area_for_window, ComponentHandle, Duration, TileWindow,
+    Timer, HWND_GRAB_DELAY_MS, TILE_DEFAULT_H, TILE_DEFAULT_W,
 };
 
 /// Atomic counter for tile-slot index — increments per spawn so
@@ -149,7 +149,7 @@ fn cascade_cycle(
 /// Win32 SetWindowPos with current position so the tile expands in
 /// place from its top-left corner. Flips tile.tile-maximized so the
 /// button glyph updates.
-pub(crate) fn toggle_tile_maximize(hwnd: windows::Win32::Foundation::HWND, tile: &TileWindow) {
+pub(crate) fn toggle_tile_maximize(hwnd: slint_replay::win32::HWND, tile: &TileWindow) {
     // Phase E6 v18 fix — use Slint's window().set_size() not raw
     // Win32 SetWindowPos. SetWindowPos resized the OS window but
     // left Slint's layout pass thinking the size was still 460×360
@@ -164,10 +164,12 @@ pub(crate) fn toggle_tile_maximize(hwnd: windows::Win32::Foundation::HWND, tile:
 
     // Phase E6 v45 — keep the resized tile fully on-screen. Growing in
     // place from the top-left pushed tiles near a screen edge/corner off
-    // the monitor (user: "тайл у угла раскрывается за экран"). Work in
-    // PHYSICAL pixels (logical × DPI scale) since Win32 rects/positions
-    // are physical, then nudge the origin back inside the tile's monitor.
+    // the monitor (user: "тайл у угла раскрывается за экран"). Windows native
+    // rects use physical pixels; AppKit/CoreGraphics geometry uses points.
+    #[cfg(windows)]
     let scale = tile.window().scale_factor();
+    #[cfg(target_os = "macos")]
+    let scale = 1.0_f32;
     let pw = (w * scale) as i32;
     let ph = (h * scale) as i32;
     // Clamp against the WORK AREA (monitor minus taskbar) of the tile's
@@ -193,9 +195,11 @@ pub(crate) fn toggle_tile_maximize(hwnd: windows::Win32::Foundation::HWND, tile:
         }
         if nx != x || ny != y {
             let _ = move_window_pos_only(hwnd, nx, ny);
+            #[cfg(target_os = "macos")]
+            set_platform_window_position(tile.window(), nx, ny);
         }
     }
-    diag!("tile maximized -> {new} (logical {w}x{h}, phys {pw}x{ph})");
+    diag!("tile maximized -> {new} (logical {w}x{h}, native {pw}x{ph})");
 }
 
 /// Wire the chrome-row drag callbacks on a tile so the user can move
@@ -213,6 +217,8 @@ pub(crate) fn wire_tile_drag(tile: &TileWindow) {
     let weak = tile.as_weak();
     tile.on_drag_start_requested(move || {
         if let Some(t) = weak.upgrade() {
+            #[cfg(target_os = "macos")]
+            let _ = slint_replay::native::window::begin_drag(t.window());
             if let Ok(hwnd) = grab_hwnd(t.window()) {
                 drag_begin(hwnd);
             }
@@ -255,8 +261,7 @@ pub(crate) fn present_tile_window(tile: &TileWindow) {
     // editor + follow-up LineEdit) and copy/select-all on the read-only answer text.
     crate::kbd_shortcuts::install(tile.window());
     if global_stealth() {
-        tile.window()
-            .set_position(slint::PhysicalPosition::new(-32000, -32000));
+        set_platform_window_position(tile.window(), -32000, -32000);
     }
     let _ = tile.show();
 }
@@ -407,11 +412,13 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             // rendering stays correct (text fills the dark fill area
             // instead of overflowing).
             let _ = move_window_pos_only(hwnd, x_clamped, y_clamped);
+            set_platform_window_position(t.window(), x_clamped, y_clamped);
         } else {
             // No monitor from pick_monitor (degenerate — no primary display).
             // A stealth-parked tile would otherwise stay off the virtual desktop
             // (permanently invisible), so bring it back to a safe on-screen spot.
             let _ = move_window_pos_only(hwnd, 100, 100);
+            set_platform_window_position(t.window(), 100, 100);
             eprintln!("[overlay-host] tile placement: no monitor from pick_monitor — fallback to (100, 100)");
         }
     });

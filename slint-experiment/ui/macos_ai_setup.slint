@@ -1,0 +1,148 @@
+// First-slice macOS AI bridge setup — configures the legacy bridge fields
+// (ai_base_url / ai_bearer) through overlay_backend::config.
+// Deliberately tiny: bridge URL + password-masked access token + one generic
+// status line. The token is never displayed in clear text and never populated
+// from the stored config — Rust reads the typed value on Save and clears the
+// field immediately (on every Save attempt and on Cancel). The status words
+// live HERE (@tr) so Rust only sets a code.
+
+import { LineEdit, Button } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Metrics } from "metrics.slint";
+import { CloseButton, DragGrip } from "controls.slint";
+
+export component MacAiSetupWindow inherits Window {
+    no-frame: true;
+    always-on-top: true;
+    title: @tr("AI bridge setup");
+    default-font-family: Theme.font-sans;
+    background: Theme.bg-surface;
+    preferred-width: 460px;
+    preferred-height: 274px;
+
+    in-out property <string> bridge-url;
+    // Typed token. Never populated from the stored config; cleared on Save.
+    in-out property <string> token-input;
+    // A stored token exists, so leaving the field blank keeps it.
+    in property <bool> token-stored: false;
+    // Status code (words stay in @tr below): 0 missing · 1 configured ·
+    // 2 check the fields · 3 saved · 4 save failed.
+    in property <int> status-kind: 0;
+
+    callback save-clicked();
+    callback cancel-clicked();
+    // The header row is the drag handle (native AppKit drag, one callback).
+    callback drag-start-requested();
+
+    forward-focus: url-input;
+
+    FocusScope {
+        // Esc = Cancel; everything else reaches the focused LineEdit.
+        key-pressed(e) => {
+            if (e.text == Key.Escape) {
+                root.cancel-clicked();
+                return accept;
+            }
+            return reject;
+        }
+        VerticalLayout {
+            padding: 14px;
+            spacing: 10px;
+
+            // Header: icon + drag grip + title on a drag handle, close = Cancel.
+            HorizontalLayout {
+                spacing: Metrics.space-sm;
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 30px;
+                    TouchArea {
+                        mouse-cursor: grab;
+                        pointer-event(ev) => {
+                            if (ev.button == PointerEventButton.left
+                                && ev.kind == PointerEventKind.down) {
+                                root.drag-start-requested();
+                            }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: Metrics.space-sm;
+                        Rectangle {
+                            width: 18px;
+                            height: 30px;
+                            Image {
+                                source: @image-url("../assets/icons/gear.svg");
+                                colorize: Theme.accent;
+                                width: 16px;
+                                height: 16px;
+                                image-fit: contain;
+                                y: 7px;
+                            }
+                        }
+                        DragGrip { y: 2px; }
+                        Text {
+                            text: @tr("AI bridge setup");
+                            color: Theme.text-secondary;
+                            font-size: Metrics.font-body;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                CloseButton {
+                    clicked => { root.cancel-clicked(); }
+                }
+            }
+
+            Text {
+                text: @tr("Bridge URL");
+                color: Theme.text-secondary;
+                font-size: Metrics.font-label;
+            }
+            url-input := LineEdit {
+                placeholder-text: @tr("http://your.bridge.host:PORT/v1");
+                text <=> root.bridge-url;
+            }
+
+            Text {
+                text: @tr("Access token");
+                color: Theme.text-secondary;
+                font-size: Metrics.font-label;
+            }
+            LineEdit {
+                placeholder-text: root.token-stored
+                    ? @tr("Leave empty to keep the saved token")
+                    : @tr("Paste the access token");
+                text <=> root.token-input;
+                input-type: password;
+            }
+
+            Text {
+                text: root.status-kind == 1 ? @tr("The AI bridge is configured.")
+                    : root.status-kind == 2 ? @tr("Check the URLs and access token.")
+                    : root.status-kind == 3 ? @tr("Saved.")
+                    : root.status-kind == 4 ? @tr("Saving the bridge settings failed.")
+                    : @tr("The AI bridge is not configured yet.");
+                color: root.status-kind == 2 ? Theme.warning
+                    : root.status-kind == 3 ? Theme.success
+                    : root.status-kind == 4 ? Theme.danger
+                    : Theme.text-muted;
+                font-size: Metrics.font-label;
+                wrap: word-wrap;
+            }
+
+            HorizontalLayout {
+                spacing: Metrics.space-sm;
+                Rectangle { horizontal-stretch: 1; }
+                Button {
+                    text: @tr("Cancel");
+                    clicked => { root.cancel-clicked(); }
+                }
+                Button {
+                    text: @tr("Save");
+                    primary: true;
+                    clicked => { root.save-clicked(); }
+                }
+            }
+        }
+    }
+}

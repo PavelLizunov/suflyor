@@ -4,7 +4,9 @@
 //! config format for compatibility. New OpenAI and Anthropic keys never enter
 //! `Config`, config exports, backups, or diagnostics.
 
-use anyhow::{anyhow, Context, Result};
+#[cfg(windows)]
+use anyhow::Context;
+use anyhow::{anyhow, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecretSlot {
@@ -111,19 +113,66 @@ pub fn delete(slot: SecretSlot) -> Result<()> {
 }
 
 #[cfg(not(windows))]
-pub fn write(_slot: SecretSlot, _secret: &str) -> Result<()> {
-    Err(anyhow!("protected credential storage requires Windows"))
+mod posix_credentials {
+    use super::*;
+    use std::collections::HashMap;
+    use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::PathBuf;
+
+    fn credentials_path() -> Result<PathBuf> {
+        let dir = dirs::config_dir()
+            .ok_or_else(|| anyhow!("could not resolve user config dir"))?
+            .join("suflyor");
+        fs::create_dir_all(&dir)?;
+        Ok(dir.join("credentials.json"))
+    }
+
+    fn read_map() -> HashMap<String, String> {
+        let Ok(path) = credentials_path() else {
+            return HashMap::new();
+        };
+        let Ok(bytes) = fs::read(path) else {
+            return HashMap::new();
+        };
+        serde_json::from_slice(&bytes).unwrap_or_default()
+    }
+
+    fn write_map(map: &HashMap<String, String>) -> Result<()> {
+        let path = credentials_path()?;
+        let bytes = serde_json::to_vec_pretty(map)?;
+        fs::write(&path, bytes)?;
+        #[cfg(unix)]
+        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+        Ok(())
+    }
+
+    pub fn write(slot: SecretSlot, secret: &str) -> Result<()> {
+        let trimmed = secret.trim();
+        let mut map = read_map();
+        if trimmed.is_empty() {
+            map.remove(slot.target());
+        } else {
+            map.insert(slot.target().to_string(), trimmed.to_string());
+        }
+        write_map(&map)
+    }
+
+    pub fn read(slot: SecretSlot) -> Result<Option<String>> {
+        let map = read_map();
+        Ok(map.get(slot.target()).cloned())
+    }
+
+    pub fn delete(slot: SecretSlot) -> Result<()> {
+        let mut map = read_map();
+        map.remove(slot.target());
+        write_map(&map)
+    }
 }
 
 #[cfg(not(windows))]
-pub fn read(_slot: SecretSlot) -> Result<Option<String>> {
-    Err(anyhow!("protected credential storage requires Windows"))
-}
-
-#[cfg(not(windows))]
-pub fn delete(_slot: SecretSlot) -> Result<()> {
-    Err(anyhow!("protected credential storage requires Windows"))
-}
+pub use posix_credentials::*;
 
 #[cfg(test)]
 mod tests {

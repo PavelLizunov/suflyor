@@ -23,6 +23,7 @@ use std::time::{Duration, Instant};
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(8);
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const TURN_TIMEOUT: Duration = Duration::from_secs(3 * 60);
+#[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const SECURE_PROFILE: &str = "suflyor-text-only";
 const MAX_MODEL_PAGES: usize = 64;

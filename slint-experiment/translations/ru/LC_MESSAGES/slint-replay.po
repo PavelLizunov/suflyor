@@ -48,6 +48,9 @@ msgstr "+ тайл ({})"
 msgid "close all"
 msgstr "закрыть все"
 
+msgid "Restore last tile"
+msgstr "Вернуть последний тайл"
+
 # Phase E6 v45 — two-step quit confirm (X arms "Quit? Yes/No").
 msgid "Quit?"
 msgstr "Выйти?"
@@ -651,7 +654,7 @@ msgstr "Облако (мост)"
 msgid "Local (Ollama / llama.cpp)"
 msgstr "Локально (Ollama / llama.cpp)"
 
-msgid "local URL — http://127.0.0.1:8080/v1 (llama.cpp) or :11434 (Ollama)"
+msgid "local URL — http://127.0.0.1:8080/v1 (llama.cpp)"
 msgstr "локальный URL — http://127.0.0.1:8080/v1 (llama.cpp) или :11434 (Ollama)"
 
 # V4 — vision (screenshot) settings section.
@@ -729,7 +732,7 @@ msgstr "Откуда брать живые ответы? Выберите тип
 msgid "Cloud (Claude bridge)"
 msgstr "Облако (мост Claude)"
 
-msgid "Local (llama.cpp / Ollama)"
+msgid "Local (llama.cpp)"
 msgstr "Локально (llama.cpp / Ollama)"
 
 msgid "Cloud bridge"
@@ -963,6 +966,9 @@ msgstr "Отмена"
 msgid "Use GPU (DirectML) — faster on long audio, ~1s warm-up on first use"
 msgstr "GPU (DirectML) — быстрее на длинном аудио, ~1с прогрев при первом запуске"
 
+msgid "Use Apple Core ML — faster on Apple Silicon"
+msgstr "Использовать Apple Core ML — быстрее на Apple Silicon"
+
 msgid "Profile:"
 msgstr "Профиль:"
 
@@ -1008,6 +1014,9 @@ msgstr "Выделить текст"
 msgid "Rich view"
 msgstr "Обычный вид"
 
+msgid "You"
+msgstr "Вы"
+
 msgid "local model — e.g. qwen2.5:7b-instruct"
 msgstr "локальная модель — напр. qwen2.5:7b-instruct"
 
@@ -1020,8 +1029,8 @@ msgstr "Рассуждения локальной модели (медленне
 msgid "Test local connection"
 msgstr "Проверить локальное подключение"
 
-msgid "Tip: Save writes to %APPDATA%\\suflyor\\config.json. Restart binary to re-load."
-msgstr "Подсказка: «Сохранить» пишет в %APPDATA%\\suflyor\\config.json. Перезапустите бинарник для перезагрузки."
+msgid "Tip: Save writes to suflyor/config.json in application configuration folder. Restart binary to re-load."
+msgstr "Подсказка: «Сохранить» пишет в suflyor/config.json в папке настроек приложения. Перезапустите бинарник для перезагрузки."
 
 # --- Tab 12: STT ---
 
@@ -1034,6 +1043,9 @@ msgstr "Ключ API Groq:"
 msgid "paste new Groq key then Save"
 msgstr "вставьте новый ключ Groq и нажмите «Сохранить»"
 
+msgid "Get Groq API Key (console.groq.com)"
+msgstr "Получить API ключ Groq (console.groq.com)"
+
 msgid "Test STT (Groq) connection"
 msgstr "Проверить подключение STT (Groq)"
 
@@ -1043,6 +1055,9 @@ msgstr "Проверить подключение STT"
 msgid "Speech-to-text engine. Local options run on this PC (no cloud, no Groq key needed)."
 msgstr "Движок распознавания речи. Локальные варианты работают на этом ПК (без облака и ключа Groq)."
 
+msgid "Speech-to-text engine. Configure Groq cloud or your own OpenAI-compatible whisper-server."
+msgstr "Движок распознавания речи. Настройте облако Groq или свой OpenAI-совместимый whisper-server."
+
 msgid "Cloud (Groq Whisper)"
 msgstr "Облако (Groq Whisper)"
 
@@ -1051,6 +1066,9 @@ msgstr "Локально GigaAM-v3 (русский)"
 
 msgid "Local Whisper (whisper.cpp)"
 msgstr "Локально Whisper (whisper.cpp)"
+
+msgid "External Whisper (whisper-server)"
+msgstr "Внешний Whisper (whisper-server)"
 
 msgid "Recognition language — Auto detects per phrase (Whisper/Groq). GigaAM is Russian-only."
 msgstr "Язык распознавания — «Авто» определяет по фразе (Whisper/Groq). GigaAM только русский."
@@ -1084,6 +1102,9 @@ msgstr "Локально: работает полностью на этом ПК
 
 msgid "Local: runs on your whisper-server. Multilingual. Configure the server URL and model below."
 msgstr "Локально: работает на вашем whisper-server. Много языков. Настройте URL и модель сервера ниже."
+
+msgid "External: sends audio to the whisper-server URL below. Multilingual; no Groq key required."
+msgstr "Внешний: отправляет аудио на URL whisper-server, указанный ниже. Поддерживает много языков; ключ Groq не нужен."
 
 msgid "Cloud recognition model"
 msgstr "Модель облачного распознавания"
@@ -1421,6 +1442,9 @@ msgstr "Распознавание текста (OCR) — Shift+Alt+2 озвуч
 
 msgid "Install text recognition (OCR)"
 msgstr "Установить распознавание текста (OCR)"
+
+msgid "Text recognition (OCR) - Apple Vision is built into macOS; no download is required."
+msgstr "Распознавание текста (OCR) - Apple Vision встроен в macOS; скачивание не требуется."
 
 msgid "Text recognition is installed."
 msgstr "Распознавание текста установлено."
@@ -2060,3 +2084,187 @@ msgstr "Пауза"
 
 msgid "suflyor"
 msgstr "suflyor"
+
+msgid "Suflyor for macOS"
+msgstr "Suflyor для macOS"
+
+msgid "Native overlay ready; product features are being connected."
+msgstr "Нативный оверлей готов; функции продукта подключаются."
+
+msgid "Quit"
+msgstr "Выйти"
+
+# === macOS text-ask slice (bootstrap chips + MacAiSetupWindow) ===
+
+msgid "Ask"
+msgstr "Спросить"
+
+msgid "AI setup"
+msgstr "Настройка AI"
+
+msgid "Allow mic"
+msgstr "Разрешить микрофон"
+
+msgid "Requesting..."
+msgstr "Запрашиваем..."
+
+msgid "Mic denied"
+msgstr "Микрофон запрещён"
+
+msgid "Start mic"
+msgstr "Включить микрофон"
+
+msgid "Mic live"
+msgstr "Микрофон активен"
+
+msgid "Mic failed"
+msgstr "Ошибка микрофона"
+
+msgid "AI bridge setup"
+msgstr "Настройка AI-моста"
+
+msgid "Bridge URL"
+msgstr "URL моста"
+
+msgid "Access token"
+msgstr "Токен доступа"
+
+msgid "Paste the access token"
+msgstr "Вставьте токен доступа"
+
+msgid "Leave empty to keep the saved token"
+msgstr "Оставьте пустым, чтобы сохранить текущий токен"
+
+msgid "The AI bridge is not configured yet."
+msgstr "AI-мост ещё не настроен."
+
+msgid "The AI bridge is configured."
+msgstr "AI-мост настроен."
+
+msgid "Check the URLs and access token."
+msgstr "Проверьте URL-адреса и токен доступа."
+
+msgid "Saved."
+msgstr "Сохранено."
+
+msgid "Saving the bridge settings failed."
+msgstr "Не удалось сохранить настройки моста."
+
+msgid "Read-aloud is unavailable. Check the installed voice and try again."
+msgstr "Озвучка сейчас недоступна. Проверьте установленный голос и повторите."
+
+msgid "Backup"
+msgstr "Резервная копия"
+
+msgid "macOS has no public API that can hide the overlay from other screen-sharing apps. Suflyor only excludes its own windows from its own screenshots."
+msgstr "В macOS нет публичного API, позволяющего скрыть оверлей от других приложений демонстрации экрана. Suflyor исключает свои окна только из собственных снимков экрана."
+
+msgid "Always on top"
+msgstr "Поверх всех окон"
+
+msgid "Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in this user's local credentials file. Local UI, profiles, devices and snippets stay unchanged."
+msgstr "Перенос серверов копирует провайдеры AI/STT, URL, модели и устаревшие ключи моста. Защищённые API-ключи OpenAI и Anthropic остаются в локальном файле учётных данных этого пользователя. Локальный интерфейс, профили, устройства и сниппеты не меняются."
+
+msgid "Microphone device selection. The list comes from the audio devices available to macOS."
+msgstr "Выбор микрофона. Список формируется из аудиоустройств, доступных в macOS."
+
+msgid "Stored in a user-only local credentials file and excluded from configuration exports."
+msgstr "Хранится в локальном файле учётных данных, доступном только пользователю, и не включается в экспорт конфигурации."
+
+msgid "Recognition language — Auto detects per phrase with Whisper or Groq."
+msgstr "Язык распознавания — автоопределение для каждой фразы через Whisper или Groq."
+
+msgid "Personal memory is stored locally. Approved items are added to new AI requests and may be sent to your configured AI provider."
+msgstr "Личная память хранится локально. Одобренные элементы добавляются в новые AI-запросы и могут отправляться настроенному AI-провайдеру."
+
+msgid "Read selected text (Shift+Option+1) or a screen region (Shift+Option+2) aloud. Pause or resume with Shift+Option+3."
+msgstr "Озвучивайте выделенный текст (Shift+Option+1) или область экрана (Shift+Option+2). Пауза и продолжение — Shift+Option+3."
+
+msgid "Choose the text and Vision providers separately in Settings → AI providers. Gemma 4B is text-only and cannot analyse screenshots. Speech recognition is configured in Settings → STT."
+msgstr "Выбирайте провайдеры текста и Vision отдельно в разделе «Настройки → AI-провайдеры». Gemma 4B работает только с текстом и не анализирует снимки экрана. Распознавание речи настраивается в разделе «Настройки → STT»."
+
+msgid "Choose the text and Vision providers separately in Settings → AI. Gemma 4B is text-only and cannot analyse screenshots. Speech recognition is configured in Settings → STT."
+msgstr "Выбирайте провайдеры текста и Vision отдельно в разделе «Настройки → AI». Gemma 4B работает только с текстом и не анализирует снимки экрана. Распознавание речи настраивается в разделе «Настройки → STT»."
+
+msgid "Shift+Option+1 — read the selected text aloud; Shift+Option+2 — recognize a screen region with Apple Vision and read it; Shift+Option+3 — pause/resume. Voices are configured in Settings → TTS; Apple Vision is built into macOS. Compact reader mode uses the collapse chip on the bar. Listening mode in Settings → Auto-tiles mutes automatic tiles."
+msgstr "Shift+Option+1 — озвучить выделенный текст; Shift+Option+2 — распознать область экрана через Apple Vision и озвучить её; Shift+Option+3 — пауза или продолжение. Голоса настраиваются в разделе «Настройки → TTS»; Apple Vision встроен в macOS. Компактный режим чтения включается кнопкой сворачивания на панели. Режим прослушивания в разделе «Настройки → Авто-тайлы» отключает автоматические тайлы."
+
+msgid "The saved Codex provider is unavailable on macOS. Choose a supported provider."
+msgstr "Сохранённый провайдер Codex недоступен в macOS. Выберите поддерживаемый провайдер."
+
+msgid "The saved Codex Vision provider is unavailable on macOS. Choose another Vision provider."
+msgstr "Сохранённый провайдер Codex Vision недоступен в macOS. Выберите другой провайдер Vision."
+
+msgid "The saved GigaAM engine is unavailable on macOS. Choose Cloud or External Whisper."
+msgstr "Сохранённый движок GigaAM недоступен в macOS. Выберите облачный режим или внешний Whisper."
+
+msgid "Control+F8"
+msgstr "Control+F8"
+
+msgid "Shift+Option+1"
+msgstr "Shift+Option+1"
+
+msgid "Shift+Option+2"
+msgstr "Shift+Option+2"
+
+msgid "Shift+Option+3"
+msgstr "Shift+Option+3"
+
+# === macOS managed MLX models ===
+
+msgid "Managed MLX (Apple silicon)"
+msgstr "Управляемый MLX (Apple silicon)"
+
+msgid "Managed MLX text model"
+msgstr "Управляемая текстовая модель MLX"
+
+msgid "MLX runs locally on Apple-silicon Macs only. Models are downloaded only when you ask."
+msgstr "MLX работает локально только на Mac с Apple silicon. Модели загружаются только по вашему запросу."
+
+msgid "LFM2.5-8B-A1B MLX 4-bit"
+msgstr "LFM2.5-8B-A1B MLX 4-bit"
+
+msgid "Download size: 4.52 GiB."
+msgstr "Размер загрузки: 4,52 ГиБ."
+
+msgid "[!] LFM Open License v1.0 has commercial-use conditions. Review the license before commercial use. Russian response quality is not guaranteed."
+msgstr "[!] В LFM Open License v1.0 есть условия коммерческого использования. Перед коммерческим применением изучите лицензию. Качество ответов на русском языке не гарантируется."
+
+msgid "Downloading and verifying…"
+msgstr "Загрузка и проверка…"
+
+msgid "Checking installation…"
+msgstr "Проверка установки…"
+
+msgid "Download or activation failed. Retry when ready."
+msgstr "Не удалось загрузить или активировать модель. Повторите попытку, когда будете готовы."
+
+msgid "Download cancelled. Resume keeps verified files."
+msgstr "Загрузка отменена. При продолжении проверенные файлы сохранятся."
+
+msgid "{} / {} MB downloaded"
+msgstr "{} / {} МБ загружено"
+
+msgid "Download / Resume"
+msgstr "Загрузить / Продолжить"
+
+msgid "Enable for text"
+msgstr "Использовать для текста"
+
+msgid "Managed MLX Vision model"
+msgstr "Управляемая Vision-модель MLX"
+
+msgid "Separate image-capable model for screenshots. MLX runs locally on Apple-silicon Macs only."
+msgstr "Отдельная модель с поддержкой изображений для снимков экрана. MLX работает локально только на Mac с Apple silicon."
+
+msgid "Qwen3.5-2B MLX 4-bit (Vision)"
+msgstr "Qwen3.5-2B MLX 4-bit (Vision)"
+
+msgid "Download size: 1.63 GiB. Supports image input. License: Apache-2.0."
+msgstr "Размер загрузки: 1,63 ГиБ. Поддерживает изображения. Лицензия: Apache-2.0."
+
+msgid "One managed MLX model stays active at a time. The app switches between the selected text and Vision models when a request needs the other one."
+msgstr "Одновременно активна одна управляемая модель MLX. Приложение переключается между выбранными текстовой и Vision-моделями, когда запросу нужна другая модель."
+
+msgid "Enable for Vision"
+msgstr "Использовать для Vision"

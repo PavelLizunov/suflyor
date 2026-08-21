@@ -49,7 +49,9 @@ pub fn is_blocked_error(msg: &str) -> bool {
 /// external Ollama, whisper :8081 and any other URL pass through untouched.
 #[must_use]
 pub fn endpoint_blocked(deep_lock: bool, base_url: &str) -> bool {
-    deep_lock && crate::local_ai::is_managed_llama_endpoint(base_url)
+    deep_lock
+        && (crate::local_ai::is_managed_llama_endpoint(base_url)
+            || crate::mlx_runtime::is_owned_endpoint(base_url))
 }
 
 /// Ordinary managed-server lifecycle paths are blocked while deep-locked.
@@ -63,7 +65,9 @@ pub const fn lifecycle_launch_allowed(deep_lock: bool, explicit_unlock: bool) ->
 /// server — the only case where the chip runs the three-state machine.
 #[must_use]
 pub fn cfg_is_managed_local(cfg: &crate::config::Config) -> bool {
-    cfg.ai_provider == "local" && crate::local_ai::is_managed_llama_endpoint(&cfg.ai_local_base_url)
+    (cfg.ai_provider == "local"
+        && crate::local_ai::is_managed_llama_endpoint(&cfg.ai_local_base_url))
+        || (cfg.ai_provider == "mlx" && cfg!(target_os = "macos"))
 }
 
 /// What a lock-chip click does next. Pure so the transition table is testable
@@ -286,6 +290,11 @@ mod tests {
             "cloud",
             "http://127.0.0.1:8080/v1"
         )));
+        assert_eq!(
+            cfg_is_managed_local(&cfg("mlx", "http://127.0.0.1:11434/v1")),
+            cfg!(target_os = "macos"),
+            "MLX is managed intent only on macOS and never borrows external local ownership"
+        );
     }
 
     #[test]

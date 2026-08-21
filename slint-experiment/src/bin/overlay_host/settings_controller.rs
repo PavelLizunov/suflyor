@@ -44,19 +44,41 @@
 // `set_global_stealth`, `populate_diagnostics` / `build_diag_report`,
 // `open_wizard`, `try_acquire_mic` / `release_mic`, and `active_stack_label`
 // through it). That is intentional for the move; imports narrow in a later pass.
+mod settings_mlx {
+    include!("settings_mlx.rs");
+}
+
+#[cfg(windows)]
+use super::open_wizard;
+#[cfg(windows)]
+use super::wire_local_ai;
+#[cfg(windows)]
+use super::wire_updates;
 use super::{
     active_stack_label, ai, apply_bar_stealth, apply_scheme_bar, apply_scheme_settings, audio,
     clamp_scheme, cloud_model_index, config, drag_begin, drag_update, fetch_models,
     global_stealth_effective, grab_hwnd, invalidate_codex_snapshot_ui, make_transparent_tile,
-    open_wizard, parse_tile_monitor_pin, populate_diagnostics, present_window_stealth_aware,
+    parse_tile_monitor_pin, populate_diagnostics, present_window_stealth_aware,
     preset_for_tts_rate, refresh_codex_account_status, refresh_local_context_controls,
     refresh_local_model_resource_warning, set_always_on_top, set_global_scheme, set_global_stealth,
-    set_global_tile_monitor, set_global_tile_opacity, spawn_ptt_watchdog, stt, try_acquire_mic,
-    wire_ai_settings, wire_diagnostics, wire_import_export, wire_local_ai, wire_memory,
-    wire_stt_settings, wire_updates, wire_vision_settings, wire_voice_settings, Arc, AtomicBool,
-    ComponentHandle, ComponentRow, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell,
-    SettingsWindow, SharedString, TileWindows, VecModel, WindowRegistry,
+    set_global_tile_monitor, set_global_tile_opacity, spawn_ptt_watchdog, stt, stt_provider_index,
+    try_acquire_mic, ui, wire_ai_settings, wire_diagnostics, wire_import_export, wire_memory,
+    wire_stt_settings, wire_vision_settings, wire_voice_settings, Arc, AtomicBool, ComponentHandle,
+    ComponentRow, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell, SettingsWindow,
+    SharedString, TileWindows, VecModel, WindowRegistry,
 };
+
+pub(crate) fn ai_provider_index(provider: &str, is_macos: bool) -> i32 {
+    match (provider, is_macos) {
+        ("local", _) => 1,
+        ("openai", _) => 2,
+        ("anthropic", _) => 3,
+        ("codex", false) => 4,
+        ("codex", true) => -1,
+        ("mlx", true) => 4,
+        _ => 0,
+    }
+}
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn open_settings(
@@ -84,7 +106,8 @@ pub(crate) fn open_settings(
         populate_token_status(existing, cfg);
         {
             let snap = cfg.read();
-            if (snap.ai_provider == "codex" || snap.vision_provider == "codex")
+            if !cfg!(target_os = "macos")
+                && (snap.ai_provider == "codex" || snap.vision_provider == "codex")
                 && !existing.get_codex_auth_busy()
             {
                 refresh_codex_account_status(existing.as_weak(), cfg.clone());
@@ -115,6 +138,8 @@ pub(crate) fn open_settings(
             return;
         }
     };
+    win.global::<ui::Platform>()
+        .set_is_macos(cfg!(target_os = "macos"));
     reset_component_install_state(&win);
     {
         let st = state.lock().ok();
@@ -126,7 +151,8 @@ pub(crate) fn open_settings(
     populate_token_status(&win, cfg);
     {
         let snap = cfg.read();
-        if (snap.ai_provider == "codex" || snap.vision_provider == "codex")
+        if !cfg!(target_os = "macos")
+            && (snap.ai_provider == "codex" || snap.vision_provider == "codex")
             && !win.get_codex_auth_busy()
         {
             refresh_codex_account_status(win.as_weak(), cfg.clone());
@@ -191,10 +217,10 @@ pub(crate) fn open_settings(
             let weak_done = w.as_weak();
             let cfg_t = cfg_inst.clone();
             std::thread::spawn(move || {
-                // Row order from components::status(): 0=engine 1=model 2=stt
-                // 3=voices 4=ocr. Only 3/4 are inline-installable here.
+                // Windows keeps components::status() order. macOS filters the
+                // first two Windows-only rows, so Voices moves from 3 to 1.
                 let result: std::result::Result<(), String> = match idx {
-                    3 => {
+                    idx if idx == if cfg!(target_os = "macos") { 1 } else { 3 } => {
                         let cancel = std::sync::atomic::AtomicBool::new(false);
                         let weak_cb = weak_done.clone();
                         let on = move |p: overlay_backend::tts_install::VoiceProgress| {
@@ -219,6 +245,7 @@ pub(crate) fn open_settings(
                         overlay_backend::tts_install::install_voices(&cancel, &on, ru)
                             .map_err(|e| format!("{e:#}"))
                     }
+                    #[cfg(windows)]
                     4 => {
                         let weak_cb = weak_done.clone();
                         let on = move |p: overlay_backend::ocr_install::OcrProgress| {
@@ -416,8 +443,9 @@ pub(crate) fn open_settings(
         registry_stealth.apply_stealth(on);
     });
 
-    // V0.8.4 — Settings → Interface "🪄 Run setup wizard" button. Re-opens the
+    // V0.8.4 — Windows Settings → Interface setup wizard button. Re-opens the
     // guided first-run wizard on demand (it is also auto-shown on first launch).
+    #[cfg(windows)]
     {
         // The wizard slot lives in the registry; forward the same registry so the
         // wizard's stealth toggle reaches every open window (Phase 1 §5.1).
@@ -438,6 +466,7 @@ pub(crate) fn open_settings(
     // (`ModelTarget` + `fetch_models` moved with it). The install/updater
     // closures below stay in open_settings (separate later wave).
     wire_ai_settings(&win, cfg, overlay_weak);
+    settings_mlx::wire(&win, cfg);
     crate::settings_hermes::wire_hermes_settings(&win, cfg);
 
     // ===== V4 — vision (screenshot) channel: provider switch + field saves + test =====
@@ -451,6 +480,7 @@ pub(crate) fn open_settings(
     // Extracted to settings_local_ai.rs (P1 domain split) — wired verbatim there.
     // SECURITY: download -> verify -> spawn stays in overlay_backend::local_ai;
     // this only CALLs install(); the sequence is byte-for-byte unchanged.
+    #[cfg(windows)]
     wire_local_ai(&win, cfg, state, overlay_weak);
 
     // Phase E6 v20 — tile opacity slider. Persists to config AND
@@ -555,7 +585,8 @@ pub(crate) fn open_settings(
                         snap.ui_is_ru(),
                     ),
                 ));
-                if (snap.ai_provider == "codex" || snap.vision_provider == "codex")
+                if !cfg!(target_os = "macos")
+                    && (snap.ai_provider == "codex" || snap.vision_provider == "codex")
                     && !codex_login_busy
                 {
                     refresh_codex_account_status(w.as_weak(), cfg_lang.clone());
@@ -895,9 +926,10 @@ pub(crate) fn open_settings(
                     // Create it first so the folder opens even before the first
                     // recording exists. Explorer launch is fire-and-forget.
                     let _ = std::fs::create_dir_all(&dir);
-                    if let Err(e) = std::process::Command::new("explorer").arg(&dir).spawn() {
-                        eprintln!("[overlay-host] open recordings folder failed: {e}");
-                    }
+                    #[cfg(target_os = "macos")]
+                    let _ = std::process::Command::new("open").arg(&dir).spawn();
+                    #[cfg(windows)]
+                    let _ = std::process::Command::new("explorer").arg(&dir).spawn();
                 }
                 Err(e) => eprintln!("[overlay-host] cannot resolve recordings dir: {e:#}"),
             }
@@ -911,11 +943,21 @@ pub(crate) fn open_settings(
         win.on_open_data_folder_clicked(move || match overlay_backend::paths::data_root() {
             Some(dir) => {
                 let _ = std::fs::create_dir_all(&dir);
-                if let Err(e) = std::process::Command::new("explorer").arg(&dir).spawn() {
-                    eprintln!("[overlay-host] open data folder failed: {e}");
-                }
+                #[cfg(target_os = "macos")]
+                let _ = std::process::Command::new("open").arg(&dir).spawn();
+                #[cfg(windows)]
+                let _ = std::process::Command::new("explorer").arg(&dir).spawn();
             }
             None => eprintln!("[overlay-host] cannot resolve data folder"),
+        });
+    }
+    {
+        win.on_open_groq_keys_clicked(move || {
+            let url = "https://console.groq.com/keys";
+            #[cfg(target_os = "macos")]
+            let _ = std::process::Command::new("open").arg(url).spawn();
+            #[cfg(windows)]
+            let _ = std::process::Command::new("explorer").arg(url).spawn();
         });
     }
     {
@@ -1186,6 +1228,8 @@ pub(crate) fn open_settings(
         let weak = win.as_weak();
         win.on_drag_start_requested(move || {
             if let Some(w) = weak.upgrade() {
+                #[cfg(target_os = "macos")]
+                let _ = slint_replay::native::window::begin_drag(w.window());
                 if let Ok(hwnd) = grab_hwnd(w.window()) {
                     drag_begin(hwnd);
                 }
@@ -1205,6 +1249,7 @@ pub(crate) fn open_settings(
     // Extracted to settings_updates.rs (P1 domain split) — wired verbatim there.
     // SECURITY: download -> verify -> spawn stays in overlay_backend::update;
     // this only CALLs it; the sequence is byte-for-byte unchanged.
+    #[cfg(windows)]
     wire_updates(&win);
 
     let weak_close = win.as_weak();
@@ -1329,11 +1374,46 @@ pub(crate) fn populate_component_rows(
 ) {
     use overlay_backend::components::{status, ComponentKind};
     let ru = snap.ui_is_ru();
+    let is_macos = cfg!(target_os = "macos");
     let rows: Vec<ComponentRow> = status(snap)
         .into_iter()
-        .map(|c| {
+        .filter(|c| {
+            !is_macos || !matches!(c.kind, ComponentKind::Engine | ComponentKind::LocalModel)
+        })
+        .map(|mut c| {
+            if is_macos {
+                match c.kind {
+                    ComponentKind::Stt => {
+                        c.installed = match snap.stt_provider.as_str() {
+                            "cloud" => !snap.groq_api_key.trim().is_empty(),
+                            "gigaam" => super::settings_stt::installed_gigaam_dir(
+                                &snap.stt_gigaam_dir,
+                            )
+                            .is_some(),
+                            "whisper" => !snap.stt_whisper_url.trim().is_empty(),
+                            _ => false,
+                        };
+                        c.detail = if c.installed {
+                            match snap.stt_provider.as_str() {
+                                "cloud" => "Groq Whisper".into(),
+                                "gigaam" => "GigaAM".into(),
+                                "whisper" => "External Whisper".into(),
+                                _ => String::new(),
+                            }
+                        } else {
+                            String::new()
+                        };
+                    }
+                    ComponentKind::Ocr => {
+                        c.installed = true;
+                        c.detail = "Apple Vision".into();
+                    }
+                    _ => {}
+                }
+            }
             // Light, single-call installers wired inline in the hub.
-            let installable = matches!(c.kind, ComponentKind::Voices | ComponentKind::Ocr);
+            let installable = matches!(c.kind, ComponentKind::Voices)
+                || (cfg!(windows) && c.kind == ComponentKind::Ocr);
             // «Открыть» jump target for the heavy components (their full installer
             // with progress + cancel lives in a dedicated panel); -1 = inline.
             let jump_tab: i32 = match c.kind {
@@ -1341,7 +1421,21 @@ pub(crate) fn populate_component_rows(
                 ComponentKind::Stt => 12,                                // STT
                 ComponentKind::Voices | ComponentKind::Ocr => -1,
             };
-            let (name, hint) = component_row_copy(c.kind, ru);
+            let (name, hint) = if is_macos && c.kind == ComponentKind::Stt {
+                if ru {
+                    (
+                        "Распознавание речи (STT)",
+                        "Настройки → STT → Cloud, GigaAM или External Whisper",
+                    )
+                } else {
+                    (
+                        "Speech recognition (STT)",
+                        "Settings → STT → Cloud, GigaAM or External Whisper",
+                    )
+                }
+            } else {
+                component_row_copy(c.kind, ru)
+            };
             ComponentRow {
                 name: SharedString::from(name),
                 detail: SharedString::from(c.detail.as_str()),
@@ -1501,6 +1595,8 @@ pub(crate) fn populate_token_status(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
 ) {
+    settings_mlx::populate(win);
+    win.set_tts_test_status(SharedString::from(""));
     let codex_login_busy = win.get_codex_auth_busy();
     invalidate_codex_snapshot_ui();
     // Phase E6 v18 — ASCII status prefixes ("[ok]" / "[--]") instead of
@@ -1625,10 +1721,11 @@ pub(crate) fn populate_token_status(
     // A1 — drop any in-flight inline memory edit so reopening Settings never lands
     // on a row stuck in edit mode (reused-window transient-state rule).
     win.set_memory_editing_id(-1);
-    // OCR engine (Tesseract) install state — re-checked each open (the data dir
-    // is user-writable + the installer button writes it). Transient install
-    // status reset so a stale "Готово…" can't survive a reopen.
-    win.set_ocr_installed(overlay_backend::ocr_install::is_installed());
+    // Apple Vision ships with macOS; Windows re-checks its user-writable
+    // Tesseract install on every open.
+    win.set_ocr_installed(
+        cfg!(target_os = "macos") || overlay_backend::ocr_install::is_installed(),
+    );
     win.set_ocr_installing(false);
     win.set_ocr_install_phase(0);
     // Speaker-diarization models — same reset-on-reopen discipline (the window is
@@ -1673,13 +1770,7 @@ pub(crate) fn populate_token_status(
     win.set_component_busy_label(blank());
     win.set_component_busy_index(-1);
     win.set_ai_prompt_cache(c.ai_prompt_cache);
-    win.set_ai_provider_index(match c.ai_provider.as_str() {
-        "local" => 1,
-        "openai" => 2,
-        "anthropic" => 3,
-        "codex" => 4,
-        _ => 0,
-    });
+    win.set_ai_provider_index(ai_provider_index(&c.ai_provider, cfg!(target_os = "macos")));
     win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));
     let managed_local_server =
         overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url);
@@ -1776,11 +1867,7 @@ pub(crate) fn populate_token_status(
         win.set_engine_update_status(blank());
     }
     // Phase E10 — STT provider selector + local-engine fields.
-    win.set_stt_provider_index(match c.stt_provider.as_str() {
-        "gigaam" => 1,
-        "whisper" => 2,
-        _ => 0,
-    });
+    win.set_stt_provider_index(stt_provider_index(&c.stt_provider));
     // Recognition language (stt_language): None=auto → 0, "ru" → 1, "en" → 2.
     win.set_stt_language_index(match c.stt_language.as_deref() {
         Some("ru") => 1,
@@ -1789,7 +1876,20 @@ pub(crate) fn populate_token_status(
     });
     // Cloud recognition model (stt_model): turbo → 0, large-v3 → 1.
     win.set_stt_cloud_model_index(cloud_model_index(&c.stt_model));
-    win.set_stt_gigaam_dir_input(SharedString::from(c.stt_gigaam_dir.clone()));
+    if !win.get_stt_gigaam_installing() {
+        let installed = super::settings_stt::installed_gigaam_dir(&c.stt_gigaam_dir);
+        win.set_stt_gigaam_installed(installed.is_some());
+        win.set_stt_gigaam_install_failed(false);
+        win.set_stt_gigaam_install_cancelled(false);
+        win.set_stt_gigaam_install_progress(0.0);
+        win.set_stt_gigaam_install_done(SharedString::from("0"));
+        win.set_stt_gigaam_install_total(SharedString::from("214"));
+        win.set_stt_gigaam_dir_input(SharedString::from(
+            installed
+                .map(|path| path.to_string_lossy().into_owned())
+                .unwrap_or_else(|| c.stt_gigaam_dir.clone()),
+        ));
+    }
     win.set_stt_gigaam_gpu(c.stt_gigaam_gpu);
     win.set_stt_whisper_url_input(SharedString::from(c.stt_whisper_url.clone()));
     win.set_stt_whisper_bearer_input(SharedString::from(c.stt_whisper_bearer.clone()));
@@ -1817,7 +1917,7 @@ pub(crate) fn populate_token_status(
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-    use super::component_row_copy;
+    use super::{ai_provider_index, component_row_copy};
     use overlay_backend::components::ComponentKind;
 
     /// The Components hub rows follow the interface language in BOTH
@@ -1856,5 +1956,13 @@ mod tests {
             component_row_copy(ComponentKind::Engine, true).0,
             "Движок (llama.cpp)"
         );
+    }
+
+    #[test]
+    fn codex_has_no_fake_cloud_selection_on_macos() {
+        assert_eq!(ai_provider_index("codex", true), -1);
+        assert_eq!(ai_provider_index("codex", false), 4);
+        assert_eq!(ai_provider_index("cloud", true), 0);
+        assert_eq!(ai_provider_index("local", true), 1);
     }
 }

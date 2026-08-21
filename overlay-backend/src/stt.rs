@@ -11,53 +11,116 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
-use std::path::Path;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
-use transcribe_rs::onnx::gigaam::GigaAMModel;
-use transcribe_rs::onnx::Quantization;
-use transcribe_rs::{SpeechModel, TranscribeOptions};
 
 const GROQ_STT_URL: &str = "https://api.groq.com/openai/v1/audio/transcriptions";
 /// Models-list endpoint — used by `test_connection` to validate the
 /// Groq API key without uploading audio.
 const GROQ_MODELS_URL: &str = "https://api.groq.com/openai/v1/models";
+#[cfg(not(any(windows, target_os = "macos")))]
+const GIGAAM_UNSUPPORTED: &str = "local GigaAM STT is not supported on this platform";
+
+/// Private cfg-selected shim isolating the Windows/macOS `transcribe-rs` GigaAM
+/// dependency. Other targets keep the same shape but fail explicitly.
+#[cfg(any(windows, target_os = "macos"))]
+mod gigaam_shim {
+    use std::path::Path;
+    use transcribe_rs::onnx::gigaam::GigaAMModel;
+    use transcribe_rs::onnx::Quantization;
+    use transcribe_rs::{SpeechModel, TranscribeOptions};
+
+    /// In-process GigaAM int8 model handle.
+    pub(super) struct Model(GigaAMModel);
+
+    pub(super) fn configure_accelerator(use_gpu: bool) {
+        #[cfg(windows)]
+        let pref = if use_gpu {
+            transcribe_rs::OrtAccelerator::DirectMl
+        } else {
+            transcribe_rs::OrtAccelerator::CpuOnly
+        };
+        #[cfg(target_os = "macos")]
+        let pref = if use_gpu {
+            transcribe_rs::OrtAccelerator::CoreMl
+        } else {
+            transcribe_rs::OrtAccelerator::CpuOnly
+        };
+        transcribe_rs::set_ort_accelerator(pref);
+        log::info!("GigaAM ONNX Runtime accelerator = {pref}");
+    }
+
+    /// Load under the configured ORT accelerator, falling back to CPU if the
+    /// platform provider (DirectML/Core ML) cannot build this model.
+    pub(super) fn load(dir: &str) -> anyhow::Result<Model> {
+        match GigaAMModel::load(Path::new(dir), &Quantization::Int8) {
+            Ok(m) => Ok(Model(m)),
+            Err(e)
+                if transcribe_rs::get_ort_accelerator()
+                    != transcribe_rs::OrtAccelerator::CpuOnly =>
+            {
+                log::warn!("GigaAM accelerator load failed ({e}); falling back to CPU");
+                transcribe_rs::set_ort_accelerator(transcribe_rs::OrtAccelerator::CpuOnly);
+                GigaAMModel::load(Path::new(dir), &Quantization::Int8)
+                    .map(Model)
+                    .map_err(|e| anyhow::anyhow!("{e}"))
+            }
+            Err(e) => Err(anyhow::anyhow!("{e}")),
+        }
+    }
+
+    impl Model {
+        /// One transcription. `samples` is f32 mono 16 kHz in [-1, 1].
+        pub(super) fn transcribe_f32(&mut self, samples: &[f32]) -> anyhow::Result<String> {
+            self.0
+                .transcribe(samples, &TranscribeOptions::default())
+                .map(|r| r.text)
+                .map_err(|e| anyhow::anyhow!("GigaAM transcribe: {e}"))
+        }
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+mod gigaam_shim {
+    /// Placeholder handle that keeps the shared STT code shape. Never
+    /// constructed on this platform — `load` always fails.
+    pub(super) struct Model;
+
+    pub(super) fn configure_accelerator(_use_gpu: bool) {
+        log::info!(
+            "GigaAM accelerator selection skipped: local GigaAM STT is not \
+             supported on this platform"
+        );
+    }
+
+    pub(super) fn load(_dir: &str) -> anyhow::Result<Model> {
+        Err(unsupported())
+    }
+
+    impl Model {
+        pub(super) fn transcribe_f32(&mut self, _samples: &[f32]) -> anyhow::Result<String> {
+            Err(unsupported())
+        }
+    }
+
+    fn unsupported() -> anyhow::Error {
+        anyhow::anyhow!(super::GIGAAM_UNSUPPORTED)
+    }
+}
+
+fn public_gigaam_load_error(error: anyhow::Error, public_message: &'static str) -> anyhow::Error {
+    log::warn!("GigaAM load failed: {error}");
+    anyhow::anyhow!(public_message)
+}
 
 /// Select the ONNX Runtime execution provider for the in-process GigaAM model.
 ///
 /// Must be called once at startup, BEFORE any GigaAM model is loaded: the ORT
 /// session builder reads this global preference when it creates the session.
-/// `use_gpu` → DirectML (GPU, Windows DX12); otherwise CPU-only. ORT always
-/// appends a CPU fallback, so if DirectML can't initialise (no compatible GPU,
-/// or a missing/shadowed `DirectML.dll`) the model transparently runs on CPU.
-/// The first GPU transcription pays a ~1s one-time DirectML shader-compile.
+/// `use_gpu` selects DirectML on Windows and Core ML on macOS; otherwise CPU.
+/// Both builds retain ONNX Runtime's CPU fallback.
 pub fn configure_gigaam_accelerator(use_gpu: bool) {
-    let pref = if use_gpu {
-        transcribe_rs::OrtAccelerator::DirectMl
-    } else {
-        transcribe_rs::OrtAccelerator::CpuOnly
-    };
-    transcribe_rs::set_ort_accelerator(pref);
-    log::info!("GigaAM ONNX Runtime accelerator = {pref}");
-}
-
-/// Load the GigaAM int8 model under the configured ORT accelerator, transparently
-/// falling back to CPU if a GPU (DirectML) session fails to build. DirectML can
-/// fail at graph fusion (0x80070715) when the system `DirectML.dll` is absent or
-/// shadowed; rather than break STT entirely we switch the process to the
-/// always-available CPU provider for this and all future loads, and log it.
-fn load_gigaam(dir: &str) -> std::result::Result<GigaAMModel, transcribe_rs::TranscribeError> {
-    match GigaAMModel::load(Path::new(dir), &Quantization::Int8) {
-        Ok(m) => Ok(m),
-        Err(e)
-            if transcribe_rs::get_ort_accelerator() != transcribe_rs::OrtAccelerator::CpuOnly =>
-        {
-            log::warn!("GigaAM GPU (DirectML) load failed ({e}); falling back to CPU");
-            transcribe_rs::set_ort_accelerator(transcribe_rs::OrtAccelerator::CpuOnly);
-            GigaAMModel::load(Path::new(dir), &Quantization::Int8)
-        }
-        Err(e) => Err(e),
-    }
+    gigaam_shim::configure_accelerator(use_gpu);
 }
 
 /// Phase E6 v27 — connection test for the Settings "STT" tab. GETs the
@@ -128,11 +191,10 @@ pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> 
         SttBackendCfg::Gigaam { model_dir } => {
             let dir = model_dir.clone();
             tokio::task::spawn_blocking(move || {
-                load_gigaam(&dir)
+                gigaam_shim::load(&dir)
                     .map(|_m| "GigaAM model loaded OK".to_string())
                     .map_err(|e| {
-                        log::warn!("GigaAM test load failed: {e}");
-                        anyhow::anyhow!("GigaAM: model failed to load (see log)")
+                        public_gigaam_load_error(e, "GigaAM: model failed to load (see log)")
                     })
             })
             .await
@@ -147,10 +209,9 @@ pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> 
 /// mirroring the cloud "Groq key not set" bail. Blocks for the load duration
 /// (~0.5 s) — acceptable for a once-per-session start gate. The model handle is
 /// dropped immediately; the live pipeline loads its own copy via `spawn`.
+/// On unsupported platforms this always fails with an explicit error.
 pub fn validate_gigaam_dir(model_dir: &str) -> Result<()> {
-    load_gigaam(model_dir)
-        .map(|_m| ())
-        .map_err(|e| anyhow::anyhow!("{e}"))
+    gigaam_shim::load(model_dir).map(|_m| ())
 }
 /// Fallback Groq model id if config doesn't specify one. Both "whisper-large-v3"
 /// (most accurate) and "whisper-large-v3-turbo" (~3× faster) are valid.
@@ -206,6 +267,13 @@ pub fn spawn(
 ) -> mpsc::Receiver<TranscriptEvent> {
     let (tx, rx) = mpsc::channel::<TranscriptEvent>(64);
 
+    #[cfg(not(any(windows, target_os = "macos")))]
+    if matches!(&backend, SttBackendCfg::Gigaam { .. }) {
+        log::error!("local GigaAM STT is not supported on this platform");
+        drop(tx);
+        return rx;
+    }
+
     // Back-pressure cap on simultaneous in-flight HTTP STT requests (cloud /
     // local whisper). Carried over from 1st+2nd-pass audits: previously
     // unbounded. GigaAM serialises through its own model mutex, so this only
@@ -218,11 +286,11 @@ pub fn spawn(
         // selected. None for the HTTP backends. A load failure is logged and
         // leaves the pipeline producing no transcripts (the Settings "Test"
         // button surfaces the real error to the user).
-        let gigaam: Option<Arc<Mutex<GigaAMModel>>> =
+        let gigaam: Option<Arc<Mutex<gigaam_shim::Model>>> =
             if let SttBackendCfg::Gigaam { model_dir } = &backend {
                 let dir = model_dir.clone();
                 let dir_for_log = model_dir.clone();
-                match tokio::task::spawn_blocking(move || load_gigaam(&dir)).await {
+                match tokio::task::spawn_blocking(move || gigaam_shim::load(&dir)).await {
                     Ok(Ok(m)) => {
                         log::info!("STT GigaAM model loaded from {dir_for_log}");
                         Some(Arc::new(Mutex::new(m)))
@@ -274,6 +342,7 @@ pub fn spawn(
             }
             SttBackendCfg::Gigaam { .. } => None,
         };
+        let utterance_cap_sec = MAX_UTTERANCE_SEC;
 
         // Per-source rolling buffer + silence tracking
         let mut buffers: HashMap<AudioSource, Utterance> = HashMap::new();
@@ -348,7 +417,7 @@ pub fn spawn(
             }
 
             let dur_sec = utt.samples.len() as f32 / TARGET_SAMPLE_RATE as f32;
-            let forced_by_size = dur_sec >= MAX_UTTERANCE_SEC as f32;
+            let forced_by_size = dur_sec >= utterance_cap_sec as f32;
             let should_flush =
                 (utt.silent_run_ms >= VAD_HANG_MS && utt.had_voice) || forced_by_size;
             if forced_by_size {
@@ -360,7 +429,7 @@ pub fn spawn(
                      had_voice={} silent_run={}ms (VAD threshold {})",
                     chunk.source,
                     dur_sec,
-                    MAX_UTTERANCE_SEC,
+                    utterance_cap_sec,
                     utt.had_voice,
                     utt.silent_run_ms,
                     VAD_RMS_THRESHOLD,
@@ -650,7 +719,7 @@ fn rms_i16(samples: &[i16]) -> f32 {
 /// session pipeline (`spawn`) keeps its OWN preloaded model, so this is purely
 /// for the ad-hoc one-shot flows. GigaAM already serialises through its own
 /// `&mut self`, so holding this lock across the transcribe call is fine.
-static GIGAAM_CACHE: std::sync::OnceLock<std::sync::Mutex<Option<(String, GigaAMModel)>>> =
+static GIGAAM_CACHE: std::sync::OnceLock<std::sync::Mutex<Option<(String, gigaam_shim::Model)>>> =
     std::sync::OnceLock::new();
 
 /// Drop the cached ad-hoc GigaAM model so the next transcription reloads it.
@@ -723,11 +792,10 @@ pub async fn transcribe_once(
                     .lock()
                     .unwrap_or_else(|p| p.into_inner());
                 if !matches!(&*guard, Some((cached_dir, _)) if *cached_dir == dir) {
-                    let m = load_gigaam(&dir).map_err(|e| {
+                    let m = gigaam_shim::load(&dir).map_err(|e| {
                         // Don't surface the model_dir path (it embeds the user's
-                        // Windows username) into a screen-capturable tile; log it.
-                        log::warn!("GigaAM load failed: {e}");
-                        anyhow::anyhow!("local STT model failed to load (see log)")
+                        // Windows username) into a screen-capturable tile.
+                        public_gigaam_load_error(e, "local STT model failed to load (see log)")
                     })?;
                     *guard = Some((dir.clone(), m));
                 }
@@ -736,10 +804,8 @@ pub async fn transcribe_once(
                     // Unreachable: we just ensured an entry for `dir` above.
                     None => return Err(anyhow::anyhow!("GigaAM cache empty after load")),
                 };
-                let r = model
-                    .transcribe(&f32s, &TranscribeOptions::default())
-                    .map_err(|e| anyhow::anyhow!("GigaAM transcribe: {e}"))?;
-                Ok::<String, anyhow::Error>(r.text)
+                let text = model.transcribe_f32(&f32s)?;
+                Ok::<String, anyhow::Error>(text)
             })
             .await
             .map_err(|e| anyhow::anyhow!("GigaAM join: {e}"))?
@@ -922,16 +988,13 @@ async fn finish_transcript(
 /// Run one in-process GigaAM transcription (called on a blocking thread).
 /// Converts i16 PCM (16 kHz mono) to f32 in [-1, 1] then runs the shared model
 /// under its mutex. GigaAM is Russian-specialised and takes no prompt.
-fn gigaam_transcribe(model: &Arc<Mutex<GigaAMModel>>, pcm: &[i16]) -> Result<String> {
+fn gigaam_transcribe(model: &Arc<Mutex<gigaam_shim::Model>>, pcm: &[i16]) -> Result<String> {
     let f32s: Vec<f32> = pcm.iter().map(|&s| f32::from(s) / 32768.0).collect();
     // Recover from a poisoned mutex instead of erroring out: a single ORT
     // panic on one utterance must not brick STT for the rest of the session
     // (the model's internal state is re-entrant per transcribe call).
     let mut m = model.lock().unwrap_or_else(|p| p.into_inner());
-    let res = m
-        .transcribe(&f32s, &TranscribeOptions::default())
-        .map_err(|e| anyhow::anyhow!("GigaAM transcribe: {e}"))?;
-    Ok(res.text)
+    m.transcribe_f32(&f32s)
 }
 
 /// Canonical Latin spellings of high-frequency loanwords that Whisper
@@ -1462,5 +1525,33 @@ mod tests {
         assert!(!is_permanent_error("connection reset by peer"));
         assert!(!is_permanent_error("dns lookup failed"));
         assert!(!is_permanent_error("tcp timed out"));
+    }
+
+    // ── Unsupported-platform GigaAM seam ──
+
+    #[cfg(not(any(windows, target_os = "macos")))]
+    #[test]
+    fn gigaam_shim_load_unsupported_off_windows() {
+        let err = gigaam_shim::load("nonexistent-model-dir")
+            .err()
+            .unwrap_or_else(|| anyhow::anyhow!("GigaAM unexpectedly loaded"));
+        assert!(
+            err.to_string().contains("not supported"),
+            "load must fail unsupported, got: {err}"
+        );
+    }
+
+    #[cfg(not(any(windows, target_os = "macos")))]
+    #[test]
+    fn validate_gigaam_dir_unsupported_off_windows() {
+        assert!(validate_gigaam_dir("nonexistent-model-dir").is_err());
+    }
+
+    #[cfg(not(any(windows, target_os = "macos")))]
+    #[test]
+    fn configure_gigaam_accelerator_honest_noop_off_windows() {
+        // Must not panic — the session-start path calls it unconditionally.
+        configure_gigaam_accelerator(true);
+        configure_gigaam_accelerator(false);
     }
 }

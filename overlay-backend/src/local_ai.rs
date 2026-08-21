@@ -786,21 +786,25 @@ enum GpuKind {
 /// cheap `nvidia-smi`; only a non-NVIDIA machine pays the WMI query for an AMD /
 /// Intel adapter (Vulkan). No detectable GPU → CPU.
 fn detect_gpu() -> GpuKind {
-    if detect_nvidia() {
-        GpuKind::Nvidia
-    } else if detect_non_nvidia_gpu() && vulkan_loader_present() {
-        // Vulkan needs BOTH a non-NVIDIA GPU AND the loader (vulkan-1.dll, shipped
-        // with Win10+). Without the loader the Vulkan build can't load at all — and
-        // the -ngl 0 fallback re-runs the SAME exe, so it couldn't rescue it — so
-        // use CPU rather than risk a failed install on a loader-less box (Баг2).
-        GpuKind::Other
-    } else {
-        GpuKind::None
+    #[cfg(target_os = "macos")]
+    {
+        GpuKind::Other // Metal GPU acceleration on macOS / Apple Silicon
+    }
+    #[cfg(windows)]
+    {
+        if detect_nvidia() {
+            GpuKind::Nvidia
+        } else if detect_non_nvidia_gpu() && vulkan_loader_present() {
+            GpuKind::Other
+        } else {
+            GpuKind::None
+        }
     }
 }
 
 /// True if the Vulkan loader (`vulkan-1.dll`) is present in System32 — required for
 /// the Vulkan llama build to load at all.
+#[cfg(windows)]
 fn vulkan_loader_present() -> bool {
     std::env::var_os("SystemRoot")
         .map(|r| PathBuf::from(r).join("System32").join("vulkan-1.dll"))
@@ -810,6 +814,7 @@ fn vulkan_loader_present() -> bool {
 /// True if a non-NVIDIA display adapter (AMD / Intel) is present. Best-effort name
 /// match over WMI; a false positive only means we try the Vulkan build and fall
 /// back to CPU if it can't offload (Баг2), so this never makes things worse.
+#[cfg(windows)]
 fn detect_non_nvidia_gpu() -> bool {
     let out = match run_capture(
         "powershell",
@@ -828,6 +833,7 @@ fn detect_non_nvidia_gpu() -> bool {
         .any(|k| names.contains(k))
 }
 
+#[allow(dead_code)]
 fn detect_nvidia_vram_gib() -> Option<u64> {
     detect_nvidia_memory_mib().map(|(_, total)| (total + 512) / 1024)
 }
@@ -956,34 +962,61 @@ fn vram_is_at_baseline(baseline_mib: u64, after_mib: Option<u64>) -> bool {
 }
 
 fn detect_system_ram_gib() -> Option<u64> {
-    let out = run_capture(
-        "powershell",
-        &[
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
-        ],
-    )
-    .ok()?;
-    if !out.status.success() {
-        return None;
+    #[cfg(target_os = "macos")]
+    {
+        let out = run_capture("sysctl", &["-n", "hw.memsize"]).ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        String::from_utf8_lossy(&out.stdout)
+            .trim()
+            .parse::<u64>()
+            .ok()
+            .map(|bytes| bytes / GIB)
     }
-    String::from_utf8_lossy(&out.stdout)
-        .trim()
-        .parse::<u64>()
-        .ok()
-        .map(|bytes| bytes.div_ceil(GIB))
+    #[cfg(windows)]
+    {
+        let out = run_capture(
+            "powershell",
+            &[
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
+            ],
+        )
+        .ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        String::from_utf8_lossy(&out.stdout)
+            .trim()
+            .parse::<u64>()
+            .ok()
+            .map(|bytes| bytes.div_ceil(GIB))
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    None
 }
 
 fn detected_hardware_model_profile(force_cpu: bool) -> HardwareModelProfile {
     if force_cpu {
         return HardwareModelProfile::Unknown;
     }
-    let raw_vram = detect_nvidia_vram_gib();
-    let raw_ram = detect_system_ram_gib();
-    log::info!("local-ai hardware discovery: raw_vram_gib={raw_vram:?} raw_ram_gib={raw_ram:?}");
-    hardware_profile_from_discovery(force_cpu, raw_vram, raw_ram)
+    #[cfg(target_os = "macos")]
+    {
+        let ram = detect_system_ram_gib().unwrap_or(16);
+        hardware_profile_from_discovery(false, Some(ram), Some(ram))
+    }
+    #[cfg(windows)]
+    {
+        let raw_vram = detect_nvidia_vram_gib();
+        let raw_ram = detect_system_ram_gib();
+        log::info!(
+            "local-ai hardware discovery: raw_vram_gib={raw_vram:?} raw_ram_gib={raw_ram:?}"
+        );
+        hardware_profile_from_discovery(force_cpu, raw_vram, raw_ram)
+    }
 }
 
 /// Detect whether this machine is currently in the confirmed 26B-A4B matrix.
@@ -1596,12 +1629,31 @@ pub fn install(
     })
 }
 
+fn curl_exe() -> &'static str {
+    if cfg!(windows) {
+        "curl.exe"
+    } else {
+        "curl"
+    }
+}
+
+fn dev_null() -> &'static str {
+    if cfg!(windows) {
+        "NUL"
+    } else {
+        "/dev/null"
+    }
+}
+
 /// One-shot reachability probe: true if the URL answers anything (even a 404),
 /// i.e. a server is listening. A connection failure returns false.
 fn is_reachable(url: &str) -> bool {
-    run_capture("curl.exe", &["-s", "-o", "NUL", "--max-time", "2", url])
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    run_capture(
+        curl_exe(),
+        &["-s", "-o", dev_null(), "--max-time", "2", url],
+    )
+    .map(|o| o.status.success())
+    .unwrap_or(false)
 }
 
 fn models_list_expected_model(http_success: bool, body: &str, expected: &str) -> bool {
@@ -1632,7 +1684,7 @@ fn expected_model_is_ready(
 }
 
 fn curl_success_body(args: &[&str]) -> Option<String> {
-    run_capture("curl.exe", args).ok().and_then(|out| {
+    run_capture(curl_exe(), args).ok().and_then(|out| {
         out.status
             .success()
             .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
@@ -2934,7 +2986,7 @@ pub fn update_llama_engine(
     // build as updated. swap_engine_binaries already bails when the staged build
     // has no llama-server.exe; this guards any residual "swap returned Ok but the
     // live exe isn't there" path so the UI never reports a phantom update.
-    if !llama_dir.join("llama-server.exe").is_file() {
+    if find_exe(&llama_dir, "llama-server.exe").is_none() {
         let _ = std::fs::remove_dir_all(&staging);
         return Ok(EngineUpdate::Skipped {
             reason: "engine install produced no llama-server.exe — kept the current engine".into(),
@@ -3057,11 +3109,13 @@ fn swap_engine_binaries(staging: &Path, live: &Path, backup: &Path) -> Result<()
     // Must install at least the server binary — otherwise this is not a real engine
     // and we must NOT report success / write the build stamp (P1-2).
     let has_server = by_name.keys().any(|n| {
-        n.to_str()
-            .is_some_and(|s| s.eq_ignore_ascii_case("llama-server.exe"))
+        n.to_str().is_some_and(|s| {
+            let lower = s.to_ascii_lowercase();
+            lower == "llama-server.exe" || lower == "llama-server"
+        })
     });
     if !has_server {
-        bail!("staged build has no llama-server.exe to install");
+        bail!("staged build has no llama-server to install");
     }
     let mut files: Vec<PathBuf> = by_name.into_values().collect();
     files.sort_by_key(|p| {
@@ -3299,45 +3353,51 @@ fn llama_server_args(
     if force_cpu {
         args.push("-ngl".to_string());
         args.push("0".to_string());
-    } else if profile != HardwareModelProfile::Unknown {
+    } else if profile != HardwareModelProfile::Unknown || cfg!(target_os = "macos") {
+        let ngl_val = match profile {
+            HardwareModelProfile::Fallback12B => "34",
+            HardwareModelProfile::Primary26Vram8
+            | HardwareModelProfile::Primary26Vram12
+            | HardwareModelProfile::Primary26Vram16 => "99",
+            HardwareModelProfile::Unknown => {
+                if cfg!(target_os = "macos") {
+                    "99"
+                } else {
+                    "0"
+                }
+            }
+        };
         args.extend([
             "-ngl".to_string(),
-            match profile {
-                HardwareModelProfile::Fallback12B => "34",
-                HardwareModelProfile::Primary26Vram8
-                | HardwareModelProfile::Primary26Vram12
-                | HardwareModelProfile::Primary26Vram16 => "99",
-                HardwareModelProfile::Unknown => "0",
-            }
-            .to_string(),
+            ngl_val.to_string(),
             "--no-mmap".to_string(),
             "-np".to_string(),
             "1".to_string(),
         ]);
-        match profile {
-            HardwareModelProfile::Primary26Vram8 => {
-                args.extend(["-ncmoe".to_string(), "20".to_string()]);
-            }
-            HardwareModelProfile::Primary26Vram12 => {
-                args.extend(["-ncmoe".to_string(), "8".to_string()]);
-            }
-            HardwareModelProfile::Unknown
-            | HardwareModelProfile::Fallback12B
-            | HardwareModelProfile::Primary26Vram16 => {}
+    }
+    match profile {
+        HardwareModelProfile::Primary26Vram8 => {
+            args.extend(["-ncmoe".to_string(), "20".to_string()]);
         }
-        if prep
-            && matches!(
-                profile,
-                HardwareModelProfile::Primary26Vram8 | HardwareModelProfile::Primary26Vram12
-            )
-        {
-            args.extend([
-                "-ctk".to_string(),
-                "q8_0".to_string(),
-                "-ctv".to_string(),
-                "q8_0".to_string(),
-            ]);
+        HardwareModelProfile::Primary26Vram12 => {
+            args.extend(["-ncmoe".to_string(), "8".to_string()]);
         }
+        HardwareModelProfile::Unknown
+        | HardwareModelProfile::Fallback12B
+        | HardwareModelProfile::Primary26Vram16 => {}
+    }
+    if prep
+        && matches!(
+            profile,
+            HardwareModelProfile::Primary26Vram8 | HardwareModelProfile::Primary26Vram12
+        )
+    {
+        args.extend([
+            "-ctk".to_string(),
+            "q8_0".to_string(),
+            "-ctv".to_string(),
+            "q8_0".to_string(),
+        ]);
     }
     if let Some(projector) = mmproj {
         args.push("--mmproj".to_string());
@@ -3410,6 +3470,7 @@ fn github_assets(repo: &str) -> Result<Vec<GhAsset>> {
 
 /// Parse the CUDA version out of a llama.cpp build asset name, e.g.
 /// `llama-b9410-bin-win-cuda-13.3-x64.zip` -> (13, 3).
+#[allow(dead_code)]
 fn cuda_version_of(name: &str) -> Option<(u32, u32)> {
     let after = name.split("-bin-win-cuda-").nth(1)?; // "13.3-x64.zip"
     let ver = after.strip_suffix("-x64.zip")?; // "13.3"
@@ -3419,59 +3480,82 @@ fn cuda_version_of(name: &str) -> Option<(u32, u32)> {
     Some((maj, min))
 }
 
-/// Pick the llama.cpp Windows build for the detected GPU (Баг2): NVIDIA → newest
-/// CUDA build + matching cudart (RTX 50-series/Blackwell needs CUDA ≥ 12.8, so we
-/// take the HIGHEST CUDA version); AMD/Intel → the Vulkan build; none (or no
-/// matching GPU asset in this release) → the CPU build.
-fn pick_llama(assets: &[GhAsset], gpu: GpuKind) -> Result<LlamaPick> {
-    if gpu == GpuKind::Nvidia {
-        let best = assets
+/// Pick the llama.cpp build for the detected GPU.
+fn pick_llama(assets: &[GhAsset], _gpu: GpuKind) -> Result<LlamaPick> {
+    #[cfg(target_os = "macos")]
+    {
+        let mac_asset = assets
             .iter()
-            .filter(|a| a.name.starts_with("llama-"))
-            .filter_map(|a| cuda_version_of(&a.name).map(|v| (v, a)))
-            .max_by_key(|(v, _)| *v);
-        if let Some(((maj, min), build)) = best {
-            let needle = format!("-cuda-{maj}.{min}-x64.zip");
-            let cudart = assets
+            .find(|a| {
+                a.name.starts_with("llama-")
+                    && (a.name.contains("bin-macos-arm64.zip")
+                        || a.name.contains("bin-macos-x64.zip"))
+            })
+            .or_else(|| {
+                assets
+                    .iter()
+                    .find(|a| a.name.starts_with("llama-") && a.name.contains("macos"))
+            })
+            .ok_or_else(|| anyhow!("no llama macOS build asset"))?;
+        Ok(LlamaPick {
+            build_url: mac_asset.browser_download_url.clone(),
+            build_size: mac_asset.size,
+            cudart_url: None,
+            cudart_size: 0,
+            version: Some("Metal".to_string()),
+        })
+    }
+
+    #[cfg(windows)]
+    {
+        if _gpu == GpuKind::Nvidia {
+            let best = assets
                 .iter()
-                .find(|a| a.name.starts_with("cudart-") && a.name.ends_with(&needle))
-                .ok_or_else(|| anyhow!("no cudart asset for CUDA {maj}.{min}"))?;
-            return Ok(LlamaPick {
-                build_url: build.browser_download_url.clone(),
-                build_size: build.size,
-                cudart_url: Some(cudart.browser_download_url.clone()),
-                cudart_size: cudart.size,
-                version: Some(format!("{maj}.{min}")),
-            });
+                .filter(|a| a.name.starts_with("llama-"))
+                .filter_map(|a| cuda_version_of(&a.name).map(|v| (v, a)))
+                .max_by_key(|(v, _)| *v);
+            if let Some(((maj, min), build)) = best {
+                let needle = format!("-cuda-{maj}.{min}-x64.zip");
+                let cudart = assets
+                    .iter()
+                    .find(|a| a.name.starts_with("cudart-") && a.name.ends_with(&needle))
+                    .ok_or_else(|| anyhow!("no cudart asset for CUDA {maj}.{min}"))?;
+                return Ok(LlamaPick {
+                    build_url: build.browser_download_url.clone(),
+                    build_size: build.size,
+                    cudart_url: Some(cudart.browser_download_url.clone()),
+                    cudart_size: cudart.size,
+                    version: Some(format!("{maj}.{min}")),
+                });
+            }
+            // No CUDA asset in this release → fall through to the CPU build.
         }
-        // No CUDA asset in this release → fall through to the CPU build.
-    }
-    if gpu == GpuKind::Other {
-        if let Some(vk) = assets
+        if _gpu == GpuKind::Other {
+            if let Some(vk) = assets.iter().find(|a| {
+                a.name.starts_with("llama-") && a.name.ends_with("-bin-win-vulkan-x64.zip")
+            }) {
+                return Ok(LlamaPick {
+                    build_url: vk.browser_download_url.clone(),
+                    build_size: vk.size,
+                    cudart_url: None,
+                    cudart_size: 0,
+                    version: Some("Vulkan".to_string()),
+                });
+            }
+            // No Vulkan asset in this release → fall through to the CPU build.
+        }
+        let cpu = assets
             .iter()
-            .find(|a| a.name.starts_with("llama-") && a.name.ends_with("-bin-win-vulkan-x64.zip"))
-        {
-            return Ok(LlamaPick {
-                build_url: vk.browser_download_url.clone(),
-                build_size: vk.size,
-                cudart_url: None,
-                cudart_size: 0,
-                version: Some("Vulkan".to_string()),
-            });
-        }
-        // No Vulkan asset in this release → fall through to the CPU build.
+            .find(|a| a.name.starts_with("llama-") && a.name.ends_with("-bin-win-cpu-x64.zip"))
+            .ok_or_else(|| anyhow!("no llama CPU build asset"))?;
+        Ok(LlamaPick {
+            build_url: cpu.browser_download_url.clone(),
+            build_size: cpu.size,
+            cudart_url: None,
+            cudart_size: 0,
+            version: None,
+        })
     }
-    let cpu = assets
-        .iter()
-        .find(|a| a.name.starts_with("llama-") && a.name.ends_with("-bin-win-cpu-x64.zip"))
-        .ok_or_else(|| anyhow!("no llama CPU build asset"))?;
-    Ok(LlamaPick {
-        build_url: cpu.browser_download_url.clone(),
-        build_size: cpu.size,
-        cudart_url: None,
-        cudart_size: 0,
-        version: None,
-    })
 }
 
 /// Parse the CUDA version from a whisper cuBLAS asset name, e.g.
@@ -3493,6 +3577,19 @@ fn whisper_cublas_version_of(name: &str) -> Option<(u32, u32, u32)> {
 /// GPU-accelerates via PTX JIT (whisper_init: use gpu = 1, model loads into VRAM).
 /// Returns (url, size).
 fn pick_whisper(assets: &[GhAsset], force_cpu: bool) -> Result<(String, u64)> {
+    if cfg!(target_os = "macos") {
+        let is_arm = cfg!(target_arch = "aarch64");
+        let needle = if is_arm { "macos-arm64" } else { "macos" };
+        if let Some(a) = assets.iter().find(|a| a.name.contains(needle)) {
+            return Ok((a.browser_download_url.clone(), a.size));
+        }
+        if let Some(a) = assets
+            .iter()
+            .find(|a| a.name.contains("macos") || a.name.contains("darwin"))
+        {
+            return Ok((a.browser_download_url.clone(), a.size));
+        }
+    }
     if !force_cpu {
         let best = assets
             .iter()
@@ -3609,6 +3706,18 @@ fn extract_zip(zip: &Path, dest_dir: &Path) -> Result<()> {
     if !status.success() {
         bail!("extract failed: {}", zip.display());
     }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(entries) = std::fs::read_dir(dest_dir) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_file() {
+                    let _ = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755));
+                }
+            }
+        }
+    }
     Ok(())
 }
 
@@ -3631,7 +3740,7 @@ fn curl_resumable(
             break;
         }
         let mut child = spawn_hidden(
-            "curl.exe",
+            curl_exe(),
             &[
                 "-L",
                 "--retry",
@@ -3700,7 +3809,7 @@ fn curl_small(url: &str, out: &Path) -> Result<()> {
     let mut last_err = format!("download failed: {}", out.display());
     for attempt in 1..=ATTEMPTS {
         let status = launch_hidden_wait(
-            "curl.exe",
+            curl_exe(),
             &[
                 "-fsL",
                 "--retry",
@@ -3762,7 +3871,10 @@ fn verify_gpu_offload(tries: u32) -> bool {
 fn wait_ready(url: &str, max_secs: u64) -> Result<()> {
     let deadline = max_secs / 2;
     for _ in 0..deadline {
-        if let Ok(out) = run_capture("curl.exe", &["-s", "-o", "NUL", "--max-time", "2", url]) {
+        if let Ok(out) = run_capture(
+            curl_exe(),
+            &["-s", "-o", dev_null(), "--max-time", "2", url],
+        ) {
             if out.status.success() {
                 return Ok(());
             }
@@ -3795,11 +3907,11 @@ fn llama_reply_has_text_content(body: &str) -> bool {
 // ---- process + fs helpers --------------------------------------------------
 
 fn preflight() -> Result<()> {
-    if run_capture("curl.exe", &["--version"]).is_err() {
-        bail!("curl.exe not found (needs Windows 10 1803+)");
+    if run_capture(curl_exe(), &["--version"]).is_err() {
+        bail!("curl not found");
     }
     if run_capture(&system_tar().to_string_lossy(), &["--version"]).is_err() {
-        bail!("tar.exe not found (needs Windows 10 1803+)");
+        bail!("tar not found");
     }
     Ok(())
 }
@@ -4094,6 +4206,7 @@ fn ensure_disk_space(root: &Path, need: u64, on: &dyn Fn(Progress)) -> Result<()
 
 fn find_exe(dir: &Path, name: &str) -> Option<PathBuf> {
     let want = name.to_ascii_lowercase();
+    let want_bare = want.strip_suffix(".exe").unwrap_or(&want);
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
         let entries = std::fs::read_dir(&d).ok()?;
@@ -4101,13 +4214,12 @@ fn find_exe(dir: &Path, name: &str) -> Option<PathBuf> {
             let p = e.path();
             if p.is_dir() {
                 stack.push(p);
-            } else if p
-                .file_name()
-                .and_then(|n| n.to_str())
-                .map(|n| n.to_ascii_lowercase() == want)
-                .unwrap_or(false)
-            {
-                return Some(p);
+            } else if let Some(n) = p.file_name().and_then(|n| n.to_str()) {
+                let n_lower = n.to_ascii_lowercase();
+                let n_bare = n_lower.strip_suffix(".exe").unwrap_or(&n_lower);
+                if n_lower == want || n_bare == want_bare {
+                    return Some(p);
+                }
             }
         }
     }
