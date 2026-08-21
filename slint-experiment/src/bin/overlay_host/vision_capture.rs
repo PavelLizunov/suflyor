@@ -51,7 +51,7 @@ use super::{
 pub(crate) fn bgra_to_slint_image(bgra: &[u8], w: u32, h: u32) -> slint::Image {
     let mut buf = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(w, h);
     let dst = buf.make_mut_bytes();
-    for (i, px) in bgra.chunks_exact(4).enumerate() {
+    for (i, px) in bgra.as_chunks::<4>().0.iter().enumerate() {
         let o = i * 4;
         if let Some(slot) = dst.get_mut(o..o + 4) {
             slot[0] = px[2]; // R
