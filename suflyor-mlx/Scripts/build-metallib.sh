@@ -15,8 +15,11 @@ fi
 
 mlx_checkout="$package_root/.build/checkouts/mlx-swift"
 expected_mlx_swift_revision="0bb916c67f4b9e5c682cbe02a42c701c93ab5021"
-bin_dir="$(swift build --package-path "$package_root" -c "$configuration" \
-  --disable-automatic-resolution --show-bin-path)"
+# Git exports the outer repository's local environment to pre-push hooks.
+# Clear it before inspecting SwiftPM's nested checkout.
+for git_var in $(git rev-parse --local-env-vars); do
+  unset "$git_var"
+done
 if [[ ! -d "$mlx_checkout/.git" ]]; then
   echo "resolved mlx-swift checkout is missing; run the locked Swift build first" >&2
   exit 1
@@ -56,6 +59,8 @@ for source in "${sources[@]}"; do
   fi
 done
 
+bin_dir="$(swift build --package-path "$package_root" -c "$configuration" \
+  --disable-automatic-resolution --show-bin-path)"
 mkdir -p "$bin_dir"
 tmp_parent="$(mktemp -d)"
 trap 'rm -rf -- "$tmp_parent"' EXIT
