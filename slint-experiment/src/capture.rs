@@ -74,7 +74,7 @@ pub fn bgra_to_jpeg_data_url(
     }
     // BGRA → RGB (drop alpha, swap B/R).
     let mut rgb: Vec<u8> = Vec::with_capacity((width as usize) * (height as usize) * 3);
-    for px in bgra.chunks_exact(4) {
+    for px in bgra.as_chunks::<4>().0 {
         rgb.push(px[2]);
         rgb.push(px[1]);
         rgb.push(px[0]);
