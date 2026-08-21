@@ -112,12 +112,17 @@ jobs:
   macos:
     needs: changes
     if: needs.changes.outputs.rust == 'true'
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select Xcode 26.3 (Swift 6.3)
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_26.3.app/Contents/Developer
+          swift --version | grep -E '^Swift version 6\.3'
 
       - name: Install Rust (stable + rustfmt + clippy)
         uses: dtolnay/rust-toolchain@stable
