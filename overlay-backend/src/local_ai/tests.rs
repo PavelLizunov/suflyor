@@ -1684,6 +1684,11 @@ fn archive_entry_safety_rejects_zip_slip() {
                                                              // Windows trailing-space coercion: ".. " / "..  " resolve to ".." → rejected.
     assert!(!archive_entry_is_safe(".. /x"));
     assert!(!archive_entry_is_safe("a/..  /b"));
+    // Windows trailing dot/space coercion (e.g. `.. .`, `.. . `, `...`) → rejected.
+    assert!(!archive_entry_is_safe("a/.. ./b"));
+    assert!(!archive_entry_is_safe("a/.. . /b"));
+    assert!(!archive_entry_is_safe("a/.../b"));
+    assert!(!archive_entry_is_safe("a/. . /b"));
     // A bare "." current-dir component is harmless and must stay allowed
     // (tar may emit "./"-prefixed entries).
     assert!(archive_entry_is_safe("./build/x.dll"));

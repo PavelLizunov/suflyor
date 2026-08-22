@@ -71,6 +71,14 @@ pub fn platform_capability(feature: PlatformFeature) -> CapabilityState {
         | PlatformFeature::HermesInstaller
         | PlatformFeature::SelfReplacingUpdater => CapabilityState::Available,
     }
+
+    #[cfg(not(any(windows, target_os = "macos")))]
+    match feature {
+        PlatformFeature::Microphone
+        | PlatformFeature::SystemAudio
+        | PlatformFeature::ScreenCapture => CapabilityState::Available,
+        _ => CapabilityState::Unsupported(CapabilityReason::NotSupportedOnPlatform),
+    }
 }
 
 #[cfg(test)]
