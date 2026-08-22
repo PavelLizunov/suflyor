@@ -800,6 +800,10 @@ fn detect_gpu() -> GpuKind {
             GpuKind::None
         }
     }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        GpuKind::None
+    }
 }
 
 /// True if the Vulkan loader (`vulkan-1.dll`) is present in System32 — required for
@@ -1016,6 +1020,10 @@ fn detected_hardware_model_profile(force_cpu: bool) -> HardwareModelProfile {
             "local-ai hardware discovery: raw_vram_gib={raw_vram:?} raw_ram_gib={raw_ram:?}"
         );
         hardware_profile_from_discovery(force_cpu, raw_vram, raw_ram)
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        HardwareModelProfile::Unknown
     }
 }
 
@@ -3556,6 +3564,21 @@ fn pick_llama(assets: &[GhAsset], _gpu: GpuKind) -> Result<LlamaPick> {
             version: None,
         })
     }
+
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let cpu = assets
+            .iter()
+            .find(|a| a.name.starts_with("llama-") && a.name.ends_with("-bin-win-cpu-x64.zip"))
+            .ok_or_else(|| anyhow!("no llama CPU build asset"))?;
+        Ok(LlamaPick {
+            build_url: cpu.browser_download_url.clone(),
+            build_size: cpu.size,
+            cudart_url: None,
+            cudart_size: 0,
+            version: None,
+        })
+    }
 }
 
 /// Parse the CUDA version from a whisper cuBLAS asset name, e.g.
@@ -3668,11 +3691,17 @@ fn archive_entry_is_safe(entry: &str) -> bool {
     if b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' {
         return false; // drive-qualified (C:\...)
     }
-    // Reject any `..` traversal component. Windows also strips trailing spaces
-    // from a name, so ".. " / "..  " resolve to ".." too — collapse trailing
-    // spaces before the compare. (A bare "." is the harmless current-dir, and
-    // tar may emit "./"-prefixed entries, so it must NOT be rejected.)
-    !e.split('/').any(|c| c.trim_end_matches(' ') == "..")
+    // Reject any component that is a `..` path traversal or consists entirely
+    // of dots and spaces (except a single `.`). Windows strips trailing spaces
+    // and dots from components when opening paths (e.g. `.. .` -> `..`), so any
+    // component of dots/spaces other than `.` or `` is an escape or invalid.
+    !e.split('/').any(|c| {
+        if c.chars().all(|ch| ch == '.' || ch == ' ') {
+            c != "." && !c.is_empty()
+        } else {
+            c.trim_end_matches([' ', '.']) == ".."
+        }
+    })
 }
 
 fn extract_zip(zip: &Path, dest_dir: &Path) -> Result<()> {
