@@ -36,9 +36,8 @@ pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     // SECURITY: Constant-time byte slice comparison against secret `b`
     // to prevent timing side-channel attacks (avoids early return on length mismatch).
     let mut result = (a.len() != b.len()) as u8;
-    for i in 0..b.len() {
+    for (i, &y) in b.iter().enumerate() {
         let x = a.get(i).copied().unwrap_or(0);
-        let y = b[i];
         result |= x ^ y;
     }
     result == 0
