@@ -33,11 +33,12 @@ use std::sync::Arc;
 /// when validating authentication tokens or secret tokens.
 #[must_use]
 pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut result = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
+    // SECURITY: Constant-time byte slice comparison against secret `b`
+    // to prevent timing side-channel attacks (avoids early return on length mismatch).
+    let mut result = (a.len() != b.len()) as u8;
+    for i in 0..b.len() {
+        let x = a.get(i).copied().unwrap_or(0);
+        let y = b[i];
         result |= x ^ y;
     }
     result == 0
@@ -715,5 +716,13 @@ mod tests {
         assert!(!constant_time_eq(b"Bearer token123", b"Bearer token1234"));
         assert!(constant_time_eq(b"", b""));
         assert!(!constant_time_eq(b"", b"a"));
+        assert!(!constant_time_eq(b"a", b""));
+
+        // Test length mismatch of 256 bytes to verify no u8 truncation overflow
+        let secret = vec![b'x'; 256];
+        let longer = vec![b'x'; 512];
+        assert!(constant_time_eq(&secret, &secret));
+        assert!(!constant_time_eq(&longer, &secret));
+        assert!(!constant_time_eq(&secret, &longer));
     }
 }
