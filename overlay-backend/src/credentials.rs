@@ -142,7 +142,27 @@ mod posix_credentials {
     fn write_map(map: &HashMap<String, String>) -> Result<()> {
         let path = credentials_path()?;
         let bytes = serde_json::to_vec_pretty(map)?;
-        fs::write(&path, bytes)?;
+        // SECURITY: Open with mode(0o600) on Unix so credentials.json is created
+        // with restricted permissions atomically, avoiding a race window where
+        // API secrets are stored in a world-readable file.
+        #[cfg(unix)]
+        {
+            use std::fs::OpenOptions;
+            use std::io::Write;
+            use std::os::unix::fs::OpenOptionsExt;
+
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&path)?;
+            file.write_all(&bytes)?;
+        }
+        #[cfg(not(unix))]
+        {
+            fs::write(&path, bytes)?;
+        }
         #[cfg(unix)]
         let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
         Ok(())
@@ -185,5 +205,32 @@ mod tests {
         assert_eq!(SecretSlot::OpenAi.target(), "suflyor/ai/openai/v1");
         assert_eq!(SecretSlot::Anthropic.target(), "suflyor/ai/anthropic/v1");
         assert_ne!(SecretSlot::OpenAi.target(), SecretSlot::Anthropic.target());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn posix_credentials_file_mode_is_secure_on_creation() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("credentials.json");
+        let mut map = std::collections::HashMap::new();
+        map.insert("suflyor/ai/openai/v1".to_string(), "sk-test".to_string());
+        let bytes = serde_json::to_vec_pretty(&map).unwrap();
+
+        use std::fs::OpenOptions;
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&path)
+            .unwrap();
+        file.write_all(&bytes).unwrap();
+
+        let permissions = std::fs::metadata(&path).unwrap().permissions();
+        assert_eq!(permissions.mode() & 0o777, 0o600);
     }
 }
