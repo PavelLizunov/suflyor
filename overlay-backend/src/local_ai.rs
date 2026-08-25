@@ -3505,13 +3505,13 @@ fn pick_llama(assets: &[GhAsset], _gpu: GpuKind) -> Result<LlamaPick> {
                     .find(|a| a.name.starts_with("llama-") && a.name.contains("macos"))
             })
             .ok_or_else(|| anyhow!("no llama macOS build asset"))?;
-        return Ok(LlamaPick {
+        Ok(LlamaPick {
             build_url: mac_asset.browser_download_url.clone(),
             build_size: mac_asset.size,
             cudart_url: None,
             cudart_size: 0,
             version: Some("Metal".to_string()),
-        });
+        })
     }
 
     #[cfg(windows)]
@@ -3556,13 +3556,13 @@ fn pick_llama(assets: &[GhAsset], _gpu: GpuKind) -> Result<LlamaPick> {
             .iter()
             .find(|a| a.name.starts_with("llama-") && a.name.ends_with("-bin-win-cpu-x64.zip"))
             .ok_or_else(|| anyhow!("no llama CPU build asset"))?;
-        return Ok(LlamaPick {
+        Ok(LlamaPick {
             build_url: cpu.browser_download_url.clone(),
             build_size: cpu.size,
             cudart_url: None,
             cudart_size: 0,
             version: None,
-        });
+        })
     }
 
     #[cfg(all(not(windows), not(target_os = "macos")))]
