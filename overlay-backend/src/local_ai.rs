@@ -800,6 +800,10 @@ fn detect_gpu() -> GpuKind {
             GpuKind::None
         }
     }
+    #[cfg(all(not(windows), not(target_os = "macos")))]
+    {
+        GpuKind::None
+    }
 }
 
 /// True if the Vulkan loader (`vulkan-1.dll`) is present in System32 — required for
@@ -1016,6 +1020,10 @@ fn detected_hardware_model_profile(force_cpu: bool) -> HardwareModelProfile {
             "local-ai hardware discovery: raw_vram_gib={raw_vram:?} raw_ram_gib={raw_ram:?}"
         );
         hardware_profile_from_discovery(force_cpu, raw_vram, raw_ram)
+    }
+    #[cfg(all(not(windows), not(target_os = "macos")))]
+    {
+        HardwareModelProfile::Unknown
     }
 }
 
@@ -3497,13 +3505,13 @@ fn pick_llama(assets: &[GhAsset], _gpu: GpuKind) -> Result<LlamaPick> {
                     .find(|a| a.name.starts_with("llama-") && a.name.contains("macos"))
             })
             .ok_or_else(|| anyhow!("no llama macOS build asset"))?;
-        Ok(LlamaPick {
+        return Ok(LlamaPick {
             build_url: mac_asset.browser_download_url.clone(),
             build_size: mac_asset.size,
             cudart_url: None,
             cudart_size: 0,
             version: Some("Metal".to_string()),
-        })
+        });
     }
 
     #[cfg(windows)]
@@ -3548,6 +3556,22 @@ fn pick_llama(assets: &[GhAsset], _gpu: GpuKind) -> Result<LlamaPick> {
             .iter()
             .find(|a| a.name.starts_with("llama-") && a.name.ends_with("-bin-win-cpu-x64.zip"))
             .ok_or_else(|| anyhow!("no llama CPU build asset"))?;
+        return Ok(LlamaPick {
+            build_url: cpu.browser_download_url.clone(),
+            build_size: cpu.size,
+            cudart_url: None,
+            cudart_size: 0,
+            version: None,
+        });
+    }
+
+    #[cfg(all(not(windows), not(target_os = "macos")))]
+    {
+        let cpu = assets
+            .iter()
+            .find(|a| a.name.starts_with("llama-") && a.name.contains("ubuntu"))
+            .or_else(|| assets.iter().find(|a| a.name.starts_with("llama-")))
+            .ok_or_else(|| anyhow!("no llama build asset found"))?;
         Ok(LlamaPick {
             build_url: cpu.browser_download_url.clone(),
             build_size: cpu.size,

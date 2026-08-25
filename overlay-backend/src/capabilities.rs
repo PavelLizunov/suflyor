@@ -71,6 +71,20 @@ pub fn platform_capability(feature: PlatformFeature) -> CapabilityState {
         | PlatformFeature::HermesInstaller
         | PlatformFeature::SelfReplacingUpdater => CapabilityState::Available,
     }
+
+    #[cfg(all(not(windows), not(target_os = "macos")))]
+    match feature {
+        PlatformFeature::ExternalStealth
+        | PlatformFeature::SapiTts
+        | PlatformFeature::GigaamGpu
+        | PlatformFeature::HermesInstaller
+        | PlatformFeature::SelfReplacingUpdater => {
+            CapabilityState::Unsupported(CapabilityReason::NotSupportedOnPlatform)
+        }
+        PlatformFeature::Microphone
+        | PlatformFeature::SystemAudio
+        | PlatformFeature::ScreenCapture => CapabilityState::Available,
+    }
 }
 
 #[cfg(test)]

@@ -121,7 +121,7 @@ mod posix_credentials {
     use std::os::unix::fs::PermissionsExt;
     use std::path::PathBuf;
 
-    fn credentials_path() -> Result<PathBuf> {
+    pub(crate) fn credentials_path() -> Result<PathBuf> {
         let dir = dirs::config_dir()
             .ok_or_else(|| anyhow!("could not resolve user config dir"))?
             .join("suflyor");
@@ -142,9 +142,24 @@ mod posix_credentials {
     fn write_map(map: &HashMap<String, String>) -> Result<()> {
         let path = credentials_path()?;
         let bytes = serde_json::to_vec_pretty(map)?;
-        fs::write(&path, bytes)?;
         #[cfg(unix)]
-        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+        {
+            use std::io::Write;
+            use std::os::unix::fs::OpenOptionsExt;
+            // SECURITY: create file atomically with 0o600 permissions to prevent window of exposure
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&path)?;
+            file.write_all(&bytes)?;
+            let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
+        }
+        #[cfg(not(unix))]
+        {
+            fs::write(&path, bytes)?;
+        }
         Ok(())
     }
 
@@ -185,5 +200,37 @@ mod tests {
         assert_eq!(SecretSlot::OpenAi.target(), "suflyor/ai/openai/v1");
         assert_eq!(SecretSlot::Anthropic.target(), "suflyor/ai/anthropic/v1");
         assert_ne!(SecretSlot::OpenAi.target(), SecretSlot::Anthropic.target());
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn posix_credentials_write_read_delete_and_permissions() {
+        use std::fs;
+
+        // Clean slate test
+        let slot = SecretSlot::OpenAi;
+        delete(slot).unwrap();
+        assert_eq!(read(slot).unwrap(), None);
+
+        // Write secret
+        let test_secret = "sk-test-secret-key-12345";
+        write(slot, test_secret).unwrap();
+
+        // Read secret
+        assert_eq!(read(slot).unwrap(), Some(test_secret.to_string()));
+
+        // Verify file permissions on Unix
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let path = posix_credentials::credentials_path().unwrap();
+            let metadata = fs::metadata(&path).unwrap();
+            let mode = metadata.permissions().mode();
+            assert_eq!(mode & 0o777, 0o600, "credentials.json must have 0600 mode");
+        }
+
+        // Delete secret
+        delete(slot).unwrap();
+        assert_eq!(read(slot).unwrap(), None);
     }
 }
