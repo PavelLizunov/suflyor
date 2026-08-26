@@ -127,11 +127,23 @@ pub async fn check_latest(current_version: &str) -> Result<UpdateInfo> {
 
 /// Allow-list of hosts the installer may be downloaded from. GitHub serves
 /// release assets from github.com (which 302-redirects to CDN hosts).
+/// SECURITY: Validate host boundaries strictly to avoid domain prefix matching bypasses
+/// (e.g. `https://objects.githubusercontent.com.attacker.com/`).
 fn is_trusted_download(url: &str) -> bool {
     let repo_prefix = format!("https://github.com/{REPO}/");
-    url.starts_with(&repo_prefix)
-        || url.starts_with("https://objects.githubusercontent.com/")
-        || url.starts_with("https://release-assets.githubusercontent.com/")
+    if url.starts_with(&repo_prefix) {
+        return true;
+    }
+    if let Ok(parsed) = reqwest::Url::parse(url) {
+        if parsed.scheme() != "https" {
+            return false;
+        }
+        if let Some(host) = parsed.host_str() {
+            return host == "objects.githubusercontent.com"
+                || host == "release-assets.githubusercontent.com";
+        }
+    }
+    false
 }
 
 /// Re-query the latest release and return the expected SHA-256 (lowercase hex)
@@ -268,11 +280,27 @@ mod tests {
         assert!(is_trusted_download(
             "https://github.com/PavelLizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
         ));
+        assert!(is_trusted_download(
+            "https://objects.githubusercontent.com/github-production-release-asset-2345/setup.exe"
+        ));
+        assert!(is_trusted_download(
+            "https://release-assets.githubusercontent.com/github-production-release-asset-2345/setup.exe"
+        ));
         assert!(!is_trusted_download(
             "https://github.com/other/repo/releases/download/v0.2.0/suflyor-slint-setup.exe"
         ));
         assert!(!is_trusted_download("https://evil.example.com/x.exe"));
         assert!(!is_trusted_download("http://github.com/x.exe")); // not https
+                                                                  // Domain boundary / prefix spoofing tests
+        assert!(!is_trusted_download(
+            "https://objects.githubusercontent.com.evil.com/setup.exe"
+        ));
+        assert!(!is_trusted_download(
+            "https://release-assets.githubusercontent.com.evil.com/setup.exe"
+        ));
+        assert!(!is_trusted_download(
+            "http://objects.githubusercontent.com/setup.exe"
+        ));
     }
 
     #[test]
