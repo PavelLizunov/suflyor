@@ -29,15 +29,16 @@ use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-/// Constant-time byte slice comparison to prevent timing side-channel attacks
-/// when validating authentication tokens or secret tokens.
+/// SECURITY: Constant-time byte slice comparison using SHA-256 digests to prevent timing
+/// side-channel attacks when validating authentication tokens. Hashing inputs first
+/// ensures slice length differences are compared over fixed 32-byte digests in constant time.
 #[must_use]
 pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
+    use sha2::{Digest, Sha256};
+    let hash_a = Sha256::digest(a);
+    let hash_b = Sha256::digest(b);
     let mut result = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
+    for (x, y) in hash_a.iter().zip(hash_b.iter()) {
         result |= x ^ y;
     }
     result == 0
