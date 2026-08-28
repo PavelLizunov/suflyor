@@ -127,11 +127,26 @@ pub async fn check_latest(current_version: &str) -> Result<UpdateInfo> {
 
 /// Allow-list of hosts the installer may be downloaded from. GitHub serves
 /// release assets from github.com (which 302-redirects to CDN hosts).
+///
+/// Security: Uses strict URL parsing (`reqwest::Url`) to prevent authority/userinfo
+/// spoofing (e.g. `https://github.com/repo@attacker.com`) or domain prefix tricks.
 fn is_trusted_download(url: &str) -> bool {
-    let repo_prefix = format!("https://github.com/{REPO}/");
-    url.starts_with(&repo_prefix)
-        || url.starts_with("https://objects.githubusercontent.com/")
-        || url.starts_with("https://release-assets.githubusercontent.com/")
+    let Ok(parsed) = reqwest::Url::parse(url) else {
+        return false;
+    };
+    if parsed.scheme() != "https" {
+        return false;
+    }
+    match parsed.host_str() {
+        Some("github.com") => {
+            let required_prefix = format!("/{REPO}/");
+            parsed.path().starts_with(&required_prefix)
+        }
+        Some("objects.githubusercontent.com") | Some("release-assets.githubusercontent.com") => {
+            true
+        }
+        _ => false,
+    }
 }
 
 /// Re-query the latest release and return the expected SHA-256 (lowercase hex)
@@ -268,11 +283,27 @@ mod tests {
         assert!(is_trusted_download(
             "https://github.com/PavelLizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
         ));
+        assert!(is_trusted_download(
+            "https://objects.githubusercontent.com/github-production-release-asset/123/setup.exe"
+        ));
+        assert!(is_trusted_download(
+            "https://release-assets.githubusercontent.com/123/setup.exe"
+        ));
         assert!(!is_trusted_download(
             "https://github.com/other/repo/releases/download/v0.2.0/suflyor-slint-setup.exe"
         ));
         assert!(!is_trusted_download("https://evil.example.com/x.exe"));
         assert!(!is_trusted_download("http://github.com/x.exe")); // not https
+        // Security bypass attempts:
+        assert!(!is_trusted_download(
+            "https://github.com/PavelLizunov/suflyor@attacker.com/setup.exe"
+        ));
+        assert!(!is_trusted_download(
+            "https://objects.githubusercontent.com@attacker.com/setup.exe"
+        ));
+        assert!(!is_trusted_download(
+            "https://objects.githubusercontent.com.attacker.com/setup.exe"
+        ));
     }
 
     #[test]
