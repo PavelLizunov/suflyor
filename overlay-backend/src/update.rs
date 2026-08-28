@@ -294,7 +294,7 @@ mod tests {
         ));
         assert!(!is_trusted_download("https://evil.example.com/x.exe"));
         assert!(!is_trusted_download("http://github.com/x.exe")); // not https
-        // Security bypass attempts:
+                                                                  // Security bypass attempts:
         assert!(!is_trusted_download(
             "https://github.com/PavelLizunov/suflyor@attacker.com/setup.exe"
         ));
