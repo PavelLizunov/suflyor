@@ -22,7 +22,7 @@ use std::io::Write as _;
 #[cfg(target_os = "macos")]
 use std::sync::Arc;
 #[cfg(target_os = "macos")]
-use std::{thread, time::Duration};
+use std::{thread, time::{Duration, Instant}};
 #[cfg(target_os = "macos")]
 use tokio::sync::mpsc;
 
@@ -86,18 +86,16 @@ fn transcript_matches(event: &TranscriptEvent, expected: &str) -> bool {
 }
 
 #[cfg(target_os = "macos")]
-async fn start_live(
-    backend: &SttBackendCfg,
+async fn transcribe_live(
+    audio_tx: &mpsc::Sender<AudioChunk>,
+    transcript_rx: &mut mpsc::Receiver<TranscriptEvent>,
     pcm: &[i16],
     expected: &str,
-) -> Result<(mpsc::Sender<AudioChunk>, mpsc::Receiver<TranscriptEvent>)> {
-    let (audio_tx, audio_rx) = mpsc::channel(4);
-    let health = Arc::new(overlay_backend::health::HealthSignals::default());
-    let mut transcript_rx =
-        overlay_backend::stt::spawn(audio_rx, backend.clone(), None, None, health);
-    let mut elapsed_samples = 0_u64;
+    elapsed_samples: &mut u64,
+) -> Result<Duration> {
+    let started = Instant::now();
     for chunk in pcm.chunks(PCM_CHUNK_SAMPLES) {
-        elapsed_samples = elapsed_samples.saturating_add(chunk.len() as u64);
+        *elapsed_samples = elapsed_samples.saturating_add(chunk.len() as u64);
         audio_tx
             .send(AudioChunk {
                 source: AudioSource::Mic,
@@ -108,7 +106,7 @@ async fn start_live(
             .context("send probe speech")?;
     }
     for _ in 0..SILENCE_CHUNKS {
-        elapsed_samples = elapsed_samples.saturating_add(PCM_CHUNK_SAMPLES as u64);
+        *elapsed_samples = elapsed_samples.saturating_add(PCM_CHUNK_SAMPLES as u64);
         audio_tx
             .send(AudioChunk {
                 source: AudioSource::Mic,
@@ -125,7 +123,33 @@ async fn start_live(
     if !transcript_matches(&event, expected) {
         bail!("known-answer substring was not recognized by live STT");
     }
-    Ok((audio_tx, transcript_rx))
+    Ok(started.elapsed())
+}
+
+#[cfg(target_os = "macos")]
+async fn start_live(
+    backend: &SttBackendCfg,
+    pcm: &[i16],
+    expected: &str,
+) -> Result<(
+    mpsc::Sender<AudioChunk>,
+    mpsc::Receiver<TranscriptEvent>,
+    u64,
+)> {
+    let (audio_tx, audio_rx) = mpsc::channel(4);
+    let health = Arc::new(overlay_backend::health::HealthSignals::default());
+    let mut transcript_rx =
+        overlay_backend::stt::spawn(audio_rx, backend.clone(), None, None, health);
+    let mut elapsed_samples = 0_u64;
+    let _ = transcribe_live(
+        &audio_tx,
+        &mut transcript_rx,
+        pcm,
+        expected,
+        &mut elapsed_samples,
+    )
+    .await?;
+    Ok((audio_tx, transcript_rx, elapsed_samples))
 }
 
 #[cfg(target_os = "macos")]
@@ -181,8 +205,59 @@ async fn main() -> Result<()> {
     }
     phase("adhoc_loaded").await?;
 
-    let (audio_tx, transcript_rx) = start_live(&backend, &pcm, &expected).await?;
+    let (audio_tx, mut transcript_rx, mut elapsed_samples) =
+        start_live(&backend, &pcm, &expected).await?;
     phase("adhoc_plus_live").await?;
+
+    let sequential_live = transcribe_live(
+        &audio_tx,
+        &mut transcript_rx,
+        &pcm,
+        &expected,
+        &mut elapsed_samples,
+    )
+    .await?;
+    let sequential_adhoc_started = Instant::now();
+    let sequential_adhoc_text =
+        overlay_backend::stt::transcribe_once(&backend, &pcm, None, None).await?;
+    let sequential_adhoc = sequential_adhoc_started.elapsed();
+    if !sequential_adhoc_text
+        .to_lowercase()
+        .contains(&expected.to_lowercase())
+    {
+        bail!("known-answer substring was not recognized by sequential one-shot STT");
+    }
+
+    let pair_started = Instant::now();
+    let concurrent_live = transcribe_live(
+        &audio_tx,
+        &mut transcript_rx,
+        &pcm,
+        &expected,
+        &mut elapsed_samples,
+    );
+    let concurrent_adhoc = async {
+        let started = Instant::now();
+        let text = overlay_backend::stt::transcribe_once(&backend, &pcm, None, None).await?;
+        if !text.to_lowercase().contains(&expected.to_lowercase()) {
+            bail!("known-answer substring was not recognized by concurrent one-shot STT");
+        }
+        Ok::<Duration, anyhow::Error>(started.elapsed())
+    };
+    let (concurrent_live, concurrent_adhoc) = tokio::join!(concurrent_live, concurrent_adhoc);
+    let concurrent_live = concurrent_live?;
+    let concurrent_adhoc = concurrent_adhoc?;
+    let pair_wall = pair_started.elapsed();
+    println!(
+        "timing sequential_live_ms={:.3} sequential_adhoc_ms={:.3} \
+         concurrent_live_ms={:.3} concurrent_adhoc_ms={:.3} pair_wall_ms={:.3}",
+        sequential_live.as_secs_f64() * 1000.0,
+        sequential_adhoc.as_secs_f64() * 1000.0,
+        concurrent_live.as_secs_f64() * 1000.0,
+        concurrent_adhoc.as_secs_f64() * 1000.0,
+        pair_wall.as_secs_f64() * 1000.0,
+    );
+    phase("after_concurrent").await?;
     stop_live(audio_tx, transcript_rx).await?;
     phase("adhoc_after_live_stop").await?;
 
@@ -190,7 +265,7 @@ async fn main() -> Result<()> {
     phase("cache_reset").await?;
 
     for cycle in 1..=LIVE_CYCLES {
-        let (audio_tx, transcript_rx) = start_live(&backend, &pcm, &expected).await?;
+        let (audio_tx, transcript_rx, _) = start_live(&backend, &pcm, &expected).await?;
         stop_live(audio_tx, transcript_rx).await?;
         phase(&format!("live_cycle_{cycle}_stopped")).await?;
     }
