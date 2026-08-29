@@ -79,9 +79,7 @@ async fn main() -> Result<()> {
     overlay_backend::stt::configure_gigaam_accelerator(use_coreml);
     overlay_backend::stt::reset_gigaam_cache();
 
-    println!(
-        "probe accelerator={accelerator} audio_seconds={audio_seconds:.3} repeats={repeats}"
-    );
+    println!("probe accelerator={accelerator} audio_seconds={audio_seconds:.3} repeats={repeats}");
     for run in 1..=repeats {
         let started = Instant::now();
         let text = overlay_backend::stt::transcribe_once(&backend, &pcm, None, None).await?;
