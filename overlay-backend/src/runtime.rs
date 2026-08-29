@@ -51,11 +51,12 @@ pub use summary_plan::{
     truncate_transcript_middle,
 };
 use summary_plan::{
-    managed_summary_context, message_text_chars, partial_summary_prompt, prompt_fits_context,
-    summary_request_fits, SUMMARY_CONTEXT_RESERVE_TOKENS, SUMMARY_INPUT_BUDGET_CLOUD_CHARS,
-    SUMMARY_INPUT_BUDGET_LOCAL_CHARS, SUMMARY_MAX_TOKENS, SUMMARY_MIN_LINES,
+    managed_summary_context, partial_summary_prompt, summary_request_fits,
+    SUMMARY_INPUT_BUDGET_CLOUD_CHARS, SUMMARY_INPUT_BUDGET_LOCAL_CHARS, SUMMARY_MAX_TOKENS,
     SUMMARY_PARTIAL_MAX_TOKENS,
 };
+#[cfg(test)]
+use summary_plan::prompt_fits_context;
 pub use trigger_detect::{
     build_auto_tile_prompts, detect_trigger, looks_like_real_speech, strip_filler_prefix, Trigger,
 };

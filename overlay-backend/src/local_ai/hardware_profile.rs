@@ -1,3 +1,4 @@
+#[cfg(windows)]
 use std::path::PathBuf;
 
 use super::{run_capture, GIB};
