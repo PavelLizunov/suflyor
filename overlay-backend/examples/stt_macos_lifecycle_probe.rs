@@ -22,18 +22,26 @@ use std::io::Write as _;
 #[cfg(target_os = "macos")]
 use std::sync::Arc;
 #[cfg(target_os = "macos")]
-use std::time::Duration;
+use std::{thread, time::Duration};
 #[cfg(target_os = "macos")]
 use tokio::sync::mpsc;
 
 #[cfg(target_os = "macos")]
 const LIVE_CYCLES: usize = 5;
 #[cfg(target_os = "macos")]
+const PCM_CHUNK_SAMPLES: usize = 3200; // 200 ms at 16 kHz, matching production capture.
+#[cfg(target_os = "macos")]
+const SILENCE_CHUNKS: usize = 4; // 800 ms, matching the production VAD hang.
+#[cfg(target_os = "macos")]
 const PHASE_SETTLE: Duration = Duration::from_millis(1200);
+#[cfg(target_os = "macos")]
+const MODEL_RELEASE_SETTLE: Duration = Duration::from_secs(1);
 #[cfg(target_os = "macos")]
 const TRANSCRIPT_TIMEOUT: Duration = Duration::from_secs(30);
 #[cfg(target_os = "macos")]
 const PIPELINE_STOP_TIMEOUT: Duration = Duration::from_secs(10);
+#[cfg(target_os = "macos")]
+const PROCESS_TIMEOUT: Duration = Duration::from_secs(180);
 
 #[cfg(target_os = "macos")]
 fn usage() -> &'static str {
@@ -64,7 +72,7 @@ fn read_pcm(path: &str) -> Result<Vec<i16>> {
 #[cfg(target_os = "macos")]
 async fn phase(name: &str) -> Result<()> {
     println!(
-        "phase={name} active_accelerator={:?}",
+        "phase={name} accelerator_preference={:?}",
         transcribe_rs::get_ort_accelerator()
     );
     std::io::stdout().flush().context("flush phase marker")?;
@@ -87,23 +95,29 @@ async fn start_live(
     let health = Arc::new(overlay_backend::health::HealthSignals::default());
     let mut transcript_rx =
         overlay_backend::stt::spawn(audio_rx, backend.clone(), None, None, health);
-    let speech_ms = (pcm.len() as u64 * 1000) / 16_000;
-    audio_tx
-        .send(AudioChunk {
-            source: AudioSource::Mic,
-            pcm_i16: pcm.to_vec(),
-            timestamp_ms: speech_ms,
-        })
-        .await
-        .context("send probe speech")?;
-    audio_tx
-        .send(AudioChunk {
-            source: AudioSource::Mic,
-            pcm_i16: vec![0; 16_000],
-            timestamp_ms: speech_ms + 1000,
-        })
-        .await
-        .context("send probe silence")?;
+    let mut elapsed_samples = 0_u64;
+    for chunk in pcm.chunks(PCM_CHUNK_SAMPLES) {
+        elapsed_samples = elapsed_samples.saturating_add(chunk.len() as u64);
+        audio_tx
+            .send(AudioChunk {
+                source: AudioSource::Mic,
+                pcm_i16: chunk.to_vec(),
+                timestamp_ms: elapsed_samples.saturating_mul(1000) / 16_000,
+            })
+            .await
+            .context("send probe speech")?;
+    }
+    for _ in 0..SILENCE_CHUNKS {
+        elapsed_samples = elapsed_samples.saturating_add(PCM_CHUNK_SAMPLES as u64);
+        audio_tx
+            .send(AudioChunk {
+                source: AudioSource::Mic,
+                pcm_i16: vec![0; PCM_CHUNK_SAMPLES],
+                timestamp_ms: elapsed_samples.saturating_mul(1000) / 16_000,
+            })
+            .await
+            .context("send probe silence")?;
+    }
     let event = tokio::time::timeout(TRANSCRIPT_TIMEOUT, transcript_rx.recv())
         .await
         .context("live transcript timeout")?
@@ -125,12 +139,21 @@ async fn stop_live(
     })
     .await
     .context("live STT pipeline did not stop")?;
+    // `stt::spawn` does not expose its JoinHandle. Channel closure means every
+    // transcript sender is gone; this bounded grace period lets the completed
+    // task finish dropping its model before the supervisor samples RSS.
+    tokio::time::sleep(MODEL_RELEASE_SETTLE).await;
     Ok(())
 }
 
 #[cfg(target_os = "macos")]
 #[tokio::main]
 async fn main() -> Result<()> {
+    let _watchdog = thread::spawn(|| {
+        thread::sleep(PROCESS_TIMEOUT);
+        eprintln!("STT lifecycle probe exceeded its process timeout");
+        std::process::abort();
+    });
     let mut args = std::env::args().skip(1);
     let accelerator = args.next().context(usage())?;
     let model_dir = args.next().context(usage())?;

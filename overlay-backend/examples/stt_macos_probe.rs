@@ -1,8 +1,8 @@
 //! Bounded macOS GigaAM timing probe.
 //!
 //! It exercises the production `stt::transcribe_once` path with a caller-owned
-//! 16 kHz mono PCM WAV and reports only timing, the active accelerator, and a
-//! known-answer match. Pass a non-sensitive expected substring to prove the
+//! 16 kHz mono PCM WAV and reports only timing, the post-load accelerator
+//! preference, and a known-answer match. Pass a non-sensitive substring to prove the
 //! smoke without printing transcript contents.
 //!
 //! Usage:
@@ -86,13 +86,13 @@ async fn main() -> Result<()> {
         let elapsed = started.elapsed();
         let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
         let rtf = elapsed.as_secs_f64() / audio_seconds;
-        let active_accelerator = transcribe_rs::get_ort_accelerator();
+        let accelerator_preference = transcribe_rs::get_ort_accelerator();
         let text = match result {
             Ok(text) => text,
             Err(error) => {
                 println!(
                     "run={run} phase={} elapsed_ms={elapsed_ms:.3} rtf={rtf:.4} \
-                     active_accelerator={active_accelerator:?} status=error",
+                     accelerator_preference={accelerator_preference:?} status=error",
                     if run == 1 { "cold" } else { "warm" },
                 );
                 return Err(error).context("STT probe transcription failed");
@@ -101,7 +101,7 @@ async fn main() -> Result<()> {
         let expect_match = text.to_lowercase().contains(&expected.to_lowercase());
         println!(
             "run={run} phase={} elapsed_ms={elapsed_ms:.3} rtf={rtf:.4} \
-             active_accelerator={active_accelerator:?} expect_match={expect_match}",
+             accelerator_preference={accelerator_preference:?} expect_match={expect_match}",
             if run == 1 { "cold" } else { "warm" },
         );
         if !expect_match {
