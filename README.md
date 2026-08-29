@@ -33,7 +33,8 @@ The `master` branch may contain unreleased work.
   pipeline. The standalone PowerShell script installs the lightweight 4B
   profile.
 - **Speech-to-text.** Cloud (Groq Whisper), local whisper.cpp server, or
-  GigaAM-v3 running in-process (CPU or DirectML GPU). Groq and whisper.cpp
+  GigaAM-v3 running in-process. DirectML remains the Windows default; macOS
+  defaults to CPU, with Core ML available as an opt-in. Groq and whisper.cpp
   support mixed Russian + English; GigaAM is the Russian specialist.
 - **Transparent overlay bar.** Always-on-top HUD showing session status,
   live transcript, mic/system-audio toggles, timer, and action chips.

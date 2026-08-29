@@ -47,27 +47,29 @@ fn hide_action_present_in_both_bar_layouts() {
 fn tray_actions_route_through_existing_bar_callbacks() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let host = read(root, "src/bin/overlay_host_windows.rs");
+    let bar_tray = read(root, "src/bin/overlay_host/bar_tray.rs");
+    assert!(host.contains("#[path = \"overlay_host/bar_tray.rs\"]"));
 
     // Session actions must reuse the bar's own callbacks (single lifecycle
     // implementation — the tray must never start/stop sessions itself).
     assert!(
-        host.contains("o.invoke_pause_toggle_clicked();"),
+        bar_tray.contains("o.invoke_pause_toggle_clicked();"),
         "tray Pause/Resume must invoke the bar's pause callback"
     );
     assert!(
-        host.contains("o.invoke_timer_toggle_clicked();"),
+        bar_tray.contains("o.invoke_timer_toggle_clicked();"),
         "tray Stop must invoke the bar's timer-toggle callback"
     );
 
     // Stop must be guarded by the live session flag (the toggle callback
     // would otherwise START a session from the tray).
-    let dispatch_start = host
+    let dispatch_start = bar_tray
         .find("fn tray_action_dispatch(")
         .expect("tray dispatch helper");
-    let dispatch_end = host
+    let dispatch_end = bar_tray
         .find("fn apply_overlay_hwnd(")
         .expect("helper after dispatch");
-    let dispatch = &host[dispatch_start..dispatch_end];
+    let dispatch = &bar_tray[dispatch_start..dispatch_end];
     assert!(
         dispatch.matches("s.timer_active").count() >= 2,
         "Pause/Resume and Stop both check timer_active before invoking"
@@ -86,39 +88,41 @@ fn tray_actions_route_through_existing_bar_callbacks() {
 fn startup_is_always_visible_and_hide_is_explicit_only() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let host = read(root, "src/bin/overlay_host_windows.rs");
+    let bar_tray = read(root, "src/bin/overlay_host/bar_tray.rs");
+    let implementation = format!("{host}\n{bar_tray}");
     assert!(
-        host.contains("static BAR_TRAY_HIDDEN: AtomicBool = AtomicBool::new(false);"),
+        implementation.contains("static BAR_TRAY_HIDDEN: AtomicBool = AtomicBool::new(false);"),
         "the hidden flag must start false — every startup is visible"
     );
     assert!(
-        host.contains("if TRAY_AVAILABLE.load(Ordering::Relaxed)"),
+        implementation.contains("if TRAY_AVAILABLE.load(Ordering::Relaxed)"),
         "the bar must not hide when Windows rejected the only restore surface"
     );
     assert!(
-        host.contains("o.set_tray_available(available);"),
+        implementation.contains("o.set_tray_available(available);"),
         "the tray callback must keep the hide-chip availability current"
     );
     assert!(
-        host.contains("if !available && BAR_TRAY_HIDDEN.load(Ordering::Relaxed)"),
+        implementation.contains("if !available && BAR_TRAY_HIDDEN.load(Ordering::Relaxed)"),
         "losing the tray icon while hidden must restore the bar"
     );
     assert!(
-        host.contains("restore_bar_from_tray(&weak_for_availability);"),
+        implementation.contains("restore_bar_from_tray(&weak_for_availability);"),
         "tray-loss recovery must reuse the normal restore path"
     );
     assert_eq!(
-        host.matches("BAR_TRAY_HIDDEN.store(true").count(),
+        implementation.matches("BAR_TRAY_HIDDEN.store(true").count(),
         1,
         "exactly ONE path hides the bar (hide_bar_to_tray)"
     );
     assert_eq!(
-        host.matches("fn hide_bar_to_tray(").count(),
+        implementation.matches("fn hide_bar_to_tray(").count(),
         1,
         "single hide helper"
     );
     // Chip handler + tray dispatch are the only hide callers.
     assert_eq!(
-        host.matches("hide_bar_to_tray(").count(),
+        implementation.matches("hide_bar_to_tray(").count(),
         3, // definition + bar chip handler + tray ShowHide dispatch
         "hide is reachable only from the explicit chip and the tray"
     );
@@ -128,15 +132,16 @@ fn startup_is_always_visible_and_hide_is_explicit_only() {
 fn restore_keeps_compact_mode_and_icon_lifecycle_is_clean() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let host = read(root, "src/bin/overlay_host_windows.rs");
+    let bar_tray = read(root, "src/bin/overlay_host/bar_tray.rs");
 
     // Restore must not resize / re-compact the bar.
-    let restore_start = host
+    let restore_start = bar_tray
         .find("fn restore_bar_from_tray(")
         .expect("restore helper");
-    let restore_end = host
+    let restore_end = bar_tray
         .find("fn tray_action_dispatch(")
         .expect("helper after restore");
-    let restore = &host[restore_start..restore_end];
+    let restore = &bar_tray[restore_start..restore_end];
     assert!(
         !restore.contains("apply_bar_size"),
         "restore must not touch the compact sizing"
@@ -267,19 +272,19 @@ fn tray_module_never_persists_state() {
 #[test]
 fn every_non_open_tray_action_closes_the_styled_menu_first() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let host = read(root, "src/bin/overlay_host_windows.rs");
-    let start = host
+    let bar_tray = read(root, "src/bin/overlay_host/bar_tray.rs");
+    let start = bar_tray
         .find("fn tray_action_dispatch(")
         .expect("tray dispatch helper");
-    let end = host[start..]
+    let end = bar_tray[start..]
         .find("fn apply_overlay_hwnd(")
         .map(|offset| start + offset)
         .expect("helper after dispatch");
-    let dispatch = &host[start..end];
+    let dispatch = &bar_tray[start..end];
     assert!(dispatch.contains("if !matches!(action, TrayAction::OpenMenu { .. })"));
     assert!(dispatch.contains("dismiss_tray_menu(menu.as_ref(), focus_armed.as_ref());"));
     assert!(
-        host.contains("slint_replay::tray::return_focus();"),
+        bar_tray.contains("slint_replay::tray::return_focus();"),
         "dismissal must complete the notification-area focus lifecycle"
     );
 }
@@ -287,15 +292,15 @@ fn every_non_open_tray_action_closes_the_styled_menu_first() {
 #[test]
 fn themed_menu_stays_above_and_clear_of_the_taskbar() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let host = read(root, "src/bin/overlay_host_windows.rs");
+    let bar_tray = read(root, "src/bin/overlay_host/bar_tray.rs");
     let menu = read(root, "ui/tray_menu.slint");
     assert!(menu.contains("export component TrayMenuWindow inherits Window"));
     assert!(menu.contains("always-on-top: true;"));
     assert!(menu.lines().any(|line| line.trim() == "width: 196px;"));
     assert!(menu.lines().any(|line| line.trim() == "height: 136px;"));
-    assert!(host.contains("work_area_for_point(anchor_x, anchor_y)"));
-    assert!(host.contains("set_always_on_top(hwnd, true)"));
-    assert!(host.contains("set_skip_taskbar(hwnd, true)"));
+    assert!(bar_tray.contains("work_area_for_point(anchor_x, anchor_y)"));
+    assert!(bar_tray.contains("set_always_on_top(hwnd, true)"));
+    assert!(bar_tray.contains("set_skip_taskbar(hwnd, true)"));
 }
 
 #[test]

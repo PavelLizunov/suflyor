@@ -1233,10 +1233,27 @@ fn stt_provider_defaults_from_partial_json() {
     assert_eq!(cfg.stt_is_local(), cfg!(target_os = "macos"));
     assert!(cfg.stt_gigaam_dir.ends_with("gigaam-v3"));
     assert!(!cfg.ai_local_thinking);
-    // GigaAM GPU (DirectML) is on by default; old configs opt in on upgrade.
-    assert!(cfg.stt_gigaam_gpu);
+    // CoreML is opt-in on macOS; DirectML remains the Windows default.
+    assert_eq!(cfg.stt_gigaam_gpu, !cfg!(target_os = "macos"));
     // Colour scheme defaults to 0 (Glacier) for configs predating the field.
     assert_eq!(cfg.color_scheme, 0);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_migrates_the_old_coreml_default_once() {
+    let mut cfg = Config::defaults();
+    cfg.config_version = 1;
+    cfg.stt_gigaam_gpu = true;
+
+    assert!(migrate_macos_gigaam_cpu_default(&mut cfg));
+    assert!(!cfg.stt_gigaam_gpu);
+    assert!(!migrate_macos_gigaam_cpu_default(&mut cfg));
+
+    cfg.config_version = CURRENT_CONFIG_VERSION;
+    cfg.stt_gigaam_gpu = true;
+    assert!(!migrate_macos_gigaam_cpu_default(&mut cfg));
+    assert!(cfg.stt_gigaam_gpu);
 }
 
 #[cfg(target_os = "macos")]

@@ -165,6 +165,7 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
                     let mut c = cfg_t.write();
                     c.stt_provider = "gigaam".into();
                     c.stt_gigaam_dir = result.stt_gigaam_dir.clone();
+                    overlay_backend::stt::reset_gigaam_cache();
                     overlay_backend::config::save(&c)?;
                     Ok(result.stt_gigaam_dir)
                 });
@@ -193,9 +194,8 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
             let mut c = cfg_c.write();
             c.stt_gigaam_gpu = on;
             let _ = overlay_backend::config::save(&c);
-            // Apply immediately: update the global ORT accelerator + drop the
-            // cached model so the next transcription reloads on the new backend.
-            // (The live session pipeline reloads its own copy next session.)
+            // Apply immediately for the next model load. An active live session
+            // keeps its current shared handle until that session stops.
             overlay_backend::stt::configure_gigaam_accelerator(on);
             overlay_backend::stt::reset_gigaam_cache();
         });
@@ -252,6 +252,7 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
                     }
                 }
             }
+            overlay_backend::stt::reset_gigaam_cache();
             if let Err(e) = overlay_backend::config::save(&c) {
                 eprintln!("[overlay-host] stt_provider save failed: {e:#}");
                 return;
@@ -304,6 +305,7 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
             let trimmed = v.trim().to_string();
             let mut c = cfg_c.write();
             c.stt_gigaam_dir = trimmed.clone();
+            overlay_backend::stt::reset_gigaam_cache();
             if let Err(e) = overlay_backend::config::save(&c) {
                 eprintln!("[overlay-host] stt_gigaam_dir save failed: {e:#}");
                 return;

@@ -1,194 +1,178 @@
-# suflyor (overlay-mvp) — agent instructions
+# Suflyor — DSH agent instructions
 
-Windows-only AI-interview overlay. **Pure Rust + Slint 1.17** (no Node, no web
-engine). Read this file fully before editing; the checks below define "done".
+Suflyor is a native meeting/interview assistant built with Rust and Slint. The
+production code supports Windows and an active macOS port; Linux is not a
+product target. This repository has five standalone crates and no root Cargo
+workspace.
 
-## Project map (five standalone crates, NO root workspace)
+This file is the repository-wide contract for agents working through DeepSeek
+Harness (DSH). System, developer, direct user, and global DSH instructions
+remain higher priority. Within repository instructions, more specific
+`AGENTS.md` files apply inside their directories and the nearest file wins.
 
-- `slint-experiment/` — the `overlay-host` binary. UI in `ui/*.slint`
-  (compiled in via build.rs). Host logic is the ~25-module DIRECTORY
-  `src/bin/overlay_host/` (settings_*, tile_*, hotkeys, diagnostics, …) —
-  grep the directory, not just `overlay_host.rs` (thin entrypoint).
-- `overlay-backend/` — no-UI shared crate (ai, audio, bridge, config, memory,
-  persistence, stt, tts, teratts_install, hermes_install, …). Most unit tests
-  live here.
-- `suflyor-tts/` — Piper read-aloud + diarization SIDECAR exe. Links
-  sherpa-onnx ONLY and MUST stay a separate process (two onnxruntimes crash
-  in one binary). Never merge it into overlay-backend. Diarization ALWAYS
-  stays in this sidecar.
-- `suflyor-teratts/` — experimental TeraTTSv2 read-aloud SIDECAR exe (RC17).
-  Links ONNX Runtime through `ort` ONLY; same process-isolation rule as
-  suflyor-tts. Never add a second ONNX Runtime to suflyor-tts instead. Its
-  ~370 MB model is pinned in `suflyor-teratts/manifest/teratts-v2.json` and
-  downloads on demand — NEVER bundle weights in NSIS; see
-  `suflyor-teratts/NOTICE.md` for the upstream licensing release gate.
-- `suflyor-wsola/` — tiny WSOLA time-stretch helper used by the transcript
-  player.
+## DSH is the control plane
 
-Version lives in BOTH `slint-experiment/Cargo.toml` and
-`scripts/slint-installer.nsi` (`PRODUCT_VERSION`) — keep in sync.
-Docs/plans: `docs/goal-*.md` (task charters), `docs/retest-*.html` (tester
-acceptance checklists), `docs/memory-architecture.md`. CLAUDE.md is the
-Claude-Code twin of this file — same rules, different tooling notes.
+- Development is orchestrated from DSH on `harness-test`. Use DSH tools for
+  repository inspection, editing, planning, delegation, and evidence capture.
+- Do not turn `harness-test` into a Windows/macOS builder and do not install
+  platform SDKs there. Native compilation, tests, installers, and live UI QA run
+  on homelab workers.
+- Before any homelab, remote-worker, Tailscale, VM, build, or recovery action,
+  load and follow the global `homelab` skill. The canonical infrastructure docs
+  live outside this repository in `/var/lib/dsh/Project/homelab-infra-docs/`.
+- Use trusted SSH aliases, not embedded IP addresses:
+  - `windows-worker` / `windows-brat`: Windows Rust builds, native gate,
+    installer, Windows runtime and Slint MCP QA.
+  - `mac-worker` / `mac-mini`: macOS Rust/Swift builds, package checks, and
+    physical macOS QA.
+  - `linux-worker` / `debian-xfce`: Git/Python-only support tasks. It currently
+    has no Rust toolchain; do not provision one as part of an unrelated task.
+- Remote builds use an immutable candidate commit: commit on the task branch,
+  make the worker fetch and check out that exact SHA in its own clean checkout,
+  then record the SHA, command, exit code, and artifact/evidence path. Never
+  build from a shared mutable source directory or claim that a different SHA
+  verifies the current change.
+- Before Windows work, read `docs/winbrat-recovery.md`. A lost SSH session is not
+  proof that a job failed: inspect its task, log, and exit marker before retrying.
+- Read-only documentation checks such as `git diff --cached --check` may run on
+  the DSH control plane. Cargo, native packaging, and live application checks do
+  not.
 
-## OpenCode Go worker
+## Start every task here
 
-- OpenCode Go is available for small, bounded tasks through model
-  `opencode-go/deepseek-v4-flash`: mechanical inspection, focused test-gap
-  review, documentation, or a tiny isolated implementation.
-- Invoke it non-interactively with `opencode run -m
-  opencode-go/deepseek-v4-flash <prompt>`. Keep it read-only in a shared
-  checkout; use `--auto` only inside a dedicated task worktree with an exact
-  scope. It must not read secrets, publish, push, tag, or act outside the
-  checkout. The primary agent validates its result and owns Git/GitHub work.
-- Qwen remains the first-class worker for non-trivial implementation and
-  investigation; OpenCode Go is the faster lane for genuinely simple work.
+1. Run `git status --short --branch` and inspect recent `git log`; do not trust a
+   handoff document over the actual checkout.
+2. Read this file and every nested `AGENTS.md` governing the files to change.
+3. Read a referenced `docs/goal-*.md` charter when one exists. Treat
+   `docs/CODEX_HANDOFF.md` as an in-flight handoff for the branch/worktree it
+   names, not as a universal description of `master`.
+4. Keep scope narrow. Do not overwrite, stage, revert, or clean unrelated work.
+5. For a capability, dependency, integration, reusable utility, or architecture,
+   use the global `search-first` discipline. For non-trivial implementation,
+   use the global `sdd` workflow and wait for approval of its Micro-Spec.
+6. Use `gemini-swarm` for substantial independent mechanical assignments; the
+   lead agent owns decomposition, integration, architectural decisions, and
+   final acceptance.
 
-## Build / test / lint (Windows; cargo at `~/.cargo/bin/cargo.exe`)
+## Project map
 
-Use the smallest gate that matches the diff. The agent-agnostic classifier is:
-`powershell -NoProfile -ExecutionPolicy Bypass -File
-scripts/git-gate-native.ps1 manual`. Git hooks call the same script.
+- `slint-experiment/`: `overlay-host`, Slint UI, host orchestration, native
+  Windows/macOS adapters, translations, assets, and integration guards.
+- `overlay-backend/`: UI-free domain crate: AI, audio, STT, config, journal,
+  SQLite persistence, KB/RAG, personal memory, installers, and sidecar control.
+- `suflyor-tts/`: Piper read-aloud and diarization sidecar. Links sherpa-onnx
+  only and remains a separate process.
+- `suflyor-teratts/`: experimental TeraTTSv2 sidecar. Links ONNX Runtime through
+  `ort` only; model assets download on demand and are not bundled.
+- `suflyor-wsola/`: pitch-preserving time-stretch helper used by playback.
+- `scripts/`: gate, build, installer, release, maintenance, and QA tooling.
+- `.github/`: CI, security, packaging, and release-document automation.
+- `.agents/skills/`: project-owned DSH procedures. Load a matching skill rather
+  than copying its procedure into task prompts.
+- `docs/`: current architecture and operational docs plus historical plans and
+  evidence. Read `docs/AGENTS.md` before changing them.
+- `experiments/`: non-production feasibility spikes; never import them into a
+  production crate.
 
-- **Docs gate:** documentation, plans, and other non-executable text files. Run
-  diff/whitespace validation; do not build Rust.
-- **Targeted gate:** one crate or one isolated UI surface. Run fmt, clippy, and
-  tests only for the affected crate. A `.slint`/asset/translation-only change
-  instead gets the overlay compile plus the static Slint/i18n guard tests and
-  the mandatory live visual gate below.
-- **Full gate:** changes spanning multiple crates; dependencies/lockfiles;
-  build, installer, CI, or gate infrastructure; audio routing/recording, data
-  persistence/recovery, credentials/security, networking/update paths, or
-  similarly cross-cutting runtime work. Stable releases always require it.
-  Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci.ps1`.
-- A version-only prerelease bump does not by itself upgrade an otherwise
-  targeted change to the full gate. Agents may force it with
-  `scripts/git-gate-native.ps1 manual -Full` when risk is uncertain.
-- Quick compile check: `cargo check --bin overlay-host --manifest-path
-  slint-experiment/Cargo.toml`
-- Single-crate tests: `cargo test --manifest-path overlay-backend/Cargo.toml`
-- Always `set CARGO_INCREMENTAL=0` (disk-bloat policy; the gate scripts do).
-- Before a release build, kill running instances:
-  `taskkill /IM overlay-host.exe /F` + `taskkill /IM suflyor-tts.exe /F`.
-- Release build + installer (rarely needed by agents):
-  `powershell -File scripts/build-slint-release.ps1 -Installer`.
+The thin binary entrypoint is `slint-experiment/src/bin/overlay_host.rs`. The
+canonical shared Windows/macOS runtime root is
+`slint-experiment/src/bin/overlay_host_windows.rs`; host subsystems live in the
+`slint-experiment/src/bin/overlay_host/` directory.
 
-## Winbrat remote work and recovery
+## Sources of truth
 
-Before starting or resuming any Winbrat build, test, installer, or live UI
-task, read [`docs/winbrat-recovery.md`](docs/winbrat-recovery.md). A lost SSH
-connection does not mean a scheduled build failed: diagnose Tailscale and port
-22 separately, inspect the recorded task/log/exit marker before restarting,
-and recover the agent-managed Winbrat through SSH, WinRM, or its verified
-console. Never mistake the owner's workstation for the test VM or run/build
-Suflyor there as a fallback.
+For factual claims about the implementation, use the narrowest executable
+source before prose; code does not override higher-priority instructions:
 
-## Mandatory Slint MCP visual gate
+1. Current code, manifests, migrations, tests, and gate scripts.
+2. This root file and the nearest nested `AGENTS.md`.
+3. Active task charter and exact-SHA verification evidence.
+4. Architecture/status documents explicitly marked current.
+5. Historical plans, audits, and release evidence only for provenance.
 
-- After any `.slint` edit or Rust change that affects visible UI, use the
-  project skill `.agents/skills/slint-mcp-ui-audit/SKILL.md` before calling the
-  task done, committing it, or handing a build to the user.
-- Every visual fix must keep matching **before and after** screenshots of the
-  same surface, size, theme, language, and UI state at a stable artifact path;
-  link both from the PR. An after-only screenshot is not acceptance evidence.
-- A green compile/test gate is not visual verification. The embedded Slint MCP
-  server is compiled in **only** by the `ui-mcp` Cargo feature; setting the
-  environment variables on a normal build does nothing. You **MUST** build the
-  audited binary with `cargo build --locked --bin overlay-host --features
-  ui-mcp --manifest-path slint-experiment/Cargo.toml`, then launch **that**
-  binary with `SLINT_EMIT_DEBUG_INFO=1` and `SLINT_MCP_PORT=9123`, inspect
-  live screenshots through the embedded Slint MCP server, and report the
-  surfaces checked.
-- A change to a shared Settings primitive or layout requires screenshots of all
-  16 Settings tabs at 720x600. Never rely on computer-use screenshots for
-  transparent-window colours.
-- After the page pass, run the project skill's complete 13-shortcut global
-  hotkey smoke once against the same binary. Registration logs alone do not
-  prove dispatch; check the distinct result/log for every shortcut.
+`CLAUDE.md` is legacy tool-specific context. It may contain useful history, but
+it is not the DSH operating contract and must not override current code,
+`AGENTS.md`, or direct instructions. If a lasting rule changes, update the
+relevant `AGENTS.md`; do not maintain two competing copies.
 
-Git hooks: run `git config core.hooksPath .githooks` once after clone. The
-pre-commit and pre-push hooks enforce the selected docs/targeted/full tier.
-Do not bypass them except when the required cargo gate is deliberately moved
-to Winbrat or required GitHub CI; record that evidence before merging.
+## Verification routing
 
-## Hard rules
+The diff classifier is `scripts/git-gate-native.ps1`. Run it on
+`windows-worker` against the exact candidate SHA for Windows-targeted work.
 
-- **RC prereleases have standing owner authorization:** after the selected gate,
-  release build, and required UI evidence are green, an agent may publish the
-  next RC without asking again. A stable GitHub release or stable tag still
-  requires explicit owner authorization for that version. Direct pushes to
-  `master` are forbidden; use a `codex/<task>` branch + PR.
-- **Work on a branch `codex/<short-task-name>`**, one task = one branch =
-  one coherent deliverable. Claude Code sessions share this checkout —
-  branches prevent the commit races we've already been burned by.
-- Both Rust crates `deny` clippy `unwrap_used` / `expect_used` / `panic` in
-  production code. In `#[cfg(test)]` modules add an inner
-  `#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]`;
-  integration tests in `tests/` need the same file-level allow.
-- **i18n:** every user-facing string in `.slint` is English `@tr("…")` and
-  MUST get a matching `msgid`/`msgstr` pair in
-  `slint-experiment/translations/ru/LC_MESSAGES/slint-replay.po` (the
-  i18n_guard test in the gate fails otherwise). Hardcoded Cyrillic in
-  `.slint` is a bug. Russian status strings built in Rust code are fine.
-- **No tofu glyphs in UI text:** the skia renderer draws rare Unicode
-  (warning sign, checkmark, circled digits, emoji) as squares. Use ASCII
-  ([!], [ok], "1)") or the SVG icon set.
-- Icons: `slint-experiment/assets/icons/*.svg`, convention 16x16 viewBox,
-  stroke-width 1.6. Match it for any new icon.
-- The Settings window is REUSED: every transient `*-status`/`*-result`
-  Slint property must be reset in `populate_token_status`
-  (settings_controller.rs) — the settings_reset_guard test enforces this.
-- Secrets: `%APPDATA%\suflyor\config.json` holds live API keys — never print
-  its contents. Never commit `nini-context-backup.txt`. Error strings shown
-  in tiles must be generic (no URL/LAN-IP leakage; see http_log.rs).
-- Don't touch `.claude/**` (Claude Code local config) or `.codex/**` unless
-  the task is about them.
-- Cargo.lock: `slint-experiment/Cargo.lock` and `suflyor-tts/Cargo.lock` are
-  committed; `overlay-backend/Cargo.lock` is gitignored.
+- **Docs:** Markdown/HTML/text-only changes. Before commit run
+  `git diff --cached --check`; after commit use `git show --check <SHA>`. No
+  Cargo build. The compiled KB inputs `overlay-backend/knowledge/glossary.md`,
+  `commands.md`, and `patterns.md` require backend checks; a local
+  `knowledge/AGENTS.md` edit remains documentation. GitHub's separate fast-path
+  classifier also treats paths under `docs/` as docs-only.
+- **Targeted:** one crate or one isolated UI surface. Run fmt, Clippy, and tests
+  for the affected crate on the appropriate native worker.
+- **Full:** multiple crates, dependencies/lockfiles, build/installer/CI/gate
+  infrastructure, audio capture/routing, persistence/recovery, credentials,
+  security, networking/update, or similarly cross-cutting runtime work. Run
+  `scripts/ci.ps1` on `windows-worker`; run the macOS gate on `mac-worker` when
+  the changed seam is compiled or exercised there.
+- Set `CARGO_INCREMENTAL=0`; gate scripts already do this. Inspect free space
+  before heavy builds and follow homelab cache-hygiene rules. Do not clean
+  caches or targets merely to be tidy.
+- GitHub Actions is independent supporting evidence, not a substitute for a
+  required physical-worker or live UI check.
 
-## Task workflow expected from agents
+### Visible UI changes
 
-1. Read the task's `docs/goal-*.md` charter if referenced; keep scope to it.
-2. Implement with unit tests (backend logic must be testable without UI).
-3. Run the gate tier selected by `scripts/git-gate-native.ps1`; run the full
-   gate only for a Full-class diff or stable release.
-4. Commit on your `codex/<task>` branch with a descriptive message; do not
-   merge to master yourself unless the task says to.
-5. State in your summary: what changed, gate result, what you did NOT do.
-   UI changes additionally get validated visually by the owner/tester —
-   note any surface you changed so they know where to look.
+For any `.slint` edit or Rust change that affects visible UI, load and follow
+`slint-mcp-ui-audit`; it is the procedural source of truth. Non-negotiable
+acceptance evidence is the exact candidate SHA, matching before/after captures,
+and functional hotkey dispatch where required. A green compile or registration
+log is not visual or functional acceptance.
 
-## Mandatory post-release hygiene (all agents)
+## Repository-wide invariants
 
-Publishing is not complete until repository and disk hygiene are complete.
-The publishing agent runs a preview and then applies the shared cleanup:
+- Production Rust denies `clippy::unwrap_used`, `expect_used`, and `panic`.
+  Test modules and integration tests may add the documented local allow.
+- User-facing `.slint` strings are English `@tr("...")` source strings with an
+  exact Russian `msgid`/`msgstr` pair in
+  `slint-experiment/translations/ru/LC_MESSAGES/slint-replay.po`.
+- Avoid rare Unicode/emoji in UI text because Skia may render tofu. Use ASCII or
+  the SVG icon set. New stroke icons use a 16x16 viewBox and stroke width 1.6.
+- The Settings window is reused. Every transient `*-status`/`*-result` property
+  must be reset by `populate_token_status`; never show optimistic success before
+  an asynchronous operation confirms it.
+- `suflyor-tts` and `suflyor-teratts` remain separate processes. Never combine
+  their ONNX runtimes with each other or with in-process STT.
+- Version metadata lives in both `slint-experiment/Cargo.toml` and
+  `scripts/slint-installer.nsi` (`PRODUCT_VERSION`). Keep them synchronized.
+- Committed lockfiles: `slint-experiment/Cargo.lock` and
+  `suflyor-tts/Cargo.lock`. `overlay-backend/Cargo.lock` is ignored.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/post-release-cleanup.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/post-release-cleanup.ps1 -Apply
-```
+## Security and privacy
 
-The cleanup keeps the newest published prerelease, removes older
-prereleases/tags, closes only PRs whose exact head is already in `master`,
-merges only unchanged green mergeable PRs, deletes proven-merged remote
-branches, removes clean completed worktrees, and clears rebuildable `target`
-directories from inactive worktrees. GitHub must keep
-`delete_branch_on_merge` enabled.
+- Never print or commit `%APPDATA%\suflyor\config.json`, credentials, tokens,
+  private transcripts, personal prep notes, or `nini-context-backup.txt`.
+- Keep screenshot-visible errors generic. Redact local paths, usernames, URLs,
+  hostnames, and LAN addresses from logs, diagnostics, docs, and evidence.
+- Do not bypass SSH host-key checking or weaken platform security/TCC controls.
+- Do not touch `.claude/**` or `.codex/**` unless the task explicitly owns those
+  files.
 
-Never delete a dirty, active, unpushed, or unproven branch/worktree; never
-follow/delete a junction or reparse-point target; never delete stable or draft
-releases. Report what was removed and what was preserved. If a
-running `cargo`/`rustc` process prevents disk cleanup, finish the release but
-keep the cleanup task open until it can be rerun safely.
+## Git and delivery
 
-## Resuming an in-flight session
-
-**Start here:** `docs/CODEX_HANDOFF.md` — the live state (current branch, what
-is done/committed, gate status) and the exact push runbook + guardrails.
-`docs/state-and-plan.md` points to it. Read it before touching anything: this
-checkout is SHARED with a Claude Code session, so `git status`/`git log` first.
-
-## Agent task queue
-
-See `docs/AGENT_TASKS.md` — self-contained tasks with acceptance criteria,
-sized for one session each.
+- Work on `codex/<short-task-name>`; one task, one branch, one coherent change.
+  Never push directly to `master` and never merge your own PR unless explicitly
+  instructed.
+- Enable `.githooks` in native worker/developer clones that provide
+  `powershell.exe`. Do not enable the Windows-only hook in the Linux DSH
+  control-plane checkout.
+- A DSH candidate commit may use `--no-verify` only because the selected native
+  gate is deliberately moved to a worker testing that exact SHA (or for a
+  docs-only commit after `git diff --cached --check`). Push only the task branch
+  from DSH so the worker can fetch that SHA; do not open/merge a PR or release
+  until its required evidence is green. If verification requires a code change,
+  create and push a new candidate commit and rerun the affected evidence; never
+  reuse evidence from the old SHA.
+- Commit only task-owned, verified files. In the final summary state what
+  changed, exact verification evidence, and what was not run.
+- RC publication follows the project `source-command-release` skill. Stable
+  tags/releases require explicit owner authorization. Publishing is not done
+  until the skill's post-release cleanup preview and apply phases complete.

@@ -192,7 +192,7 @@ pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> 
             let dir = model_dir.clone();
             tokio::task::spawn_blocking(move || {
                 gigaam_shim::load(&dir)
-                    .map(|_m| "GigaAM model loaded OK".to_string())
+                    .map(|_model| "GigaAM model loaded OK".to_string())
                     .map_err(|e| {
                         public_gigaam_load_error(e, "GigaAM: model failed to load (see log)")
                     })
@@ -207,11 +207,11 @@ pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> 
 /// loads. Used by the session-start path (which is sync + on the UI thread) to
 /// fail fast with a clear error BEFORE the capture/STT pipeline spins up,
 /// mirroring the cloud "Groq key not set" bail. Blocks for the load duration
-/// (~0.5 s) — acceptable for a once-per-session start gate. The model handle is
-/// dropped immediately; the live pipeline loads its own copy via `spawn`.
+/// (~0.5 s) — acceptable for a once-per-session start gate. The validated model
+/// remains in the shared cache so `spawn` does not immediately load it again.
 /// On unsupported platforms this always fails with an explicit error.
 pub fn validate_gigaam_dir(model_dir: &str) -> Result<()> {
-    gigaam_shim::load(model_dir).map(|_m| ())
+    shared_gigaam_model(model_dir).map(|_model| ())
 }
 /// Fallback Groq model id if config doesn't specify one. Both "whisper-large-v3"
 /// (most accurate) and "whisper-large-v3-turbo" (~3× faster) are valid.
@@ -274,26 +274,25 @@ pub fn spawn(
         return rx;
     }
 
-    // Back-pressure cap on simultaneous in-flight HTTP STT requests (cloud /
-    // local whisper). Carried over from 1st+2nd-pass audits: previously
-    // unbounded. GigaAM serialises through its own model mutex, so this only
-    // bounds the network backends.
+    // Back-pressure cap on simultaneous in-flight STT tasks. GigaAM still
+    // serialises actual inference through the shared model mutex; the permits
+    // bound queued sample buffers while HTTP backends use them for requests.
     let stt_semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(6));
 
     tokio::spawn(async move {
-        // Pre-load the GigaAM model ONCE (expensive: ~250 MB + ~0.5 s), OFF the
-        // async executor via spawn_blocking, when the local-GigaAM backend is
-        // selected. None for the HTTP backends. A load failure is logged and
-        // leaves the pipeline producing no transcripts (the Settings "Test"
-        // button surfaces the real error to the user).
-        let gigaam: Option<Arc<Mutex<gigaam_shim::Model>>> =
+        // Resolve the one shared GigaAM model OFF the async executor when the
+        // local backend is selected. Live and ad-hoc flows serialize on this
+        // model instead of retaining separate hundreds-of-MiB ORT sessions.
+        // A load failure leaves the pipeline producing no transcripts (the
+        // Settings "Test" button surfaces the real error to the user).
+        let gigaam: Option<SharedGigaamModel> =
             if let SttBackendCfg::Gigaam { model_dir } = &backend {
                 let dir = model_dir.clone();
                 let dir_for_log = model_dir.clone();
-                match tokio::task::spawn_blocking(move || gigaam_shim::load(&dir)).await {
-                    Ok(Ok(m)) => {
-                        log::info!("STT GigaAM model loaded from {dir_for_log}");
-                        Some(Arc::new(Mutex::new(m)))
+                match tokio::task::spawn_blocking(move || shared_gigaam_model(&dir)).await {
+                    Ok(Ok(model)) => {
+                        log::info!("STT GigaAM model ready from {dir_for_log}");
+                        Some(model)
                     }
                     Ok(Err(e)) => {
                         log::error!(
@@ -711,22 +710,32 @@ fn rms_i16(samples: &[i16]) -> f32 {
     (sum / samples.len() as f64).sqrt() as f32
 }
 
-/// Process-global single-entry cache for the ad-hoc GigaAM path
-/// (`transcribe_once`). Loading GigaAM is ~250 MB + ONNX init (~0.5 s), so
-/// re-loading on every push-to-talk / dictation call stalls the user each
-/// time. We keep ONE `(model_dir, model)` pair alive: repeated calls with the
-/// same dir reuse it; a different dir reloads (replacing the entry). The live
-/// session pipeline (`spawn`) keeps its OWN preloaded model, so this is purely
-/// for the ad-hoc one-shot flows. GigaAM already serialises through its own
-/// `&mut self`, so holding this lock across the transcribe call is fine.
-static GIGAAM_CACHE: std::sync::OnceLock<std::sync::Mutex<Option<(String, gigaam_shim::Model)>>> =
+/// Process-global single-entry GigaAM cache shared by live sessions and
+/// ad-hoc transcription. One model costs hundreds of MiB; keeping separate
+/// live and one-shot copies exceeded 1 GiB on Apple Silicon. The model mutex
+/// intentionally serialises simultaneous live/PTT inference to keep one copy.
+type SharedGigaamModel = Arc<Mutex<gigaam_shim::Model>>;
+static GIGAAM_CACHE: std::sync::OnceLock<Mutex<Option<(String, SharedGigaamModel)>>> =
     std::sync::OnceLock::new();
 
-/// Drop the cached ad-hoc GigaAM model so the next transcription reloads it.
-/// The ORT session bakes its execution provider in at load time, so after the
-/// GPU/CPU preference changes (`configure_gigaam_accelerator`) a cached model
-/// would keep the old backend. The live session pipeline reloads its own copy
-/// on the next session start, so this only needs to clear the ad-hoc cache.
+fn shared_gigaam_model(model_dir: &str) -> Result<SharedGigaamModel> {
+    let mut guard = GIGAAM_CACHE
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    if !matches!(&*guard, Some((cached_dir, _)) if cached_dir == model_dir) {
+        let model = gigaam_shim::load(model_dir)?;
+        *guard = Some((model_dir.to_string(), Arc::new(Mutex::new(model))));
+    }
+    guard
+        .as_ref()
+        .map(|(_, model)| model.clone())
+        .ok_or_else(|| anyhow::anyhow!("GigaAM cache empty after load"))
+}
+
+/// Drop the cache's strong model handle. In-flight live/ad-hoc calls retain
+/// their own `Arc` until they finish. Call after accelerator/provider changes
+/// and at session stop so idle memory returns to the OS when work is complete.
 pub fn reset_gigaam_cache() {
     if let Some(lock) = GIGAAM_CACHE.get() {
         *lock.lock().unwrap_or_else(|p| p.into_inner()) = None;
@@ -735,9 +744,8 @@ pub fn reset_gigaam_cache() {
 
 /// Public one-shot transcription helper for ad-hoc flows (e.g. prep recording).
 /// Provider-aware: cloud Groq, local whisper-server, or in-process GigaAM
-/// (cached in `GIGAAM_CACHE` so repeated ad-hoc calls with the same model dir
-/// don't pay the ~250 MB + ONNX-init reload cost; the live pipeline preloads
-/// its own copy).
+/// (shared through `GIGAAM_CACHE` with the live pipeline so repeated or
+/// simultaneous calls reuse one memory-bounded model instance).
 pub async fn transcribe_once(
     backend: &SttBackendCfg,
     pcm: &[i16],
@@ -778,34 +786,12 @@ pub async fn transcribe_once(
             let dir = model_dir.clone();
             let pcm = pcm.to_vec();
             tokio::task::spawn_blocking(move || {
-                let f32s: Vec<f32> = pcm.iter().map(|&s| f32::from(s) / 32768.0).collect();
-                // Reuse the cached model when the dir matches; otherwise load
-                // (and replace any stale entry). The guard is intentionally held
-                // across transcribe(): GigaAM needs `&mut self`, so this is a
-                // deliberate single-flight — two concurrent ad-hoc callers (e.g.
-                // a tile mic follow-up while a PTT blob is still transcribing)
-                // serialise on this process-global cache mutex for the full
-                // inference. The live session pipeline uses a SEPARATE model
-                // handle, so contention here is rare by design.
-                let mut guard = GIGAAM_CACHE
-                    .get_or_init(|| Mutex::new(None))
-                    .lock()
-                    .unwrap_or_else(|p| p.into_inner());
-                if !matches!(&*guard, Some((cached_dir, _)) if *cached_dir == dir) {
-                    let m = gigaam_shim::load(&dir).map_err(|e| {
-                        // Don't surface the model_dir path (it embeds the user's
-                        // Windows username) into a screen-capturable tile.
-                        public_gigaam_load_error(e, "local STT model failed to load (see log)")
-                    })?;
-                    *guard = Some((dir.clone(), m));
-                }
-                let model = match guard.as_mut() {
-                    Some((_, m)) => m,
-                    // Unreachable: we just ensured an entry for `dir` above.
-                    None => return Err(anyhow::anyhow!("GigaAM cache empty after load")),
-                };
-                let text = model.transcribe_f32(&f32s)?;
-                Ok::<String, anyhow::Error>(text)
+                let model = shared_gigaam_model(&dir).map_err(|e| {
+                    // Don't surface the model_dir path (it embeds the user's
+                    // username) into a screen-capturable tile.
+                    public_gigaam_load_error(e, "local STT model failed to load (see log)")
+                })?;
+                gigaam_transcribe(&model, &pcm)
             })
             .await
             .map_err(|e| anyhow::anyhow!("GigaAM join: {e}"))?

@@ -1216,6 +1216,7 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
     // Старт in start_session_inner).
     let journal = s.journal.take();
     drop(s);
+    stt::reset_gigaam_cache();
     // Write the SessionSummary roll-up + SessionStop marker before closing, so
     // the journal has the "how did this session go" one-liner on disk (audit:
     // these were defined + counted but never emitted on the shipping stack).

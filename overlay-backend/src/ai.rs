@@ -7,6 +7,10 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 mod provider;
+mod tps;
+
+use tps::record_stream_tps;
+pub use tps::{avg_tps, record_tps};
 
 /// Wire protocol used by a resolved AI endpoint. Existing bridge, local and
 /// Hermes routes stay on OpenAI Chat Completions compatibility; direct cloud
@@ -722,8 +726,10 @@ async fn stream_inner(
     let mut buf = String::new();
     let mut id_sent = false;
     let mut delta_count: u32 = 0;
-    // Time of the first content token — tok/s is measured over the GENERATION
-    // window (first token -> done), excluding prompt-processing latency.
+    let mut server_tps: Option<f64> = None;
+    let mut completion_tokens: Option<u64> = None;
+    // Time of the first content token — fallback tok/s is measured over the
+    // GENERATION window (first token -> done), excluding prompt processing.
     let mut first_delta_at: Option<std::time::Instant> = None;
 
     while let Some(chunk) = resp.chunk().await.context("read sse chunk")? {
@@ -744,7 +750,7 @@ async fn stream_inner(
                 let payload = line["data:".len()..].trim();
                 if endpoint.protocol == AiProtocol::OpenAiCompatible && payload == "[DONE]" {
                     log::info!("AI stream got [DONE]: deltas={}", delta_count);
-                    record_stream_tps(delta_count, first_delta_at);
+                    record_stream_tps(delta_count, first_delta_at, server_tps, completion_tokens);
                     let _ = tx
                         .send(AiEvent::Done {
                             reason: "stop".into(),
@@ -761,6 +767,12 @@ async fn stream_inner(
                 let parsed = provider::parse_stream(endpoint.protocol, &v);
                 if parsed.failed {
                     return Err(anyhow!("AI provider stream error"));
+                }
+                if parsed.server_tps.is_some() {
+                    server_tps = parsed.server_tps;
+                }
+                if parsed.completion_tokens.is_some() {
+                    completion_tokens = parsed.completion_tokens;
                 }
                 if !id_sent {
                     if let Some(id) = parsed.id {
@@ -790,7 +802,7 @@ async fn stream_inner(
                         reason,
                         delta_count
                     );
-                    record_stream_tps(delta_count, first_delta_at);
+                    record_stream_tps(delta_count, first_delta_at, server_tps, completion_tokens);
                     let _ = tx.send(AiEvent::Done { reason }).await;
                     return Ok(());
                 }
@@ -811,7 +823,7 @@ async fn stream_inner(
     // "exactly one terminal event per stream" contract; otherwise the bar's
     // "AI working" pulse and the follow-up "busy" state stay stuck on).
     log::info!("AI stream ended without [DONE]/finish_reason: deltas={delta_count}");
-    record_stream_tps(delta_count, first_delta_at);
+    record_stream_tps(delta_count, first_delta_at, server_tps, completion_tokens);
     let _ = tx
         .send(AiEvent::Done {
             reason: "eof".into(),
@@ -914,48 +926,6 @@ pub struct TokenUsage {
     /// (audit D4: non-streaming sites previously hardcoded "stop" and lost
     /// real truncation signals).
     pub finish_reason: String,
-}
-
-/// Rolling tokens/sec across recent AI requests (streaming + non-streaming both
-/// feed it). EWMA so the bar can show an at-a-glance "is generation slower than
-/// usual?" trend without a chart. `record_tps` is called by the backend on each
-/// completed request; the bar polls `avg_tps` on its refresh timer.
-static TPS_EWMA: std::sync::Mutex<f64> = std::sync::Mutex::new(0.0);
-
-/// Fold one request's tok/s into the rolling average. Ignores non-positive /
-/// non-finite values (failed or zero-length generations).
-pub fn record_tps(v: f64) {
-    if !(v.is_finite() && v > 0.0) {
-        return;
-    }
-    let mut g = match TPS_EWMA.lock() {
-        Ok(g) => g,
-        Err(p) => p.into_inner(),
-    };
-    // alpha 0.3 — responsive to a real slowdown without being jumpy per-token.
-    *g = if *g <= 0.0 { v } else { 0.3 * v + 0.7 * *g };
-}
-
-/// Current rolling tok/s, or None if no request has completed yet this run.
-pub fn avg_tps() -> Option<f64> {
-    let g = match TPS_EWMA.lock() {
-        Ok(g) => g,
-        Err(p) => p.into_inner(),
-    };
-    (*g > 0.0).then_some(*g)
-}
-
-/// Fold a streamed generation's throughput into the rolling tok/s. `delta_count`
-/// ≈ completion tokens (llama streams ~one content chunk per token); measured
-/// over the generation window (first token → done) so prompt-processing latency
-/// doesn't drag the number down.
-fn record_stream_tps(delta_count: u32, first_delta_at: Option<std::time::Instant>) {
-    if let Some(t) = first_delta_at {
-        let secs = t.elapsed().as_secs_f64();
-        if secs > 0.0 && delta_count > 0 {
-            record_tps(delta_count as f64 / secs);
-        }
-    }
 }
 
 /// Non-streaming completion — used for prep-context structuring where we
@@ -2016,6 +1986,40 @@ mod tests {
         assert!(header(&request, "authorization").is_none());
         let body: Value = serde_json::from_str(&request.body).unwrap();
         assert_eq!(body["max_tokens"], 43);
+    }
+
+    #[tokio::test]
+    async fn openai_finish_reason_is_terminal_without_optional_metrics() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 4_096];
+            let _ = std::io::Read::read(&mut stream, &mut request);
+            let frame = b"data: {\"choices\":[{\"delta\":{\"content\":\"hi\"},\"finish_reason\":\"stop\"}]}\n\n";
+            let headers = b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n";
+            std::io::Write::write_all(&mut stream, headers).unwrap();
+            std::io::Write::write_all(&mut stream, format!("{:X}\r\n", frame.len()).as_bytes())
+                .unwrap();
+            std::io::Write::write_all(&mut stream, frame).unwrap();
+            std::io::Write::write_all(&mut stream, b"\r\n").unwrap();
+            std::io::Write::flush(&mut stream).unwrap();
+            std::thread::sleep(std::time::Duration::from_secs(5));
+        });
+
+        let mut rx = stream_chat(url, String::new(), "model".into(), Vec::new(), 8);
+        assert!(matches!(rx.recv().await, Some(AiEvent::Delta { text }) if text == "hi"));
+        let done = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+            .await
+            .expect("finish_reason must not wait for optional telemetry");
+        assert!(matches!(done, Some(AiEvent::Done { reason }) if reason == "stop"));
+        let terminal = tokio::time::timeout(std::time::Duration::from_millis(500), rx.recv())
+            .await
+            .expect("stream producer should stop after finish_reason");
+        assert!(
+            terminal.is_none(),
+            "finish_reason must emit exactly one terminal event"
+        );
     }
 
     #[tokio::test]

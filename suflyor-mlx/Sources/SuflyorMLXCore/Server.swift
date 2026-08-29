@@ -6,11 +6,56 @@ import MLXLMCommon
 import MLXVLM
 import Tokenizers
 
+struct CompletionUsage: Encodable, Equatable, Sendable {
+    let promptTokens: Int
+    let completionTokens: Int
+    let totalTokens: Int
+
+    enum CodingKeys: String, CodingKey {
+        case promptTokens = "prompt_tokens"
+        case completionTokens = "completion_tokens"
+        case totalTokens = "total_tokens"
+    }
+}
+
+struct CompletionTimings: Encodable, Equatable, Sendable {
+    let predictedPerSecond: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case predictedPerSecond = "predicted_per_second"
+    }
+}
+
+func completionMetrics(
+    promptTokenCount: Int,
+    generationTokenCount: Int,
+    generateTime: TimeInterval
+) -> (usage: CompletionUsage, timings: CompletionTimings) {
+    let rate = generateTime > 0 ? Double(generationTokenCount) / generateTime : nil
+    let finiteRate = rate.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+    return (
+        CompletionUsage(
+            promptTokens: promptTokenCount,
+            completionTokens: generationTokenCount,
+            totalTokens: promptTokenCount + generationTokenCount
+        ),
+        CompletionTimings(predictedPerSecond: finiteRate)
+    )
+}
+
+func openAIFinishReason(_ reason: GenerateStopReason) throws -> String {
+    switch reason {
+    case .length: "length"
+    case .stop: "stop"
+    case .cancelled: throw CancellationError()
+    }
+}
+
 private struct CompletionEnvelope: Encodable {
     struct Choice: Encodable {
         let index = 0
         let message: Message
-        let finishReason = "stop"
+        let finishReason: String
         enum CodingKeys: String, CodingKey { case index, message; case finishReason = "finish_reason" }
     }
     struct Message: Encodable { let role = "assistant"; let content: String }
@@ -18,6 +63,8 @@ private struct CompletionEnvelope: Encodable {
     let object = "chat.completion"
     let model: String
     let choices: [Choice]
+    let usage: CompletionUsage
+    let timings: CompletionTimings
 }
 
 private struct ChunkEnvelope: Encodable {
@@ -32,6 +79,8 @@ private struct ChunkEnvelope: Encodable {
     let object = "chat.completion.chunk"
     let model: String
     let choices: [Choice]
+    let usage: CompletionUsage?
+    let timings: CompletionTimings?
 }
 
 private struct ModelList: Encodable {
@@ -70,6 +119,7 @@ func sidecarDiagnosticCase(_ error: Error) -> String {
     case .unsupportedModel: return "unsupported_model"
     case .invalidSnapshot: return "invalid_snapshot"
     case .reasoningBoundaryMissing: return "reasoning_boundary_missing"
+    case .generationIncomplete: return "generation_incomplete"
     }
 }
 
@@ -134,6 +184,11 @@ actor GenerationGate {
     }
 }
 
+private enum GenerationOutput: Sendable {
+    case chunk(String)
+    case info(GenerateCompletionInfo)
+}
+
 private actor ModelEngine {
     private let model: SupportedModel
     private let snapshot: URL
@@ -150,7 +205,9 @@ private actor ModelEngine {
         try Task.checkCancellation()
     }
 
-    nonisolated func events(for request: ChatCompletionRequest) -> AsyncThrowingStream<String, Error> {
+    nonisolated func events(
+        for request: ChatCompletionRequest
+    ) -> AsyncThrowingStream<GenerationOutput, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -170,7 +227,7 @@ private actor ModelEngine {
 
     func generate(
         request: ChatCompletionRequest,
-        onChunk: @Sendable (String) async throws -> Void
+        onEvent: @Sendable (GenerationOutput) async throws -> Void
     ) async throws {
         guard request.model == model else { throw SidecarError.unsupportedModel }
         try await gate.acquire()
@@ -194,19 +251,28 @@ private actor ModelEngine {
             )
             try Task.checkCancellation()
             var filter = ReasoningFilter(required: request.model.requiresReasoningBoundary)
+            var completionInfo: GenerateCompletionInfo?
             phase = .iterate
             for await event in stream {
                 try Task.checkCancellation()
-                if case .chunk(let text) = event {
+                switch event {
+                case .chunk(let text):
                     phase = .reasoningFilter
                     let visible = try filter.feed(text)
-                    if !visible.isEmpty { try await onChunk(visible) }
+                    if !visible.isEmpty { try await onEvent(.chunk(visible)) }
                     phase = .iterate
+                case .info(let info):
+                    completionInfo = info
+                case .toolCall:
+                    break
                 }
             }
+            guard let completionInfo else { throw SidecarError.generationIncomplete }
+            if case .cancelled = completionInfo.stopReason { throw CancellationError() }
             phase = .reasoningFilter
             let tail = try filter.feed("", finished: true)
-            if !tail.isEmpty { try await onChunk(tail) }
+            if !tail.isEmpty { try await onEvent(.chunk(tail)) }
+            try await onEvent(.info(completionInfo))
             await gate.release()
         } catch {
             await gate.release()
@@ -277,16 +343,34 @@ public struct SidecarServer: Sendable {
                     headers: [.contentType: "text/event-stream", .cacheControl: "no-cache"],
                     body: .init { writer in
                         let encoder = JSONEncoder()
-                        for try await text in engine.events(for: completion) {
-                            let chunk = ChunkEnvelope(
-                                id: id, model: completion.model.rawValue,
-                                choices: [.init(delta: .init(content: text), finishReason: nil)]
-                            )
-                            try await writer.write(ByteBuffer(string: sseData(try encoder.encode(chunk))))
+                        var completionInfo: GenerateCompletionInfo?
+                        for try await event in engine.events(for: completion) {
+                            switch event {
+                            case .chunk(let text):
+                                let chunk = ChunkEnvelope(
+                                    id: id, model: completion.model.rawValue,
+                                    choices: [.init(delta: .init(content: text), finishReason: nil)],
+                                    usage: nil, timings: nil
+                                )
+                                try await writer.write(ByteBuffer(string: sseData(try encoder.encode(chunk))))
+                            case .info(let info):
+                                completionInfo = info
+                            }
                         }
+                        guard let completionInfo else { throw SidecarError.generationIncomplete }
+                        let metrics = completionMetrics(
+                            promptTokenCount: completionInfo.promptTokenCount,
+                            generationTokenCount: completionInfo.generationTokenCount,
+                            generateTime: completionInfo.generateTime
+                        )
                         let end = ChunkEnvelope(
                             id: id, model: completion.model.rawValue,
-                            choices: [.init(delta: .init(content: nil), finishReason: "stop")]
+                            choices: [.init(
+                                delta: .init(content: nil),
+                                finishReason: try openAIFinishReason(completionInfo.stopReason)
+                            )],
+                            usage: metrics.usage,
+                            timings: metrics.timings
                         )
                         try await writer.write(ByteBuffer(string: sseData(try encoder.encode(end))))
                         try await writer.write(ByteBuffer(string: "data: [DONE]\n\n"))
@@ -295,10 +379,27 @@ public struct SidecarServer: Sendable {
                 )
             }
             var answer = ""
-            for try await text in engine.events(for: completion) { answer += text }
+            var completionInfo: GenerateCompletionInfo?
+            for try await event in engine.events(for: completion) {
+                switch event {
+                case .chunk(let text): answer += text
+                case .info(let info): completionInfo = info
+                }
+            }
+            guard let completionInfo else { throw SidecarError.generationIncomplete }
+            let metrics = completionMetrics(
+                promptTokenCount: completionInfo.promptTokenCount,
+                generationTokenCount: completionInfo.generationTokenCount,
+                generateTime: completionInfo.generateTime
+            )
             let envelope = CompletionEnvelope(
                 id: id, model: completion.model.rawValue,
-                choices: [.init(message: .init(content: answer))]
+                choices: [.init(
+                    message: .init(content: answer),
+                    finishReason: try openAIFinishReason(completionInfo.stopReason)
+                )],
+                usage: metrics.usage,
+                timings: metrics.timings
             )
             return try context.responseEncoder.encode(envelope, from: request, context: context)
         }

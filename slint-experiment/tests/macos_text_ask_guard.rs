@@ -14,13 +14,15 @@ fn canonical_runtime_is_shared_and_reaches_text_ask() {
     let wrapper = read("src/bin/overlay_host.rs");
     let host = read("src/bin/overlay_host_windows.rs");
     let windows = read("src/bin/overlay_host/aux_windows.rs");
+    let text_ask = read("src/bin/overlay_host/aux_windows/text_ask.rs");
 
     assert!(wrapper.contains("#[cfg(any(windows, target_os = \"macos\"))]"));
     assert!(wrapper.contains("include!(\"overlay_host_windows.rs\");"));
     assert!(host.contains("#[path = \"overlay_host/aux_windows.rs\"]"));
     assert!(host.contains("open_text_ask("));
-    assert!(windows.contains("pub(crate) fn open_text_ask("));
-    assert!(windows.contains("TextAskWindow::new()"));
+    assert!(windows.contains("#[path = \"aux_windows/text_ask.rs\"]"));
+    assert!(text_ask.contains("fn open_text_ask("));
+    assert!(text_ask.contains("TextAskWindow::new()"));
 }
 
 #[test]
@@ -62,8 +64,9 @@ fn macos_clipboard_copy_keeps_its_native_contracts() {
     assert!(routing.contains("crate::native::clipboard::read_text()"));
 
     let host = read("src/bin/overlay_host_windows.rs");
+    let read_aloud = read("src/bin/overlay_host/read_aloud.rs");
     assert!(host.contains("if !slint_replay::win32::send_ctrl_c()"));
     assert!(host.contains("restore_text_clipboard(saved.as_ref())"));
     assert!(host.contains("Accessibility permission is required"));
-    assert!(host.contains("ponytail: SA1 preserves only UTF-8 text"));
+    assert!(read_aloud.contains("ponytail: SA1 preserves only UTF-8 text"));
 }

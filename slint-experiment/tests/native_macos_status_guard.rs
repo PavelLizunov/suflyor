@@ -62,6 +62,7 @@ fn status_guard_is_synchronous_main_thread_owned_and_removes_on_drop() {
 fn production_host_owns_one_status_guard_through_the_event_loop() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let host = source(root, "src/bin/overlay_host_windows.rs");
+    let bar_tray = source(root, "src/bin/overlay_host/bar_tray.rs");
 
     assert_eq!(host.matches("native::status::install").count(), 1);
     let install_at = host.find("native::status::install").unwrap();
@@ -71,7 +72,8 @@ fn production_host_owns_one_status_guard_through_the_event_loop() {
     assert!(run_at < drop_at);
     assert!(host.contains("TRAY_AVAILABLE.store(true, Ordering::Relaxed)"));
     assert!(host.contains("TRAY_AVAILABLE.store(false, Ordering::Relaxed)"));
-    assert!(host.contains("BAR_TRAY_HIDDEN.store(!visible, Ordering::Relaxed)"));
+    assert!(bar_tray.contains("BAR_TRAY_HIDDEN.store(!visible, Ordering::Relaxed)"));
+    assert!(bar_tray.contains("sync_bar_status_visibility"));
     assert!(host.contains("sync_bar_status_visibility"));
 
     let build = source(root, "build.rs");

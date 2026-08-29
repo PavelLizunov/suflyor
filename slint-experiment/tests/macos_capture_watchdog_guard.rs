@@ -14,6 +14,7 @@ fn canonical_runtime_owns_the_macos_watchdog_timer() {
     let wrapper = read("src/bin/overlay_host.rs");
     let host = read("src/bin/overlay_host_windows.rs");
     let watchdog = read("src/bin/overlay_host/capture_watchdog.rs");
+    let status_copy = read("src/bin/overlay_host/status_copy.rs");
 
     assert!(wrapper.contains("include!(\"overlay_host_windows.rs\");"));
     assert!(host.contains("#[path = \"overlay_host/capture_watchdog.rs\"]"));
@@ -36,7 +37,8 @@ fn canonical_runtime_owns_the_macos_watchdog_timer() {
     assert!(!wiring.contains("slint_session::start_session"));
     assert!(wiring.contains("let weak_overlay_after_stop = weak_overlay.clone()"));
     assert!(wiring.contains("slint::invoke_from_event_loop(move ||"));
-    assert!(host.contains("Press Start to continue"));
+    assert!(wiring.contains("capture_stopped_copy"));
+    assert!(status_copy.contains("Press Start to continue"));
     assert!(host.contains("if stop_pending_for_timer_toggle.load(Ordering::Acquire)"));
     let lifecycle_lock = wiring
         .find("lifecycle.lock().await")
