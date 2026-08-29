@@ -99,6 +99,19 @@ Run-Step "backend fmt --check" {
 Run-Step "backend clippy -D warnings" {
     & $cargoExe clippy --manifest-path overlay-backend/Cargo.toml --all-targets -- -D warnings
 }
+Run-Step "stage DirectML for backend tests" {
+    $dmlSource = Join-Path $projectRoot "overlay-backend\target\debug\DirectML.dll"
+    if (-not (Test-Path $dmlSource)) {
+        throw "matching DirectML.dll not found after the backend build"
+    }
+    $dmlDestination = Join-Path $projectRoot "overlay-backend\target\debug\deps\DirectML.dll"
+    $alreadyMatching = (Test-Path $dmlDestination) -and
+        ((Get-FileHash -LiteralPath $dmlSource -Algorithm SHA256).Hash -eq
+         (Get-FileHash -LiteralPath $dmlDestination -Algorithm SHA256).Hash)
+    if (-not $alreadyMatching) {
+        Copy-Item -LiteralPath $dmlSource -Destination $dmlDestination -Force
+    }
+}
 Run-Step "backend test" {
     & $cargoExe test --manifest-path overlay-backend/Cargo.toml --quiet
 }

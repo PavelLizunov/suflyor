@@ -55,7 +55,7 @@ All scripts in `scripts/` are classified below by domain, inspection/execution m
 - **Purpose:** Full CI quality gate covering all five standalone crates (`slint-experiment`, `overlay-backend`, `suflyor-wsola`, `suflyor-tts`, `suflyor-teratts`).
 - **Invariants:**
   - Enforces `$env:CARGO_INCREMENTAL = "0"` and limits parallel rustc jobs (`$env:CARGO_BUILD_JOBS = "2"`).
-  - Automatically stages matching `DirectML.dll` into `slint-experiment/target/debug/deps/` so Slint integration tests do not crash on system DirectML symbol mismatches.
+  - Automatically stages matching `DirectML.dll` into both `slint-experiment/target/debug/deps/` and `overlay-backend/target/debug/deps/` so test executables do not crash on system DirectML symbol mismatches.
   - Verifies the QA-only `ui-mcp` feature build via `cargo check --locked --bin overlay-host --features ui-mcp`.
 
 #### `scripts/git-gate-macos.sh`
