@@ -6,9 +6,9 @@ Guide for inspecting, extending, and verifying the host orchestration modules of
 
 ## 1. Module Map & Ownership
 
-The host orchestration layer lives under `slint-experiment/src/bin/overlay_host/` (~30 modules). It separates platform runtime assembly, UI-thread window management, hotkeys, AI tile streaming, and tab-specific settings controllers.
+The host orchestration layer lives under `slint-experiment/src/bin/overlay_host/`. It separates platform runtime assembly, UI-thread window management, hotkeys, AI tile streaming, and tab-specific settings controllers.
 
-### Core Architecture & Modules (30 `.rs` files)
+### Core Architecture & Modules
 
 | Subsystem | Module | Primary Responsibility |
 |---|---|---|
@@ -36,7 +36,12 @@ The host orchestration layer lives under `slint-experiment/src/bin/overlay_host/
 | | `settings_local_ai.rs` | One-click local AI server installer pipeline (`wire_local_ai`). |
 | | `settings_updates.rs` | GitHub release update checker and verified installer callbacks (`wire_updates`). |
 | | `settings_mlx.rs` | Apple Silicon MLX local backend settings callbacks (`include!("settings_mlx.rs")` inside `settings_controller.rs`). |
-| **Auxiliary & Specialized** | `aux_windows.rs` | On-demand windows: Text Ask (`open_text_ask`), Help (`open_help`), F4 KB Palette (`open_palette`). |
+| **Auxiliary & Specialized** | `aux_windows.rs` | Thin facade for shared auxiliary-window state and re-exports; implementations live in its child modules. |
+| | `aux_windows/{text_ask,help_palette,archive,transcript}.rs` | Text Ask, Help/F4 Palette, session Archive, and transcript-window implementations. |
+| | `read_aloud.rs` | Selected-text clipboard handling, read-aloud/OCR result tiles, and closed-read-tile restoration. |
+| | `bar_tray.rs` | Bar status/size/placement, hide-to-tray lifecycle, tray menu dispatch, and macOS status visibility synchronization. |
+| | `local_watchdog.rs` | Pure local-AI watchdog cooldown/failure policy and its unit tests; live probes and process starts remain in `main()`. |
+| | `status_copy.rs` | Active-stack labels, model/status copy, manual-tile naming, and related pure formatting helpers. |
 | | `vision_capture.rs` | Screen capture execution (F8 monitor, Shift+F8 drag region), BGRA to Slint image conversion, AI vision endpoint stream dispatch (`fire_f8_vision_capture`, `launch_vision_for_bgra`). |
 | | `recovery.rs` | Crash context recovery markers (`build_recovery_block`, `strip_recovery_block`, `compose_recovery_context`), recovery dialog (`open_recover_offer`). |
 | | `wizard.rs` | First-run setup onboarding wizard (`open_wizard`), step-by-step setup, mic check, summary generation. |
@@ -55,7 +60,8 @@ The host orchestration layer lives under `slint-experiment/src/bin/overlay_host/
    - Delegates execution by platform `include!("overlay_host_windows.rs");`.
 
 2. **Root Compilation Module (`src/bin/overlay_host_windows.rs`):**
-   - Declares and re-exports submodules via `#[path = "overlay_host/<module>.rs"] mod <module>; use <module>::*;`.
+   - Declares and re-exports top-level host modules via `#[path = "overlay_host/<module>.rs"] mod <module>; use <module>::*;`.
+   - `aux_windows.rs` is a thin facade that declares its normal child modules with `#[path = "aux_windows/<module>.rs"]` and re-exports only the root-facing window helpers.
    - Special inclusion case: `settings_mlx.rs` is included inside `settings_controller.rs` via `include!("settings_mlx.rs");`.
    - Houses `fn main()`, which initializes Tokio runtime (`shared_runtime()`), launches the Slint event loop, constructs the `OverlayBarWindow`, wires global timers for hotkey polling and async event drains, and processes UI events.
 

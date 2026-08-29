@@ -13,7 +13,7 @@ This guide extends the repository root `AGENTS.md`; do not duplicate root workfl
 - `persistence/` (`sqlite_store.rs`, `migrations.rs`, `indexer.rs`, `models.rs`): SQLite catalog handle, schema migrations, WAL mode, and JSONL indexing worker. **High Risk**: Risk of database lockup (`SQLITE_BUSY`), schema regression, or catalog corruption.
 - `stt.rs`, `diarize.rs`, `diar_install.rs`: In-process GigaAM-v3 STT via ONNX (`transcribe-rs`/`ort-directml`) and diarization management. **High Risk**: Risk of ONNX runtime collisions or GPU accelerator failure.
 - `download.rs`, `update.rs`, `*install.rs` (`teratts_install.rs`, `hermes_install.rs`, `ocr_install.rs`, `mlx_install.rs`): Network asset download and installer tools. **High Risk**: SHA-256 and SHA-1 checksum validation must be strictly enforced before archive extraction or execution.
-- `local_ai.rs`: Spawning and managing local LLM (`llama-server`) and Whisper sidecar servers. **High Risk**: Risk of orphaned sub-processes, port squatting, or memory exhaustion; must register Windows `JobObjects`.
+- `local_ai.rs` with `local_ai/{hardware_profile,model_choice,model_state}.rs`: The facade owns local LLM/Whisper process lifecycle, downloads, extraction, integrity checks, and engine updates; child modules own hardware detection, managed model/context selection, and persisted model-state repair. **High Risk**: Process spawning must remain in the facade, avoid orphaned processes, port squatting, and memory exhaustion, and register Windows `JobObjects`.
 - `config/` (`config.rs`, `repair.rs`, `snippets.rs`): Application configuration parsing, repair routines, and defaults. **High Risk**: Risk of configuration corruption or setting loss.
 - `http_log.rs`: Error message sanitization and redaction. **High Risk**: Prevents sensitive local IP addresses, bridge URLs, or internal endpoints from leaking into screenshot-visible UI error tiles.
 
@@ -24,7 +24,8 @@ This guide extends the repository root `AGENTS.md`; do not duplicate root workfl
 - `journal.rs`, `conspect.rs`, `session_admin.rs`, `session_audio.rs`, `session_names.rs`: Session event tracking, bookmark management, and summary records.
 - `memory/` (`context_builder.rs`, `candidates.rs`, `summary_ref.rs`, `normalize.rs`): Context assembly, history compaction, memory database interaction.
 - `ocr.rs`, `vision.rs`: Screen capture OCR processing and image data preparation.
-- `runtime.rs`, `deep_lock.rs`, `capabilities.rs`, `events.rs`, `health.rs`, `paths.rs`, `text.rs`, `bridge.rs`, `summary_source.rs`: Path resolution, runtime state, event dispatch, system health diagnostics, and string processing.
+- `runtime.rs` with `runtime/{summary_plan,trigger_detect}.rs`: The facade owns async session/summary orchestration, retries, tile actions, and `RuntimeEvents` dispatch; child modules own summary prompt/context planning and pure auto-trigger detection/prompt construction.
+- `deep_lock.rs`, `capabilities.rs`, `events.rs`, `health.rs`, `paths.rs`, `text.rs`, `bridge.rs`, `summary_source.rs`: Path resolution, runtime state, event dispatch support, system health diagnostics, and string processing.
 - `audio_macos.rs`, `audio_unavailable.rs`: Platform seams for macOS mic capture and unsupported non-Windows OS targets.
 
 ### Tests & Verification Guards
