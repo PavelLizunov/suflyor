@@ -1,9 +1,9 @@
 //! Bounded macOS GigaAM timing probe.
 //!
 //! It exercises the production `stt::transcribe_once` path with a caller-owned
-//! 16 kHz mono PCM WAV and reports only timing, resource-neutral counters, and
-//! a transcript digest. Pass a non-sensitive expected substring to prove the
-//! known-answer smoke without printing transcript contents.
+//! 16 kHz mono PCM WAV and reports only timing, the active accelerator, and a
+//! known-answer match. Pass a non-sensitive expected substring to prove the
+//! smoke without printing transcript contents.
 //!
 //! Usage:
 //!   cargo run --manifest-path overlay-backend/Cargo.toml --example stt_macos_probe -- \
@@ -13,10 +13,6 @@
 use anyhow::{bail, Context, Result};
 #[cfg(target_os = "macos")]
 use overlay_backend::config::SttBackendCfg;
-#[cfg(target_os = "macos")]
-use sha2::{Digest, Sha256};
-#[cfg(target_os = "macos")]
-use std::fmt::Write as _;
 #[cfg(target_os = "macos")]
 use std::time::Instant;
 
@@ -81,38 +77,42 @@ async fn main() -> Result<()> {
     overlay_backend::stt::configure_gigaam_accelerator(use_coreml);
     overlay_backend::stt::reset_gigaam_cache();
 
-    println!("probe accelerator={accelerator} audio_seconds={audio_seconds:.3} repeats={repeats}");
+    println!(
+        "probe requested_accelerator={accelerator} audio_seconds={audio_seconds:.3} repeats={repeats}"
+    );
     for run in 1..=repeats {
         let started = Instant::now();
-        let text = overlay_backend::stt::transcribe_once(&backend, &pcm, None, None).await?;
+        let result = overlay_backend::stt::transcribe_once(&backend, &pcm, None, None).await;
         let elapsed = started.elapsed();
         let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
         let rtf = elapsed.as_secs_f64() / audio_seconds;
-        let normalized = text.to_lowercase();
-        let expect_match = normalized.contains(&expected.to_lowercase());
-        let digest = Sha256::digest(text.as_bytes());
-        let mut digest_hex = String::with_capacity(digest.len() * 2);
-        for byte in digest {
-            write!(&mut digest_hex, "{byte:02x}").context("format transcript digest")?;
-        }
+        let active_accelerator = transcribe_rs::get_ort_accelerator();
+        let text = match result {
+            Ok(text) => text,
+            Err(error) => {
+                println!(
+                    "run={run} phase={} elapsed_ms={elapsed_ms:.3} rtf={rtf:.4} \
+                     active_accelerator={active_accelerator:?} status=error",
+                    if run == 1 { "cold" } else { "warm" },
+                );
+                return Err(error).context("STT probe transcription failed");
+            }
+        };
+        let expect_match = text.to_lowercase().contains(&expected.to_lowercase());
         println!(
             "run={run} phase={} elapsed_ms={elapsed_ms:.3} rtf={rtf:.4} \
-             transcript_chars={} transcript_sha256={digest_hex} expect_match={expect_match}",
+             active_accelerator={active_accelerator:?} expect_match={expect_match}",
             if run == 1 { "cold" } else { "warm" },
-            text.chars().count(),
         );
         if !expect_match {
             bail!("known-answer substring was not recognized");
         }
     }
-    println!(
-        "active_accelerator={:?}",
-        transcribe_rs::get_ort_accelerator()
-    );
     Ok(())
 }
 
 #[cfg(not(target_os = "macos"))]
 fn main() {
-    println!("stt_macos_probe: macOS only");
+    eprintln!("stt_macos_probe: unsupported outside macOS");
+    std::process::exit(2);
 }
