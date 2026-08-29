@@ -7,6 +7,10 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 mod provider;
+mod tps;
+
+pub use tps::{avg_tps, record_tps};
+use tps::record_stream_tps;
 
 /// Wire protocol used by a resolved AI endpoint. Existing bridge, local and
 /// Hermes routes stay on OpenAI Chat Completions compatibility; direct cloud
@@ -722,8 +726,11 @@ async fn stream_inner(
     let mut buf = String::new();
     let mut id_sent = false;
     let mut delta_count: u32 = 0;
-    // Time of the first content token — tok/s is measured over the GENERATION
-    // window (first token -> done), excluding prompt-processing latency.
+    let mut server_tps: Option<f64> = None;
+    let mut completion_tokens: Option<u64> = None;
+    let mut pending_done_reason: Option<String> = None;
+    // Time of the first content token — fallback tok/s is measured over the
+    // GENERATION window (first token -> done), excluding prompt processing.
     let mut first_delta_at: Option<std::time::Instant> = None;
 
     while let Some(chunk) = resp.chunk().await.context("read sse chunk")? {
@@ -744,10 +751,15 @@ async fn stream_inner(
                 let payload = line["data:".len()..].trim();
                 if endpoint.protocol == AiProtocol::OpenAiCompatible && payload == "[DONE]" {
                     log::info!("AI stream got [DONE]: deltas={}", delta_count);
-                    record_stream_tps(delta_count, first_delta_at);
+                    record_stream_tps(
+                        delta_count,
+                        first_delta_at,
+                        server_tps,
+                        completion_tokens,
+                    );
                     let _ = tx
                         .send(AiEvent::Done {
-                            reason: "stop".into(),
+                            reason: pending_done_reason.unwrap_or_else(|| "stop".into()),
                         })
                         .await;
                     return Ok(());
@@ -761,6 +773,12 @@ async fn stream_inner(
                 let parsed = provider::parse_stream(endpoint.protocol, &v);
                 if parsed.failed {
                     return Err(anyhow!("AI provider stream error"));
+                }
+                if parsed.server_tps.is_some() {
+                    server_tps = parsed.server_tps;
+                }
+                if parsed.completion_tokens.is_some() {
+                    completion_tokens = parsed.completion_tokens;
                 }
                 if !id_sent {
                     if let Some(id) = parsed.id {
@@ -790,7 +808,22 @@ async fn stream_inner(
                         reason,
                         delta_count
                     );
-                    record_stream_tps(delta_count, first_delta_at);
+                    // OpenAI-compatible providers may put exact usage in a
+                    // separate frame after finish_reason. Keep reading until
+                    // [DONE]/EOF only when this frame had no usable metrics.
+                    if endpoint.protocol == AiProtocol::OpenAiCompatible
+                        && server_tps.is_none()
+                        && completion_tokens.is_none()
+                    {
+                        pending_done_reason = Some(reason);
+                        continue;
+                    }
+                    record_stream_tps(
+                        delta_count,
+                        first_delta_at,
+                        server_tps,
+                        completion_tokens,
+                    );
                     let _ = tx.send(AiEvent::Done { reason }).await;
                     return Ok(());
                 }
@@ -811,10 +844,15 @@ async fn stream_inner(
     // "exactly one terminal event per stream" contract; otherwise the bar's
     // "AI working" pulse and the follow-up "busy" state stay stuck on).
     log::info!("AI stream ended without [DONE]/finish_reason: deltas={delta_count}");
-    record_stream_tps(delta_count, first_delta_at);
+    record_stream_tps(
+        delta_count,
+        first_delta_at,
+        server_tps,
+        completion_tokens,
+    );
     let _ = tx
         .send(AiEvent::Done {
-            reason: "eof".into(),
+            reason: pending_done_reason.unwrap_or_else(|| "eof".into()),
         })
         .await;
     Ok(())
@@ -914,48 +952,6 @@ pub struct TokenUsage {
     /// (audit D4: non-streaming sites previously hardcoded "stop" and lost
     /// real truncation signals).
     pub finish_reason: String,
-}
-
-/// Rolling tokens/sec across recent AI requests (streaming + non-streaming both
-/// feed it). EWMA so the bar can show an at-a-glance "is generation slower than
-/// usual?" trend without a chart. `record_tps` is called by the backend on each
-/// completed request; the bar polls `avg_tps` on its refresh timer.
-static TPS_EWMA: std::sync::Mutex<f64> = std::sync::Mutex::new(0.0);
-
-/// Fold one request's tok/s into the rolling average. Ignores non-positive /
-/// non-finite values (failed or zero-length generations).
-pub fn record_tps(v: f64) {
-    if !(v.is_finite() && v > 0.0) {
-        return;
-    }
-    let mut g = match TPS_EWMA.lock() {
-        Ok(g) => g,
-        Err(p) => p.into_inner(),
-    };
-    // alpha 0.3 — responsive to a real slowdown without being jumpy per-token.
-    *g = if *g <= 0.0 { v } else { 0.3 * v + 0.7 * *g };
-}
-
-/// Current rolling tok/s, or None if no request has completed yet this run.
-pub fn avg_tps() -> Option<f64> {
-    let g = match TPS_EWMA.lock() {
-        Ok(g) => g,
-        Err(p) => p.into_inner(),
-    };
-    (*g > 0.0).then_some(*g)
-}
-
-/// Fold a streamed generation's throughput into the rolling tok/s. `delta_count`
-/// ≈ completion tokens (llama streams ~one content chunk per token); measured
-/// over the generation window (first token → done) so prompt-processing latency
-/// doesn't drag the number down.
-fn record_stream_tps(delta_count: u32, first_delta_at: Option<std::time::Instant>) {
-    if let Some(t) = first_delta_at {
-        let secs = t.elapsed().as_secs_f64();
-        if secs > 0.0 && delta_count > 0 {
-            record_tps(delta_count as f64 / secs);
-        }
-    }
 }
 
 /// Non-streaming completion — used for prep-context structuring where we

@@ -16,6 +16,7 @@ private let validBearer = String(repeating: "a1", count: 32)
     #expect(!token.contains("\n"))
     #expect(sidecarDiagnosticCase(SidecarError.invalidSnapshot) == "invalid_snapshot")
     #expect(sidecarDiagnosticCase(SidecarError.reasoningBoundaryMissing) == "reasoning_boundary_missing")
+    #expect(sidecarDiagnosticCase(SidecarError.generationIncomplete) == "generation_incomplete")
     #expect(sidecarDiagnosticCase(CancellationError()) == "none")
 }
 
@@ -131,6 +132,32 @@ private func firstImageData(in request: ChatCompletionRequest) throws -> Data {
     #expect(throws: SidecarError.reasoningBoundaryMissing) {
         try incomplete.feed("", finished: true)
     }
+}
+
+@Test func completionMetricsExposeOpenAIUsageAndDecodeTPS() throws {
+    let metrics = completionMetrics(
+        promptTokenCount: 12,
+        generationTokenCount: 30,
+        generateTime: 2.0
+    )
+    #expect(metrics.usage == CompletionUsage(
+        promptTokens: 12,
+        completionTokens: 30,
+        totalTokens: 42
+    ))
+    #expect(metrics.timings == CompletionTimings(predictedPerSecond: 15.0))
+
+    let usage = try JSONSerialization.jsonObject(with: JSONEncoder().encode(metrics.usage))
+        as? [String: Int]
+    let timings = try JSONSerialization.jsonObject(with: JSONEncoder().encode(metrics.timings))
+        as? [String: Double]
+    #expect(usage?["prompt_tokens"] == 12)
+    #expect(usage?["completion_tokens"] == 30)
+    #expect(usage?["total_tokens"] == 42)
+    #expect(timings?["predicted_per_second"] == 15.0)
+
+    let empty = completionMetrics(promptTokenCount: 0, generationTokenCount: 0, generateTime: 0)
+    #expect(empty.timings.predictedPerSecond == nil)
 }
 
 @Test func readyLineCarriesProtocolAndResidentModel() throws {

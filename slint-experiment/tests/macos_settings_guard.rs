@@ -104,6 +104,18 @@ fn macos_provider_catalogs_and_components_keep_platform_indices_honest() {
 }
 
 #[test]
+fn model_dropdowns_keep_selected_indices_across_provider_switches() {
+    let ui = read("ui/settings_panel.slint");
+
+    assert!(ui.contains(
+        "root.ai-model-index = self.current-index;\n                                        root.ai-model-selected(self.current-value);"
+    ));
+    assert!(ui.contains(
+        "root.ai-local-model-index = self.current-index;\n                                        root.ai-local-model-selected(self.current-value);"
+    ));
+}
+
+#[test]
 fn macos_gigaam_is_coreml_backed_and_primary_on_fresh_config() {
     let cargo = read("../overlay-backend/Cargo.toml");
     let stt = read("../overlay-backend/src/stt.rs");

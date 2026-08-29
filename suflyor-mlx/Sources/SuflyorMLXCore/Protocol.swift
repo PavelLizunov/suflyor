@@ -9,6 +9,7 @@ public enum SidecarError: Error, Equatable {
     case unsupportedModel
     case invalidSnapshot
     case reasoningBoundaryMissing
+    case generationIncomplete
 }
 
 public enum SupportedModel: String, CaseIterable, Codable, Sendable {

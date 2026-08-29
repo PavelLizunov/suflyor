@@ -2412,6 +2412,7 @@ export component SettingsWindow inherits Window {
                                     current-index: root.ai-model-index;
                                     horizontal-stretch: 1;
                                     selected => {
+                                        root.ai-model-index = self.current-index;
                                         root.ai-model-selected(self.current-value);
                                     }
                                 }
@@ -2674,6 +2675,7 @@ export component SettingsWindow inherits Window {
                                     current-index: root.ai-local-model-index;
                                     horizontal-stretch: 1;
                                     selected => {
+                                        root.ai-local-model-index = self.current-index;
                                         root.ai-local-model-selected(self.current-value);
                                     }
                                 }

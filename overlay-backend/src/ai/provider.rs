@@ -6,6 +6,8 @@ pub(super) struct ParsedStreamEvent {
     pub id: Option<String>,
     pub delta: Option<String>,
     pub done: Option<String>,
+    pub server_tps: Option<f64>,
+    pub completion_tokens: Option<u64>,
     pub failed: bool,
 }
 
@@ -206,6 +208,13 @@ pub(super) fn parse_stream(protocol: AiProtocol, value: &Value) -> ParsedStreamE
                     .and_then(Value::as_str)
                     .filter(|reason| !reason.is_empty())
                     .map(str::to_string),
+                server_tps: value
+                    .pointer("/timings/predicted_per_second")
+                    .and_then(Value::as_f64)
+                    .filter(|rate| rate.is_finite() && *rate > 0.0),
+                completion_tokens: value
+                    .pointer("/usage/completion_tokens")
+                    .and_then(Value::as_u64),
                 failed: false,
             }
         }
@@ -234,6 +243,11 @@ pub(super) fn parse_stream(protocol: AiProtocol, value: &Value) -> ParsedStreamE
                 } else {
                     None
                 },
+                server_tps: None,
+                completion_tokens: value
+                    .pointer("/response/usage/output_tokens")
+                    .or_else(|| value.pointer("/usage/output_tokens"))
+                    .and_then(Value::as_u64),
                 failed: kind == "response.failed" || kind == "error",
             }
         }
@@ -267,6 +281,11 @@ pub(super) fn parse_stream(protocol: AiProtocol, value: &Value) -> ParsedStreamE
                 } else {
                     None
                 },
+                server_tps: None,
+                completion_tokens: value
+                    .pointer("/usage/output_tokens")
+                    .or_else(|| value.pointer("/message/usage/output_tokens"))
+                    .and_then(Value::as_u64),
                 failed: kind == "error",
             }
         }
@@ -274,6 +293,8 @@ pub(super) fn parse_stream(protocol: AiProtocol, value: &Value) -> ParsedStreamE
             id: None,
             delta: None,
             done: None,
+            server_tps: None,
+            completion_tokens: None,
             failed: true,
         },
     }
@@ -462,6 +483,21 @@ mod tests {
             &json!({"type":"content_block_delta","delta":{"type":"text_delta","text":"ok"}}),
         );
         assert_eq!(anthropic.delta.as_deref(), Some("ok"));
+    }
+
+    #[test]
+    fn parses_openai_stream_decode_metrics() {
+        let parsed = parse_stream(
+            AiProtocol::OpenAiCompatible,
+            &json!({
+                "choices":[{"delta":{},"finish_reason":"stop"}],
+                "usage":{"completion_tokens":24},
+                "timings":{"predicted_per_second":12.5}
+            }),
+        );
+        assert_eq!(parsed.done.as_deref(), Some("stop"));
+        assert_eq!(parsed.completion_tokens, Some(24));
+        assert_eq!(parsed.server_tps, Some(12.5));
     }
 
     #[test]
