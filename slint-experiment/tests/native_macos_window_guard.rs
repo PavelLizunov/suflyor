@@ -15,6 +15,8 @@ fn production_macos_window_uses_the_proven_minimal_appkit_bridge() {
         .expect("read window lifecycle");
     let host = fs::read_to_string(root.join("src/bin/overlay_host_windows.rs"))
         .expect("read canonical host");
+    let bar_tray = fs::read_to_string(root.join("src/bin/overlay_host/bar_tray.rs"))
+        .expect("read bar and tray helpers");
     let tiles = fs::read_to_string(root.join("src/bin/overlay_host/tile_window.rs"))
         .expect("read tile placement");
     let lock_menu = host
@@ -69,9 +71,9 @@ fn production_macos_window_uses_the_proven_minimal_appkit_bridge() {
     assert!(lifecycle.contains("slint::LogicalPosition::new(x as f32, y as f32)"));
     assert!(lifecycle.contains("set_platform_window_position(w.window(), sx, sy)"));
     assert!(lifecycle.contains("set_platform_window_position(w.window(), cx, cy)"));
-    assert!(host.contains("set_platform_window_position(o.window(), x, y)"));
-    assert!(host.contains("let target_width = target_w_logical.round() as i32"));
-    assert!(host.contains("move_window_pos_only(hwnd, x, y)"));
+    assert!(bar_tray.contains("set_platform_window_position(o.window(), x, y)"));
+    assert!(bar_tray.contains("let target_width = target_w_logical.round() as i32"));
+    assert!(bar_tray.contains("move_window_pos_only(hwnd, x, y)"));
     assert!(lock_menu.contains("let (bar_left, bar_top) = match get_window_rect(bar_hwnd)"));
     assert!(
         lock_menu.contains("#[cfg(target_os = \"macos\")]\n                let scale = 1.0_f32;")
@@ -85,6 +87,7 @@ fn production_macos_window_uses_the_proven_minimal_appkit_bridge() {
     assert!(tiles.contains("set_platform_window_position(t.window(), 100, 100)"));
     assert!(!lifecycle.contains("center_window"));
     assert!(!host.contains("center_window"));
+    assert!(!bar_tray.contains("center_window"));
     assert!(!rust.contains("center_window"));
     assert!(!objc.contains("center_window"));
     assert!(ui.contains("!root.compact-bar && !root.bootstrap-mode"));

@@ -27,8 +27,11 @@ fn explicit_speech_replaces_the_current_utterance() {
 
     let host = fs::read_to_string(root.join("src/bin/overlay_host_windows.rs"))
         .expect("read overlay_host_windows.rs");
-    assert!(host.contains("speak_explicit(text, convo_id);"));
-    assert!(host.contains("speak_explicit(trimmed, convo_id);"));
+    let read_aloud = fs::read_to_string(root.join("src/bin/overlay_host/read_aloud.rs"))
+        .expect("read read_aloud.rs");
+    assert!(host.contains("#[path = \"overlay_host/read_aloud.rs\"]"));
+    assert!(read_aloud.contains("speak_explicit(text, convo_id);"));
+    assert!(read_aloud.contains("speak_explicit(trimmed, convo_id);"));
     assert!(!source.contains("auto_speak_if_idle"));
 }
 

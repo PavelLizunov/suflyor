@@ -98,15 +98,18 @@ fn canonical_ocr_route_uses_the_platform_local_engine_off_thread() {
         .expect("read vision capture");
     let host = fs::read_to_string(root.join("src/bin/overlay_host_windows.rs"))
         .expect("read canonical host");
+    let read_aloud = fs::read_to_string(root.join("src/bin/overlay_host/read_aloud.rs"))
+        .expect("read OCR tile helpers");
 
     assert!(capture.contains("fn local_ocr_available()"));
     assert!(capture.contains("overlay_backend::ocr::is_available()"));
     assert!(capture.contains("slint_replay::native::screen::recognize_text_from_bgra"));
     assert!(capture.contains("tokio::task::spawn_blocking(move || run_local_ocr"));
     assert!(capture.contains("super::fill_ocr_error_tile(weak_ocr, ui_is_ru)"));
-    assert!(host.contains("pub(crate) fn fill_ocr_error_tile"));
-    assert!(host.contains("Text recognition failed."));
-    assert!(host.contains("OCR · Tesseract"));
-    assert!(host.contains("OCR · Apple Vision"));
-    assert!(host.contains("*(no text recognized)*"));
+    assert!(host.contains("#[path = \"overlay_host/read_aloud.rs\"]"));
+    assert!(read_aloud.contains("fn fill_ocr_error_tile"));
+    assert!(read_aloud.contains("Text recognition failed."));
+    assert!(read_aloud.contains("OCR · Tesseract"));
+    assert!(read_aloud.contains("OCR · Apple Vision"));
+    assert!(read_aloud.contains("*(no text recognized)*"));
 }
