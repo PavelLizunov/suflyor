@@ -16,6 +16,8 @@ use overlay_backend::config::SttBackendCfg;
 #[cfg(target_os = "macos")]
 use sha2::{Digest, Sha256};
 #[cfg(target_os = "macos")]
+use std::fmt::Write as _;
+#[cfg(target_os = "macos")]
 use std::time::Instant;
 
 #[cfg(target_os = "macos")]
@@ -89,9 +91,13 @@ async fn main() -> Result<()> {
         let normalized = text.to_lowercase();
         let expect_match = normalized.contains(&expected.to_lowercase());
         let digest = Sha256::digest(text.as_bytes());
+        let mut digest_hex = String::with_capacity(digest.len() * 2);
+        for byte in digest {
+            write!(&mut digest_hex, "{byte:02x}").context("format transcript digest")?;
+        }
         println!(
             "run={run} phase={} elapsed_ms={elapsed_ms:.3} rtf={rtf:.4} \
-             transcript_chars={} transcript_sha256={digest:x} expect_match={expect_match}",
+             transcript_chars={} transcript_sha256={digest_hex} expect_match={expect_match}",
             if run == 1 { "cold" } else { "warm" },
             text.chars().count(),
         );
