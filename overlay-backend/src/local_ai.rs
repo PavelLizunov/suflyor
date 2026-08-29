@@ -41,7 +41,8 @@ pub use model_state::*;
 pub(super) const GEMMA_URL: &str = "https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/980b060c40a8539ac159e0501a3e0f66a6365af3/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf";
 pub(super) const GEMMA_FILE: &str = "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf";
 pub(super) const GEMMA_SIZE: u64 = 6_716_356_800;
-pub(super) const GEMMA_SHA256: &str = "90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821ea634c940c370";
+pub(super) const GEMMA_SHA256: &str =
+    "90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821ea634c940c370";
 
 // The optional fast 4B profile (also the model the previous release installed).
 // Pinned to an immutable Hugging Face revision with the exact LFS size + SHA-256
@@ -66,12 +67,14 @@ pub(super) const LEGACY_GEMMA_SIZE_PREV: u64 = 4_977_169_568;
 pub(super) const GEMMA26_URL: &str = "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/c099eb4/gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf";
 pub(super) const GEMMA26_FILE: &str = "gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf";
 pub(super) const GEMMA26_SIZE: u64 = 10_546_934_240;
-pub(super) const GEMMA26_SHA256: &str = "2a1d26dfe6ea00a467940a5728316af6edb366bbdba950d65b85d232392fb658";
+pub(super) const GEMMA26_SHA256: &str =
+    "2a1d26dfe6ea00a467940a5728316af6edb366bbdba950d65b85d232392fb658";
 pub(super) const MMPROJ26_URL: &str =
     "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/c099eb4/mmproj-F16.gguf";
 pub(super) const MMPROJ26_FILE: &str = "mmproj-F16.gguf";
 pub(super) const MMPROJ26_SIZE: u64 = 1_193_058_784;
-pub(super) const MMPROJ26_SHA256: &str = "418a6d8723067cd712235facbbc5cba6c8fbbd413fc1292d2aace5a027d5a42f";
+pub(super) const MMPROJ26_SHA256: &str =
+    "418a6d8723067cd712235facbbc5cba6c8fbbd413fc1292d2aace5a027d5a42f";
 
 // Vision projector for the 12B fallback. Uses the model's own gemma4uv
 // projector and is only attached on a compatible llama.cpp build.
@@ -79,7 +82,8 @@ pub(super) const MMPROJ_URL: &str =
     "https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/main/mmproj-F16.gguf";
 pub(super) const MMPROJ_FILE: &str = "mmproj-12b-F16.gguf";
 pub(super) const MMPROJ_SIZE: u64 = 175_115_840;
-pub(super) const MMPROJ_SHA256: &str = "ecc4e93128da8363b7dbf2193eab98cf1142353f52ceaa0c95c0872997aaadd3";
+pub(super) const MMPROJ_SHA256: &str =
+    "ecc4e93128da8363b7dbf2193eab98cf1142353f52ceaa0c95c0872997aaadd3";
 /// Minimum llama.cpp release build (the `bNNNN` tag) that can load Gemma 4
 /// "gemma4uv" projector. Below this we keep the 12B text-only (no crash).
 pub(super) const GEMMA4UV_MIN_BUILD: u32 = 9626;
@@ -89,13 +93,15 @@ pub(super) const WHISPER_URL: &str =
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin";
 pub(super) const WHISPER_FILE: &str = "ggml-large-v3-turbo-q8_0.bin";
 pub(super) const WHISPER_SIZE: u64 = 874_188_075;
-pub(super) const WHISPER_SHA256: &str = "317eb69c11673c9de1e1f0d459b253999804ec71ac4c23c17ecf5fbe24e259a1";
+pub(super) const WHISPER_SHA256: &str =
+    "317eb69c11673c9de1e1f0d459b253999804ec71ac4c23c17ecf5fbe24e259a1";
 pub(super) const WHISPER_MODEL_ID: &str = "whisper-large-v3-turbo";
 
 pub(super) const GIGAAM_MODEL_URL: &str =
     "https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/main/v3_e2e_ctc.int8.onnx";
 pub(super) const GIGAAM_MODEL_SIZE: u64 = 224_893_347;
-pub(super) const GIGAAM_SHA256: &str = "2e3fcb7a7b66030336fd10c2fcfb033bd1dc7e1bf238fe5cfd83b1d0cfc9d28e";
+pub(super) const GIGAAM_SHA256: &str =
+    "2e3fcb7a7b66030336fd10c2fcfb033bd1dc7e1bf238fe5cfd83b1d0cfc9d28e";
 pub(super) const GIGAAM_VOCAB_URL: &str =
     "https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/main/v3_e2e_ctc_vocab.txt";
 /// GigaAM-v3 vocab (2 KB, FIXED for this model) — BUNDLED via include_bytes so the
@@ -113,7 +119,6 @@ pub const LLAMA_BASE_URL: &str = "http://127.0.0.1:8080/v1";
 pub const WHISPER_BASE_URL: &str = "http://127.0.0.1:8081/v1";
 pub(super) const LLAMA_PORT: &str = "8080";
 pub(super) const WHISPER_PORT: &str = "8081";
-
 
 const STRICT_LLAMA_READY_BUDGET: Duration = Duration::from_secs(120);
 
@@ -140,7 +145,6 @@ pub fn blocking_acquire_lifecycle(
         }
     }
 }
-
 
 /// `install` returns this exact error message when the user cancels mid-run, so
 /// the UI can show "Отменено" instead of treating it as a failure.
@@ -228,7 +232,6 @@ impl Drop for InstallServerCleanup {
         terminate_servers(std::mem::take(&mut self.children));
     }
 }
-
 
 fn system_memory_telemetry(pid: Option<u32>) -> Option<String> {
     let process = pid.map_or_else(
@@ -327,7 +330,6 @@ fn wait_for_nvidia_vram_baseline(baseline_mib: Option<u64>, budget: Duration) ->
 fn vram_is_at_baseline(baseline_mib: u64, after_mib: Option<u64>) -> bool {
     after_mib.is_some_and(|after| after <= baseline_mib.saturating_add(64))
 }
-
 
 /// Write the installer's resulting endpoints/models into a `Config`, switching
 /// it to the local stack. Secrets are untouched. The actual installed selection
@@ -1511,7 +1513,6 @@ fn restart_llama_server_for_route_inner(
         (ModelSwitch::FailedToStart, Vec::new())
     }
 }
-
 
 // ---- engine auto-update (keep llama.cpp fresh) -----------------------------
 
@@ -2770,7 +2771,11 @@ fn file_stamp(path: &Path) -> Option<FileStamp> {
     })
 }
 
-pub(super) fn cached_pinned_file_matches(path: &Path, expected_size: u64, expected_sha256: &str) -> bool {
+pub(super) fn cached_pinned_file_matches(
+    path: &Path,
+    expected_size: u64,
+    expected_sha256: &str,
+) -> bool {
     let Some(stamp) = file_stamp(path) else {
         return false;
     };

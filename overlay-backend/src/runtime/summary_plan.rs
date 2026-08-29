@@ -31,7 +31,11 @@ pub(super) fn managed_summary_context(
     })
 }
 
-pub(super) fn prompt_fits_context(prompt_tokens: u64, max_tokens: u32, context_tokens: u32) -> bool {
+pub(super) fn prompt_fits_context(
+    prompt_tokens: u64,
+    max_tokens: u32,
+    context_tokens: u32,
+) -> bool {
     prompt_tokens
         .saturating_add(u64::from(max_tokens))
         .saturating_add(SUMMARY_CONTEXT_RESERVE_TOKENS)
