@@ -45,6 +45,8 @@ use std::sync::Arc;
 mod summary_plan;
 mod trigger_detect;
 
+#[cfg(test)]
+use summary_plan::prompt_fits_context;
 pub use summary_plan::{
     build_summary_reduce_seed, build_summary_seed, build_summary_seed_from_formatted,
     format_transcript_for_summary, split_transcript_for_map, summary_gate, summary_system_prompt,
@@ -55,8 +57,6 @@ use summary_plan::{
     SUMMARY_INPUT_BUDGET_CLOUD_CHARS, SUMMARY_INPUT_BUDGET_LOCAL_CHARS, SUMMARY_MAX_TOKENS,
     SUMMARY_PARTIAL_MAX_TOKENS,
 };
-#[cfg(test)]
-use summary_plan::prompt_fits_context;
 pub use trigger_detect::{
     build_auto_tile_prompts, detect_trigger, looks_like_real_speech, strip_filler_prefix, Trigger,
 };
