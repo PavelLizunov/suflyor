@@ -22,7 +22,10 @@ use std::io::Write as _;
 #[cfg(target_os = "macos")]
 use std::sync::Arc;
 #[cfg(target_os = "macos")]
-use std::{thread, time::{Duration, Instant}};
+use std::{
+    thread,
+    time::{Duration, Instant},
+};
 #[cfg(target_os = "macos")]
 use tokio::sync::mpsc;
 
