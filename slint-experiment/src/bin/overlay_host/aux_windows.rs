@@ -35,9 +35,13 @@ use slint::Model;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
+#[path = "aux_windows/archive.rs"]
 mod archive;
+#[path = "aux_windows/help_palette.rs"]
 mod help_palette;
+#[path = "aux_windows/text_ask.rs"]
 mod text_ask;
+#[path = "aux_windows/transcript.rs"]
 mod transcript;
 
 use archive::{session_title, spawn_content_tile};

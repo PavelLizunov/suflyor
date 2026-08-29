@@ -8,7 +8,7 @@ use overlay_backend::events::RuntimeEvents;
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, VecModel};
 use slint_replay::runtime_state::SharedSlintRuntime;
 use slint_replay::win32::grab_hwnd;
-use ui::{OverlayBarWindow, TileWindow};
+use crate::ui::{OverlayBarWindow, TileWindow};
 
 use super::{
     apply_tile_hwnd_with_monitor, fire_followup_ask, live_route, present_tile_window,

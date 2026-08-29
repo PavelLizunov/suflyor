@@ -1,6 +1,6 @@
 use overlay_backend::config;
 use slint::SharedString;
-use ui::OverlayBarWindow;
+use crate::ui::OverlayBarWindow;
 
 /// Short, human display name for a model id: drop a `.gguf`/`.bin` extension,
 /// then take the first token (or the tier after "claude-"). Used by the bar's
@@ -63,7 +63,7 @@ pub(super) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
     format!("{tag}: {stt} · {model}")
 }
 
-fn gigaam_accelerator_name(enabled: bool) -> &'static str {
+pub(super) fn gigaam_accelerator_name(enabled: bool) -> &'static str {
     if !enabled {
         "CPU"
     } else if cfg!(target_os = "macos") {

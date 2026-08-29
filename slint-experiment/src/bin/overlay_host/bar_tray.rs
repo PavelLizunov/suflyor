@@ -3,9 +3,10 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+#[cfg(windows)]
 use overlay_backend::config;
 use slint::{ComponentHandle, SharedString, Timer};
-use ui::{OverlayBarWindow, TrayMenuWindow};
+use crate::ui::{OverlayBarWindow, TrayMenuWindow};
 
 #[allow(unused_imports)]
 use slint_replay::win32::{
@@ -13,9 +14,11 @@ use slint_replay::win32::{
     move_window_pos_only, set_always_on_top, set_skip_taskbar, set_stealth, work_area_for_point,
 };
 
+#[cfg(windows)]
+use super::clamp_scheme;
 use super::{
-    apply_bar_stealth, clamp_scheme, global_stealth, realize_with_retries,
-    set_global_stealth_effective, set_platform_window_position, surface_stealth_unavailable,
+    apply_bar_stealth, global_stealth, realize_with_retries, set_global_stealth_effective,
+    set_platform_window_position, surface_stealth_unavailable,
 };
 
 /// hidden-to-tray — the bar is hidden ONLY by an explicit action (bar chip
