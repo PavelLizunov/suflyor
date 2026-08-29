@@ -9,8 +9,8 @@ use tokio::sync::mpsc;
 mod provider;
 mod tps;
 
-pub use tps::{avg_tps, record_tps};
 use tps::record_stream_tps;
+pub use tps::{avg_tps, record_tps};
 
 /// Wire protocol used by a resolved AI endpoint. Existing bridge, local and
 /// Hermes routes stay on OpenAI Chat Completions compatibility; direct cloud
@@ -751,12 +751,7 @@ async fn stream_inner(
                 let payload = line["data:".len()..].trim();
                 if endpoint.protocol == AiProtocol::OpenAiCompatible && payload == "[DONE]" {
                     log::info!("AI stream got [DONE]: deltas={}", delta_count);
-                    record_stream_tps(
-                        delta_count,
-                        first_delta_at,
-                        server_tps,
-                        completion_tokens,
-                    );
+                    record_stream_tps(delta_count, first_delta_at, server_tps, completion_tokens);
                     let _ = tx
                         .send(AiEvent::Done {
                             reason: pending_done_reason.unwrap_or_else(|| "stop".into()),
@@ -818,12 +813,7 @@ async fn stream_inner(
                         pending_done_reason = Some(reason);
                         continue;
                     }
-                    record_stream_tps(
-                        delta_count,
-                        first_delta_at,
-                        server_tps,
-                        completion_tokens,
-                    );
+                    record_stream_tps(delta_count, first_delta_at, server_tps, completion_tokens);
                     let _ = tx.send(AiEvent::Done { reason }).await;
                     return Ok(());
                 }
@@ -844,12 +834,7 @@ async fn stream_inner(
     // "exactly one terminal event per stream" contract; otherwise the bar's
     // "AI working" pulse and the follow-up "busy" state stay stuck on).
     log::info!("AI stream ended without [DONE]/finish_reason: deltas={delta_count}");
-    record_stream_tps(
-        delta_count,
-        first_delta_at,
-        server_tps,
-        completion_tokens,
-    );
+    record_stream_tps(delta_count, first_delta_at, server_tps, completion_tokens);
     let _ = tx
         .send(AiEvent::Done {
             reason: pending_done_reason.unwrap_or_else(|| "eof".into()),

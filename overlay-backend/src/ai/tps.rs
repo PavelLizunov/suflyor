@@ -50,8 +50,7 @@ fn stream_tps(
                 .map(|count| count as f64 / elapsed_secs)
         })
         .or_else(|| {
-            (delta_count > 0 && elapsed_secs > 0.0)
-                .then_some(delta_count as f64 / elapsed_secs)
+            (delta_count > 0 && elapsed_secs > 0.0).then_some(delta_count as f64 / elapsed_secs)
         })
 }
 
