@@ -216,7 +216,7 @@ fn open_tray_menu(
     menu.set_stop_label(entries[2].label.into());
     menu.set_quit_label(entries[3].label.into());
     menu.set_session_running(running);
-    menu.global::<ui::Theme>()
+    menu.global::<crate::ui::Theme>()
         .set_scheme(clamp_scheme(config.color_scheme));
     drop(config);
 
