@@ -24,7 +24,7 @@ use snippets::default_snippets;
 /// paper over). [`load`] stamps any older/unstamped file up to this number and
 /// is the single place a number-keyed migration would run. Additive fields do
 /// NOT need a bump — `#[serde(default)]` already loads old files.
-const CURRENT_CONFIG_VERSION: u32 = 1;
+const CURRENT_CONFIG_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -224,9 +224,10 @@ pub struct Config {
     /// Defaults to the same `~/suflyor-local-ai/gigaam-v3` path the installer uses.
     #[serde(default = "default_stt_gigaam_dir")]
     pub stt_gigaam_dir: String,
-    /// Run GigaAM through DirectML on Windows or Core ML on macOS. Falls back
-    /// to ONNX Runtime CPU when the platform provider cannot load the model.
-    /// ~7x faster on long audio; ~1s one-time shader-compile on first use.
+    /// Run GigaAM through DirectML on Windows or Core ML on macOS. DirectML is
+    /// the Windows default; Core ML is macOS opt-in because short utterances
+    /// measured slower with substantially higher RSS. Both fall back to CPU
+    /// when the platform provider cannot load the model.
     #[serde(default = "default_stt_gigaam_gpu")]
     pub stt_gigaam_gpu: bool,
     /// Local whisper.cpp server base URL (OpenAI-compatible), e.g.
@@ -1178,7 +1179,7 @@ fn default_stt_gigaam_dir() -> String {
 }
 
 fn default_stt_gigaam_gpu() -> bool {
-    true
+    !cfg!(target_os = "macos")
 }
 
 fn default_stt_whisper_url() -> String {
@@ -1476,6 +1477,10 @@ pub fn load() -> Config {
             &crate::local_ai::default_root(),
         ));
     dirty |= migrate_macos_gigaam_default(&mut cfg, managed_gigaam_ready);
+    // v2: CoreML was slower and retained substantially more RSS than CPU on
+    // Apple Silicon. Migrate the former implicit-on default once; users can
+    // still opt back in through Settings after this version is stamped.
+    dirty |= migrate_macos_gigaam_cpu_default(&mut cfg);
     // P1.3 — schema-versioning anchor. Stamp the file with the current schema
     // version so a FUTURE release can detect an older layout (config_version <
     // CURRENT) and run a one-time, number-keyed migration right here. Every
@@ -1521,6 +1526,14 @@ fn migrate_legacy_vision_same(cfg: &mut Config) -> bool {
         _ => "off",
     };
     cfg.vision_provider = replacement.to_string();
+    true
+}
+
+fn migrate_macos_gigaam_cpu_default(cfg: &mut Config) -> bool {
+    if !cfg!(target_os = "macos") || cfg.config_version >= 2 || !cfg.stt_gigaam_gpu {
+        return false;
+    }
+    cfg.stt_gigaam_gpu = false;
     true
 }
 

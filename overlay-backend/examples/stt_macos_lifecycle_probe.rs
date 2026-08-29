@@ -184,7 +184,7 @@ async fn main() -> Result<()> {
     let (audio_tx, transcript_rx) = start_live(&backend, &pcm, &expected).await?;
     phase("adhoc_plus_live").await?;
     stop_live(audio_tx, transcript_rx).await?;
-    phase("adhoc_after_live_stop").await?;
+    phase("shared_after_live_stop").await?;
 
     overlay_backend::stt::reset_gigaam_cache();
     phase("cache_reset").await?;
@@ -192,6 +192,7 @@ async fn main() -> Result<()> {
     for cycle in 1..=LIVE_CYCLES {
         let (audio_tx, transcript_rx) = start_live(&backend, &pcm, &expected).await?;
         stop_live(audio_tx, transcript_rx).await?;
+        overlay_backend::stt::reset_gigaam_cache();
         phase(&format!("live_cycle_{cycle}_stopped")).await?;
     }
     println!("probe_status=ok");
