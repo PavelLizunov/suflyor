@@ -1,0 +1,10 @@
+candidate_sha=c8fbc58389a283b8c7ef061f7c3e4c3b6d764230
+worker=windows-worker
+worktree_clean=true
+command=powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci.ps1
+started_utc=2026-08-29T11:55:45.2398445Z
+finished_utc=2026-08-29T12:44:01.7615912Z
+exit=0
+terminal=All gating layers green.
+covered=slint fmt, clippy, tests, ui-mcp feature; backend fmt, clippy, tests; wsola fmt, clippy, tests; tts fmt, clippy, tests; teratts fmt, clippy, tests
+note=The capture wrapper remained in Start-Process -Wait after the inner CI process had exited. Exit 0 was recorded only after the green terminal line, zero build processes, exact SHA, and clean worktree were independently rechecked.

@@ -1,0 +1,15 @@
+baseline_sha=1fa75a0e59694bf2fa75c2fae52e837e1958f568
+baseline_exit=0
+baseline_started_utc=2026-08-29T11:16:47Z
+baseline_finished_utc=2026-08-29T11:36:08Z
+baseline_terminal=All macOS compile-seam layers green.
+previous_candidate_sha=b6e569742ec3b151c879b19b7527106f8d1bd866
+previous_candidate_exit=0
+previous_candidate_terminal=All macOS compile-seam layers green.
+final_code_sha=c8fbc58389a283b8c7ef061f7c3e4c3b6d764230
+final_code_tree=827046bc422511d51ee48ae4f80bae18d7bbdd8a
+final_code_exit=0
+final_code_started_utc=2026-08-29T16:06:47Z
+final_code_finished_utc=2026-08-29T16:29:14Z
+final_code_terminal=All macOS compile-seam layers green.
+final_code_note=The earlier disconnected attempt had no surviving marker or build process; one resilient rerun completed after the worker returned.

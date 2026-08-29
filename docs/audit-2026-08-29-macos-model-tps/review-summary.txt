@@ -1,0 +1,10 @@
+review_scope=1fa75a0e59694bf2fa75c2fae52e837e1958f568..c8fbc58389a283b8c7ef061f7c3e4c3b6d764230
+independent_reviews=2
+final_blockers=0
+settings_result=Separate cloud and generic-local selected indices are now copied from each ComboBox current index before the persisted model callback runs.
+tps_result=Managed MLX emits OpenAI-compatible completion usage and decode TPS; Rust prioritizes server TPS, then exact completion tokens over generation duration, then SSE-delta fallback.
+stream_terminal_result=A valid finish_reason is immediately terminal even when optional usage/timings and DONE are absent.
+cancellation_result=MLX cancelled generations throw CancellationError and cannot become a successful finish_reason stop envelope.
+api_result=overlay_backend::ai::{avg_tps,record_tps} source paths and signatures remain available through facade re-exports.
+security_result=No credential, endpoint, transcript, or private-path leak found.
+compatibility_result=No Windows-compatibility blocker found.
