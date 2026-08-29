@@ -43,10 +43,11 @@ func completionMetrics(
     )
 }
 
-private func openAIFinishReason(_ reason: GenerateStopReason) -> String {
+func openAIFinishReason(_ reason: GenerateStopReason) throws -> String {
     switch reason {
     case .length: "length"
-    case .stop, .cancelled: "stop"
+    case .stop: "stop"
+    case .cancelled: throw CancellationError()
     }
 }
 
@@ -266,10 +267,11 @@ private actor ModelEngine {
                     break
                 }
             }
+            guard let completionInfo else { throw SidecarError.generationIncomplete }
+            if case .cancelled = completionInfo.stopReason { throw CancellationError() }
             phase = .reasoningFilter
             let tail = try filter.feed("", finished: true)
             if !tail.isEmpty { try await onEvent(.chunk(tail)) }
-            guard let completionInfo else { throw SidecarError.generationIncomplete }
             try await onEvent(.info(completionInfo))
             await gate.release()
         } catch {
@@ -365,7 +367,7 @@ public struct SidecarServer: Sendable {
                             id: id, model: completion.model.rawValue,
                             choices: [.init(
                                 delta: .init(content: nil),
-                                finishReason: openAIFinishReason(completionInfo.stopReason)
+                                finishReason: try openAIFinishReason(completionInfo.stopReason)
                             )],
                             usage: metrics.usage,
                             timings: metrics.timings
@@ -394,7 +396,7 @@ public struct SidecarServer: Sendable {
                 id: id, model: completion.model.rawValue,
                 choices: [.init(
                     message: .init(content: answer),
-                    finishReason: openAIFinishReason(completionInfo.stopReason)
+                    finishReason: try openAIFinishReason(completionInfo.stopReason)
                 )],
                 usage: metrics.usage,
                 timings: metrics.timings

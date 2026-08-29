@@ -160,6 +160,12 @@ private func firstImageData(in request: ChatCompletionRequest) throws -> Data {
     #expect(empty.timings.predictedPerSecond == nil)
 }
 
+@Test func cancelledGenerationIsNeverASuccessfulStop() {
+    #expect(throws: CancellationError.self) {
+        try openAIFinishReason(.cancelled)
+    }
+}
+
 @Test func readyLineCarriesProtocolAndResidentModel() throws {
     let line = try readyLine(port: 49_151, model: .qwen)
     #expect(line.last == 0x0A)

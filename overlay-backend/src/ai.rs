@@ -728,7 +728,6 @@ async fn stream_inner(
     let mut delta_count: u32 = 0;
     let mut server_tps: Option<f64> = None;
     let mut completion_tokens: Option<u64> = None;
-    let mut pending_done_reason: Option<String> = None;
     // Time of the first content token — fallback tok/s is measured over the
     // GENERATION window (first token -> done), excluding prompt processing.
     let mut first_delta_at: Option<std::time::Instant> = None;
@@ -754,7 +753,7 @@ async fn stream_inner(
                     record_stream_tps(delta_count, first_delta_at, server_tps, completion_tokens);
                     let _ = tx
                         .send(AiEvent::Done {
-                            reason: pending_done_reason.unwrap_or_else(|| "stop".into()),
+                            reason: "stop".into(),
                         })
                         .await;
                     return Ok(());
@@ -803,16 +802,6 @@ async fn stream_inner(
                         reason,
                         delta_count
                     );
-                    // OpenAI-compatible providers may put exact usage in a
-                    // separate frame after finish_reason. Keep reading until
-                    // [DONE]/EOF only when this frame had no usable metrics.
-                    if endpoint.protocol == AiProtocol::OpenAiCompatible
-                        && server_tps.is_none()
-                        && completion_tokens.is_none()
-                    {
-                        pending_done_reason = Some(reason);
-                        continue;
-                    }
                     record_stream_tps(delta_count, first_delta_at, server_tps, completion_tokens);
                     let _ = tx.send(AiEvent::Done { reason }).await;
                     return Ok(());
@@ -837,7 +826,7 @@ async fn stream_inner(
     record_stream_tps(delta_count, first_delta_at, server_tps, completion_tokens);
     let _ = tx
         .send(AiEvent::Done {
-            reason: pending_done_reason.unwrap_or_else(|| "eof".into()),
+            reason: "eof".into(),
         })
         .await;
     Ok(())
@@ -1997,6 +1986,37 @@ mod tests {
         assert!(header(&request, "authorization").is_none());
         let body: Value = serde_json::from_str(&request.body).unwrap();
         assert_eq!(body["max_tokens"], 43);
+    }
+
+    #[tokio::test]
+    async fn openai_finish_reason_is_terminal_without_optional_metrics() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 4_096];
+            let _ = std::io::Read::read(&mut stream, &mut request);
+            let frame = b"data: {\"choices\":[{\"delta\":{\"content\":\"hi\"},\"finish_reason\":\"stop\"}]}\n\n";
+            let headers = b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n";
+            std::io::Write::write_all(&mut stream, headers).unwrap();
+            std::io::Write::write_all(&mut stream, format!("{:X}\r\n", frame.len()).as_bytes())
+                .unwrap();
+            std::io::Write::write_all(&mut stream, frame).unwrap();
+            std::io::Write::write_all(&mut stream, b"\r\n").unwrap();
+            std::io::Write::flush(&mut stream).unwrap();
+            std::thread::sleep(std::time::Duration::from_secs(5));
+        });
+
+        let mut rx = stream_chat(url, String::new(), "model".into(), Vec::new(), 8);
+        assert!(matches!(rx.recv().await, Some(AiEvent::Delta { text }) if text == "hi"));
+        let done = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+            .await
+            .expect("finish_reason must not wait for optional telemetry");
+        assert!(matches!(done, Some(AiEvent::Done { reason }) if reason == "stop"));
+        let terminal = tokio::time::timeout(std::time::Duration::from_millis(500), rx.recv())
+            .await
+            .expect("stream producer should stop after finish_reason");
+        assert!(terminal.is_none(), "finish_reason must emit exactly one terminal event");
     }
 
     #[tokio::test]
