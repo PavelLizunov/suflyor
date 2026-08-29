@@ -82,13 +82,11 @@ async fn start_live(
     backend: &SttBackendCfg,
     pcm: &[i16],
     expected: &str,
-) -> Result<(
-    mpsc::Sender<AudioChunk>,
-    mpsc::Receiver<TranscriptEvent>,
-)> {
+) -> Result<(mpsc::Sender<AudioChunk>, mpsc::Receiver<TranscriptEvent>)> {
     let (audio_tx, audio_rx) = mpsc::channel(4);
     let health = Arc::new(overlay_backend::health::HealthSignals::default());
-    let mut transcript_rx = overlay_backend::stt::spawn(audio_rx, backend.clone(), None, None, health);
+    let mut transcript_rx =
+        overlay_backend::stt::spawn(audio_rx, backend.clone(), None, None, health);
     let speech_ms = (pcm.len() as u64 * 1000) / 16_000;
     audio_tx
         .send(AudioChunk {
