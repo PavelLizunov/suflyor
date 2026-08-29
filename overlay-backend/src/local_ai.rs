@@ -26,14 +26,22 @@ use std::time::{Duration, Instant, SystemTime};
 use anyhow::{anyhow, bail, Context, Result};
 use serde::Deserialize;
 
+mod hardware_profile;
+mod model_choice;
+mod model_state;
+
+pub use hardware_profile::*;
+pub use model_choice::*;
+pub use model_state::*;
+
 // ---- pinned model coordinates (HuggingFace) + exact sizes (integrity) -------
 // RAM-safe fallback: Gemma 4 12B QAT. It is always installed so a machine that
 // does not qualify for the 26B matrix, or whose 26B file disappears, still has
 // a verified local model to launch.
-const GEMMA_URL: &str = "https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/980b060c40a8539ac159e0501a3e0f66a6365af3/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf";
-const GEMMA_FILE: &str = "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf";
-const GEMMA_SIZE: u64 = 6_716_356_800;
-const GEMMA_SHA256: &str = "90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821ea634c940c370";
+pub(super) const GEMMA_URL: &str = "https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/980b060c40a8539ac159e0501a3e0f66a6365af3/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf";
+pub(super) const GEMMA_FILE: &str = "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf";
+pub(super) const GEMMA_SIZE: u64 = 6_716_356_800;
+pub(super) const GEMMA_SHA256: &str = "90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821ea634c940c370";
 
 // The optional fast 4B profile (also the model the previous release installed).
 // Pinned to an immutable Hugging Face revision with the exact LFS size + SHA-256
@@ -42,106 +50,70 @@ const GEMMA_SHA256: &str = "90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821e
 // resolved from /main. Keep recognising it during an upgrade: replacing its
 // persisted model id with the new 12B filename before the user has downloaded
 // 12B would leave an otherwise working installation with no launchable model.
-const LEGACY_GEMMA_URL: &str = "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/bfc15c382204943c3a8fff0c750b94ae2364d7a3/gemma-4-E4B-it-Q4_K_M.gguf";
-const LEGACY_GEMMA_FILE: &str = "gemma-4-E4B-it-Q4_K_M.gguf";
-const LEGACY_GEMMA_SIZE: u64 = 4_977_171_584;
-const LEGACY_GEMMA_SHA256: &str =
+pub(super) const LEGACY_GEMMA_URL: &str = "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/bfc15c382204943c3a8fff0c750b94ae2364d7a3/gemma-4-E4B-it-Q4_K_M.gguf";
+pub(super) const LEGACY_GEMMA_FILE: &str = "gemma-4-E4B-it-Q4_K_M.gguf";
+pub(super) const LEGACY_GEMMA_SIZE: u64 = 4_977_171_584;
+pub(super) const LEGACY_GEMMA_SHA256: &str =
     "85a896a047553e842f25297ee5b031d64ff30147d9c4af17b1e4b394cd1fab87";
 /// The 4B file size installed by releases before the immutable-revision pin.
 /// Same filename, same model weights, 2 016 bytes shorter (different GGUF
 /// metadata padding). Recognised as a complete, launchable artifact so an
 /// upgraded install never corrupt-resumes or re-downloads a working file.
-const LEGACY_GEMMA_SIZE_PREV: u64 = 4_977_169_568;
+pub(super) const LEGACY_GEMMA_SIZE_PREV: u64 = 4_977_169_568;
 
 // Owner-approved primary model. The byte size and SHA-256 are independently
 // pinned from the immutable Hugging Face revision c099eb4.
-const GEMMA26_URL: &str = "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/c099eb4/gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf";
-const GEMMA26_FILE: &str = "gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf";
-const GEMMA26_SIZE: u64 = 10_546_934_240;
-const GEMMA26_SHA256: &str = "2a1d26dfe6ea00a467940a5728316af6edb366bbdba950d65b85d232392fb658";
-const MMPROJ26_URL: &str =
+pub(super) const GEMMA26_URL: &str = "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/c099eb4/gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf";
+pub(super) const GEMMA26_FILE: &str = "gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf";
+pub(super) const GEMMA26_SIZE: u64 = 10_546_934_240;
+pub(super) const GEMMA26_SHA256: &str = "2a1d26dfe6ea00a467940a5728316af6edb366bbdba950d65b85d232392fb658";
+pub(super) const MMPROJ26_URL: &str =
     "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/c099eb4/mmproj-F16.gguf";
-const MMPROJ26_FILE: &str = "mmproj-F16.gguf";
-const MMPROJ26_SIZE: u64 = 1_193_058_784;
-const MMPROJ26_SHA256: &str = "418a6d8723067cd712235facbbc5cba6c8fbbd413fc1292d2aace5a027d5a42f";
+pub(super) const MMPROJ26_FILE: &str = "mmproj-F16.gguf";
+pub(super) const MMPROJ26_SIZE: u64 = 1_193_058_784;
+pub(super) const MMPROJ26_SHA256: &str = "418a6d8723067cd712235facbbc5cba6c8fbbd413fc1292d2aace5a027d5a42f";
 
 // Vision projector for the 12B fallback. Uses the model's own gemma4uv
 // projector and is only attached on a compatible llama.cpp build.
-const MMPROJ_URL: &str =
+pub(super) const MMPROJ_URL: &str =
     "https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/main/mmproj-F16.gguf";
-const MMPROJ_FILE: &str = "mmproj-12b-F16.gguf";
-const MMPROJ_SIZE: u64 = 175_115_840;
-const MMPROJ_SHA256: &str = "ecc4e93128da8363b7dbf2193eab98cf1142353f52ceaa0c95c0872997aaadd3";
+pub(super) const MMPROJ_FILE: &str = "mmproj-12b-F16.gguf";
+pub(super) const MMPROJ_SIZE: u64 = 175_115_840;
+pub(super) const MMPROJ_SHA256: &str = "ecc4e93128da8363b7dbf2193eab98cf1142353f52ceaa0c95c0872997aaadd3";
 /// Minimum llama.cpp release build (the `bNNNN` tag) that can load Gemma 4
 /// "gemma4uv" projector. Below this we keep the 12B text-only (no crash).
-const GEMMA4UV_MIN_BUILD: u32 = 9626;
-const GEMMA26_MIN_BUILD: u32 = 9963;
+pub(super) const GEMMA4UV_MIN_BUILD: u32 = 9626;
+pub(super) const GEMMA26_MIN_BUILD: u32 = 9963;
 
-const WHISPER_URL: &str =
+pub(super) const WHISPER_URL: &str =
     "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin";
-const WHISPER_FILE: &str = "ggml-large-v3-turbo-q8_0.bin";
-const WHISPER_SIZE: u64 = 874_188_075;
-const WHISPER_SHA256: &str = "317eb69c11673c9de1e1f0d459b253999804ec71ac4c23c17ecf5fbe24e259a1";
-const WHISPER_MODEL_ID: &str = "whisper-large-v3-turbo";
+pub(super) const WHISPER_FILE: &str = "ggml-large-v3-turbo-q8_0.bin";
+pub(super) const WHISPER_SIZE: u64 = 874_188_075;
+pub(super) const WHISPER_SHA256: &str = "317eb69c11673c9de1e1f0d459b253999804ec71ac4c23c17ecf5fbe24e259a1";
+pub(super) const WHISPER_MODEL_ID: &str = "whisper-large-v3-turbo";
 
-const GIGAAM_MODEL_URL: &str =
+pub(super) const GIGAAM_MODEL_URL: &str =
     "https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/main/v3_e2e_ctc.int8.onnx";
-const GIGAAM_MODEL_SIZE: u64 = 224_893_347;
-const GIGAAM_SHA256: &str = "2e3fcb7a7b66030336fd10c2fcfb033bd1dc7e1bf238fe5cfd83b1d0cfc9d28e";
-const GIGAAM_VOCAB_URL: &str =
+pub(super) const GIGAAM_MODEL_SIZE: u64 = 224_893_347;
+pub(super) const GIGAAM_SHA256: &str = "2e3fcb7a7b66030336fd10c2fcfb033bd1dc7e1bf238fe5cfd83b1d0cfc9d28e";
+pub(super) const GIGAAM_VOCAB_URL: &str =
     "https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/main/v3_e2e_ctc_vocab.txt";
 /// GigaAM-v3 vocab (2 KB, FIXED for this model) — BUNDLED via include_bytes so the
 /// install never depends on the flaky HF download. HF has repeatedly served an
 /// HTML error page for this tiny file, which (before v0.10.2) aborted the WHOLE
 /// install at the vocab step → gemma never deployed + server never launched. The
 /// download (`GIGAAM_VOCAB_URL` / `curl_small`) is kept only as a fallback.
-const GIGAAM_VOCAB: &[u8] = include_bytes!("../assets/gigaam-v3-vocab.txt");
+pub(super) const GIGAAM_VOCAB: &[u8] = include_bytes!("../assets/gigaam-v3-vocab.txt");
 
-const LLAMA_REPO: &str = "ggml-org/llama.cpp";
-const WHISPER_REPO: &str = "ggml-org/whisper.cpp";
+pub(super) const LLAMA_REPO: &str = "ggml-org/llama.cpp";
+pub(super) const WHISPER_REPO: &str = "ggml-org/whisper.cpp";
 
 /// Local server endpoints the installer configures + launches.
 pub const LLAMA_BASE_URL: &str = "http://127.0.0.1:8080/v1";
 pub const WHISPER_BASE_URL: &str = "http://127.0.0.1:8081/v1";
-const LLAMA_PORT: &str = "8080";
-const WHISPER_PORT: &str = "8081";
+pub(super) const LLAMA_PORT: &str = "8080";
+pub(super) const WHISPER_PORT: &str = "8081";
 
-/// True only for Suflyor's bundled loopback llama.cpp endpoint. Port 8080 on a
-/// LAN host or another local port is not ours to restart or relabel.
-#[must_use]
-pub fn is_managed_llama_endpoint(base_url: &str) -> bool {
-    let Some(without_scheme) = base_url.trim().strip_prefix("http://") else {
-        return false;
-    };
-    let (authority, path) = without_scheme
-        .split_once('/')
-        .map_or((without_scheme, ""), |(authority, path)| (authority, path));
-    if format!("/{path}").trim_end_matches('/') != "/v1" {
-        return false;
-    }
-    let host_port = if let Some(bracketed) = authority.strip_prefix('[') {
-        bracketed.split_once("]:")
-    } else {
-        authority.rsplit_once(':')
-    };
-    host_port.is_some_and(|(host, port)| {
-        port == LLAMA_PORT
-            && matches!(
-                host.to_ascii_lowercase().as_str(),
-                "127.0.0.1" | "localhost" | "::1"
-            )
-    })
-}
-
-/// Select the local provider and repair a bundled managed endpoint before any
-/// request can use its persisted model fields. Custom local servers retain
-/// their configured model and prep-model values.
-pub fn select_local_provider(cfg: &mut crate::config::Config, root: &Path) -> bool {
-    let provider_changed = cfg.ai_provider != "local";
-    cfg.ai_provider = "local".to_string();
-    let model_state_changed = repair_managed_model_state(cfg, root);
-    provider_changed || model_state_changed
-}
 
 const STRICT_LLAMA_READY_BUDGET: Duration = Duration::from_secs(120);
 
@@ -169,506 +141,6 @@ pub fn blocking_acquire_lifecycle(
     }
 }
 
-/// Confirmed hardware matrix supplied by the owner. Values outside the matrix
-/// remain unknown; they are never rounded into a stronger profile.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HardwareModelProfile {
-    Unknown,
-    Fallback12B,
-    Primary26Vram8,
-    Primary26Vram12,
-    Primary26Vram16,
-}
-
-impl HardwareModelProfile {
-    #[must_use]
-    pub const fn from_index(index: i32) -> Self {
-        match index {
-            1 => Self::Fallback12B,
-            2 => Self::Primary26Vram8,
-            3 => Self::Primary26Vram12,
-            4 => Self::Primary26Vram16,
-            _ => Self::Unknown,
-        }
-    }
-
-    #[must_use]
-    pub const fn index(self) -> i32 {
-        match self {
-            Self::Unknown => 0,
-            Self::Fallback12B => 1,
-            Self::Primary26Vram8 => 2,
-            Self::Primary26Vram12 => 3,
-            Self::Primary26Vram16 => 4,
-        }
-    }
-
-    #[must_use]
-    pub const fn uses_primary_26b(self) -> bool {
-        matches!(
-            self,
-            Self::Primary26Vram8 | Self::Primary26Vram12 | Self::Primary26Vram16
-        )
-    }
-
-    #[must_use]
-    pub const fn context_tokens(self, prep: bool) -> u32 {
-        match (self, prep) {
-            (Self::Primary26Vram8, false) | (Self::Fallback12B, _) => 32_768,
-            (Self::Primary26Vram8, true) | (Self::Primary26Vram12, false) => 65_536,
-            (Self::Primary26Vram12, true) | (Self::Primary26Vram16, _) => 98_304,
-            (Self::Unknown, _) => 8_192,
-        }
-    }
-
-    #[must_use]
-    pub const fn requires_prep_switch(self) -> bool {
-        matches!(self, Self::Primary26Vram8 | Self::Primary26Vram12)
-    }
-}
-
-/// User-selected context for Suflyor's managed llama.cpp server.
-///
-/// Manual presets never exceed the confirmed profile's safe live ceiling.
-/// `Auto` stays compact: 16K on known profiles, 8K on unknown hardware.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LocalContextPreset {
-    Auto,
-    K8,
-    K16,
-    K32,
-    K64,
-    K96,
-}
-
-impl LocalContextPreset {
-    #[must_use]
-    pub fn from_config(value: &str) -> Self {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "8k" => Self::K8,
-            "16k" => Self::K16,
-            "32k" => Self::K32,
-            "64k" => Self::K64,
-            "96k" => Self::K96,
-            _ => Self::Auto,
-        }
-    }
-
-    #[must_use]
-    pub const fn as_config(self) -> &'static str {
-        match self {
-            Self::Auto => "auto",
-            Self::K8 => "8k",
-            Self::K16 => "16k",
-            Self::K32 => "32k",
-            Self::K64 => "64k",
-            Self::K96 => "96k",
-        }
-    }
-
-    #[must_use]
-    pub const fn from_index(index: i32) -> Self {
-        match index {
-            1 => Self::K8,
-            2 => Self::K16,
-            3 => Self::K32,
-            4 => Self::K64,
-            5 => Self::K96,
-            _ => Self::Auto,
-        }
-    }
-
-    #[must_use]
-    pub const fn index(self) -> i32 {
-        match self {
-            Self::Auto => 0,
-            Self::K8 => 1,
-            Self::K16 => 2,
-            Self::K32 => 3,
-            Self::K64 => 4,
-            Self::K96 => 5,
-        }
-    }
-
-    #[must_use]
-    pub fn context_tokens(self, profile: HardwareModelProfile, _prep: bool) -> u32 {
-        let safe_live = profile.context_tokens(false);
-        match self {
-            Self::Auto => 16_384.min(safe_live),
-            Self::K8 => 8_192.min(safe_live),
-            Self::K16 => 16_384.min(safe_live),
-            Self::K32 => 32_768.min(safe_live),
-            Self::K64 => 65_536.min(safe_live),
-            Self::K96 => 98_304.min(safe_live),
-        }
-    }
-
-    /// Approximate VRAM change against Auto. A real 26B/F16-KV measurement on
-    /// RTX 5060 Ti showed ~675 MiB per 32K context step.
-    #[must_use]
-    pub fn estimated_vram_delta_mib(self, profile: HardwareModelProfile) -> i32 {
-        let auto = Self::Auto.context_tokens(profile, false) as i64;
-        let selected = self.context_tokens(profile, false) as i64;
-        ((selected - auto) * 675 / 32_768) as i32
-    }
-}
-
-/// Explicit model selected for Suflyor's managed llama.cpp server.
-///
-/// `ai_local_model` already stores the active GGUF name, so keeping the third
-/// state here avoids a config migration. `ai_local_quality` remains the
-/// backwards-compatible 26B flag.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ManagedModel {
-    Legacy4B,
-    Fallback12B,
-    Primary26B,
-}
-
-impl ManagedModel {
-    #[must_use]
-    pub fn from_config(model_id: &str, quality: bool) -> Self {
-        if quality {
-            Self::Primary26B
-        } else if model_id.eq_ignore_ascii_case(LEGACY_GEMMA_FILE) {
-            Self::Legacy4B
-        } else {
-            Self::Fallback12B
-        }
-    }
-
-    #[must_use]
-    pub const fn from_index(index: i32) -> Self {
-        match index {
-            0 => Self::Legacy4B,
-            2 => Self::Primary26B,
-            _ => Self::Fallback12B,
-        }
-    }
-
-    #[must_use]
-    pub const fn index(self) -> i32 {
-        match self {
-            Self::Legacy4B => 0,
-            Self::Fallback12B => 1,
-            Self::Primary26B => 2,
-        }
-    }
-
-    #[must_use]
-    pub const fn file_name(self) -> &'static str {
-        match self {
-            Self::Legacy4B => LEGACY_GEMMA_FILE,
-            Self::Fallback12B => GEMMA_FILE,
-            Self::Primary26B => GEMMA26_FILE,
-        }
-    }
-
-    #[must_use]
-    pub const fn is_quality(self) -> bool {
-        matches!(self, Self::Primary26B)
-    }
-
-    /// The immutable download coordinates + integrity pins for this model. A
-    /// model button downloads EXACTLY this spec on any hardware (never /main,
-    /// never hardware-redirected) and verifies it byte-for-byte before load.
-    #[must_use]
-    pub const fn spec(self) -> ModelSpec {
-        match self {
-            Self::Legacy4B => ModelSpec {
-                url: LEGACY_GEMMA_URL,
-                file: LEGACY_GEMMA_FILE,
-                size: LEGACY_GEMMA_SIZE,
-                sha256: LEGACY_GEMMA_SHA256,
-                label: "Gemma 4B",
-            },
-            Self::Fallback12B => ModelSpec {
-                url: GEMMA_URL,
-                file: GEMMA_FILE,
-                size: GEMMA_SIZE,
-                sha256: GEMMA_SHA256,
-                label: "Gemma 12B QAT",
-            },
-            Self::Primary26B => ModelSpec {
-                url: GEMMA26_URL,
-                file: GEMMA26_FILE,
-                size: GEMMA26_SIZE,
-                sha256: GEMMA26_SHA256,
-                label: "Gemma 26B-A4B",
-            },
-        }
-    }
-}
-
-/// Immutable download coordinates + integrity pins for one bundled model. Every
-/// field is a compile-time constant pinned from a fixed Hugging Face revision.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ModelSpec {
-    pub url: &'static str,
-    pub file: &'static str,
-    pub size: u64,
-    pub sha256: &'static str,
-    /// Short progress label, e.g. "Gemma 4B".
-    pub label: &'static str,
-}
-
-/// Approximate total VRAM requirement before launch. The 26B baseline and
-/// context slope come from the owner's RTX 5060 Ti measurements; 4B/12B are
-/// conservative rounded profiles and the UI labels the result as an estimate.
-#[must_use]
-pub fn estimated_total_vram_mib(
-    model: ManagedModel,
-    context: LocalContextPreset,
-    profile: HardwareModelProfile,
-) -> u32 {
-    let auto_mib: u32 = match model {
-        ManagedModel::Legacy4B => 6_144,
-        ManagedModel::Fallback12B => 9_728,
-        ManagedModel::Primary26B => 12_238,
-    };
-    auto_mib
-        .saturating_add_signed(context.estimated_vram_delta_mib(profile))
-        .max(1)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ManagedLlamaChoice {
-    pub model: ManagedModel,
-    pub context: LocalContextPreset,
-    custom_gguf: Option<PathBuf>,
-}
-
-impl ManagedLlamaChoice {
-    #[must_use]
-    pub const fn new(prefer_quality: bool, context: LocalContextPreset) -> Self {
-        Self {
-            model: if prefer_quality {
-                ManagedModel::Primary26B
-            } else {
-                ManagedModel::Fallback12B
-            },
-            context,
-            custom_gguf: None,
-        }
-    }
-
-    #[must_use]
-    pub const fn for_model(model: ManagedModel, context: LocalContextPreset) -> Self {
-        Self {
-            model,
-            context,
-            custom_gguf: None,
-        }
-    }
-
-    #[must_use]
-    pub fn for_custom(path: PathBuf, context: LocalContextPreset) -> Self {
-        Self {
-            model: ManagedModel::Fallback12B,
-            context,
-            custom_gguf: Some(path),
-        }
-    }
-
-    #[must_use]
-    pub fn from_config(
-        model_id: &str,
-        quality: bool,
-        custom_gguf: &str,
-        context: LocalContextPreset,
-    ) -> Self {
-        if custom_gguf.trim().is_empty() {
-            Self::for_model(ManagedModel::from_config(model_id, quality), context)
-        } else {
-            Self::for_custom(PathBuf::from(custom_gguf), context)
-        }
-    }
-
-    #[must_use]
-    pub fn with_context(&self, context: LocalContextPreset) -> Self {
-        Self {
-            model: self.model,
-            context,
-            custom_gguf: self.custom_gguf.clone(),
-        }
-    }
-
-    #[must_use]
-    pub fn custom_gguf(&self) -> Option<&Path> {
-        self.custom_gguf.as_deref()
-    }
-
-    #[must_use]
-    pub fn is_custom(&self) -> bool {
-        self.custom_gguf.is_some()
-    }
-}
-
-/// Accept only an absolute, non-empty `.gguf` file with the standard magic.
-#[must_use]
-pub fn valid_custom_gguf_path(value: &str) -> Option<PathBuf> {
-    use std::io::Read;
-
-    let path = PathBuf::from(value.trim());
-    if !path.is_absolute()
-        || !path.is_file()
-        || !path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("gguf"))
-    {
-        return None;
-    }
-    let mut magic = [0_u8; 4];
-    let mut file = std::fs::File::open(&path).ok()?;
-    file.read_exact(&mut magic).ok()?;
-    (magic == *b"GGUF").then_some(path)
-}
-
-#[must_use]
-pub fn custom_gguf_display_name(value: &str) -> String {
-    valid_custom_gguf_path(value)
-        .and_then(|path| {
-            path.file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-        })
-        .unwrap_or_default()
-}
-
-fn valid_custom_choice_path(choice: &ManagedLlamaChoice) -> Option<PathBuf> {
-    choice
-        .custom_gguf()
-        .and_then(|path| valid_custom_gguf_path(&path.to_string_lossy()))
-}
-
-fn custom_choice_alias(choice: &ManagedLlamaChoice) -> Option<String> {
-    valid_custom_choice_path(choice).and_then(|path| {
-        path.file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-    })
-}
-
-fn effective_llama_choice(root: &Path, choice: &ManagedLlamaChoice) -> ManagedLlamaChoice {
-    if let Some(path) = valid_custom_choice_path(choice) {
-        return ManagedLlamaChoice::for_custom(path, choice.context);
-    }
-    let model = effective_verified_managed_model(root, choice.model);
-    ManagedLlamaChoice::for_model(model, choice.context)
-}
-
-fn llama_choice_name(root: &Path, choice: &ManagedLlamaChoice) -> String {
-    custom_choice_alias(choice).unwrap_or_else(|| active_local_model_name(root, choice.model))
-}
-
-/// Persist a successfully started managed or user-selected model.
-pub fn apply_llama_choice(
-    cfg: &mut crate::config::Config,
-    root: &Path,
-    choice: &ManagedLlamaChoice,
-) {
-    cfg.ai_local_base_url = LLAMA_BASE_URL.to_string();
-    cfg.ai_local_quality = false;
-    cfg.ai_local_prep_model.clear();
-    if let (Some(path), Some(alias)) = (
-        valid_custom_choice_path(choice),
-        custom_choice_alias(choice),
-    ) {
-        cfg.ai_local_custom_gguf = path.to_string_lossy().into_owned();
-        cfg.ai_local_model = alias;
-        cfg.ai_local_vision = false;
-        if vision_routes_to_managed_llama(cfg) {
-            cfg.vision_provider = "off".to_string();
-        }
-    } else {
-        cfg.ai_local_custom_gguf.clear();
-        cfg.ai_local_model = choice.model.file_name().to_string();
-        cfg.ai_local_quality = choice.model.is_quality();
-        let vision_capable = managed_model_vision_capable(root, choice.model);
-        cfg.ai_local_vision &= vision_capable;
-        if !vision_capable && vision_routes_to_managed_llama(cfg) {
-            cfg.vision_provider = "off".to_string();
-        }
-    }
-}
-
-/// Whether a profile is in the owner's confirmed 26B-A4B matrix.
-#[must_use]
-pub const fn primary_26b_allowed(profile: HardwareModelProfile) -> bool {
-    profile.uses_primary_26b()
-}
-
-/// Select an owner-confirmed NVIDIA VRAM tier with its minimum RAM threshold.
-/// Inputs are nominal binary GiB: each VRAM tier keeps its minimum RAM but
-/// accepts any greater value:
-/// 16/32+, 12/24+, 8/32+ -> the corresponding 26B profile; 8/16..31 -> 12B.
-#[must_use]
-pub const fn select_hardware_model_profile(
-    vram_gib: Option<u64>,
-    ram_gib: Option<u64>,
-) -> HardwareModelProfile {
-    let (Some(vram), Some(ram)) = (vram_gib, ram_gib) else {
-        return HardwareModelProfile::Unknown;
-    };
-    match (vram, ram) {
-        (16, 32..) => HardwareModelProfile::Primary26Vram16,
-        (12, 24..) => HardwareModelProfile::Primary26Vram12,
-        (8, 32..) => HardwareModelProfile::Primary26Vram8,
-        (8, 16..=31) => HardwareModelProfile::Fallback12B,
-        _ => HardwareModelProfile::Unknown,
-    }
-}
-
-/// Snap a near-nominal VRAM reading to the closest approved matrix tier.
-///
-/// Tolerance is ±1 GiB — enough to absorb firmware/driver underreport
-/// (e.g. a 16 GiB card reporting 15 GiB). Readings 2+ GiB away from any
-/// tier pass through unchanged, so clearly smaller hardware (6 GiB) never
-/// enters the confirmed matrix.
-#[must_use]
-fn normalize_vram_gib(raw: u64) -> u64 {
-    match raw {
-        7..=9 => 8,
-        11..=13 => 12,
-        15..=17 => 16,
-        _ => raw,
-    }
-}
-
-/// Snap a near-nominal system-RAM reading to the closest approved tier.
-///
-/// With an iGPU enabled in firmware, `TotalPhysicalMemory` reports usable
-/// RAM minus the iGPU reservation, so a 32 GiB machine can show 31 GiB.
-/// ±1 GiB tolerance covers this without promoting clearly smaller hardware
-/// (e.g. 22 GiB stays 22 → `Unknown`).
-#[must_use]
-fn normalize_ram_gib(raw: u64) -> u64 {
-    match raw {
-        15..=17 => 16,
-        23..=25 => 24,
-        31..=33 => 32,
-        _ => raw,
-    }
-}
-
-fn hardware_profile_status(profile: HardwareModelProfile) -> String {
-    match profile {
-        HardwareModelProfile::Unknown => {
-            "Hardware profile unknown — installing the Gemma 12B fallback".to_string()
-        }
-        HardwareModelProfile::Fallback12B => {
-            "Hardware profile 8 GB VRAM / 16-31 GB RAM — using Gemma 12B".to_string()
-        }
-        HardwareModelProfile::Primary26Vram8 => {
-            "Hardware profile 8 GB VRAM / 32+ GB RAM — using Gemma 26B-A4B".to_string()
-        }
-        HardwareModelProfile::Primary26Vram12 => {
-            "Hardware profile 12 GB VRAM / 24+ GB RAM — using Gemma 26B-A4B".to_string()
-        }
-        HardwareModelProfile::Primary26Vram16 => {
-            "Hardware profile 16 GB VRAM / 32+ GB RAM — using Gemma 26B-A4B".to_string()
-        }
-    }
-}
 
 /// `install` returns this exact error message when the user cancels mid-run, so
 /// the UI can show "Отменено" instead of treating it as a failure.
@@ -757,111 +229,6 @@ impl Drop for InstallServerCleanup {
     }
 }
 
-/// Default install root: `%USERPROFILE%\suflyor-local-ai`.
-#[must_use]
-pub fn default_root() -> PathBuf {
-    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-    home.join("suflyor-local-ai")
-}
-
-/// True if an NVIDIA GPU is present (`nvidia-smi -L` succeeds with output).
-#[must_use]
-pub fn detect_nvidia() -> bool {
-    match run_capture("nvidia-smi", &["-L"]) {
-        Ok(out) => out.status.success() && !out.stdout.is_empty(),
-        Err(_) => false,
-    }
-}
-
-/// Which GPU acceleration to target for the local engine (Баг2): NVIDIA → CUDA
-/// build; any other GPU (AMD/Intel) → Vulkan build; none → CPU.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum GpuKind {
-    Nvidia,
-    Other,
-    None,
-}
-
-/// Classify the GPU for engine selection. NVIDIA (CUDA) is checked first via the
-/// cheap `nvidia-smi`; only a non-NVIDIA machine pays the WMI query for an AMD /
-/// Intel adapter (Vulkan). No detectable GPU → CPU.
-fn detect_gpu() -> GpuKind {
-    #[cfg(target_os = "macos")]
-    {
-        GpuKind::Other // Metal GPU acceleration on macOS / Apple Silicon
-    }
-    #[cfg(windows)]
-    {
-        if detect_nvidia() {
-            GpuKind::Nvidia
-        } else if detect_non_nvidia_gpu() && vulkan_loader_present() {
-            GpuKind::Other
-        } else {
-            GpuKind::None
-        }
-    }
-}
-
-/// True if the Vulkan loader (`vulkan-1.dll`) is present in System32 — required for
-/// the Vulkan llama build to load at all.
-#[cfg(windows)]
-fn vulkan_loader_present() -> bool {
-    std::env::var_os("SystemRoot")
-        .map(|r| PathBuf::from(r).join("System32").join("vulkan-1.dll"))
-        .is_some_and(|p| p.is_file())
-}
-
-/// True if a non-NVIDIA display adapter (AMD / Intel) is present. Best-effort name
-/// match over WMI; a false positive only means we try the Vulkan build and fall
-/// back to CPU if it can't offload (Баг2), so this never makes things worse.
-#[cfg(windows)]
-fn detect_non_nvidia_gpu() -> bool {
-    let out = match run_capture(
-        "powershell",
-        &[
-            "-NoProfile",
-            "-Command",
-            "(Get-CimInstance Win32_VideoController).Name -join ';'",
-        ],
-    ) {
-        Ok(o) if o.status.success() => o.stdout,
-        _ => return false,
-    };
-    let names = String::from_utf8_lossy(&out).to_lowercase();
-    ["radeon", "amd", "intel", "arc"]
-        .iter()
-        .any(|k| names.contains(k))
-}
-
-#[allow(dead_code)]
-fn detect_nvidia_vram_gib() -> Option<u64> {
-    detect_nvidia_memory_mib().map(|(_, total)| (total + 512) / 1024)
-}
-
-fn detect_nvidia_memory_mib() -> Option<(u64, u64)> {
-    let out = run_capture(
-        "nvidia-smi",
-        &[
-            "--query-gpu=memory.used,memory.total",
-            "--format=csv,noheader,nounits",
-        ],
-    )
-    .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    parse_nvidia_memory_mib(&String::from_utf8_lossy(&out.stdout))
-}
-
-fn parse_nvidia_memory_mib(text: &str) -> Option<(u64, u64)> {
-    // One selected dedicated adapter; never add VRAM across devices.
-    text.lines()
-        .filter_map(|line| {
-            let (used, total) = line.split_once(',')?;
-            Some((used.trim().parse().ok()?, total.trim().parse().ok()?))
-        })
-        .max_by_key(|(_, total)| *total)
-}
 
 fn system_memory_telemetry(pid: Option<u32>) -> Option<String> {
     let process = pid.map_or_else(
@@ -961,113 +328,6 @@ fn vram_is_at_baseline(baseline_mib: u64, after_mib: Option<u64>) -> bool {
     after_mib.is_some_and(|after| after <= baseline_mib.saturating_add(64))
 }
 
-fn detect_system_ram_gib() -> Option<u64> {
-    #[cfg(target_os = "macos")]
-    {
-        let out = run_capture("sysctl", &["-n", "hw.memsize"]).ok()?;
-        if !out.status.success() {
-            return None;
-        }
-        String::from_utf8_lossy(&out.stdout)
-            .trim()
-            .parse::<u64>()
-            .ok()
-            .map(|bytes| bytes / GIB)
-    }
-    #[cfg(windows)]
-    {
-        let out = run_capture(
-            "powershell",
-            &[
-                "-NoProfile",
-                "-NonInteractive",
-                "-Command",
-                "(Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory",
-            ],
-        )
-        .ok()?;
-        if !out.status.success() {
-            return None;
-        }
-        String::from_utf8_lossy(&out.stdout)
-            .trim()
-            .parse::<u64>()
-            .ok()
-            .map(|bytes| bytes.div_ceil(GIB))
-    }
-    #[cfg(not(any(windows, target_os = "macos")))]
-    None
-}
-
-fn detected_hardware_model_profile(force_cpu: bool) -> HardwareModelProfile {
-    if force_cpu {
-        return HardwareModelProfile::Unknown;
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let ram = detect_system_ram_gib().unwrap_or(16);
-        hardware_profile_from_discovery(false, Some(ram), Some(ram))
-    }
-    #[cfg(windows)]
-    {
-        let raw_vram = detect_nvidia_vram_gib();
-        let raw_ram = detect_system_ram_gib();
-        log::info!(
-            "local-ai hardware discovery: raw_vram_gib={raw_vram:?} raw_ram_gib={raw_ram:?}"
-        );
-        hardware_profile_from_discovery(force_cpu, raw_vram, raw_ram)
-    }
-}
-
-/// Detect whether this machine is currently in the confirmed 26B-A4B matrix.
-/// This is worker-only: discovery may query WMI/DXGI and must not block Slint.
-#[must_use]
-pub fn primary_26b_allowed_on_current_hardware() -> bool {
-    primary_26b_allowed(detected_hardware_model_profile(false))
-}
-
-#[must_use]
-pub fn current_hardware_model_profile() -> HardwareModelProfile {
-    detected_hardware_model_profile(false)
-}
-
-#[must_use]
-pub fn current_server_profile(prefer_quality: bool) -> HardwareModelProfile {
-    profile_for_model(current_hardware_model_profile(), prefer_quality)
-}
-
-fn profile_for_model(detected: HardwareModelProfile, prefer_quality: bool) -> HardwareModelProfile {
-    if prefer_quality || detected == HardwareModelProfile::Unknown {
-        detected
-    } else {
-        HardwareModelProfile::Fallback12B
-    }
-}
-
-/// The confirmed matrix is NVIDIA-only. AMD/Intel remain on the safe fallback
-/// until they have their own measured profiles.
-///
-/// Raw readings pass through ±1 GiB normalization before the minimum-RAM
-/// matrix lookup, absorbing iGPU memory reservations and firmware underreport.
-fn hardware_profile_from_discovery(
-    force_cpu: bool,
-    nvidia_vram_gib: Option<u64>,
-    ram_gib: Option<u64>,
-) -> HardwareModelProfile {
-    if force_cpu {
-        return HardwareModelProfile::Unknown;
-    }
-    let vram = nvidia_vram_gib.map(normalize_vram_gib);
-    let ram = ram_gib.map(normalize_ram_gib);
-    if vram != nvidia_vram_gib || ram != ram_gib {
-        log::info!(
-            "local-ai hardware normalization: vram {nvidia_vram_gib:?} -> {vram:?}, ram {ram_gib:?} -> {ram:?}"
-        );
-    }
-    let profile = select_hardware_model_profile(vram, ram);
-    log::info!("local-ai hardware profile: {profile:?}");
-    profile
-}
 
 /// Write the installer's resulting endpoints/models into a `Config`, switching
 /// it to the local stack. Secrets are untouched. The actual installed selection
@@ -2252,562 +1512,6 @@ fn restart_llama_server_for_route_inner(
     }
 }
 
-/// Friendly, compact label for a local model basename.
-#[must_use]
-pub fn local_model_label(basename: &str) -> String {
-    let l = basename.to_ascii_lowercase();
-    if l.contains("26b") {
-        "Gemma 26B-A4B".to_string()
-    } else if l.contains("12b") {
-        "Gemma 12B".to_string()
-    } else if l.contains("e4b") || l.contains("e2b") || l.contains("4b") {
-        "Gemma 4B".to_string()
-    } else if l.contains("gemma") {
-        "Gemma".to_string()
-    } else {
-        basename
-            .trim_end_matches(".gguf")
-            .trim_end_matches(".bin")
-            .split(['-', '.', '/', ' ', ':'])
-            .find(|s| !s.is_empty())
-            .unwrap_or("—")
-            .to_string()
-    }
-}
-
-/// Basename of the candidate profile Settings should display. This is stat-only
-/// and safe on the UI thread; the worker-side launcher independently resolves
-/// the exact verified GGUF through [`selected_llama_gguf`].
-#[must_use]
-pub fn active_local_model_name(root: &Path, requested: ManagedModel) -> String {
-    effective_managed_model(root, requested)
-        .file_name()
-        .to_string()
-}
-
-fn fallback_model_name(root: &Path) -> String {
-    fallback_llama_gguf(&root.join("llama.cpp"))
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_else(|| GEMMA_FILE.to_string())
-}
-
-/// Absolute path the optional 26B primary GGUF lives at (whether or not it
-/// has been downloaded yet) under an install `root`.
-#[must_use]
-pub fn quality_gguf_path(root: &Path) -> PathBuf {
-    root.join("llama.cpp").join(GEMMA26_FILE)
-}
-
-/// Fast, stat-only 26B presence check for Settings and component rows. Exact
-/// SHA-256 validation is intentionally deferred to [`quality_model_verified`],
-/// which is called only from worker-side launch/switch paths. Opening Settings
-/// must never stream the 10.5-GB model from disk.
-#[must_use]
-pub fn quality_model_present(root: &Path) -> bool {
-    file_has_expected_size(&quality_gguf_path(root), GEMMA26_SIZE)
-}
-
-#[must_use]
-pub fn legacy_model_present(root: &Path) -> bool {
-    legacy_gguf_complete(&root.join("llama.cpp").join(LEGACY_GEMMA_FILE))
-}
-
-#[must_use]
-pub fn fallback_model_present(root: &Path) -> bool {
-    file_has_expected_size(&root.join("llama.cpp").join(GEMMA_FILE), GEMMA_SIZE)
-}
-
-#[must_use]
-pub fn managed_model_present(root: &Path, model: ManagedModel) -> bool {
-    match model {
-        ManagedModel::Legacy4B => legacy_model_present(root),
-        ManagedModel::Fallback12B => fallback_model_present(root),
-        ManagedModel::Primary26B => quality_model_present(root),
-    }
-}
-
-/// Resolve a requested model using only file metadata, safe for Settings.
-#[must_use]
-pub fn effective_managed_model(root: &Path, requested: ManagedModel) -> ManagedModel {
-    if managed_model_present(root, requested) {
-        requested
-    } else if fallback_model_present(root) {
-        ManagedModel::Fallback12B
-    } else if legacy_model_present(root) {
-        ManagedModel::Legacy4B
-    } else {
-        ManagedModel::Fallback12B
-    }
-}
-
-fn effective_verified_managed_model(root: &Path, requested: ManagedModel) -> ManagedModel {
-    if requested == ManagedModel::Primary26B && quality_model_verified(root) {
-        return requested;
-    }
-    if requested != ManagedModel::Primary26B && managed_model_present(root, requested) {
-        return requested;
-    }
-    if fallback_model_present(root) {
-        ManagedModel::Fallback12B
-    } else if legacy_model_present(root) {
-        ManagedModel::Legacy4B
-    } else {
-        ManagedModel::Fallback12B
-    }
-}
-
-/// Resolve a persisted primary preference to the candidate profile displayed by
-/// Settings. This is intentionally stat-only; worker launch paths use
-/// [`effective_verified_local_quality`] before loading the primary.
-#[must_use]
-pub fn effective_local_quality(root: &Path, requested_quality: bool) -> bool {
-    requested_quality && quality_model_present(root)
-}
-
-/// Repair persisted bundled-model state without touching custom local servers.
-/// Returns `true` when the caller must save the config. This is used at boot and
-/// when switching back to Suflyor's endpoint so a vanished/partial primary
-/// cannot leave a stale model or prep-model id in requests. Same-size integrity
-/// failures are repaired by [`repair_managed_model_state_after_verification`].
-pub fn repair_managed_model_state(cfg: &mut crate::config::Config, root: &Path) -> bool {
-    if !is_managed_llama_endpoint(&cfg.ai_local_base_url) {
-        return false;
-    }
-    let custom_was_set = !cfg.ai_local_custom_gguf.trim().is_empty();
-    if let Some(changed) = repair_valid_custom_model_state(cfg, root) {
-        return changed;
-    }
-    cfg.ai_local_custom_gguf.clear();
-    let requested = ManagedModel::from_config(&cfg.ai_local_model, cfg.ai_local_quality);
-    custom_was_set
-        | repair_managed_model_state_for_model(cfg, root, effective_managed_model(root, requested))
-}
-
-/// Worker-only version of [`repair_managed_model_state`]. It is called after a
-/// launch attempt, so persistence records the 12B fallback if the exact 26B
-/// SHA-256 review rejected a same-size replacement.
-pub fn repair_managed_model_state_after_verification(
-    cfg: &mut crate::config::Config,
-    root: &Path,
-) -> bool {
-    if !is_managed_llama_endpoint(&cfg.ai_local_base_url) {
-        return false;
-    }
-    let custom_was_set = !cfg.ai_local_custom_gguf.trim().is_empty();
-    if let Some(changed) = repair_valid_custom_model_state(cfg, root) {
-        return changed;
-    }
-    cfg.ai_local_custom_gguf.clear();
-    let requested = ManagedModel::from_config(&cfg.ai_local_model, cfg.ai_local_quality);
-    custom_was_set
-        | repair_managed_model_state_for_model(
-            cfg,
-            root,
-            effective_verified_managed_model(root, requested),
-        )
-}
-
-/// Whether the configured local text endpoint may safely receive an image
-/// attachment. Managed profiles are checked from their actual selected model
-/// and matching projector state instead of trusting the persisted UI flag.
-#[must_use]
-pub fn local_vision_available(cfg: &crate::config::Config, root: &Path) -> bool {
-    !is_managed_llama_endpoint(&cfg.ai_local_base_url)
-        || (cfg.ai_local_custom_gguf.trim().is_empty()
-            && managed_model_vision_capable(
-                root,
-                effective_managed_model(
-                    root,
-                    ManagedModel::from_config(&cfg.ai_local_model, cfg.ai_local_quality),
-                ),
-            ))
-}
-
-#[must_use]
-pub fn local_vision_enabled(cfg: &crate::config::Config, root: &Path) -> bool {
-    cfg.ai_local_vision && local_vision_available(cfg, root)
-}
-
-/// Apply the local-model Vision toggle and keep F8's route in sync.
-pub fn set_local_vision(cfg: &mut crate::config::Config, root: &Path, enabled: bool) {
-    cfg.ai_local_vision = enabled;
-    if enabled {
-        cfg.vision_provider = "same".to_string();
-    } else if cfg.vision_provider == "same" {
-        cfg.vision_provider = "off".to_string();
-    }
-    repair_managed_model_state(cfg, root);
-}
-
-fn repair_valid_custom_model_state(cfg: &mut crate::config::Config, root: &Path) -> Option<bool> {
-    let path = valid_custom_gguf_path(&cfg.ai_local_custom_gguf)?;
-    let alias = path.file_name()?.to_string_lossy().into_owned();
-    let changed = cfg.ai_local_base_url != LLAMA_BASE_URL
-        || cfg.ai_local_quality
-        || cfg.ai_local_model != alias
-        || !cfg.ai_local_prep_model.is_empty()
-        || cfg.ai_local_vision
-        || (vision_routes_to_managed_llama(cfg) && cfg.vision_provider != "off");
-    let choice = ManagedLlamaChoice::for_custom(
-        path,
-        LocalContextPreset::from_config(&cfg.ai_local_context),
-    );
-    apply_llama_choice(cfg, root, &choice);
-    Some(changed)
-}
-
-fn repair_managed_model_state_for_model(
-    cfg: &mut crate::config::Config,
-    root: &Path,
-    model: ManagedModel,
-) -> bool {
-    let model_name = model.file_name().to_string();
-    let quality = model.is_quality();
-    let vision_capable = managed_model_vision_capable(root, model);
-    let local_vision = cfg.ai_local_vision && vision_capable;
-    let vision_provider = if !vision_capable && vision_routes_to_managed_llama(cfg) {
-        "off".to_string()
-    } else {
-        cfg.vision_provider.clone()
-    };
-    let changed = cfg.ai_local_base_url != LLAMA_BASE_URL
-        || cfg.ai_local_quality != quality
-        || cfg.ai_local_model != model_name
-        || !cfg.ai_local_prep_model.is_empty()
-        || cfg.ai_local_vision != local_vision
-        || cfg.vision_provider != vision_provider;
-    // The managed server is launched on 127.0.0.1. Canonicalise legacy
-    // localhost/[::1] spellings so persisted requests use the same listener.
-    cfg.ai_local_base_url = LLAMA_BASE_URL.to_string();
-    cfg.ai_local_quality = quality;
-    cfg.ai_local_model = model_name;
-    cfg.ai_local_prep_model.clear();
-    cfg.ai_local_vision = local_vision;
-    cfg.vision_provider = vision_provider;
-    changed
-}
-
-/// True when either the current 12B fallback or the legacy 4B fallback is
-/// complete. The latter remains launchable only to preserve an existing install
-/// until the user runs the new installer.
-#[must_use]
-pub fn base_model_present(root: &Path) -> bool {
-    let llama_dir = root.join("llama.cpp");
-    file_has_expected_size(&llama_dir.join(GEMMA_FILE), GEMMA_SIZE)
-        || legacy_gguf_complete(&llama_dir.join(LEGACY_GEMMA_FILE))
-}
-
-/// The conventional GigaAM model directory under the local-AI root
-/// (`<root>/gigaam-v3`) — the SAME location the installer writes to. The
-/// readiness API uses this when `config.stt_gigaam_dir` is unset, so it agrees
-/// with where a fresh install lands (single source of truth for the path).
-#[must_use]
-pub fn gigaam_default_dir(root: &Path) -> PathBuf {
-    root.join("gigaam-v3")
-}
-
-/// True when a complete GigaAM model lives in `dir` (`model.int8.onnx` present
-/// at the pinned size). Mirrors the installer's own "needs download?" size check
-/// so the readiness API can't disagree with it; a truncated file reads as absent.
-#[must_use]
-pub fn gigaam_model_present(dir: &Path) -> bool {
-    file_len(&dir.join("model.int8.onnx")) >= GIGAAM_MODEL_SIZE
-}
-
-#[must_use]
-pub fn quality_vision_present(root: &Path) -> bool {
-    file_has_expected_size(&root.join("llama.cpp").join(MMPROJ26_FILE), MMPROJ26_SIZE)
-}
-
-#[must_use]
-pub fn quality_vision_supported(root: &Path) -> bool {
-    llama_build_supports_26b(&root.join("llama.cpp"))
-}
-
-/// Resource text for the selected endpoint/model. The only numbers shown are
-/// the owner-approved hardware matrix and exact disk sizes. Vision memory is
-/// intentionally explicit as unknown for both bundled models.
-#[must_use]
-pub fn local_model_resource_warning(root: &Path, base_url: &str, model_id: &str) -> String {
-    if !is_managed_llama_endpoint(base_url) {
-        return "[!] Требования к памяти выбранной внешней модели неизвестны.".to_string();
-    }
-    let lower = model_id.to_ascii_lowercase();
-    if lower.contains("26b-a4b") {
-        let profile = detected_hardware_model_profile(false);
-        let matrix = match profile {
-            HardwareModelProfile::Primary26Vram8 => "профиль 8 ГБ VRAM / 32+ ГБ RAM",
-            HardwareModelProfile::Primary26Vram12 => "профиль 12 ГБ VRAM / 24+ ГБ RAM",
-            HardwareModelProfile::Primary26Vram16 => "профиль 16 ГБ VRAM / 32+ ГБ RAM",
-            HardwareModelProfile::Unknown | HardwareModelProfile::Fallback12B => {
-                "профиль железа не подтверждён"
-            }
-        };
-        format!(
-            "[!] Gemma 26B-A4B: {:.1} GiB на диске; {matrix}. Память для vision: неизвестно.",
-            GEMMA26_SIZE as f64 / GIB as f64
-        )
-    } else if lower.contains("12b") {
-        format!(
-            "[!] Gemma 12B QAT fallback: {:.1} GiB на диске. Матрица 8 ГБ VRAM / 16-31 ГБ RAM подтверждена владельцем. Память для vision: неизвестно.",
-            GEMMA_SIZE as f64 / GIB as f64
-        )
-    } else if lower.contains("e4b") || lower.contains("4b") {
-        format!(
-            "[!] Legacy Gemma 4B: {:.1} GiB на диске. Память для vision: неизвестно.",
-            LEGACY_GEMMA_SIZE as f64 / GIB as f64
-        )
-    } else if model_id.trim().is_empty() && base_model_present(root) {
-        local_model_resource_warning(root, base_url, &fallback_model_name(root))
-    } else {
-        "[!] Требования к памяти выбранной локальной модели неизвестны.".to_string()
-    }
-}
-
-/// Pick which llama GGUF to load: the 26B only when requested and complete;
-/// otherwise the always-installed 12B fallback.
-/// Centralised so `ensure_servers` and `install`'s launch agree. Does the disk
-/// check then defers the choice to the pure [`pick_llama_gguf`] (unit-tested
-/// without materialising a 6 GB file).
-fn selected_llama_gguf(llama_dir: &Path, model: ManagedModel) -> PathBuf {
-    match model {
-        ManagedModel::Primary26B => {
-            // Selection is a worker-only launch boundary. The exact pinned hash
-            // is rechecked here (or served from the matching metadata cache).
-            let present = cached_pinned_file_matches(
-                &llama_dir.join(GEMMA26_FILE),
-                GEMMA26_SIZE,
-                GEMMA26_SHA256,
-            );
-            pick_llama_gguf(llama_dir, model, present)
-        }
-        ManagedModel::Legacy4B => pick_llama_gguf(
-            llama_dir,
-            model,
-            legacy_gguf_complete(&llama_dir.join(LEGACY_GEMMA_FILE)),
-        ),
-        ManagedModel::Fallback12B => pick_llama_gguf(
-            llama_dir,
-            model,
-            file_has_expected_size(&llama_dir.join(GEMMA_FILE), GEMMA_SIZE),
-        ),
-    }
-}
-
-/// Prefer the current 12B fallback, but keep the previous 4B artifact
-/// launchable during an in-place upgrade that has not downloaded 12B yet.
-fn fallback_llama_gguf(llama_dir: &Path) -> PathBuf {
-    complete_fallback_llama_gguf(llama_dir).unwrap_or_else(|| llama_dir.join(GEMMA_FILE))
-}
-
-/// Complete fallback GGUF available for a launch-time model-load check. The
-/// current 12B is preferred, while a complete legacy 4B remains supported until
-/// the user installs 12B. `None` means a binary-only verification is the best
-/// safe check available.
-fn complete_fallback_llama_gguf(llama_dir: &Path) -> Option<PathBuf> {
-    let current = llama_dir.join(GEMMA_FILE);
-    if file_has_expected_size(&current, GEMMA_SIZE) {
-        Some(current)
-    } else {
-        let legacy = llama_dir.join(LEGACY_GEMMA_FILE);
-        legacy_gguf_complete(&legacy).then_some(legacy)
-    }
-}
-
-/// Pure model-choice rule (no I/O): an explicit model only when complete.
-fn pick_llama_gguf(llama_dir: &Path, model: ManagedModel, target_present: bool) -> PathBuf {
-    if target_present {
-        llama_dir.join(model.file_name())
-    } else {
-        fallback_llama_gguf(llama_dir)
-    }
-}
-
-/// Download (resumable) + SHA-verify EXACTLY the requested bundled model into
-/// `root`, on demand from a Settings model button. Mirrors the installer's
-/// download→verify discipline (P1.5: a tampered byte-stream fails the pinned
-/// hash and the partial file is left for a clean re-pull, never launched).
-/// Hardware is never consulted to block or redirect the choice — any machine
-/// may pull any model; the 26B keeps only its advisory VRAM warning. Does NOT
-/// restart the server — the caller switches models afterwards so a background
-/// download can't swap the model mid-call.
-///
-/// # Errors
-/// Network/disk failure, cancellation, or a SHA-256 mismatch after download.
-pub fn download_managed_model(
-    root: &Path,
-    model: ManagedModel,
-    cancel: &AtomicBool,
-    on: &dyn Fn(Progress),
-) -> Result<()> {
-    let spec = model.spec();
-    if model == ManagedModel::Primary26B && !primary_26b_allowed_on_current_hardware() {
-        log::warn!(
-            "local-ai: hardware outside the confirmed matrix — 26B may exceed VRAM, \
-             spill into system RAM, run slowly, or fail; user accepted the risk"
-        );
-    }
-    let llama_dir = root.join("llama.cpp");
-    std::fs::create_dir_all(&llama_dir)
-        .with_context(|| format!("create llama dir {}", llama_dir.display()))?;
-    let dest = llama_dir.join(spec.file);
-    // A previous-release 4B file is complete and launchable at its own size.
-    // Never resume into it (curl -C - would append new-spec bytes and corrupt
-    // it) and never re-download it — treat it as already installed.
-    if model == ManagedModel::Legacy4B && file_len(&dest) == LEGACY_GEMMA_SIZE_PREV {
-        on(Progress::Step(format!("{}: файл уже загружен", spec.label)));
-        return Ok(());
-    }
-    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-    if reuse_if_available(
-        &dest,
-        spec.size,
-        spec.sha256,
-        &[home.join("llama.cpp").join(spec.file)],
-    ) {
-        on(Progress::Step(format!("{}: файл уже загружен", spec.label)));
-    } else {
-        curl_resumable(spec.url, &dest, spec.size, spec.label, cancel, on)?;
-    }
-    verify_sha256(&dest, spec.sha256, spec.label)?;
-    if model == ManagedModel::Primary26B {
-        cache_quality_model_verification(&dest, true);
-    }
-    Ok(())
-}
-
-/// Download (resumable) + SHA-verify the optional 26B model into `root`, on
-/// demand from Settings. Thin wrapper over [`download_managed_model`] kept for
-/// the 26B-specific callers/tests.
-///
-/// # Errors
-/// Network/disk failure, cancellation, or a SHA-256 mismatch after download.
-pub fn download_quality_model(
-    root: &Path,
-    cancel: &AtomicBool,
-    on: &dyn Fn(Progress),
-) -> Result<()> {
-    download_managed_model(root, ManagedModel::Primary26B, cancel, on)
-}
-
-/// Download and verify the projector that belongs to the pinned 26B model.
-pub fn download_quality_vision(
-    root: &Path,
-    cancel: &AtomicBool,
-    on: &dyn Fn(Progress),
-) -> Result<()> {
-    let llama_dir = root.join("llama.cpp");
-    std::fs::create_dir_all(&llama_dir)
-        .with_context(|| format!("create llama dir {}", llama_dir.display()))?;
-    let dest = llama_dir.join(MMPROJ26_FILE);
-    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-    if reuse_if_available(
-        &dest,
-        MMPROJ26_SIZE,
-        MMPROJ26_SHA256,
-        &[home.join("llama.cpp").join(MMPROJ26_FILE)],
-    ) {
-        on(Progress::Step(
-            "Reusing existing Gemma 26B vision projector".to_string(),
-        ));
-    } else {
-        curl_resumable(
-            MMPROJ26_URL,
-            &dest,
-            MMPROJ26_SIZE,
-            "Gemma 26B vision projector",
-            cancel,
-            on,
-        )?;
-    }
-    verify_sha256(&dest, MMPROJ26_SHA256, "Gemma 26B vision projector")
-}
-
-/// The installed llama.cpp release build number (the `bNNNN` tag), read from the
-/// `.llama-build` stamp `install`/the engine-updater write next to the binaries.
-/// `None` when the stamp is missing/unparseable (an old install) → treated as
-/// too-old by the gemma4uv gate (so we stay safe, never crash).
-fn installed_llama_build(llama_dir: &Path) -> Option<u32> {
-    parse_build_tag(&std::fs::read_to_string(llama_dir.join(".llama-build")).ok()?)
-}
-
-/// Parse a llama.cpp build tag (`b9626`, or a bare `9626`) into its number.
-/// `None` for anything unparseable (an old/garbage stamp) → callers treat that
-/// as "too old", staying on the safe side of the gemma4uv gate.
-fn parse_build_tag(tag: &str) -> Option<u32> {
-    tag.trim().trim_start_matches('b').parse::<u32>().ok()
-}
-
-/// Record which llama.cpp build is installed (the `bNNNN` tag, e.g. `b9626`).
-/// Best-effort: a write failure just leaves the gate conservative (12B vision
-/// stays off until the next successful install/update). Trims to keep the stamp
-/// a clean single token regardless of what the GitHub API returned.
-fn write_build_stamp(llama_dir: &Path, tag: &str) {
-    let tag = tag.trim();
-    if !tag.is_empty() {
-        let _ = std::fs::write(llama_dir.join(".llama-build"), tag);
-    }
-}
-
-/// True if the installed llama.cpp is new enough to load the 12B's "gemma4uv"
-/// projector (build >= [`GEMMA4UV_MIN_BUILD`]). A missing/old stamp → false.
-fn llama_build_supports_gemma4uv(llama_dir: &Path) -> bool {
-    installed_llama_build(llama_dir).is_some_and(|b| b >= GEMMA4UV_MIN_BUILD)
-}
-
-fn llama_build_supports_26b(llama_dir: &Path) -> bool {
-    installed_llama_build(llama_dir).is_some_and(|build| build >= GEMMA26_MIN_BUILD)
-}
-
-/// The matching vision projector to attach for `gguf`, if present and loadable.
-fn mmproj_for_model(llama_dir: &Path, gguf: &Path) -> Option<PathBuf> {
-    let name = gguf.file_name().and_then(|n| n.to_str())?;
-    let (file, size, supported) = match name {
-        GEMMA_FILE => (
-            MMPROJ_FILE,
-            MMPROJ_SIZE,
-            llama_build_supports_gemma4uv(llama_dir),
-        ),
-        GEMMA26_FILE => (
-            MMPROJ26_FILE,
-            MMPROJ26_SIZE,
-            llama_build_supports_26b(llama_dir),
-        ),
-        _ => return None,
-    };
-    let proj = llama_dir.join(file);
-    (supported && file_len(&proj) == size).then_some(proj)
-}
-
-/// Whether the effective managed profile can accept screenshots on the server
-/// Suflyor launches.
-fn managed_model_vision_capable(root: &Path, model: ManagedModel) -> bool {
-    if !managed_model_present(root, model) {
-        return false;
-    }
-    let llama_dir = root.join("llama.cpp");
-    mmproj_for_model(&llama_dir, &llama_dir.join(model.file_name())).is_some()
-}
-
-/// True when F8's configured route resolves back to Suflyor's managed text
-/// server. Besides `same`, a `local` vision provider with an empty (or explicit
-/// managed) URL inherits `ai_local_base_url` and is the same unsafe route for a
-/// text-only profile.
-fn vision_routes_to_managed_llama(cfg: &crate::config::Config) -> bool {
-    match cfg.vision_provider.as_str() {
-        "same" => true,
-        "local" => {
-            let base_url = if cfg.vision_local_base_url.trim().is_empty() {
-                &cfg.ai_local_base_url
-            } else {
-                &cfg.vision_local_base_url
-            };
-            is_managed_llama_endpoint(base_url)
-        }
-        _ => false,
-    }
-}
 
 // ---- engine auto-update (keep llama.cpp fresh) -----------------------------
 
@@ -3608,6 +2312,106 @@ fn pick_whisper(assets: &[GhAsset], force_cpu: bool) -> Result<(String, u64)> {
 
 // ---- downloads + extraction (curl.exe + tar.exe) ---------------------------
 
+/// Download (resumable) + SHA-verify EXACTLY the requested bundled model into
+/// `root`, on demand from a Settings model button. Mirrors the installer's
+/// download→verify discipline (P1.5: a tampered byte-stream fails the pinned
+/// hash and the partial file is left for a clean re-pull, never launched).
+/// Hardware is never consulted to block or redirect the choice — any machine
+/// may pull any model; the 26B keeps only its advisory VRAM warning. Does NOT
+/// restart the server — the caller switches models afterwards so a background
+/// download can't swap the model mid-call.
+///
+/// # Errors
+/// Network/disk failure, cancellation, or a SHA-256 mismatch after download.
+pub fn download_managed_model(
+    root: &Path,
+    model: ManagedModel,
+    cancel: &AtomicBool,
+    on: &dyn Fn(Progress),
+) -> Result<()> {
+    let spec = model.spec();
+    if model == ManagedModel::Primary26B && !primary_26b_allowed_on_current_hardware() {
+        log::warn!(
+            "local-ai: hardware outside the confirmed matrix — 26B may exceed VRAM, \
+             spill into system RAM, run slowly, or fail; user accepted the risk"
+        );
+    }
+    let llama_dir = root.join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir)
+        .with_context(|| format!("create llama dir {}", llama_dir.display()))?;
+    let dest = llama_dir.join(spec.file);
+    // A previous-release 4B file is complete and launchable at its own size.
+    // Never resume into it (curl -C - would append new-spec bytes and corrupt
+    // it) and never re-download it — treat it as already installed.
+    if model == ManagedModel::Legacy4B && file_len(&dest) == LEGACY_GEMMA_SIZE_PREV {
+        on(Progress::Step(format!("{}: файл уже загружен", spec.label)));
+        return Ok(());
+    }
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    if reuse_if_available(
+        &dest,
+        spec.size,
+        spec.sha256,
+        &[home.join("llama.cpp").join(spec.file)],
+    ) {
+        on(Progress::Step(format!("{}: файл уже загружен", spec.label)));
+    } else {
+        curl_resumable(spec.url, &dest, spec.size, spec.label, cancel, on)?;
+    }
+    verify_sha256(&dest, spec.sha256, spec.label)?;
+    if model == ManagedModel::Primary26B {
+        cache_quality_model_verification(&dest, true);
+    }
+    Ok(())
+}
+
+/// Download (resumable) + SHA-verify the optional 26B model into `root`, on
+/// demand from Settings. Thin wrapper over [`download_managed_model`] kept for
+/// the 26B-specific callers/tests.
+///
+/// # Errors
+/// Network/disk failure, cancellation, or a SHA-256 mismatch after download.
+pub fn download_quality_model(
+    root: &Path,
+    cancel: &AtomicBool,
+    on: &dyn Fn(Progress),
+) -> Result<()> {
+    download_managed_model(root, ManagedModel::Primary26B, cancel, on)
+}
+
+/// Download and verify the projector that belongs to the pinned 26B model.
+pub fn download_quality_vision(
+    root: &Path,
+    cancel: &AtomicBool,
+    on: &dyn Fn(Progress),
+) -> Result<()> {
+    let llama_dir = root.join("llama.cpp");
+    std::fs::create_dir_all(&llama_dir)
+        .with_context(|| format!("create llama dir {}", llama_dir.display()))?;
+    let dest = llama_dir.join(MMPROJ26_FILE);
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    if reuse_if_available(
+        &dest,
+        MMPROJ26_SIZE,
+        MMPROJ26_SHA256,
+        &[home.join("llama.cpp").join(MMPROJ26_FILE)],
+    ) {
+        on(Progress::Step(
+            "Reusing existing Gemma 26B vision projector".to_string(),
+        ));
+    } else {
+        curl_resumable(
+            MMPROJ26_URL,
+            &dest,
+            MMPROJ26_SIZE,
+            "Gemma 26B vision projector",
+            cancel,
+            on,
+        )?;
+    }
+    verify_sha256(&dest, MMPROJ26_SHA256, "Gemma 26B vision projector")
+}
+
 /// Allow-list for release-asset downloads (mirrors update::is_trusted_download).
 /// GitHub serves release zips from github.com (302 → the *.githubusercontent
 /// hosts). Defends against a tampered GitHub-API response pointing the download
@@ -3916,18 +2720,18 @@ fn preflight() -> Result<()> {
     Ok(())
 }
 
-fn file_len(p: &Path) -> u64 {
+pub(super) fn file_len(p: &Path) -> u64 {
     std::fs::metadata(p).map(|m| m.len()).unwrap_or(0)
 }
 
-fn file_has_expected_size(path: &Path, expected_size: u64) -> bool {
+pub(super) fn file_has_expected_size(path: &Path, expected_size: u64) -> bool {
     file_len(path) == expected_size
 }
 
 /// True when `path` holds a complete legacy 4B model — either the current
 /// pinned size or the previous release's size. Both are launchable; the old
 /// size is never re-downloaded or resumed into.
-fn legacy_gguf_complete(path: &Path) -> bool {
+pub(super) fn legacy_gguf_complete(path: &Path) -> bool {
     let len = file_len(path);
     len == LEGACY_GEMMA_SIZE || len == LEGACY_GEMMA_SIZE_PREV
 }
@@ -3966,7 +2770,7 @@ fn file_stamp(path: &Path) -> Option<FileStamp> {
     })
 }
 
-fn cached_pinned_file_matches(path: &Path, expected_size: u64, expected_sha256: &str) -> bool {
+pub(super) fn cached_pinned_file_matches(path: &Path, expected_size: u64, expected_sha256: &str) -> bool {
     let Some(stamp) = file_stamp(path) else {
         return false;
     };
@@ -4037,7 +2841,7 @@ fn discard_rejected_pinned_file(path: &Path, expected_size: u64) {
     }
 }
 
-fn quality_model_verified(root: &Path) -> bool {
+pub(super) fn quality_model_verified(root: &Path) -> bool {
     if !llama_build_supports_26b(&root.join("llama.cpp")) {
         log::warn!("local AI: Gemma 26B requires llama.cpp build b{GEMMA26_MIN_BUILD}+");
         return false;
@@ -4101,7 +2905,7 @@ fn reuse_if_available(
     false
 }
 
-const GIB: u64 = 1_073_741_824;
+pub(super) const GIB: u64 = 1_073_741_824;
 /// Flat disk allowance for the llama.cpp build zip + cudart + their extraction
 /// (exact size isn't known until the GitHub API call). Whisper's cuBLAS zip
 /// bundles its runtime so it needs a little less.
@@ -4321,7 +3125,7 @@ fn launch_hidden_wait(exe: &str, args: &[&str]) -> Result<std::process::ExitStat
 
 /// Run a command and capture its output (used for short queries: nvidia-smi,
 /// curl version/JSON, readiness probes).
-fn run_capture(exe: &str, args: &[&str]) -> Result<std::process::Output> {
+pub(super) fn run_capture(exe: &str, args: &[&str]) -> Result<std::process::Output> {
     hidden_command(exe, args)
         .stdin(Stdio::null())
         .output()
