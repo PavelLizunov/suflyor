@@ -2016,7 +2016,10 @@ mod tests {
         let terminal = tokio::time::timeout(std::time::Duration::from_millis(500), rx.recv())
             .await
             .expect("stream producer should stop after finish_reason");
-        assert!(terminal.is_none(), "finish_reason must emit exactly one terminal event");
+        assert!(
+            terminal.is_none(),
+            "finish_reason must emit exactly one terminal event"
+        );
     }
 
     #[tokio::test]
