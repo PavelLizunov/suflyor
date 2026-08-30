@@ -744,6 +744,9 @@ mod tests {
         // Mismatched token of same length
         let invalid_same_len_header = "Bearer test_secret_tokXn";
         let invalid_same_len_digest = Sha256::digest(invalid_same_len_header.as_bytes());
-        assert!(!constant_time_eq(&invalid_same_len_digest, &expected_digest));
+        assert!(!constant_time_eq(
+            &invalid_same_len_digest,
+            &expected_digest
+        ));
     }
 }
