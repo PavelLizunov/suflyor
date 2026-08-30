@@ -162,12 +162,19 @@ pub fn start(cfg: SharedConfig) -> Result<BridgeHandle, String> {
 /// failure path answers with a generic JSON error.
 fn handle_request(mut req: tiny_http::Request, cfg: &SharedConfig, token: &str) {
     // Auth FIRST (before reading the body): constant shape, generic error.
+    // SECURITY: Hash both expected and provided Authorization headers with SHA-256
+    // to fixed 32-byte digests before constant_time_eq to avoid length-leaking timing side-channels.
+    use sha2::{Digest, Sha256};
     let expected_auth = format!("Bearer {token}");
+    let expected_digest = Sha256::digest(expected_auth.as_bytes());
     let authed = req
         .headers()
         .iter()
         .find(|h| h.field.equiv("Authorization"))
-        .map(|h| constant_time_eq(h.value.as_str().as_bytes(), expected_auth.as_bytes()))
+        .map(|h| {
+            let got_digest = Sha256::digest(h.value.as_str().as_bytes());
+            constant_time_eq(&got_digest, &expected_digest)
+        })
         .unwrap_or(false);
     let (status, body, needs_save) = if !authed {
         (401, serde_json::json!({"error": "unauthorized"}), false)
@@ -715,5 +722,28 @@ mod tests {
         assert!(!constant_time_eq(b"Bearer token123", b"Bearer token1234"));
         assert!(constant_time_eq(b"", b""));
         assert!(!constant_time_eq(b"", b"a"));
+    }
+
+    #[test]
+    fn token_digest_auth_verification() {
+        use sha2::{Digest, Sha256};
+        let token = "test_secret_token";
+        let expected_auth = format!("Bearer {token}");
+        let expected_digest = Sha256::digest(expected_auth.as_bytes());
+
+        // Matching token header
+        let valid_header = "Bearer test_secret_token";
+        let valid_digest = Sha256::digest(valid_header.as_bytes());
+        assert!(constant_time_eq(&valid_digest, &expected_digest));
+
+        // Mismatched token of different length (should not short-circuit timing check)
+        let invalid_len_header = "Bearer short";
+        let invalid_len_digest = Sha256::digest(invalid_len_header.as_bytes());
+        assert!(!constant_time_eq(&invalid_len_digest, &expected_digest));
+
+        // Mismatched token of same length
+        let invalid_same_len_header = "Bearer test_secret_tokXn";
+        let invalid_same_len_digest = Sha256::digest(invalid_same_len_header.as_bytes());
+        assert!(!constant_time_eq(&invalid_same_len_digest, &expected_digest));
     }
 }
