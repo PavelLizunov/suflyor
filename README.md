@@ -92,10 +92,11 @@ The `master` branch may contain unreleased work.
 
 Configuration is stored in `%APPDATA%\suflyor\config.json`.
 
-### Local macOS package (Apple Silicon)
+### macOS prerelease package (Apple Silicon)
 
-macOS DMGs are not currently published in GitHub Releases; build one from source
-with the command below or obtain a verified artifact directly from the owner.
+Download the versioned `.dmg` from
+[GitHub Releases](https://github.com/PavelLizunov/suflyor/releases) or build one
+from source with the command below. The published macOS package is a prerelease.
 Open the versioned `.dmg`, then drag **Suflyor** onto the **Applications**
 shortcut. The app is ad-hoc signed rather than Developer ID signed or notarized.
 If Gatekeeper blocks its first launch, try to open it once, then use
