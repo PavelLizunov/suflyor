@@ -1,15 +1,17 @@
 # Suflyor
 
-A native Windows overlay that listens to your meetings, transcribes speech in
-real time, and answers technical questions through an LLM — cloud or fully
-local — in small floating windows ("tiles") beside your meeting window.
+A native Windows overlay with an active Apple Silicon macOS port. It listens to
+meetings, transcribes speech in real time, and answers technical questions
+through an LLM — cloud or fully local — in small floating windows ("tiles")
+beside the meeting window.
 
 Built in **pure Rust + [Slint](https://slint.dev)** (skia renderer, no browser
 engine, no Node). Transparent, always-on-top, with Windows capture exclusion
 available through an explicit stealth toggle.
 
-**Windows 10/11 only.** Single user, no telemetry, no code signing.
-Interface languages: English and Russian (switchable at runtime).
+**Published production installers target Windows 10/11.** The local macOS port
+requires Apple Silicon and macOS 14.2+. Single user, no telemetry. Interface
+languages: English and Russian (switchable at runtime).
 
 <!-- latest-release:start -->
 Latest published build: [v0.37.0](https://github.com/PavelLizunov/suflyor/releases/tag/v0.37.0).
@@ -67,15 +69,17 @@ The `master` branch may contain unreleased work.
   `WDA_EXCLUDEFROMCAPTURE`, used by modern Windows capture APIs. Capture
   software can vary, so verify it with your own meeting setup before relying
   on it.
-- **Auto-update.** Checks GitHub Releases, downloads the installer, verifies
-  its SHA-256 digest against the release metadata, and launches it. Verification
-  is fail-closed, and downloads are restricted to GitHub hosts.
+- **Windows auto-update.** Checks GitHub Releases, downloads the installer,
+  verifies its SHA-256 digest against the release metadata, and launches it.
+  Verification is fail-closed, and downloads are restricted to GitHub hosts.
 - **Hermes plugin.** Optional two-way integration with a local Hermes agent
   instance — install the plugin from Settings.
 - **Context window control.** Auto / 8K / 16K / 32K / 64K / 96K presets for
   the managed local llama.cpp server, with hardware-aware memory estimates.
 
 ## Installation
+
+### Windows
 
 1. Download **`suflyor-slint-setup.exe`** from
    [GitHub Releases](https://github.com/PavelLizunov/suflyor/releases).
@@ -87,6 +91,17 @@ The `master` branch may contain unreleased work.
    speech recognition, microphone, system audio, and overlay preferences.
 
 Configuration is stored in `%APPDATA%\suflyor\config.json`.
+
+### Local macOS package (Apple Silicon)
+
+macOS DMGs are not currently published in GitHub Releases; build one from source
+with the command below or obtain a verified artifact directly from the owner.
+Open the versioned `.dmg`, then drag **Suflyor** onto the **Applications**
+shortcut. The app is ad-hoc signed rather than Developer ID signed or notarized.
+If Gatekeeper blocks its first launch, try to open it once, then use
+**System Settings → Privacy & Security → Open Anyway** as described by
+[Apple Support](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac).
+Grant microphone and system-audio capture only when macOS asks for them.
 
 ### Local AI (optional — everything on your PC)
 
@@ -193,12 +208,15 @@ overview and [`CONTRIBUTING.md`](CONTRIBUTING.md) for the build setup.
 
 ## Limitations
 
-- **Windows only.** WASAPI for audio capture, Win32 for window management —
-  there is no macOS or Linux support today.
-- **Roadmap.** Native Linux and macOS versions are planned, but no builds or
-  delivery dates are promised yet.
-- **No code signing.** SmartScreen will warn on first launch. This is a
-  deliberate choice for a single-user tool.
+- **No Linux build.** Supported native targets are Windows 10/11 and Apple
+  Silicon macOS 14.2 or newer.
+- **Platform signing warnings.** Windows builds are not Authenticode-signed;
+  local macOS builds are ad-hoc signed and not notarized. SmartScreen or
+  Gatekeeper may therefore require an explicit first-launch confirmation.
+- **macOS capture permissions.** Microphone and system-audio capture remain
+  subject to macOS TCC approval. Because ad-hoc identity is tied to a specific
+  build, a rebuilt app can prompt for those permissions again; verify every new
+  build with the actual meeting devices before use.
 - **Single user.** No multi-user profiles, no concurrent sessions.
 - **GPU-dependent local AI quality.** The 26B Gemma profile needs a GPU with
   sufficient VRAM; CPU fallback uses smaller models.
@@ -209,8 +227,8 @@ overview and [`CONTRIBUTING.md`](CONTRIBUTING.md) for the build setup.
 
 ## Building from source
 
-Prerequisites: Windows 10/11, Rust (stable-msvc toolchain), Visual Studio
-Build Tools 2022 with the C++ workload.
+Windows prerequisites: Windows 10/11, Rust (stable-msvc toolchain), Visual
+Studio Build Tools 2022 with the C++ workload.
 
 ```powershell
 # Dev build + run
@@ -220,8 +238,16 @@ cargo run --bin overlay-host --manifest-path slint-experiment\Cargo.toml
 powershell -ExecutionPolicy Bypass -File scripts\build-slint-release.ps1 -Installer
 # → slint-experiment\target\release\bundle\suflyor-slint-setup.exe
 
-# Full CI gate (fmt + clippy + tests for all 3 crates + i18n guard)
+# Full CI gate
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci.ps1
+```
+
+macOS prerequisites: Apple Silicon macOS 14.2+, Xcode command-line tools, Rust,
+and the pinned Swift package dependencies already recorded by the repository.
+
+```bash
+./slint-experiment/scripts/build-macos-dmg.sh
+# → slint-experiment/target/bundle/Suflyor-<version>-macos-arm64.dmg
 ```
 
 ## License

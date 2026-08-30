@@ -31,6 +31,7 @@ tera_binary="$target_dir/release/suflyor-teratts"
 mlx_root="$crate_root/../suflyor-mlx"
 
 export CARGO_INCREMENTAL=0
+export CARGO_BUILD_JOBS=2
 cargo build --locked --release --bin overlay-host \
   --manifest-path "$crate_root/Cargo.toml"
 
@@ -40,9 +41,9 @@ if [[ ! -f "$mlx_root/Package.resolved" ]]; then
   echo "required MLX Package.resolved is missing" >&2
   exit 1
 fi
-swift build --package-path "$mlx_root" -c release --disable-automatic-resolution
+swift build --package-path "$mlx_root" -c release --disable-automatic-resolution --jobs 2
 mlx_bin_dir="$(swift build --package-path "$mlx_root" -c release \
-  --disable-automatic-resolution --show-bin-path)"
+  --disable-automatic-resolution --jobs 2 --show-bin-path)"
 mlx_binary="$mlx_bin_dir/suflyor-mlx"
 mlx_metallib="$($mlx_root/Scripts/build-metallib.sh release)"
 
