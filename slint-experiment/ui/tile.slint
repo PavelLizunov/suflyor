@@ -736,11 +736,13 @@ export component TileWindow inherits Window {
                         // conversation renderer, but looks like a chat bubble
                         // instead of source code.
                         if block.kind == 5 && block.lang == "user" : Rectangle {
+                            height: user-layout.preferred-height;
+                            vertical-stretch: 0;
                             background: Theme.accent.with-alpha(0.14);
                             border-radius: 7px;
                             border-width: 1px;
                             border-color: Theme.accent.with-alpha(0.55);
-                            VerticalLayout {
+                            user-layout := VerticalLayout {
                                 padding: Metrics.space-sm;
                                 spacing: 4px;
                                 Text {
