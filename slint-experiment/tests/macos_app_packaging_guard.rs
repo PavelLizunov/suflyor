@@ -25,14 +25,6 @@ fn manifest_keeps_the_production_macos_identity() {
             "<string>com.ninitux.suflyor.macos</string>",
         ),
         ("CFBundlePackageType", "<string>APPL</string>"),
-        (
-            "CFBundleShortVersionString",
-            concat!("<string>", env!("CARGO_PKG_VERSION"), "</string>"),
-        ),
-        (
-            "CFBundleVersion",
-            concat!("<string>", env!("CARGO_PKG_VERSION"), "</string>"),
-        ),
         ("LSMinimumSystemVersion", "<string>14.2</string>"),
         ("LSUIElement", "<true/>"),
         ("NSHighResolutionCapable", "<true/>"),
@@ -46,6 +38,18 @@ fn manifest_keeps_the_production_macos_identity() {
         ),
     ] {
         assert!(has_plist_value(key, value), "invalid plist entry: {key}");
+    }
+
+    // Apple bundle versions are numeric; Cargo's prerelease suffix stays in the binary version.
+    let release_version = env!("CARGO_PKG_VERSION")
+        .split_once('-')
+        .map_or(env!("CARGO_PKG_VERSION"), |(version, _)| version);
+    let release_value = format!("<string>{release_version}</string>");
+    for key in ["CFBundleShortVersionString", "CFBundleVersion"] {
+        assert!(
+            has_plist_value(key, &release_value),
+            "invalid plist release version: {key}"
+        );
     }
 }
 
