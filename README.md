@@ -96,13 +96,10 @@ Configuration is stored in `%APPDATA%\suflyor\config.json`.
 
 Download the versioned `.dmg` from
 [GitHub Releases](https://github.com/PavelLizunov/suflyor/releases) or build one
-from source with the command below. The published macOS package is a prerelease.
-Open the versioned `.dmg`, then drag **Suflyor** onto the **Applications**
-shortcut. The app is ad-hoc signed rather than Developer ID signed or notarized.
-If Gatekeeper blocks its first launch, try to open it once, then use
-**System Settings → Privacy & Security → Open Anyway** as described by
-[Apple Support](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac).
-Grant microphone and system-audio capture only when macOS asks for them.
+from source with the command below. Before the first launch, follow the complete
+[macOS installation and permissions guide](docs/macos-install.md). The published
+package is an ad-hoc-signed, unnotarized prerelease, so Gatekeeper confirmation
+and explicit microphone/system-audio permissions are required.
 
 ### Local AI (optional — everything on your PC)
 
