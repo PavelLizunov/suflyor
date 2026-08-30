@@ -3,6 +3,7 @@
 const PLIST: &str = include_str!("../macos/Info.plist");
 const ENTITLEMENTS: &str = include_str!("../macos/entitlements.plist");
 const SCRIPT: &str = include_str!("../scripts/build-macos-app.sh");
+const DMG_SCRIPT: &str = include_str!("../scripts/build-macos-dmg.sh");
 const METAL_SCRIPT: &str = include_str!("../../suflyor-mlx/Scripts/build-metallib.sh");
 const HOST: &str = include_str!("../src/bin/overlay_host_windows.rs");
 const SETTINGS_CONTROLLER: &str = include_str!("../src/bin/overlay_host/settings_controller.rs");
@@ -110,10 +111,12 @@ fn script_builds_and_ad_hoc_signs_the_app() {
         "if [[ \"$target_dir\" == \"/\" ]]",
         "$(basename \"$app_dir\")\" != \"Suflyor.app\"",
         "export CARGO_INCREMENTAL=0",
+        "export CARGO_BUILD_JOBS=2",
         "cargo build --locked --release --bin overlay-host",
         "cargo build --locked --release --manifest-path \"$crate_root/../suflyor-tts/Cargo.toml\"",
         "cargo build --locked --release --manifest-path \"$crate_root/../suflyor-teratts/Cargo.toml\"",
         "swift build --package-path \"$mlx_root\" -c release --disable-automatic-resolution",
+        "--disable-automatic-resolution --jobs 2",
         "mlx_root=\"$crate_root/../suflyor-mlx\"",
         "mlx_metallib=\"$($mlx_root/Scripts/build-metallib.sh release)\"",
         "if [[ ! -f \"$mlx_root/Package.resolved\" ]]",
@@ -233,6 +236,54 @@ fn script_stays_free_local_packaging() {
     for forbidden in ["notarytool ", "hdiutil ", "productbuild ", "pkgbuild "] {
         assert!(!script.contains(forbidden), "unexpected step: {forbidden}");
     }
+}
+
+#[test]
+fn dmg_script_uses_the_native_drag_install_layout() {
+    for required in [
+        "set -euo pipefail",
+        "BASH_SOURCE",
+        "export CARGO_BUILD_JOBS=2",
+        "\"$script_dir/build-macos-app.sh\"",
+        "ln -s /Applications \"$staging_dir/Applications\"",
+        "if [[ -L \"$bundle_dir\" ]]",
+        "bundle_dir=\"$(cd \"$bundle_dir\" && pwd -P)\"",
+        "hdiutil create -quiet -fs HFS+ -format UDZO",
+        "hdiutil attach -quiet -readonly -nobrowse -mountpoint \"$mount_dir\" \"$tmp_dmg\"",
+        "readlink \"$mount_dir/Applications\"",
+        "mv -f -- \"$tmp_dmg\" \"$dmg_path\"",
+        "codesign --verify --deep --strict --verbose=2",
+        "lipo -archs \"$path\"",
+        "dmg_path=%s",
+        "dmg_bytes=%s",
+        "dmg_sha256=%s",
+    ] {
+        assert!(
+            DMG_SCRIPT.contains(required),
+            "missing DMG packaging step: {required}"
+        );
+    }
+    for forbidden in [
+        "pkgbuild ",
+        "productbuild ",
+        "notarytool ",
+        "curl ",
+        "brew ",
+        "create-dmg",
+    ] {
+        assert!(
+            !DMG_SCRIPT.contains(forbidden),
+            "unexpected DMG dependency or installer step: {forbidden}"
+        );
+    }
+    assert!(
+        DMG_SCRIPT.find("build-macos-app.sh") < DMG_SCRIPT.find("hdiutil create"),
+        "the verified app must be built before its DMG"
+    );
+    assert!(
+        DMG_SCRIPT.find("hdiutil attach") < DMG_SCRIPT.find("mv -f -- \"$tmp_dmg\" \"$dmg_path\""),
+        "the temporary DMG must pass mounted verification before replacing the artifact"
+    );
 }
 
 #[test]
