@@ -116,6 +116,14 @@ The diff classifier is `scripts/git-gate-native.ps1`. Run it on
 - Set `CARGO_INCREMENTAL=0`; gate scripts already do this. Inspect free space
   before heavy builds and follow homelab cache-hygiene rules. Do not clean
   caches or targets merely to be tidy.
+- **Hard mac-worker memory rule (16 GiB):** before any Cargo/Swift build or gate,
+  verify that no other Cargo, Rust, Swift, Suflyor host, or local-model process is
+  active and that `memory_pressure` reports at least 40% system-wide free memory.
+  Always use `CARGO_BUILD_JOBS=2` and `RUST_TEST_THREADS=2`; never raise either
+  limit on this worker. The macOS gate enforces the same preflight. If macOS
+  shows a memory-pressure/Force Quit warning, stop the owned build immediately,
+  verify its processes exited, and report the interrupted gate; never close
+  unrelated user applications to make room.
 - GitHub Actions is independent supporting evidence, not a substitute for a
   required physical-worker or live UI check.
 

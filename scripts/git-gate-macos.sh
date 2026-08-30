@@ -4,11 +4,33 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 export CARGO_INCREMENTAL=0
+export CARGO_BUILD_JOBS=2
+export RUST_TEST_THREADS=2
 
 if [[ "$(uname -m)" != "arm64" ]]; then
   echo "macOS gate requires an Apple Silicon arm64 host" >&2
   exit 1
 fi
+
+active=()
+for name in cargo rustc swift swiftc swift-build swift-test swift-frontend \
+  overlay-host suflyor-mlx suflyor-tts suflyor-teratts llama-server whisper-server; do
+  if pgrep -x "$name" >/dev/null 2>&1; then
+    active+=("$name")
+  fi
+done
+if ((${#active[@]} > 0)); then
+  printf 'macOS gate refused: active build/model processes: %s\n' "${active[*]}" >&2
+  exit 2
+fi
+
+free_percent="$(memory_pressure | awk -F': ' '/System-wide memory free percentage/ {gsub(/%/, "", $2); print $2; exit}')"
+if [[ ! "$free_percent" =~ ^[0-9]+$ ]] || ((free_percent < 40)); then
+  echo "macOS gate refused: system-wide free memory must be at least 40% (observed ${free_percent:-unknown}%)" >&2
+  exit 2
+fi
+printf 'macOS memory preflight: %s%% free; Cargo jobs=%s; Rust test threads=%s\n' \
+  "$free_percent" "$CARGO_BUILD_JOBS" "$RUST_TEST_THREADS"
 
 echo "=== macOS backend ==="
 cargo fmt --manifest-path overlay-backend/Cargo.toml --all -- --check
@@ -58,8 +80,8 @@ done
 
 echo "=== macOS MLX sidecar (locked) ==="
 test -f suflyor-mlx/Package.resolved
-swift test --package-path suflyor-mlx --disable-automatic-resolution
-swift build --package-path suflyor-mlx -c release --disable-automatic-resolution
+swift test --package-path suflyor-mlx --jobs 2 --disable-automatic-resolution
+swift build --package-path suflyor-mlx -c release --jobs 2 --disable-automatic-resolution
 mlx_metallib="$(suflyor-mlx/Scripts/build-metallib.sh release)"
 test -s "$mlx_metallib"
 
