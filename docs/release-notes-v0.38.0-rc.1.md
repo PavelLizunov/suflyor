@@ -26,6 +26,9 @@ macOS port together for final acceptance before v0.38.0.
 
 - `Suflyor-0.38.0-rc.1-macos-arm64.dmg` supports Apple Silicon on macOS 14.2
   or newer. Open the image and drag Suflyor onto its Applications shortcut.
+- Follow the bilingual
+  [macOS installation and permissions guide](https://github.com/PavelLizunov/suflyor/blob/master/docs/macos-install.md)
+  before the first launch.
 - This prerelease package is ad-hoc signed and not notarized. Gatekeeper can
   require **Privacy & Security → Open Anyway**, and rebuilt versions can request
   fresh microphone and system-audio permissions.
