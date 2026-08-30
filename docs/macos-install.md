@@ -36,7 +36,9 @@ Suflyor не показывает значок в Dock. После запуск�
 ### 3. Выдать разрешения на запись
 
 При первом использовании соответствующей функции разрешите доступ в системном
-диалоге. Проверить разрешения можно вручную:
+диалоге. На обычном Mac эти TCC-разрешения нельзя выдать приложению одной
+командой Terminal: каждое из них подтверждает пользователь. Проверить разрешения
+можно вручную:
 
 - **Privacy & Security → Microphone → Suflyor** — микрофон;
 - **Privacy & Security → Screen & System Audio Recording → Suflyor** — системный
@@ -83,7 +85,8 @@ show, hide, or quit the overlay.
 
 ### Grant capture permissions
 
-Enable Suflyor under:
+On an unmanaged Mac, no Terminal command can grant these TCC permissions to an
+app; the user must approve each one. Enable Suflyor under:
 
 - **Privacy & Security → Microphone** for microphone capture;
 - **Privacy & Security → Screen & System Audio Recording** for system audio,
