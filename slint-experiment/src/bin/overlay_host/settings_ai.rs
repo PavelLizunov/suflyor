@@ -746,12 +746,6 @@ pub(crate) fn wire_ai_settings(
             // Selecting the catalog entry only reveals it; activation stays
             // behind the explicit "Enable for text" action.
             if cfg!(target_os = "macos") && idx == 4 {
-                if let Some(window) = weak.upgrade() {
-                    let current = cfg_c.read().ai_provider.clone();
-                    window.set_ai_provider_index(
-                        super::settings_controller::ai_provider_index(&current, true),
-                    );
-                }
                 return;
             }
             let provider = match idx {

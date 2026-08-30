@@ -49,3 +49,21 @@ fn tile_conversation_fixes_stay_wired() {
     assert!(host.contains("tile.on_followup_submitted"));
     assert!(host.contains("LAST_CLOSED_READ_TILE"));
 }
+
+#[test]
+fn user_bubble_height_invariants_are_guarded() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let tile = fs::read_to_string(root.join("ui/tile.slint")).expect("read tile.slint");
+    let start = tile
+        .find("if block.kind == 5 && block.lang == \"user\"")
+        .expect("user bubble block definition");
+    let end = tile[start..]
+        .find("if block.kind == 5 && block.lang != \"user\"")
+        .map(|offset| start + offset)
+        .expect("block after user bubble");
+    let block = &tile[start..end];
+
+    assert!(block.contains("height: user-layout.preferred-height;"));
+    assert!(block.contains("vertical-stretch: 0;"));
+    assert!(block.contains("user-layout := VerticalLayout"));
+}

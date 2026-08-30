@@ -101,6 +101,62 @@ fn macos_provider_catalogs_and_components_keep_platform_indices_honest() {
     assert!(ui.contains(
         "Personal memory is stored locally. Approved items are added to new AI requests"
     ));
+
+    for (source, callback, branch, label) in [
+        (
+            ai.as_str(),
+            "on_ai_provider_changed",
+            "if cfg!(target_os = \"macos\") && idx == 4",
+            "text",
+        ),
+        (
+            vision.as_str(),
+            "on_vision_provider_changed",
+            "if cfg!(target_os = \"macos\") && idx == 6",
+            "Vision",
+        ),
+    ] {
+        let callback_body = source
+            .split_once(callback)
+            .unwrap_or_else(|| panic!("missing {label} provider callback"))
+            .1;
+        let preview_body = callback_body
+            .split_once(branch)
+            .unwrap_or_else(|| panic!("missing macOS {label} MLX preview branch"))
+            .1
+            .split_once('}')
+            .expect("MLX preview branch must close")
+            .0;
+        assert_eq!(
+            preview_body.trim().trim_start_matches('{').trim(),
+            "return;",
+            "macOS {label} MLX preview must not mutate or persist provider state"
+        );
+    }
+    assert!(ui.contains(
+        "root.ai-provider-index = self.current-index;\n                                root.ai-provider-changed(self.current-index);"
+    ));
+    assert!(ui.contains(
+        "root.vision-provider-index = self.current-index;\n                                root.vision-provider-changed(self.current-index);"
+    ));
+
+    assert_eq!(
+        ui.matches("@tr(\"Version: {} (suflyor / Slint)\", root.app-version)")
+            .count(),
+        1,
+        "ui/settings_panel.slint must contain exactly one Version text line"
+    );
+    let backup = ui
+        .split_once("title: @tr(\"Backup / transfer settings\");")
+        .expect("Backup / transfer settings card title must exist in UI")
+        .1
+        .split_once("// Phase E6 v28")
+        .expect("Backup card content marker must follow its title")
+        .0;
+    assert!(
+        backup.contains("@tr(\"Version: {} (suflyor / Slint)\", root.app-version)"),
+        "Version text must be inside the platform-neutral Backup card"
+    );
 }
 
 #[test]

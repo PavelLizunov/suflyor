@@ -196,8 +196,9 @@ foreach ($crate in $affectedCrates) {
         $guards = @(
             'codex_copy_guard', 'i18n_guard', 'icon_guard',
             'lock_chip_geometry_guard', 'lock_chip_layout_guard',
-            'lock_mode_menu_guard', 'rc3_regression_guard',
-            'settings_reset_guard', 'tera_tts_layout_guard',
+            'lock_mode_menu_guard', 'macos_settings_guard',
+            'rc3_regression_guard', 'settings_reset_guard',
+            'tera_tts_layout_guard', 'tile_player_layout_guard',
             'tray_guard', 'version_guard'
         )
         $guardArgs = @('test', '--locked', '--manifest-path', $manifest)

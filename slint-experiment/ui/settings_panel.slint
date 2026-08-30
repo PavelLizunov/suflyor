@@ -1677,16 +1677,16 @@ export component SettingsWindow inherits Window {
                             color: root.update-available ? Theme.success : Theme.text-muted;
                             wrap: word-wrap;
                         }
+                        }
+
+                        SettingsCard {
+                            title: @tr("Backup / transfer settings");
                         Text {
                             text: @tr("Version: {} (suflyor / Slint)", root.app-version);
                             font-size: 10px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        }
-
-                        SettingsCard {
-                            title: @tr("Backup / transfer settings");
                         // Phase E6 v28 — full-profile import/export.
                         // (duplicate heading removed — the SettingsCard title already shows it)
                         Text {

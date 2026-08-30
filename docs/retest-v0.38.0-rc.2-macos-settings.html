@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Suflyor v0.38.0-rc.2 — ретест</title>
+<style>
+:root{--bg:#0f1216;--card:#171c22;--line:#262d36;--txt:#e6eaf0;--mut:#9aa6b2;--acc:#5b9dff;--ok:#3fb950;--fail:#f85149;--na:#8b949e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;padding:24px}
+h1{font-size:21px;margin:0 0 4px}.sub{color:var(--mut);font-size:13px;margin-bottom:18px}.meta,.item{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:12px}.meta{font-size:13px}.meta b{color:var(--acc)}.id{font-weight:700}.sev{font-size:11px;padding:2px 7px;border-radius:20px;margin-left:8px;background:#16303a;color:#79c0ff}.steps{margin:8px 0}.exp{margin:6px 0 10px;color:var(--mut);font-size:13.5px}.exp b{color:var(--ok)}.lang{display:inline-block;font-size:11px;background:#1f2630;border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--mut);margin-right:6px}.ctl{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;margin-top:8px}.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}.seg button{background:transparent;color:var(--mut);border:0;padding:6px 14px;cursor:pointer;font:inherit}.seg button.on[data-v=pass]{background:var(--ok);color:#04130a}.seg button.on[data-v=fail]{background:var(--fail);color:#1a0405}.seg button.on[data-v=na]{background:var(--na);color:#0c0f12}textarea{flex:1;min-width:240px;min-height:38px;background:#0d1116;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 10px;font:inherit;resize:vertical}.bar{position:sticky;bottom:0;margin-top:24px;background:#0d1116ee;border-top:1px solid var(--line);padding:14px 0;display:flex;gap:12px;align-items:center}.bar button{background:var(--acc);color:#04122e;border:0;border-radius:8px;padding:10px 18px;font:inherit;font-weight:700;cursor:pointer}.bar button.ghost{background:transparent;color:var(--acc);border:1px solid var(--acc)}.tally{color:var(--mut);font-size:13px}.tally b{color:var(--txt)}code{background:#0d1116;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:13px}
+</style>
+</head>
+<body>
+<h1>Suflyor v0.38.0-rc.2 — ретест</h1>
+<div class="sub">Короткий чек-лист только по исправленным состояниям.</div>
+<div class="meta"><b>ВАЖНО:</b> на macOS тестируйте приложение из нового DMG; в Settings → Backup должна отображаться версия <b>0.38.0-rc.2</b>.</div>
+<div id="items">
+<div class="item" data-id="Версия в macOS Settings"><span class="id">Версия во вкладке Backup</span><span class="sev">fix</span><div class="steps"><span class="lang">RU</span><b>Шаги:</b> открыть Settings → Backup.</div><div class="exp"><b>Ожидание:</b> видна строка <code>Версия: 0.38.0-rc.2 (suflyor / Slint)</code>; элементы резервного копирования не перекрыты.</div></div>
+<div class="item" data-id="Managed MLX для текста"><span class="id">Предпросмотр Managed MLX для текста</span><span class="sev">fix</span><div class="steps"><span class="lang">RU</span><span class="lang">Apple Silicon</span><b>Шаги:</b> Settings → AI providers → выбрать Managed MLX.</div><div class="exp"><b>Ожидание:</b> появляется карточка текстовой модели со статусом и действиями. До нажатия Enable активный провайдер не меняется.</div></div>
+<div class="item" data-id="Managed MLX Vision"><span class="id">Предпросмотр Managed MLX Vision</span><span class="sev">fix</span><div class="steps"><span class="lang">RU</span><span class="lang">Apple Silicon</span><b>Шаги:</b> Settings → Vision → выбрать Managed MLX.</div><div class="exp"><b>Ожидание:</b> появляется прокручиваемая карточка Vision-модели. До нажатия Enable for Vision маршрут не меняется.</div></div>
+<div class="item" data-id="Короткий текст озвучивания"><span class="id">Рамка короткого текста в тайле озвучивания</span><span class="sev">fix</span><div class="steps"><span class="lang">RU</span><b>Шаги:</b> выделить короткий текст и запустить Read selection.</div><div class="exp"><b>Ожидание:</b> рамка вокруг исходного текста имеет высоту по содержимому и не занимает весь тайл.</div></div>
+</div>
+<div class="bar"><button onclick="exportResults()">Экспортировать результаты</button><button class="ghost" onclick="copyResults()">Скопировать</button><span class="tally" id="tally"></span></div>
+<script>
+const VERSION="v0.38.0-rc.2",state={};
+document.querySelectorAll('.item').forEach(it=>{const id=it.dataset.id;state[id]={status:'',comment:''};const ctl=document.createElement('div'),seg=document.createElement('div'),ta=document.createElement('textarea');ctl.className='ctl';seg.className='seg';[['pass','Прошло'],['fail','Не прошло'],['na','Н/Д']].forEach(([v,l])=>{const b=document.createElement('button');b.dataset.v=v;b.textContent=l;b.onclick=()=>{state[id].status=v;seg.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');tally()};seg.appendChild(b)});ta.placeholder='Комментарий';ta.oninput=()=>{state[id].comment=ta.value};ctl.append(seg,ta);it.appendChild(ctl)});
+function tally(){const v=Object.values(state),p=v.filter(x=>x.status==='pass').length,f=v.filter(x=>x.status==='fail').length,n=v.filter(x=>x.status==='na').length;document.getElementById('tally').innerHTML=`<b>${p}</b> прошло · <b>${f}</b> не прошло · <b>${n}</b> н/д · <b>${v.length-p-f-n}</b> осталось`}
+function build(){let o=`Suflyor ${VERSION} — ретест\n\n`;document.querySelectorAll('.item').forEach(it=>{const s=state[it.dataset.id],l={pass:'ПРОШЛО',fail:'НЕ ПРОШЛО',na:'Н/Д','':'НЕ ОТМЕЧЕНО'}[s.status];o+=`[${l}] ${it.dataset.id}\n${s.comment?`    ${s.comment}\n`:''}\n`});return o}
+function exportResults(){const b=new Blob([build()],{type:'text/plain;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`retest-${VERSION}-results.txt`;a.click()}
+async function copyResults(){try{await navigator.clipboard.writeText(build())}catch(_){exportResults()}}
+tally();
+</script>
+</body>
+</html>

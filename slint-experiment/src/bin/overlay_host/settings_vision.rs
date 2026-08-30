@@ -54,10 +54,6 @@ pub(crate) fn wire_vision_settings(
             // Selecting the catalog entry does not start or route to MLX. The
             // explicit Vision enable button owns that state change.
             if cfg!(target_os = "macos") && idx == 6 {
-                if let Some(window) = weak.upgrade() {
-                    let current = cfg_c.read().vision_provider.clone();
-                    window.set_vision_provider_index(vision_provider_index_from_id(&current));
-                }
                 return;
             }
             if idx == 1 {
