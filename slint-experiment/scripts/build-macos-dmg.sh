@@ -15,6 +15,11 @@ if [[ "$target_dir" == "/" ]]; then
   echo "refusing to package into the filesystem root" >&2
   exit 1
 fi
+install_guide="$crate_root/../docs/macos-install.md"
+if [[ ! -s "$install_guide" ]]; then
+  echo "required macOS installation guide is missing" >&2
+  exit 1
+fi
 
 version="$(awk '
   /^\[package\]$/ { package = 1; next }
@@ -81,6 +86,7 @@ trap cleanup EXIT
 
 ditto "$app_dir" "$staging_dir/Suflyor.app"
 ln -s /Applications "$staging_dir/Applications"
+install -m 644 "$install_guide" "$staging_dir/Install Suflyor.txt"
 rm -f -- "$tmp_dmg"
 hdiutil create -quiet -fs HFS+ -format UDZO -imagekey zlib-level=9 \
   -volname "Suflyor $version" -srcfolder "$staging_dir" "$tmp_dmg"
@@ -88,10 +94,21 @@ hdiutil create -quiet -fs HFS+ -format UDZO -imagekey zlib-level=9 \
 hdiutil attach -quiet -readonly -nobrowse -mountpoint "$mount_dir" "$tmp_dmg"
 attached=1
 if [[ ! -d "$mount_dir/Suflyor.app" || ! -L "$mount_dir/Applications" \
-  || "$(readlink "$mount_dir/Applications")" != "/Applications" ]]; then
+  || "$(readlink "$mount_dir/Applications")" != "/Applications" \
+  || ! -s "$mount_dir/Install Suflyor.txt" ]]; then
   echo "DMG does not contain the expected drag-install layout" >&2
   exit 1
 fi
+if ! cmp -s "$install_guide" "$mount_dir/Install Suflyor.txt"; then
+  echo "DMG installation guide differs from its source" >&2
+  exit 1
+fi
+for guide_marker in "Open Anyway" "Microphone" "Screen & System Audio Recording" "Accessibility"; do
+  if ! grep -Fq "$guide_marker" "$mount_dir/Install Suflyor.txt"; then
+    echo "DMG installation guide is incomplete: $guide_marker" >&2
+    exit 1
+  fi
+done
 codesign --verify --deep --strict --verbose=2 "$mount_dir/Suflyor.app"
 hdiutil detach "$mount_dir" >/dev/null
 attached=0

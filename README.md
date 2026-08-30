@@ -97,9 +97,10 @@ Configuration is stored in `%APPDATA%\suflyor\config.json`.
 Download the versioned `.dmg` from
 [GitHub Releases](https://github.com/PavelLizunov/suflyor/releases) or build one
 from source with the command below. Before the first launch, follow the complete
-[macOS installation and permissions guide](docs/macos-install.md). The published
-package is an ad-hoc-signed, unnotarized prerelease, so Gatekeeper confirmation
-and explicit microphone/system-audio permissions are required.
+[macOS installation and permissions guide](docs/macos-install.md), also included
+inside the DMG as `Install Suflyor.txt`. The published package is an
+ad-hoc-signed, unnotarized prerelease, so Gatekeeper confirmation and explicit
+microphone/system-audio permissions are required.
 
 ### Local AI (optional — everything on your PC)
 
