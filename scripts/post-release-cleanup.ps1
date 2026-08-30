@@ -101,11 +101,11 @@ foreach ($pr in $openPrs) {
         }
         continue
     }
-    $view = & gh.exe pr view $pr.number --repo $repo --json isDraft,mergeable,headRefOid,statusCheckRollup | ConvertFrom-Json
+    $view = & gh.exe pr view $pr.number --repo $repo --json isDraft,mergeable,mergeStateStatus,headRefOid,statusCheckRollup | ConvertFrom-Json
     $gate = @($view.statusCheckRollup | Where-Object {
         $_.name -eq 'gate' -and $_.status -eq 'COMPLETED' -and $_.conclusion -eq 'SUCCESS'
     })
-    if (-not $view.isDraft -and $view.mergeable -eq 'MERGEABLE' -and $gate.Count -gt 0) {
+    if (-not $view.isDraft -and $view.mergeable -eq 'MERGEABLE' -and $view.mergeStateStatus -eq 'CLEAN' -and $gate.Count -gt 0) {
         Say 'MERGE green PR' "#$($pr.number) $($pr.headRefName)"
         if ($Apply) {
             & gh.exe pr merge $pr.number --repo $repo --merge --match-head-commit $view.headRefOid
