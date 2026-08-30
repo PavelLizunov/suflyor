@@ -22,9 +22,22 @@ macOS port together for final acceptance before v0.38.0.
   timing data; stream cancellation and terminal-event guards remain covered by
   the native gates.
 
+## macOS installer
+
+- `Suflyor-0.38.0-rc.1-macos-arm64.dmg` supports Apple Silicon on macOS 14.2
+  or newer. Open the image and drag Suflyor onto its Applications shortcut.
+- This prerelease package is ad-hoc signed and not notarized. Gatekeeper can
+  require **Privacy & Security → Open Anyway**, and rebuilt versions can request
+  fresh microphone and system-audio permissions.
+- DMG SHA-256:
+  `e3c2d7b16df4c49ce73a6a90785b4322ab295ffd2ac56220e6d78aaed59223c8`.
+
 ## Verification
 
 - Exact-SHA macOS and Windows full gates passed for the STT candidate.
+- The DMG packaging candidate `871c6d0f70ee31a41e930d82d4d0659931a5e1b1`
+  passed full macOS and Windows gates, read-only mount validation, deep signature
+  checks, thin-arm64 checks, and a mounted LaunchServices runtime smoke.
 - GigaAM CPU warm median was 75.6 ms on the recorded fixture; the duplicate
   live-model RSS delta fell from about 445 MiB to 2.4 MiB.
 - A bounded macOS concurrency run completed five GigaAM lifecycle cycles while
