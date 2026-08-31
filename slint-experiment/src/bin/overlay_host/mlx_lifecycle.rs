@@ -66,6 +66,7 @@ pub(crate) fn stop_mlx_model() {
 }
 
 /// Stop a superseded prewarm only while that exact model is still resident.
+#[cfg(target_os = "macos")]
 pub(crate) fn stop_mlx_model_if_active(model: &str) {
     let _guard = lifecycle_lock()
         .lock()
