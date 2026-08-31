@@ -76,7 +76,9 @@ fi
 dmg_name="Suflyor-${version}-macos-arm64.dmg"
 dmg_path="$bundle_dir/$dmg_name"
 staging_dir="$(mktemp -d "$target_dir/.dmg-staging.XXXXXX")"
-mount_dir="$(mktemp -d "$target_dir/.dmg-mount.XXXXXX")"
+# Disk images cannot be mounted below another mounted image. Keep the mount
+# point on the local startup volume even when CARGO_TARGET_DIR is external.
+mount_dir="$(mktemp -d /tmp/suflyor-dmg-mount.XXXXXX)"
 tmp_dmg="$bundle_dir/.${dmg_name}.tmp.dmg"
 attached=0
 cleanup() {

@@ -262,6 +262,7 @@ fn dmg_script_uses_the_native_drag_install_layout() {
         "if [[ -L \"$bundle_dir\" ]]",
         "bundle_dir=\"$(cd \"$bundle_dir\" && pwd -P)\"",
         "hdiutil create -quiet -fs HFS+ -format UDZO",
+        "mount_dir=\"$(mktemp -d /tmp/suflyor-dmg-mount.XXXXXX)\"",
         "hdiutil attach -quiet -readonly -nobrowse -mountpoint \"$mount_dir\" \"$tmp_dmg\"",
         "readlink \"$mount_dir/Applications\"",
         "mv -f -- \"$tmp_dmg\" \"$dmg_path\"",
