@@ -158,7 +158,6 @@ fn script_builds_and_ad_hoc_signs_the_app() {
         "codesign --verify --strict --verbose=2 \"$macos_dir/suflyor-tts\"",
         "codesign --verify --strict --verbose=2 \"$macos_dir/suflyor-teratts\"",
         "codesign --verify --strict --verbose=2 \"$macos_dir/suflyor-mlx\"",
-        "codesign --verify --strict --verbose=2 \"$macos_dir/mlx.metallib\"",
         "codesign --verify --deep --strict --verbose=2 \"$app_dir\"",
         "if \"$macos_dir/suflyor-mlx\" </dev/null >/dev/null 2>&1",
         "suflyor-mlx packaged launch smoke failed",
@@ -184,20 +183,18 @@ fn script_builds_and_ad_hoc_signs_the_app() {
     let mlx_sign = SCRIPT
         .find("codesign \"${codesign_args[@]}\" \"$macos_dir/suflyor-mlx\"")
         .expect("missing MLX sidecar signature");
-    let metallib_sign = SCRIPT
-        .find("codesign \"${codesign_args[@]}\" \"$macos_dir/mlx.metallib\"")
-        .expect("missing MLX Metal library signature");
     let app_sign = SCRIPT
         .find(
             "codesign \"${codesign_args[@]}\" \\\n  --entitlements \"$crate_root/macos/entitlements.plist\" \\\n  \"$app_dir\"",
         )
         .expect("missing app entitlements signature");
     assert!(
-        metallib_sign < mlx_sign
-            && mlx_sign < tts_sign
-            && tts_sign < tera_sign
-            && tera_sign < app_sign,
+        mlx_sign < tts_sign && tts_sign < tera_sign && tera_sign < app_sign,
         "nested executables must be signed before the outer app"
+    );
+    assert!(
+        !SCRIPT.contains("codesign \"${codesign_args[@]}\" \"$macos_dir/mlx.metallib\""),
+        "the outer app signature seals mlx.metallib as a resource"
     );
     assert!(SCRIPT.trim_end().ends_with("echo \"$app_dir\""));
 }
