@@ -37,8 +37,7 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-const SESSION_SYSTEM_COLLECTOR_MAX_SAMPLES: usize =
-    audio::TARGET_SAMPLE_RATE as usize * 30;
+const SESSION_SYSTEM_COLLECTOR_MAX_SAMPLES: usize = audio::TARGET_SAMPLE_RATE as usize * 30;
 const SYSTEM_AUDIO_OWNER_NONE: u8 = 0;
 const SYSTEM_AUDIO_OWNER_AUX: u8 = 1;
 const SYSTEM_AUDIO_OWNER_SESSION: u8 = 2;

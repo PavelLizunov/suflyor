@@ -9,8 +9,8 @@ use tokio::sync::mpsc;
 mod provider;
 mod tps;
 
-use tps::{begin_request, record_stream_tps};
 pub use tps::{avg_tps, clear_request_perf, latest_request_perf, record_tps, RequestPerf};
+use tps::{begin_request, record_stream_tps};
 
 /// Wire protocol used by a resolved AI endpoint. Existing bridge, local and
 /// Hermes routes stay on OpenAI Chat Completions compatibility; direct cloud
