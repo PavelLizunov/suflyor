@@ -630,9 +630,8 @@ fn reopen_mic(stop: &AtomicBool) -> Option<(*mut MicController, f64)> {
         let mut error_code = 0;
         // SAFETY: the returned controller is owned by this worker and stopped
         // before replacement or worker exit.
-        let controller = unsafe {
-            mic_capture_start(NATIVE_BUFFER_FRAMES, &mut native_rate, &mut error_code)
-        };
+        let controller =
+            unsafe { mic_capture_start(NATIVE_BUFFER_FRAMES, &mut native_rate, &mut error_code) };
         (!controller.is_null()).then_some((controller, native_rate))
     })
 }
@@ -695,10 +694,7 @@ fn capture_worker(
             native_rate = next_rate;
             rate = native_rate as usize;
             let ring_capacity = unsafe { mic_capture_ring_capacity(controller) } as usize;
-            scratch.resize(
-                ring_capacity.max(NATIVE_BUFFER_FRAMES as usize),
-                0.0,
-            );
+            scratch.resize(ring_capacity.max(NATIVE_BUFFER_FRAMES as usize), 0.0);
             accum.clear();
             chunk_target = (rate / 5).max(1);
             ratio = native_rate / f64::from(TARGET_SAMPLE_RATE);
@@ -835,10 +831,7 @@ fn system_capture_worker(
             native_rate = next_rate;
             rate = native_rate as usize;
             let ring_capacity = unsafe { system_capture_ring_capacity(controller) } as usize;
-            scratch.resize(
-                ring_capacity.max(NATIVE_BUFFER_FRAMES as usize),
-                0.0,
-            );
+            scratch.resize(ring_capacity.max(NATIVE_BUFFER_FRAMES as usize), 0.0);
             accum.clear();
             chunk_target = (rate / 5).max(1);
             ratio = native_rate / f64::from(TARGET_SAMPLE_RATE);
