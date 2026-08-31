@@ -275,7 +275,15 @@ mod tests {
     #[test]
     fn load_voice_rejects_path_traversal() {
         let dummy_dir = Path::new("/tmp/tts");
-        for invalid in ["", "..", ".", "../secret", "..\\secret", "voice/sub", "voice\\sub"] {
+        for invalid in [
+            "",
+            "..",
+            ".",
+            "../secret",
+            "..\\secret",
+            "voice/sub",
+            "voice\\sub",
+        ] {
             let res = super::load_voice(dummy_dir, invalid);
             assert!(res.is_err());
             if let Err(err) = res {
