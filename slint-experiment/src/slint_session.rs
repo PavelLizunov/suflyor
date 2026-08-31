@@ -510,7 +510,7 @@ fn forward_audio_chunks(
     tokio::spawn(async move {
         while let Some(chunk) = src_rx.recv().await {
             let (paused, mic_muted) = {
-                let state = lock(&rt);
+                let mut state = lock(&rt);
                 let now_ms = now_unix_ms() as u64;
                 // Capture is alive even when pause/mute keeps this chunk away
                 // from STT. Keep the shared signal fresh at this common gate.
