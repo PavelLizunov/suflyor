@@ -16,10 +16,9 @@
 // destroy private aggregate device, destroy process tap, free ring +
 // controller. Partial-start failures clean up every already-created object.
 //
-// WARNING for the wiring packet: AudioDeviceStart on a private tap can hit
-// the first-run TCC consent flow and block (or restart the audio stack).
-// This packet only compiles and link-tests the seam — nothing calls
-// system_capture_start yet.
+// AudioDeviceStart on a private tap can hit the first-run TCC consent flow
+// and block (or restart the audio stack), so Rust starts and rebuilds this
+// controller only on its dedicated system-audio worker.
 //
 // Compiled with ARC (the gate0b-proven tap path); mic_capture.m stays
 // non-ARC.
@@ -33,18 +32,34 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+@interface SuflyorSystemCaptureState : NSObject {
+@public
+  float *ring;
+  uint32_t capacity;
+  uint32_t channels;
+  uint32_t bytes_per_frame;
+  bool interleaved;
+  _Atomic uint64_t head;
+  _Atomic uint64_t tail;
+  _Atomic uint64_t dropped;
+  _Atomic bool route_changed;
+}
+@end
+
+@implementation SuflyorSystemCaptureState
+- (void)dealloc {
+  free(ring);
+  ring = NULL;
+}
+@end
+
 typedef struct SystemCaptureController {
   AudioObjectID tap;           // private process tap
   AudioObjectID aggregate;     // private aggregate device
   AudioDeviceIOProcID io_proc; // NULL until the callback is attached
-  float *ring;                 // owned, capacity is a power of two (samples)
-  uint32_t capacity;
-  uint32_t channels;      // native tap channel count
-  uint32_t bytes_per_frame; // native tap frame stride
-  bool interleaved;       // native tap buffer layout
-  _Atomic uint64_t head;    // next write slot, producer = IOProc
-  _Atomic uint64_t tail;    // next read slot, consumer = Rust worker
-  _Atomic uint64_t dropped; // frames the IOProc dropped on ring overflow
+  void *state_ref;             // retained SuflyorSystemCaptureState
+  bool default_output_listener;
+  bool tap_format_listener;
 } SystemCaptureController;
 
 enum {
@@ -56,6 +71,32 @@ enum {
   SYS_START_DEVICE = 5,    // AudioDeviceStart refused (incl. TCC timeout)
   SYS_START_NO_MEMORY = 6,
 };
+
+static const AudioObjectPropertyAddress DEFAULT_OUTPUT_ADDRESS = {
+    kAudioHardwarePropertyDefaultOutputDevice,
+    kAudioObjectPropertyScopeGlobal,
+    kAudioObjectPropertyElementMain,
+};
+
+static const AudioObjectPropertyAddress TAP_FORMAT_ADDRESS = {
+    kAudioTapPropertyFormat,
+    kAudioObjectPropertyScopeGlobal,
+    kAudioObjectPropertyElementMain,
+};
+
+static OSStatus route_changed_listener(
+    AudioObjectID object, UInt32 address_count,
+    const AudioObjectPropertyAddress addresses[], void *context) {
+  (void)object;
+  (void)address_count;
+  (void)addresses;
+  SuflyorSystemCaptureState *state =
+      (__bridge SuflyorSystemCaptureState *)context;
+  if (state != nil) {
+    atomic_store_explicit(&state->route_changed, true, memory_order_release);
+  }
+  return noErr;
+}
 
 // ~1 s of audio at the native rate, at least 8192 frames and at least
 // buffer_frames; power of two so the ring can wrap with a mask instead of
@@ -72,12 +113,31 @@ static uint32_t ring_capacity_for(double sample_rate, uint32_t buffer_frames) {
 }
 
 // Deterministic teardown used by BOTH partial-start cleanup and
-// system_capture_stop. Frees the ring + controller too, so callers must
-// not touch `c` afterwards.
+// system_capture_stop. The IOProc captures `state`, never the C controller.
+// If HAL refuses to unregister a callback, retain that small state instead of
+// risking a callback-after-free.
 static void system_capture_teardown(SystemCaptureController *c) {
+  SuflyorSystemCaptureState *state =
+      (__bridge SuflyorSystemCaptureState *)c->state_ref;
+  bool safe_release = true;
+  if (c->default_output_listener) {
+    OSStatus status = AudioObjectRemovePropertyListener(
+        kAudioObjectSystemObject, &DEFAULT_OUTPUT_ADDRESS,
+        route_changed_listener, (__bridge void *)state);
+    safe_release = safe_release && status == noErr;
+    c->default_output_listener = false;
+  }
+  if (c->tap_format_listener && c->tap != kAudioObjectUnknown) {
+    OSStatus status = AudioObjectRemovePropertyListener(
+        c->tap, &TAP_FORMAT_ADDRESS, route_changed_listener,
+        (__bridge void *)state);
+    safe_release = safe_release && status == noErr;
+    c->tap_format_listener = false;
+  }
   if (c->aggregate != kAudioObjectUnknown && c->io_proc != NULL) {
     AudioDeviceStop(c->aggregate, c->io_proc);
-    AudioDeviceDestroyIOProcID(c->aggregate, c->io_proc);
+    OSStatus status = AudioDeviceDestroyIOProcID(c->aggregate, c->io_proc);
+    safe_release = safe_release && status == noErr;
     c->io_proc = NULL;
   }
   if (c->aggregate != kAudioObjectUnknown) {
@@ -88,8 +148,10 @@ static void system_capture_teardown(SystemCaptureController *c) {
     AudioHardwareDestroyProcessTap(c->tap);
     c->tap = kAudioObjectUnknown;
   }
-  free(c->ring);
-  c->ring = NULL;
+  if (safe_release && c->state_ref != NULL) {
+    CFRelease((CFTypeRef)c->state_ref);
+  }
+  c->state_ref = NULL;
   free(c);
 }
 
@@ -142,10 +204,12 @@ SystemCaptureController *system_capture_start(uint32_t buffer_frames,
 
   // 3) Private aggregate device wrapping only the tap (gate0b dictionary).
   NSDictionary *tap_entry = @{@kAudioSubTapUIDKey : (__bridge NSString *)tap_uid};
+  NSString *aggregate_uid = [NSString
+      stringWithFormat:@"com.ninitux.suflyor.system-capture.aggregate.%@",
+                       [NSUUID UUID].UUIDString];
   NSDictionary *aggregate_description = @{
     @kAudioAggregateDeviceNameKey : @"Suflyor system capture aggregate",
-    @kAudioAggregateDeviceUIDKey :
-        @"com.ninitux.suflyor.system-capture.aggregate",
+    @kAudioAggregateDeviceUIDKey : aggregate_uid,
     @kAudioAggregateDeviceIsPrivateKey : @YES,
     @kAudioAggregateDeviceTapListKey : @[ tap_entry ],
   };
@@ -163,16 +227,11 @@ SystemCaptureController *system_capture_start(uint32_t buffer_frames,
 
   // 4) The tap must expose readable float32 PCM.
   AudioStreamBasicDescription format = {0};
-  AudioObjectPropertyAddress format_address = {
-      kAudioTapPropertyFormat,
-      kAudioObjectPropertyScopeGlobal,
-      kAudioObjectPropertyElementMain,
-  };
   UInt32 format_size = sizeof(format);
-  status = AudioObjectGetPropertyData(tap, &format_address, 0, NULL,
+  status = AudioObjectGetPropertyData(tap, &TAP_FORMAT_ADDRESS, 0, NULL,
                                       &format_size, &format);
   bool usable = status == noErr && format.mBytesPerFrame > 0 &&
-                format.mChannelsPerFrame > 0 &&
+                format.mChannelsPerFrame > 0 && format.mBitsPerChannel == 32 &&
                 format.mFormatID == kAudioFormatLinearPCM &&
                 (format.mFormatFlags & kLinearPCMFormatFlagIsFloat) != 0;
   if (!usable) {
@@ -187,13 +246,14 @@ SystemCaptureController *system_capture_start(uint32_t buffer_frames,
   // 5) Ring + controller, allocated before the IOProc so teardown covers
   //    both on the remaining failure paths.
   uint32_t capacity = ring_capacity_for(format.mSampleRate, buffer_frames);
-  float *ring = (float *)calloc(capacity, sizeof(float));
-  SystemCaptureController *c = NULL;
-  if (ring != NULL) {
-    c = (SystemCaptureController *)calloc(1, sizeof(SystemCaptureController));
+  SuflyorSystemCaptureState *state = [[SuflyorSystemCaptureState alloc] init];
+  if (state != nil) {
+    state->ring = (float *)calloc(capacity, sizeof(float));
   }
-  if (c == NULL) {
-    free(ring);
+  SystemCaptureController *c =
+      (SystemCaptureController *)calloc(1, sizeof(SystemCaptureController));
+  if (state == nil || state->ring == NULL || c == NULL) {
+    free(c);
     AudioHardwareDestroyAggregateDevice(aggregate);
     AudioHardwareDestroyProcessTap(tap);
     if (out_error) {
@@ -201,24 +261,30 @@ SystemCaptureController *system_capture_start(uint32_t buffer_frames,
     }
     return NULL;
   }
+  state->capacity = capacity;
+  state->channels = format.mChannelsPerFrame;
+  state->bytes_per_frame = format.mBytesPerFrame;
+  state->interleaved =
+      (format.mFormatFlags & kLinearPCMFormatFlagIsNonInterleaved) == 0;
+  atomic_init(&state->head, 0);
+  atomic_init(&state->tail, 0);
+  atomic_init(&state->dropped, 0);
+  atomic_init(&state->route_changed, false);
+
   c->tap = tap;
   c->aggregate = aggregate;
   c->io_proc = NULL;
-  c->ring = ring;
-  c->capacity = capacity;
-  c->channels = format.mChannelsPerFrame;
-  c->bytes_per_frame = format.mBytesPerFrame;
-  c->interleaved =
-      (format.mFormatFlags & kLinearPCMFormatFlagIsNonInterleaved) == 0;
-  atomic_init(&c->head, 0);
-  atomic_init(&c->tail, 0);
-  atomic_init(&c->dropped, 0);
+  c->state_ref = (void *)CFBridgingRetain(state);
+  c->default_output_listener = false;
+  c->tap_format_listener = false;
 
-  // 6) Realtime IOProc: downmix into the ring + atomics only.
-  uint32_t channels = c->channels;
-  uint32_t bytes_per_frame = c->bytes_per_frame;
-  bool interleaved = c->interleaved;
-  SystemCaptureController *cc = c;
+  // 6) Realtime IOProc: downmix into the ring + atomics only. The block
+  // retains state independently of the C controller, so a HAL teardown
+  // failure cannot turn a late callback into a use-after-free.
+  uint32_t channels = state->channels;
+  uint32_t bytes_per_frame = state->bytes_per_frame;
+  bool interleaved = state->interleaved;
+  SuflyorSystemCaptureState *callback_state = state;
   status = AudioDeviceCreateIOProcIDWithBlock(
       &c->io_proc, aggregate, NULL,
       ^(const AudioTimeStamp *now,
@@ -243,19 +309,19 @@ SystemCaptureController *system_capture_start(uint32_t buffer_frames,
           return;
         }
         uint64_t head =
-            atomic_load_explicit(&cc->head, memory_order_relaxed);
+            atomic_load_explicit(&callback_state->head, memory_order_relaxed);
         uint64_t tail =
-            atomic_load_explicit(&cc->tail, memory_order_acquire);
-        uint64_t free_slots = cc->capacity - (head - tail);
+            atomic_load_explicit(&callback_state->tail, memory_order_acquire);
+        uint64_t free_slots = callback_state->capacity - (head - tail);
         if ((uint64_t)frames > free_slots) {
           // Keep whatever the consumer has not drained yet and drop this
           // callback wholesale; the Rust worker reads the counter and logs
           // outside the realtime path.
-          atomic_fetch_add_explicit(&cc->dropped, frames,
+          atomic_fetch_add_explicit(&callback_state->dropped, frames,
                                     memory_order_relaxed);
           return;
         }
-        uint32_t mask = cc->capacity - 1;
+        uint32_t mask = callback_state->capacity - 1;
         if (interleaved) {
           const float *src = (const float *)input->mBuffers[0].mData;
           if (src == NULL) {
@@ -266,7 +332,7 @@ SystemCaptureController *system_capture_start(uint32_t buffer_frames,
             for (uint32_t ch = 0; ch < channels; ch++) {
               acc += src[i * channels + ch];
             }
-            cc->ring[(head + i) & mask] = acc / (float)channels;
+            callback_state->ring[(head + i) & mask] = acc / (float)channels;
           }
         } else {
           uint32_t ch = input->mNumberBuffers < channels
@@ -284,10 +350,10 @@ SystemCaptureController *system_capture_start(uint32_t buffer_frames,
                 acc += samples[i];
               }
             }
-            cc->ring[(head + i) & mask] = acc / (float)ch;
+            callback_state->ring[(head + i) & mask] = acc / (float)ch;
           }
         }
-        atomic_store_explicit(&cc->head, head + frames,
+        atomic_store_explicit(&callback_state->head, head + frames,
                               memory_order_release);
       });
   if (status != noErr) {
@@ -309,6 +375,25 @@ SystemCaptureController *system_capture_start(uint32_t buffer_frames,
     return NULL;
   }
 
+  status = AudioObjectAddPropertyListener(
+      kAudioObjectSystemObject, &DEFAULT_OUTPUT_ADDRESS,
+      route_changed_listener, (__bridge void *)state);
+  if (status == noErr) {
+    c->default_output_listener = true;
+    status = AudioObjectAddPropertyListener(
+        tap, &TAP_FORMAT_ADDRESS, route_changed_listener,
+        (__bridge void *)state);
+  }
+  if (status == noErr) {
+    c->tap_format_listener = true;
+  } else {
+    system_capture_teardown(c);
+    if (out_error) {
+      *out_error = SYS_START_DEVICE;
+    }
+    return NULL;
+  }
+
   if (out_sample_rate) {
     *out_sample_rate = format.mSampleRate;
   }
@@ -316,34 +401,55 @@ SystemCaptureController *system_capture_start(uint32_t buffer_frames,
 }
 
 uint32_t system_capture_ring_capacity(const SystemCaptureController *c) {
-  return c ? c->capacity : 0;
+  if (!c || c->state_ref == NULL) {
+    return 0;
+  }
+  SuflyorSystemCaptureState *state =
+      (__bridge SuflyorSystemCaptureState *)c->state_ref;
+  return state->capacity;
 }
 
 // Consumer side of the SPSC ring. Returns the number of mono f32 frames
 // copied into dst (at most max_frames).
 uint32_t system_capture_read(SystemCaptureController *c, float *dst,
                              uint32_t max_frames) {
-  if (!c || !dst || max_frames == 0) {
+  if (!c || c->state_ref == NULL || !dst || max_frames == 0) {
     return 0;
   }
-  uint64_t tail = atomic_load_explicit(&c->tail, memory_order_relaxed);
-  uint64_t head = atomic_load_explicit(&c->head, memory_order_acquire);
+  SuflyorSystemCaptureState *state =
+      (__bridge SuflyorSystemCaptureState *)c->state_ref;
+  uint64_t tail = atomic_load_explicit(&state->tail, memory_order_relaxed);
+  uint64_t head = atomic_load_explicit(&state->head, memory_order_acquire);
   uint64_t available = head - tail;
   uint32_t n = available < max_frames ? (uint32_t)available : max_frames;
-  uint32_t mask = c->capacity - 1;
+  uint32_t mask = state->capacity - 1;
   for (uint32_t i = 0; i < n; i++) {
-    dst[i] = c->ring[(tail + i) & mask];
+    dst[i] = state->ring[(tail + i) & mask];
   }
-  atomic_store_explicit(&c->tail, tail + n, memory_order_release);
+  atomic_store_explicit(&state->tail, tail + n, memory_order_release);
   return n;
 }
 
 // Take-and-reset the IOProc overflow counter so the Rust worker can log it.
 uint64_t system_capture_take_dropped(SystemCaptureController *c) {
-  if (!c) {
+  if (!c || c->state_ref == NULL) {
     return 0;
   }
-  return atomic_exchange_explicit(&c->dropped, 0, memory_order_relaxed);
+  SuflyorSystemCaptureState *state =
+      (__bridge SuflyorSystemCaptureState *)c->state_ref;
+  return atomic_exchange_explicit(&state->dropped, 0, memory_order_relaxed);
+}
+
+uint32_t system_capture_take_route_change(SystemCaptureController *c) {
+  if (!c || c->state_ref == NULL) {
+    return 0;
+  }
+  SuflyorSystemCaptureState *state =
+      (__bridge SuflyorSystemCaptureState *)c->state_ref;
+  return atomic_exchange_explicit(&state->route_changed, false,
+                                  memory_order_acq_rel)
+             ? 1
+             : 0;
 }
 
 // Synchronous, NULL-safe teardown — see system_capture_teardown for the
