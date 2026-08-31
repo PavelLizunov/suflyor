@@ -12,10 +12,12 @@
 // plain C struct with explicit ownership.
 
 #import <AVFoundation/AVFoundation.h>
+#import <CoreAudio/CoreAudio.h>
 #import <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 @interface SuflyorMicRouteFlag : NSObject {
 @public
@@ -300,4 +302,58 @@ void mic_capture_stop(MicController *c) {
   free(c->ring);
   c->ring = NULL;
   free(c);
+}
+
+#ifndef kAudioObjectPropertyElementMain
+#define kAudioObjectPropertyElementMain kAudioObjectPropertyElementMaster
+#endif
+
+static char *copy_default_device_name(AudioObjectPropertySelector selector) {
+  @autoreleasepool {
+    AudioObjectID device_id = kAudioObjectUnknown;
+    UInt32 data_size = sizeof(device_id);
+    AudioObjectPropertyAddress address = {
+        .mSelector = selector,
+        .mScope = kAudioObjectPropertyScopeGlobal,
+        .mElement = kAudioObjectPropertyElementMain};
+
+    OSStatus status = AudioObjectGetPropertyData(
+        kAudioObjectSystemObject, &address, 0, NULL, &data_size, &device_id);
+    if (status != noErr || device_id == kAudioObjectUnknown) {
+      return NULL;
+    }
+
+    CFStringRef cf_name = NULL;
+    data_size = sizeof(cf_name);
+    AudioObjectPropertyAddress name_address = {
+        .mSelector = kAudioObjectPropertyName,
+        .mScope = kAudioObjectPropertyScopeGlobal,
+        .mElement = kAudioObjectPropertyElementMain};
+
+    status = AudioObjectGetPropertyData(device_id, &name_address, 0, NULL,
+                                        &data_size, &cf_name);
+    if (status != noErr || !cf_name) {
+      return NULL;
+    }
+
+    NSString *name = (NSString *)cf_name;
+    const char *utf8 = [name UTF8String];
+    char *result = utf8 && utf8[0] != '\0' ? strdup(utf8) : NULL;
+    [name release];
+    return result;
+  }
+}
+
+char *mic_capture_copy_default_input_name(void) {
+  return copy_default_device_name(kAudioHardwarePropertyDefaultInputDevice);
+}
+
+char *mic_capture_copy_default_output_name(void) {
+  return copy_default_device_name(kAudioHardwarePropertyDefaultOutputDevice);
+}
+
+void mic_capture_free_string(char *s) {
+  if (s) {
+    free(s);
+  }
 }
