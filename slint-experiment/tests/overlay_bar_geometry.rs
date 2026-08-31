@@ -160,10 +160,7 @@ fn assert_memory_footer_geometry(bar: &ui::OverlayBarWindow, app_ram_label: &str
             ));
         }
         if !mlx_memory.is_empty() {
-            items.push((
-                "MLX memory",
-                element(bar, &format!("MLX {mlx_memory}")),
-            ));
+            items.push(("MLX memory", element(bar, &format!("MLX {mlx_memory}"))));
         }
         for (name, item) in items {
             let pos = item.absolute_position();

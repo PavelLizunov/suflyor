@@ -72,12 +72,8 @@ fn try_acquire_auto_tile(state: &AtomicU64, session_gen: u64) -> Option<AutoTile
         if current_gen > session_gen || (current_gen == session_gen && current & 1 == 1) {
             return None;
         }
-        match state.compare_exchange_weak(
-            current,
-            busy_state,
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        ) {
+        match state.compare_exchange_weak(current, busy_state, Ordering::AcqRel, Ordering::Acquire)
+        {
             Ok(_) => return Some(AutoTilePermit { state, busy_state }),
             Err(observed) => current = observed,
         }
@@ -1130,8 +1126,13 @@ async fn maybe_spawn_auto_tile(
         reasoning_effort,
         is_local,
     };
-    let (answer, usage) =
-        match ai::complete_with_usage_endpoint(&endpoint, messages, AUTO_TILE_MAX_TOKENS).await {
+    let (answer, usage) = match ai::complete_with_usage_endpoint(
+        &endpoint,
+        messages,
+        AUTO_TILE_MAX_TOKENS,
+    )
+    .await
+    {
         Ok((t, u)) => {
             lock(&rt)
                 .health
