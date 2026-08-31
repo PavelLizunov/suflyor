@@ -164,6 +164,25 @@ log is not visual or functional acceptance.
 - Do not touch `.claude/**` or `.codex/**` unless the task explicitly owns those
   files.
 
+## Deterministic execution contract
+
+Before delegated or long-running work, publish the applicable manifest:
+
+- `SWARM: <N workers> - <assignments>` before `workflow`, then
+  `SWARM RESULT: <completed>/<failed>/<retried>` after integration.
+- `VERIFY: <worker> <candidate SHA> <changed paths> -> <exact commands>` before
+  remote checks. For normal development and RCs, unfiltered `cargo test` and
+  `cargo clippy --all-targets` are prohibited for every crate. An exception must
+  name the uncovered risk and receive explicit approval. A new SHA does not
+  invalidate evidence for unchanged files; do not repeat unaffected hotkeys.
+- `SPACE: <worker> <used%> <free GiB> -> <candidates>` before a heavy build.
+  Usage of at least 90% or less than 15 GiB free is a concrete blocker, not
+  authorization by itself. A standing cleanup approval applies to its current
+  task and named worker; reuse it without asking again. Otherwise ask once.
+  Delete only exact inactive task-owned candidates after checking size, age,
+  and owners. Never delete an active cache: relocate output first, wait for its
+  owner to exit, then clean and report the resulting free space.
+
 ## Git and delivery
 
 - Work on `codex/<short-task-name>`; one task, one branch, one coherent change.
