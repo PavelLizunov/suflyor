@@ -4681,13 +4681,27 @@ fn main() -> Result<(), slint::PlatformError> {
     // be captured, even though their use-case (interviews, Zoom,
     // YouTube prep) ALWAYS wants sys capture on. Opt-out via env
     // var SLINT_OVERLAY_NO_AUTO_SYS=1 if a future caller needs the
-    // old behaviour (e.g. CI smoke runs).
+    // old behaviour (e.g. CI smoke runs). macOS only arms the chip here: the
+    // session remains the sole Core Audio owner instead of racing a startup
+    // probe for the same process tap.
     //
     if std::env::var("SLINT_OVERLAY_NO_AUTO_SYS").is_err() {
         let weak = overlay.as_weak();
+        #[cfg(target_os = "macos")]
+        let state_sys = state.clone();
         Timer::single_shot(Duration::from_millis(400), move || {
             if let Some(o) = weak.upgrade() {
                 eprintln!("[overlay-host] auto-enabling sys capture on startup");
+                #[cfg(target_os = "macos")]
+                {
+                    match state_sys.lock() {
+                        Ok(mut state) => state.sys_active = true,
+                        Err(poisoned) => poisoned.into_inner().sys_active = true,
+                    }
+                    o.set_sys_active(true);
+                    refresh_status(&o, get_mic_active(&state_sys), true);
+                }
+                #[cfg(not(target_os = "macos"))]
                 o.invoke_sys_toggle_clicked();
             }
         });
