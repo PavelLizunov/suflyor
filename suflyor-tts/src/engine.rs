@@ -117,6 +117,15 @@ pub fn scan_voices(tts_dir: &Path) -> Vec<VoiceInfo> {
 /// Load the engine for `voice_dir`. espeak-ng-data (Piper) is checked inside the
 /// voice dir first, then a shared copy at the tts root; absent → char-tokenized.
 pub fn load_voice(tts_dir: &Path, voice_dir: &str) -> Result<NeuralEngine> {
+    // SECURITY: Validate `voice_dir` to prevent path traversal attacks.
+    if voice_dir.is_empty()
+        || voice_dir.contains('/')
+        || voice_dir.contains('\\')
+        || voice_dir == ".."
+        || voice_dir == "."
+    {
+        return Err(anyhow!("invalid voice directory path"));
+    }
     let vd = tts_dir.join(voice_dir);
     let onnx =
         find_onnx(&vd).ok_or_else(|| anyhow!("no .onnx model in voice dir '{voice_dir}'"))?;
@@ -254,10 +263,24 @@ pub mod text {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+    use super::*;
+
     #[test]
     fn tts_root_resolves_cross_platform_config_dir() {
         let root = super::tts_root().expect("config dir must be resolvable");
         assert!(root.to_string_lossy().contains("suflyor"));
         assert!(root.to_string_lossy().contains("tts"));
+    }
+
+    #[test]
+    fn load_voice_rejects_path_traversal() {
+        let dummy_dir = Path::new("/tmp/tts");
+        for invalid in ["", "..", ".", "../secret", "..\\secret", "voice/sub", "voice\\sub"] {
+            let res = super::load_voice(dummy_dir, invalid);
+            assert!(res.is_err());
+            if let Err(err) = res {
+                assert_eq!(err.to_string(), "invalid voice directory path");
+            }
+        }
     }
 }
