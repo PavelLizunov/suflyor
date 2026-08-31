@@ -5,6 +5,7 @@
 - Baseline: `d7949618b8dfe35f1b0473fc0900436d4a0bf59b`
 - Candidate UI: `a7db6fd78936d6e5c10fdd9096df4cde305ad8dd`
 - Follow-up UI: `cfbef936b65cea64ea304f41177407e42f407536`
+- Final runtime candidate: `e938a7fd0af6917f6ccdb2cfba87b9d3826bd5ef`
 - Capture path: exact candidate built with `--features ui-mcp` and `SLINT_EMIT_DEBUG_INFO=1`, captured through Slint MCP
 - Environment: Apple Silicon macOS, Graphite scheme, system display scale, same saved configuration for before/after
 - Locales: English and Russian
@@ -69,3 +70,12 @@ The exact follow-up UI candidate `cfbef936b65cea64ea304f41177407e42f407536` was 
 - Both compact captures retain the pre-existing single-line loading state without clipping or overlap.
 - No paths, URLs, usernames, credentials, private transcripts, tofu, clipping, or overlap were observed.
 - The 13-key hotkey matrix was not repeated for this follow-up because no hotkey code changed; the earlier 13/13 functional evidence above remains the relevant hotkey result.
+
+## Final live functional smoke
+
+The stable-signed runtime candidate `e938a7fd0af6917f6ccdb2cfba87b9d3826bd5ef` was installed over the existing app and exercised through real macOS system-audio capture with two spoken questions. Startup armed system capture without opening a competing standalone Core Audio probe.
+
+- 2 system transcript lines produced 2 detector triggers and 2 auto-tile requests.
+- Both responses contained visible text and completed with `finish_reason=stop`.
+- 2 answer tiles spawned; the journal recorded no errors.
+- No Python process participated in production inference; the resident model process was the native Swift/Metal sidecar.
