@@ -4,6 +4,7 @@
 
 - Baseline: `d7949618b8dfe35f1b0473fc0900436d4a0bf59b`
 - Candidate UI: `a7db6fd78936d6e5c10fdd9096df4cde305ad8dd`
+- Follow-up UI: `cfbef936b65cea64ea304f41177407e42f407536`
 - Capture path: exact candidate built with `--features ui-mcp` and `SLINT_EMIT_DEBUG_INFO=1`, captured through Slint MCP
 - Environment: Apple Silicon macOS, Graphite scheme, system display scale, same saved configuration for before/after
 - Locales: English and Russian
@@ -20,6 +21,8 @@
 | MLX ready compact | `after-en-ready-compact.png` | `after-ru-ready-compact.png` |
 | Completed request full | `after-en-perf-full.png` | `after-ru-perf-full.png` |
 | Completed request compact | `after-en-perf-compact.png` | `after-ru-perf-compact.png` |
+| Follow-up memory footer full | `followup-after-en-full.png` | `followup-after-ru-full.png` |
+| Follow-up compact regression | `followup-after-en-compact.png` | `followup-after-ru-compact.png` |
 
 ## Results
 
@@ -56,3 +59,13 @@ A bounded follow-up used the installed native Swift sidecar and its production `
 | 4096 | 481 | 9.659 s | 11.523 s | stop |
 
 The 1024-token cell was the smallest successful budget and the fastest successful total in this screen, so the auto-tile path uses 1024 rather than the earlier 512 cap or the manual ask path's 4096 cap. This single-prompt screen establishes truncation and latency for the selected production path; it does not claim general model quality or load capacity. Total measured generation time was about 32 seconds and remained below the approved 15-minute GPU ceiling.
+
+## Follow-up memory-footer audit
+
+The exact follow-up UI candidate `cfbef936b65cea64ea304f41177407e42f407536` was captured in English and Russian at 1280×64 and 680×64. A bounded synthetic loopback sidecar was used only to populate deterministic process-footprint values during these layout captures; it did not generate model output or replace the separately built and tested native Swift sidecar.
+
+- Full mode places the model/load line first and `App RAM` / `RAM приложения` plus the short `MLX` label on a separate line underneath.
+- The English capture shows `App RAM 328 MiB` and `MLX 171 MiB`; Russian shows `RAM приложения 327 MiB` and `MLX 171 MiB`.
+- Both compact captures retain the pre-existing single-line loading state without clipping or overlap.
+- No paths, URLs, usernames, credentials, private transcripts, tofu, clipping, or overlap were observed.
+- The 13-key hotkey matrix was not repeated for this follow-up because no hotkey code changed; the earlier 13/13 functional evidence above remains the relevant hotkey result.
