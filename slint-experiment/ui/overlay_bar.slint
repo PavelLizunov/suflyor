@@ -528,10 +528,14 @@ export component OverlayBarWindow inherits Window {
     // which AI model are actually live, with a 🟢 local / ☁ cloud / ◐ mixed
     // icon. So the user can tell at a glance what's transcribing + answering.
     in-out property <string> active-stack: "";
-    // Rolling generation throughput (" · 42 tok/s", or "" when unknown), polled
-    // from the backend EWMA and appended to the active-stack footer so a speed
-    // drop is visible at a glance.
+    // Current request phases (load/TTFT/total/decode/effective), polled from the
+    // backend and appended to the active-stack footer. Empty after 30s so an old
+    // fast request is never presented as the speed of current work.
     in-out property <string> tok-per-sec: "";
+    // macOS process-footprint samples, formatted by Rust. The MLX value is the
+    // sidecar's unified-memory process footprint, not discrete VRAM.
+    in-out property <string> app-memory: "";
+    in-out property <string> mlx-memory: "";
 
     // Tile counter for the "+ Tile" button.
     in-out property <int> tiles-spawned: 0;
@@ -563,6 +567,9 @@ export component OverlayBarWindow inherits Window {
     // apply_bar_stealth); the pill TEXT is translated here so RU follows
     // ui_language (the pill's colour stays Rust-owned — colours don't translate).
     in-out property <bool> stealth-fault: false;
+    property <string> presented-status: root.stealth-fault
+        ? @tr("[!] stealth unavailable")
+        : root.status-text;
 
     // Phase E6 v11 — live status indicators. `last-transcript-line`
     // shows the most recent STT output (truncated by Rust to ~120
@@ -724,7 +731,7 @@ export component OverlayBarWindow inherits Window {
                 // The pill is the bar's status readout AND its drag handle —
                 // expose both to accessibility (no visible caption describes it).
                 accessible-role: text;
-                accessible-label: root.status-text + ". " + @tr("Drag to move the bar; shows the live state");
+                accessible-label: root.presented-status + ". " + @tr("Drag to move the bar; shows the live state");
                 // Drag handle — press-and-drag to move the whole bar.
                 TouchArea {
                     mouse-cursor: OverlayCursorPolicy.force-arrow ? default : grab;
@@ -758,9 +765,7 @@ export component OverlayBarWindow inherits Window {
                     Text {
                         // I1/I4 — a verified stealth failure overrides the
                         // mic/sys status with the translated generic banner.
-                        text: root.stealth-fault
-                            ? @tr("[!] stealth unavailable")
-                            : root.status-text;
+                        text: root.presented-status;
                         font-size: 11px;
                         font-weight: 600;
                         color: root.stealth-fault ? Theme.warning : root.status-color;
@@ -1095,6 +1100,20 @@ export component OverlayBarWindow inherits Window {
                 vertical-alignment: center;
                 horizontal-stretch: 0;
             }
+            if root.app-memory != "" : Text {
+                text: @tr("App RAM") + " " + root.app-memory;
+                font-size: 10px;
+                color: Theme.text-muted;
+                vertical-alignment: center;
+                horizontal-stretch: 0;
+            }
+            if root.mlx-memory != "" : Text {
+                text: @tr("MLX unified") + " " + root.mlx-memory;
+                font-size: 10px;
+                color: Theme.text-muted;
+                vertical-alignment: center;
+                horizontal-stretch: 0;
+            }
             // Source tag — "mic" green dot, "sys" cyan dot, "" gray. The dot is
             // colour-ONLY, so accessibility gets a word for the source it marks.
             Rectangle {
@@ -1195,7 +1214,7 @@ export component OverlayBarWindow inherits Window {
                     // Same accessibility label as the full bar's pill (status +
                     // drag affordance) — zero layout impact.
                     accessible-role: text;
-                    accessible-label: root.status-text + ". " + @tr("Drag to move the bar; shows the live state");
+                    accessible-label: root.presented-status + ". " + @tr("Drag to move the bar; shows the live state");
                     TouchArea {
                         mouse-cursor: OverlayCursorPolicy.force-arrow ? default : grab;
                         pointer-event(ev) => {
@@ -1235,9 +1254,7 @@ export component OverlayBarWindow inherits Window {
                         Text {
                             // I1/I4 — same translated stealth-failure override
                             // as the full bar's pill.
-                            text: root.stealth-fault
-                                ? @tr("[!] stealth unavailable")
-                                : root.status-text;
+                            text: root.presented-status;
                             font-size: 11px;
                             font-weight: 600;
                             color: root.stealth-fault ? Theme.warning : root.status-color;
@@ -1341,8 +1358,9 @@ export component OverlayBarWindow inherits Window {
                     font-size: 10px;
                     font-weight: 600;
                     color: Theme.accent;
+                    overflow: elide;
                     vertical-alignment: center;
-                    horizontal-stretch: 0;
+                    horizontal-stretch: 1;
                 }
                 Rectangle {
                     width: 8px;

@@ -9,8 +9,8 @@ use tokio::sync::mpsc;
 mod provider;
 mod tps;
 
-use tps::record_stream_tps;
-pub use tps::{avg_tps, record_tps};
+use tps::{begin_request, record_stream_tps};
+pub use tps::{avg_tps, clear_request_perf, latest_request_perf, record_tps, RequestPerf};
 
 /// Wire protocol used by a resolved AI endpoint. Existing bridge, local and
 /// Hermes routes stay on OpenAI Chat Completions compatibility; direct cloud
@@ -333,6 +333,8 @@ pub fn stream_chat_endpoint(
     messages: Vec<ChatMessage>,
     max_tokens: u32,
 ) -> mpsc::Receiver<AiEvent> {
+    let request_started_at = std::time::Instant::now();
+    let request_id = begin_request();
     let (tx, rx) = mpsc::channel::<AiEvent>(64);
 
     tokio::spawn(async move {
@@ -414,7 +416,16 @@ pub fn stream_chat_endpoint(
         if tx.is_closed() {
             return;
         }
-        if let Err(e) = stream_inner(endpoint, messages, max_tokens, tx.clone()).await {
+        if let Err(e) = stream_inner(
+            endpoint,
+            messages,
+            max_tokens,
+            tx.clone(),
+            request_id,
+            request_started_at,
+        )
+        .await
+        {
             let _ = tx
                 .send(AiEvent::Error {
                     message: format!("{e:#}"),
@@ -644,6 +655,8 @@ async fn stream_inner(
     messages: Vec<ChatMessage>,
     max_tokens: u32,
     tx: mpsc::Sender<AiEvent>,
+    request_id: u64,
+    request_started_at: std::time::Instant,
 ) -> Result<()> {
     if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), &endpoint.base_url)
     {
@@ -750,7 +763,14 @@ async fn stream_inner(
                 let payload = line["data:".len()..].trim();
                 if endpoint.protocol == AiProtocol::OpenAiCompatible && payload == "[DONE]" {
                     log::info!("AI stream got [DONE]: deltas={}", delta_count);
-                    record_stream_tps(delta_count, first_delta_at, server_tps, completion_tokens);
+                    record_stream_tps(
+                        request_id,
+                        request_started_at,
+                        delta_count,
+                        first_delta_at,
+                        server_tps,
+                        completion_tokens,
+                    );
                     let _ = tx
                         .send(AiEvent::Done {
                             reason: "stop".into(),
@@ -802,7 +822,14 @@ async fn stream_inner(
                         reason,
                         delta_count
                     );
-                    record_stream_tps(delta_count, first_delta_at, server_tps, completion_tokens);
+                    record_stream_tps(
+                        request_id,
+                        request_started_at,
+                        delta_count,
+                        first_delta_at,
+                        server_tps,
+                        completion_tokens,
+                    );
                     let _ = tx.send(AiEvent::Done { reason }).await;
                     return Ok(());
                 }
@@ -823,7 +850,14 @@ async fn stream_inner(
     // "exactly one terminal event per stream" contract; otherwise the bar's
     // "AI working" pulse and the follow-up "busy" state stay stuck on).
     log::info!("AI stream ended without [DONE]/finish_reason: deltas={delta_count}");
-    record_stream_tps(delta_count, first_delta_at, server_tps, completion_tokens);
+    record_stream_tps(
+        request_id,
+        request_started_at,
+        delta_count,
+        first_delta_at,
+        server_tps,
+        completion_tokens,
+    );
     let _ = tx
         .send(AiEvent::Done {
             reason: "eof".into(),

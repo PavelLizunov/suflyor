@@ -32,6 +32,12 @@ msgstr "спросить"
 msgid "grab"
 msgstr "захватить"
 
+msgid "App RAM"
+msgstr "RAM приложения"
+
+msgid "MLX unified"
+msgstr "MLX: единая память"
+
 msgid "⏸ {}"
 msgstr "⏸ {}"
 

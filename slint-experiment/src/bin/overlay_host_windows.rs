@@ -682,13 +682,15 @@ fn main() -> Result<(), slint::PlatformError> {
         let c = cfg.read();
         ai::set_local_no_think(c.ai_provider == "local" && !c.ai_local_thinking);
     }
-    // E10.2 — restore persisted stealth (WDA_EXCLUDEFROMCAPTURE) so it survives
-    // a restart (was previously lost → overlay launched visible to capture).
-    set_global_stealth(cfg.read().stealth_enabled);
+    // E10.2 — restore persisted stealth only where capture exclusion exists.
+    // Keep the saved preference untouched on macOS so returning to Windows does
+    // not lose it, but never turn an unsupported capability into a live fault.
+    let stealth_intent = stealth_supported() && cfg.read().stealth_enabled;
+    set_global_stealth(stealth_intent);
 
     let state = new_shared_state();
     if let Ok(mut st) = state.lock() {
-        st.stealth = cfg.read().stealth_enabled;
+        st.stealth = stealth_intent;
     }
     #[cfg(target_os = "macos")]
     let capture_watchdog = Arc::new(std::sync::Mutex::new(
@@ -844,27 +846,158 @@ fn main() -> Result<(), slint::PlatformError> {
     overlay.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
     overlay.set_active_stack(SharedString::from(active_stack_label(&cfg.read())));
 
-    // Poll the rolling tok/s into the bar footer (~1.5s). Decoupled from the AI
-    // event flow: the backend folds each request's throughput into an EWMA
-    // (ai::record_tps); the bar just reads ai::avg_tps() here. Held for the whole
-    // run via the named binding so the Timer keeps firing.
+    // Poll request latency + process footprints into the footer (~1.5s). The
+    // detailed request sample expires after 30s, so an old fast answer is never
+    // presented as current speed. One timer owns all low-rate telemetry.
+    let mlx_prewarm_loading = Arc::new(AtomicBool::new(false));
     let _tps_timer = slint::Timer::default();
     {
         let weak_tps = overlay.as_weak();
+        let cfg_tps = cfg.clone();
+        let loading_tps = mlx_prewarm_loading.clone();
+        #[cfg(target_os = "macos")]
+        let session_rt_tps = slint_rt.clone();
+        #[cfg(target_os = "macos")]
+        let app_state_tps = state.clone();
+        #[cfg(target_os = "macos")]
+        let last_system_state = Rc::new(std::cell::Cell::new(0_u8));
         _tps_timer.start(
             slint::TimerMode::Repeated,
             std::time::Duration::from_millis(1500),
             move || {
                 if let Some(o) = weak_tps.upgrade() {
-                    let label = match ai::avg_tps() {
-                        Some(t) => format!(" · {t:.0} tok/s"),
-                        None => String::new(),
-                    };
+                    let is_ru = cfg_tps.read().ui_is_ru();
+                    let label = ai_perf_label(
+                        ai::latest_request_perf(),
+                        overlay_backend::mlx_runtime::last_load_ms(),
+                        loading_tps.load(Ordering::Acquire),
+                        is_ru,
+                    );
+                    let memory = overlay_backend::mlx_runtime::memory_sample();
                     o.set_tok_per_sec(SharedString::from(label));
+                    o.set_app_memory(SharedString::from(memory_size_label(memory.app_bytes)));
+                    o.set_mlx_memory(SharedString::from(memory_size_label(memory.mlx_bytes)));
+
+                    #[cfg(target_os = "macos")]
+                    {
+                        use overlay_backend::audio::SystemCaptureState;
+                        let system_state = {
+                            let runtime = slint_replay::runtime_state::lock(&session_rt_tps);
+                            runtime.capture.as_ref().map(|capture| capture.system_capture_state())
+                        };
+                        let code = match system_state {
+                            None => 0,
+                            Some(SystemCaptureState::Pending) => 1,
+                            Some(SystemCaptureState::Running) => 2,
+                            Some(SystemCaptureState::Failed) => 3,
+                        };
+                        if last_system_state.replace(code) != code {
+                            let active = code == 2;
+                            match app_state_tps.lock() {
+                                Ok(mut state) => state.sys_active = active,
+                                Err(poisoned) => poisoned.into_inner().sys_active = active,
+                            }
+                            o.set_sys_active(active);
+                            match code {
+                                1 => {
+                                    o.set_status_text(SharedString::from(if is_ru {
+                                        "системный звук: запуск..."
+                                    } else {
+                                        "system audio: starting..."
+                                    }));
+                                    o.set_status_color(slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24));
+                                }
+                                3 => {
+                                    o.set_status_text(SharedString::from(if is_ru {
+                                        "системный звук недоступен"
+                                    } else {
+                                        "system audio unavailable"
+                                    }));
+                                    o.set_status_color(slint::Color::from_rgb_u8(0xf8, 0x71, 0x71));
+                                }
+                                0 | 2 => refresh_status(
+                                    &o,
+                                    get_mic_active(&app_state_tps),
+                                    active,
+                                ),
+                                _ => {}
+                            }
+                        }
+                    }
                 }
             },
         );
     }
+
+    // Prewarm the saved macOS text model after the UI is constructed. Startup
+    // remains responsive; Deep Lock and non-MLX configurations keep RAM free.
+    #[cfg(target_os = "macos")]
+    let _mlx_prewarm_task = {
+        let selected = {
+            let c = cfg.read();
+            (c.ai_provider == "mlx" && !c.deep_lock).then(|| c.ai_mlx_model.clone())
+        };
+        selected.map(|model| {
+            let cfg_prewarm = cfg.clone();
+            let loading = mlx_prewarm_loading.clone();
+            let weak_prewarm = overlay.as_weak();
+            let state_prewarm = state.clone();
+            loading.store(true, Ordering::Release);
+            rt_handle.spawn_blocking(move || {
+                let started = std::time::Instant::now();
+                let result = activate_mlx_model(&model);
+                let (still_selected, is_ru) = {
+                    let c = cfg_prewarm.read();
+                    (
+                        c.ai_provider == "mlx" && c.ai_mlx_model == model && !c.deep_lock,
+                        c.ui_is_ru(),
+                    )
+                };
+                if !still_selected {
+                    stop_mlx_model_if_active(&model);
+                }
+                loading.store(false, Ordering::Release);
+                match result {
+                    Ok(()) if still_selected => diag!(
+                        "[overlay-host] MLX text prewarm ready in {} ms",
+                        started.elapsed().as_millis()
+                    ),
+                    Ok(()) => diag!("[overlay-host] MLX text prewarm superseded"),
+                    Err(()) if still_selected => {
+                        diag!("[overlay-host] MLX text prewarm unavailable");
+                        let _ = slint::invoke_from_event_loop(move || {
+                            let unavailable = if is_ru {
+                                "MLX недоступен"
+                            } else {
+                                "MLX unavailable"
+                            };
+                            if let Some(o) = weak_prewarm.upgrade() {
+                                o.set_status_text(SharedString::from(unavailable));
+                                o.set_status_color(slint::Color::from_rgb_u8(0xf8, 0x71, 0x71));
+                            }
+                            let weak_restore = weak_prewarm.clone();
+                            let state_restore = state_prewarm.clone();
+                            slint::Timer::single_shot(
+                                std::time::Duration::from_secs(5),
+                                move || {
+                                    if let Some(o) = weak_restore.upgrade() {
+                                        if o.get_status_text().as_str() == unavailable {
+                                            refresh_status(
+                                                &o,
+                                                get_mic_active(&state_restore),
+                                                get_sys_active(&state_restore),
+                                            );
+                                        }
+                                    }
+                                },
+                            );
+                        });
+                    }
+                    Err(()) => diag!("[overlay-host] MLX text prewarm superseded"),
+                }
+            })
+        })
+    };
 
     // ===== Local-AI boot + watchdog (E10.5, hardened 2026-06-13) =====
     // The local servers ARE the user's AI/STT brain. Previously boot did a
@@ -1327,6 +1460,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let weak = overlay.as_weak();
         let cfg_sys = cfg.clone();
         let rt_sys = rt_handle.clone();
+        let slint_rt_sys = slint_rt.clone();
         overlay.on_sys_toggle_clicked(move || {
             let (new_active, may_probe) = {
                 let mut st = match s.lock() {
@@ -1348,20 +1482,57 @@ fn main() -> Result<(), slint::PlatformError> {
                 return;
             }
 
-            // Phase C symmetry with mic — respect cfg.system_audio_device
-            // when set so users with non-default loopback (e.g. A50
-            // Stream Out) get their chosen device probed. Review-agent
-            // 2026-05-27 (mirror of the mic chip's cfg.mic_device read).
+            // During a session the production capture already owns the macOS
+            // process tap. Reuse its System chunks instead of opening a second
+            // aggregate device with the same UID. Outside a session the bounded
+            // standalone probe remains unchanged.
+            let session_active =
+                slint_replay::runtime_state::lock(&slint_rt_sys).capture.is_some();
+            let use_session_stream = session_active
+                && slint_session::begin_system_audio_collector(&slint_rt_sys);
+            let aux_guard = if session_active {
+                None
+            } else {
+                slint_session::try_acquire_system_audio_aux()
+            };
+            if (session_active && !use_session_stream)
+                || (!session_active && aux_guard.is_none())
+            {
+                match s.lock() {
+                    Ok(mut st) => st.sys_probe_in_flight = false,
+                    Err(poisoned) => poisoned.into_inner().sys_probe_in_flight = false,
+                }
+                o.set_status_text(SharedString::from("sys test failed"));
+                o.set_status_color(slint::Color::from_rgb_u8(0xf8, 0x71, 0x71));
+                return;
+            }
             let sys_device = cfg_sys.read().system_audio_device.clone();
             let weak_for_status = weak.clone();
             let s_for_status = s.clone();
+            let slint_rt_for_probe = slint_rt_sys.clone();
             rt_sys.spawn_blocking(move || {
-                let device_label = sys_device.clone().unwrap_or_else(|| "default".into());
-                eprintln!("[overlay-host] sys test 3s — device={device_label}");
-                let result = audio::record_sys_blocking(PROBE_DURATION_MS, sys_device);
-                let peak_dbfs = match result {
-                    Ok(samples) if samples.is_empty() => None,
-                    Ok(samples) => {
+                let _aux_guard = aux_guard;
+                let samples = if use_session_stream {
+                    eprintln!("[overlay-host] sys test 3s — reusing session stream");
+                    std::thread::sleep(Duration::from_millis(PROBE_DURATION_MS));
+                    slint_session::finish_system_audio_collector(&slint_rt_for_probe)
+                } else if session_active {
+                    eprintln!("[overlay-host] sys test unavailable — session stream is busy");
+                    None
+                } else {
+                    let device_label = sys_device.clone().unwrap_or_else(|| "default".into());
+                    eprintln!("[overlay-host] sys test 3s — device={device_label}");
+                    match audio::record_sys_blocking(PROBE_DURATION_MS, sys_device) {
+                        Ok(samples) => Some(samples),
+                        Err(e) => {
+                            eprintln!("[overlay-host] sys test failed: {e:#}");
+                            None
+                        }
+                    }
+                };
+                let peak_dbfs = match samples {
+                    Some(samples) if samples.is_empty() => None,
+                    Some(samples) => {
                         let peak = samples
                             .iter()
                             .map(|s| s.unsigned_abs() as u32)
@@ -1374,10 +1545,7 @@ fn main() -> Result<(), slint::PlatformError> {
                             Some(20.0 * norm.log10())
                         }
                     }
-                    Err(e) => {
-                        eprintln!("[overlay-host] sys test failed: {e:#}");
-                        None
-                    }
+                    None => None,
                 };
                 let _ = slint::invoke_from_event_loop(move || {
                     {
@@ -2826,10 +2994,27 @@ fn main() -> Result<(), slint::PlatformError> {
         let weak = overlay.as_weak();
         let cfg_p = cfg.clone();
         let tx = ptt_pcm_tx.clone();
+        let slint_rt_p = slint_rt.clone();
         overlay.on_ptt_sys_pressed(move || {
             if ptt_state.borrow().is_some() {
                 return;
             }
+            let session_active =
+                slint_replay::runtime_state::lock(&slint_rt_p).capture.is_some();
+            let use_session_stream = session_active
+                && slint_session::begin_system_audio_collector(&slint_rt_p);
+            let aux_guard = if session_active {
+                None
+            } else {
+                slint_session::try_acquire_system_audio_aux()
+            };
+            if (session_active && !use_session_stream)
+                || (!session_active && aux_guard.is_none())
+            {
+                eprintln!("[overlay-host] PTT sys unavailable — system capture is busy");
+                return;
+            }
+
             let stop = Arc::new(AtomicBool::new(false));
             *ptt_state.borrow_mut() = Some(PttRec {
                 is_mic: false,
@@ -2844,21 +3029,33 @@ fn main() -> Result<(), slint::PlatformError> {
             };
             let tx = tx.clone();
             let id = stop.clone();
+            let slint_rt_for_record = slint_rt_p.clone();
             spawn_ptt_watchdog(stop.clone());
             std::thread::spawn(move || {
-                let pcm = audio::record_source_until_stop(
-                    audio::AudioSource::System,
-                    mic_dev,
-                    sys_dev,
-                    stop,
-                )
-                .unwrap_or_else(|e| {
-                    eprintln!("[overlay-host] PTT sys record failed: {e:#}");
-                    Vec::new()
-                });
+                let _aux_guard = aux_guard;
+                let pcm = if use_session_stream {
+                    while !stop.load(Ordering::Acquire) {
+                        std::thread::sleep(Duration::from_millis(20));
+                    }
+                    slint_session::finish_system_audio_collector(&slint_rt_for_record)
+                        .unwrap_or_default()
+                } else {
+                    audio::record_source_until_stop(
+                        audio::AudioSource::System,
+                        mic_dev,
+                        sys_dev,
+                        stop,
+                    )
+                    .unwrap_or_else(|e| {
+                        eprintln!("[overlay-host] PTT sys record failed: {e:#}");
+                        Vec::new()
+                    })
+                };
                 let _ = tx.send((audio::AudioSource::System, id, pcm));
             });
-            eprintln!("[overlay-host] PTT sys — recording (hold)…");
+            eprintln!(
+                "[overlay-host] PTT sys — recording (hold, session_stream={use_session_stream})…"
+            );
         });
     }
     {

@@ -39,7 +39,11 @@ fi
 
 export CARGO_TARGET_DIR="$target_dir"
 export CARGO_BUILD_JOBS=2
-echo "note: ad-hoc signing can require fresh macOS capture permissions after a rebuild" >&2
+if [[ -n "${SUFLYOR_MACOS_SIGN_IDENTITY:-}" ]]; then
+  echo "note: packaging with the requested stable local signing identity" >&2
+else
+  echo "note: ad-hoc signing can require fresh macOS capture permissions after a rebuild" >&2
+fi
 "$script_dir/build-macos-app.sh" >&2
 
 app_dir="$target_dir/Suflyor.app"

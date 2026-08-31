@@ -24,7 +24,7 @@
 //! SlintEvents adapter back to UI property setters via
 //! `slint::invoke_from_event_loop`.
 
-use crate::runtime_state::{lock, push_transcript_line, SharedSlintRuntime};
+use crate::runtime_state::{lock, push_transcript_line, SharedSlintRuntime, SlintRuntime};
 use anyhow::{Context, Result};
 use overlay_backend::audio::{self, AudioChunk, AudioSource, TranscriptLine};
 use overlay_backend::config::SharedConfig;
@@ -33,9 +33,119 @@ use overlay_backend::journal::{now_unix_ms, Journal, JournalEvent};
 use overlay_backend::recorder::SessionRecorder;
 use overlay_backend::stt;
 use overlay_backend::{ai, runtime as backend_runtime};
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+const SESSION_SYSTEM_COLLECTOR_MAX_SAMPLES: usize =
+    audio::TARGET_SAMPLE_RATE as usize * 30;
+const SYSTEM_AUDIO_OWNER_NONE: u8 = 0;
+const SYSTEM_AUDIO_OWNER_AUX: u8 = 1;
+const SYSTEM_AUDIO_OWNER_SESSION: u8 = 2;
+static SYSTEM_AUDIO_OWNER: AtomicU8 = AtomicU8::new(SYSTEM_AUDIO_OWNER_NONE);
+static SYSTEM_AUDIO_SESSION_STUCK: AtomicBool = AtomicBool::new(false);
+
+/// Exclusive standalone probe/PTT ownership. The active session uses the same
+/// atomic state, so no check-then-act gap can open a second Core Audio tap.
+pub struct SystemAudioAuxGuard;
+
+impl Drop for SystemAudioAuxGuard {
+    fn drop(&mut self) {
+        let _ = SYSTEM_AUDIO_OWNER.compare_exchange(
+            SYSTEM_AUDIO_OWNER_AUX,
+            SYSTEM_AUDIO_OWNER_NONE,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
+    }
+}
+
+#[must_use]
+pub fn try_acquire_system_audio_aux() -> Option<SystemAudioAuxGuard> {
+    SYSTEM_AUDIO_OWNER
+        .compare_exchange(
+            SYSTEM_AUDIO_OWNER_NONE,
+            SYSTEM_AUDIO_OWNER_AUX,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        )
+        .ok()
+        .map(|_| SystemAudioAuxGuard)
+}
+
+struct SystemAudioSessionStartGuard {
+    armed: bool,
+}
+
+impl SystemAudioSessionStartGuard {
+    fn acquire() -> Result<Self> {
+        SYSTEM_AUDIO_OWNER
+            .compare_exchange(
+                SYSTEM_AUDIO_OWNER_NONE,
+                SYSTEM_AUDIO_OWNER_SESSION,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .map(|_| {
+                SYSTEM_AUDIO_SESSION_STUCK.store(false, Ordering::Release);
+                Self { armed: true }
+            })
+            .map_err(|_| anyhow::anyhow!("system audio capture is busy"))
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for SystemAudioSessionStartGuard {
+    fn drop(&mut self) {
+        if self.armed {
+            release_system_audio_session();
+        }
+    }
+}
+
+fn release_system_audio_session() {
+    if SYSTEM_AUDIO_SESSION_STUCK.load(Ordering::Acquire) {
+        return;
+    }
+    let _ = SYSTEM_AUDIO_OWNER.compare_exchange(
+        SYSTEM_AUDIO_OWNER_SESSION,
+        SYSTEM_AUDIO_OWNER_NONE,
+        Ordering::AcqRel,
+        Ordering::Acquire,
+    );
+}
+
+/// Start copying the already-owned session system stream for one explicit
+/// probe/PTT consumer. Returns false when no session capture is active or a
+/// consumer already owns the bounded collector.
+#[must_use]
+pub fn begin_system_audio_collector(rt: &SharedSlintRuntime) -> bool {
+    let mut state = lock(rt);
+    if state.capture.is_none() || state.system_audio_collector.is_some() {
+        return false;
+    }
+    state.system_audio_collector = Some(Vec::new());
+    true
+}
+
+/// Finish the current in-session system collector and return its PCM.
+#[must_use]
+pub fn finish_system_audio_collector(rt: &SharedSlintRuntime) -> Option<Vec<i16>> {
+    lock(rt).system_audio_collector.take()
+}
+
+fn collect_system_audio(state: &mut SlintRuntime, chunk: &AudioChunk) {
+    if !matches!(chunk.source, AudioSource::System) {
+        return;
+    }
+    if let Some(samples) = state.system_audio_collector.as_mut() {
+        let remaining = SESSION_SYSTEM_COLLECTOR_MAX_SAMPLES.saturating_sub(samples.len());
+        samples.extend(chunk.pcm_i16.iter().take(remaining).copied());
+    }
+}
 
 /// Start an audio→STT→transcript session. Drops any prior session
 /// first (aborts old tasks + clears state).
@@ -80,10 +190,13 @@ fn start_session_inner(
     rt: SharedSlintRuntime,
     recovered_from: Option<String>,
 ) -> Result<()> {
+    let mut system_audio_owner = SystemAudioSessionStartGuard::acquire()?;
+
     // ===== 1. Stop any prior session + reset state =====
     {
         let mut s = lock(&rt);
         s.capture = None; // Drop signals capture thread to stop.
+        s.system_audio_collector = None;
         s.transcript.clear();
         // v0.12.0 — the Summary accumulator resets at session START (not
         // stop) so the Summary button keeps working between Стоп and the
@@ -310,6 +423,7 @@ fn start_session_inner(
         health.clone(),
     );
     lock(&rt).capture = Some(capture_handle);
+    system_audio_owner.disarm();
 
     // ===== 6. Spawn health emitter (2s ticker) =====
     let health_for_tick = health.clone();
@@ -416,6 +530,7 @@ fn forward_audio_chunks(
                         .last_mic_frame_ms
                         .store(now_ms, Ordering::Relaxed);
                 }
+                collect_system_audio(&mut state, &chunk);
                 (
                     state.paused,
                     matches!(chunk.source, AudioSource::Mic) && state.mic_muted,
@@ -1184,7 +1299,19 @@ async fn maybe_spawn_auto_tile(
 /// and fires `overlay_backend::runtime::run_post_meeting_debrief`.
 pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<TranscriptLine> {
     let mut s = lock(&rt);
-    s.capture = None;
+    let capture = s.capture.take();
+    #[cfg(target_os = "macos")]
+    let system_start_pending = capture.as_ref().is_some_and(|capture| {
+        capture.system_capture_state() == overlay_backend::audio::SystemCaptureState::Pending
+    });
+    #[cfg(not(target_os = "macos"))]
+    let system_start_pending = false;
+    if system_start_pending {
+        // The native TCC call can remain blocked after handle drop. Keep global
+        // ownership until process exit rather than permit a second process tap.
+        SYSTEM_AUDIO_SESSION_STUCK.store(true, Ordering::Release);
+    }
+    s.system_audio_collector = None;
     // Bump generation so an in-flight auto-tile call from this session
     // discards its result instead of spawning a tile after the stop.
     s.session_gen = s.session_gen.wrapping_add(1);
@@ -1216,6 +1343,10 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
     // Старт in start_session_inner).
     let journal = s.journal.take();
     drop(s);
+    drop(capture);
+    if !system_start_pending {
+        release_system_audio_session();
+    }
     stt::reset_gigaam_cache();
     // Write the SessionSummary roll-up + SessionStop marker before closing, so
     // the journal has the "how did this session go" one-liner on disk (audit:
@@ -1477,6 +1608,25 @@ fn log_info(msg: &str) {
 mod tests {
     use super::*;
 
+    #[test]
+    fn system_audio_owner_is_atomic_between_session_and_auxiliary_capture() {
+        SYSTEM_AUDIO_SESSION_STUCK.store(false, Ordering::Release);
+        SYSTEM_AUDIO_OWNER.store(SYSTEM_AUDIO_OWNER_NONE, Ordering::Release);
+
+        let aux = try_acquire_system_audio_aux().expect("aux should claim the idle owner");
+        assert!(SystemAudioSessionStartGuard::acquire().is_err());
+        drop(aux);
+
+        let session =
+            SystemAudioSessionStartGuard::acquire().expect("session should claim the idle owner");
+        assert!(try_acquire_system_audio_aux().is_none());
+        drop(session);
+        assert_eq!(
+            SYSTEM_AUDIO_OWNER.load(Ordering::Acquire),
+            SYSTEM_AUDIO_OWNER_NONE
+        );
+    }
+
     #[tokio::test]
     async fn audio_forwarder_gates_stt_while_paused_without_recording() {
         use crate::runtime_state::{lock, shared_runtime};
@@ -1676,6 +1826,34 @@ mod tests {
         assert!(!meeting_ending_phrase_match("Thanks for explaining that."));
         assert!(!meeting_ending_phrase_match("Спасибо за объяснение."));
         assert!(!meeting_ending_phrase_match(""));
+    }
+
+    #[test]
+    fn session_system_collector_is_source_filtered_and_bounded() {
+        let mut state = SlintRuntime {
+            system_audio_collector: Some(Vec::new()),
+            ..Default::default()
+        };
+        collect_system_audio(
+            &mut state,
+            &AudioChunk {
+                source: AudioSource::Mic,
+                pcm_i16: vec![1, 2],
+                timestamp_ms: 0,
+            },
+        );
+        collect_system_audio(
+            &mut state,
+            &AudioChunk {
+                source: AudioSource::System,
+                pcm_i16: vec![3; SESSION_SYSTEM_COLLECTOR_MAX_SAMPLES + 8],
+                timestamp_ms: 0,
+            },
+        );
+        assert_eq!(
+            state.system_audio_collector.as_ref().map(Vec::len),
+            Some(SESSION_SYSTEM_COLLECTOR_MAX_SAMPLES)
+        );
     }
 
     // NOTE: a start_session smoke test would need a hermetic

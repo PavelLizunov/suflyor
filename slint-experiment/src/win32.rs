@@ -325,6 +325,11 @@ mod windows_impl {
     /// `GetWindowDisplayAffinity` — callers reduce the Result through
     /// `presentable_stealth` to the EFFECTIVE state they show to the user,
     /// so a failed/unsupported exclusion can never be presented as stealth on.
+    #[must_use]
+    pub const fn stealth_supported() -> bool {
+        true
+    }
+
     pub fn set_stealth(hwnd: HWND, on: bool) -> Result<(), Box<dyn std::error::Error>> {
         let affinity = if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE };
         unsafe {
@@ -1087,6 +1092,12 @@ mod posix_stubs {
         }
         let _ = (hwnd, on);
         Ok(())
+    }
+
+    /// Whether this platform can apply and verify capture exclusion.
+    #[must_use]
+    pub const fn stealth_supported() -> bool {
+        false
     }
 
     pub fn set_stealth(_hwnd: HWND, on: bool) -> Result<(), Box<dyn std::error::Error>> {

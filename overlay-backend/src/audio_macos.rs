@@ -280,6 +280,13 @@ pub fn list_devices() -> Result<DeviceList> {
 /// thread and any partial native state live until OS process cleanup — so
 /// in that pending case the handle drop does NOT guarantee all native
 /// resources are gone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SystemCaptureState {
+    Pending,
+    Running,
+    Failed,
+}
+
 pub struct CaptureHandle {
     stop: Arc<AtomicBool>,
     mic_worker: Option<thread::JoinHandle<()>>,
@@ -292,6 +299,20 @@ impl CaptureHandle {
     /// any thread while capture runs.
     pub fn metrics_snapshot(&self) -> AudioMetricsSnapshot {
         self.metrics.snapshot()
+    }
+
+    /// Verified asynchronous system-capture worker state.
+    #[must_use]
+    pub fn system_capture_state(&self) -> SystemCaptureState {
+        match self
+            .system_worker
+            .as_ref()
+            .map(|(state, _)| state.load(Ordering::Acquire))
+        {
+            Some(SYSTEM_WORKER_PENDING) => SystemCaptureState::Pending,
+            Some(SYSTEM_WORKER_RUNNING) => SystemCaptureState::Running,
+            Some(SYSTEM_WORKER_FINISHED) | None | Some(_) => SystemCaptureState::Failed,
+        }
     }
 }
 
@@ -681,10 +702,6 @@ fn system_capture_worker(
     let mut error_code: i32 = 0;
     let controller =
         unsafe { system_capture_start(NATIVE_BUFFER_FRAMES, &mut native_rate, &mut error_code) };
-    // Start has returned — from this point on the worker is joinable and
-    // must observe `stop` promptly.
-    state.store(SYSTEM_WORKER_RUNNING, Ordering::Release);
-
     if controller.is_null() {
         // Safe async system failure: log a generic message and exit. The
         // mic may or may not be active at this point; session health
@@ -702,6 +719,10 @@ fn system_capture_worker(
         state.store(SYSTEM_WORKER_FINISHED, Ordering::Release);
         return;
     }
+
+    // Native startup is verified; from this point the worker is joinable and
+    // must observe `stop` promptly.
+    state.store(SYSTEM_WORKER_RUNNING, Ordering::Release);
 
     let rate = native_rate as usize;
     let ring_capacity = unsafe { system_capture_ring_capacity(controller) } as usize;

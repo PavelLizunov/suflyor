@@ -30,12 +30,59 @@ impl std::fmt::Debug for MlxEndpoint {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MlxMemorySample {
+    pub app_bytes: Option<u64>,
+    pub mlx_bytes: Option<u64>,
+}
+
+#[cfg(target_os = "macos")]
+extern "C" {
+    fn suflyor_process_footprint(pid: u32, bytes: *mut u64) -> i32;
+}
+
+#[cfg(target_os = "macos")]
+fn process_footprint(pid: u32) -> Option<u64> {
+    let mut bytes = 0_u64;
+    let ok = unsafe { suflyor_process_footprint(pid, &mut bytes) };
+    (ok == 1 && bytes != 0).then_some(bytes)
+}
+
+/// Current macOS physical footprint for the host and its exact owned MLX child.
+/// Values are separate process-accounting samples, not additive GPU-only usage.
+#[must_use]
+pub fn memory_sample() -> MlxMemorySample {
+    #[cfg(target_os = "macos")]
+    {
+        let child_pid = {
+            let mut runtime = state().lock();
+            reap_exited_child(&mut runtime);
+            runtime.child.as_ref().map(std::process::Child::id)
+        };
+        MlxMemorySample {
+            app_bytes: process_footprint(std::process::id()),
+            mlx_bytes: child_pid.and_then(process_footprint),
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        MlxMemorySample::default()
+    }
+}
+
+/// Duration of the most recent successful resident-model cold start.
+#[must_use]
+pub fn last_load_ms() -> Option<u64> {
+    state().lock().last_load_ms
+}
+
 #[derive(Default)]
 struct RuntimeState {
     generation: u64,
     active_requests: usize,
     endpoint: Option<MlxEndpoint>,
     last_owned_base_url: Option<String>,
+    last_load_ms: Option<u64>,
     #[cfg(target_os = "macos")]
     child: Option<std::process::Child>,
     #[cfg(target_os = "macos")]
@@ -143,6 +190,7 @@ fn stop_locked() {
         let mut state = state().lock();
         state.generation = state.generation.wrapping_add(1);
         state.active_requests = 0;
+        state.last_load_ms = None;
         clear_endpoint(&mut state);
         (state.stdin.take(), state.child.take())
     };
@@ -151,6 +199,7 @@ fn stop_locked() {
         let mut state = state().lock();
         state.generation = state.generation.wrapping_add(1);
         state.active_requests = 0;
+        state.last_load_ms = None;
         clear_endpoint(&mut state);
     }
     #[cfg(target_os = "macos")]
@@ -215,6 +264,7 @@ fn reap_exited_child(state: &mut RuntimeState) {
     if exited {
         state.generation = state.generation.wrapping_add(1);
         state.active_requests = 0;
+        state.last_load_ms = None;
         clear_endpoint(state);
         let _stdin = state.stdin.take();
         let _child = state.child.take();
@@ -270,7 +320,7 @@ fn start_macos(model: &str) -> Result<MlxEndpoint> {
     use std::io::{BufRead, BufReader, Read, Write};
     use std::process::{Command, Stdio};
     use std::sync::mpsc;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     if crate::deep_lock::deep_lock_active() {
         bail!(crate::deep_lock::BLOCKED_ERROR);
@@ -285,6 +335,8 @@ fn start_macos(model: &str) -> Result<MlxEndpoint> {
             bail!("MLX model is busy");
         }
     }
+    let load_started = Instant::now();
+    state().lock().last_load_ms = None;
     let catalog = crate::mlx_install::catalog_model(model).context("unsupported MLX model")?;
     let snapshot =
         crate::mlx_install::installed_snapshot(model).context("MLX model is not installed")?;
@@ -389,6 +441,7 @@ fn start_macos(model: &str) -> Result<MlxEndpoint> {
     }
     state.last_owned_base_url = Some(endpoint.base_url.clone());
     state.endpoint = Some(endpoint.clone());
+    state.last_load_ms = Some(load_started.elapsed().as_millis().min(u64::MAX as u128) as u64);
     state.stdin = Some(stdin);
     state.child = Some(child);
     Ok(endpoint)
