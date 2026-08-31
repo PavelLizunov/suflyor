@@ -11,7 +11,8 @@ use crate::ui::{OverlayBarWindow, TrayMenuWindow};
 #[allow(unused_imports)]
 use slint_replay::win32::{
     enum_monitors, focus_window, get_window_rect, grab_hwnd, make_transparent_overlay,
-    move_window_pos_only, set_always_on_top, set_skip_taskbar, set_stealth, work_area_for_point,
+    move_window_pos_only, set_always_on_top, set_skip_taskbar, set_stealth, stealth_supported,
+    work_area_for_point,
 };
 
 #[cfg(windows)]
@@ -459,7 +460,7 @@ pub(super) fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_repla
     let fallback: Rc<dyn Fn(&OverlayBarWindow)> = Rc::new(move |o: &OverlayBarWindow| {
         set_global_stealth_effective(false);
         o.set_stealth_active(false);
-        if global_stealth() {
+        if stealth_supported() && global_stealth() {
             surface_stealth_unavailable(o);
         }
         diag!(

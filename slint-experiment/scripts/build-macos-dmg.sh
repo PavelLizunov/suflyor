@@ -39,7 +39,11 @@ fi
 
 export CARGO_TARGET_DIR="$target_dir"
 export CARGO_BUILD_JOBS=2
-echo "note: ad-hoc signing can require fresh macOS capture permissions after a rebuild" >&2
+if [[ -n "${SUFLYOR_MACOS_SIGN_IDENTITY:-}" ]]; then
+  echo "note: packaging with the requested stable local signing identity" >&2
+else
+  echo "note: ad-hoc signing can require fresh macOS capture permissions after a rebuild" >&2
+fi
 "$script_dir/build-macos-app.sh" >&2
 
 app_dir="$target_dir/Suflyor.app"
@@ -72,7 +76,9 @@ fi
 dmg_name="Suflyor-${version}-macos-arm64.dmg"
 dmg_path="$bundle_dir/$dmg_name"
 staging_dir="$(mktemp -d "$target_dir/.dmg-staging.XXXXXX")"
-mount_dir="$(mktemp -d "$target_dir/.dmg-mount.XXXXXX")"
+# Disk images cannot be mounted below another mounted image. Keep the mount
+# point on the local startup volume even when CARGO_TARGET_DIR is external.
+mount_dir="$(mktemp -d /tmp/suflyor-dmg-mount.XXXXXX)"
 tmp_dmg="$bundle_dir/.${dmg_name}.tmp.dmg"
 attached=0
 cleanup() {

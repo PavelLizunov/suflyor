@@ -1,6 +1,6 @@
 # suflyor FULL CI runner — fmt + clippy + tests for all five crates.
-# Required for Full-class diffs and stable releases. Routine docs and isolated
-# single-crate/UI changes use scripts/git-gate-native.ps1 instead.
+# Reserved for publishing an owner-authorized stable release. Normal changes
+# and prereleases use scripts/git-gate-native.ps1 without -Full.
 #
 # Covered: cargo fmt --check, clippy --all-targets -D warnings, test
 #   for slint-experiment, overlay-backend, suflyor-wsola, suflyor-tts,

@@ -37,6 +37,11 @@ pub struct SlintRuntime {
     /// Dropping it signals the WASAPI thread to stop.
     pub capture: Option<CaptureHandle>,
 
+    /// PCM copied from the already-owned session system stream for one explicit
+    /// bar probe/PTT hold. `None` means no consumer; bounded by the session
+    /// helper to 30 seconds at 16 kHz so the realtime forwarder never blocks.
+    pub system_audio_collector: Option<Vec<i16>>,
+
     /// Rolling transcript window — capped at `TRANSCRIPT_MAX_LINES`
     /// (80) entries. Append-only; oldest evicted on overflow.
     pub transcript: VecDeque<TranscriptLine>,

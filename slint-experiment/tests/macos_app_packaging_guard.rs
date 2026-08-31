@@ -148,6 +148,12 @@ fn script_builds_and_ad_hoc_signs_the_app() {
         "unresolved bundled dependency",
         "lipo -archs \"$mlx_binary\"",
         "[[ ! -s \"$resources_dir/AppIcon.icns\" ]]",
+        "sign_identity=\"${SUFLYOR_MACOS_SIGN_IDENTITY:--}\"",
+        "security find-identity -v -p codesigning",
+        "^[[:xdigit:]]{40}$",
+        "toupper($2) == toupper(wanted)",
+        "codesign_args=(--force --sign \"$sign_identity\" --options runtime)",
+        "codesign_args+=(--timestamp)",
         "--entitlements \"$crate_root/macos/entitlements.plist\"",
         "codesign --verify --strict --verbose=2 \"$macos_dir/suflyor-tts\"",
         "codesign --verify --strict --verbose=2 \"$macos_dir/suflyor-teratts\"",
@@ -170,20 +176,20 @@ fn script_builds_and_ad_hoc_signs_the_app() {
     );
 
     let tts_sign = SCRIPT
-        .find("codesign --force --sign - --options runtime \"$macos_dir/suflyor-tts\"")
+        .find("codesign \"${codesign_args[@]}\" \"$macos_dir/suflyor-tts\"")
         .expect("missing TTS sidecar signature");
     let tera_sign = SCRIPT
-        .find("codesign --force --sign - --options runtime \"$macos_dir/suflyor-teratts\"")
+        .find("codesign \"${codesign_args[@]}\" \"$macos_dir/suflyor-teratts\"")
         .expect("missing Tera sidecar signature");
     let mlx_sign = SCRIPT
-        .find("codesign --force --sign - --options runtime \"$macos_dir/suflyor-mlx\"")
+        .find("codesign \"${codesign_args[@]}\" \"$macos_dir/suflyor-mlx\"")
         .expect("missing MLX sidecar signature");
     let metallib_sign = SCRIPT
-        .find("codesign --force --sign - --options runtime \"$macos_dir/mlx.metallib\"")
+        .find("codesign \"${codesign_args[@]}\" \"$macos_dir/mlx.metallib\"")
         .expect("missing MLX Metal library signature");
     let app_sign = SCRIPT
         .find(
-            "codesign --force --sign - --options runtime \\\n  --entitlements \"$crate_root/macos/entitlements.plist\" \\\n  \"$app_dir\"",
+            "codesign \"${codesign_args[@]}\" \\\n  --entitlements \"$crate_root/macos/entitlements.plist\" \\\n  \"$app_dir\"",
         )
         .expect("missing app entitlements signature");
     assert!(
@@ -245,6 +251,7 @@ fn dmg_script_uses_the_native_drag_install_layout() {
         "set -euo pipefail",
         "BASH_SOURCE",
         "export CARGO_BUILD_JOBS=2",
+        "SUFLYOR_MACOS_SIGN_IDENTITY",
         "\"$script_dir/build-macos-app.sh\"",
         "install_guide=\"$crate_root/../docs/macos-install.md\"",
         "ln -s /Applications \"$staging_dir/Applications\"",
@@ -255,6 +262,7 @@ fn dmg_script_uses_the_native_drag_install_layout() {
         "if [[ -L \"$bundle_dir\" ]]",
         "bundle_dir=\"$(cd \"$bundle_dir\" && pwd -P)\"",
         "hdiutil create -quiet -fs HFS+ -format UDZO",
+        "mount_dir=\"$(mktemp -d /tmp/suflyor-dmg-mount.XXXXXX)\"",
         "hdiutil attach -quiet -readonly -nobrowse -mountpoint \"$mount_dir\" \"$tmp_dmg\"",
         "readlink \"$mount_dir/Applications\"",
         "mv -f -- \"$tmp_dmg\" \"$dmg_path\"",

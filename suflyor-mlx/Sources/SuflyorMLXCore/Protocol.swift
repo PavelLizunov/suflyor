@@ -232,15 +232,8 @@ public struct ReasoningFilter: Sendable {
                 buffer = String(buffer[end.upperBound...])
                 state = .answer
             case .answer:
-                if finished {
-                    output += buffer
-                    buffer = ""
-                } else {
-                    let keep = min(6, buffer.count)
-                    let split = buffer.index(buffer.endIndex, offsetBy: -keep)
-                    output += buffer[..<split]
-                    buffer = String(buffer[split...])
-                }
+                output += buffer
+                buffer = ""
                 return output
             }
         }

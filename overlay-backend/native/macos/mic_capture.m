@@ -12,13 +12,26 @@
 // plain C struct with explicit ownership.
 
 #import <AVFoundation/AVFoundation.h>
+#import <CoreAudio/CoreAudio.h>
 #import <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
+
+@interface SuflyorMicRouteFlag : NSObject {
+@public
+  _Atomic bool changed;
+}
+@end
+
+@implementation SuflyorMicRouteFlag
+@end
 
 typedef struct MicController {
   AVAudioEngine *engine; // owned, released in mic_capture_stop
+  id route_observer;     // AVAudioEngine configuration-change observer
+  SuflyorMicRouteFlag *route_flag; // owned, retained by the observer block too
   float *ring;           // owned, capacity is a power of two (samples)
   uint32_t capacity;
   _Atomic uint64_t head;    // next write slot, producer = audio tap
@@ -132,7 +145,10 @@ MicController *mic_capture_start(uint32_t buffer_frames,
     return NULL;
   }
   MicController *c = (MicController *)calloc(1, sizeof(MicController));
-  if (!c) {
+  SuflyorMicRouteFlag *route_flag = [[SuflyorMicRouteFlag alloc] init];
+  if (!c || !route_flag) {
+    [route_flag release];
+    free(c);
     free(ring);
     [engine release];
     if (out_error) {
@@ -141,11 +157,14 @@ MicController *mic_capture_start(uint32_t buffer_frames,
     return NULL;
   }
   c->engine = engine; // transfer ownership into the controller
+  c->route_observer = nil;
+  c->route_flag = route_flag;
   c->ring = ring;
   c->capacity = capacity;
   atomic_init(&c->head, 0);
   atomic_init(&c->tail, 0);
   atomic_init(&c->dropped, 0);
+  atomic_init(&route_flag->changed, false);
 
   uint32_t channels = format.channelCount;
   [input installTapOnBus:0
@@ -193,6 +212,8 @@ MicController *mic_capture_start(uint32_t buffer_frames,
   NSError *error = nil;
   if (![engine startAndReturnError:&error]) {
     [input removeTapOnBus:0];
+    [c->route_flag release];
+    c->route_flag = nil;
     free(c->ring);
     [engine release];
     free(c);
@@ -201,6 +222,17 @@ MicController *mic_capture_start(uint32_t buffer_frames,
     }
     return NULL;
   }
+
+  c->route_observer =
+      [[NSNotificationCenter defaultCenter]
+          addObserverForName:AVAudioEngineConfigurationChangeNotification
+                      object:engine
+                       queue:nil
+                  usingBlock:^(NSNotification *notification) {
+                    (void)notification;
+                    atomic_store_explicit(&route_flag->changed, true,
+                                          memory_order_release);
+                  }];
 
   if (out_sample_rate) {
     *out_sample_rate = format.sampleRate;
@@ -238,6 +270,16 @@ uint64_t mic_capture_take_dropped(MicController *c) {
   return atomic_exchange_explicit(&c->dropped, 0, memory_order_relaxed);
 }
 
+uint32_t mic_capture_take_route_change(MicController *c) {
+  if (!c || !c->route_flag) {
+    return 0;
+  }
+  return atomic_exchange_explicit(&c->route_flag->changed, false,
+                                  memory_order_acq_rel)
+             ? 1
+             : 0;
+}
+
 // Synchronous teardown: remove the tap, stop the engine, then release the
 // engine and free the ring + controller. The
 // Rust worker is the only caller and must join before freeing anything else.
@@ -245,13 +287,69 @@ void mic_capture_stop(MicController *c) {
   if (!c) {
     return;
   }
+  if (c->route_observer) {
+    [[NSNotificationCenter defaultCenter] removeObserver:c->route_observer];
+    c->route_observer = nil;
+  }
   if (c->engine) {
-    [c->engine.inputNode removeTapOnBus:0];
     [c->engine stop];
+    [c->engine.inputNode removeTapOnBus:0];
     [c->engine release];
     c->engine = nil;
   }
+  [c->route_flag release];
+  c->route_flag = nil;
   free(c->ring);
   c->ring = NULL;
   free(c);
+}
+
+static char *copy_default_device_name(AudioObjectPropertySelector selector) {
+  @autoreleasepool {
+    AudioObjectID device_id = kAudioObjectUnknown;
+    UInt32 data_size = sizeof(device_id);
+    AudioObjectPropertyAddress address = {
+        .mSelector = selector,
+        .mScope = kAudioObjectPropertyScopeGlobal,
+        .mElement = kAudioObjectPropertyElementMain};
+
+    OSStatus status = AudioObjectGetPropertyData(
+        kAudioObjectSystemObject, &address, 0, NULL, &data_size, &device_id);
+    if (status != noErr || device_id == kAudioObjectUnknown) {
+      return NULL;
+    }
+
+    CFStringRef cf_name = NULL;
+    data_size = sizeof(cf_name);
+    AudioObjectPropertyAddress name_address = {
+        .mSelector = kAudioObjectPropertyName,
+        .mScope = kAudioObjectPropertyScopeGlobal,
+        .mElement = kAudioObjectPropertyElementMain};
+
+    status = AudioObjectGetPropertyData(device_id, &name_address, 0, NULL,
+                                        &data_size, &cf_name);
+    if (status != noErr || !cf_name) {
+      return NULL;
+    }
+
+    NSString *name = (NSString *)cf_name;
+    const char *utf8 = [name UTF8String];
+    char *result = utf8 && utf8[0] != '\0' ? strdup(utf8) : NULL;
+    [name release];
+    return result;
+  }
+}
+
+char *mic_capture_copy_default_input_name(void) {
+  return copy_default_device_name(kAudioHardwarePropertyDefaultInputDevice);
+}
+
+char *mic_capture_copy_default_output_name(void) {
+  return copy_default_device_name(kAudioHardwarePropertyDefaultOutputDevice);
+}
+
+void mic_capture_free_string(char *s) {
+  if (s) {
+    free(s);
+  }
 }

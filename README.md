@@ -210,12 +210,12 @@ overview and [`CONTRIBUTING.md`](CONTRIBUTING.md) for the build setup.
 - **No Linux build.** Supported native targets are Windows 10/11 and Apple
   Silicon macOS 14.2 or newer.
 - **Platform signing warnings.** Windows builds are not Authenticode-signed;
-  local macOS builds are ad-hoc signed and not notarized. SmartScreen or
-  Gatekeeper may therefore require an explicit first-launch confirmation.
+  macOS builds are not notarized and use ad-hoc signing by default. An explicit
+  stable local identity can preserve code identity across personal builds, but
+  Gatekeeper still requires first-launch confirmation.
 - **macOS capture permissions.** Microphone and system-audio capture remain
-  subject to macOS TCC approval. Because ad-hoc identity is tied to a specific
-  build, a rebuilt app can prompt for those permissions again; verify every new
-  build with the actual meeting devices before use.
+  subject to macOS TCC approval. Ad-hoc rebuilds or a changed signing identity
+  can prompt again; verify every new build with the actual meeting devices.
 - **Single user.** No multi-user profiles, no concurrent sessions.
 - **GPU-dependent local AI quality.** The 26B Gemma profile needs a GPU with
   sufficient VRAM; CPU fallback uses smaller models.
@@ -247,7 +247,14 @@ and the pinned Swift package dependencies already recorded by the repository.
 ```bash
 ./slint-experiment/scripts/build-macos-dmg.sh
 # → slint-experiment/target/bundle/Suflyor-<version>-macos-arm64.dmg
+
+# Optional personal-build identity stored in the macOS Keychain (exact SHA-1):
+SUFLYOR_MACOS_SIGN_IDENTITY="<40-hex certificate SHA-1>" \
+  ./slint-experiment/scripts/build-macos-dmg.sh
 ```
+
+The explicit identity must already exist as a code-signing identity in the
+login Keychain. Its private key is never stored in this repository.
 
 ## License
 

@@ -1,7 +1,7 @@
 # Installing Suflyor on macOS / Установка Suflyor на macOS
 
 Suflyor currently supports Apple Silicon and macOS 14.2 or newer. The
-prerelease app is ad-hoc signed and is not notarized by Apple, so the first
+prerelease app is locally signed and is not notarized by Apple, so the first
 launch requires an explicit Gatekeeper confirmation.
 
 ## Русский
@@ -61,9 +61,11 @@ Suflyor не показывает значок в Dock. После запуск�
    дают непустую расшифровку.
 4. Только после этого используйте приложение на реальной встрече.
 
-При замене приложения новой ad-hoc сборкой macOS может снова запросить
-Gatekeeper и разрешения на запись. Это ожидаемое ограничение текущего
-пререлизного пакета.
+При первом переходе с ad-hoc сборки на стабильную локальную подпись macOS
+попросит выдать разрешения ещё один раз. Следующие сборки, подписанные той же
+identity и установленные поверх `/Applications/Suflyor.app`, должны сохранять
+code identity; смена подписи или возврат к ad-hoc снова потребует проверки
+разрешений.
 
 ## English
 
@@ -100,3 +102,9 @@ add `/Applications/Suflyor.app` manually. After changing a permission, quit
 Suflyor from its menu-bar item and reopen it. Run a short test session and
 confirm non-empty transcription from both microphone and system audio before
 relying on it in a meeting.
+
+The first switch from an ad-hoc build to a stable local signing identity needs
+one new permission approval cycle. Later builds signed by that same identity and
+installed over `/Applications/Suflyor.app` should keep the same code identity;
+changing the identity or returning to ad-hoc signing requires another permission
+check.

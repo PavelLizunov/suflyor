@@ -224,7 +224,20 @@ const VAD_RMS_THRESHOLD: f32 = 50.0;
 /// How long silence must persist to flush an utterance (ms).
 const VAD_HANG_MS: u64 = 800;
 /// Force flush if buffer is this long (seconds).
-const MAX_UTTERANCE_SEC: u64 = 25;
+const MAX_UTTERANCE_SEC: u64 = 10;
+
+fn utterance_flush_decision(
+    duration_sec: f32,
+    silent_run_ms: u64,
+    had_voice: bool,
+    cap_sec: u64,
+) -> (bool, bool) {
+    let forced_by_size = duration_sec >= cap_sec as f32;
+    (
+        (silent_run_ms >= VAD_HANG_MS && had_voice) || forced_by_size,
+        forced_by_size,
+    )
+}
 /// Skip flushing buffers shorter than this (avoid sending noise).
 const MIN_UTTERANCE_SEC: f32 = 0.4;
 /// Anti-hallucination: require this fraction of 200ms chunks to be above
@@ -416,9 +429,12 @@ pub fn spawn(
             }
 
             let dur_sec = utt.samples.len() as f32 / TARGET_SAMPLE_RATE as f32;
-            let forced_by_size = dur_sec >= utterance_cap_sec as f32;
-            let should_flush =
-                (utt.silent_run_ms >= VAD_HANG_MS && utt.had_voice) || forced_by_size;
+            let (should_flush, forced_by_size) = utterance_flush_decision(
+                dur_sec,
+                utt.silent_run_ms,
+                utt.had_voice,
+                utterance_cap_sec,
+            );
             if forced_by_size {
                 // info, not warn (v0.17.1 audit): the size-cap flush is normal,
                 // designed behavior for continuous speech — a warn read like an
@@ -1157,6 +1173,24 @@ fn encode_wav_pcm_i16_mono_16k(pcm: &[i16]) -> Result<Vec<u8>> {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
+
+    #[test]
+    fn live_utterance_flushes_at_ten_seconds_or_four_silent_chunks() {
+        assert_eq!(MAX_UTTERANCE_SEC, 10);
+        assert_eq!(VAD_HANG_MS, 800);
+        assert_eq!(
+            utterance_flush_decision(9.9, 600, true, MAX_UTTERANCE_SEC),
+            (false, false)
+        );
+        assert_eq!(
+            utterance_flush_decision(9.9, 800, true, MAX_UTTERANCE_SEC),
+            (true, false)
+        );
+        assert_eq!(
+            utterance_flush_decision(10.0, 0, false, MAX_UTTERANCE_SEC),
+            (true, true)
+        );
+    }
 
     #[test]
     fn permanent_error_classification_survives_redaction() {

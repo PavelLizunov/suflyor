@@ -137,6 +137,45 @@ fn assert_compact_geometry(bar: &ui::OverlayBarWindow) {
     bar.set_compact_bar(false);
 }
 
+fn assert_memory_footer_geometry(bar: &ui::OverlayBarWindow, app_ram_label: &str) {
+    bar.set_compact_bar(false);
+    bar.set_active_stack("MODEL".into());
+    bar.set_tok_per_sec("".into());
+    bar.window().set_size(LogicalSize::new(1280.0, 64.0));
+
+    for (app_memory, mlx_memory) in [
+        ("", ""),
+        ("123 MB", ""),
+        ("", "456 MB"),
+        ("123 MB", "456 MB"),
+    ] {
+        bar.set_app_memory(app_memory.into());
+        bar.set_mlx_memory(mlx_memory.into());
+
+        let mut items = vec![("model", element(bar, "MODEL"))];
+        if !app_memory.is_empty() {
+            items.push((
+                "app memory",
+                element(bar, &format!("{app_ram_label} {app_memory}")),
+            ));
+        }
+        if !mlx_memory.is_empty() {
+            items.push(("MLX memory", element(bar, &format!("MLX {mlx_memory}"))));
+        }
+        for (name, item) in items {
+            let pos = item.absolute_position();
+            let size = item.size();
+            assert!(pos.y >= 34.0, "{name} entered the action row: y={}", pos.y);
+            assert!(
+                pos.y + size.height <= 64.0,
+                "{name} escaped the status row: y={}, height={}",
+                pos.y,
+                size.height
+            );
+        }
+    }
+}
+
 fn assert_confirming_geometry(bar: &ui::OverlayBarWindow, yes_label: &str, no_label: &str) {
     bar.window().set_size(LogicalSize::new(1280.0, 64.0));
     bar.set_open_tiles(99);
@@ -172,12 +211,14 @@ fn open_tile_controls_stay_inside_1280_in_english_and_russian() {
     let english = ui::OverlayBarWindow::new().expect("create English bar");
     assert_open_tile_geometry(&english, "close all", "+ tile");
     assert_compact_geometry(&english);
+    assert_memory_footer_geometry(&english, "App RAM");
     assert_confirming_geometry(&english, "Yes", "No");
 
     slint::select_bundled_translation("ru").expect("select Russian translation");
     let russian = ui::OverlayBarWindow::new().expect("create Russian bar");
     assert_open_tile_geometry(&russian, "закрыть все", "+ тайл");
     assert_compact_geometry(&russian);
+    assert_memory_footer_geometry(&russian, "RAM приложения");
     assert_confirming_geometry(&russian, "Да", "Нет");
 }
 

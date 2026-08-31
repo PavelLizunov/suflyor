@@ -6,9 +6,11 @@
 fn main() {
     println!("cargo:rerun-if-changed=native/macos/mic_capture.m");
     println!("cargo:rerun-if-changed=native/macos/system_capture.m");
+    println!("cargo:rerun-if-changed=native/macos/process_memory.c");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
         build_mic_capture();
         build_system_capture();
+        build_process_memory();
     }
 }
 
@@ -33,6 +35,13 @@ fn build_system_capture() {
     println!("cargo:rustc-link-lib=framework=CoreAudio");
 }
 
+#[cfg(target_os = "macos")]
+fn build_process_memory() {
+    cc::Build::new()
+        .file("native/macos/process_memory.c")
+        .compile("process_memory");
+}
+
 #[cfg(not(target_os = "macos"))]
 fn build_mic_capture() {
     // The `cc` build-dependency is macOS-target-gated, so the bridge can
@@ -45,5 +54,11 @@ fn build_mic_capture() {
 #[cfg(not(target_os = "macos"))]
 fn build_system_capture() {
     eprintln!("overlay-backend: macOS targets must be built on macOS (system_capture bridge)");
+    std::process::exit(1);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn build_process_memory() {
+    eprintln!("overlay-backend: macOS targets must be built on macOS (process_memory bridge)");
     std::process::exit(1);
 }

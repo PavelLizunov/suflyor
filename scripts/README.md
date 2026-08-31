@@ -1,13 +1,13 @@
 # overlay-mvp scripts/
 
-Workflow tooling for the Slint build + the testing methodology in `../CLAUDE.md`.
+Workflow tooling for the Slint build and verification policy in `../AGENTS.md`.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `git-gate-native.ps1` | Selects docs, targeted, or full verification from the diff |
-| `ci.ps1` | Full CI — fmt + clippy + tests for all five crates + UI-MCP compile |
+| `git-gate-native.ps1` | Selects docs or targeted verification; `-Full` is explicit for stable publication |
+| `ci.ps1` | Stable-release full CI — fmt + clippy + tests for all five crates + UI-MCP compile |
 | `git-gate-macos.sh` | Native macOS compile-seam gate for backend, Slint/UI host surfaces, and TTS |
 | `post-release-cleanup.ps1` | Preview/apply safe PR, prerelease, branch, worktree, and target cleanup |
 | `build-slint-release.ps1` | `-Installer` → release `overlay-host.exe` + NSIS `suflyor-slint-setup.exe` |
@@ -21,8 +21,8 @@ Workflow tooling for the Slint build + the testing methodology in `../CLAUDE.md`
 # Inspect/run the gate selected for the current diff:
 powershell scripts\git-gate-native.ps1 manual
 
-# Force the full five-crate gate when risk warrants it:
-powershell scripts\git-gate-native.ps1 manual -Full
+# Only while publishing an owner-authorized stable release:
+powershell scripts\git-gate-native.ps1 push -Full
 
 # Cut a tester release:
 powershell scripts\build-slint-release.ps1 -Installer

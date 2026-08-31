@@ -34,7 +34,7 @@
 use crate::audio_metrics::{AudioMetrics, AudioMetricsSnapshot, Stream};
 use anyhow::{anyhow, Result};
 use serde::Serialize;
-use std::ffi::c_void;
+use std::ffi::{c_char, c_void, CStr};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
@@ -50,6 +50,9 @@ const NATIVE_BUFFER_FRAMES: u32 = 1024;
 
 /// Worker drain period — the ring is polled on this cadence.
 const DRAIN_INTERVAL: Duration = Duration::from_millis(20);
+
+/// AirPods/Core Audio route transitions can take a few seconds to settle.
+const ROUTE_RESTART_DELAY: Duration = Duration::from_millis(500);
 
 /// Native category-only start errors, mirrored from `mic_capture.m`.
 const MIC_START_PERMISSION: i32 = 1;
@@ -124,7 +127,24 @@ extern "C" {
     fn mic_capture_ring_capacity(controller: *const MicController) -> u32;
     fn mic_capture_read(controller: *mut MicController, dst: *mut f32, max_frames: u32) -> u32;
     fn mic_capture_take_dropped(controller: *mut MicController) -> u64;
+    fn mic_capture_take_route_change(controller: *mut MicController) -> u32;
     fn mic_capture_stop(controller: *mut MicController);
+    fn mic_capture_copy_default_input_name() -> *mut c_char;
+    fn mic_capture_copy_default_output_name() -> *mut c_char;
+    fn mic_capture_free_string(ptr: *mut c_char);
+}
+
+/// Convert a native C string pointer returned by native bridges to `Option<String>`,
+/// safely freeing the native memory before returning.
+/// Missing, null, or empty/whitespace strings return `None`.
+unsafe fn free_and_convert_c_string(ptr: *mut c_char) -> Option<String> {
+    if ptr.is_null() {
+        return None;
+    }
+    let c_str = unsafe { CStr::from_ptr(ptr) };
+    let res = c_str.to_str().ok().map(|s| s.to_string());
+    unsafe { mic_capture_free_string(ptr) };
+    res.filter(|s| !s.trim().is_empty())
 }
 
 // --- Native bridge (system_capture.m) — private Core Audio process tap -----
@@ -152,6 +172,7 @@ extern "C" {
         max_frames: u32,
     ) -> u32;
     fn system_capture_take_dropped(controller: *mut SystemCaptureController) -> u64;
+    fn system_capture_take_route_change(controller: *mut SystemCaptureController) -> u32;
     fn system_capture_stop(controller: *mut SystemCaptureController);
 }
 
@@ -211,6 +232,11 @@ where
     unsafe { mic_capture_request_permission(permission_callback::<F>, context) };
 }
 
+struct MicStartupError {
+    error: anyhow::Error,
+    terminal: bool,
+}
+
 fn start_error_message(code: i32) -> anyhow::Error {
     match code {
         MIC_START_PERMISSION => anyhow!(
@@ -258,10 +284,22 @@ fn system_worker_joinable(state: u8) -> bool {
 
 // --- Public API (mirrors audio_unavailable.rs) ------------------------------
 
-/// Enumerate render + capture endpoints — unsupported on macOS in this
-/// packet (device selection by name cannot be honoured yet).
+/// Enumerate default render + capture endpoint names on macOS.
 pub fn list_devices() -> Result<DeviceList> {
-    anyhow::bail!("audio device enumeration is not supported on macOS yet")
+    let mut inputs = Vec::new();
+    let mut outputs = Vec::new();
+
+    let in_ptr = unsafe { mic_capture_copy_default_input_name() };
+    if let Some(name) = unsafe { free_and_convert_c_string(in_ptr) } {
+        inputs.push(name);
+    }
+
+    let out_ptr = unsafe { mic_capture_copy_default_output_name() };
+    if let Some(name) = unsafe { free_and_convert_c_string(out_ptr) } {
+        outputs.push(name);
+    }
+
+    Ok(DeviceList { outputs, inputs })
 }
 
 /// Handle returned to caller — dropping it sets the shared stop flag and
@@ -280,6 +318,13 @@ pub fn list_devices() -> Result<DeviceList> {
 /// thread and any partial native state live until OS process cleanup — so
 /// in that pending case the handle drop does NOT guarantee all native
 /// resources are gone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SystemCaptureState {
+    Pending,
+    Running,
+    Failed,
+}
+
 pub struct CaptureHandle {
     stop: Arc<AtomicBool>,
     mic_worker: Option<thread::JoinHandle<()>>,
@@ -292,6 +337,20 @@ impl CaptureHandle {
     /// any thread while capture runs.
     pub fn metrics_snapshot(&self) -> AudioMetricsSnapshot {
         self.metrics.snapshot()
+    }
+
+    /// Verified asynchronous system-capture worker state.
+    #[must_use]
+    pub fn system_capture_state(&self) -> SystemCaptureState {
+        match self
+            .system_worker
+            .as_ref()
+            .map(|(state, _)| state.load(Ordering::Acquire))
+        {
+            Some(SYSTEM_WORKER_PENDING) => SystemCaptureState::Pending,
+            Some(SYSTEM_WORKER_RUNNING) => SystemCaptureState::Running,
+            Some(SYSTEM_WORKER_FINISHED) | None | Some(_) => SystemCaptureState::Failed,
+        }
     }
 }
 
@@ -317,9 +376,9 @@ impl Drop for CaptureHandle {
 /// Start capture on both sources, each independent of the other.
 ///
 /// The microphone keeps its synchronous start attempt on the default input
-/// device; a failed mic start (permission, no input, engine failure) logs
-/// its safe generic error and capture continues with the system source
-/// alone. The system worker starts asynchronously and is never awaited:
+/// device. Permission failure is terminal for that worker; missing or changing
+/// hardware keeps the worker armed until a default input becomes available.
+/// The system worker starts asynchronously and is never awaited:
 /// `system_capture_start` executes only on the `audio-sys` thread, because
 /// first-run macOS TCC consent can block or restart the audio stack. The
 /// asynchronous native start can still fail later; that failure is logged
@@ -352,7 +411,7 @@ pub fn start_capture(
     let (tx, rx) = mpsc::channel::<AudioChunk>(128);
     let stop = Arc::new(AtomicBool::new(false));
     let worker_stop = stop.clone();
-    let (started_tx, started_rx) = std::sync::mpsc::channel::<Result<u32>>();
+    let (started_tx, started_rx) = std::sync::mpsc::channel::<Result<u32, MicStartupError>>();
     // One shared timestamp origin for the whole session: Mic and System
     // chunk timestamps stay aligned even when the system TCC flow returns
     // much later than the microphone start.
@@ -368,21 +427,26 @@ pub fn start_capture(
         })?;
 
     // Synchronous startup report: the native start attempt still runs on the
-    // mic worker, but a failure no longer fails the whole capture — its
-    // already-safe generic error is logged and capture continues with the
-    // system source alone (the test Mac has no physical microphone, and
-    // system audio must still work).
+    // mic worker, but a failure no longer fails the whole capture. Permission
+    // failure is terminal; a missing or unstable default input keeps this
+    // worker armed while system capture continues independently.
     let mic_worker = match started_rx.recv() {
         Ok(Ok(rate)) => {
             log::info!("[Mic] audio_route open mode=default device=default_input rate={rate} Hz");
             Some(worker)
         }
-        Ok(Err(error)) => {
-            // The worker already returned after sending the error; the join
-            // is bounded and clears the thread before we continue.
-            log::warn!("[Mic] {error} — continuing with system audio only");
-            let _ = worker.join();
-            None
+        Ok(Err(startup_err)) => {
+            if startup_err.terminal {
+                log::warn!(
+                    "[Mic] {} — continuing with system audio only",
+                    startup_err.error
+                );
+                let _ = worker.join();
+                None
+            } else {
+                log::warn!("[Mic] {} — keeping mic worker armed", startup_err.error);
+                Some(worker)
+            }
         }
         Err(_) => {
             // The channel only disconnects after the worker has exited, so
@@ -575,36 +639,143 @@ pub fn record_mic_blocking(duration_ms: u64, _mic_device: Option<String>) -> Res
 
 // --- Worker -----------------------------------------------------------------
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RetryResult<T> {
+    Success(T),
+    Retry,
+    Stop,
+}
+
+fn retry_route_start<T>(
+    stop: &AtomicBool,
+    delay: Duration,
+    mut start: impl FnMut() -> RetryResult<T>,
+) -> Option<T> {
+    loop {
+        if stop.load(Ordering::Acquire) {
+            return None;
+        }
+        match start() {
+            RetryResult::Success(value) => return Some(value),
+            RetryResult::Stop => return None,
+            RetryResult::Retry => {}
+        }
+        if stop.load(Ordering::Acquire) {
+            return None;
+        }
+        thread::sleep(delay);
+    }
+}
+
+fn reopen_mic(stop: &AtomicBool) -> Option<(*mut MicController, f64)> {
+    retry_route_start(stop, ROUTE_RESTART_DELAY, || {
+        if matches!(
+            microphone_permission(),
+            MicrophonePermission::Denied | MicrophonePermission::Restricted
+        ) {
+            return RetryResult::Stop;
+        }
+        let mut native_rate = 0.0;
+        let mut error_code = 0;
+        // SAFETY: the returned controller is owned by this worker and stopped
+        // before replacement or worker exit.
+        let controller =
+            unsafe { mic_capture_start(NATIVE_BUFFER_FRAMES, &mut native_rate, &mut error_code) };
+        if !controller.is_null() {
+            RetryResult::Success((controller, native_rate))
+        } else if error_code == MIC_START_PERMISSION {
+            RetryResult::Stop
+        } else {
+            RetryResult::Retry
+        }
+    })
+}
+
+fn reopen_system(stop: &AtomicBool) -> Option<(*mut SystemCaptureController, f64)> {
+    retry_route_start(stop, ROUTE_RESTART_DELAY, || {
+        let mut native_rate = 0.0;
+        let mut error_code = 0;
+        // SAFETY: the returned controller is owned by this worker and stopped
+        // before replacement or worker exit.
+        let controller = unsafe {
+            system_capture_start(NATIVE_BUFFER_FRAMES, &mut native_rate, &mut error_code)
+        };
+        if !controller.is_null() {
+            RetryResult::Success((controller, native_rate))
+        } else {
+            RetryResult::Retry
+        }
+    })
+}
+
 fn capture_worker(
     tx: mpsc::Sender<AudioChunk>,
     stop: Arc<AtomicBool>,
-    started: std::sync::mpsc::Sender<Result<u32>>,
+    started: std::sync::mpsc::Sender<Result<u32, MicStartupError>>,
     session_start: Instant,
     metrics: Arc<AudioMetrics>,
 ) {
     let mut native_rate: f64 = 0.0;
     let mut error_code: i32 = 0;
-    let controller =
+    let mut controller =
         unsafe { mic_capture_start(NATIVE_BUFFER_FRAMES, &mut native_rate, &mut error_code) };
     if controller.is_null() {
-        let _ = started.send(Err(start_error_message(error_code)));
-        return;
-    }
-    if started.send(Ok(native_rate as u32)).is_err() {
+        let is_terminal = error_code == MIC_START_PERMISSION;
+        let err = start_error_message(error_code);
+        if started
+            .send(Err(MicStartupError {
+                error: err,
+                terminal: is_terminal,
+            }))
+            .is_err()
+            || is_terminal
+        {
+            return;
+        }
+        let Some((next_controller, next_rate)) = reopen_mic(stop.as_ref()) else {
+            log::info!("[Mic] macOS capture worker exit");
+            return;
+        };
+        controller = next_controller;
+        native_rate = next_rate;
+        log::info!("[Mic] macOS default input became available");
+    } else if started.send(Ok(native_rate as u32)).is_err() {
         unsafe { mic_capture_stop(controller) };
         return;
     }
 
-    let rate = native_rate as usize;
+    let mut rate = native_rate as usize;
     let ring_capacity = unsafe { mic_capture_ring_capacity(controller) } as usize;
     let mut scratch = vec![0.0_f32; ring_capacity.max(NATIVE_BUFFER_FRAMES as usize)];
     let mut accum: Vec<f32> = Vec::with_capacity(rate / 5 + NATIVE_BUFFER_FRAMES as usize);
-    let chunk_target = (rate / 5).max(1); // ~200 ms at the native rate
-    let ratio = native_rate / f64::from(TARGET_SAMPLE_RATE);
+    let mut chunk_target = (rate / 5).max(1); // ~200 ms at the native rate
+    let mut ratio = native_rate / f64::from(TARGET_SAMPLE_RATE);
     let mut dropped_chunks: u64 = 0;
 
     while !stop.load(Ordering::Acquire) {
         thread::sleep(DRAIN_INTERVAL);
+
+        if unsafe { mic_capture_take_route_change(controller) } != 0 {
+            log::info!("[Mic] macOS audio route changed — reopening current input");
+            unsafe { mic_capture_stop(controller) };
+            let Some((next_controller, next_rate)) = reopen_mic(stop.as_ref()) else {
+                if !stop.load(Ordering::Acquire) {
+                    log::warn!("[Mic] current input did not recover after route change");
+                }
+                log::info!("[Mic] macOS capture worker exit");
+                return;
+            };
+            controller = next_controller;
+            native_rate = next_rate;
+            rate = native_rate as usize;
+            let ring_capacity = unsafe { mic_capture_ring_capacity(controller) } as usize;
+            scratch.resize(ring_capacity.max(NATIVE_BUFFER_FRAMES as usize), 0.0);
+            accum.clear();
+            chunk_target = (rate / 5).max(1);
+            ratio = native_rate / f64::from(TARGET_SAMPLE_RATE);
+            log::info!("[Mic] macOS audio route recovery complete rate={rate} Hz");
+            continue;
+        }
 
         let n = unsafe { mic_capture_read(controller, scratch.as_mut_ptr(), scratch.len() as u32) }
             as usize;
@@ -679,20 +850,20 @@ fn system_capture_worker(
 ) {
     let mut native_rate: f64 = 0.0;
     let mut error_code: i32 = 0;
-    let controller =
+    let mut controller =
         unsafe { system_capture_start(NATIVE_BUFFER_FRAMES, &mut native_rate, &mut error_code) };
-    // Start has returned — from this point on the worker is joinable and
-    // must observe `stop` promptly.
-    state.store(SYSTEM_WORKER_RUNNING, Ordering::Release);
-
     if controller.is_null() {
-        // Safe async system failure: log a generic message and exit. The
-        // mic may or may not be active at this point; session health
-        // observes the missing system frames. Never fail the whole capture
-        // from this thread.
+        // A default-route transition can make the first tap attempt fail.
+        // Keep the sole system worker armed until Core Audio settles or the
+        // session stops; never fail the whole capture from this thread.
         log::warn!("[Sys] {}", system_start_error_message(error_code));
-        state.store(SYSTEM_WORKER_FINISHED, Ordering::Release);
-        return;
+        let Some((next_controller, next_rate)) = reopen_system(stop.as_ref()) else {
+            state.store(SYSTEM_WORKER_FINISHED, Ordering::Release);
+            return;
+        };
+        controller = next_controller;
+        native_rate = next_rate;
+        log::info!("[Sys] macOS default output became available");
     }
 
     if stop.load(Ordering::Acquire) {
@@ -703,16 +874,50 @@ fn system_capture_worker(
         return;
     }
 
-    let rate = native_rate as usize;
+    // Native startup is verified; from this point the worker is joinable and
+    // must observe `stop` promptly.
+    state.store(SYSTEM_WORKER_RUNNING, Ordering::Release);
+
+    let mut rate = native_rate as usize;
     let ring_capacity = unsafe { system_capture_ring_capacity(controller) } as usize;
     let mut scratch = vec![0.0_f32; ring_capacity.max(NATIVE_BUFFER_FRAMES as usize)];
     let mut accum: Vec<f32> = Vec::with_capacity(rate / 5 + NATIVE_BUFFER_FRAMES as usize);
-    let chunk_target = (rate / 5).max(1); // ~200 ms at the native rate
-    let ratio = native_rate / f64::from(TARGET_SAMPLE_RATE);
+    let mut chunk_target = (rate / 5).max(1); // ~200 ms at the native rate
+    let mut ratio = native_rate / f64::from(TARGET_SAMPLE_RATE);
     let mut dropped_chunks: u64 = 0;
 
     while !stop.load(Ordering::Acquire) {
         thread::sleep(DRAIN_INTERVAL);
+
+        if unsafe { system_capture_take_route_change(controller) } != 0 {
+            log::info!("[Sys] macOS audio route changed — rebuilding system tap");
+            state.store(SYSTEM_WORKER_PENDING, Ordering::Release);
+            unsafe { system_capture_stop(controller) };
+            let Some((next_controller, next_rate)) = reopen_system(stop.as_ref()) else {
+                if !stop.load(Ordering::Acquire) {
+                    log::warn!("[Sys] system tap did not recover after route change");
+                }
+                state.store(SYSTEM_WORKER_FINISHED, Ordering::Release);
+                log::info!("[Sys] macOS capture worker exit");
+                return;
+            };
+            if stop.load(Ordering::Acquire) {
+                unsafe { system_capture_stop(next_controller) };
+                state.store(SYSTEM_WORKER_FINISHED, Ordering::Release);
+                return;
+            }
+            controller = next_controller;
+            native_rate = next_rate;
+            rate = native_rate as usize;
+            let ring_capacity = unsafe { system_capture_ring_capacity(controller) } as usize;
+            scratch.resize(ring_capacity.max(NATIVE_BUFFER_FRAMES as usize), 0.0);
+            accum.clear();
+            chunk_target = (rate / 5).max(1);
+            ratio = native_rate / f64::from(TARGET_SAMPLE_RATE);
+            state.store(SYSTEM_WORKER_RUNNING, Ordering::Release);
+            log::info!("[Sys] macOS audio route recovery complete rate={rate} Hz");
+            continue;
+        }
 
         let n =
             unsafe { system_capture_read(controller, scratch.as_mut_ptr(), scratch.len() as u32) }
@@ -801,12 +1006,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn unsupported_entry_points_fail_with_clear_errors() {
-        let err = list_devices().expect_err("list_devices must fail on macOS");
-        assert!(
-            err.to_string().contains("not supported"),
-            "error must say unsupported, got: {err}"
-        );
+    fn list_devices_returns_default_device_names_and_handles_missing_safely() {
+        let null_res = unsafe { free_and_convert_c_string(std::ptr::null_mut()) };
+        assert!(null_res.is_none());
+        assert!(list_devices().is_ok());
     }
 
     #[test]
@@ -833,6 +1036,10 @@ mod tests {
             mic_capture_start as *const (),
             mic_capture_permission_status as *const (),
             mic_capture_request_permission as *const (),
+            mic_capture_take_route_change as *const (),
+            mic_capture_copy_default_input_name as *const (),
+            mic_capture_copy_default_output_name as *const (),
+            mic_capture_free_string as *const (),
         ];
         let _ = std::hint::black_box(symbols);
     }
@@ -848,9 +1055,45 @@ mod tests {
             system_capture_ring_capacity as *const (),
             system_capture_read as *const (),
             system_capture_take_dropped as *const (),
+            system_capture_take_route_change as *const (),
             system_capture_stop as *const (),
         ];
         let _ = std::hint::black_box(symbols);
+    }
+
+    #[test]
+    fn route_restart_retry_is_stop_aware_and_recovers_on_success() {
+        let stop = AtomicBool::new(false);
+        let attempts = std::cell::Cell::new(0);
+        let recovered = retry_route_start(&stop, Duration::ZERO, || {
+            let next = attempts.get() + 1;
+            attempts.set(next);
+            if next == 3 {
+                RetryResult::Success(next)
+            } else {
+                RetryResult::Retry
+            }
+        });
+        assert_eq!(recovered, Some(3));
+        assert_eq!(attempts.get(), 3);
+
+        stop.store(true, Ordering::Release);
+        attempts.set(0);
+        let stopped: Option<()> = retry_route_start(&stop, Duration::ZERO, || {
+            attempts.set(attempts.get() + 1);
+            RetryResult::Retry
+        });
+        assert!(stopped.is_none());
+        assert_eq!(attempts.get(), 0);
+
+        let stop2 = AtomicBool::new(false);
+        attempts.set(0);
+        let terminal: Option<()> = retry_route_start(&stop2, Duration::ZERO, || {
+            attempts.set(attempts.get() + 1);
+            RetryResult::Stop
+        });
+        assert!(terminal.is_none());
+        assert_eq!(attempts.get(), 1);
     }
 
     #[test]

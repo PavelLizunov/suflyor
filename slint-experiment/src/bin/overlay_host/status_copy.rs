@@ -63,6 +63,70 @@ pub(super) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
     format!("{tag}: {stt} · {model}")
 }
 
+pub(super) fn ai_perf_label(
+    perf: Option<overlay_backend::ai::RequestPerf>,
+    load_ms: Option<u64>,
+    loading: bool,
+    is_ru: bool,
+) -> String {
+    if loading {
+        return if is_ru {
+            " · MLX загружается...".to_string()
+        } else {
+            " · MLX loading...".to_string()
+        };
+    }
+    if let Some(perf) = perf {
+        let mut parts = Vec::new();
+        if let Some(ttft) = perf.ttft_ms {
+            parts.push(if is_ru {
+                format!("1-й {:.1}с", ttft as f64 / 1_000.0)
+            } else {
+                format!("first {:.1}s", ttft as f64 / 1_000.0)
+            });
+        }
+        parts.push(if is_ru {
+            format!("всего {:.1}с", perf.total_ms as f64 / 1_000.0)
+        } else {
+            format!("total {:.1}s", perf.total_ms as f64 / 1_000.0)
+        });
+        if let Some(rate) = perf.decode_tps {
+            parts.push(if is_ru {
+                format!("{rate:.0} дек/с")
+            } else {
+                format!("{rate:.0} dec/s")
+            });
+        }
+        if let Some(rate) = perf.effective_tps {
+            parts.push(if is_ru {
+                format!("{rate:.1} общ/с")
+            } else {
+                format!("{rate:.1} e2e/s")
+            });
+        }
+        return format!(" · {}", parts.join(" · "));
+    }
+    load_ms.map_or_else(String::new, |ms| {
+        if is_ru {
+            format!(" · загрузка {:.1}с", ms as f64 / 1_000.0)
+        } else {
+            format!(" · load {:.1}s", ms as f64 / 1_000.0)
+        }
+    })
+}
+
+pub(super) fn memory_size_label(bytes: Option<u64>) -> String {
+    let Some(bytes) = bytes else {
+        return String::new();
+    };
+    let mib = bytes as f64 / (1024.0 * 1024.0);
+    if mib >= 1024.0 {
+        format!("{:.1} GiB", mib / 1024.0)
+    } else {
+        format!("{mib:.0} MiB")
+    }
+}
+
 pub(super) fn gigaam_accelerator_name(enabled: bool) -> &'static str {
     if !enabled {
         "CPU"
@@ -180,8 +244,9 @@ pub(super) fn refresh_lock_chip(o: &OverlayBarWindow, cfg: &config::SharedConfig
 mod tile_heading_tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
     use super::{
-        active_stack_label, manual_tile_failure, manual_tile_heading, manual_tile_not_configured,
-        manual_tile_placeholder, mic_busy_status, summary_empty_copy,
+        active_stack_label, ai_perf_label, manual_tile_failure, manual_tile_heading,
+        manual_tile_not_configured, manual_tile_placeholder, memory_size_label, mic_busy_status,
+        summary_empty_copy,
     };
 
     #[cfg(target_os = "macos")]
@@ -251,6 +316,25 @@ mod tile_heading_tests {
     fn mic_busy_status_follows_ui_language() {
         assert_eq!(mic_busy_status(false), "microphone busy");
         assert_eq!(mic_busy_status(true), "микрофон занят");
+    }
+
+    #[test]
+    fn performance_and_memory_labels_are_honest_and_localized() {
+        let perf = overlay_backend::ai::RequestPerf {
+            decode_tps: Some(78.0),
+            ttft_ms: Some(1_250),
+            total_ms: 4_000,
+            effective_tps: Some(5.0),
+        };
+        let english = ai_perf_label(Some(perf), None, false, false);
+        assert!(english.contains("first ") && english.contains("total 4.0s"));
+        assert!(english.contains("78 dec/s"));
+        assert!(english.contains("5.0 e2e/s"));
+        let russian = ai_perf_label(Some(perf), None, false, true);
+        assert!(russian.contains("1-й 1.2с"));
+        assert!(russian.contains("78 дек/с"));
+        assert_eq!(memory_size_label(Some(512 * 1024 * 1024)), "512 MiB");
+        assert_eq!(memory_size_label(None), "");
     }
 
     #[cfg(target_os = "macos")]

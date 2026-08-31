@@ -222,7 +222,7 @@ fn needs_translation(literal: &str) -> bool {
     let visible = visible_literal_text(literal);
     let visible = visible.trim();
     if visible.is_empty()
-        || matches!(visible, "AI" | "STT" | "px")
+        || matches!(visible, "AI" | "MLX" | "STT" | "px")
         || visible.starts_with("http://")
         || visible.starts_with("https://")
     {
@@ -296,6 +296,7 @@ fn bare_literal_scanner_distinguishes_display_text_from_tokens() {
         Text { text: root.mode == "queue" ? @tr("Clear queue") : ""; }
         Text { text: root.busy ? "…" : "→"; }
         Text { text: "AI"; }
+        Text { text: "MLX"; }
         Text { text: "127.0.0.1"; }
         Text { text: "\{root.pos} / \{root.count}"; }
         Window { title: "Session archive"; }

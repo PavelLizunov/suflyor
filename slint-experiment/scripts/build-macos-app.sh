@@ -29,6 +29,29 @@ binary="$target_dir/release/overlay-host"
 sidecar_binary="$target_dir/release/suflyor-tts"
 tera_binary="$target_dir/release/suflyor-teratts"
 mlx_root="$crate_root/../suflyor-mlx"
+sign_identity="${SUFLYOR_MACOS_SIGN_IDENTITY:--}"
+if [[ "$sign_identity" != "-" ]]; then
+  if [[ ! "$sign_identity" =~ ^[[:xdigit:]]{40}$ ]]; then
+    echo "SUFLYOR_MACOS_SIGN_IDENTITY must be the exact 40-hex certificate SHA-1" >&2
+    exit 1
+  fi
+  if ! security find-identity -v -p codesigning \
+    | awk -v wanted="$sign_identity" '
+        toupper($2) == toupper(wanted) { found = 1 }
+        END { exit(found ? 0 : 1) }
+      '
+  then
+    echo "requested macOS code-signing identity is unavailable" >&2
+    exit 1
+  fi
+  echo "using an explicit stable macOS code-signing identity" >&2
+else
+  echo "using ad-hoc macOS signing; rebuilt apps may require fresh permissions" >&2
+fi
+codesign_args=(--force --sign "$sign_identity" --options runtime)
+if [[ "$sign_identity" != "-" ]]; then
+  codesign_args+=(--timestamp)
+fi
 
 export CARGO_INCREMENTAL=0
 export CARGO_BUILD_JOBS=2
@@ -177,19 +200,20 @@ fi
 rm -rf -- "$tmp_parent"
 trap - EXIT
 
-# Local-only ad-hoc signatures. Public distribution requires a separate owner-
-# authorized Developer ID and notarization flow; this script never publishes.
+# Local packaging defaults to ad-hoc. An explicit stable Keychain identity keeps
+# the designated requirement stable for personal upgrade/TCC testing. Public
+# distribution still requires owner-authorized Developer ID + notarization.
 while IFS= read -r library; do
-  codesign --force --sign - --options runtime "$library"
+  codesign "${codesign_args[@]}" "$library"
 done < <(find "$frameworks_dir" -type f -name '*.dylib' -print)
 while IFS= read -r framework; do
-  codesign --force --sign - --options runtime "$framework"
+  codesign "${codesign_args[@]}" "$framework"
 done < <(find "$frameworks_dir" -depth -type d -name '*.framework' -print)
-codesign --force --sign - --options runtime "$macos_dir/mlx.metallib"
-codesign --force --sign - --options runtime "$macos_dir/suflyor-mlx"
-codesign --force --sign - --options runtime "$macos_dir/suflyor-tts"
-codesign --force --sign - --options runtime "$macos_dir/suflyor-teratts"
-codesign --force --sign - --options runtime \
+codesign "${codesign_args[@]}" "$macos_dir/mlx.metallib"
+codesign "${codesign_args[@]}" "$macos_dir/suflyor-mlx"
+codesign "${codesign_args[@]}" "$macos_dir/suflyor-tts"
+codesign "${codesign_args[@]}" "$macos_dir/suflyor-teratts"
+codesign "${codesign_args[@]}" \
   --entitlements "$crate_root/macos/entitlements.plist" \
   "$app_dir"
 codesign --verify --strict --verbose=2 "$macos_dir/suflyor-tts"

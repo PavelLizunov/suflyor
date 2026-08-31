@@ -17,8 +17,9 @@
 //! explicitly below.
 use super::{
     enum_monitors, get_mic_active, get_sys_active, get_window_rect, grab_hwnd,
-    move_window_pos_only, pick_monitor, refresh_status, set_stealth, ui, ArchiveWindow,
-    ComponentHandle, Duration, HelpWindow, LockModeMenuWindow, OverlayBarWindow, PaletteWindow, Rc,
+    move_window_pos_only, pick_monitor, refresh_status, set_stealth, stealth_supported, ui,
+    ArchiveWindow, ComponentHandle, Duration, HelpWindow, LockModeMenuWindow, OverlayBarWindow,
+    PaletteWindow, Rc,
     RecoverOfferWindow, RefCell, SettingsWindow, TextAskWindow, TileWindow, TileWindows, Timer,
     TranscriptWindow, WizardWindow, HWND_GRAB_DELAY_MS, HWND_REVEAL_FAST_MS,
 };
@@ -63,7 +64,10 @@ static STEALTH_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool
 
 /// Store the current global stealth state.
 pub(crate) fn set_global_stealth(on: bool) {
-    STEALTH_ON.store(on, std::sync::atomic::Ordering::Relaxed);
+    STEALTH_ON.store(
+        on && stealth_supported(),
+        std::sync::atomic::Ordering::Relaxed,
+    );
 }
 
 /// Read the current global stealth state (defaults to off).
@@ -120,6 +124,16 @@ pub(crate) fn apply_bar_stealth(
     state: &slint_replay::app_state::SharedState,
     on: bool,
 ) -> bool {
+    if !stealth_supported() {
+        set_global_stealth_effective(false);
+        bar.set_stealth_active(false);
+        if bar.get_stealth_fault() {
+            bar.set_stealth_fault(false);
+            refresh_status(bar, get_mic_active(state), get_sys_active(state));
+        }
+        return false;
+    }
+
     let effective = match grab_hwnd(bar.window()) {
         Ok(hwnd) => {
             let applied = set_stealth(hwnd, on);
@@ -522,6 +536,7 @@ impl WindowRegistry {
     /// the verified outcome (I1). The capture overlay is excluded — it
     /// re-applies + verifies WDA on every show (I4, vision_capture.rs).
     pub(crate) fn apply_stealth(&self, on: bool) {
+        let on = on && stealth_supported();
         // All tiles.
         for t in self.tiles.borrow().iter() {
             if let Ok(hwnd) = grab_hwnd(t.window()) {

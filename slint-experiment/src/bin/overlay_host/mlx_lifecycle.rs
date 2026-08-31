@@ -48,6 +48,7 @@ pub(crate) fn activate_mlx_model(model: &str) -> Result<(), ()> {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     if overlay_backend::mlx_runtime::active_endpoint_for_model(model).is_none() {
+        overlay_backend::ai::clear_request_perf();
         overlay_backend::mlx_runtime::start(model).map_err(|_| ())?;
     }
     overlay_backend::mlx_runtime::active_endpoint_for_model(model)
@@ -61,6 +62,20 @@ pub(crate) fn stop_mlx_model() {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     overlay_backend::mlx_runtime::stop();
+    overlay_backend::ai::clear_request_perf();
+}
+
+/// Stop a superseded prewarm only while that exact model is still resident.
+#[cfg(target_os = "macos")]
+pub(crate) fn stop_mlx_model_if_active(model: &str) {
+    let _guard = lifecycle_lock()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if overlay_backend::mlx_runtime::active_endpoint_for_model(model).is_some()
+        && overlay_backend::mlx_runtime::stop_if_idle()
+    {
+        overlay_backend::ai::clear_request_perf();
+    }
 }
 
 /// Resolve a request endpoint. Call only from an existing worker: MLX startup
@@ -109,6 +124,7 @@ pub(crate) fn start_mlx_for_unlock(
         selected_mlx_model(AskRoute::Text, &config).ok_or(())?
     };
     overlay_backend::deep_lock::set_deep_lock_active(false);
+    overlay_backend::ai::clear_request_perf();
     let started = overlay_backend::mlx_runtime::start(&model).is_ok();
     overlay_backend::deep_lock::set_deep_lock_active(true);
     if !started || overlay_backend::mlx_runtime::active_endpoint_for_model(&model).is_none() || {
