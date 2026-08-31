@@ -153,6 +153,7 @@ fn script_builds_and_ad_hoc_signs_the_app() {
         "^[[:xdigit:]]{40}$",
         "toupper($2) == toupper(wanted)",
         "codesign_args=(--force --sign \"$sign_identity\" --options runtime)",
+        "codesign_args+=(--timestamp)",
         "--entitlements \"$crate_root/macos/entitlements.plist\"",
         "codesign --verify --strict --verbose=2 \"$macos_dir/suflyor-tts\"",
         "codesign --verify --strict --verbose=2 \"$macos_dir/suflyor-teratts\"",

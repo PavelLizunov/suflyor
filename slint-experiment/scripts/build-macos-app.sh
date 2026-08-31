@@ -49,6 +49,9 @@ else
   echo "using ad-hoc macOS signing; rebuilt apps may require fresh permissions" >&2
 fi
 codesign_args=(--force --sign "$sign_identity" --options runtime)
+if [[ "$sign_identity" != "-" ]]; then
+  codesign_args+=(--timestamp)
+fi
 
 export CARGO_INCREMENTAL=0
 export CARGO_BUILD_JOBS=2
