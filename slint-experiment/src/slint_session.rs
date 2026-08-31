@@ -33,16 +33,56 @@ use overlay_backend::journal::{now_unix_ms, Journal, JournalEvent};
 use overlay_backend::recorder::SessionRecorder;
 use overlay_backend::stt;
 use overlay_backend::{ai, runtime as backend_runtime};
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 const SESSION_SYSTEM_COLLECTOR_MAX_SAMPLES: usize = audio::TARGET_SAMPLE_RATE as usize * 30;
+const AUTO_TILE_MAX_TOKENS: u32 = 1024;
 const SYSTEM_AUDIO_OWNER_NONE: u8 = 0;
 const SYSTEM_AUDIO_OWNER_AUX: u8 = 1;
 const SYSTEM_AUDIO_OWNER_SESSION: u8 = 2;
 static SYSTEM_AUDIO_OWNER: AtomicU8 = AtomicU8::new(SYSTEM_AUDIO_OWNER_NONE);
 static SYSTEM_AUDIO_SESSION_STUCK: AtomicBool = AtomicBool::new(false);
+// ponytail: only the opt-in every-line mode is single-flight; normal question detection never drops accepted triggers.
+static EVERY_LINE_AUTO_TILE_STATE: AtomicU64 = AtomicU64::new(0);
+
+struct AutoTilePermit<'a> {
+    state: &'a AtomicU64,
+    busy_state: u64,
+}
+
+impl Drop for AutoTilePermit<'_> {
+    fn drop(&mut self) {
+        let _ = self.state.compare_exchange(
+            self.busy_state,
+            self.busy_state & !1,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
+    }
+}
+
+// Low bit = busy; upper bits keep the newest session generation even while idle.
+fn try_acquire_auto_tile(state: &AtomicU64, session_gen: u64) -> Option<AutoTilePermit<'_>> {
+    let busy_state = session_gen.wrapping_shl(1) | 1;
+    let mut current = state.load(Ordering::Acquire);
+    loop {
+        let current_gen = current >> 1;
+        if current_gen > session_gen || (current_gen == session_gen && current & 1 == 1) {
+            return None;
+        }
+        match state.compare_exchange_weak(
+            current,
+            busy_state,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        ) {
+            Ok(_) => return Some(AutoTilePermit { state, busy_state }),
+            Err(observed) => current = observed,
+        }
+    }
+}
 
 /// Exclusive standalone probe/PTT ownership. The active session uses the same
 /// atomic state, so no check-then-act gap can open a second Core Audio tap.
@@ -856,6 +896,15 @@ async fn maybe_spawn_auto_tile(
         trigger_kind: trigger_kind.as_deref(),
     });
     let Some(trigger) = detected else { return };
+    let _every_line_permit = if every_line {
+        let Some(permit) = try_acquire_auto_tile(&EVERY_LINE_AUTO_TILE_STATE, session_gen) else {
+            log_info("auto-tile skipped: every-line request still running");
+            return;
+        };
+        Some(permit)
+    } else {
+        None
+    };
 
     // ===== Rate-limit =====
     let cap = if every_line {
@@ -1081,7 +1130,8 @@ async fn maybe_spawn_auto_tile(
         reasoning_effort,
         is_local,
     };
-    let (answer, usage) = match ai::complete_with_usage_endpoint(&endpoint, messages, 512).await {
+    let (answer, usage) =
+        match ai::complete_with_usage_endpoint(&endpoint, messages, AUTO_TILE_MAX_TOKENS).await {
         Ok((t, u)) => {
             lock(&rt)
                 .health
@@ -1606,6 +1656,23 @@ fn log_info(msg: &str) {
 )]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_line_auto_tile_permit_is_single_flight_per_session() {
+        let state = AtomicU64::new(0);
+        let first = try_acquire_auto_tile(&state, 1).expect("first session should acquire");
+        assert!(try_acquire_auto_tile(&state, 1).is_none());
+
+        let second = try_acquire_auto_tile(&state, 2).expect("new session should supersede old");
+        drop(first);
+        assert!(try_acquire_auto_tile(&state, 2).is_none());
+        assert!(try_acquire_auto_tile(&state, 1).is_none());
+
+        drop(second);
+        assert!(try_acquire_auto_tile(&state, 1).is_none());
+        assert!(try_acquire_auto_tile(&state, 2).is_some());
+        assert_eq!(AUTO_TILE_MAX_TOKENS, 1024);
+    }
 
     #[test]
     fn system_audio_owner_is_atomic_between_session_and_auxiliary_capture() {

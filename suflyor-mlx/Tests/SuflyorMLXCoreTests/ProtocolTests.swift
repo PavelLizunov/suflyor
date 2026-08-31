@@ -127,6 +127,12 @@ private func firstImageData(in request: ChatCompletionRequest) throws -> Data {
     #expect(try truncatedOptional.feed("<think>unfinished", finished: true) == "")
     var ordinary = ReasoningFilter(required: SupportedModel.lfm.requiresReasoningBoundary)
     #expect(try ordinary.feed("plain answer", finished: true) == "plain answer")
+    var streaming = ReasoningFilter(required: false)
+    #expect(try streaming.feed("first") == "first")
+    var requiredStreaming = ReasoningFilter(required: true)
+    #expect(try requiredStreaming.feed("<think>secret</thi") == "")
+    #expect(try requiredStreaming.feed("nk>first") == "first")
+    #expect(try requiredStreaming.feed(" answer") == " answer")
     var incomplete = ReasoningFilter(required: true)
     _ = try incomplete.feed("secret")
     #expect(throws: SidecarError.reasoningBoundaryMissing) {

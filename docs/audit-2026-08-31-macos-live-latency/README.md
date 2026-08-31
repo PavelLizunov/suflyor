@@ -43,3 +43,16 @@ The approved three-cell run used `overlay_backend::ai::stream_chat_endpoint` and
 | Long synthetic context | resident | unavailable | 9.992 s | 79.884 tok/s | 9.607 tok/s | 6.09 GiB |
 
 The benchmark stream reported completion-token metrics but no visible content delta, so TTFT is recorded as unavailable rather than inferred. Total GPU-active benchmark time was 50 seconds, below the approved 15-minute ceiling.
+
+## Follow-up auto-tile output-budget screen
+
+A bounded follow-up used the installed native Swift sidecar and its production `/v1/chat/completions` streaming API with the pinned LFM model, production chat template, temperature `0.2`, and one fixed concise-answer prompt. Python was used only as the benchmark HTTP harness; the measured inference process remained the Swift/Metal sidecar.
+
+| Max output tokens | Visible characters | TTFT | Total | Finish |
+|---:|---:|---:|---:|---|
+| 512 | 0 | unavailable | 6.034 s | length |
+| 1024 | 509 | 5.835 s | 7.034 s | stop |
+| 2048 | 451 | 6.096 s | 7.237 s | stop |
+| 4096 | 481 | 9.659 s | 11.523 s | stop |
+
+The 1024-token cell was the smallest successful budget and the fastest successful total in this screen, so the auto-tile path uses 1024 rather than the earlier 512 cap or the manual ask path's 4096 cap. This single-prompt screen establishes truncation and latency for the selected production path; it does not claim general model quality or load capacity. Total measured generation time was about 32 seconds and remained below the approved 15-minute GPU ceiling.

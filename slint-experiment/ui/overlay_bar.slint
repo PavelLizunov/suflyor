@@ -1090,29 +1090,34 @@ export component OverlayBarWindow inherits Window {
                 vertical-alignment: center;
                 horizontal-stretch: 0;
             }
-            // Active-stack readout (read-only) — moved here from the top row
-            // so Settings + quit fit. Shows local/cloud/mixed · STT · AI model.
-            Text {
-                text: root.active-stack + root.tok-per-sec;
-                font-size: 10px;
-                font-weight: 600;
-                color: Theme.accent;
-                vertical-alignment: center;
+            // Active-stack and compact memory readout (read-only).
+            VerticalLayout {
                 horizontal-stretch: 0;
-            }
-            if root.app-memory != "" : Text {
-                text: @tr("App RAM") + " " + root.app-memory;
-                font-size: 10px;
-                color: Theme.text-muted;
-                vertical-alignment: center;
-                horizontal-stretch: 0;
-            }
-            if root.mlx-memory != "" : Text {
-                text: @tr("MLX unified") + " " + root.mlx-memory;
-                font-size: 10px;
-                color: Theme.text-muted;
-                vertical-alignment: center;
-                horizontal-stretch: 0;
+                alignment: center;
+
+                Text {
+                    text: root.active-stack + root.tok-per-sec;
+                    font-size: 10px;
+                    font-weight: 600;
+                    color: Theme.accent;
+                    vertical-alignment: center;
+                }
+                if root.app-memory != "" || root.mlx-memory != "" : HorizontalLayout {
+                    spacing: 4px;
+
+                    if root.app-memory != "" : Text {
+                        text: @tr("App RAM") + " " + root.app-memory;
+                        font-size: 10px;
+                        color: Theme.text-muted;
+                        vertical-alignment: center;
+                    }
+                    if root.mlx-memory != "" : Text {
+                        text: "MLX " + root.mlx-memory;
+                        font-size: 10px;
+                        color: Theme.text-muted;
+                        vertical-alignment: center;
+                    }
+                }
             }
             // Source tag — "mic" green dot, "sys" cyan dot, "" gray. The dot is
             // colour-ONLY, so accessibility gets a word for the source it marks.
