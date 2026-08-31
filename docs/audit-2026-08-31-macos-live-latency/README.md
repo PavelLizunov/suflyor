@@ -79,3 +79,13 @@ The stable-signed runtime candidate `e938a7fd0af6917f6ccdb2cfba87b9d3826bd5ef` w
 - Both responses contained visible text and completed with `finish_reason=stop`.
 - 2 answer tiles spawned; the journal recorded no errors.
 - No Python process participated in production inference; the resident model process was the native Swift/Metal sidecar.
+
+## AirPods and default-route follow-up
+
+The exact code candidate `dbbfc3c472865ca4647e7a4dedcf6765afd4e8ec` added a native Core Audio query for the current default input/output and stop-aware recovery for transient microphone and system-route failures. Permission denial remains terminal, and the one-microphone/one-system-tap ownership model is unchanged.
+
+- Targeted macOS formatting and Clippy passed, followed by the three focused native-symbol, default-device-list, and retry-policy tests.
+- The exact release host built successfully on the macOS worker.
+- Settings → Audio was inspected at 720×600 in English and Russian through an exact-candidate Slint MCP build. In both locales the current default input appeared instead of a loading/no-device placeholder, with no clipping or overlap. The temporary captures were not retained because a connected device name was visible.
+- Physical AirPods acceptance was completed against the installed stable-signed candidate; the owner confirmed that AirPods audio worked. No transcript text or device name was captured in repository evidence.
+- The 13-key hotkey matrix was not repeated because this follow-up changed no hotkey code.
