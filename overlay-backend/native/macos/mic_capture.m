@@ -304,10 +304,6 @@ void mic_capture_stop(MicController *c) {
   free(c);
 }
 
-#ifndef kAudioObjectPropertyElementMain
-#define kAudioObjectPropertyElementMain kAudioObjectPropertyElementMaster
-#endif
-
 static char *copy_default_device_name(AudioObjectPropertySelector selector) {
   @autoreleasepool {
     AudioObjectID device_id = kAudioObjectUnknown;

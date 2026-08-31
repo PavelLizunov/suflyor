@@ -1079,7 +1079,7 @@ mod tests {
 
         stop.store(true, Ordering::Release);
         attempts.set(0);
-        let stopped = retry_route_start(&stop, Duration::ZERO, || {
+        let stopped: Option<()> = retry_route_start(&stop, Duration::ZERO, || {
             attempts.set(attempts.get() + 1);
             RetryResult::Retry
         });
@@ -1088,7 +1088,7 @@ mod tests {
 
         let stop2 = AtomicBool::new(false);
         attempts.set(0);
-        let terminal = retry_route_start(&stop2, Duration::ZERO, || {
+        let terminal: Option<()> = retry_route_start(&stop2, Duration::ZERO, || {
             attempts.set(attempts.get() + 1);
             RetryResult::Stop
         });
