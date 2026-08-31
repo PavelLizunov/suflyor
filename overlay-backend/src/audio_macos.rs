@@ -411,8 +411,7 @@ pub fn start_capture(
     let (tx, rx) = mpsc::channel::<AudioChunk>(128);
     let stop = Arc::new(AtomicBool::new(false));
     let worker_stop = stop.clone();
-    let (started_tx, started_rx) =
-        std::sync::mpsc::channel::<Result<u32, MicStartupError>>();
+    let (started_tx, started_rx) = std::sync::mpsc::channel::<Result<u32, MicStartupError>>();
     // One shared timestamp origin for the whole session: Mic and System
     // chunk timestamps stay aligned even when the system TCC flow returns
     // much later than the microphone start.
@@ -438,7 +437,10 @@ pub fn start_capture(
         }
         Ok(Err(startup_err)) => {
             if startup_err.terminal {
-                log::warn!("[Mic] {} — continuing with system audio only", startup_err.error);
+                log::warn!(
+                    "[Mic] {} — continuing with system audio only",
+                    startup_err.error
+                );
                 let _ = worker.join();
                 None
             } else {
