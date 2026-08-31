@@ -1,5 +1,6 @@
 # Agent-agnostic selective git gate used by .githooks/pre-commit and pre-push.
-# The diff decides the tier: docs, targeted, or full. Force the release gate with:
+# Normal development and prereleases use docs/targeted checks. Full CI is
+# explicit and reserved for publishing an owner-authorized stable release:
 #   powershell -File scripts/git-gate-native.ps1 push -Full
 param(
     [ValidateSet('commit', 'push', 'manual', 'classify')]
@@ -65,19 +66,6 @@ if ($changed.Count -eq 0) {
     exit 0
 }
 
-function Test-VersionMetadataOnly([string]$Path) {
-    $lines = @(Invoke-Git (@('diff') + $diffArguments + @('--unified=0', '--', $Path)) |
-        Where-Object { $_ -match '^[+-]' -and $_ -notmatch '^(---|\+\+\+)' })
-    if ($lines.Count -eq 0) { return $false }
-    foreach ($line in $lines) {
-        if ($line -notmatch '^[+-]\s*version\s*=\s*"[^"]+"\s*$' -and
-            $line -notmatch '^[+-]!define\s+PRODUCT_VERSION\s+"[^"]+"\s*$') {
-            return $false
-        }
-    }
-    return $true
-}
-
 $affectedCrates = @($crateOrder | Where-Object {
     $prefix = "$_/"
     @($changed | Where-Object { $_.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
@@ -87,38 +75,13 @@ $docsOnly = @($changed | Where-Object {
     $_ -notmatch '(^|/)[^/]+\.(md|html|txt)$'
 }).Count -eq 0
 
-$fullReasons = [System.Collections.Generic.List[string]]::new()
-if ($Full) { $fullReasons.Add('forced') }
-if ($affectedCrates.Count -gt 1) { $fullReasons.Add('multiple crates') }
-
-$fullPatterns = @(
-    '^\.github/',
-    '^\.githooks/',
-    '^scripts/(ci|git-gate-native|build-slint-release)\.ps1$',
-    '(^|/)build\.rs$',
-    '^overlay-backend/src/(audio|audio_route|bridge|config|credentials|download|http_log|journal|paths|recorder|runtime|session|session_admin|session_audio|stt|update)(/|\.rs$)',
-    '^overlay-backend/src/persistence/',
-    '^slint-experiment/src/bin/overlay_host/(recovery|settings_import_export|settings_updates)\.rs$'
-)
-foreach ($path in $changed) {
-    foreach ($pattern in $fullPatterns) {
-        if ($path -match $pattern) {
-            $fullReasons.Add($path)
-            break
-        }
-    }
-    if ($path -match '(^|/)(Cargo\.toml|Cargo\.lock)$' -or $path -eq 'scripts/slint-installer.nsi') {
-        if (-not (Test-VersionMetadataOnly $path)) { $fullReasons.Add($path) }
-    }
-}
-
 $tier = 'targeted'
 if ($docsOnly) { $tier = 'docs' }
-if ($fullReasons.Count -gt 0) { $tier = 'full' }
+if ($Full) { $tier = 'full' }
 
 Write-Host "[gate:$Stage] tier=$tier files=$($changed.Count) crates=$($affectedCrates -join ',')"
-if ($fullReasons.Count -gt 0) {
-    Write-Host "[gate:$Stage] full reasons: $(@($fullReasons | Sort-Object -Unique) -join '; ')"
+if ($Full) {
+    Write-Host "[gate:$Stage] full reason: explicit stable-release gate"
 }
 $changed | ForEach-Object { Write-Host "[gate:$Stage]   $_" }
 if ($ListOnly -or $Stage -eq 'classify') { exit 0 }

@@ -106,13 +106,13 @@ The diff classifier is `scripts/git-gate-native.ps1`. Run it on
   `commands.md`, and `patterns.md` require backend checks; a local
   `knowledge/AGENTS.md` edit remains documentation. GitHub's separate fast-path
   classifier also treats paths under `docs/` as docs-only.
-- **Targeted:** one crate or one isolated UI surface. Run fmt, Clippy, and tests
-  for the affected crate on the appropriate native worker.
-- **Full:** multiple crates, dependencies/lockfiles, build/installer/CI/gate
-  infrastructure, audio capture/routing, persistence/recovery, credentials,
-  security, networking/update, or similarly cross-cutting runtime work. Run
-  `scripts/ci.ps1` on `windows-worker`; run the macOS gate on `mac-worker` when
-  the changed seam is compiled or exercised there.
+- **Targeted:** every normal development change and every prerelease, including
+  multi-crate and cross-cutting work. Run only the smallest fmt, Clippy, tests,
+  compile seams, and live checks that cover the affected files/platforms.
+- **Full:** only when publishing an owner-authorized stable release. Invoke
+  `scripts/git-gate-native.ps1 ... -Full` / `scripts/ci.ps1` explicitly and run
+  the stable release's required platform gates. Never auto-promote a normal
+  change or an RC/prerelease to Full based on diff size or path.
 - Set `CARGO_INCREMENTAL=0`; gate scripts already do this. Inspect free space
   before heavy builds and follow homelab cache-hygiene rules. Do not clean
   caches or targets merely to be tidy.

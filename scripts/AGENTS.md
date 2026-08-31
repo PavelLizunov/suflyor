@@ -19,8 +19,8 @@ All scripts in `scripts/` are classified below by domain, inspection/execution m
 
 | Script | Purpose | Inspection Mode | Execution Mode | Risk Tier |
 |---|---|---|---|---|
-| `git-gate-native.ps1` | Native selective git gate selector (docs, targeted, full) | `classify`, `-ListOnly` stage modes | `commit`, `push`, `manual` stage modes | Low (Inspection) / Medium (Gate Execution) |
-| `ci.ps1` | Full CI quality gate across all 5 crates | None (invoked by gate/manual) | Full execution (`powershell scripts/ci.ps1`) | Medium-High (Heavy Cargo build, RAM/Disk impact) |
+| `git-gate-native.ps1` | Native selective gate (docs/targeted; explicit stable full) | `classify`, `-ListOnly` stage modes | `commit`, `push`, `manual` stage modes | Low (Inspection) / Medium (Gate Execution) |
+| `ci.ps1` | Stable-release full CI across all 5 crates | None (explicit stable publication only) | Full execution (`powershell scripts/ci.ps1`) | Medium-High (Heavy Cargo build, RAM/Disk impact) |
 | `git-gate-macos.sh` | macOS arm64 compile-seam gate | None | Bash script execution | Medium (Cargo/Swift compile & test) |
 | `build-slint-release.ps1` | Release build for host + sidecars + DirectML DLL + NSIS | Standard build (no `-Installer`) | `-Installer` flag (runs `makensis.exe`) | High (Release compilation & installer generation) |
 | `slint-installer.nsi` | NSIS installer definition script | `makensis /V2` dry compile | Execution of resulting installer EXE | High (Modifies `%LOCALAPPDATA%` & Windows Registry) |
@@ -42,17 +42,16 @@ All scripts in `scripts/` are classified below by domain, inspection/execution m
 - **Purpose:** Agent-agnostic selective gate invoked by `.githooks/pre-commit`, `.githooks/pre-push`, and manual workflows.
 - **Classification Rules:**
   - `docs`: Non-executable text/documentation changes (`.md`, `.html`, `.txt`). Runs git diff checks only; no Cargo compilation.
-  - `targeted`: Single crate change. Runs `cargo fmt`, `cargo clippy`, and `cargo test` for the affected crate only. (For `slint-experiment` UI-only changes, runs `cargo check` + static Slint guard tests).
-  - `full`: Triggered when changes touch multiple crates, root dependencies (`Cargo.toml`/`Cargo.lock`), build scripts (`build.rs`), high-risk core modules (`overlay-backend/src/{audio,bridge,config,persistence,...}`), CI/gate scripts, or when forced with `-Full`. Delegates to `scripts/ci.ps1`.
+  - `targeted`: Every normal change and every prerelease. Runs checks only for each affected crate/surface; multi-crate or high-risk paths do not auto-escalate.
+  - `full`: Selected only by explicit `-Full` while publishing an owner-authorized stable release. Delegates to `scripts/ci.ps1`.
 - **Inspection vs Execution:**
   - `powershell scripts/git-gate-native.ps1 manual -ListOnly` or `classify`: Inspects changed files and outputs the selected tier without triggering syntax checks or Cargo builds.
   - `commit` / `push` / `manual`: Runs `git diff --check`, validates changed PowerShell syntax, then executes the selected formatting/test gate.
 - **Maintenance Guidelines:**
   - Enforces `$env:CARGO_INCREMENTAL = '0'` and `$env:CARGO_BUILD_JOBS = '2'` to prevent disk bloat and OOM conditions during gate execution.
-  - Version-only updates in `Cargo.toml` or `slint-installer.nsi` are detected by `Test-VersionMetadataOnly` and do not force Full tier escalation on their own.
 
 #### `scripts/ci.ps1`
-- **Purpose:** Full CI quality gate covering all five standalone crates (`slint-experiment`, `overlay-backend`, `suflyor-wsola`, `suflyor-tts`, `suflyor-teratts`).
+- **Purpose:** Stable-publication full CI covering all five standalone crates (`slint-experiment`, `overlay-backend`, `suflyor-wsola`, `suflyor-tts`, `suflyor-teratts`). Do not run it for normal development or prereleases.
 - **Invariants:**
   - Enforces `$env:CARGO_INCREMENTAL = "0"` and limits parallel rustc jobs (`$env:CARGO_BUILD_JOBS = "2"`).
   - Automatically stages matching `DirectML.dll` into both `slint-experiment/target/debug/deps/` and `overlay-backend/target/debug/deps/` so test executables do not crash on system DirectML symbol mismatches.
