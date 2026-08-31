@@ -38,7 +38,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 const SESSION_SYSTEM_COLLECTOR_MAX_SAMPLES: usize = audio::TARGET_SAMPLE_RATE as usize * 30;
-const AUTO_TILE_MAX_TOKENS: u32 = 2048;
+const AUTO_TILE_MAX_TOKENS: u32 = 4096;
 const SYSTEM_AUDIO_OWNER_NONE: u8 = 0;
 const SYSTEM_AUDIO_OWNER_AUX: u8 = 1;
 const SYSTEM_AUDIO_OWNER_SESSION: u8 = 2;
@@ -1672,7 +1672,7 @@ mod tests {
         drop(second);
         assert!(try_acquire_auto_tile(&state, 1).is_none());
         assert!(try_acquire_auto_tile(&state, 2).is_some());
-        assert_eq!(AUTO_TILE_MAX_TOKENS, 2048);
+        assert_eq!(AUTO_TILE_MAX_TOKENS, 4096);
     }
 
     #[test]

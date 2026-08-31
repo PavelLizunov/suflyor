@@ -58,7 +58,7 @@ A bounded follow-up used the installed native Swift sidecar and its production `
 | 2048 | 451 | 6.096 s | 7.237 s | stop |
 | 4096 | 481 | 9.659 s | 11.523 s | stop |
 
-The 1024-token cell was the smallest successful budget and the fastest successful total in this screen, but a later exact-candidate system-audio smoke produced an empty, length-limited 1024-token answer for a real detected question. The final auto-tile path therefore uses 2048, the next-smallest already measured successful budget; its measured total was only 0.203 seconds slower in this screen. The manual ask path remains at 4096. This single-prompt screen plus the later functional smoke establish truncation handling for the selected production path; they do not claim general model quality or load capacity. Total measured generation time was about 32 seconds and remained below the approved 15-minute GPU ceiling.
+The 1024-token cell was the smallest successful budget and the fastest successful total in this screen, but a later exact-candidate system-audio smoke produced an empty, length-limited 1024-token answer for a real detected question. A second exact-candidate two-question smoke at 2048 still produced one empty, length-limited answer. The final auto-tile path therefore uses the already measured 4096 budget, matching the manual ask path; that cell completed visibly in 11.523 seconds. This single-prompt screen plus the later functional smokes establish truncation handling for the selected production path; they do not claim general model quality or load capacity. Total measured generation time was about 32 seconds and remained below the approved 15-minute GPU ceiling.
 
 ## Follow-up memory-footer audit
 
