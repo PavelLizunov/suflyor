@@ -12,7 +12,7 @@ use slint_replay::win32::{
     drag_begin, drag_update, enum_monitors, focus_window, get_window_rect, grab_hwnd,
     is_foreground_window, make_transparent_overlay, make_transparent_tile, move_window_pos_only,
     pick_monitor, set_always_on_top, set_skip_taskbar, set_stealth, set_window_owner,
-    work_area_for_point, work_area_for_window,
+    stealth_supported, work_area_for_point, work_area_for_window,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
