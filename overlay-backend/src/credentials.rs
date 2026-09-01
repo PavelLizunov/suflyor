@@ -118,8 +118,8 @@ mod posix_credentials {
     use std::collections::HashMap;
     use std::fs;
     #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
-    use std::path::PathBuf;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    use std::path::{Path, PathBuf};
 
     fn credentials_path() -> Result<PathBuf> {
         let dir = dirs::config_dir()
@@ -139,13 +139,29 @@ mod posix_credentials {
         serde_json::from_slice(&bytes).unwrap_or_default()
     }
 
+    pub(super) fn write_to_path(path: &Path, bytes: &[u8]) -> Result<()> {
+        #[cfg(unix)]
+        {
+            use std::io::Write;
+
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(path)?;
+            file.set_permissions(fs::Permissions::from_mode(0o600))?;
+            file.write_all(bytes)?;
+        }
+        #[cfg(not(unix))]
+        fs::write(path, bytes)?;
+        Ok(())
+    }
+
     fn write_map(map: &HashMap<String, String>) -> Result<()> {
         let path = credentials_path()?;
         let bytes = serde_json::to_vec_pretty(map)?;
-        fs::write(&path, bytes)?;
-        #[cfg(unix)]
-        let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o600));
-        Ok(())
+        write_to_path(&path, &bytes)
     }
 
     pub fn write(slot: SecretSlot, secret: &str) -> Result<()> {
@@ -185,5 +201,27 @@ mod tests {
         assert_eq!(SecretSlot::OpenAi.target(), "suflyor/ai/openai/v1");
         assert_eq!(SecretSlot::Anthropic.target(), "suflyor/ai/anthropic/v1");
         assert_ne!(SecretSlot::OpenAi.target(), SecretSlot::Anthropic.target());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn posix_credentials_are_written_with_mode_0600() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().expect("create temp directory");
+        let path = temp.path().join("credentials.json");
+        posix_credentials::write_to_path(&path, b"secret").expect("create credentials file");
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        posix_credentials::write_to_path(&path, b"updated").expect("update credentials file");
+        assert_eq!(std::fs::read(&path).unwrap(), b"updated");
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
     }
 }

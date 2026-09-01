@@ -30,10 +30,11 @@ The `master` branch may contain unreleased work.
 ## Features
 
 - **Cloud or local AI.** Use a cloud LLM (Claude via an OpenAI-compatible
-  bridge) or install llama.cpp with an in-app choice of Gemma 4 E4B / 12B / 26B-A4B
-  profiles (CUDA or CPU). Combine it with local STT for an offline meeting
-  pipeline. The standalone PowerShell script installs the lightweight 4B
-  profile.
+  bridge), install llama.cpp with an in-app choice of Gemma 4 E4B / 12B / 26B-A4B
+  profiles (CUDA or CPU), or use native managed MLX for on-demand local text
+  and Vision models on Apple Silicon macOS. Combine it with local STT for an
+  offline meeting pipeline. The standalone PowerShell script installs the
+  lightweight 4B profile on Windows.
 - **Speech-to-text.** Cloud (Groq Whisper), local whisper.cpp server, or
   GigaAM-v3 running in-process. DirectML remains the Windows default; macOS
   defaults to CPU, with Core ML available as an opt-in. Groq and whisper.cpp
@@ -55,7 +56,8 @@ The `master` branch may contain unreleased work.
 - **Personal memory.** Your facts, terms, and names (internal projects,
   abbreviations) injected into AI answers and summaries. Candidates extracted
   from sessions with manual review.
-- **Vision AI (F8).** Select a screen region for analysis or description.
+- **Vision AI (F8).** Select a screen region for analysis or description (via
+  cloud vision, local llama.cpp vision, or native MLX on Apple Silicon).
   **Shift+F8** translates the captured text. **Ctrl+F8** runs OCR for the
   read-aloud pipeline.
 - **Read-aloud (TTS).** Neural text-to-speech via a separate sidecar process
@@ -104,9 +106,10 @@ permissions are required.
 
 ### Local AI (optional — everything on your PC)
 
-From the app: **Settings → AI bridge → Install / complete local AI**. This downloads llama.cpp,
-whisper.cpp, and models, detects your GPU (CUDA), starts the servers, and
-writes the settings.
+From the app: **Settings → AI bridge → Install / complete local AI** (or select
+**Managed MLX** on Apple Silicon macOS for native text and Vision models). This
+downloads llama.cpp, whisper.cpp, and models, detects your GPU (CUDA), starts
+the servers, and writes the settings.
 
 Or run the standalone script:
 

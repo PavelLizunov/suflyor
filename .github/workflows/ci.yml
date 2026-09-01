@@ -72,13 +72,13 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      # Cache each crate's target dir (no root workspace → two separate ones).
+      # sherpa-onnx native archives are not safe to restore independently of
+      # their build-script state, so suflyor-tts deliberately builds fresh.
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             overlay-backend
             slint-experiment
-            suflyor-tts
 
       # ---- overlay-backend (shared logic) ----
       - name: backend fmt --check
@@ -135,7 +135,6 @@ jobs:
           workspaces: |
             overlay-backend
             slint-experiment
-            suflyor-tts
 
       - name: macOS compile-seam gate
         run: bash scripts/git-gate-macos.sh

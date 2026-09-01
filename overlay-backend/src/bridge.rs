@@ -25,6 +25,7 @@
 
 use crate::config::SharedConfig;
 use crate::persistence::{open_default_store, NewMemoryCandidate, Store};
+use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -41,6 +42,15 @@ pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
         result |= x ^ y;
     }
     result == 0
+}
+
+/// SHA-256 hashes supplied and expected authorization values before calling
+/// [`constant_time_eq`] to ensure token verification is performed on fixed-size
+/// digests and prevent timing side-channel attacks based on token length.
+fn verify_authorization(supplied: &[u8], expected: &[u8]) -> bool {
+    let supplied_hash = Sha256::digest(supplied);
+    let expected_hash = Sha256::digest(expected);
+    constant_time_eq(&supplied_hash, &expected_hash)
 }
 
 /// Max accepted request body (a profile context is ≤ ~20k chars; 256 KiB is
@@ -167,7 +177,7 @@ fn handle_request(mut req: tiny_http::Request, cfg: &SharedConfig, token: &str) 
         .headers()
         .iter()
         .find(|h| h.field.equiv("Authorization"))
-        .map(|h| constant_time_eq(h.value.as_str().as_bytes(), expected_auth.as_bytes()))
+        .map(|h| verify_authorization(h.value.as_str().as_bytes(), expected_auth.as_bytes()))
         .unwrap_or(false);
     let (status, body, needs_save) = if !authed {
         (401, serde_json::json!({"error": "unauthorized"}), false)
@@ -715,5 +725,26 @@ mod tests {
         assert!(!constant_time_eq(b"Bearer token123", b"Bearer token1234"));
         assert!(constant_time_eq(b"", b""));
         assert!(!constant_time_eq(b"", b"a"));
+    }
+
+    #[test]
+    fn verify_authorization_behavior() {
+        // Matching
+        assert!(verify_authorization(b"Bearer token123", b"Bearer token123"));
+        assert!(verify_authorization(b"", b""));
+
+        // Same-length mismatch
+        assert!(!verify_authorization(
+            b"Bearer token123",
+            b"Bearer token124"
+        ));
+
+        // Different-length mismatch
+        assert!(!verify_authorization(b"Bearer token123", b"Bearer token12"));
+        assert!(!verify_authorization(
+            b"Bearer token123",
+            b"Bearer token1234"
+        ));
+        assert!(!verify_authorization(b"", b"a"));
     }
 }

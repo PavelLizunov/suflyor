@@ -114,12 +114,29 @@ pub fn scan_voices(tts_dir: &Path) -> Vec<VoiceInfo> {
     out
 }
 
+fn is_valid_voice_dir(voice_dir: &str) -> bool {
+    if voice_dir.trim().is_empty()
+        || voice_dir == "."
+        || voice_dir == ".."
+        || voice_dir.contains('/')
+        || voice_dir.contains('\\')
+        || voice_dir.contains(':')
+    {
+        return false;
+    }
+    let mut components = Path::new(voice_dir).components();
+    matches!(components.next(), Some(std::path::Component::Normal(_)))
+        && components.next().is_none()
+}
+
 /// Load the engine for `voice_dir`. espeak-ng-data (Piper) is checked inside the
 /// voice dir first, then a shared copy at the tts root; absent → char-tokenized.
 pub fn load_voice(tts_dir: &Path, voice_dir: &str) -> Result<NeuralEngine> {
+    if !is_valid_voice_dir(voice_dir) {
+        return Err(anyhow!("invalid voice directory"));
+    }
     let vd = tts_dir.join(voice_dir);
-    let onnx =
-        find_onnx(&vd).ok_or_else(|| anyhow!("no .onnx model in voice dir '{voice_dir}'"))?;
+    let onnx = find_onnx(&vd).ok_or_else(|| anyhow!("no .onnx model in voice dir"))?;
     let tokens = vd.join("tokens.txt");
     let per_voice = vd.join("espeak-ng-data");
     let shared = tts_dir.join("espeak-ng-data");
@@ -259,5 +276,30 @@ mod tests {
         let root = super::tts_root().expect("config dir must be resolvable");
         assert!(root.to_string_lossy().contains("suflyor"));
         assert!(root.to_string_lossy().contains("tts"));
+    }
+
+    #[test]
+    fn voice_dir_validation_rejects_traversal() {
+        for valid in ["irina", "ruslan_v1", "ru_ru-irina-medium"] {
+            assert!(super::is_valid_voice_dir(valid));
+        }
+        for invalid in [
+            "",
+            " ",
+            ".",
+            "..",
+            "../irina",
+            "irina/..",
+            "C:\\irina",
+            "C:irina",
+            "irina/model",
+            "irina\\model",
+        ] {
+            assert!(!super::is_valid_voice_dir(invalid));
+            match super::load_voice(std::path::Path::new("unused"), invalid) {
+                Ok(_) => panic!("invalid voice directory was accepted"),
+                Err(error) => assert_eq!(error.to_string(), "invalid voice directory"),
+            }
+        }
     }
 }

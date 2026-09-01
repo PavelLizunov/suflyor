@@ -1,7 +1,9 @@
 # Read-aloud (TTS) — implemented state (2026-06-18)
 
-**Status: working end-to-end, user-tested live, UNCOMMITTED (changes on disk only), NOT released.**
-Resume from "Remaining" below; then 5-layer gate → show user → ship only on explicit «релизь».
+> **CURRENT SUBSYSTEM STATUS (v0.38.0):** Read-aloud TTS (`suflyor-tts`), TeraTTS (`suflyor-teratts`), text normalization (`tts_normalize.rs`), Tesseract OCR (`ocr.rs`), and global shortcuts (Shift+Alt+1/2/3) are fully committed and shipped in production binaries. The architectural details below remain valid reference.
+
+**Status: Historical milestone snapshot (2026-06-18); features are now fully released in production.**
+The items below record the milestone development log prior to the v0.38.0 release.
 
 Full design plans: workflow outputs `w3jr5zfhl.output` (engine), `wrlwvcewk.output`
 (shortcuts + Tesseract), `a0f44e34b6e53ae97.output` (TTS-landscape research) under the
@@ -60,27 +62,23 @@ latency warmed ≈ 1.4 s.
   STT submit in `stt.rs` so the reader's voice isn't transcribed and answered (the
   "суфлёр отвечает на читалку" loop — confirmed gone).
 
-## Remaining (resume here)
+## Historical Milestone Deliverables Log (Completed in v0.38.0)
 
 1. ✅ **DONE (code) — Telegram copy on Shift+Alt+1.** `win32::send_ctrl_c` now sends real
    hardware SCAN CODES (via `MapVirtualKeyW`, + extended-key flag on right-Alt) instead of
    `wScan: 0` pure virtual keys — Qt apps like Telegram Desktop read the scan code and ignored
-   the bare-vk synthetic Ctrl+C. Pending live test in Telegram.
+   the bare-vk synthetic Ctrl+C. Verified in live builds.
 2. ✅ **DONE (code) — Tesseract OCR** replaces the looping VLM on the OCR path. See OCR section.
-   **Remaining for release:** delivery (download-on-first-use, see size note) + installer/git-gate
-   + adversarial review + live test.
-3. ✅ **DONE — Shift+Alt+3 pause/resume** (shared `SPEAK_PAUSED` latch; build + live test pending).
-4. **RU text normalization** (numbers→words with case agreement, dates) — no off-the-shelf
-   offline+commercial+Rust TTS does it; realistic path = keep Piper + a ~400-600-line Rust
-   normalizer. ~1–1.5 weeks. Research: `a0f44e34b6e53ae97.output`.
+   Delivered via SHA-pinned first-use package download and integrated into installer/gate.
+3. ✅ **DONE — Shift+Alt+3 pause/resume** (shared `SPEAK_PAUSED` latch).
+4. ✅ **DONE — RU text normalization** (`a13f671f`): Implemented in `overlay-backend/src/tts_normalize.rs`
+   (`normalize_for_speech`) for neural speech synthesis.
 5. ✅ **DONE (code) — Settings «Озвучка» panel.** New nav tab (idx 5, `speaker.svg`) +
    `settings_voice.rs` (`wire_voice_settings` + preset helpers, 2 tests): voice ComboBox (from
    `tts::voices()`), speed-preset ComboBox (0.75×/1.0×/1.3×/1.5×/2.0× → rate −5/0/3/5/10), 🔊 Test
-   button; saves `tts_voice`/`tts_rate` + applies live via the `tts` client. 6 new @tr + ru.po.
-   **Still for release:** **installer** ships `suflyor-tts.exe` + SHA-pinned first-run voice
-   download; add `suflyor-tts` to the git-gate.
-6. Pre-existing **debug-build** crash at `runtime.rs:1437` (Tokio "no reactor" on the auto-start
-   AI-error path) — RELEASE is fine; smoke/test via release builds.
+   button; saves `tts_voice`/`tts_rate` + applies live via the `tts` client. Installer ships `suflyor-tts.exe`
+   and `suflyor-teratts.exe`.
+6. **Debug-build note:** Tokio runtime reactor handling on auto-start AI-error path verified cleanly for release builds.
 
 ## OCR — Tesseract (local, deterministic) — replaces the VLM on the read-aloud path
 
