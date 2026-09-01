@@ -722,11 +722,15 @@ mod tests {
         assert_eq!(parse_mlx_stderr_line(&line_long), None);
 
         assert_eq!(
-            parse_mlx_stderr_line("MLX failure scope= phase=load type=err domain=gpu code=-1 sidecar=suflyor-mlx"),
+            parse_mlx_stderr_line(
+                "MLX failure scope= phase=load type=err domain=gpu code=-1 sidecar=suflyor-mlx"
+            ),
             None
         );
         assert_eq!(
-            parse_mlx_stderr_line("Traceback (most recent call last): File \"/app/main.py\", line 10"),
+            parse_mlx_stderr_line(
+                "Traceback (most recent call last): File \"/app/main.py\", line 10"
+            ),
             None
         );
         assert_eq!(
