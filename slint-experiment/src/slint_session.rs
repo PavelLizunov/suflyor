@@ -39,7 +39,7 @@ use std::time::{Duration, Instant};
 
 const SESSION_SYSTEM_COLLECTOR_MAX_SAMPLES: usize = audio::TARGET_SAMPLE_RATE as usize * 30;
 const AUTO_TILE_MAX_TOKENS: u32 = 4096;
-const AUTO_TILE_MAX_TOKENS_MLX: u32 = 512;
+const AUTO_TILE_MAX_TOKENS_MLX: u32 = 384;
 
 #[must_use]
 fn auto_tile_max_tokens(is_mlx: bool) -> u32 {
@@ -48,6 +48,23 @@ fn auto_tile_max_tokens(is_mlx: bool) -> u32 {
     } else {
         AUTO_TILE_MAX_TOKENS
     }
+}
+
+#[must_use]
+fn auto_tile_prompt_hash(
+    effective_context: &str,
+    recent_transcript: &[String],
+    live_coaching: bool,
+    is_mlx: bool,
+) -> u64 {
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    effective_context.hash(&mut hasher);
+    recent_transcript.hash(&mut hasher);
+    live_coaching.hash(&mut hasher);
+    is_mlx.hash(&mut hasher);
+    hasher.finish()
 }
 
 #[must_use]
@@ -821,9 +838,8 @@ fn mic_down_notice(ui_is_ru: bool) -> (&'static str, &'static str) {
 /// - Spawns the tile via `events.spawn_tile_full` (trait) instead of
 ///   direct `tile::spawn_tile_with_stealth`. Adapter routes to the
 ///   Slint binary's `SpawnTileRequest` channel + poll Timer.
-/// - Does NOT yet integrate KB lookup (src-tauri `kb::search` is
-///   in overlay-backend and could be wired in a follow-up — for now
-///   the prompt skips the KB-context-addon block).
+/// - Managed MLX auto-tiles use the backend prompt builder's bounded embedded-KB
+///   grounding; standard non-MLX prompts preserve the original behavior.
 async fn maybe_spawn_auto_tile(
     events: Arc<dyn RuntimeEvents>,
     cfg: SharedConfig,
@@ -982,24 +998,40 @@ async fn maybe_spawn_auto_tile(
         s.recent_question_prefixes.push((normalized, now));
     }
 
-    // ===== QA cache key + lookup =====
-    // Audit (prompt-context): compute the EFFECTIVE context (profile + approved
-    // memory) ONCE here, hash IT (not the raw meeting_context) so approving/editing/
-    // deleting memory invalidates a stale cached answer, and reuse it for the prompt.
-    // ТЗ 2026-07-06 (A) — the detected question selects the RELEVANT facts; the
-    // hash below covers the resulting context, so a different fact selection
-    // can't serve a stale cached answer.
+    // ===== Prompt inputs + QA cache key =====
+    // Collect every prompt-affecting input before lookup so a cached answer cannot
+    // outlive transcript grounding, approved memory, coaching, or provider profile.
+    let recent_transcript: Vec<String> = {
+        let s = lock(&rt);
+        s.transcript
+            .iter()
+            .rev()
+            .take(5)
+            .rev()
+            .map(|line| {
+                let source = match line.source {
+                    AudioSource::System => "СОБЕСЕДНИК",
+                    AudioSource::Mic => "ПОЛЬЗОВАТЕЛЬ",
+                };
+                format!("[{source}] {}", line.text)
+            })
+            .collect()
+    };
+    let live_coaching = cfg.read().live_coaching_tiles_enabled;
     let effective_context =
         overlay_backend::memory::context_for_meeting(&meeting_context, Some(text.as_str()));
+    let prompt_hash = auto_tile_prompt_hash(
+        &effective_context,
+        &recent_transcript,
+        live_coaching,
+        is_mlx,
+    );
     use std::hash::{Hash, Hasher};
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    effective_context.hash(&mut h);
-    let ctx_hash = h.finish();
-    let mut h2 = std::collections::hash_map::DefaultHasher::new();
-    trigger_keywords.hash(&mut h2);
-    let kw_hash = h2.finish();
+    let mut keyword_hasher = std::collections::hash_map::DefaultHasher::new();
+    trigger_keywords.hash(&mut keyword_hasher);
+    let kw_hash = keyword_hasher.finish();
     let cache_key: String = format!(
-        "m={model};l={response_language};c={ctx_hash:x};k={kw_hash:x};q={}",
+        "m={model};l={response_language};p={is_mlx};h={prompt_hash:x};k={kw_hash:x};q={}",
         normalized_full.chars().take(200).collect::<String>(),
     );
     let cache_hit: Option<String> = {
@@ -1077,32 +1109,11 @@ async fn maybe_spawn_auto_tile(
         return;
     }
 
-    // ===== Recent transcript context (last 5 labeled lines) =====
-    let recent_transcript: Vec<String> = {
-        let s = lock(&rt);
-        s.transcript
-            .iter()
-            .rev()
-            .take(5)
-            .rev()
-            .map(|l| {
-                let src = match l.source {
-                    AudioSource::System => "СОБЕСЕДНИК",
-                    AudioSource::Mic => "ПОЛЬЗОВАТЕЛЬ",
-                };
-                format!("[{src}] {}", l.text)
-            })
-            .collect()
-    };
-
     // ===== Build prompts + AI call =====
     let trigger_text = match &trigger {
         backend_runtime::Trigger::Question(q) => q.clone(),
         backend_runtime::Trigger::Keyword(kw, _) => kw.clone(),
     };
-    // Фича1 — read-aloud tone for these live auto-tiles when the coaching
-    // live-speech toggle is on (the auto hints the user reads aloud on-call).
-    let live_coaching = cfg.read().live_coaching_tiles_enabled;
     let (system_prompt, prompt) = backend_runtime::build_auto_tile_prompts(
         &trigger,
         &recent_transcript,
@@ -1112,6 +1123,7 @@ async fn maybe_spawn_auto_tile(
         &effective_context,
         &response_language,
         live_coaching,
+        is_mlx,
     );
     let sys_full = system_prompt.clone();
     let usr_full = prompt.clone();
@@ -1692,13 +1704,30 @@ mod tests {
     }
 
     #[test]
+    fn auto_tile_cache_hash_tracks_every_prompt_input() {
+        let transcript = vec!["[СОБЕСЕДНИК] вопрос".to_string()];
+        let base = auto_tile_prompt_hash("context", &transcript, false, false);
+
+        assert_ne!(
+            base,
+            auto_tile_prompt_hash("changed", &transcript, false, false)
+        );
+        assert_ne!(
+            base,
+            auto_tile_prompt_hash("context", &["new line".to_string()], false, false)
+        );
+        assert_ne!(base, auto_tile_prompt_hash("context", &transcript, true, false));
+        assert_ne!(base, auto_tile_prompt_hash("context", &transcript, false, true));
+    }
+
+    #[test]
     fn auto_tile_policy_and_token_selection_follow_mlx_rules() {
         assert!(auto_tile_single_flight_required(true, false));
         assert!(auto_tile_single_flight_required(true, true));
         assert!(auto_tile_single_flight_required(false, true));
         assert!(!auto_tile_single_flight_required(false, false));
 
-        assert_eq!(auto_tile_max_tokens(true), 512);
+        assert_eq!(auto_tile_max_tokens(true), 384);
         assert_eq!(auto_tile_max_tokens(false), 4096);
     }
 

@@ -1261,6 +1261,7 @@ pub async fn reask_last(
         // F3 re-ask is user-initiated, not an auto "во время встречи" hint — the
         // live-coaching read-aloud style applies only to auto-tiles (Фича1).
         false,
+        false,
     );
 
     let user_prompt = format!(
@@ -1604,6 +1605,7 @@ pub async fn manual_spawn_tile(
         &crate::memory::context_for_meeting(&meeting_context, Some(&line.text)),
         &response_language,
         // F6 manual tile is user-initiated — read-aloud style is auto-only (Фича1).
+        false,
         false,
     );
     let messages = vec![

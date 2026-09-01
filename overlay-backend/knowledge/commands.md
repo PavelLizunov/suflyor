@@ -1071,11 +1071,13 @@ Parser: split on `\n## `.
 - `xtrabackup --backup --target-dir=/backup` — hot backup
 
 ## etcd-cli
+Aliases: etcd
 - `etcdctl member list`
 - `etcdctl endpoint health`
 - `etcdctl endpoint status -w table`
 - `etcdctl snapshot save /backup/snap.db`
-- `etcdctl snapshot restore /backup/snap.db --data-dir=/var/lib/etcd-new`
+- `etcdutl snapshot status /backup/snap.db`
+- `etcdutl snapshot restore /backup/snap.db --data-dir=/var/lib/etcd-new`
 - `etcdctl alarm list`
 - `etcdctl defrag` — reclaim space
 - `etcdctl compact REVISION` — old history
