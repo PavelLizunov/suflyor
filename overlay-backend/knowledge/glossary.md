@@ -43,7 +43,7 @@ Per-node agent that talks to API server, runs Pods via container runtime (contai
 Per-node networking component. Maintains iptables/IPVS rules implementing Service abstraction (ClusterIP virtual IP → backend Pods).
 
 ## etcd
-Distributed key-value store used by Kubernetes for all cluster state. Raft consensus; loss of a majority removes quorum and blocks updates. Create backups with `etcdctl snapshot save snapshot.db`; inspect with `etcdutl snapshot status snapshot.db`; restore every member from the same snapshot using `etcdutl snapshot restore snapshot.db` into new data directories. Use `etcdutl`, not `etcdctl`, for snapshot status and restore. Restore assigns new member/cluster IDs and creates a new logical cluster from the supplied initial-cluster configuration. Latency-sensitive; watch quotas and disk I/O.
+Distributed key-value store used by Kubernetes for all cluster state. Raft consensus; loss of a majority removes quorum and blocks updates. Backup creation uses only `etcdctl snapshot save snapshot.db`; `etcdutl snapshot save` does not exist. Snapshot inspection uses `etcdutl snapshot status snapshot.db`; restore every member from the same snapshot with `etcdutl snapshot restore snapshot.db` into new data directories. Use `etcdutl`, not `etcdctl`, only for snapshot status and restore. Restore assigns new member/cluster IDs and creates a new logical cluster from the supplied initial-cluster configuration. Latency-sensitive; watch quotas and disk I/O.
 
 ## pod
 Smallest deployable unit in K8s — wraps 1+ containers sharing network namespace + storage volumes. Pod IP is ephemeral, dies on restart.

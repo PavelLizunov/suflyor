@@ -1075,8 +1075,8 @@ Aliases: etcd
 - `etcdctl member list`
 - `etcdctl endpoint health`
 - `etcdctl endpoint status -w table`
-- `etcdctl snapshot save /backup/snap.db`
-- `etcdutl snapshot status /backup/snap.db` — use `etcdutl`, not `etcdctl`
+- `etcdctl snapshot save /backup/snap.db` — save uses `etcdctl`; `etcdutl snapshot save` does not exist
+- `etcdutl snapshot status /backup/snap.db` — status uses `etcdutl`, not `etcdctl`
 - `etcdutl snapshot restore /backup/snap.db --data-dir=/var/lib/etcd-new` — use `etcdutl`, not `etcdctl`
 - `etcdctl alarm list`
 - `etcdctl defrag` — reclaim space

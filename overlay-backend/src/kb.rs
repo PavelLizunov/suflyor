@@ -322,6 +322,7 @@ mod tests {
         if let Some(t) = etcd_ref {
             let lower = t.to_lowercase();
             assert!(lower.contains("etcdctl snapshot save"));
+            assert!(lower.contains("`etcdutl snapshot save` does not exist"));
             assert!(lower.contains("etcdutl snapshot restore"));
             assert!(lower.contains("use `etcdutl`, not `etcdctl`"));
         }
