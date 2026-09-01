@@ -703,6 +703,7 @@ fn compact_prompt_grounds_probes_load_average_and_etcd() {
     assert!(sys.contains("etcdctl snapshot save"));
     assert!(sys.contains("etcdutl snapshot restore"));
     assert!(sys.contains("источник истины"));
+    assert!(sys.contains("Копируй приведённые команды дословно"));
 }
 
 /// Reask with no prior QA → emits tile:error + returns None.
