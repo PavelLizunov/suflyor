@@ -911,7 +911,8 @@ async fn maybe_spawn_auto_tile(
     });
     let Some(trigger) = detected else { return };
     let _single_flight_permit = if auto_tile_single_flight_required(is_mlx, every_line) {
-        let Some(permit) = try_acquire_auto_tile(&AUTO_TILE_SINGLE_FLIGHT_STATE, session_gen) else {
+        let Some(permit) = try_acquire_auto_tile(&AUTO_TILE_SINGLE_FLIGHT_STATE, session_gen)
+        else {
             log_info("auto-tile skipped: auto-tile request still running");
             return;
         };
@@ -1145,12 +1146,8 @@ async fn maybe_spawn_auto_tile(
         is_local,
     };
     let max_tokens = auto_tile_max_tokens(is_mlx);
-    let (answer, usage) = match ai::complete_with_usage_endpoint(
-        &endpoint,
-        messages,
-        max_tokens,
-    )
-    .await
+    let (answer, usage) = match ai::complete_with_usage_endpoint(&endpoint, messages, max_tokens)
+        .await
     {
         Ok((t, u)) => {
             lock(&rt)
