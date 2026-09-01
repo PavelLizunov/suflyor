@@ -1716,8 +1716,14 @@ mod tests {
             base,
             auto_tile_prompt_hash("context", &["new line".to_string()], false, false)
         );
-        assert_ne!(base, auto_tile_prompt_hash("context", &transcript, true, false));
-        assert_ne!(base, auto_tile_prompt_hash("context", &transcript, false, true));
+        assert_ne!(
+            base,
+            auto_tile_prompt_hash("context", &transcript, true, false)
+        );
+        assert_ne!(
+            base,
+            auto_tile_prompt_hash("context", &transcript, false, true)
+        );
     }
 
     #[test]

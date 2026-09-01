@@ -423,8 +423,14 @@ fn prompt_always_contains_injection_guard() {
         (vec!["normal line".to_string()], "Senior SRE"),
         (vec!["a".to_string(); 50], "x".repeat(2000).as_str()),
     ] {
-        let (sys, _usr) =
-            build_auto_tile_prompts(&Trigger::Question("q".into()), lines, ctx, "ru", false, false);
+        let (sys, _usr) = build_auto_tile_prompts(
+            &Trigger::Question("q".into()),
+            lines,
+            ctx,
+            "ru",
+            false,
+            false,
+        );
         assert!(
             sys.contains("БЕЗОПАСНОСТЬ"),
             "system prompt missing anti-injection block for input shape {lines:?}"
@@ -440,7 +446,14 @@ fn prompt_always_contains_injection_guard() {
 /// makes up answers to malformed transcripts.
 #[test]
 fn prompt_contains_garbage_and_offtopic_guards() {
-    let (sys, _) = build_auto_tile_prompts(&Trigger::Question("test".into()), &[], "", "ru", false, false);
+    let (sys, _) = build_auto_tile_prompts(
+        &Trigger::Question("test".into()),
+        &[],
+        "",
+        "ru",
+        false,
+        false,
+    );
     assert!(sys.contains("мусор"), "missing garbage-input rule");
     assert!(sys.contains("повтори?"), "missing 'повтори?' fallback");
     assert!(
@@ -457,7 +470,14 @@ fn prompt_contains_garbage_and_offtopic_guards() {
 /// the canonical Cyrillic-mangling → Latin recoveries.
 #[test]
 fn prompt_contains_whisper_artifact_recovery_hints() {
-    let (sys, _) = build_auto_tile_prompts(&Trigger::Question("test".into()), &[], "", "ru", false, false);
+    let (sys, _) = build_auto_tile_prompts(
+        &Trigger::Question("test".into()),
+        &[],
+        "",
+        "ru",
+        false,
+        false,
+    );
     assert!(sys.contains("К87С") || sys.contains("K8s"));
     assert!(sys.contains("гинкс") || sys.contains("nginx"));
     // Newly added in morning addendum:
@@ -491,7 +511,8 @@ fn prompt_handles_long_transcript() {
 /// Empty transcript must not crash + still produce coherent prompt.
 #[test]
 fn prompt_handles_empty_transcript() {
-    let (sys, usr) = build_auto_tile_prompts(&Trigger::Question("q?".into()), &[], "", "ru", false, false);
+    let (sys, usr) =
+        build_auto_tile_prompts(&Trigger::Question("q?".into()), &[], "", "ru", false, false);
     assert!(!sys.is_empty());
     assert!(!usr.is_empty());
     assert!(
@@ -662,9 +683,7 @@ fn compact_prompt_preserves_guards_context_language_coaching() {
 #[test]
 fn compact_prompt_grounds_probes_load_average_and_etcd() {
     let (probe_sys, _) = build_auto_tile_prompts(
-        &Trigger::Question(
-            "Чем readinessProbe отличается от livenessProbe в Kubernetes?".into(),
-        ),
+        &Trigger::Question("Чем readinessProbe отличается от livenessProbe в Kubernetes?".into()),
         &[],
         "",
         "ru",
@@ -676,8 +695,7 @@ fn compact_prompt_grounds_probes_load_average_and_etcd() {
 
     let trigger = Trigger::Question("как проверить load average и восстановить etcd?".into());
     let transcript = vec!["высокий loadavg и сбой etcd".to_string()];
-    let (sys, _) =
-        build_auto_tile_prompts(&trigger, &transcript, "SRE context", "ru", false, true);
+    let (sys, _) = build_auto_tile_prompts(&trigger, &transcript, "SRE context", "ru", false, true);
 
     assert!(sys.contains("=== Проверенная справка"));
     assert!(sys.contains("state R"));

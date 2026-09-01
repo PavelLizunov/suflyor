@@ -128,7 +128,9 @@ pub fn build_auto_tile_prompts(
     }
 
     let lang_block = match response_language {
-        "ru" => "Отвечай исключительно по-русски; английский используй только для названий и команд.",
+        "ru" => {
+            "Отвечай исключительно по-русски; английский используй только для названий и команд."
+        }
         "en" => "Respond exclusively in English.",
         _ => "Respond in the same language as the transcript.",
     };
