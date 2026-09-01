@@ -9,12 +9,12 @@ Built in **pure Rust + [Slint](https://slint.dev)** (skia renderer, no browser
 engine, no Node). Transparent, always-on-top, with Windows capture exclusion
 available through an explicit stealth toggle.
 
-**Published production installers target Windows 10/11.** The local macOS port
-requires Apple Silicon and macOS 14.2+. Single user, no telemetry. Interface
-languages: English and Russian (switchable at runtime).
+**Published production installers target Windows 10/11 and Apple Silicon macOS
+14.2+.** Single user, no telemetry. Interface languages: English and Russian
+(switchable at runtime).
 
 <!-- latest-release:start -->
-Latest published build: [v0.37.0](https://github.com/PavelLizunov/suflyor/releases/tag/v0.37.0).
+Latest published build: [v0.38.0](https://github.com/PavelLizunov/suflyor/releases/tag/v0.38.0).
 <!-- latest-release:end -->
 The `master` branch may contain unreleased work.
 
@@ -92,15 +92,15 @@ The `master` branch may contain unreleased work.
 
 Configuration is stored in `%APPDATA%\suflyor\config.json`.
 
-### macOS prerelease package (Apple Silicon)
+### macOS (Apple Silicon)
 
 Download the versioned `.dmg` from
 [GitHub Releases](https://github.com/PavelLizunov/suflyor/releases) or build one
 from source with the command below. Before the first launch, follow the complete
 [macOS installation and permissions guide](docs/macos-install.md), also included
-inside the DMG as `Install Suflyor.txt`. The published package is an
-ad-hoc-signed, unnotarized prerelease, so Gatekeeper confirmation and explicit
-microphone/system-audio permissions are required.
+inside the DMG as `Install Suflyor.txt`. The published package is ad-hoc signed
+and unnotarized, so Gatekeeper confirmation and explicit microphone/system-audio
+permissions are required.
 
 ### Local AI (optional — everything on your PC)
 
