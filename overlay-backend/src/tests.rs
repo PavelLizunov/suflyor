@@ -1619,6 +1619,7 @@ fn archive_entry_safety_rejects_zip_slip() {
     assert!(!archive_entry_is_safe("C:/escape.txt")); // drive
     assert!(!archive_entry_is_safe("C:\\escape.txt"));
     assert!(!archive_entry_is_safe("\\\\server\\share\\x")); // UNC
+
     // Windows trailing-space coercion & traversal aliases:
     assert!(!archive_entry_is_safe(".. /x"));
     assert!(!archive_entry_is_safe("a/..  /b"));

@@ -211,11 +211,17 @@ mod tests {
         let temp = tempfile::tempdir().expect("create temp directory");
         let path = temp.path().join("credentials.json");
         posix_credentials::write_to_path(&path, b"secret").expect("create credentials file");
-        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
 
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
         posix_credentials::write_to_path(&path, b"updated").expect("update credentials file");
         assert_eq!(std::fs::read(&path).unwrap(), b"updated");
-        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
     }
 }

@@ -734,11 +734,17 @@ mod tests {
         assert!(verify_authorization(b"", b""));
 
         // Same-length mismatch
-        assert!(!verify_authorization(b"Bearer token123", b"Bearer token124"));
+        assert!(!verify_authorization(
+            b"Bearer token123",
+            b"Bearer token124"
+        ));
 
         // Different-length mismatch
         assert!(!verify_authorization(b"Bearer token123", b"Bearer token12"));
-        assert!(!verify_authorization(b"Bearer token123", b"Bearer token1234"));
+        assert!(!verify_authorization(
+            b"Bearer token123",
+            b"Bearer token1234"
+        ));
         assert!(!verify_authorization(b"", b"a"));
     }
 }
