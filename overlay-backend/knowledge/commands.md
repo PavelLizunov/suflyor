@@ -1076,8 +1076,8 @@ Aliases: etcd
 - `etcdctl endpoint health`
 - `etcdctl endpoint status -w table`
 - `etcdctl snapshot save /backup/snap.db`
-- `etcdutl snapshot status /backup/snap.db`
-- `etcdutl snapshot restore /backup/snap.db --data-dir=/var/lib/etcd-new`
+- `etcdutl snapshot status /backup/snap.db` — use `etcdutl`, not `etcdctl`
+- `etcdutl snapshot restore /backup/snap.db --data-dir=/var/lib/etcd-new` — use `etcdutl`, not `etcdctl`
 - `etcdctl alarm list`
 - `etcdctl defrag` — reclaim space
 - `etcdctl compact REVISION` — old history

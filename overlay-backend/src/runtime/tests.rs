@@ -695,7 +695,7 @@ fn compact_prompt_grounds_probes_load_average_and_etcd() {
     assert!(probe_sys.contains("kills and restarts"));
     assert!(probe_sys.contains("does NOT control Service endpoint"));
     assert!(probe_user.contains("Используй только релевантные факты"));
-    assert!(probe_user.contains("максимум тремя"));
+    assert!(probe_user.contains("ровно два пункта"));
 
     let trigger = Trigger::Question("как проверить load average и восстановить etcd?".into());
     let transcript = vec!["высокий loadavg и сбой etcd".to_string()];

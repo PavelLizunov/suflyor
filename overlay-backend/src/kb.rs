@@ -323,6 +323,7 @@ mod tests {
             let lower = t.to_lowercase();
             assert!(lower.contains("etcdctl snapshot save"));
             assert!(lower.contains("etcdutl snapshot restore"));
+            assert!(lower.contains("use `etcdutl`, not `etcdctl`"));
         }
     }
 
