@@ -160,10 +160,10 @@ Max CPU/memory a Pod can use. Exceeding memory limit → OOMKilled. CPU is throt
 K8s assigns Pods QoS based on requests/limits: Guaranteed (req=limit), Burstable (req<limit), BestEffort (no req/limit). Evicted in reverse order on node pressure.
 
 ## readinessprobe
-Per-container check. If failing, Pod removed from Service endpoints (no traffic). Use for slow-starting apps that aren't ready immediately.
+Per-container readiness check. If it fails, Kubernetes removes the Pod from Service endpoints so it receives no traffic; readiness failure does NOT restart the container.
 
 ## livenessprobe
-Per-container check. If failing, container is killed and restarted. Use sparingly — aggressive probes cause cascading restarts.
+Per-container health check. If it fails, Kubernetes kills and restarts the container; liveness does NOT control Service endpoint readiness. Use sparingly — aggressive probes cause cascading restarts.
 
 ## startupprobe
 Disables livenessProbe until passing once. For very slow-starting apps (large JVMs, complex initialization).

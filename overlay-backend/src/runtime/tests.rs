@@ -682,7 +682,7 @@ fn compact_prompt_preserves_guards_context_language_coaching() {
 
 #[test]
 fn compact_prompt_grounds_probes_load_average_and_etcd() {
-    let (probe_sys, _) = build_auto_tile_prompts(
+    let (probe_sys, probe_user) = build_auto_tile_prompts(
         &Trigger::Question("Чем readinessProbe отличается от livenessProbe в Kubernetes?".into()),
         &[],
         "",
@@ -691,7 +691,11 @@ fn compact_prompt_grounds_probes_load_average_and_etcd() {
         true,
     );
     assert!(probe_sys.contains("Service endpoints"));
-    assert!(probe_sys.contains("killed and restarted"));
+    assert!(probe_sys.contains("does NOT restart"));
+    assert!(probe_sys.contains("kills and restarts"));
+    assert!(probe_sys.contains("does NOT control Service endpoint"));
+    assert!(probe_user.contains("Используй только релевантные факты"));
+    assert!(probe_user.contains("максимум тремя"));
 
     let trigger = Trigger::Question("как проверить load average и восстановить etcd?".into());
     let transcript = vec!["высокий loadavg и сбой etcd".to_string()];
