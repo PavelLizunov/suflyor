@@ -322,7 +322,7 @@ fn is_valid_mlx_code(code: &str) -> bool {
     !code.is_empty() && code.len() <= 96 && code.parse::<i64>().is_ok()
 }
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(target_os = "macos")]
 const MLX_GENERIC_FAILURE: &str = "suflyor-mlx failed";
 
 #[cfg(any(target_os = "macos", test))]
