@@ -125,7 +125,8 @@ fn is_valid_voice_dir(voice_dir: &str) -> bool {
         return false;
     }
     let mut components = Path::new(voice_dir).components();
-    matches!(components.next(), Some(std::path::Component::Normal(_))) && components.next().is_none()
+    matches!(components.next(), Some(std::path::Component::Normal(_)))
+        && components.next().is_none()
 }
 
 /// Load the engine for `voice_dir`. espeak-ng-data (Piper) is checked inside the
@@ -135,8 +136,7 @@ pub fn load_voice(tts_dir: &Path, voice_dir: &str) -> Result<NeuralEngine> {
         return Err(anyhow!("invalid voice directory"));
     }
     let vd = tts_dir.join(voice_dir);
-    let onnx =
-        find_onnx(&vd).ok_or_else(|| anyhow!("no .onnx model in voice dir"))?;
+    let onnx = find_onnx(&vd).ok_or_else(|| anyhow!("no .onnx model in voice dir"))?;
     let tokens = vd.join("tokens.txt");
     let per_voice = vd.join("espeak-ng-data");
     let shared = tts_dir.join("espeak-ng-data");
@@ -284,8 +284,16 @@ mod tests {
             assert!(super::is_valid_voice_dir(valid));
         }
         for invalid in [
-            "", " ", ".", "..", "../irina", "irina/..", "C:\\irina", "C:irina",
-            "irina/model", "irina\\model",
+            "",
+            " ",
+            ".",
+            "..",
+            "../irina",
+            "irina/..",
+            "C:\\irina",
+            "C:irina",
+            "irina/model",
+            "irina\\model",
         ] {
             assert!(!super::is_valid_voice_dir(invalid));
             match super::load_voice(std::path::Path::new("unused"), invalid) {
