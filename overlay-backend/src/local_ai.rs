@@ -2459,8 +2459,9 @@ fn system_tar() -> PathBuf {
 
 /// SECURITY (P1-1): true iff an archive entry path stays inside the extraction
 /// dir. Rejects absolute paths, a leading `/` or `\` (incl. UNC), a drive prefix
-/// (`C:`), and any `..` component — the zip-slip vectors a poisoned release asset
-/// could use. Empty lines (tar -tf trailing newline) are ignored (safe).
+/// (`C:`), and any `..` component or traversal alias — the zip-slip vectors a
+/// poisoned release asset could use. Empty lines (tar -tf trailing newline) are
+/// ignored (safe).
 fn archive_entry_is_safe(entry: &str) -> bool {
     let e = entry.trim().replace('\\', "/");
     if e.is_empty() {
@@ -2473,11 +2474,18 @@ fn archive_entry_is_safe(entry: &str) -> bool {
     if b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' {
         return false; // drive-qualified (C:\...)
     }
-    // Reject any `..` traversal component. Windows also strips trailing spaces
-    // from a name, so ".. " / "..  " resolve to ".." too — collapse trailing
-    // spaces before the compare. (A bare "." is the harmless current-dir, and
-    // tar may emit "./"-prefixed entries, so it must NOT be rejected.)
-    !e.split('/').any(|c| c.trim_end_matches(' ') == "..")
+    // Reject any `..` traversal component or traversal aliases. Windows strips
+    // trailing dots and spaces from path components, so components like ".. ",
+    // ".. .", "...", "....", ". ." resolve to traversal aliases or "..".
+    // A bare "." is the harmless current-dir, and tar may emit "./"-prefixed entries.
+    !e.split('/').any(|c| {
+        let is_dots_spaces = !c.is_empty() && c.chars().all(|ch| ch == '.' || ch == ' ');
+        if is_dots_spaces {
+            c != "."
+        } else {
+            c.trim_end_matches([' ', '.']) == ".."
+        }
+    })
 }
 
 fn extract_zip(zip: &Path, dest_dir: &Path) -> Result<()> {

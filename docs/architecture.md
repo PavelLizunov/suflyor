@@ -3,31 +3,40 @@
 **Audience:** developer forking or auditing the codebase.
 
 **Stack:** pure **Rust + Slint** (the original Tauri 2 + React 19 + WebView2
-surface was removed in the Phase 7 cut, 2026-05-28 — see
-`docs/PHASE-7-CUT-PLAN.md`). No browser engine, no Node, no TypeScript. Three
-standalone crates, NO root workspace:
+surface was removed in the historical Phase 7 cut, 2026-05-28 — see
+`docs/PHASE-7-CUT-PLAN.md`). No browser engine, no Node, no TypeScript. Five
+standalone Rust crates plus one native Swift/Metal sidecar package:
 
 - **`slint-experiment/`** — the `overlay-host` binary. Declarative UI in
   `ui/*.slint` (compiled into the binary at build time via `build.rs` +
-  `slint-build`), orchestration in `src/bin/overlay_host.rs`, Win32 HWND
-  helpers in `src/win32.rs`.
+  `slint-build`), thin entrypoint in `src/bin/overlay_host.rs` delegating to
+  canonical shared runtime `src/bin/overlay_host_windows.rs` and the
+  `src/bin/overlay_host/` host subsystem directory, Win32 HWND helpers in
+  `src/win32.rs`, and native AppKit/macOS integration in `src/native/`.
 - **`overlay-backend/`** — the no-UI shared crate (audio / stt / ai /
   local_ai / config / runtime / events / journal / kb / health / update),
   consumed by `slint-experiment` via a path dep.
 - **`suflyor-tts/`** — read-aloud + diarization sidecar exe. Links
   sherpa-onnx ONLY and MUST stay a separate process (two onnxruntimes
   crash in one binary). Shipped in the installer alongside overlay-host.
+- **`suflyor-teratts/`** — TeraTTSv2 read-aloud sidecar exe. Links ONNX
+  Runtime through `ort` ONLY; weights download on demand.
+- **`suflyor-wsola/`** — pitch-preserving time-stretch helper library crate.
+- **`suflyor-mlx/`** — native Swift/Metal sidecar package for Apple Silicon
+  macOS (arm64, macOS 14.2+). Provides OpenAI-compatible local AI model
+  inference with background prewarm for managed MLX text and Vision models.
 
 ## Data flow
 
 ```
-WASAPI loopback (system) + mic  (overlay-backend/src/audio.rs)
+System audio capture (WASAPI loopback on Windows / Core Audio Tap on macOS) + mic
+  (overlay-backend/src/audio.rs + audio_macos.rs)
         │  tokio::mpsc — audio chunks @ 16 kHz mono i16
         ▼
 STT (overlay-backend/src/stt.rs) — backend chosen by config `stt_provider`:
   · Cloud   → Groq /openai/v1/audio/transcriptions (Whisper)
   · Whisper → local whisper.cpp server (OpenAI-compatible endpoint)
-  · GigaAM  → local, in-process (transcribe-rs / ort), CPU or DirectML
+  · GigaAM  → local, in-process (transcribe-rs / ort), CPU / DirectML / Core ML
   + noise gate, retry on 5xx/429, artefact/repetition post-filter
         │  TranscriptLine { source, text }
         ▼
@@ -41,8 +50,8 @@ detect_trigger (question / keyword) → KB-search injection → prompt build
         │
         ▼
 AI (overlay-backend/src/ai.rs) — endpoint chosen by config.ai_endpoint():
-  · "local" → local llama.cpp server (OpenAI-compatible)
-  · else    → cloud bridge (Claude OpenAI-compat)
+  · "local"       → local llama.cpp server (OpenAI-compatible) or native `suflyor-mlx` sidecar (macOS)
+  · else          → cloud bridge (Claude OpenAI-compat)
   · complete_with_usage / stream_chat; 3 retries on 5xx/429, fail-fast 4xx
   · cost_microcents accumulation
         │
@@ -50,8 +59,13 @@ AI (overlay-backend/src/ai.rs) — endpoint chosen by config.ai_endpoint():
 tile spawn (slint-experiment/src/bin/overlay_host.rs)
   · events.spawn_tile_full → spawn-poll Timer drains the queue on the UI thread
   · TileWindow (ui/tile.slint), markdown via pulldown-cmark (src/markdown.rs)
-  · Win32 transparency + monitor placement + optional stealth
+  · Win32 transparency + monitor placement + optional stealth (Windows) / AppKit overlay (macOS)
 ```
+
+## macOS Platform Subsystems (Core Audio & Native MLX)
+
+- **Core Audio System Capture:** System audio capture on macOS runs via Core Audio Taps (`AudioHardwareTapping.h` / `CATapDescription.h`) combined with a private aggregate device, running alongside microphone input via AVFoundation/CoreAudio. CoreAudio render transport for TTS sidecars is backed by `cpal` / `coreaudio-sys` (`playback_macos.rs`).
+- **Native Swift/MLX Local AI Path:** On Apple Silicon (macOS 14.2+), local AI text and Vision inference run through a dedicated Swift/Metal sidecar (`suflyor-mlx` binary + `mlx.metallib` compiled Metal library). Managed by `overlay-backend/src/mlx_install.rs`, `mlx_runtime.rs`, and `slint-experiment/src/bin/overlay_host/mlx_lifecycle.rs`. Prewarming starts automatically in the background; full overlay mode reports `App RAM` and unified `MLX` memory.
 
 ## Windows
 
@@ -105,53 +119,63 @@ by a Slint `Timer`):
 
 ## Critical files
 
-| File | ~Lines | Role |
-|---|---|---|
-| `slint-experiment/src/bin/overlay_host.rs` | 5200 | App entry, all windows + handlers, hotkey poll, tile spawn, session wiring |
-| `overlay-backend/src/config.rs` | 2235 | Config struct + serde defaults + `ai_endpoint` resolver + default snippets |
-| `overlay-backend/src/runtime.rs` | 1330 | Session lifecycle, transcript forwarder, AI ask flows, debrief, manual spawn |
-| `overlay-backend/src/stt.rs` | 1260 | STT dispatch (Groq / whisper.cpp / GigaAM), VAD, prompt budgeting, retry |
-| `overlay-backend/src/journal.rs` | 956 | JSONL writer, prune (count + size cap), session summary |
-| `overlay-backend/src/local_ai.rs` | 910 | Local llama.cpp + GigaAM model management |
-| `overlay-backend/src/audio.rs` | 550 | WASAPI loopback + mic, resampling, push-to-talk |
-| `overlay-backend/src/ai.rs` | 840 | OpenAI-compat client (stream + non-stream + retry + cost) |
-| `overlay-backend/src/kb.rs` | 427 | Embedded KB search (pre-lowercased) |
-| `overlay-backend/src/events.rs` | 368 | `RuntimeEvents` trait (emit / spawn_tile / spawn_tile_full) |
-| `slint-experiment/src/slint_session.rs` | 925 | Slint-side session orchestrator + STT pipeline |
-| `slint-experiment/src/win32.rs` | 434 | HWND transparency, stealth, monitor enum, placement |
-| `slint-experiment/src/markdown.rs` | 360 | pulldown-cmark → Slint block model |
-| `slint-experiment/ui/settings_panel.slint` | 1318 | Grouped settings UI |
-| `slint-experiment/ui/overlay_bar.slint` | 514 | Overlay bar HUD |
-| `slint-experiment/ui/tile.slint` | 404 | Q/A tile card |
+| File | Role |
+|---|---|
+| `slint-experiment/src/bin/overlay_host.rs` | Thin binary entrypoint |
+| `slint-experiment/src/bin/overlay_host_windows.rs` | Canonical shared runtime host root |
+| `slint-experiment/src/bin/overlay_host/` | Subsystem controllers (settings, tile, hotkeys, aux, mlx_lifecycle, etc.) |
+| `slint-experiment/src/native/` | macOS AppKit window & native platform integration seams |
+| `overlay-backend/src/config.rs` | Config struct + serde defaults + `ai_endpoint` resolver + default snippets |
+| `overlay-backend/src/runtime.rs` | Session lifecycle, transcript forwarder, AI ask flows, debrief, manual spawn |
+| `overlay-backend/src/stt.rs` | STT dispatch (Groq / whisper.cpp / GigaAM), VAD, prompt budgeting, retry |
+| `overlay-backend/src/journal.rs` | JSONL writer, prune (count + size cap), session summary |
+| `overlay-backend/src/local_ai.rs` | Local llama.cpp + GigaAM model management |
+| `overlay-backend/src/audio.rs` | WASAPI loopback + Core Audio tap & mic capture, resampling, push-to-talk |
+| `overlay-backend/src/ai.rs` | OpenAI-compat client (stream + non-stream + retry + cost) |
+| `overlay-backend/src/kb.rs` | Embedded KB search (pre-lowercased) |
+| `overlay-backend/src/events.rs` | `RuntimeEvents` trait (emit / spawn_tile / spawn_tile_full) |
+| `slint-experiment/src/slint_session.rs` | Slint-side session orchestrator + STT pipeline |
+| `slint-experiment/src/win32.rs` | HWND transparency, stealth, monitor enum, placement |
+| `slint-experiment/src/markdown.rs` | pulldown-cmark → Slint block model |
+| `slint-experiment/ui/settings_panel.slint` | Grouped settings UI |
+| `slint-experiment/ui/overlay_bar.slint` | Overlay bar HUD |
+| `slint-experiment/ui/tile.slint` | Q/A tile card |
+| `suflyor-mlx/Package.swift` | Native Swift/Metal MLX sidecar manifest & dependencies |
+| `suflyor-mlx/Sources/SuflyorMLXCore/` | Swift MLX local AI server implementation (text & Vision) |
+| `suflyor-tts/src/playback_macos.rs` | CoreAudio render transport for macOS TTS sidecar |
 
-## Build & release
+## Build & release policy
 
 ```pwsh
 # Dev / build (from slint-experiment/; cargo is at ~/.cargo/bin/cargo.exe)
 cargo run   --bin overlay-host
 cargo build --release --bin overlay-host
 
-# Tests + lint (all three crates; no root workspace)
+# Tests + lint (all five standalone crates; no root workspace)
 cargo test  --manifest-path overlay-backend\Cargo.toml
 cargo clippy --manifest-path overlay-backend\Cargo.toml --all-targets
 cargo clippy --manifest-path slint-experiment\Cargo.toml --bin overlay-host
 cargo test  --manifest-path suflyor-tts\Cargo.toml
+cargo test  --manifest-path suflyor-teratts\Cargo.toml
+cargo test  --manifest-path suflyor-wsola\Cargo.toml
 
 # Installer (NSIS)
 scripts\build-slint-release.ps1 -Installer
-#   → slint-experiment/target/release/bundle/suflyor-slint-setup.exe
-
-# Release: owner-only. Agents push a codex/<task> branch + open a PR;
-# only the owner merges, tags, and publishes after explicit authorization.
 ```
+
+### Branching & Merge Policy
+- **One task, one branch, one PR:** Agents work exclusively on `codex/<task-name>` branches. Agents never push directly to `master` and do not merge their own PRs unless explicitly instructed.
+- **Prerelease / RC Authorization:** RC prereleases have standing owner authorization to publish once the selected gate, installer build, and required visual/MCP test evidence are green.
+- **Stable Release Authorization:** Tagging and publishing a stable release requires explicit owner authorization for that version.
+- **Post-Release Cleanup:** Every release publication is completed by running `scripts/post-release-cleanup.ps1` (preview phase followed by `-Apply`).
 
 Version is tracked in **2** places (keep in sync): `slint-experiment/Cargo.toml`
 and `scripts/slint-installer.nsi` (`!define PRODUCT_VERSION`).
 
-## Out-of-scope (deferred or won't-do)
+## Out-of-scope & Historical Milestones
 
 - **Code signing** (Authenticode): personal tool, single user; SmartScreen
   "Unknown publisher" accepted.
 - **Telemetry**: explicit non-goal.
-- **overlay_host.rs split**: at ~5200 lines it's a split candidate, but the
-  windows share a lot of closure-captured state; deferred until it hurts.
+- **Phase 7 Tauri-to-Slint Cut**: completed historical refactor (2026-05-28, see `docs/PHASE-7-CUT-PLAN.md`).
+- **overlay_host.rs split**: completed historical refactor (entrypoint is now thin, delegating to `overlay_host_windows.rs` and the `overlay_host/` module directory).

@@ -1,17 +1,28 @@
-# Codex handoff — macOS port recovery
+# Codex handoff — master
 
-Updated 2026-08-20. Read `AGENTS.md` before acting. The section immediately
-below is authoritative. The older P0n recovery narrative is retained after it
-for provenance only and must not override the current state.
+Updated 2026-09-01. Read `AGENTS.md` before acting.
+
+## Current operational state — master
+
+- Branch: `master`
+- Latest published stable release: `v0.38.0`
+- Active master handoff: none
+- Post-release maintenance may be newer than the stable tag; inspect Git before acting.
+
+There is no active in-flight handoff for `master`. Historical feature and
+recovery narratives below belong to their named branches/worktrees and remain
+provenance only. Do not claim those unrelated worktrees are complete.
 
 Operational note: Windows jobs follow
 [`docs/winbrat-recovery.md`](winbrat-recovery.md). Never start a duplicate job
 because SSH or a terminal disconnected. macOS builds and live QA run only on
 `mm4`; Windows compilation and the repository gate run only on `winbrat`.
 
-## Current operational state — 2026-08-20
+## Historical macOS MLX runtime handoff state (superseded) — 2026-08-20
 
-- Worktree: `C:\Users\x3d_mutant\Natively\suflyor-macos-mlx-runtime`
+> **Note:** The section below is historical/superseded provenance from the `codex/macos-mlx-runtime` feature worktree. It does not describe an active handoff for `master`.
+
+- Worktree: `%USERPROFILE%\Natively\suflyor-macos-mlx-runtime`
 - Branch: `codex/macos-mlx-runtime`
 - Packaged code commit: `02ac938a46beb1c3fb335fda9f5310f92ef48d8b`
 - Packaged code tree: `703ce482d60f90e836f663eac903ff12c7a49b53`
@@ -19,7 +30,7 @@ because SSH or a terminal disconnected. macOS builds and live QA run only on
   made.
 
 The verified arm64 app is installed on mm4 at
-`/Users/slovn/Applications/Suflyor.app`. The previous installed app was moved
+`~/Applications/Suflyor.app`. The previous installed app was moved
 to durable evidence before replacement. A cross-device archive for the
 MacBook Air is available at
 `C:\suflyor-test-evidence\macos-mlx-package-02ac938-20260820\Suflyor-02ac938-macos-arm64.zip`
@@ -73,7 +84,7 @@ The Air was offline and was not contacted or modified.
 
 ## Historical P0n recovery state (superseded)
 
-- Worktree: `C:\Users\x3d_mutant\Natively\suflyor-macos-port-recovery`
+- Worktree: `%USERPROFILE%\Natively\suflyor-macos-port-recovery`
 - Branch: `codex/macos-port-recovery`
 - Code commit: `d85e1c245b909cb1a5afe1e36ba7ef247d8c1cc8`
 - Parent/base: `ce6739ba303037780dd5b584748c15cc192dc744`
@@ -87,12 +98,12 @@ The immutable validation snapshot is synthetic commit
 identical to code commit `d85e1c245`.
 
 - Bundle:
-  `C:\Users\x3d_mutant\Natively\worker-logs\macos-port-recovery-20260819\macos-p0n-final-20260819.bundle`
+  `%USERPROFILE%\Natively\worker-logs\macos-port-recovery-20260819\macos-p0n-final-20260819.bundle`
 - Bundle SHA-256:
   `29e84468fb495b93ffea1580113f60eff5287fd27e92caee7c079b15d07ca6a4`
 - Bundle length: `15,144,107` bytes
 - Recovery archive:
-  `C:\Users\x3d_mutant\Natively\suflyor-macos-recovery-20260819`
+  `%USERPROFILE%\Natively\suflyor-macos-recovery-20260819`
 
 ## What the branch audit established
 
@@ -209,7 +220,7 @@ Validated synthetic commit `4047d843`, tree `ff8f822f`:
 - full `scripts/git-gate-macos.sh`: green
 - 38 test suites; 1,006 passed; 0 failed; 5 expected ignored
 - Evidence:
-  `/Users/slovn/Developer/suflyor-test-evidence/macos-p0n-final-20260819-1730`
+  `~/Developer/suflyor-test-evidence/macos-p0n-final-20260819-1730`
 - `cargo-check.log` SHA-256:
   `dccad65a474a0e64d7c677fc96c87f30265067841005a793f4d82605fea6fe77`
 - `git-gate-macos.log` SHA-256:
@@ -239,7 +250,7 @@ The same commit/tree passed one non-duplicated full `scripts/ci.ps1` run:
 Built from the same P0n tree and launched through LaunchServices:
 
 - App:
-  `/Users/slovn/Developer/suflyor-macos-backend-seam/slint-experiment/target/Suflyor.app`
+  `~/Developer/suflyor-macos-backend-seam/slint-experiment/target/Suflyor.app`
 - App size: 88,040 KiB
 - `overlay-host`: 35,600,512 bytes; SHA-256
   `2afbb3338b6756790081a88cdffc5d98d4103f1d3b7a2278498a558a1ec453c9`
@@ -254,7 +265,7 @@ Built from the same P0n tree and launched through LaunchServices:
 - At verification time after the exact relaunch, the host/child PIDs were
   `41971` / `41975`.
 - Evidence:
-  `/Users/slovn/Developer/suflyor-test-evidence/macos-p0n-package-20260819-1740`
+  `~/Developer/suflyor-test-evidence/macos-p0n-package-20260819-1740`
 - `build-macos-app.log` SHA-256:
   `9beb6a3dde7d93962cf99d312102ca46ca17f56b239da5c62316f26fcbf1e8fe`
 - `package-verification.txt` SHA-256:

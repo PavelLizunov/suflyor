@@ -1,7 +1,7 @@
 # Installing Suflyor on macOS / Установка Suflyor на macOS
 
 Suflyor currently supports Apple Silicon and macOS 14.2 or newer. The
-prerelease app is locally signed and is not notarized by Apple, so the first
+app is locally signed and is not notarized by Apple, so the first
 launch requires an explicit Gatekeeper confirmation.
 
 ## Русский

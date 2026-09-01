@@ -13,6 +13,7 @@
 //! so the download target can't be redirected by config or UI input.
 
 use anyhow::{bail, Context, Result};
+use reqwest::Url;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -125,13 +126,34 @@ pub async fn check_latest(current_version: &str) -> Result<UpdateInfo> {
     })
 }
 
-/// Allow-list of hosts the installer may be downloaded from. GitHub serves
-/// release assets from github.com (which 302-redirects to CDN hosts).
+/// Allow-list of hosts and paths the installer may be downloaded from.
+/// Requires HTTPS, exact repo path on github.com or approved CDN hosts,
+/// and rejects userinfo, domain-prefix, non-standard port, or case spoofing.
 fn is_trusted_download(url: &str) -> bool {
-    let repo_prefix = format!("https://github.com/{REPO}/");
-    url.starts_with(&repo_prefix)
-        || url.starts_with("https://objects.githubusercontent.com/")
-        || url.starts_with("https://release-assets.githubusercontent.com/")
+    let Ok(parsed) = Url::parse(url) else {
+        return false;
+    };
+    if parsed.scheme() != "https" {
+        return false;
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return false;
+    }
+    if parsed.port_or_known_default() != Some(443) {
+        return false;
+    }
+    let Some(host) = parsed.host_str() else {
+        return false;
+    };
+
+    match host {
+        "github.com" => {
+            let repo_prefix = format!("/{REPO}/");
+            parsed.path().starts_with(&repo_prefix)
+        }
+        "objects.githubusercontent.com" | "release-assets.githubusercontent.com" => true,
+        _ => false,
+    }
 }
 
 /// Re-query the latest release and return the expected SHA-256 (lowercase hex)
@@ -265,14 +287,58 @@ mod tests {
 
     #[test]
     fn untrusted_download_host_rejected() {
+        // Legitimate release and CDN URLs
         assert!(is_trusted_download(
             "https://github.com/PavelLizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
         ));
+        assert!(is_trusted_download(
+            "https://objects.githubusercontent.com/github-production-release-asset-262108/12345"
+        ));
+        assert!(is_trusted_download(
+            "https://release-assets.githubusercontent.com/12345/suflyor-slint-setup.exe"
+        ));
+        // Host uppercase normalization test
+        assert!(is_trusted_download(
+            "https://GITHUB.COM/PavelLizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
+        ));
+
+        // Rejections: wrong repo, non-HTTPS, unknown host
         assert!(!is_trusted_download(
             "https://github.com/other/repo/releases/download/v0.2.0/suflyor-slint-setup.exe"
         ));
         assert!(!is_trusted_download("https://evil.example.com/x.exe"));
-        assert!(!is_trusted_download("http://github.com/x.exe")); // not https
+        assert!(!is_trusted_download(
+            "http://github.com/PavelLizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
+        ));
+
+        // Domain-prefix spoofing
+        assert!(!is_trusted_download(
+            "https://github.com.evil.com/PavelLizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
+        ));
+        assert!(!is_trusted_download(
+            "https://objects.githubusercontent.com.evil.com/asset.exe"
+        ));
+
+        // Userinfo spoofing
+        assert!(!is_trusted_download(
+            "https://github.com@evil.com/PavelLizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
+        ));
+        assert!(!is_trusted_download(
+            "https://user:pass@github.com/PavelLizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
+        ));
+
+        // Case spoofing in repo path
+        assert!(!is_trusted_download(
+            "https://github.com/pavellizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
+        ));
+
+        // Non-standard port
+        assert!(!is_trusted_download(
+            "https://github.com:8443/PavelLizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
+        ));
+
+        // Invalid URL string
+        assert!(!is_trusted_download("not a valid url"));
     }
 
     #[test]

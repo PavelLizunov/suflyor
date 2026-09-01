@@ -1673,7 +1673,10 @@ fn archive_entry_safety_rejects_zip_slip() {
     assert!(archive_entry_is_safe("ggml.dll"));
     assert!(archive_entry_is_safe("a/b/c.dll"));
     assert!(archive_entry_is_safe("")); // tar -tf trailing blank line
-                                        // escapes — all rejected
+    assert!(archive_entry_is_safe(".gitignore"));
+    assert!(archive_entry_is_safe("foo.bar.txt"));
+    assert!(archive_entry_is_safe("a/b..c/d"));
+    // escapes — all rejected
     assert!(!archive_entry_is_safe("../escape.txt"));
     assert!(!archive_entry_is_safe("a/../../escape"));
     assert!(!archive_entry_is_safe("..\\escape")); // backslash-normalised
@@ -1681,9 +1684,13 @@ fn archive_entry_safety_rejects_zip_slip() {
     assert!(!archive_entry_is_safe("C:/escape.txt")); // drive
     assert!(!archive_entry_is_safe("C:\\escape.txt"));
     assert!(!archive_entry_is_safe("\\\\server\\share\\x")); // UNC
-                                                             // Windows trailing-space coercion: ".. " / "..  " resolve to ".." → rejected.
+    // Windows trailing-space coercion & traversal aliases:
     assert!(!archive_entry_is_safe(".. /x"));
     assert!(!archive_entry_is_safe("a/..  /b"));
+    assert!(!archive_entry_is_safe("a/.. ./b"));
+    assert!(!archive_entry_is_safe("a/.../b"));
+    assert!(!archive_entry_is_safe("a/..../b"));
+    assert!(!archive_entry_is_safe("a/. ./b"));
     // A bare "." current-dir component is harmless and must stay allowed
     // (tar may emit "./"-prefixed entries).
     assert!(archive_entry_is_safe("./build/x.dll"));
