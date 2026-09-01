@@ -133,7 +133,7 @@ pub fn init() {
 /// without pulling in a date/time crate.
 pub fn line(msg: &str) {
     let stamped = stamped_line(msg);
-    #[cfg(debug_assertions)]
+    #[cfg(any(debug_assertions, target_os = "macos"))]
     write_file_stamped(&stamped);
     eprintln!("{stamped}");
 }
@@ -149,10 +149,8 @@ fn stamped_line(msg: &str) -> String {
         (secs / 60) % 60,
         secs % 60
     );
-    // DEBUG: stderr goes to the console, NOT the file — so write the entry to
-    // `LOG_FILE` directly here. RELEASE: stderr is redirected to the log file
-    // (see `init`), so the `eprintln!` below already lands there; a direct
-    // write would duplicate every `line()` entry.
+    // DEBUG: stderr goes to the console, NOT the file. WINDOWS RELEASE redirects
+    // stderr to this file; MACOS RELEASE writes `line()` entries here directly.
     format!("[{stamp}] {msg}")
 }
 

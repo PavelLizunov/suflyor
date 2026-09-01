@@ -39,13 +39,28 @@ use std::time::{Duration, Instant};
 
 const SESSION_SYSTEM_COLLECTOR_MAX_SAMPLES: usize = audio::TARGET_SAMPLE_RATE as usize * 30;
 const AUTO_TILE_MAX_TOKENS: u32 = 4096;
+const AUTO_TILE_MAX_TOKENS_MLX: u32 = 512;
+
+#[must_use]
+fn auto_tile_max_tokens(is_mlx: bool) -> u32 {
+    if is_mlx {
+        AUTO_TILE_MAX_TOKENS_MLX
+    } else {
+        AUTO_TILE_MAX_TOKENS
+    }
+}
+
+#[must_use]
+fn auto_tile_single_flight_required(is_mlx: bool, every_line: bool) -> bool {
+    is_mlx || every_line
+}
 const SYSTEM_AUDIO_OWNER_NONE: u8 = 0;
 const SYSTEM_AUDIO_OWNER_AUX: u8 = 1;
 const SYSTEM_AUDIO_OWNER_SESSION: u8 = 2;
 static SYSTEM_AUDIO_OWNER: AtomicU8 = AtomicU8::new(SYSTEM_AUDIO_OWNER_NONE);
 static SYSTEM_AUDIO_SESSION_STUCK: AtomicBool = AtomicBool::new(false);
-// ponytail: only the opt-in every-line mode is single-flight; normal question detection never drops accepted triggers.
-static EVERY_LINE_AUTO_TILE_STATE: AtomicU64 = AtomicU64::new(0);
+// ponytail: one process-wide gate; split per provider only if parallel MLX inference becomes safe.
+static AUTO_TILE_SINGLE_FLIGHT_STATE: AtomicU64 = AtomicU64::new(0);
 
 struct AutoTilePermit<'a> {
     state: &'a AtomicU64,
@@ -839,10 +854,12 @@ async fn maybe_spawn_auto_tile(
         preferred_monitor,
         stealth,
         is_local,
+        is_mlx,
     ) = {
         let c = cfg.read();
         let ep = c.ai_endpoint(false);
         let is_unmetered = ep.is_unmetered();
+        let is_mlx = c.ai_provider == "mlx";
         (
             c.auto_tiles_enabled,
             c.auto_tile_every_line,
@@ -858,6 +875,7 @@ async fn maybe_spawn_auto_tile(
             c.tile_monitor_name.clone(),
             c.stealth_enabled,
             is_unmetered,
+            is_mlx,
         )
     };
     // A bearer is required only for the CLOUD bridge; local servers
@@ -892,9 +910,9 @@ async fn maybe_spawn_auto_tile(
         trigger_kind: trigger_kind.as_deref(),
     });
     let Some(trigger) = detected else { return };
-    let _every_line_permit = if every_line {
-        let Some(permit) = try_acquire_auto_tile(&EVERY_LINE_AUTO_TILE_STATE, session_gen) else {
-            log_info("auto-tile skipped: every-line request still running");
+    let _single_flight_permit = if auto_tile_single_flight_required(is_mlx, every_line) {
+        let Some(permit) = try_acquire_auto_tile(&AUTO_TILE_SINGLE_FLIGHT_STATE, session_gen) else {
+            log_info("auto-tile skipped: auto-tile request still running");
             return;
         };
         Some(permit)
@@ -1126,10 +1144,11 @@ async fn maybe_spawn_auto_tile(
         reasoning_effort,
         is_local,
     };
+    let max_tokens = auto_tile_max_tokens(is_mlx);
     let (answer, usage) = match ai::complete_with_usage_endpoint(
         &endpoint,
         messages,
-        AUTO_TILE_MAX_TOKENS,
+        max_tokens,
     )
     .await
     {
@@ -1659,7 +1678,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_line_auto_tile_permit_is_single_flight_per_session() {
+    fn auto_tile_permit_is_single_flight_per_session() {
         let state = AtomicU64::new(0);
         let first = try_acquire_auto_tile(&state, 1).expect("first session should acquire");
         assert!(try_acquire_auto_tile(&state, 1).is_none());
@@ -1673,6 +1692,17 @@ mod tests {
         assert!(try_acquire_auto_tile(&state, 1).is_none());
         assert!(try_acquire_auto_tile(&state, 2).is_some());
         assert_eq!(AUTO_TILE_MAX_TOKENS, 4096);
+    }
+
+    #[test]
+    fn auto_tile_policy_and_token_selection_follow_mlx_rules() {
+        assert!(auto_tile_single_flight_required(true, false));
+        assert!(auto_tile_single_flight_required(true, true));
+        assert!(auto_tile_single_flight_required(false, true));
+        assert!(!auto_tile_single_flight_required(false, false));
+
+        assert_eq!(auto_tile_max_tokens(true), 512);
+        assert_eq!(auto_tile_max_tokens(false), 4096);
     }
 
     #[test]

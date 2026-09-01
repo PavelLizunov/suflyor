@@ -4,6 +4,41 @@ import Testing
 
 private let validBearer = String(repeating: "a1", count: 32)
 
+private let lfmTemplateSeam =
+    "{%- if add_generation_prompt -%}\n"
+    + "    {{- \"<|im_start|>assistant\\n\" -}}\n"
+    + "{%- endif -%}"
+
+@Test func lfmTemplatePatchIsExact() throws {
+    let source = "before\n" + lfmTemplateSeam + "\nafter"
+    let expected =
+        "before\n{%- if add_generation_prompt -%}\n"
+        + "    {{- \"<|im_start|>assistant\\n\" -}}\n"
+        + "    {%- if enable_thinking is defined and enable_thinking is false -%}\n"
+        + "        {{- \"<think>\\nNo unnecessary reasoning. Close thinking and answer immediately.\\n</think>\\n\" -}}\n"
+        + "    {%- endif -%}\n"
+        + "{%- endif -%}\nafter"
+
+    #expect(try patchLFMChatTemplate(source) == expected)
+}
+
+@Test func lfmTemplatePatchRequiresOneExactSeam() {
+    #expect(throws: SidecarError.invalidSnapshot) {
+        try patchLFMChatTemplate(lfmTemplateSeam + "\n" + lfmTemplateSeam)
+    }
+    #expect(throws: SidecarError.invalidSnapshot) {
+        try patchLFMChatTemplate(lfmTemplateSeam.replacingOccurrences(of: " -%}", with: " %}"))
+    }
+}
+
+@Test func lfmTemplatePatchRejectsAlreadyPatchedOrUnknownTemplates() throws {
+    let patched = try patchLFMChatTemplate(lfmTemplateSeam)
+    #expect(throws: SidecarError.invalidSnapshot) { try patchLFMChatTemplate(patched) }
+    #expect(throws: SidecarError.invalidSnapshot) {
+        try patchLFMChatTemplate("{%- if add_generation_prompt -%}unknown{%- endif -%}")
+    }
+}
+
 @Test func generationDiagnosticsAreBoundedTechnicalTokens() {
     let token = generationDiagnosticToken(String(repeating: "Type/путь\n", count: 32))
     #expect(token.count == 96)

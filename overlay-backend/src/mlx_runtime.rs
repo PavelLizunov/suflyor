@@ -308,6 +308,85 @@ fn parse_ready(line: &str, expected_model: &str) -> Result<u16> {
     Ok(ready.port)
 }
 
+#[cfg(any(target_os = "macos", test))]
+fn is_valid_mlx_token(token: &str) -> bool {
+    !token.is_empty()
+        && token.len() <= 96
+        && token
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'_' || b == b'-')
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn is_valid_mlx_code(code: &str) -> bool {
+    !code.is_empty() && code.len() <= 96 && code.parse::<i64>().is_ok()
+}
+
+#[cfg(any(target_os = "macos", test))]
+const MLX_GENERIC_FAILURE: &str = "suflyor-mlx failed";
+
+#[cfg(any(target_os = "macos", test))]
+fn parse_mlx_stderr_line(line: &str) -> Option<&str> {
+    let parts: Vec<&str> = line.split(' ').collect();
+    if parts.len() != 8 {
+        return None;
+    }
+    if parts[0] != "MLX" || parts[1] != "failure" {
+        return None;
+    }
+    let scope = parts[2].strip_prefix("scope=")?;
+    if !is_valid_mlx_token(scope) {
+        return None;
+    }
+    let phase = parts[3].strip_prefix("phase=")?;
+    if !is_valid_mlx_token(phase) {
+        return None;
+    }
+    let type_ = parts[4].strip_prefix("type=")?;
+    if !is_valid_mlx_token(type_) {
+        return None;
+    }
+    let domain = parts[5].strip_prefix("domain=")?;
+    if !is_valid_mlx_token(domain) {
+        return None;
+    }
+    let code = parts[6].strip_prefix("code=")?;
+    if !is_valid_mlx_code(code) {
+        return None;
+    }
+    let sidecar = parts[7].strip_prefix("sidecar=")?;
+    if !is_valid_mlx_token(sidecar) {
+        return None;
+    }
+    Some(line)
+}
+
+#[cfg(target_os = "macos")]
+fn drain_mlx_stderr(stderr: std::process::ChildStderr) {
+    use std::io::{BufRead, BufReader, Read};
+    let mut reader = BufReader::new(stderr);
+    let mut line = String::new();
+    let mut prev_was_generic = false;
+    {
+        // Bound parsed diagnostics; keep draining the pipe below without allocating.
+        let mut bounded = reader.by_ref().take(65_536);
+        while bounded.read_line(&mut line).is_ok_and(|bytes| bytes > 0) {
+            let trimmed = line.trim_end_matches(['\r', '\n']);
+            if !trimmed.is_empty() {
+                if let Some(structured) = parse_mlx_stderr_line(trimmed) {
+                    log::warn!("{structured}");
+                    prev_was_generic = false;
+                } else if !prev_was_generic {
+                    log::warn!("{MLX_GENERIC_FAILURE}");
+                    prev_was_generic = true;
+                }
+            }
+            line.clear();
+        }
+    }
+    let _ = std::io::copy(&mut reader, &mut std::io::sink());
+}
+
 #[cfg(target_os = "macos")]
 fn random_token() -> Result<String> {
     let mut bytes = [0_u8; 32];
@@ -367,9 +446,22 @@ fn start_macos(model: &str) -> Result<MlxEndpoint> {
     let mut child = Command::new(executable)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .context("start MLX sidecar")?;
+    let Some(stderr) = child.stderr.take() else {
+        let _ = child.kill();
+        let _ = child.wait();
+        bail!("open MLX sidecar stderr");
+    };
+    if let Err(error) = std::thread::Builder::new()
+        .name("suflyor-mlx-stderr".into())
+        .spawn(move || drain_mlx_stderr(stderr))
+    {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(error).context("start MLX stderr drain");
+    }
     let configured = (|| -> Result<(std::process::ChildStdin, std::process::ChildStdout)> {
         let mut stdin = child.stdin.take().context("open MLX sidecar stdin")?;
         writeln!(stdin, "{wire}").context("configure MLX sidecar")?;
@@ -604,6 +696,43 @@ mod tests {
         release_request(&mut state, 7);
         release_request(&mut state, 7);
         assert_eq!(state.active_requests, 0);
+    }
+
+    #[test]
+    fn mlx_stderr_privacy_drain_accepts_exact_structured_shape() {
+        let line = "MLX failure scope=model phase=load type=out_of_memory domain=gpu code=-1 sidecar=suflyor-mlx";
+        assert_eq!(parse_mlx_stderr_line(line), Some(line));
+
+        let line_pos_code = "MLX failure scope=engine phase=init type=bad_config domain=host code=42 sidecar=mlx.py";
+        assert_eq!(parse_mlx_stderr_line(line_pos_code), Some(line_pos_code));
+    }
+
+    #[test]
+    fn mlx_stderr_privacy_drain_rejects_malformed_path_and_unbounded_tokens() {
+        assert_eq!(
+            parse_mlx_stderr_line("MLX failure scope=/usr/local/model.bin phase=load type=err domain=gpu code=-1 sidecar=suflyor-mlx"),
+            None
+        );
+        assert_eq!(
+            parse_mlx_stderr_line("MLX failure scope=model phase=load type=err domain=gpu code=fail sidecar=suflyor-mlx"),
+            None
+        );
+        let long_token = "a".repeat(97);
+        let line_long = format!("MLX failure scope={long_token} phase=load type=err domain=gpu code=-1 sidecar=suflyor-mlx");
+        assert_eq!(parse_mlx_stderr_line(&line_long), None);
+
+        assert_eq!(
+            parse_mlx_stderr_line("MLX failure scope= phase=load type=err domain=gpu code=-1 sidecar=suflyor-mlx"),
+            None
+        );
+        assert_eq!(
+            parse_mlx_stderr_line("Traceback (most recent call last): File \"/app/main.py\", line 10"),
+            None
+        );
+        assert_eq!(
+            parse_mlx_stderr_line("MLX failure scope=model phase=load type=err domain=gpu code=-1 sidecar=suflyor-mlx extra"),
+            None
+        );
     }
 
     #[cfg(not(target_os = "macos"))]
