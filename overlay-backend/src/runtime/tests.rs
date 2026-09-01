@@ -630,7 +630,7 @@ fn compact_prompt_preserves_guards_context_language_coaching() {
     assert!(sys_ru.contains("БЕЗОПАСНОСТЬ"));
     assert!(sys_ru.contains("ДАННЫЕ"));
     assert!(sys_ru.contains("Staff SRE, k8s, eBPF"));
-    assert!(sys_ru.contains("русском"));
+    assert!(sys_ru.contains("по-русски"));
     assert!(usr_q.contains("как настроить cgroup?"));
 
     // 2. English response language
