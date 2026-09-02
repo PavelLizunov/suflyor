@@ -1,0 +1,46 @@
+STT QUESTION-BOUNDARY AUDIT — 2026-09-02
+
+BASELINE
+source_sha=d17d849f09ae3c2ec1e4ee59c4f3201522441b32
+production_safe_aggregate_system_submissions=16
+production_safe_aggregate_system_buffer_median_sec=10.1
+production_safe_aggregate_system_forced_cap_count=14
+production_safe_aggregate_system_text_results=14
+production_safe_submit_to_result_resolution_sec=0..1
+
+CANDIDATE
+source_sha=95eab80623b670103ada55ac561d00a128e08bbe
+system_hard_cap_sec=5
+mic_hard_cap_sec=10
+mlx_sidecar_or_prompt_generation_changes=none
+
+EXACT-CANDIDATE MACOS CHECKS
+preflight_memory_free_pct=81
+cargo_fmt_overlay_backend=pass
+cargo_fmt_slint_experiment=pass
+stt_cap_tests=1_pass
+question_extractor_tests=5_pass
+question_detector_integration_tests=1_pass
+aggressive_auto_tile_wiring_tests=1_pass
+normal_auto_tile_delegation_tests=1_pass
+clippy_overlay_backend_lib=pass
+clippy_overlay_host_bin=pass
+ui_mcp_build=pass
+independent_question_boundary_review=pass
+independent_stt_cap_review=pass
+
+SLINT MCP EVIDENCE
+baseline_tile=460x360 position=968,80 scale=1
+candidate_tile=460x360 position=968,80 scale=1
+fixture_body=identical synthetic translation and answer
+baseline_title=synthetic preceding statement plus question
+candidate_accessible_title=exact extracted question
+image_visual_review=unverified: session image payload was omitted by the model runtime
+
+LIMITATIONS
+The unbundled QA binary's system-audio tap emitted zero-RMS chunks, so no candidate live-audio timing claim is made. The 5-second submission bound is verified at the pure flush-decision seam; production runtime confirmation remains for the next installed RC/user test.
+The hard cap can bisect continuous speech. No samples are discarded, and existing transcript context remains available, but low-energy boundary selection is intentionally deferred unless live transcripts show cut-word regression.
+Global hotkeys were outside the changed path and were not functionally replayed. Unverified: F1, F3, F4, F6, F7, F8, Shift+F8, Ctrl+F8, F9, Shift+F9, Shift+Alt+1, Shift+Alt+2, Shift+Alt+3.
+
+SAFETY
+A synthetic baseline session accidentally invoked normal recording retention and pruned one older recording. The synthetic journal/recording were removed, further live-session creation was stopped, and candidate incident INC-1329 was recorded for human confirmation.
