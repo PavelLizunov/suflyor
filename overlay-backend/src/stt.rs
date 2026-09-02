@@ -223,8 +223,19 @@ const DEFAULT_GROQ_MODEL: &str = "whisper-large-v3";
 const VAD_RMS_THRESHOLD: f32 = 50.0;
 /// How long silence must persist to flush an utterance (ms).
 const VAD_HANG_MS: u64 = 800;
-/// Force flush if buffer is this long (seconds).
-const MAX_UTTERANCE_SEC: u64 = 10;
+/// Force flush for System loopback audio if buffer is this long (seconds).
+// ponytail: a fixed cap may bisect speech; add low-energy boundary selection only if live transcripts regress.
+const SYSTEM_MAX_UTTERANCE_SEC: u64 = 5;
+/// Force flush for Microphone audio if buffer is this long (seconds).
+const DEFAULT_MAX_UTTERANCE_SEC: u64 = 10;
+
+#[must_use]
+fn utterance_cap_sec(source: AudioSource) -> u64 {
+    match source {
+        AudioSource::System => SYSTEM_MAX_UTTERANCE_SEC,
+        AudioSource::Mic => DEFAULT_MAX_UTTERANCE_SEC,
+    }
+}
 
 fn utterance_flush_decision(
     duration_sec: f32,
@@ -354,7 +365,6 @@ pub fn spawn(
             }
             SttBackendCfg::Gigaam { .. } => None,
         };
-        let utterance_cap_sec = MAX_UTTERANCE_SEC;
 
         // Per-source rolling buffer + silence tracking
         let mut buffers: HashMap<AudioSource, Utterance> = HashMap::new();
@@ -429,11 +439,12 @@ pub fn spawn(
             }
 
             let dur_sec = utt.samples.len() as f32 / TARGET_SAMPLE_RATE as f32;
+            let cap_sec = utterance_cap_sec(chunk.source);
             let (should_flush, forced_by_size) = utterance_flush_decision(
                 dur_sec,
                 utt.silent_run_ms,
                 utt.had_voice,
-                utterance_cap_sec,
+                cap_sec,
             );
             if forced_by_size {
                 // info, not warn (v0.17.1 audit): the size-cap flush is normal,
@@ -444,7 +455,7 @@ pub fn spawn(
                      had_voice={} silent_run={}ms (VAD threshold {})",
                     chunk.source,
                     dur_sec,
-                    utterance_cap_sec,
+                    cap_sec,
                     utt.had_voice,
                     utt.silent_run_ms,
                     VAD_RMS_THRESHOLD,
@@ -1175,20 +1186,48 @@ mod tests {
     use super::*;
 
     #[test]
-    fn live_utterance_flushes_at_ten_seconds_or_four_silent_chunks() {
-        assert_eq!(MAX_UTTERANCE_SEC, 10);
+    fn live_utterance_flushes_at_per_source_caps_or_four_silent_chunks() {
+        assert_eq!(SYSTEM_MAX_UTTERANCE_SEC, 5);
+        assert_eq!(DEFAULT_MAX_UTTERANCE_SEC, 10);
         assert_eq!(VAD_HANG_MS, 800);
+
+        let sys_cap = utterance_cap_sec(AudioSource::System);
+        let mic_cap = utterance_cap_sec(AudioSource::Mic);
+        assert_eq!(sys_cap, 5);
+        assert_eq!(mic_cap, 10);
+
+        // System flushes at 5.0s
         assert_eq!(
-            utterance_flush_decision(9.9, 600, true, MAX_UTTERANCE_SEC),
+            utterance_flush_decision(4.9, 600, true, sys_cap),
             (false, false)
         );
         assert_eq!(
-            utterance_flush_decision(9.9, 800, true, MAX_UTTERANCE_SEC),
+            utterance_flush_decision(5.0, 0, false, sys_cap),
+            (true, true)
+        );
+
+        // Mic stays buffered at 5.0s and flushes at 10.0s
+        assert_eq!(
+            utterance_flush_decision(5.0, 600, true, mic_cap),
+            (false, false)
+        );
+        assert_eq!(
+            utterance_flush_decision(9.9, 600, true, mic_cap),
+            (false, false)
+        );
+        assert_eq!(
+            utterance_flush_decision(10.0, 0, false, mic_cap),
+            (true, true)
+        );
+
+        // 800ms voice-silence flushes before either cap
+        assert_eq!(
+            utterance_flush_decision(2.0, 800, true, sys_cap),
             (true, false)
         );
         assert_eq!(
-            utterance_flush_decision(10.0, 0, false, MAX_UTTERANCE_SEC),
-            (true, true)
+            utterance_flush_decision(5.0, 800, true, mic_cap),
+            (true, false)
         );
     }
 

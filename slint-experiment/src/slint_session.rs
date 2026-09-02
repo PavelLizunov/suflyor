@@ -71,6 +71,25 @@ fn auto_tile_prompt_hash(
 fn auto_tile_single_flight_required(is_mlx: bool, every_line: bool) -> bool {
     is_mlx || every_line
 }
+
+#[must_use]
+fn auto_tile_trigger(
+    text: &str,
+    every_line: bool,
+    trigger_keywords: &str,
+) -> Option<backend_runtime::Trigger> {
+    if !every_line {
+        return backend_runtime::detect_trigger(text, trigger_keywords);
+    }
+    if !backend_runtime::looks_like_real_speech(text) {
+        return None;
+    }
+    Some(backend_runtime::Trigger::Question(
+        backend_runtime::extract_question_candidate(text)
+            .unwrap_or_else(|| text.trim().to_string()),
+    ))
+}
+
 const SYSTEM_AUDIO_OWNER_NONE: u8 = 0;
 const SYSTEM_AUDIO_OWNER_AUX: u8 = 1;
 const SYSTEM_AUDIO_OWNER_SESSION: u8 = 2;
@@ -902,15 +921,7 @@ async fn maybe_spawn_auto_tile(
     }
 
     // ===== Detector trigger =====
-    let detected = if every_line {
-        if text.trim().chars().count() < 5 {
-            None
-        } else {
-            Some(backend_runtime::Trigger::Question(text.clone()))
-        }
-    } else {
-        backend_runtime::detect_trigger(&text, &trigger_keywords)
-    };
+    let detected = auto_tile_trigger(&text, every_line, &trigger_keywords);
     let (triggered, trigger_kind): (bool, Option<String>) = match &detected {
         Some(backend_runtime::Trigger::Question(_)) if every_line => {
             (true, Some("every_line".into()))
@@ -1735,6 +1746,42 @@ mod tests {
 
         assert_eq!(auto_tile_max_tokens(true), 384);
         assert_eq!(auto_tile_max_tokens(false), 4096);
+    }
+
+    #[test]
+    fn aggressive_auto_tile_uses_question_suffix_and_filters_noise() {
+        match auto_tile_trigger(
+            "Мы закончили обсуждать прошлую тему. Что такое контейнеризация?",
+            true,
+            "",
+        ) {
+            Some(backend_runtime::Trigger::Question(question)) => {
+                assert_eq!(question, "Что такое контейнеризация?");
+            }
+            other => panic!("expected extracted question, got {other:?}"),
+        }
+
+        let statement = "Сегодня обсуждаем распределённые системы";
+        match auto_tile_trigger(statement, true, "") {
+            Some(backend_runtime::Trigger::Question(question)) => {
+                assert_eq!(question, statement);
+            }
+            other => panic!("expected whole statement, got {other:?}"),
+        }
+
+        assert!(auto_tile_trigger("Ладно", true, "").is_none());
+        assert!(auto_tile_trigger("ага ага ага ага", true, "").is_none());
+    }
+
+    #[test]
+    fn normal_auto_tile_mode_still_delegates_to_detector() {
+        match auto_tile_trigger("Сервис использует Kubernetes", false, "Kubernetes") {
+            Some(backend_runtime::Trigger::Keyword(keyword, line)) => {
+                assert_eq!(keyword, "Kubernetes");
+                assert_eq!(line, "Сервис использует Kubernetes");
+            }
+            other => panic!("expected keyword trigger, got {other:?}"),
+        }
     }
 
     #[test]
