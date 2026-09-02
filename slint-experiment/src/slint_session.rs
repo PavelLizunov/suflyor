@@ -39,13 +39,45 @@ use std::time::{Duration, Instant};
 
 const SESSION_SYSTEM_COLLECTOR_MAX_SAMPLES: usize = audio::TARGET_SAMPLE_RATE as usize * 30;
 const AUTO_TILE_MAX_TOKENS: u32 = 4096;
+const AUTO_TILE_MAX_TOKENS_MLX: u32 = 384;
+
+#[must_use]
+fn auto_tile_max_tokens(is_mlx: bool) -> u32 {
+    if is_mlx {
+        AUTO_TILE_MAX_TOKENS_MLX
+    } else {
+        AUTO_TILE_MAX_TOKENS
+    }
+}
+
+#[must_use]
+fn auto_tile_prompt_hash(
+    effective_context: &str,
+    recent_transcript: &[String],
+    live_coaching: bool,
+    is_mlx: bool,
+) -> u64 {
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    effective_context.hash(&mut hasher);
+    recent_transcript.hash(&mut hasher);
+    live_coaching.hash(&mut hasher);
+    is_mlx.hash(&mut hasher);
+    hasher.finish()
+}
+
+#[must_use]
+fn auto_tile_single_flight_required(is_mlx: bool, every_line: bool) -> bool {
+    is_mlx || every_line
+}
 const SYSTEM_AUDIO_OWNER_NONE: u8 = 0;
 const SYSTEM_AUDIO_OWNER_AUX: u8 = 1;
 const SYSTEM_AUDIO_OWNER_SESSION: u8 = 2;
 static SYSTEM_AUDIO_OWNER: AtomicU8 = AtomicU8::new(SYSTEM_AUDIO_OWNER_NONE);
 static SYSTEM_AUDIO_SESSION_STUCK: AtomicBool = AtomicBool::new(false);
-// ponytail: only the opt-in every-line mode is single-flight; normal question detection never drops accepted triggers.
-static EVERY_LINE_AUTO_TILE_STATE: AtomicU64 = AtomicU64::new(0);
+// ponytail: one process-wide gate; split per provider only if parallel MLX inference becomes safe.
+static AUTO_TILE_SINGLE_FLIGHT_STATE: AtomicU64 = AtomicU64::new(0);
 
 struct AutoTilePermit<'a> {
     state: &'a AtomicU64,
@@ -806,9 +838,8 @@ fn mic_down_notice(ui_is_ru: bool) -> (&'static str, &'static str) {
 /// - Spawns the tile via `events.spawn_tile_full` (trait) instead of
 ///   direct `tile::spawn_tile_with_stealth`. Adapter routes to the
 ///   Slint binary's `SpawnTileRequest` channel + poll Timer.
-/// - Does NOT yet integrate KB lookup (src-tauri `kb::search` is
-///   in overlay-backend and could be wired in a follow-up — for now
-///   the prompt skips the KB-context-addon block).
+/// - Managed MLX auto-tiles use the backend prompt builder's bounded embedded-KB
+///   grounding; standard non-MLX prompts preserve the original behavior.
 async fn maybe_spawn_auto_tile(
     events: Arc<dyn RuntimeEvents>,
     cfg: SharedConfig,
@@ -839,10 +870,12 @@ async fn maybe_spawn_auto_tile(
         preferred_monitor,
         stealth,
         is_local,
+        is_mlx,
     ) = {
         let c = cfg.read();
         let ep = c.ai_endpoint(false);
         let is_unmetered = ep.is_unmetered();
+        let is_mlx = c.ai_provider == "mlx";
         (
             c.auto_tiles_enabled,
             c.auto_tile_every_line,
@@ -858,6 +891,7 @@ async fn maybe_spawn_auto_tile(
             c.tile_monitor_name.clone(),
             c.stealth_enabled,
             is_unmetered,
+            is_mlx,
         )
     };
     // A bearer is required only for the CLOUD bridge; local servers
@@ -892,9 +926,10 @@ async fn maybe_spawn_auto_tile(
         trigger_kind: trigger_kind.as_deref(),
     });
     let Some(trigger) = detected else { return };
-    let _every_line_permit = if every_line {
-        let Some(permit) = try_acquire_auto_tile(&EVERY_LINE_AUTO_TILE_STATE, session_gen) else {
-            log_info("auto-tile skipped: every-line request still running");
+    let _single_flight_permit = if auto_tile_single_flight_required(is_mlx, every_line) {
+        let Some(permit) = try_acquire_auto_tile(&AUTO_TILE_SINGLE_FLIGHT_STATE, session_gen)
+        else {
+            log_info("auto-tile skipped: auto-tile request still running");
             return;
         };
         Some(permit)
@@ -963,24 +998,40 @@ async fn maybe_spawn_auto_tile(
         s.recent_question_prefixes.push((normalized, now));
     }
 
-    // ===== QA cache key + lookup =====
-    // Audit (prompt-context): compute the EFFECTIVE context (profile + approved
-    // memory) ONCE here, hash IT (not the raw meeting_context) so approving/editing/
-    // deleting memory invalidates a stale cached answer, and reuse it for the prompt.
-    // ТЗ 2026-07-06 (A) — the detected question selects the RELEVANT facts; the
-    // hash below covers the resulting context, so a different fact selection
-    // can't serve a stale cached answer.
+    // ===== Prompt inputs + QA cache key =====
+    // Collect every prompt-affecting input before lookup so a cached answer cannot
+    // outlive transcript grounding, approved memory, coaching, or provider profile.
+    let recent_transcript: Vec<String> = {
+        let s = lock(&rt);
+        s.transcript
+            .iter()
+            .rev()
+            .take(5)
+            .rev()
+            .map(|line| {
+                let source = match line.source {
+                    AudioSource::System => "СОБЕСЕДНИК",
+                    AudioSource::Mic => "ПОЛЬЗОВАТЕЛЬ",
+                };
+                format!("[{source}] {}", line.text)
+            })
+            .collect()
+    };
+    let live_coaching = cfg.read().live_coaching_tiles_enabled;
     let effective_context =
         overlay_backend::memory::context_for_meeting(&meeting_context, Some(text.as_str()));
+    let prompt_hash = auto_tile_prompt_hash(
+        &effective_context,
+        &recent_transcript,
+        live_coaching,
+        is_mlx,
+    );
     use std::hash::{Hash, Hasher};
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    effective_context.hash(&mut h);
-    let ctx_hash = h.finish();
-    let mut h2 = std::collections::hash_map::DefaultHasher::new();
-    trigger_keywords.hash(&mut h2);
-    let kw_hash = h2.finish();
+    let mut keyword_hasher = std::collections::hash_map::DefaultHasher::new();
+    trigger_keywords.hash(&mut keyword_hasher);
+    let kw_hash = keyword_hasher.finish();
     let cache_key: String = format!(
-        "m={model};l={response_language};c={ctx_hash:x};k={kw_hash:x};q={}",
+        "m={model};l={response_language};p={is_mlx};h={prompt_hash:x};k={kw_hash:x};q={}",
         normalized_full.chars().take(200).collect::<String>(),
     );
     let cache_hit: Option<String> = {
@@ -1058,32 +1109,11 @@ async fn maybe_spawn_auto_tile(
         return;
     }
 
-    // ===== Recent transcript context (last 5 labeled lines) =====
-    let recent_transcript: Vec<String> = {
-        let s = lock(&rt);
-        s.transcript
-            .iter()
-            .rev()
-            .take(5)
-            .rev()
-            .map(|l| {
-                let src = match l.source {
-                    AudioSource::System => "СОБЕСЕДНИК",
-                    AudioSource::Mic => "ПОЛЬЗОВАТЕЛЬ",
-                };
-                format!("[{src}] {}", l.text)
-            })
-            .collect()
-    };
-
     // ===== Build prompts + AI call =====
     let trigger_text = match &trigger {
         backend_runtime::Trigger::Question(q) => q.clone(),
         backend_runtime::Trigger::Keyword(kw, _) => kw.clone(),
     };
-    // Фича1 — read-aloud tone for these live auto-tiles when the coaching
-    // live-speech toggle is on (the auto hints the user reads aloud on-call).
-    let live_coaching = cfg.read().live_coaching_tiles_enabled;
     let (system_prompt, prompt) = backend_runtime::build_auto_tile_prompts(
         &trigger,
         &recent_transcript,
@@ -1093,6 +1123,7 @@ async fn maybe_spawn_auto_tile(
         &effective_context,
         &response_language,
         live_coaching,
+        is_mlx,
     );
     let sys_full = system_prompt.clone();
     let usr_full = prompt.clone();
@@ -1126,12 +1157,9 @@ async fn maybe_spawn_auto_tile(
         reasoning_effort,
         is_local,
     };
-    let (answer, usage) = match ai::complete_with_usage_endpoint(
-        &endpoint,
-        messages,
-        AUTO_TILE_MAX_TOKENS,
-    )
-    .await
+    let max_tokens = auto_tile_max_tokens(is_mlx);
+    let (answer, usage) = match ai::complete_with_usage_endpoint(&endpoint, messages, max_tokens)
+        .await
     {
         Ok((t, u)) => {
             lock(&rt)
@@ -1659,7 +1687,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_line_auto_tile_permit_is_single_flight_per_session() {
+    fn auto_tile_permit_is_single_flight_per_session() {
         let state = AtomicU64::new(0);
         let first = try_acquire_auto_tile(&state, 1).expect("first session should acquire");
         assert!(try_acquire_auto_tile(&state, 1).is_none());
@@ -1673,6 +1701,40 @@ mod tests {
         assert!(try_acquire_auto_tile(&state, 1).is_none());
         assert!(try_acquire_auto_tile(&state, 2).is_some());
         assert_eq!(AUTO_TILE_MAX_TOKENS, 4096);
+    }
+
+    #[test]
+    fn auto_tile_cache_hash_tracks_every_prompt_input() {
+        let transcript = vec!["[СОБЕСЕДНИК] вопрос".to_string()];
+        let base = auto_tile_prompt_hash("context", &transcript, false, false);
+
+        assert_ne!(
+            base,
+            auto_tile_prompt_hash("changed", &transcript, false, false)
+        );
+        assert_ne!(
+            base,
+            auto_tile_prompt_hash("context", &["new line".to_string()], false, false)
+        );
+        assert_ne!(
+            base,
+            auto_tile_prompt_hash("context", &transcript, true, false)
+        );
+        assert_ne!(
+            base,
+            auto_tile_prompt_hash("context", &transcript, false, true)
+        );
+    }
+
+    #[test]
+    fn auto_tile_policy_and_token_selection_follow_mlx_rules() {
+        assert!(auto_tile_single_flight_required(true, false));
+        assert!(auto_tile_single_flight_required(true, true));
+        assert!(auto_tile_single_flight_required(false, true));
+        assert!(!auto_tile_single_flight_required(false, false));
+
+        assert_eq!(auto_tile_max_tokens(true), 384);
+        assert_eq!(auto_tile_max_tokens(false), 4096);
     }
 
     #[test]

@@ -141,6 +141,28 @@ fn request_perf(
     }
 }
 
+fn format_opt_u64(value: Option<u64>) -> String {
+    value.map_or_else(|| "-".to_string(), |v| v.to_string())
+}
+
+fn format_opt_f64(value: Option<f64>) -> String {
+    value
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .map_or_else(|| "-".to_string(), |v| format!("{v:.1}"))
+}
+
+fn format_stream_tps_metrics(perf: &RequestPerf, completion_tokens: Option<u64>) -> String {
+    let ttft = format_opt_u64(perf.ttft_ms);
+    let total = perf.total_ms;
+    let decode = format_opt_f64(perf.decode_tps);
+    let effective = format_opt_f64(perf.effective_tps);
+    let tokens = format_opt_u64(completion_tokens);
+
+    format!(
+        "stream tps: ttft_ms={ttft} total_ms={total} decode_tps={decode} effective_tps={effective} completion_tokens={tokens}"
+    )
+}
+
 pub(super) fn record_stream_tps(
     request_id: u64,
     request_started_at: Instant,
@@ -167,6 +189,7 @@ pub(super) fn record_stream_tps(
     if state.generation != request_id {
         return;
     }
+    let metrics = format_stream_tps_metrics(&value, completion_tokens);
     if let Some(rate) = stream_tps(server_tps, completion_tokens, delta_count, generation_secs) {
         record_tps(rate);
     }
@@ -174,6 +197,8 @@ pub(super) fn record_stream_tps(
         value,
         recorded_at: terminal_at,
     });
+    drop(state);
+    log::info!("{metrics}");
 }
 
 #[cfg(test)]
@@ -226,5 +251,32 @@ mod tests {
         );
         assert_eq!(perf.decode_tps, None);
         assert_eq!(perf.effective_tps, None);
+    }
+
+    #[test]
+    fn format_stream_tps_metrics_formats_numeric_and_dash_placeholders() {
+        let perf = RequestPerf {
+            ttft_ms: Some(150),
+            total_ms: 1200,
+            decode_tps: Some(42.5),
+            effective_tps: Some(33.3),
+        };
+        let line = format_stream_tps_metrics(&perf, Some(40));
+        assert_eq!(
+            line,
+            "stream tps: ttft_ms=150 total_ms=1200 decode_tps=42.5 effective_tps=33.3 completion_tokens=40"
+        );
+
+        let perf_none = RequestPerf {
+            ttft_ms: None,
+            total_ms: 500,
+            decode_tps: None,
+            effective_tps: None,
+        };
+        let line_none = format_stream_tps_metrics(&perf_none, None);
+        assert_eq!(
+            line_none,
+            "stream tps: ttft_ms=- total_ms=500 decode_tps=- effective_tps=- completion_tokens=-"
+        );
     }
 }

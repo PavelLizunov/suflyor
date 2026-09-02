@@ -423,8 +423,14 @@ fn prompt_always_contains_injection_guard() {
         (vec!["normal line".to_string()], "Senior SRE"),
         (vec!["a".to_string(); 50], "x".repeat(2000).as_str()),
     ] {
-        let (sys, _usr) =
-            build_auto_tile_prompts(&Trigger::Question("q".into()), lines, ctx, "ru", false);
+        let (sys, _usr) = build_auto_tile_prompts(
+            &Trigger::Question("q".into()),
+            lines,
+            ctx,
+            "ru",
+            false,
+            false,
+        );
         assert!(
             sys.contains("БЕЗОПАСНОСТЬ"),
             "system prompt missing anti-injection block for input shape {lines:?}"
@@ -440,7 +446,14 @@ fn prompt_always_contains_injection_guard() {
 /// makes up answers to malformed transcripts.
 #[test]
 fn prompt_contains_garbage_and_offtopic_guards() {
-    let (sys, _) = build_auto_tile_prompts(&Trigger::Question("test".into()), &[], "", "ru", false);
+    let (sys, _) = build_auto_tile_prompts(
+        &Trigger::Question("test".into()),
+        &[],
+        "",
+        "ru",
+        false,
+        false,
+    );
     assert!(sys.contains("мусор"), "missing garbage-input rule");
     assert!(sys.contains("повтори?"), "missing 'повтори?' fallback");
     assert!(
@@ -457,7 +470,14 @@ fn prompt_contains_garbage_and_offtopic_guards() {
 /// the canonical Cyrillic-mangling → Latin recoveries.
 #[test]
 fn prompt_contains_whisper_artifact_recovery_hints() {
-    let (sys, _) = build_auto_tile_prompts(&Trigger::Question("test".into()), &[], "", "ru", false);
+    let (sys, _) = build_auto_tile_prompts(
+        &Trigger::Question("test".into()),
+        &[],
+        "",
+        "ru",
+        false,
+        false,
+    );
     assert!(sys.contains("К87С") || sys.contains("K8s"));
     assert!(sys.contains("гинкс") || sys.contains("nginx"));
     // Newly added in morning addendum:
@@ -479,6 +499,7 @@ fn prompt_handles_long_transcript() {
         "Senior SRE interview, 7 years k8s",
         "ru",
         false,
+        false,
     );
     assert!(usr.contains("Что такое kubernetes?"));
     assert!(
@@ -490,7 +511,8 @@ fn prompt_handles_long_transcript() {
 /// Empty transcript must not crash + still produce coherent prompt.
 #[test]
 fn prompt_handles_empty_transcript() {
-    let (sys, usr) = build_auto_tile_prompts(&Trigger::Question("q?".into()), &[], "", "ru", false);
+    let (sys, usr) =
+        build_auto_tile_prompts(&Trigger::Question("q?".into()), &[], "", "ru", false, false);
     assert!(!sys.is_empty());
     assert!(!usr.is_empty());
     assert!(
@@ -507,6 +529,7 @@ fn prompt_enforces_russian_response_when_configured() {
         &[],
         "",
         "ru",
+        false,
         false,
     );
     assert!(
@@ -525,6 +548,7 @@ fn prompt_offtopic_guard_present_with_empty_context() {
         "",
         "ru",
         false,
+        false,
     );
     assert!(sys.contains("не про техническую"));
 }
@@ -538,6 +562,7 @@ fn prompt_keyword_trigger_includes_keyword_and_line() {
         "",
         "ru",
         false,
+        false,
     );
     assert!(usr.contains("etcd"));
     assert!(usr.contains("consensus"));
@@ -548,8 +573,8 @@ fn prompt_keyword_trigger_includes_keyword_and_line() {
 #[test]
 fn prompt_live_coaching_adds_readaloud_rules() {
     let q = Trigger::Question("как ответить?".into());
-    let (on, _) = build_auto_tile_prompts(&q, &[], "", "ru", true);
-    let (off, _) = build_auto_tile_prompts(&q, &[], "", "ru", false);
+    let (on, _) = build_auto_tile_prompts(&q, &[], "", "ru", true, false);
+    let (off, _) = build_auto_tile_prompts(&q, &[], "", "ru", false, false);
     assert!(
         on.contains("чтения вслух"),
         "live=on must add read-aloud rules"
@@ -559,6 +584,130 @@ fn prompt_live_coaching_adds_readaloud_rules() {
         !off.contains("чтения вслух"),
         "live=off must NOT add read-aloud rules"
     );
+}
+
+#[test]
+fn compact_prompt_is_materially_shorter_and_standard_unchanged() {
+    let q = Trigger::Question("Как организовать таймауты?".into());
+    let lines = vec!["контекст технической беседы".to_string()];
+    let ctx = "Senior DevOps engineer";
+
+    let (sys_std, usr_std) = build_auto_tile_prompts(&q, &lines, ctx, "ru", false, false);
+    let (sys_cmp, usr_cmp) = build_auto_tile_prompts(&q, &lines, ctx, "ru", false, true);
+
+    // Standard behavior preserved
+    assert!(sys_std.contains("Ты — техничный AI-ассистент"));
+    assert!(sys_std.contains("=== БЕЗОПАСНОСТЬ (важно) ==="));
+    assert!(usr_std.contains("Как организовать таймауты?"));
+
+    // Compact prompt is materially shorter
+    assert!(
+        sys_cmp.len() < sys_std.len() / 2,
+        "compact system prompt ({}) should be < 50% of standard ({})",
+        sys_cmp.len(),
+        sys_std.len()
+    );
+    assert!(
+        usr_cmp.len() <= usr_std.len(),
+        "compact user prompt should be no longer than standard"
+    );
+}
+
+#[test]
+fn compact_prompt_preserves_guards_context_language_coaching() {
+    let lines = vec!["реплика из транскрипта".to_string()];
+    let ctx = "Staff SRE, k8s, eBPF";
+
+    // 1. Injection defense guard + meeting context + language
+    let (sys_ru, usr_q) = build_auto_tile_prompts(
+        &Trigger::Question("как настроить cgroup?".into()),
+        &lines,
+        ctx,
+        "ru",
+        false,
+        true,
+    );
+    assert!(sys_ru.contains("БЕЗОПАСНОСТЬ"));
+    assert!(sys_ru.contains("ДАННЫЕ"));
+    assert!(sys_ru.contains("Staff SRE, k8s, eBPF"));
+    assert!(sys_ru.contains("по-русски"));
+    assert!(usr_q.contains("как настроить cgroup?"));
+
+    // 2. English response language
+    let (sys_en, _) = build_auto_tile_prompts(
+        &Trigger::Question("how to scale?".into()),
+        &lines,
+        ctx,
+        "en",
+        false,
+        true,
+    );
+    assert!(sys_en.contains("English"));
+
+    // 3. Live coaching
+    let (sys_coach, _) = build_auto_tile_prompts(
+        &Trigger::Question("как отвечать?".into()),
+        &lines,
+        ctx,
+        "ru",
+        true,
+        true,
+    );
+    assert!(sys_coach.contains("чтения вслух"));
+    assert!(sys_coach.contains("без слов-паразитов"));
+
+    // 4. Empty transcript handling
+    let (_, usr_empty) = build_auto_tile_prompts(
+        &Trigger::Question("вопрос?".into()),
+        &[],
+        ctx,
+        "ru",
+        false,
+        true,
+    );
+    assert!(usr_empty.contains("транскрипт пуст"));
+
+    // 5. Keyword trigger behavior
+    let (_, usr_kw) = build_auto_tile_prompts(
+        &Trigger::Keyword("etcd".into(), "мы используем etcd для данных".into()),
+        &lines,
+        ctx,
+        "ru",
+        false,
+        true,
+    );
+    assert!(usr_kw.contains("etcd"));
+    assert!(usr_kw.contains("мы используем etcd для данных"));
+}
+
+#[test]
+fn compact_prompt_grounds_probes_load_average_and_etcd() {
+    let (probe_sys, probe_user) = build_auto_tile_prompts(
+        &Trigger::Question("Чем readinessProbe отличается от livenessProbe в Kubernetes?".into()),
+        &[],
+        "",
+        "ru",
+        false,
+        true,
+    );
+    assert!(probe_sys.contains("Service endpoints"));
+    assert!(probe_sys.contains("does NOT restart"));
+    assert!(probe_sys.contains("kills and restarts"));
+    assert!(probe_sys.contains("does NOT control Service endpoint"));
+    assert!(probe_user.contains("Используй только релевантные факты"));
+    assert!(probe_user.contains("ровно два пункта"));
+
+    let trigger = Trigger::Question("как проверить load average и восстановить etcd?".into());
+    let transcript = vec!["высокий loadavg и сбой etcd".to_string()];
+    let (sys, _) = build_auto_tile_prompts(&trigger, &transcript, "SRE context", "ru", false, true);
+
+    assert!(sys.contains("=== Проверенная справка"));
+    assert!(sys.contains("state R"));
+    assert!(sys.contains("pidstat -d 1"));
+    assert!(sys.contains("etcdctl snapshot save"));
+    assert!(sys.contains("etcdutl snapshot restore"));
+    assert!(sys.contains("источник истины"));
+    assert!(sys.contains("Копируй приведённые команды дословно"));
 }
 
 /// Reask with no prior QA → emits tile:error + returns None.

@@ -43,7 +43,7 @@ Per-node agent that talks to API server, runs Pods via container runtime (contai
 Per-node networking component. Maintains iptables/IPVS rules implementing Service abstraction (ClusterIP virtual IP → backend Pods).
 
 ## etcd
-Distributed key-value store used by Kubernetes for all cluster state. Raft consensus. Latency-sensitive (NVMe recommended). Backup critical — `etcdctl snapshot save`. Watch quotas (default 2 GB), splits on partition.
+Distributed key-value store used by Kubernetes for all cluster state. Raft consensus; loss of a majority removes quorum and blocks updates. Backup creation uses only `etcdctl snapshot save snapshot.db`; `etcdutl snapshot save` does not exist. Snapshot inspection uses `etcdutl snapshot status snapshot.db`; restore every member from the same snapshot with `etcdutl snapshot restore snapshot.db` into new data directories. Use `etcdutl`, not `etcdctl`, only for snapshot status and restore. Restore assigns new member/cluster IDs and creates a new logical cluster from the supplied initial-cluster configuration. Latency-sensitive; watch quotas and disk I/O.
 
 ## pod
 Smallest deployable unit in K8s — wraps 1+ containers sharing network namespace + storage volumes. Pod IP is ephemeral, dies on restart.
@@ -160,10 +160,10 @@ Max CPU/memory a Pod can use. Exceeding memory limit → OOMKilled. CPU is throt
 K8s assigns Pods QoS based on requests/limits: Guaranteed (req=limit), Burstable (req<limit), BestEffort (no req/limit). Evicted in reverse order on node pressure.
 
 ## readinessprobe
-Per-container check. If failing, Pod removed from Service endpoints (no traffic). Use for slow-starting apps that aren't ready immediately.
+Per-container readiness check. If it fails, Kubernetes removes the Pod from Service endpoints so it receives no traffic; readiness failure does NOT restart the container.
 
 ## livenessprobe
-Per-container check. If failing, container is killed and restarted. Use sparingly — aggressive probes cause cascading restarts.
+Per-container health check. If it fails, Kubernetes kills and restarts the container; liveness does NOT control Service endpoint readiness. Use sparingly — aggressive probes cause cascading restarts.
 
 ## startupprobe
 Disables livenessProbe until passing once. For very slow-starting apps (large JVMs, complex initialization).
@@ -416,6 +416,10 @@ Virtual memory / IO / CPU stats. `vmstat 1 10` 10 samples 1s apart. `si/so` are 
 
 ## iostat
 Disk IO stats. `iostat -xz 1` extended every second. Watch `%util` (saturation), `await` (latency).
+
+## load-average — средняя загрузка системы
+Aliases: load average, loadavg, лоуд-эвередж
+`/proc/loadavg` показывает среднее число задач в очереди выполнения (state R) или непрерываемом сне (state D, часто ожидание I/O) за 1, 5 и 15 минут. Поэтому высокий load при низком CPU обычно означает runnable pressure или блокировку в D-state. Проверяйте `/proc/loadavg`; `vmstat 1` (поля r/b); `ps -eo state,pid,wchan:32,comm` для D-state и wait channel; затем `iostat -xz 1` и `pidstat -d 1`, если причина связана с дисковым I/O.
 
 ## sar
 System Activity Reporter. Historical stats from sysstat package. `sar -u 1` CPU, `sar -r 1` memory, `sar -n DEV 1` network.

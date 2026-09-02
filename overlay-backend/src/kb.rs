@@ -300,6 +300,32 @@ mod tests {
         if let Some(t) = e {
             assert!(t.to_lowercase().contains("exasol"));
         }
+        // Aliases for load-average and etcd-cli grounding.
+        let la1 = reference_for("проверь load average на сервере", 3, 4000);
+        assert!(
+            la1.is_some(),
+            "alias 'load average' should match load-average"
+        );
+        let la2 = reference_for("высокий лоуд-эвередж в системе", 3, 4000);
+        assert!(
+            la2.is_some(),
+            "alias 'лоуд-эвередж' should match load-average"
+        );
+        let la3 = reference_for("покажи loadavg", 3, 4000);
+        assert!(la3.is_some(), "alias 'loadavg' should match load-average");
+
+        let etcd_ref = reference_for("как сделать snapshot в etcd", 3, 4000);
+        assert!(
+            etcd_ref.is_some(),
+            "alias 'etcd' should match etcd/etcd-cli"
+        );
+        if let Some(t) = etcd_ref {
+            let lower = t.to_lowercase();
+            assert!(lower.contains("etcdctl snapshot save"));
+            assert!(lower.contains("`etcdutl snapshot save` does not exist"));
+            assert!(lower.contains("etcdutl snapshot restore"));
+            assert!(lower.contains("use `etcdutl`, not `etcdctl`"));
+        }
     }
 
     /// First call populates cache; check we got a non-trivial number of

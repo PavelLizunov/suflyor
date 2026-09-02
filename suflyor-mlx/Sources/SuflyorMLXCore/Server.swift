@@ -110,6 +110,67 @@ func generationDiagnosticToken(_ value: String) -> String {
     return String(value.map { allowed.contains($0) ? $0 : "_" }.prefix(96))
 }
 
+private let lfmGenerationPromptSeam =
+    "{%- if add_generation_prompt -%}\n"
+    + "    {{- \"<|im_start|>assistant\\n\" -}}\n"
+    + "{%- endif -%}"
+
+private let lfmNoThinkGenerationPrompt =
+    "{%- if add_generation_prompt -%}\n"
+    + "    {{- \"<|im_start|>assistant\\n\" -}}\n"
+    + "    {%- if enable_thinking is defined and enable_thinking is false -%}\n"
+    + "        {{- \"<think>\\nNo unnecessary reasoning. Close thinking and answer immediately.\\n</think>\\n\" -}}\n"
+    + "    {%- endif -%}\n"
+    + "{%- endif -%}"
+
+func patchLFMChatTemplate(_ template: String) throws -> String {
+    guard template.components(separatedBy: lfmGenerationPromptSeam).count == 2 else {
+        throw SidecarError.invalidSnapshot
+    }
+    return template.replacingOccurrences(
+        of: lfmGenerationPromptSeam,
+        with: lfmNoThinkGenerationPrompt
+    )
+}
+
+private struct LFMNoThinkTokenizerLoader: TokenizerLoader {
+    let base: any TokenizerLoader
+
+    func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
+        let fileManager = FileManager.default
+        let overlay = fileManager.temporaryDirectory
+            .appendingPathComponent("suflyor-lfm-tokenizer-\(UUID().uuidString)", isDirectory: true)
+        do {
+            let templateURL = directory.appendingPathComponent("chat_template.jinja")
+            let template = try String(contentsOf: templateURL, encoding: .utf8)
+            let patched = try patchLFMChatTemplate(template)
+            try fileManager.createDirectory(
+                at: overlay,
+                withIntermediateDirectories: false,
+                attributes: [.posixPermissions: 0o700]
+            )
+            defer { try? fileManager.removeItem(at: overlay) }
+            for entry in try fileManager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil
+            ) where entry.lastPathComponent != "chat_template.jinja" {
+                try fileManager.createSymbolicLink(
+                    at: overlay.appendingPathComponent(entry.lastPathComponent),
+                    withDestinationURL: entry
+                )
+            }
+            try patched.write(
+                to: overlay.appendingPathComponent("chat_template.jinja"),
+                atomically: true,
+                encoding: .utf8
+            )
+            return try await base.load(from: overlay)
+        } catch {
+            throw SidecarError.invalidSnapshot
+        }
+    }
+}
+
 func sidecarDiagnosticCase(_ error: Error) -> String {
     guard let error = error as? SidecarError else { return "none" }
     switch error {
@@ -291,7 +352,10 @@ private actor ModelEngine {
         do {
             switch model {
             case .lfm:
-                next = try await LLMModelFactory.shared.loadContainer(from: snapshot, using: tokenizer)
+                next = try await LLMModelFactory.shared.loadContainer(
+                    from: snapshot,
+                    using: LFMNoThinkTokenizerLoader(base: tokenizer)
+                )
             case .qwen:
                 next = try await VLMModelFactory.shared.loadContainer(from: snapshot, using: tokenizer)
             }
