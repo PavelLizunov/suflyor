@@ -201,6 +201,8 @@ fi
 rm -rf -- "$tmp_parent"
 trap - EXIT
 
+dot_clean -m "$app_dir" 2>/dev/null || true
+
 # Local packaging defaults to ad-hoc. An explicit stable Keychain identity keeps
 # the designated requirement stable for personal upgrade/TCC testing. Public
 # distribution still requires owner-authorized Developer ID + notarization.
