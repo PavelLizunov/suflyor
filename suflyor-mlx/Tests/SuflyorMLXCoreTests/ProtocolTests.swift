@@ -219,6 +219,14 @@ private func firstImageData(in request: ChatCompletionRequest) throws -> Data {
     #expect(object["model"] as? String == SupportedModel.qwen.rawValue)
     #expect(throws: SidecarError.invalidStartup) { try readyLine(port: 0, model: .qwen) }
     #expect(throws: SidecarError.invalidStartup) { try readyLine(port: 65_536, model: .qwen) }
+
+    let gemmaLine = try readyLine(port: 49_152, model: .gemma4)
+    let gemmaObj = try #require(
+        JSONSerialization.jsonObject(with: Data(gemmaLine.dropLast())) as? [String: Any]
+    )
+    #expect(gemmaObj["model"] as? String == SupportedModel.gemma4.rawValue)
+    #expect(SupportedModel.gemma4.modelType == "gemma4")
+    #expect(SupportedModel.gemma4.supportsVision == true)
 }
 
 @Test func cancellingQueuedGenerationDoesNotStrandGate() async throws {

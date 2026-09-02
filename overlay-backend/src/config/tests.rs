@@ -1084,6 +1084,13 @@ fn mlx_defaults_are_additive_and_fail_closed_until_owned_runtime_is_ready() {
         cfg.vision_endpoint().is_none(),
         "text-only catalog entry must never route images"
     );
+
+    // Gemma4 VLM declares image support and routes images under the same text model.
+    cfg.ai_mlx_model = crate::mlx_install::GEMMA4_MODEL.into();
+    assert!(cfg.same_text_model_accepts_images_declared());
+    cfg.vision_provider = "same".into();
+    let same_endpoint = cfg.vision_endpoint().expect("Gemma4 VLM must support same vision");
+    assert_eq!(same_endpoint.model, crate::mlx_install::GEMMA4_MODEL);
 }
 
 #[test]

@@ -356,7 +356,7 @@ private actor ModelEngine {
                     from: snapshot,
                     using: LFMNoThinkTokenizerLoader(base: tokenizer)
                 )
-            case .qwen:
+            case .qwen, .gemma4:
                 next = try await VLMModelFactory.shared.loadContainer(from: snapshot, using: tokenizer)
             }
         } catch {
