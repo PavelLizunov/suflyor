@@ -32,10 +32,12 @@ independent_stt_cap_review=pass
 SLINT MCP EVIDENCE
 baseline_tile=460x360 position=968,80 scale=1
 candidate_tile=460x360 position=968,80 scale=1
-fixture_body=identical synthetic translation and answer
+fixture_body=not identical: the local model produced different synthetic answers
 baseline_title=synthetic preceding statement plus question
 candidate_accessible_title=exact extracted question
-image_visual_review=unverified: session image payload was omitted by the model runtime
+native_vision_ocr=pass: both titles recognized at confidence 1.000 and stayed inside the 460px tile
+chrome_geometry=matched: header/source/control text retained the same OCR positions
+human_pixel_review=pending: session image payload was omitted by the model runtime
 
 LIMITATIONS
 The unbundled QA binary's system-audio tap emitted zero-RMS chunks, so no candidate live-audio timing claim is made. The 5-second submission bound is verified at the pure flush-decision seam; production runtime confirmation remains for the next installed RC/user test.
