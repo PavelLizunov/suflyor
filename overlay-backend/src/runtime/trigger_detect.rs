@@ -378,7 +378,9 @@ fn is_question_clause(c_trimmed: &str) -> bool {
     }
     let lower = c_trimmed.to_lowercase();
     let stripped = strip_filler_prefix(&lower);
-    let starts_leading = SENTENCE_LEADING.iter().any(|prefix| stripped.starts_with(prefix));
+    let starts_leading = SENTENCE_LEADING
+        .iter()
+        .any(|prefix| stripped.starts_with(prefix));
 
     if starts_leading {
         return true;
@@ -528,7 +530,10 @@ mod tests {
         let res = detect_trigger(text, "k8s");
         match res {
             Some(Trigger::Question(q)) => assert_eq!(q, "Что такое etcd?"),
-            other => panic!("Expected Trigger::Question(\"Что такое etcd?\"), got {:?}", other),
+            other => panic!(
+                "Expected Trigger::Question(\"Что такое etcd?\"), got {:?}",
+                other
+            ),
         }
     }
 }

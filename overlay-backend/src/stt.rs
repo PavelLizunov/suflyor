@@ -440,12 +440,8 @@ pub fn spawn(
 
             let dur_sec = utt.samples.len() as f32 / TARGET_SAMPLE_RATE as f32;
             let cap_sec = utterance_cap_sec(chunk.source);
-            let (should_flush, forced_by_size) = utterance_flush_decision(
-                dur_sec,
-                utt.silent_run_ms,
-                utt.had_voice,
-                cap_sec,
-            );
+            let (should_flush, forced_by_size) =
+                utterance_flush_decision(dur_sec, utt.silent_run_ms, utt.had_voice, cap_sec);
             if forced_by_size {
                 // info, not warn (v0.17.1 audit): the size-cap flush is normal,
                 // designed behavior for continuous speech — a warn read like an

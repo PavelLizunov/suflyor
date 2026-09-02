@@ -1775,7 +1775,8 @@ mod tests {
 
     #[test]
     fn normal_auto_tile_mode_still_delegates_to_detector() {
-        match auto_tile_trigger("Сервис использует Kubernetes", false, "Kubernetes") {
+        match auto_tile_trigger("Сервис использует Kubernetes", false, "Kubernetes")
+        {
             Some(backend_runtime::Trigger::Keyword(keyword, line)) => {
                 assert_eq!(keyword, "Kubernetes");
                 assert_eq!(line, "Сервис использует Kubernetes");
