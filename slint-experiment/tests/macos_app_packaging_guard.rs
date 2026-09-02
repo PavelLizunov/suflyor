@@ -42,10 +42,8 @@ fn manifest_keeps_the_production_macos_identity() {
         assert!(has_plist_value(key, value), "invalid plist entry: {key}");
     }
 
-    // Apple bundle versions are numeric; Cargo's prerelease suffix stays in the binary version.
-    let release_version = env!("CARGO_PKG_VERSION")
-        .split_once('-')
-        .map_or(env!("CARGO_PKG_VERSION"), |(version, _)| version);
+    // Info.plist keeps the exact package version including prerelease suffix so Finder/mdls match.
+    let release_version = env!("CARGO_PKG_VERSION");
     let release_value = format!("<string>{release_version}</string>");
     for key in ["CFBundleShortVersionString", "CFBundleVersion"] {
         assert!(

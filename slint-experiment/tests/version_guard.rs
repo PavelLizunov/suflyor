@@ -49,3 +49,30 @@ fn cargo_toml_version_matches_nsi_product_version() {
          PRODUCT_VERSION = {nsi_version}. Bump BOTH to the same value."
     );
 }
+
+#[test]
+fn cargo_toml_version_matches_macos_info_plist_version() {
+    let cargo_version = env!("CARGO_PKG_VERSION");
+
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let plist_path = root.join("macos/Info.plist");
+    let plist = fs::read_to_string(&plist_path)
+        .unwrap_or_else(|e| panic!("read {}: {e}", plist_path.display()));
+
+    let short_version_key = "<key>CFBundleShortVersionString</key>";
+    let (_, rest) = plist
+        .split_once(short_version_key)
+        .expect("missing CFBundleShortVersionString in Info.plist");
+    let value = rest
+        .trim_start()
+        .strip_prefix("<string>")
+        .and_then(|r| r.split_once("</string>"))
+        .map(|(v, _)| v.trim())
+        .expect("CFBundleShortVersionString must be a <string>");
+
+    assert_eq!(
+        cargo_version, value,
+        "version drift: Cargo.toml = {cargo_version}, macos/Info.plist \
+         CFBundleShortVersionString = {value}. Bump BOTH to the same value."
+    );
+}
