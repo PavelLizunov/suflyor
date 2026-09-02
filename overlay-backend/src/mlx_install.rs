@@ -41,6 +41,7 @@ pub struct CatalogFile {
 pub struct CatalogModel {
     pub id: &'static str,
     pub revision: &'static str,
+    pub supports_text: bool,
     pub supports_images: bool,
     pub license: &'static str,
     pub files: &'static [CatalogFile],
@@ -194,6 +195,7 @@ pub const CATALOG: &[CatalogModel] = &[
     CatalogModel {
         id: DEFAULT_TEXT_MODEL,
         revision: "2e92b640a63d47ad4dcf81a19a366b902356b3bc",
+        supports_text: true,
         supports_images: false,
         license: "LFM Open License v1.0",
         files: TEXT_FILES,
@@ -201,6 +203,7 @@ pub const CATALOG: &[CatalogModel] = &[
     CatalogModel {
         id: DEFAULT_VISION_MODEL,
         revision: "674aaa7240b91e8012fcad5d791b7dfe5ba90207",
+        supports_text: false,
         supports_images: true,
         license: "Apache-2.0",
         files: VISION_FILES,
@@ -208,6 +211,7 @@ pub const CATALOG: &[CatalogModel] = &[
     CatalogModel {
         id: GEMMA4_MODEL,
         revision: "9c343e0cbf958fcdbf2e174a0313b1c12e2344ab",
+        supports_text: true,
         supports_images: true,
         license: "Apache-2.0",
         files: GEMMA4_FILES,
@@ -219,7 +223,7 @@ pub fn catalog_for_role(role: ModelRole) -> Vec<&'static CatalogModel> {
     CATALOG
         .iter()
         .filter(|model| match role {
-            ModelRole::Text => true,
+            ModelRole::Text => model.supports_text,
             ModelRole::Vision => model.supports_images,
         })
         .collect()
@@ -772,6 +776,7 @@ mod tests {
         let hostile = CatalogModel {
             id: "..\\outside",
             revision: CATALOG[0].revision,
+            supports_text: true,
             supports_images: false,
             license: "test",
             files: &[],
@@ -794,6 +799,7 @@ mod tests {
         let model = CatalogModel {
             id: "test/model",
             revision: "cccccccccccccccccccccccccccccccccccccccc",
+            supports_text: true,
             supports_images: false,
             license: "test",
             files: &[CatalogFile {
@@ -815,6 +821,7 @@ mod tests {
         let model = CatalogModel {
             id: "test/model",
             revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            supports_text: true,
             supports_images: false,
             license: "test",
             files: FILES,
@@ -853,6 +860,7 @@ mod tests {
         let model = CatalogModel {
             id: "test/model",
             revision: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            supports_text: true,
             supports_images: false,
             license: "test",
             files: FILES,
@@ -903,6 +911,7 @@ mod tests {
         let model = CatalogModel {
             id: "test/model",
             revision: "dddddddddddddddddddddddddddddddddddddddd",
+            supports_text: true,
             supports_images: false,
             license: "test",
             files: FILES,
@@ -946,6 +955,7 @@ mod tests {
         let model = CatalogModel {
             id: "test/model",
             revision: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            supports_text: true,
             supports_images: false,
             license: "test",
             files: FILES,
