@@ -128,12 +128,13 @@ if [[ -n "$bad_mlx_deps" ]]; then
   echo "suflyor-mlx has non-bundle dependencies" >&2
   exit 1
 fi
+dot_clean -m "$app_dir" 2>/dev/null || true
 while IFS= read -r library; do
   if [[ " $(lipo -archs "$library") " != *" arm64 "* ]]; then
     echo "bundled Swift runtime library does not contain arm64" >&2
     exit 1
   fi
-done < <(find "$frameworks_dir" -type f -name '*.dylib' -print)
+done < <(find "$frameworks_dir" -type f -name '*.dylib' ! -name '._*' -print)
 
 verify_bundle_dependency() {
   local owner="$1"
@@ -205,10 +206,10 @@ trap - EXIT
 # distribution still requires owner-authorized Developer ID + notarization.
 while IFS= read -r library; do
   codesign "${codesign_args[@]}" "$library"
-done < <(find "$frameworks_dir" -type f -name '*.dylib' -print)
+done < <(find "$frameworks_dir" -type f -name '*.dylib' ! -name '._*' -print)
 while IFS= read -r framework; do
   codesign "${codesign_args[@]}" "$framework"
-done < <(find "$frameworks_dir" -depth -type d -name '*.framework' -print)
+done < <(find "$frameworks_dir" -depth -type d -name '*.framework' ! -name '._*' -print)
 codesign "${codesign_args[@]}" "$macos_dir/mlx.metallib"
 codesign "${codesign_args[@]}" "$macos_dir/suflyor-mlx"
 codesign "${codesign_args[@]}" "$macos_dir/suflyor-tts"
