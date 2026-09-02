@@ -141,13 +141,24 @@ pub(crate) fn redact_urls(s: &str) -> String {
 /// (`C:\Users\alice\suflyor-local-ai\…` → `%USERPROFILE%\suflyor-local-ai\…`).
 /// The report is advertised "safe to paste into a support thread", but the host /
 /// IP redaction never touched LOCAL FILE PATHS — so the STT model dir used to
-/// carry the username verbatim. Reads `USERPROFILE`; delegates to the pure,
-/// case-insensitive `redact_home_all_forms` seam (unit-testable without env).
+/// carry the username verbatim. Checks `USERPROFILE`, `HOME`, and `dirs::home_dir()`
+/// so cross-platform ports (such as macOS) and non-standard shell environments
+/// also redact home directory paths; delegates to the pure, case-insensitive
+/// `redact_home_all_forms` seam (unit-testable without env).
 pub(crate) fn redact_user_home(s: &str) -> String {
-    match std::env::var("USERPROFILE") {
-        Ok(home) => redact_home_all_forms(s, &home),
-        Err(_) => s.to_string(),
+    let mut out = s.to_string();
+    if let Ok(home) = std::env::var("USERPROFILE") {
+        out = redact_home_all_forms(&out, &home);
     }
+    if let Ok(home) = std::env::var("HOME") {
+        out = redact_home_all_forms(&out, &home);
+    }
+    if let Some(home_path) = dirs::home_dir() {
+        if let Some(home) = home_path.to_str() {
+            out = redact_home_all_forms(&out, home);
+        }
+    }
+    out
 }
 
 /// Mask the home dir in EVERY separator form that shows up in the log, not only
@@ -791,6 +802,16 @@ mod tests {
             redact_home_all_forms("at C:\\Users\\alice\\x", home),
             "at %USERPROFILE%\\x"
         );
+    }
+
+    #[test]
+    fn redact_user_home_masks_posix_mac_home_paths() {
+        // POSIX / macOS home paths (/Users/alice) must be masked without leaking username
+        let home = "/Users/alice";
+        let sample = "STT: ready — gigaam · /Users/alice/suflyor-local-ai/gigaam-v3";
+        let redacted = redact_home_all_forms(sample, home);
+        assert!(!redacted.contains("alice"), "leaked OS username: {redacted}");
+        assert!(redacted.contains("%USERPROFILE%"));
     }
 
     #[test]
