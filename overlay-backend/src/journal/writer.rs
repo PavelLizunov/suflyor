@@ -129,6 +129,14 @@ impl Journal {
         }
     }
 
+    pub fn snapshot_counters(&self) -> Option<SessionCounters> {
+        self.counters.as_ref().map(|c| c.lock().clone())
+    }
+
+    pub fn current_path(&self) -> Option<PathBuf> {
+        self.path.as_ref().map(|p| (**p).clone())
+    }
+
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref().map(PathBuf::as_path)
     }
@@ -142,45 +150,73 @@ impl Journal {
     }
 
     pub fn close(&self) {
-        let _ = self.shutdown_blocking(std::time::Duration::from_secs(2));
+        let _ = self.shutdown(std::time::Duration::from_secs(2));
     }
 
-    pub fn shutdown_blocking(&self, timeout: std::time::Duration) -> Result<(), String> {
+    pub fn shutdown(&self, timeout: std::time::Duration) -> Result<()> {
         let Some(writer) = &self.writer else {
             return Ok(());
         };
-        let (ack_tx, ack_rx) = std::sync::mpsc::channel();
+
         let (tx, join) = {
             let mut state = writer.lock();
-            if let Some(ShutdownState::Done(result)) = &state.shutdown {
-                return result.clone();
-            }
-            if state.shutdown.is_some() {
-                return Err("journal shutdown already in progress".into());
+            match &state.shutdown {
+                Some(ShutdownState::Done(result)) => {
+                    return result.clone().map_err(anyhow::Error::msg);
+                }
+                Some(ShutdownState::InProgress) => {
+                    return Err(anyhow::anyhow!("journal shutdown already in progress"));
+                }
+                None => {}
             }
             state.shutdown = Some(ShutdownState::InProgress);
-            let tx = state.tx.take();
-            let join = state.join.take();
-            (tx, join)
+            (state.tx.take(), state.join.take())
         };
-        let Some(tx) = tx else {
-            return Ok(());
+
+        let (ack_tx, ack_rx) = std::sync::mpsc::channel::<Result<(), String>>();
+        let (mut outcome, safe_to_join): (Result<(), String>, bool) = match tx {
+            Some(tx) => match tx.send(WriterCmd::Shutdown(ack_tx)) {
+                Ok(()) => match ack_rx.recv_timeout(timeout) {
+                    Ok(ack) => (ack, true),
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => (
+                        Err(format!(
+                            "journal shutdown timed out after {timeout:?}; queued entries may not be durable"
+                        )),
+                        false,
+                    ),
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => (
+                        Err("journal writer exited without acknowledging shutdown".to_string()),
+                        true,
+                    ),
+                },
+                Err(_) => (
+                    Err("journal writer channel closed before shutdown".to_string()),
+                    true,
+                ),
+            },
+            None => (
+                Err("journal writer sender missing before shutdown".to_string()),
+                false,
+            ),
         };
-        if tx.send(WriterCmd::Shutdown(ack_tx)).is_err() {
-            let mut state = writer.lock();
-            state.shutdown = Some(ShutdownState::Done(Ok(())));
-            return Ok(());
+
+        if safe_to_join {
+            outcome = if let Some(join) = join {
+                match join.join() {
+                    Ok(()) => outcome,
+                    Err(_) => Err("journal writer thread panicked".to_string()),
+                }
+            } else {
+                Err("journal writer join handle missing".to_string())
+            };
         }
-        let outcome = ack_rx
-            .recv_timeout(timeout)
-            .map_err(|e| format!("journal shutdown wait failed: {e}"))
-            .and_then(|result| result);
-        if let Some(join) = join {
-            let _ = join.join();
-        }
-        let mut state = writer.lock();
-        state.shutdown = Some(ShutdownState::Done(outcome.clone()));
-        outcome
+
+        writer.lock().shutdown = Some(ShutdownState::Done(outcome.clone()));
+        outcome.map_err(anyhow::Error::msg)
+    }
+
+    pub fn shutdown_blocking(&self, timeout: std::time::Duration) -> Result<(), String> {
+        self.shutdown(timeout).map_err(|e| e.to_string())
     }
 
     pub fn emit_summary_and_stop(&self) {

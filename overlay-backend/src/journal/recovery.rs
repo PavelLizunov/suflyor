@@ -3,8 +3,8 @@ use super::writer::sessions_dir;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-const RECOVERY_LAST_LINES: usize = 8;
-const RECOVERY_MAX_AGE_MS: u64 = 12 * 60 * 60 * 1000; // 12h
+pub(crate) const RECOVERY_LAST_LINES: usize = 8;
+pub(crate) const RECOVERY_MAX_AGE_MS: u64 = 12 * 60 * 60 * 1000; // 12h
 const RECOVERY_MAX_READ_BYTES: u64 = 16 * 1024 * 1024; // 16 MB
 
 #[derive(Debug, Clone, PartialEq, Eq)]
