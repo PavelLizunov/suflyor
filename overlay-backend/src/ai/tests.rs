@@ -1,7 +1,7 @@
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::control::*;
     use super::*;
-    use serde_json::json;
+    use serde_json::{json, Value};
 
     #[test]
     fn managed_mlx_intent_is_exact_and_does_not_capture_external_local_servers() {

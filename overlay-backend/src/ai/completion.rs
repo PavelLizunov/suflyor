@@ -5,10 +5,10 @@ use super::control::{
 use super::pricing::TokenUsage;
 use super::provider;
 use super::stream::codex_failure_message;
-use super::tps::{begin_request, record_complete_tps};
+use super::tps::record_tps;
 use super::types::{AiEndpoint, AiProtocol, ChatMessage};
 use anyhow::{anyhow, Context, Result};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 pub async fn complete_with_usage(
     base_url: &str,
@@ -133,11 +133,10 @@ pub(crate) async fn complete_with_usage_inner(
     max_tokens: u32,
     force_no_think: bool,
 ) -> Result<(String, TokenUsage)> {
-    let max_retries = 3;
-    let mut backoff = std::time::Duration::from_secs(1);
-    let mut last_err = anyhow!("completion failed");
+    const MAX_ATTEMPTS: usize = 3;
+    let mut last_err = None;
 
-    for attempt in 0..=max_retries {
+    for attempt in 1..=MAX_ATTEMPTS {
         let (endpoint, _mlx_lease) = resolve_managed_mlx_endpoint(AiEndpoint {
             protocol,
             base_url: base_url.to_string(),
@@ -147,23 +146,14 @@ pub(crate) async fn complete_with_usage_inner(
             is_local: false,
         })
         .await?;
-        if attempt > 0 {
-            log::warn!(
-                "AI complete retry {}/{} after {:?}",
-                attempt,
-                max_retries,
-                backoff
-            );
-            tokio::time::sleep(backoff).await;
-            backoff = (backoff * 2).min(std::time::Duration::from_secs(8));
-        }
+
         let _permit = AI_SEMAPHORE.acquire().await.ok();
         match complete_once(
             endpoint.protocol,
             &endpoint.base_url,
             &endpoint.bearer,
             &endpoint.model,
-            &messages,
+            messages.clone(),
             max_tokens,
             force_no_think,
         )
@@ -171,22 +161,41 @@ pub(crate) async fn complete_with_usage_inner(
         {
             Ok(result) => return Ok(result),
             Err(e) => {
-                if is_permanent_ai_error(&e) {
+                let msg = format!("{e:#}");
+                if is_permanent_ai_error(&msg) {
+                    log::warn!("AI complete permanent failure (no retry): {msg}");
                     return Err(e);
                 }
-                last_err = e;
+                if attempt == MAX_ATTEMPTS {
+                    log::warn!("AI complete final attempt {} failed: {msg}", attempt);
+                    last_err = Some(e);
+                    break;
+                }
+                let delay_ms = 1000u64 * (1u64 << (attempt - 1)); // 1s, 2s, 4s
+                log::warn!(
+                    "AI complete attempt {}/{} failed: {msg} — retrying in {}ms",
+                    attempt,
+                    MAX_ATTEMPTS,
+                    delay_ms
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             }
         }
     }
-    Err(last_err)
+    Err(last_err.unwrap_or_else(|| anyhow!("AI complete failed without specific error")))
 }
 
-pub(crate) fn is_permanent_ai_error(e: &anyhow::Error) -> bool {
-    let s = format!("{e:#}");
-    if s.contains("HTTP 429") {
-        return false;
+pub fn is_permanent_ai_error(msg: &str) -> bool {
+    if let Some(rest) = msg.split("HTTP ").nth(1) {
+        let code: u16 = rest
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect::<String>()
+            .parse()
+            .unwrap_or(0);
+        return (400..500).contains(&code) && code != 429;
     }
-    s.contains("HTTP 4") || s.contains("invalid json") || s.contains("parse models json")
+    false
 }
 
 pub(crate) async fn complete_once(
@@ -194,12 +203,11 @@ pub(crate) async fn complete_once(
     base_url: &str,
     bearer: &str,
     model: &str,
-    messages: &[ChatMessage],
+    messages: Vec<ChatMessage>,
     max_tokens: u32,
     force_no_think: bool,
 ) -> Result<(String, TokenUsage)> {
-    let request_started_at = std::time::Instant::now();
-    let request_id = begin_request();
+    let t0 = std::time::Instant::now();
     if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), base_url) {
         return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
     }
@@ -212,7 +220,7 @@ pub(crate) async fn complete_once(
     let prompt_cache = PROMPT_CACHE.load(std::sync::atomic::Ordering::Relaxed)
         && protocol.supports_prompt_cache_control();
     let mut body =
-        provider::request_body(protocol, model, messages, max_tokens, false, prompt_cache)?;
+        provider::request_body(protocol, model, &messages, max_tokens, false, prompt_cache)?;
     if protocol == AiProtocol::OpenAiCompatible {
         apply_prompt_cache(&mut body);
         apply_local_no_think(&mut body, force_no_think);
@@ -250,57 +258,49 @@ pub(crate) async fn complete_once(
             "{}",
             crate::http_log::http_error_line("AI complete", status.as_u16(), body.len())
         );
-        return Err(anyhow!("HTTP {status}"));
+        anyhow::bail!("HTTP {status}");
     }
-    let v: Value = resp.json().await.context("invalid json in AI response")?;
-    let parsed = provider::parse_completion(protocol, &v)?;
-    let content = parsed.text.unwrap_or_default();
-    let mut usage = TokenUsage {
-        input: parsed.input_tokens.unwrap_or(0),
-        output: parsed.output_tokens.unwrap_or(0),
-        finish_reason: parsed.finish_reason.unwrap_or_else(|| "stop".into()),
-        ..TokenUsage::default()
-    };
-    let throughput = record_complete_tps(
-        request_id,
-        request_started_at,
-        parsed.server_tps,
-        parsed.output_tokens,
-    );
-    usage.tok_per_sec = throughput.unwrap_or(0.0);
-    Ok((content, usage))
+    let v: Value = resp.json().await.context("parse json")?;
+    let (text, usage) = provider::parse_completion(protocol, &v, t0.elapsed().as_secs_f64());
+    record_tps(usage.tok_per_sec);
+    Ok((text, usage))
 }
 
-pub async fn count_chat_tokens(base_url: &str, model: &str, content: &str) -> Result<u64> {
+pub async fn count_chat_tokens(
+    base_url: &str,
+    bearer: &str,
+    model: &str,
+    messages: &[ChatMessage],
+) -> Result<u64> {
     if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), base_url) {
         return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
     }
-    let client = http_client();
-    let url = format!("{}/tokenize", base_url.trim_end_matches('/'));
-    let resp = client
-        .post(&url)
-        .timeout(std::time::Duration::from_secs(10))
-        .json(&serde_json::json!({
-            "model": model,
-            "content": content,
-        }))
+    let url = format!(
+        "{}/chat/completions/input_tokens",
+        base_url.trim_end_matches('/')
+    );
+    let mut body = json!({
+        "model": model,
+        "messages": messages,
+    });
+    apply_prompt_cache(&mut body);
+    apply_local_no_think(&mut body, true);
+    apply_managed_gemma_sampler(&mut body, base_url, model);
+    let response = http_client()
+        .post(url)
+        .timeout(std::time::Duration::from_secs(30))
+        .bearer_auth(bearer)
+        .json(&body)
         .send()
         .await
-        .context("send tokenize request")?;
-    if !resp.status().is_success() {
-        let status = resp.status();
-        let body = resp.text().await.unwrap_or_default();
-        log::warn!(
-            "{}",
-            crate::http_log::http_error_line("tokenize", status.as_u16(), body.len())
-        );
-        return Err(anyhow!("HTTP {status}"));
+        .context("count local prompt tokens")?;
+    if !response.status().is_success() {
+        anyhow::bail!("local prompt token count failed");
     }
-    let value: Value = resp.json().await.context("parse tokenize response")?;
-    if let Some(tokens) = value.get("tokens").and_then(Value::as_array) {
-        return Ok(tokens.len() as u64);
-    }
-    value
+    response
+        .json::<Value>()
+        .await
+        .context("parse local prompt token count")?
         .get("input_tokens")
         .and_then(Value::as_u64)
         .ok_or_else(|| anyhow!("local prompt token count missing"))

@@ -135,11 +135,18 @@ pub fn stream_chat_endpoint(
 }
 
 pub(crate) fn codex_failure_message(failure: crate::codex_subscription::TurnFailure) -> &'static str {
+    use crate::codex_subscription::TurnFailure;
     match failure {
-        crate::codex_subscription::TurnFailure::RateLimited(message) => message,
-        crate::codex_subscription::TurnFailure::Security => "Codex security boundary rejected turn",
-        crate::codex_subscription::TurnFailure::Protocol => "Codex protocol error",
-        crate::codex_subscription::TurnFailure::Cancelled => "Codex turn cancelled",
+        TurnFailure::NotInstalled => "Official Codex app-server is unavailable",
+        TurnFailure::SignedOut => "ChatGPT sign-in is required",
+        TurnFailure::InvalidModel => "Select an available Codex model",
+        TurnFailure::UnsupportedSecurityProfile => {
+            "This Codex version cannot provide the required safe mode"
+        }
+        TurnFailure::SecurityViolation => "Codex security policy stopped this answer",
+        TurnFailure::ModelMismatch => "Codex did not honor the selected model",
+        TurnFailure::Cancelled => "Codex answer cancelled",
+        TurnFailure::Unavailable => "Codex answer unavailable",
     }
 }
 

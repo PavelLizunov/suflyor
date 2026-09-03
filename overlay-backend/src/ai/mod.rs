@@ -15,7 +15,7 @@ pub mod types;
 mod tests;
 
 pub use self::completion::*;
-pub use self::control::{set_local_no_think, set_prompt_cache};
+pub use self::control::{acquire_exclusive_ai, set_local_no_think, set_prompt_cache};
 pub use self::inspect::*;
 pub use self::pricing::*;
 pub use self::prompt::*;
