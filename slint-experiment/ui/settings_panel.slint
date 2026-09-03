@@ -417,6 +417,8 @@ export component SettingsWindow inherits Window {
     in-out property <bool> ai-prompt-cache: false;
     // Local AI provider (Phase 1): 0 = cloud bridge, 1 = local (Ollama/llama.cpp).
     in-out property <int> ai-provider-index: 0;
+    in-out property <int> mlx-text-model-index: 0;
+    callback mlx-text-model-changed(int);
     in-out property <bool> mlx-text-busy: false;
     in-out property <bool> mlx-text-checking: false;
     in-out property <bool> mlx-text-installed: false;
@@ -429,6 +431,8 @@ export component SettingsWindow inherits Window {
     callback mlx-text-download();
     callback mlx-text-cancel();
     callback mlx-text-enable();
+    in-out property <int> mlx-vision-model-index: 0;
+    callback mlx-vision-model-changed(int);
     in-out property <bool> mlx-vision-busy: false;
     in-out property <bool> mlx-vision-checking: false;
     in-out property <bool> mlx-vision-installed: false;
@@ -2282,19 +2286,30 @@ export component SettingsWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             SettingsComboBox {
-                                model: [@tr("LFM2.5-8B-A1B MLX 4-bit")];
-                                current-index: 0;
+                                model: [
+                                    @tr("LFM2.5-8B-A1B MLX 4-bit"),
+                                    @tr("Gemma 4 26B-A4B VLM 2.6-bit (Text + Vision)")
+                                ];
+                                current-index: root.mlx-text-model-index;
+                                selected => {
+                                    root.mlx-text-model-index = self.current-index;
+                                    root.mlx-text-model-changed(self.current-index);
+                                }
                             }
                             Text {
-                                text: @tr("Download size: 4.52 GiB.");
+                                text: root.mlx-text-model-index == 1
+                                    ? @tr("Download size: 9.48 GiB (VLM: Text + Vision).")
+                                    : @tr("Download size: 4.52 GiB.");
                                 font-size: 10px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
                             Text {
-                                text: @tr("[!] LFM Open License v1.0 has commercial-use conditions. Review the license before commercial use. Russian response quality is not guaranteed.");
+                                text: root.mlx-text-model-index == 1
+                                    ? @tr("Apache-2.0. Gemma 4 26B-A4B VLM (4B active) with MSQ 2.6-bit mixed-precision quantization. Supports vision/screenshot tasks under 'Same as text model'.")
+                                    : @tr("[!] LFM Open License v1.0 has commercial-use conditions. Review the license before commercial use. Russian response quality is not guaranteed.");
                                 font-size: 10px;
-                                color: Theme.warning;
+                                color: root.mlx-text-model-index == 1 ? Theme.text-secondary : Theme.warning;
                                 wrap: word-wrap;
                             }
                             Text {
@@ -3263,11 +3278,20 @@ export component SettingsWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             SettingsComboBox {
-                                model: [@tr("Qwen3.5-2B MLX 4-bit (Vision)")];
-                                current-index: 0;
+                                model: [
+                                    @tr("Qwen3.5-2B MLX 4-bit (Vision)"),
+                                    @tr("Gemma 4 26B-A4B VLM 2.6-bit (Vision)")
+                                ];
+                                current-index: root.mlx-vision-model-index;
+                                selected => {
+                                    root.mlx-vision-model-index = self.current-index;
+                                    root.mlx-vision-model-changed(self.current-index);
+                                }
                             }
                             Text {
-                                text: @tr("Download size: 1.63 GiB. Supports image input. License: Apache-2.0.");
+                                text: root.mlx-vision-model-index == 1
+                                    ? @tr("Download size: 9.48 GiB. Supports text and image input. License: Apache-2.0.")
+                                    : @tr("Download size: 1.63 GiB. Supports image input. License: Apache-2.0.");
                                 font-size: 10px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;

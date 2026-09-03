@@ -2274,3 +2274,19 @@ msgstr "Одновременно активна одна управляемая 
 
 msgid "Enable for Vision"
 msgstr "Использовать для Vision"
+
+msgid "Gemma 4 26B-A4B VLM 2.6-bit (Text + Vision)"
+msgstr "Gemma 4 26B-A4B VLM 2.6-бит (Текст + Vision)"
+
+msgid "Download size: 9.48 GiB (VLM: Text + Vision)."
+msgstr "Размер загрузки: 9,48 ГиБ (VLM: Текст + Vision)."
+
+msgid "Apache-2.0. Gemma 4 26B-A4B VLM (4B active) with MSQ 2.6-bit mixed-precision quantization. Supports vision/screenshot tasks under 'Same as text model'."
+msgstr "Apache-2.0. Gemma 4 26B-A4B VLM (4B активных параметров) с квантованием MSQ 2.6-бит. Поддерживает скриншоты в режиме «Как у текстовой модели»."
+
+msgid "Gemma 4 26B-A4B VLM 2.6-bit (Vision)"
+msgstr "Gemma 4 26B-A4B VLM 2.6-бит (Vision)"
+
+msgid "Download size: 9.48 GiB. Supports text and image input. License: Apache-2.0."
+msgstr "Размер загрузки: 9,48 ГиБ. Поддерживает текст и изображения. Лицензия: Apache-2.0."
+
