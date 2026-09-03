@@ -1,6 +1,4 @@
-use super::control::{
-    http_client, resolve_managed_mlx_endpoint, transport_failure_kind,
-};
+use super::control::{http_client, resolve_managed_mlx_endpoint, transport_failure_kind};
 use super::provider;
 use super::stream::codex_failure_message;
 use super::types::{AiEndpoint, AiProtocol, ChatMessage, ContentPart, MessageContent};

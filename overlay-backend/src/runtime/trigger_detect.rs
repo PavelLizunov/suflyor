@@ -636,10 +636,22 @@ mod tests {
 
     #[test]
     fn test_statements_and_answers_are_not_detected_as_questions() {
-        assert_eq!(extract_question_candidate("Правильный ответ — четыре."), None);
-        assert_eq!(extract_question_candidate("Эверест находится в Евразии."), None);
-        assert_eq!(extract_question_candidate("Пифагор так называл чеснок."), None);
-        assert_eq!(extract_question_candidate("Медведка — это насекомое."), None);
+        assert_eq!(
+            extract_question_candidate("Правильный ответ — четыре."),
+            None
+        );
+        assert_eq!(
+            extract_question_candidate("Эверест находится в Евразии."),
+            None
+        );
+        assert_eq!(
+            extract_question_candidate("Пифагор так называл чеснок."),
+            None
+        );
+        assert_eq!(
+            extract_question_candidate("Медведка — это насекомое."),
+            None
+        );
         assert_eq!(extract_question_candidate("Танец Чехии."), None);
     }
 }

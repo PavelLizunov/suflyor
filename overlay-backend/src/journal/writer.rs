@@ -231,9 +231,7 @@ impl Journal {
             self.write(&JournalEvent::SessionSummary {
                 unix_ms: now,
                 duration_ms,
-                transcript_lines: c
-                    .transcript_mic
-                    .saturating_add(c.transcript_system),
+                transcript_lines: c.transcript_mic.saturating_add(c.transcript_system),
                 transcript_mic: c.transcript_mic,
                 transcript_system: c.transcript_system,
                 detector_triggered: c.detector_triggered,

@@ -135,7 +135,9 @@ pub fn stream_chat_endpoint(
     rx
 }
 
-pub(crate) fn codex_failure_message(failure: crate::codex_subscription::TurnFailure) -> &'static str {
+pub(crate) fn codex_failure_message(
+    failure: crate::codex_subscription::TurnFailure,
+) -> &'static str {
     use crate::codex_subscription::TurnFailure;
     match failure {
         TurnFailure::NotInstalled => "Official Codex app-server is unavailable",
