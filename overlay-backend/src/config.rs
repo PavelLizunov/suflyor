@@ -1859,15 +1859,23 @@ pub fn mask_host(url: &str) -> String {
         Some(i) => (&rest[..i], &rest[i..]),
         None => (rest, ""),
     };
-    // Keep the :port suffix of the authority if any, blank the host. A bracketed
+    // SECURITY: strip embedded user credentials (userinfo) before host/port parsing.
+    // If a URL contains userinfo (e.g., http://user:password@host/v1), authority.rfind(':')
+    // would otherwise match the colon in user:password, leaking plaintext credentials and
+    // the host into log files and diagnostic reports.
+    let host_port = match authority.rfind('@') {
+        Some(i) => &authority[i + 1..],
+        None => authority,
+    };
+    // Keep the :port suffix of the host_port if any, blanking the host. A bracketed
     // IPv6 literal ([fd00::abcd]) has colons INSIDE the brackets that are part of
     // the address, not a port — so for those keep a port ONLY when ':<digits>'
     // follows the closing ']'; otherwise nothing. (P0-2: a plain rfind(':') kept
     // ':abcd]' and leaked the IPv6 tail for a no-port bracketed host.)
-    let port = if authority.starts_with('[') {
-        match authority.find(']') {
+    let port = if host_port.starts_with('[') {
+        match host_port.find(']') {
             Some(close) => {
-                let after = &authority[close + 1..];
+                let after = &host_port[close + 1..];
                 if after.starts_with(':')
                     && after.len() > 1
                     && after.as_bytes()[1..].iter().all(u8::is_ascii_digit)
@@ -1880,7 +1888,17 @@ pub fn mask_host(url: &str) -> String {
             None => "", // malformed (no closing bracket) — blank the whole authority
         }
     } else {
-        authority.rfind(':').map(|i| &authority[i..]).unwrap_or("")
+        match host_port.rfind(':') {
+            Some(i) => {
+                let after = &host_port[i + 1..];
+                if !after.is_empty() && after.as_bytes().iter().all(u8::is_ascii_digit) {
+                    &host_port[i..]
+                } else {
+                    ""
+                }
+            }
+            None => "",
+        }
     };
     format!("{scheme}***{port}{path}")
 }
