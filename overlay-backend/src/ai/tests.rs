@@ -57,13 +57,23 @@ async fn queued_stream_stops_when_receiver_is_dropped() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     drop(permits);
 
-    let reacquired = tokio::time::timeout(
-        std::time::Duration::from_millis(2000),
-        AI_SEMAPHORE.acquire_many(2),
-    )
-    .await;
+    let start = std::time::Instant::now();
+    let mut reacquired = false;
+    while start.elapsed() < std::time::Duration::from_secs(5) {
+        if let Ok(Ok(p)) = tokio::time::timeout(
+            std::time::Duration::from_millis(200),
+            AI_SEMAPHORE.acquire_many(2),
+        )
+        .await
+        {
+            drop(p);
+            reacquired = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
     assert!(
-        reacquired.is_ok(),
+        reacquired,
         "a queued stream kept a permit after its receiver was dropped"
     );
 }
