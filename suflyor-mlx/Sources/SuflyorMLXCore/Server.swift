@@ -262,7 +262,19 @@ private actor ModelEngine {
     }
 
     func preload() async throws {
-        _ = try await container()
+        let container = try await container()
+        try Task.checkCancellation()
+        do {
+            let warmupInput = UserInput(prompt: "1")
+            let prepared = try await container.prepare(input: warmupInput)
+            let stream = try await container.generate(
+                input: prepared,
+                parameters: .init(maxTokens: 1, temperature: 0.0)
+            )
+            for await _ in stream {}
+        } catch {
+            // Non-fatal warmup failure: real requests will proceed normally.
+        }
         try Task.checkCancellation()
     }
 
