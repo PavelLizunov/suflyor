@@ -475,7 +475,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let Some(bootstrap) = app_bootstrap::run_preflight()? else {
         return Ok(());
     };
-    let is_relaunch = bootstrap.is_relaunch;
+    let _is_relaunch = bootstrap.is_relaunch;
     let _singleton = bootstrap._singleton;
     let tokio_rt = bootstrap.tokio_rt;
     let rt_handle = tokio_rt.handle().clone();
