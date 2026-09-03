@@ -3,6 +3,8 @@
     use super::*;
     use serde_json::{json, Value};
 
+    static STREAM_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
     #[test]
     fn managed_mlx_intent_is_exact_and_does_not_capture_external_local_servers() {
         let managed = AiEndpoint {
@@ -44,6 +46,7 @@
 
     #[tokio::test]
     async fn queued_stream_stops_when_receiver_is_dropped() {
+        let _stream_guard = STREAM_TEST_LOCK.lock().await;
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let base_url = format!("http://{}", listener.local_addr().unwrap());
         let permits = AI_SEMAPHORE.acquire_many(2).await.unwrap();
@@ -531,6 +534,7 @@
 
     #[tokio::test]
     async fn openai_finish_reason_is_terminal_without_optional_metrics() {
+        let _stream_guard = STREAM_TEST_LOCK.lock().await;
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         std::thread::spawn(move || {
@@ -565,6 +569,7 @@
 
     #[tokio::test]
     async fn native_streams_emit_delta_and_terminal_event() {
+        let _stream_guard = STREAM_TEST_LOCK.lock().await;
         for (protocol, body) in [
             (
                 AiProtocol::OpenAiResponses,
