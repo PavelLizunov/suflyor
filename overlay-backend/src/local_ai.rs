@@ -599,7 +599,7 @@ pub fn install(
         match giga_res {
             Ok(()) => gigaam_ok = true,
             Err(e) => {
-                eprintln!(
+                log::warn!(
                     "[local-ai] GigaAM STT setup failed — continuing (STT stays on Whisper): {e:#}"
                 );
                 on(Progress::Step(

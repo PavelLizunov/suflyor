@@ -937,6 +937,12 @@ fn context_presets_are_compact_clamped_and_stable() {
     assert_eq!(LocalContextPreset::K96.context_tokens(known, true), 98_304);
     assert_eq!(LocalContextPreset::K96.context_tokens(weak, true), 8_192);
 
+    let switch_profile = HardwareModelProfile::Primary26Vram8;
+    assert_eq!(LocalContextPreset::Auto.context_tokens(switch_profile, false), 16_384);
+    assert_eq!(LocalContextPreset::Auto.context_tokens(switch_profile, true), 65_536);
+    assert_eq!(LocalContextPreset::K64.context_tokens(switch_profile, false), 32_768);
+    assert_eq!(LocalContextPreset::K64.context_tokens(switch_profile, true), 65_536);
+
     for (index, value) in ["auto", "8k", "16k", "32k", "64k", "96k"]
         .into_iter()
         .enumerate()

@@ -274,6 +274,13 @@ pub fn snapshot_path_in(data_root: &Path, model: &CatalogModel) -> PathBuf {
 pub fn installed_snapshot(id: &str) -> Option<PathBuf> {
     let model = catalog_model(id)?;
     let path = snapshot_path_in(&crate::paths::data_root()?, model);
+    check_snapshot_fast(model, &path).then_some(path)
+}
+
+#[must_use]
+pub fn installed_snapshot_verified(id: &str) -> Option<PathBuf> {
+    let model = catalog_model(id)?;
+    let path = snapshot_path_in(&crate::paths::data_root()?, model);
     check_snapshot_verified(model, &path).then_some(path)
 }
 
