@@ -1,5 +1,6 @@
 import Foundation
 import Hummingbird
+import MLX
 import MLXHuggingFace
 import MLXLLM
 import MLXLMCommon
@@ -272,6 +273,7 @@ private actor ModelEngine {
                 parameters: .init(maxTokens: 1, temperature: 0.0)
             )
             for await _ in stream {}
+            Memory.clearCache()
         } catch {
             // Non-fatal warmup failure: real requests will proceed normally.
         }
@@ -346,8 +348,10 @@ private actor ModelEngine {
             let tail = try filter.feed("", finished: true)
             if !tail.isEmpty { try await onEvent(.chunk(tail)) }
             try await onEvent(.info(completionInfo))
+            Memory.clearCache()
             await gate.release()
         } catch {
+            Memory.clearCache()
             await gate.release()
             if !(error is CancellationError) {
                 logFailure(scope: "generation", phase: phase.rawValue, error: error)

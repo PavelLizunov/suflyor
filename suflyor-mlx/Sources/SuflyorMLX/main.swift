@@ -23,11 +23,16 @@ enum Main {
         var line = Data()
         line.reserveCapacity(512)
         while line.count <= StartupConfiguration.maxWireBytes {
-            guard let byte = try FileHandle.standardInput.read(upToCount: 1), !byte.isEmpty else {
+            let remaining = StartupConfiguration.maxWireBytes - line.count
+            let toRead = min(4096, max(1, remaining))
+            guard let chunk = try FileHandle.standardInput.read(upToCount: toRead), !chunk.isEmpty else {
                 throw SidecarError.invalidStartup
             }
-            if byte[byte.startIndex] == 0x0A { return line }
-            line.append(contentsOf: byte)
+            if let newlineIndex = chunk.firstIndex(of: 0x0A) {
+                line.append(chunk[chunk.startIndex..<newlineIndex])
+                return line
+            }
+            line.append(chunk)
         }
         throw SidecarError.invalidStartup
     }
