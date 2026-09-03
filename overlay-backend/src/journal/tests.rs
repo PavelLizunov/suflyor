@@ -1031,53 +1031,6 @@
         assert_eq!(got.last_lines[0], "sys: line 5");
         std::fs::remove_dir_all(&dir).ok();
     }
-}
-
-/// Append a Q&A pair to `%APPDATA%\suflyor\bookmarks.md`.
-/// Mirrors the React `bookmark_last_answer` Tauri command. Creates
-/// the file on first call with a brief header; subsequent calls
-/// append a separator + timestamped entry. Returns the bookmarks
-/// file path so callers can show it / open it.
-///
-/// Used by the overlay-bar bookmark chip (slint binary) and the
-/// React/Tauri command on the legacy side. Same on-disk format so
-/// users opening bookmarks.md see a unified history across stacks.
-///
-/// # Errors
-/// Returns IO errors from create_dir_all / OpenOptions / writeln.
-pub fn append_bookmark(question: &str, answer: &str) -> Result<PathBuf> {
-    use std::fs::OpenOptions;
-    use std::io::Write;
-    let dir = crate::paths::data_root().context("no config dir")?;
-    std::fs::create_dir_all(&dir).context("create data dir")?;
-    let path = dir.join("bookmarks.md");
-    let is_new = !path.exists();
-    let mut f = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .context("open bookmarks.md")?;
-    if is_new {
-        writeln!(
-            f,
-            "# suflyor bookmarks\n\nQ/A snippets bookmarked from the overlay bar chip.\n"
-        )
-        .context("write bookmarks header")?;
-    }
-    let stamp = now_unix_ms();
-    writeln!(
-        f,
-        "---\n\n## {stamp}\n\n**Q:** {q}\n\n**A:**\n\n{a}\n",
-        q = question.trim(),
-        a = answer.trim()
-    )
-    .context("write bookmark entry")?;
-    Ok(path)
-
-#[cfg(test)]
-mod bookmark_tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-    use super::*;
 
     #[test]
     fn append_bookmark_creates_file_with_header_then_appends_entries() {
