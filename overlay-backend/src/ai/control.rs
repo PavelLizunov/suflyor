@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 
 pub(crate) static AI_SEMAPHORE: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
 
-pub(crate) async fn acquire_exclusive_ai() -> Result<tokio::sync::SemaphorePermit<'static>> {
+pub async fn acquire_exclusive_ai() -> Result<tokio::sync::SemaphorePermit<'static>> {
     AI_SEMAPHORE
         .acquire_many(2)
         .await
