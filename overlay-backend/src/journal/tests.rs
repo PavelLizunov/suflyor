@@ -1067,4 +1067,3 @@
         assert!(content.contains("## Q1"));
         assert!(content.contains("## Q2"));
     }
-}
