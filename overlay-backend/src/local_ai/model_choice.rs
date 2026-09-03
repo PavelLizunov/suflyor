@@ -97,15 +97,15 @@ impl LocalContextPreset {
     }
 
     #[must_use]
-    pub fn context_tokens(self, profile: HardwareModelProfile, prep: bool) -> u32 {
-        let safe_target = profile.context_tokens(prep);
+    pub fn context_tokens(self, profile: HardwareModelProfile, _prep: bool) -> u32 {
+        let safe_live = profile.context_tokens(false);
         match self {
-            Self::Auto => if prep { safe_target } else { 16_384.min(safe_target) },
-            Self::K8 => 8_192.min(safe_target),
-            Self::K16 => 16_384.min(safe_target),
-            Self::K32 => 32_768.min(safe_target),
-            Self::K64 => 65_536.min(safe_target),
-            Self::K96 => 98_304.min(safe_target),
+            Self::Auto => 16_384.min(safe_live),
+            Self::K8 => 8_192.min(safe_live),
+            Self::K16 => 16_384.min(safe_live),
+            Self::K32 => 32_768.min(safe_live),
+            Self::K64 => 65_536.min(safe_live),
+            Self::K96 => 98_304.min(safe_live),
         }
     }
 

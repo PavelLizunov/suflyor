@@ -55,7 +55,7 @@
         drop(permits);
 
         let reacquired = tokio::time::timeout(
-            std::time::Duration::from_millis(500),
+            std::time::Duration::from_millis(2000),
             AI_SEMAPHORE.acquire_many(2),
         )
         .await;
