@@ -293,17 +293,58 @@ pub fn strip_filler_prefix(lower: &str) -> String {
 }
 
 /// Hoisted sentence-leading interrogatives + request verbs (Russian +
-/// English mix; "когда"/"где"/"кто" deliberately excluded due
-/// to high false-positive rate as conjunctions).
+/// English mix).
 const SENTENCE_LEADING: &[&str] = &[
     "что ",
     "как ",
     "почему ",
     "зачем ",
+    "кто ",
+    "где ",
+    "куда ",
+    "откуда ",
+    "кому ",
+    "кем ",
+    "о ком ",
+    "о чём ",
+    "о чем ",
+    "в каком ",
+    "в какой ",
+    "в каких ",
+    "в ком ",
+    "в чём ",
+    "в чем ",
+    "на каком ",
+    "на какой ",
+    "на каких ",
+    "на территории какой ",
+    "на территории какого ",
+    "к какому ",
+    "к какой ",
+    "к кому ",
+    "с кем ",
+    "с чем ",
+    "у кого ",
+    "у чего ",
+    "назови ",
+    "назовите ",
+    "подскажи ",
+    "подскажите ",
+    "верно ли ",
+    "правда ли ",
+    "может ли ",
+    "можно ли ",
+    "название какого ",
+    "название какой ",
     "какой ",
     "какая ",
     "какое ",
     "какие ",
+    "какая из ",
+    "какой из ",
+    "какое из ",
+    "какие из ",
+    "каково ",
     "сколько ",
     "чем ",
     "расскажи",
@@ -331,6 +372,10 @@ const SENTENCE_LEADING: &[&str] = &[
     "how ",
     "what ",
     "why ",
+    "who ",
+    "where ",
+    "which ",
+    "when ",
     "explain ",
     "describe ",
     "tell me ",
@@ -391,9 +436,17 @@ fn is_question_clause(c_trimmed: &str) -> bool {
     }
 
     if c_trimmed.ends_with('?') {
-        let word_count = lower.split_whitespace().count();
-        if word_count >= 4 {
-            return true;
+        let words: Vec<&str> = lower.split_whitespace().collect();
+        if words.len() >= 2 {
+            let first = words[0].trim_matches(|c: char| !c.is_alphanumeric());
+            if words.len() > 2
+                || !matches!(
+                    first,
+                    "да" | "ага" | "угу" | "так" | "ок" | "окей" | "правда" | "точно"
+                )
+            {
+                return true;
+            }
         }
     }
 
@@ -539,5 +592,54 @@ mod tests {
                 other
             ),
         }
+    }
+
+    #[test]
+    fn test_extract_question_interrogative_prefixes_without_question_mark() {
+        assert_eq!(
+            extract_question_candidate("Кто автор сказки «Бременские музыканты»"),
+            Some("Кто автор сказки «Бременские музыканты»".to_string())
+        );
+        assert_eq!(
+            extract_question_candidate("В каком мультфильме один из главных персонажей ест яблоки"),
+            Some("В каком мультфильме один из главных персонажей ест яблоки".to_string())
+        );
+        assert_eq!(
+            extract_question_candidate("На каком материке находится самая высокая гора в мире"),
+            Some("На каком материке находится самая высокая гора в мире".to_string())
+        );
+        assert_eq!(
+            extract_question_candidate("Где находится самый большой водопад"),
+            Some("Где находится самый большой водопад".to_string())
+        );
+        assert_eq!(
+            extract_question_candidate("Назови столицу Португалии"),
+            Some("Назови столицу Португалии".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_question_short_questions_with_question_mark() {
+        assert_eq!(
+            extract_question_candidate("Кто автор?"),
+            Some("Кто автор?".to_string())
+        );
+        assert_eq!(
+            extract_question_candidate("Какая фигура?"),
+            Some("Какая фигура?".to_string())
+        );
+        assert_eq!(
+            extract_question_candidate("Сколько планет?"),
+            Some("Сколько планет?".to_string())
+        );
+    }
+
+    #[test]
+    fn test_statements_and_answers_are_not_detected_as_questions() {
+        assert_eq!(extract_question_candidate("Правильный ответ — четыре."), None);
+        assert_eq!(extract_question_candidate("Эверест находится в Евразии."), None);
+        assert_eq!(extract_question_candidate("Пифагор так называл чеснок."), None);
+        assert_eq!(extract_question_candidate("Медведка — это насекомое."), None);
+        assert_eq!(extract_question_candidate("Танец Чехии."), None);
     }
 }

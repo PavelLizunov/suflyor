@@ -224,8 +224,8 @@ const VAD_RMS_THRESHOLD: f32 = 50.0;
 /// How long silence must persist to flush an utterance (ms).
 const VAD_HANG_MS: u64 = 800;
 /// Force flush for System loopback audio if buffer is this long (seconds).
-// ponytail: a fixed cap may bisect speech; add low-energy boundary selection only if live transcripts regress.
-const SYSTEM_MAX_UTTERANCE_SEC: u64 = 5;
+// ponytail: a 5s cap forcibly bisected multi-clause questions; 10s aligns with natural pauses and full questions.
+const SYSTEM_MAX_UTTERANCE_SEC: u64 = 10;
 /// Force flush for Microphone audio if buffer is this long (seconds).
 const DEFAULT_MAX_UTTERANCE_SEC: u64 = 10;
 
@@ -1183,29 +1183,23 @@ mod tests {
 
     #[test]
     fn live_utterance_flushes_at_per_source_caps_or_four_silent_chunks() {
-        assert_eq!(SYSTEM_MAX_UTTERANCE_SEC, 5);
+        assert_eq!(SYSTEM_MAX_UTTERANCE_SEC, 10);
         assert_eq!(DEFAULT_MAX_UTTERANCE_SEC, 10);
         assert_eq!(VAD_HANG_MS, 800);
 
         let sys_cap = utterance_cap_sec(AudioSource::System);
         let mic_cap = utterance_cap_sec(AudioSource::Mic);
-        assert_eq!(sys_cap, 5);
+        assert_eq!(sys_cap, 10);
         assert_eq!(mic_cap, 10);
 
-        // System flushes at 5.0s
+        // Utterance stays buffered at 9.9s and flushes at 10.0s
         assert_eq!(
-            utterance_flush_decision(4.9, 600, true, sys_cap),
+            utterance_flush_decision(9.9, 600, true, sys_cap),
             (false, false)
         );
         assert_eq!(
-            utterance_flush_decision(5.0, 0, false, sys_cap),
+            utterance_flush_decision(10.0, 0, false, sys_cap),
             (true, true)
-        );
-
-        // Mic stays buffered at 5.0s and flushes at 10.0s
-        assert_eq!(
-            utterance_flush_decision(5.0, 600, true, mic_cap),
-            (false, false)
         );
         assert_eq!(
             utterance_flush_decision(9.9, 600, true, mic_cap),
@@ -1216,7 +1210,7 @@ mod tests {
             (true, true)
         );
 
-        // 800ms voice-silence flushes before either cap
+        // 800ms voice-silence flushes before cap
         assert_eq!(
             utterance_flush_decision(2.0, 800, true, sys_cap),
             (true, false)
