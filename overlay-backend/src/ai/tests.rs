@@ -51,7 +51,7 @@
         let rx = stream_chat(base_url, String::new(), String::new(), Vec::new(), 1);
         tokio::task::yield_now().await;
         drop(rx);
-        tokio::task::yield_now().await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         drop(permits);
 
         let reacquired = tokio::time::timeout(

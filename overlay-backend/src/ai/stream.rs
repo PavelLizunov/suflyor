@@ -107,8 +107,9 @@ pub fn stream_chat_endpoint(
             return;
         }
         let _permit = tokio::select! {
-            permit = AI_SEMAPHORE.acquire() => permit.ok(),
+            biased;
             () = tx.closed() => return,
+            permit = AI_SEMAPHORE.acquire() => permit.ok(),
         };
         if tx.is_closed() {
             return;
