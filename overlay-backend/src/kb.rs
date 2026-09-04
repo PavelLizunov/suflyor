@@ -173,37 +173,48 @@ pub fn search(query: &str, limit: usize) -> Vec<KBEntry> {
         trimmed.to_string()
     };
     let q = truncated.to_lowercase();
-    if q.is_empty() {
+    if q.is_empty() || limit == 0 {
         return Vec::new();
     }
     let entries = all();
 
-    let mut scored: Vec<(u8, &KBEntry)> = Vec::with_capacity(entries.len() / 4);
+    let mut rank0: Vec<&KBEntry> = Vec::with_capacity(1);
+    let mut rank1: Vec<&KBEntry> = Vec::with_capacity(limit);
+    let mut rank2: Vec<&KBEntry> = Vec::with_capacity(limit);
+    let mut rank3: Vec<&KBEntry> = Vec::with_capacity(limit);
+
     for e in entries {
         let key_lower = &e.key; // already lowercase from parse()
         if key_lower == &q {
-            scored.push((0, e));
+            rank0.push(e);
             continue;
         }
         if key_lower.starts_with(&q) {
-            scored.push((1, e));
+            if rank1.len() < limit {
+                rank1.push(e);
+            }
             continue;
         }
         // heading_lower + body_lower pre-computed at parse() (see KBEntry).
         if e.heading_lower.contains(&q) {
-            scored.push((2, e));
+            if rank2.len() < limit {
+                rank2.push(e);
+            }
             continue;
         }
-        if e.body_lower.contains(&q) {
-            scored.push((3, e));
-            continue;
+        let needed = limit.saturating_sub(rank0.len() + rank1.len() + rank2.len());
+        if rank3.len() < needed && e.body_lower.contains(&q) {
+            rank3.push(e);
         }
     }
-    scored.sort_by_key(|(rank, _)| *rank);
-    scored
+
+    rank0
         .into_iter()
+        .chain(rank1)
+        .chain(rank2)
+        .chain(rank3)
         .take(limit)
-        .map(|(_, e)| e.clone())
+        .cloned()
         .collect()
 }
 
