@@ -187,6 +187,9 @@ pub fn search(query: &str, limit: usize) -> Vec<KBEntry> {
         let key_lower = &e.key; // already lowercase from parse()
         if key_lower == &q {
             rank0.push(e);
+            if rank0.len() >= limit {
+                break;
+            }
             continue;
         }
         if key_lower.starts_with(&q) {
@@ -195,15 +198,18 @@ pub fn search(query: &str, limit: usize) -> Vec<KBEntry> {
             }
             continue;
         }
+        if rank0.len() + rank1.len() >= limit {
+            continue;
+        }
         // heading_lower + body_lower pre-computed at parse() (see KBEntry).
-        if e.heading_lower.contains(&q) {
+        if e.heading_lower.len() >= q.len() && e.heading_lower.contains(&q) {
             if rank2.len() < limit {
                 rank2.push(e);
             }
             continue;
         }
         let needed = limit.saturating_sub(rank0.len() + rank1.len() + rank2.len());
-        if rank3.len() < needed && e.body_lower.contains(&q) {
+        if rank3.len() < needed && e.body_lower.len() >= q.len() && e.body_lower.contains(&q) {
             rank3.push(e);
         }
     }
