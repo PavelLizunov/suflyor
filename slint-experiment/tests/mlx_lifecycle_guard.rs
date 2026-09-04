@@ -6,7 +6,9 @@ const ASK: &str = include_str!("../src/bin/overlay_host/tile_ask.rs");
 const PTT: &str = include_str!("../src/bin/overlay_host/tile_ptt.rs");
 const FOLLOWUP: &str = include_str!("../src/bin/overlay_host/tile_followup.rs");
 const VISION: &str = include_str!("../src/bin/overlay_host/vision_capture.rs");
-const AI: &str = include_str!("../../overlay-backend/src/ai.rs");
+const AI_CONTROL: &str = include_str!("../../overlay-backend/src/ai/control.rs");
+const AI_STREAM: &str = include_str!("../../overlay-backend/src/ai/stream.rs");
+const AI_COMPLETION: &str = include_str!("../../overlay-backend/src/ai/completion.rs");
 const RUNTIME: &str = include_str!("../../overlay-backend/src/mlx_runtime.rs");
 
 #[test]
@@ -17,9 +19,9 @@ fn every_ask_family_crosses_the_mlx_route_boundary() {
     assert!(FOLLOWUP.matches("resolve_route_endpoint(route").count() >= 2);
     assert!(VISION.contains("resolve_route_endpoint(AskRoute::Vision"));
     assert!(VISION.contains("route_needs_mlx(AskRoute::Vision"));
-    assert!(AI.contains("resolve_managed_mlx_endpoint(endpoint.clone()).await?"));
-    assert!(AI.contains("resolve_managed_mlx_endpoint(endpoint).await"));
-    assert!(AI.contains("crate::mlx_runtime::acquire_request(&model)"));
+    assert!(AI_COMPLETION.contains("resolve_managed_mlx_endpoint(endpoint.clone()).await?"));
+    assert!(AI_STREAM.contains("resolve_managed_mlx_endpoint(endpoint).await"));
+    assert!(AI_CONTROL.contains("crate::mlx_runtime::acquire_request(&model)"));
 }
 
 #[test]

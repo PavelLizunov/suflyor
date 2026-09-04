@@ -10,7 +10,7 @@
 ;   slint-experiment/target/release/bundle/suflyor-slint-setup.exe
 
 !define PRODUCT_NAME "suflyor"
-!define PRODUCT_VERSION "0.38.1-rc.1"
+!define PRODUCT_VERSION "0.38.1-rc.2"
 !define PRODUCT_PUBLISHER "x3d_mutant"
 !define PRODUCT_EXE "overlay-host.exe"
 !define PRODUCT_INSTALL_DIR "$LOCALAPPDATA\suflyor-slint"

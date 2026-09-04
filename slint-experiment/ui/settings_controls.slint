@@ -1,0 +1,185 @@
+// Shared UI controls and navigation widgets for Suflyor settings.
+
+import { Button, LineEdit, ComboBox, Slider } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Platform } from "platform.slint";
+import { Metrics } from "metrics.slint";
+
+export component IconSlot inherits Rectangle {
+    in property <image> icon;
+    in property <color> tint: Theme.text-secondary;
+    in property <length> glyph-size: 15px;
+    in property <length> slot-width: 16px;
+    in property <length> slot-height: 26px;
+    width: slot-width;
+    height: slot-height;
+    horizontal-stretch: 0;
+
+    Image {
+        source: root.icon;
+        colorize: root.tint;
+        width: root.glyph-size;
+        height: root.glyph-size;
+        image-fit: contain;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+}
+
+export component BrandHeaderMark inherits Rectangle {
+    in property <length> mark-size: 22px;
+    width: mark-size;
+    height: mark-size;
+    horizontal-stretch: 0;
+
+    Image {
+        source: @image-url("../assets/brand-head.svg");
+        colorize: Theme.is-light ? #111827 : #ffffff;
+        width: root.mark-size;
+        height: root.mark-size;
+        image-fit: contain;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+    }
+}
+
+export component DarkCheck inherits Rectangle {
+    in property <string> text;
+    in-out property <bool> checked: false;
+    in property <bool> enabled: true;
+    callback toggled(bool);
+    min-height: 24px;
+    horizontal-stretch: 1;
+    HorizontalLayout {
+        spacing: 9px;
+        Rectangle {
+            width: 38px;
+            horizontal-stretch: 0;
+            height: 22px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 11px;
+            border-width: 1px;
+            border-color: !root.enabled ? Theme.border.with-alpha(0.5) : root.checked ? Theme.accent : Theme.border;
+            background: !root.enabled ? #ffffff08 : root.checked ? Theme.accent.with-alpha(0.2) : #ffffff0f;
+            animate background, border-color { duration: 140ms; }
+            Rectangle {
+                width: 16px;
+                height: 16px;
+                border-radius: 8px;
+                y: (parent.height - self.height) / 2;
+                x: root.checked ? parent.width - self.width - 3px : 3px;
+                background: !root.enabled ? Theme.text-muted.with-alpha(0.45) : root.checked ? Theme.accent : Theme.text-muted;
+                animate x, background { duration: 140ms; }
+            }
+        }
+        Text {
+            text: root.text;
+            font-size: Metrics.font-body;
+            color: root.enabled ? Theme.text-primary : Theme.text-muted;
+            vertical-alignment: center;
+            wrap: word-wrap;
+            horizontal-stretch: 1;
+        }
+    }
+    TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.checked = !root.checked;
+            root.toggled(root.checked);
+        }
+    }
+}
+
+export component SettingsCard inherits Rectangle {
+    in property <string> title;
+    horizontal-stretch: 1;
+    background: Theme.bg-elevated;
+    border-radius: Metrics.radius-control;
+    border-width: Metrics.border-thin;
+    border-color: Theme.border;
+    clip: true;
+    min-height: card-content.preferred-height;
+    preferred-height: card-content.preferred-height;
+    card-content := VerticalLayout {
+        padding: Metrics.space-md;
+        spacing: Metrics.space-sm;
+        if root.title != "" : Text {
+            text: root.title;
+            font-size: Metrics.font-body;
+            font-weight: 700;
+            color: Theme.text-secondary;
+        }
+        @children
+    }
+}
+
+export component SettingsComboBox inherits ComboBox {
+    height: 32px;
+}
+
+export component SettingsLineEdit inherits LineEdit {
+    height: 32px;
+}
+
+export component SettingsSlider inherits Slider {
+    height: 20px;
+}
+
+export component NavGroupHeader inherits Rectangle {
+    in property <string> label;
+    height: 22px;
+    HorizontalLayout {
+        padding-left: 9px;
+        padding-top: 8px;
+        Text {
+            text: root.label;
+            font-size: 10px;
+            font-weight: 700;
+            color: Theme.text-muted;
+            vertical-alignment: bottom;
+        }
+    }
+}
+
+export component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <int> tab-index;
+    in property <bool> active: false;
+    callback chosen(int);
+    height: 26px;
+    border-radius: 4px;
+    background: root.active
+        ? Theme.accent-subtle
+        : (ta.has-hover ? Theme.bg-elevated : transparent);
+    animate background { duration: 120ms; }
+    if root.active: Rectangle {
+        x: 0px;
+        y: 6px;
+        width: 3px;
+        height: parent.height - 12px;
+        border-radius: 2px;
+        background: Theme.accent;
+    }
+    HorizontalLayout {
+        padding-left: 10px;
+        spacing: Metrics.space-sm;
+        IconSlot {
+            icon: root.icon;
+            tint: root.active ? Theme.accent : Theme.text-secondary;
+            glyph-size: 15px;
+            slot-width: 16px;
+            slot-height: 26px;
+        }
+        Text {
+            text: root.label;
+            font-size: Metrics.font-body;
+            color: root.active ? Theme.accent : Theme.text-secondary;
+            vertical-alignment: center;
+            animate color { duration: 120ms; }
+        }
+    }
+    ta := TouchArea {
+        clicked => { root.chosen(root.tab-index); }
+    }
+}
