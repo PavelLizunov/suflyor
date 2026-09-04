@@ -184,7 +184,7 @@ impl AppServer {
             for line in BufReader::new(stderr).lines().map_while(Result::ok) {
                 if let Some(class) = classify_app_server_stderr(&line) {
                     if seen.insert(class) {
-                        eprintln!("[suflyor-codex] app-server diagnostic={class}");
+                        log::info!("[suflyor-codex] app-server diagnostic={class}");
                     }
                 }
             }
@@ -706,7 +706,7 @@ fn run_turn_inner(
 }
 
 fn turn_stage_failure(stage: &'static str, failure: RpcFailure) -> RpcFailure {
-    eprintln!("[suflyor-codex] turn stage={stage} failure={failure:?}");
+    log::warn!("[suflyor-codex] turn stage={stage} failure={failure:?}");
     failure
 }
 
@@ -728,24 +728,24 @@ fn receive_turn(
     loop {
         let message = recv_until(&server.messages, deadline)?;
         if message.get("method").is_some() && message.get("id").is_some() {
-            eprintln!("[suflyor-codex] unexpected server request during turn");
+            log::warn!("[suflyor-codex] unexpected server request during turn");
             return Err(RpcFailure::Security);
         }
         if message.get("id").and_then(Value::as_u64) == Some(21) {
             if turn_id.is_some() {
-                eprintln!("[suflyor-codex] duplicate turn/start response");
+                log::warn!("[suflyor-codex] duplicate turn/start response");
                 return Err(RpcFailure::Protocol);
             }
             if message.get("error").is_some() {
-                eprintln!("[suflyor-codex] turn/start returned error");
+                log::warn!("[suflyor-codex] turn/start returned error");
                 return Err(RpcFailure::Protocol);
             }
             let result = message.get("result").ok_or_else(|| {
-                eprintln!("[suflyor-codex] turn/start missing result");
+                log::warn!("[suflyor-codex] turn/start missing result");
                 RpcFailure::Protocol
             })?;
             let turn = result.get("turn").ok_or_else(|| {
-                eprintln!("[suflyor-codex] turn/start missing turn");
+                log::warn!("[suflyor-codex] turn/start missing turn");
                 RpcFailure::Protocol
             })?;
             validate_safe_items(turn.get("items"))?;
@@ -781,7 +781,7 @@ fn receive_turn(
                 .and_then(Value::as_str)
                 .filter(|value| value.len() <= 96 && value.is_ascii())
                 .unwrap_or("missing");
-            eprintln!("[suflyor-codex] notification before turn response method={method}");
+            log::warn!("[suflyor-codex] notification before turn response method={method}");
             RpcFailure::Protocol
         })?;
         let parsed = parse_turn_notification(&message, thread_id, active_turn)?;
@@ -874,7 +874,7 @@ fn parse_turn_notification(
                     Ok(TurnNotification::SafeThreadStatus)
                 }
                 Some("active") => {
-                    eprintln!("[suflyor-codex] thread waiting on approval or user input");
+                    log::warn!("[suflyor-codex] thread waiting on approval or user input");
                     Err(RpcFailure::Security)
                 }
                 _ => Err(RpcFailure::Protocol),
@@ -910,7 +910,7 @@ fn parse_turn_notification(
                 let item_type = item_type
                     .filter(|value| value.len() <= 64 && value.is_ascii())
                     .unwrap_or("missing");
-                eprintln!("[suflyor-codex] denied non-text turn item={item_type}");
+                log::warn!("[suflyor-codex] denied non-text turn item={item_type}");
                 Err(RpcFailure::Security)
             }
         }
@@ -930,7 +930,7 @@ fn parse_turn_notification(
                         byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'_' | b'-')
                     })
             }) {
-                eprintln!("[suflyor-codex] unexpected turn method={method}");
+                log::warn!("[suflyor-codex] unexpected turn method={method}");
             }
             Err(RpcFailure::Security)
         }
@@ -1207,7 +1207,7 @@ fn validate_thread_contract(
             .is_some_and(|root| paths_match(Path::new(root), workspace))
     });
     if !roots_match {
-        eprintln!(
+        log::warn!(
             "[suflyor-codex] workspace roots count={} all_match={roots_match}",
             roots.len()
         );
@@ -1226,7 +1226,7 @@ fn require_contract(valid: bool, field: &'static str) -> Result<(), RpcFailure> 
     if valid {
         Ok(())
     } else {
-        eprintln!("[suflyor-codex] security contract mismatch={field}");
+        log::warn!("[suflyor-codex] security contract mismatch={field}");
         Err(RpcFailure::Security)
     }
 }
@@ -1245,12 +1245,12 @@ fn matching_turn_params<'a>(
 ) -> Result<&'a Value, RpcFailure> {
     let params = message.get("params").ok_or(RpcFailure::Protocol)?;
     if params.get("threadId").and_then(Value::as_str) != Some(thread_id) {
-        eprintln!("[suflyor-codex] notification thread id mismatch");
+        log::warn!("[suflyor-codex] notification thread id mismatch");
         return Err(RpcFailure::Security);
     }
     if let Some(expected) = turn_id {
         if params.get("turnId").and_then(Value::as_str) != Some(expected) {
-            eprintln!("[suflyor-codex] notification turn id mismatch");
+            log::warn!("[suflyor-codex] notification turn id mismatch");
             return Err(RpcFailure::Security);
         }
     }

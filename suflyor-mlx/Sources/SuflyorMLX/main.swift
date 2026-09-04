@@ -22,12 +22,19 @@ enum Main {
     private static func readStartupLine() throws -> Data {
         var line = Data()
         line.reserveCapacity(512)
+        var buffer = [UInt8](repeating: 0, count: 4096)
         while line.count <= StartupConfiguration.maxWireBytes {
-            guard let byte = try FileHandle.standardInput.read(upToCount: 1), !byte.isEmpty else {
+            let maxChunk = min(buffer.count, StartupConfiguration.maxWireBytes - line.count)
+            let bytesRead = Darwin.read(STDIN_FILENO, &buffer, maxChunk)
+            guard bytesRead > 0 else {
                 throw SidecarError.invalidStartup
             }
-            if byte[byte.startIndex] == 0x0A { return line }
-            line.append(contentsOf: byte)
+            let chunk = Data(buffer[0..<bytesRead])
+            if let newlineIndex = chunk.firstIndex(of: 0x0A) {
+                line.append(chunk[chunk.startIndex..<newlineIndex])
+                return line
+            }
+            line.append(chunk)
         }
         throw SidecarError.invalidStartup
     }

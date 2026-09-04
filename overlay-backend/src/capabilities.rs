@@ -37,7 +37,6 @@ pub enum PlatformFeature {
     SystemAudio,
     ScreenCapture,
     ExternalStealth,
-    SapiTts,
     GigaamGpu,
     HermesInstaller,
     SelfReplacingUpdater,
@@ -49,7 +48,6 @@ pub fn platform_capability(feature: PlatformFeature) -> CapabilityState {
     #[cfg(target_os = "macos")]
     match feature {
         PlatformFeature::ExternalStealth
-        | PlatformFeature::SapiTts
         | PlatformFeature::GigaamGpu
         | PlatformFeature::HermesInstaller
         | PlatformFeature::SelfReplacingUpdater => {
@@ -66,7 +64,6 @@ pub fn platform_capability(feature: PlatformFeature) -> CapabilityState {
         | PlatformFeature::SystemAudio
         | PlatformFeature::ScreenCapture
         | PlatformFeature::ExternalStealth
-        | PlatformFeature::SapiTts
         | PlatformFeature::GigaamGpu
         | PlatformFeature::HermesInstaller
         | PlatformFeature::SelfReplacingUpdater => CapabilityState::Available,

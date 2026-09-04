@@ -58,7 +58,8 @@ use summary_plan::{
     SUMMARY_PARTIAL_MAX_TOKENS,
 };
 pub use trigger_detect::{
-    build_auto_tile_prompts, detect_trigger, looks_like_real_speech, strip_filler_prefix, Trigger,
+    build_auto_tile_prompts, detect_trigger, extract_question_candidate, looks_like_real_speech,
+    strip_filler_prefix, Trigger,
 };
 
 /// Post-meeting debrief — run Sonnet over the user's MIC-side

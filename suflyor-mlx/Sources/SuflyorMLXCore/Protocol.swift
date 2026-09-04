@@ -15,15 +15,17 @@ public enum SidecarError: Error, Equatable {
 public enum SupportedModel: String, CaseIterable, Codable, Sendable {
     case lfm = "LiquidAI/LFM2.5-8B-A1B-MLX-4bit"
     case qwen = "mlx-community/Qwen3.5-2B-4bit"
+    case gemma4 = "mlx-community/gemma-4-26B-A4B-it-heretic-msq-2.6bit"
 
     public var modelType: String {
         switch self {
         case .lfm: "lfm2_moe"
         case .qwen: "qwen3_5"
+        case .gemma4: "gemma4"
         }
     }
 
-    public var supportsVision: Bool { self == .qwen }
+    public var supportsVision: Bool { self == .qwen || self == .gemma4 }
     public var requiresReasoningBoundary: Bool { false }
 }
 

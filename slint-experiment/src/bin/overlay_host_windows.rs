@@ -49,6 +49,9 @@ use ui::{
 mod window_lifecycle;
 use window_lifecycle::*;
 
+#[path = "overlay_host/app_bootstrap.rs"]
+mod app_bootstrap;
+
 // G1 (2026-07-03) — layout-independent Ctrl+C/V/X/A/Z/Y via a per-window winit filter.
 #[path = "overlay_host/kbd_shortcuts.rs"]
 mod kbd_shortcuts;
@@ -469,85 +472,14 @@ const AI_MAX_TOKENS: u32 = 600;
 pub(crate) const AI_STREAM_MAX_TOKENS: u32 = 4096;
 
 fn main() -> Result<(), slint::PlatformError> {
-    // fs-audit — one-time, fail-safe rename of the data dir from the legacy
-    // Tauri name `overlay-mvp` to the brand `suflyor`. MUST run BEFORE logging /
-    // config touch the data dir (they resolve through `paths::data_root`). Atomic
-    // rename; on any failure the legacy dir is kept and still used, so no data is
-    // lost. Outcome is logged once the log is open (just below).
-    let data_migration = overlay_backend::paths::migrate_data_root();
-
-    // Open the diagnostics log + install the panic hook FIRST so any
-    // early failure (config, tokio, window create) is captured even in a
-    // release build that has no console.
-    slint_replay::logging::init();
-    match &data_migration {
-        overlay_backend::paths::DataMigration::Migrated => {
-            eprintln!("[overlay-host] data dir migrated: overlay-mvp -> suflyor");
-        }
-        overlay_backend::paths::DataMigration::Failed(e) => {
-            eprintln!("[overlay-host] data dir migration failed (staying on overlay-mvp): {e}");
-        }
-        _ => {}
-    }
-
-    // V0.8.0 (Поток B) — single-instance guard for the emergency-restart (⟳)
-    // flow. A `--relaunch` child was spawned by a quitting parent; it must wait
-    // for the parent to release the named mutex (i.e. fully exit + free the
-    // global hotkeys) before it registers its own hotkeys and shows a bar.
-    // Otherwise two bars run at once — and under stealth the 2nd could flash on
-    // the screen-share before WDA. A normal launch acquires immediately; if a
-    // DIFFERENT instance is already alive (user double-clicked the exe), we bail
-    // so we never run a competing bar.
-    let is_relaunch = std::env::args().any(|a| a == "--relaunch");
-    // Relaunch: give the parent up to 8s to exit. Normal: try-once (0ms).
-    let wait_ms = if is_relaunch { 8_000 } else { 0 };
-    let _singleton = match slint_replay::native::lifecycle::acquire_singleton(wait_ms) {
-        Ok(g) => {
-            if is_relaunch {
-                eprintln!("[overlay-host] relaunch: parent exited, singleton acquired");
-            }
-            Some(g)
-        }
-        Err(e) => {
-            // Another instance holds the bar. Don't run a second one.
-            eprintln!("[overlay-host] another instance is already running ({e}); exiting.");
-            return Ok(());
-        }
+    let Some(bootstrap) = app_bootstrap::run_preflight()? else {
+        return Ok(());
     };
-
-    // Phase C — tokio runtime for async AI calls. Multi-threaded so
-    // AI HTTP requests don't block the Slint UI event loop. Spawn
-    // background tasks via `rt.handle().spawn(...)` from UI callbacks.
-    // A native crash cannot finalize WAV headers. Repair them as soon as the
-    // next process owns the singleton so the last session is immediately
-    // visible and playable, without waiting for another recording to start.
-    match overlay_backend::recorder::recordings_dir()
-        .and_then(|root| overlay_backend::recorder::repair_unfinalized_in(&root, Duration::ZERO))
-    {
-        Ok(0) => {}
-        Ok(count) => diag!("[overlay-host] repaired {count} crash-truncated recording(s)"),
-        Err(error) => diag!("[overlay-host] startup recording repair failed: {error:#}"),
-    }
-
-    let tokio_rt = match tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        .enable_all()
-        .build()
-    {
-        Ok(rt) => rt,
-        Err(e) => {
-            eprintln!("[overlay-host] tokio runtime init failed: {e}. AI calls disabled.");
-            return Err(slint::PlatformError::Other(format!("tokio init: {e}")));
-        }
-    };
+    let _is_relaunch = bootstrap.is_relaunch;
+    let _singleton = bootstrap._singleton;
+    let tokio_rt = bootstrap.tokio_rt;
     let rt_handle = tokio_rt.handle().clone();
-
-    // First-run detection — capture BEFORE config::shared() (load() may create
-    // the file). Absent config.json == this is the user's first launch → we
-    // auto-open the setup wizard once the overlay is up (see below, pre-run()).
-    let first_run = overlay_backend::config::config_path()
-        .map(|p| !p.exists())
-        .unwrap_or(false);
+    let first_run = bootstrap.first_run;
 
     // Phase C — load config once at startup. SharedConfig (Arc<RwLock>)
     // because Settings tab will eventually mutate it.
@@ -2616,12 +2548,12 @@ fn main() -> Result<(), slint::PlatformError> {
                     // the global hotkey always fires regardless of focus.
                     let palette_open = hp_palette.borrow().is_some();
                     if palette_open {
-                        eprintln!("[overlay-host] F4 pressed — closing palette (toggle)");
+                        diag!("[overlay-host] F4 pressed — closing palette (toggle)");
                         if let Some(p) = hp_palette.borrow_mut().take() {
                             let _ = p.hide();
                         }
                     } else {
-                        eprintln!("[overlay-host] F4 pressed — opening palette");
+                        diag!("[overlay-host] F4 pressed — opening palette");
                         open_palette(&hp_palette, &hp_tiles, &hp_state, &hp_weak_overlay);
                     }
                 } else if event.id == f1_id {
@@ -2630,7 +2562,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     // so Esc inside it wouldn't fire reliably as the only closer).
                     let help_open = hp_help.borrow().is_some();
                     if help_open {
-                        eprintln!("[overlay-host] F1 pressed — closing help (toggle)");
+                        diag!("[overlay-host] F1 pressed — closing help (toggle)");
                         if let Some(h) = hp_help.borrow_mut().take() {
                             let _ = h.hide();
                         }
@@ -2638,7 +2570,7 @@ fn main() -> Result<(), slint::PlatformError> {
                             o.set_help_open(false);
                         }
                     } else {
-                        eprintln!("[overlay-host] F1 pressed — opening help");
+                        diag!("[overlay-host] F1 pressed — opening help");
                         open_help(&hp_help, &hp_weak_overlay);
                     }
                 } else if event.id == f7_id {
@@ -2648,7 +2580,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     // closer rather than relying on Esc landing).
                     let archive_open = hp_archive.borrow().is_some();
                     if archive_open {
-                        eprintln!("[overlay-host] F7 pressed — closing archive (toggle)");
+                        diag!("[overlay-host] F7 pressed — closing archive (toggle)");
                         if let Some(a) = hp_archive.borrow_mut().take() {
                             let _ = a.hide();
                         }
@@ -2656,7 +2588,7 @@ fn main() -> Result<(), slint::PlatformError> {
                             o.set_archive_open(false);
                         }
                     } else {
-                        eprintln!("[overlay-host] F7 pressed — opening archive");
+                        diag!("[overlay-host] F7 pressed — opening archive");
                         open_archive(
                             &hp_archive,
                             &hp_transcript,
@@ -2674,12 +2606,12 @@ fn main() -> Result<(), slint::PlatformError> {
                     // ported reask_last. Refines the last AI answer using
                     // newest transcript context. Replaces the prior D2
                     // stub that re-invoked the +tile chip.
-                    eprintln!("[overlay-host] F3 pressed — reask_last");
+                    diag!("[overlay-host] F3 pressed — reask_last");
                     fire_f3_reask(&hp_events, &hp_cfg, &hp_rt, &hp_rt_handle);
                 } else if event.id == f6_id {
                     // Phase E3 slice 3 — F6 manual spawn from last
                     // transcript line (bypasses auto-detector).
-                    eprintln!("[overlay-host] F6 pressed — manual_spawn_tile");
+                    diag!("[overlay-host] F6 pressed — manual_spawn_tile");
                     fire_f6_manual_spawn(&hp_events, &hp_cfg, &hp_rt, &hp_rt_handle);
                 } else if event.id == f9_id {
                     // Phase E3 slice 2 — F9 live AI ask via overlay-backend's
@@ -2688,7 +2620,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     // slot, then spawns the streaming AI task. Deltas land
                     // back through the bridge's ai:event handler and update
                     // the tile body live.
-                    eprintln!("[overlay-host] F9 pressed — live ask streaming");
+                    diag!("[overlay-host] F9 pressed — live ask streaming");
                     fire_f9_ask(
                         &hp_bridge,
                         &hp_events,
@@ -2705,7 +2637,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     // cloud model (deeper reasoning), without flipping the
                     // persistent provider. Egress is intentional + visible (the
                     // tile shows a 🧠 cloud badge).
-                    eprintln!("[overlay-host] Shift+F9 — one-shot CLOUD escalation");
+                    diag!("[overlay-host] Shift+F9 — one-shot CLOUD escalation");
                     fire_f9_ask(
                         &hp_bridge,
                         &hp_events,
@@ -3786,7 +3718,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 let _ = overlay_backend::config::save(&c);
                 c.auto_tile_every_line
             };
-            eprintln!("[overlay-host] aggressive auto-tile -> {new_state}");
+            diag!("[overlay-host] aggressive auto-tile -> {new_state}");
             if let Some(o) = weak_for_agg.upgrade() {
                 o.set_aggressive_active(new_state);
             }
@@ -4518,7 +4450,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 let _ = overlay_backend::config::save(&c);
                 c.compact_bar
             };
-            eprintln!("[overlay-host] compact bar -> {now_compact}");
+            diag!("[overlay-host] compact bar -> {now_compact}");
             if let Some(o) = weak_for_compact.upgrade() {
                 o.set_compact_bar(now_compact);
                 apply_bar_size(&o, now_compact);
