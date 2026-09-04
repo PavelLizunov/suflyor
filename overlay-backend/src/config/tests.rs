@@ -1716,6 +1716,27 @@ fn mask_host_keeps_real_ports_and_dns_ipv4() {
     assert_eq!(mask_host("http://example.com/v1"), "http://***/v1");
 }
 
+#[test]
+fn mask_host_strips_credentials_and_validates_port() {
+    // Basic auth credentials in URL without port
+    assert_eq!(
+        mask_host("http://user:secretpassword@example.com/v1"),
+        "http://***/v1"
+    );
+    // Basic auth credentials in URL with port
+    assert_eq!(
+        mask_host("http://user:secretpassword@192.168.0.142:8080/v1"),
+        "http://***:8080/v1"
+    );
+    // Token credentials with bracketed IPv6 and port
+    assert_eq!(
+        mask_host("http://token@[2001:db8::1]:9000/v1"),
+        "http://***:9000/v1"
+    );
+    // Invalid non-digit port suffix treated as part of host and masked
+    assert_eq!(mask_host("http://invalid-port:abc/v1"), "http://***/v1");
+}
+
 // ===== Deep lock (bar lock chip, managed-local only) =====
 
 /// Default OFF, and the persisted flag survives a save/load-style serde

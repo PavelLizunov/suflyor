@@ -1843,6 +1843,10 @@ pub struct ServerSettingsPreview {
 /// or hostname. `http://192.168.0.142:18902/v1` -> `http://***:18902/v1`. Empty
 /// input -> empty output. Best-effort: anything it can't parse is returned with
 /// the authority blanked rather than echoed.
+///
+/// SECURITY: Strips `userinfo@` (`user:pass@`) if present in the URL to prevent
+/// credential leakage in logs/reports, and validates that trailing ports consist
+/// purely of ASCII digits.
 #[must_use]
 pub fn mask_host(url: &str) -> String {
     let url = url.trim();
@@ -1859,15 +1863,16 @@ pub fn mask_host(url: &str) -> String {
         Some(i) => (&rest[..i], &rest[i..]),
         None => (rest, ""),
     };
-    // Keep the :port suffix of the authority if any, blank the host. A bracketed
-    // IPv6 literal ([fd00::abcd]) has colons INSIDE the brackets that are part of
-    // the address, not a port — so for those keep a port ONLY when ':<digits>'
-    // follows the closing ']'; otherwise nothing. (P0-2: a plain rfind(':') kept
-    // ':abcd]' and leaked the IPv6 tail for a no-port bracketed host.)
-    let port = if authority.starts_with('[') {
-        match authority.find(']') {
+    // Strip userinfo (user:pass@) if present before inspecting host/port.
+    let host_and_port = match authority.rfind('@') {
+        Some(i) => &authority[i + 1..],
+        None => authority,
+    };
+    // Keep the :port suffix if any (only if port consists strictly of ASCII digits), blank host.
+    let port = if host_and_port.starts_with('[') {
+        match host_and_port.find(']') {
             Some(close) => {
-                let after = &authority[close + 1..];
+                let after = &host_and_port[close + 1..];
                 if after.starts_with(':')
                     && after.len() > 1
                     && after.as_bytes()[1..].iter().all(u8::is_ascii_digit)
@@ -1877,10 +1882,20 @@ pub fn mask_host(url: &str) -> String {
                     ""
                 }
             }
-            None => "", // malformed (no closing bracket) — blank the whole authority
+            None => "", // malformed bracketed host
         }
     } else {
-        authority.rfind(':').map(|i| &authority[i..]).unwrap_or("")
+        match host_and_port.rfind(':') {
+            Some(i) => {
+                let suffix = &host_and_port[i + 1..];
+                if !suffix.is_empty() && suffix.as_bytes().iter().all(u8::is_ascii_digit) {
+                    &host_and_port[i..]
+                } else {
+                    ""
+                }
+            }
+            None => "",
+        }
     };
     format!("{scheme}***{port}{path}")
 }
