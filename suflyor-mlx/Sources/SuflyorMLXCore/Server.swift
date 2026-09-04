@@ -1,5 +1,6 @@
 import Foundation
 import Hummingbird
+import MLX
 import MLXHuggingFace
 import MLXLLM
 import MLXLMCommon
@@ -262,7 +263,20 @@ private actor ModelEngine {
     }
 
     func preload() async throws {
-        _ = try await container()
+        let container = try await container()
+        try Task.checkCancellation()
+        do {
+            let warmupInput = UserInput(prompt: "1")
+            let prepared = try await container.prepare(input: warmupInput)
+            let stream = try await container.generate(
+                input: prepared,
+                parameters: .init(maxTokens: 1, temperature: 0.0)
+            )
+            for await _ in stream {}
+            Memory.clearCache()
+        } catch {
+            // Non-fatal warmup failure: real requests will proceed normally.
+        }
         try Task.checkCancellation()
     }
 
@@ -334,8 +348,10 @@ private actor ModelEngine {
             let tail = try filter.feed("", finished: true)
             if !tail.isEmpty { try await onEvent(.chunk(tail)) }
             try await onEvent(.info(completionInfo))
+            Memory.clearCache()
             await gate.release()
         } catch {
+            Memory.clearCache()
             await gate.release()
             if !(error is CancellationError) {
                 logFailure(scope: "generation", phase: phase.rawValue, error: error)
@@ -356,7 +372,7 @@ private actor ModelEngine {
                     from: snapshot,
                     using: LFMNoThinkTokenizerLoader(base: tokenizer)
                 )
-            case .qwen:
+            case .qwen, .gemma4:
                 next = try await VLMModelFactory.shared.loadContainer(from: snapshot, using: tokenizer)
             }
         } catch {

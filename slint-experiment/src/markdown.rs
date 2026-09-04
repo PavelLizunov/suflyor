@@ -61,28 +61,7 @@ impl Block {
 #[must_use]
 pub fn parse(source: &str) -> Vec<Block> {
     let source = canonicalize_tex_math_delimiters(source);
-    let source = source.as_ref();
-    let mut raw = parse_variant(source, false);
-    let mut display = parse_variant(source, true);
-    // CommonMark may split one bare TeX expression into several Text events
-    // (notably at escaped matrix row separators). Normalize the completed
-    // block once more so detection sees the expression and its `=` together.
-    for block in &mut display {
-        let contains_inline_code =
-            block.text.contains(INLINE_CODE_START) || block.text.contains(INLINE_CODE_END);
-        if block.kind != kind::CODE && !contains_inline_code {
-            block.text = normalize_math_display(&block.text);
-        }
-        block
-            .text
-            .retain(|ch| !matches!(ch, INLINE_CODE_START | INLINE_CODE_END));
-    }
-    for (block, shown) in raw.iter_mut().zip(display) {
-        if block.kind == shown.kind {
-            block.display_text = shown.text;
-        }
-    }
-    raw
+    parse_single_pass(source.as_ref())
 }
 
 /// Parse a growing AI answer without exposing the unfinished TeX tail. A
@@ -236,9 +215,10 @@ fn fence_marker(line: &str) -> Option<(u8, usize)> {
     (count >= 3).then_some((marker, count))
 }
 
-fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
+fn parse_single_pass(source: &str) -> Vec<Block> {
     let mut out: Vec<Block> = Vec::new();
-    let mut current_text = String::new();
+    let mut current_raw = String::new();
+    let mut current_display = String::new();
     let mut current_kind: Option<i32> = None;
     let mut current_lang = String::new();
     let mut in_math_fence = false;
@@ -265,7 +245,8 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
             Event::Start(Tag::Heading { level, .. }) => {
                 flush(
                     &mut out,
-                    &mut current_text,
+                    &mut current_raw,
+                    &mut current_display,
                     &mut current_kind,
                     &mut current_lang,
                 );
@@ -279,7 +260,8 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
             Event::Start(Tag::Paragraph) if list_depth == 0 => {
                 flush(
                     &mut out,
-                    &mut current_text,
+                    &mut current_raw,
+                    &mut current_display,
                     &mut current_kind,
                     &mut current_lang,
                 );
@@ -291,7 +273,8 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
             Event::Start(Tag::CodeBlock(cb)) => {
                 flush(
                     &mut out,
-                    &mut current_text,
+                    &mut current_raw,
+                    &mut current_display,
                     &mut current_kind,
                     &mut current_lang,
                 );
@@ -319,22 +302,27 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
             Event::Start(Tag::Item) => {
                 flush(
                     &mut out,
-                    &mut current_text,
+                    &mut current_raw,
+                    &mut current_display,
                     &mut current_kind,
                     &mut current_lang,
                 );
                 current_kind = Some(kind::BULLET);
                 if list_depth > 1 {
-                    current_text.push_str(&"  ".repeat(list_depth - 1));
+                    let indent = "  ".repeat(list_depth - 1);
+                    current_raw.push_str(&indent);
+                    current_display.push_str(&indent);
                 }
             }
             Event::Text(t) => {
                 if in_cell {
                     current_cell.push_str(&t);
-                } else if in_math_fence && normalize_math {
-                    current_text.push_str(&normalize_math_fragment(&t));
+                } else if in_math_fence {
+                    current_raw.push_str(&t);
+                    current_display.push_str(&normalize_math_fragment(&t));
                 } else {
-                    current_text.push_str(&t);
+                    current_raw.push_str(&t);
+                    current_display.push_str(&t);
                 }
             }
             Event::Code(t) => {
@@ -345,52 +333,57 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
                 // (out of scope). Whole-answer copy is unaffected — it copies the raw
                 // markdown, not these blocks.
                 // ponytail: inline code renders plain; upgrade path = styled runs.
-                let buf = if in_cell {
-                    &mut current_cell
+                if in_cell {
+                    current_cell.push_str(&t);
                 } else {
-                    &mut current_text
-                };
-                if normalize_math {
-                    buf.push(INLINE_CODE_START);
-                }
-                buf.push_str(&t);
-                if normalize_math {
-                    buf.push(INLINE_CODE_END);
+                    current_raw.push_str(&t);
+                    current_display.push(INLINE_CODE_START);
+                    current_display.push_str(&t);
+                    current_display.push(INLINE_CODE_END);
                 }
             }
             Event::InlineMath(t) => {
-                let buf = if in_cell {
-                    &mut current_cell
+                if in_cell {
+                    current_cell.push('$');
+                    current_cell.push_str(&t);
+                    current_cell.push('$');
                 } else {
-                    &mut current_text
-                };
-                if normalize_math && looks_like_delimited_math(&t) {
-                    buf.push_str(&normalize_math_fragment(&t));
-                } else {
-                    buf.push('$');
-                    buf.push_str(&t);
-                    buf.push('$');
+                    current_raw.push('$');
+                    current_raw.push_str(&t);
+                    current_raw.push('$');
+                    if looks_like_delimited_math(&t) {
+                        current_display.push_str(&normalize_math_fragment(&t));
+                    } else {
+                        current_display.push('$');
+                        current_display.push_str(&t);
+                        current_display.push('$');
+                    }
                 }
             }
             Event::DisplayMath(t) => {
-                let buf = if in_cell {
-                    &mut current_cell
+                if in_cell {
+                    current_cell.push_str("$$");
+                    current_cell.push_str(&t);
+                    current_cell.push_str("$$");
                 } else {
-                    &mut current_text
-                };
-                if normalize_math && looks_like_delimited_math(&t) {
-                    buf.push_str(&normalize_math_fragment(&t));
-                } else {
-                    buf.push_str("$$");
-                    buf.push_str(&t);
-                    buf.push_str("$$");
+                    current_raw.push_str("$$");
+                    current_raw.push_str(&t);
+                    current_raw.push_str("$$");
+                    if looks_like_delimited_math(&t) {
+                        current_display.push_str(&normalize_math_fragment(&t));
+                    } else {
+                        current_display.push_str("$$");
+                        current_display.push_str(&t);
+                        current_display.push_str("$$");
+                    }
                 }
             }
             Event::SoftBreak | Event::HardBreak => {
                 if in_cell {
                     current_cell.push(' ');
                 } else {
-                    current_text.push(' ');
+                    current_raw.push(' ');
+                    current_display.push(' ');
                 }
             }
             Event::End(TagEnd::Heading(_))
@@ -398,7 +391,8 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
             | Event::End(TagEnd::Item) => {
                 flush(
                     &mut out,
-                    &mut current_text,
+                    &mut current_raw,
+                    &mut current_display,
                     &mut current_kind,
                     &mut current_lang,
                 );
@@ -406,7 +400,8 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
             Event::End(TagEnd::CodeBlock) => {
                 flush(
                     &mut out,
-                    &mut current_text,
+                    &mut current_raw,
+                    &mut current_display,
                     &mut current_kind,
                     &mut current_lang,
                 );
@@ -415,7 +410,8 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
             Event::Start(Tag::Table(_)) => {
                 flush(
                     &mut out,
-                    &mut current_text,
+                    &mut current_raw,
+                    &mut current_display,
                     &mut current_kind,
                     &mut current_lang,
                 );
@@ -449,7 +445,8 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
             Event::Rule => {
                 flush(
                     &mut out,
-                    &mut current_text,
+                    &mut current_raw,
+                    &mut current_display,
                     &mut current_kind,
                     &mut current_lang,
                 );
@@ -460,16 +457,19 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
             }
             Event::End(TagEnd::Link) => {
                 if let Some(url) = link_url.take() {
-                    let buf = if in_cell {
-                        &mut current_cell
-                    } else {
-                        &mut current_text
-                    };
-                    // Skip autolinks (text already == url) to avoid "x (x)".
-                    if !url.is_empty() && !buf.ends_with(url.as_str()) {
-                        buf.push_str(" (");
-                        buf.push_str(&url);
-                        buf.push(')');
+                    if in_cell {
+                        if !url.is_empty() && !current_cell.ends_with(url.as_str()) {
+                            current_cell.push_str(" (");
+                            current_cell.push_str(&url);
+                            current_cell.push(')');
+                        }
+                    } else if !url.is_empty() && !current_raw.ends_with(url.as_str()) {
+                        current_raw.push_str(" (");
+                        current_raw.push_str(&url);
+                        current_raw.push(')');
+                        current_display.push_str(" (");
+                        current_display.push_str(&url);
+                        current_display.push(')');
                     }
                 }
             }
@@ -478,23 +478,45 @@ fn parse_variant(source: &str, normalize_math: bool) -> Vec<Block> {
     }
     flush(
         &mut out,
-        &mut current_text,
+        &mut current_raw,
+        &mut current_display,
         &mut current_kind,
         &mut current_lang,
     );
     out
 }
 
-fn flush(out: &mut Vec<Block>, text: &mut String, kind_slot: &mut Option<i32>, lang: &mut String) {
+fn flush(
+    out: &mut Vec<Block>,
+    raw: &mut String,
+    display: &mut String,
+    kind_slot: &mut Option<i32>,
+    lang: &mut String,
+) {
     if let Some(k) = kind_slot.take() {
-        if !text.is_empty() || k == kind::HR {
-            out.push(Block::new(k, std::mem::take(text), std::mem::take(lang)));
+        if !raw.is_empty() || k == kind::HR {
+            let mut disp = std::mem::take(display);
+            let contains_inline_code =
+                disp.contains(INLINE_CODE_START) || disp.contains(INLINE_CODE_END);
+            if k != kind::CODE && !contains_inline_code {
+                disp = normalize_math_display(&disp);
+            }
+            disp.retain(|ch| !matches!(ch, INLINE_CODE_START | INLINE_CODE_END));
+            let raw_text = std::mem::take(raw);
+            out.push(Block {
+                kind: k,
+                text: raw_text,
+                display_text: disp,
+                lang: std::mem::take(lang),
+            });
         } else {
-            text.clear();
+            raw.clear();
+            display.clear();
             lang.clear();
         }
     }
-    text.clear();
+    raw.clear();
+    display.clear();
     lang.clear();
 }
 

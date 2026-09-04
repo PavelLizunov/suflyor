@@ -18,6 +18,7 @@ use std::time::Duration;
 
 pub const DEFAULT_TEXT_MODEL: &str = "LiquidAI/LFM2.5-8B-A1B-MLX-4bit";
 pub const DEFAULT_VISION_MODEL: &str = "mlx-community/Qwen3.5-2B-4bit";
+pub const GEMMA4_MODEL: &str = "mlx-community/gemma-4-26B-A4B-it-heretic-msq-2.6bit";
 const MARKER: &str = ".suflyor-mlx-ready-v1";
 
 #[cfg(any(target_os = "macos", test))]
@@ -40,6 +41,7 @@ pub struct CatalogFile {
 pub struct CatalogModel {
     pub id: &'static str,
     pub revision: &'static str,
+    pub supports_text: bool,
     pub supports_images: bool,
     pub license: &'static str,
     pub files: &'static [CatalogFile],
@@ -141,10 +143,59 @@ const VISION_FILES: &[CatalogFile] = &[
     },
 ];
 
+const GEMMA4_FILES: &[CatalogFile] = &[
+    CatalogFile {
+        path: "chat_template.jinja",
+        size: 17_466,
+        sha256: "36e3a42e5cf14cd0020e72d92e1fdd9970f59b82170e421f0cbe1bb42bead3f0",
+    },
+    CatalogFile {
+        path: "config.json",
+        size: 66_665,
+        sha256: "1a07a99df5ef3bfb55a38bf75917fe6de748808ab6b726d82418abec0957da54",
+    },
+    CatalogFile {
+        path: "generation_config.json",
+        size: 208,
+        sha256: "d4226bbe3117d2d253ba4609720ba82c6c4ce4627a9a6ae05387c78983ac03de",
+    },
+    CatalogFile {
+        path: "model-00001-of-00002.safetensors",
+        size: 5_364_814_139,
+        sha256: "b0916ae984026cc26a693813a30e8f1042f3424d24f31ed26baeb5fa46290d02",
+    },
+    CatalogFile {
+        path: "model-00002-of-00002.safetensors",
+        size: 4_780_368_425,
+        sha256: "70074cffc82e88cb2ff5ea7c506d449d094bdbc4c997f5cfe0467ac34b14ca54",
+    },
+    CatalogFile {
+        path: "model.safetensors.index.json",
+        size: 171_005,
+        sha256: "15766bb640c3eeb2a96ba9ee4f3e3e0f465f745b0fce207bb31aed7276e52016",
+    },
+    CatalogFile {
+        path: "processor_config.json",
+        size: 902,
+        sha256: "1bd0d00776284f369c1eff5fb631e865dfcdca861e0b7d60dbef27fcf37436a8",
+    },
+    CatalogFile {
+        path: "tokenizer.json",
+        size: 32_169_626,
+        sha256: "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f",
+    },
+    CatalogFile {
+        path: "tokenizer_config.json",
+        size: 2_712,
+        sha256: "a649af5e5f6c0b830dd2d65b25ef41e670ecb0431c711b0ab7bffa29756001b0",
+    },
+];
+
 pub const CATALOG: &[CatalogModel] = &[
     CatalogModel {
         id: DEFAULT_TEXT_MODEL,
         revision: "2e92b640a63d47ad4dcf81a19a366b902356b3bc",
+        supports_text: true,
         supports_images: false,
         license: "LFM Open License v1.0",
         files: TEXT_FILES,
@@ -152,9 +203,18 @@ pub const CATALOG: &[CatalogModel] = &[
     CatalogModel {
         id: DEFAULT_VISION_MODEL,
         revision: "674aaa7240b91e8012fcad5d791b7dfe5ba90207",
+        supports_text: false,
         supports_images: true,
         license: "Apache-2.0",
         files: VISION_FILES,
+    },
+    CatalogModel {
+        id: GEMMA4_MODEL,
+        revision: "9c343e0cbf958fcdbf2e174a0313b1c12e2344ab",
+        supports_text: true,
+        supports_images: true,
+        license: "Apache-2.0",
+        files: GEMMA4_FILES,
     },
 ];
 
@@ -163,7 +223,7 @@ pub fn catalog_for_role(role: ModelRole) -> Vec<&'static CatalogModel> {
     CATALOG
         .iter()
         .filter(|model| match role {
-            ModelRole::Text => !model.supports_images,
+            ModelRole::Text => model.supports_text,
             ModelRole::Vision => model.supports_images,
         })
         .collect()
@@ -212,6 +272,13 @@ pub fn snapshot_path_in(data_root: &Path, model: &CatalogModel) -> PathBuf {
 
 #[must_use]
 pub fn installed_snapshot(id: &str) -> Option<PathBuf> {
+    let model = catalog_model(id)?;
+    let path = snapshot_path_in(&crate::paths::data_root()?, model);
+    check_snapshot_fast(model, &path).then_some(path)
+}
+
+#[must_use]
+pub fn installed_snapshot_verified(id: &str) -> Option<PathBuf> {
     let model = catalog_model(id)?;
     let path = snapshot_path_in(&crate::paths::data_root()?, model);
     check_snapshot_verified(model, &path).then_some(path)
@@ -644,23 +711,24 @@ mod tests {
 
     #[test]
     fn catalog_is_exact_role_filtered_and_valid() {
-        assert_eq!(CATALOG.len(), 2);
+        assert_eq!(CATALOG.len(), 3);
         assert_eq!(
             catalog_for_role(ModelRole::Text)
                 .iter()
                 .map(|m| m.id)
                 .collect::<Vec<_>>(),
-            [DEFAULT_TEXT_MODEL]
+            [DEFAULT_TEXT_MODEL, GEMMA4_MODEL]
         );
         assert_eq!(
             catalog_for_role(ModelRole::Vision)
                 .iter()
                 .map(|m| m.id)
                 .collect::<Vec<_>>(),
-            [DEFAULT_VISION_MODEL]
+            [DEFAULT_VISION_MODEL, GEMMA4_MODEL]
         );
         assert!(!catalog_model(DEFAULT_TEXT_MODEL).unwrap().supports_images);
         assert!(catalog_model(DEFAULT_VISION_MODEL).unwrap().supports_images);
+        assert!(catalog_model(GEMMA4_MODEL).unwrap().supports_images);
         assert_eq!(
             CATALOG[0].revision,
             "2e92b640a63d47ad4dcf81a19a366b902356b3bc"
@@ -673,6 +741,12 @@ mod tests {
         );
         assert_eq!(CATALOG[1].license, "Apache-2.0");
         assert_eq!(CATALOG[1].files.len(), 10);
+        assert_eq!(
+            CATALOG[2].revision,
+            "9c343e0cbf958fcdbf2e174a0313b1c12e2344ab"
+        );
+        assert_eq!(CATALOG[2].license, "Apache-2.0");
+        assert_eq!(CATALOG[2].files.len(), 9);
         for model in CATALOG {
             validate_catalog_model(model).unwrap();
             assert_eq!(
@@ -694,6 +768,10 @@ mod tests {
             CATALOG[1].files.iter().map(|f| f.size).sum::<u64>(),
             1_749_079_691
         );
+        assert_eq!(
+            CATALOG[2].files.iter().map(|f| f.size).sum::<u64>(),
+            10_177_611_148
+        );
     }
 
     #[test]
@@ -705,6 +783,7 @@ mod tests {
         let hostile = CatalogModel {
             id: "..\\outside",
             revision: CATALOG[0].revision,
+            supports_text: true,
             supports_images: false,
             license: "test",
             files: &[],
@@ -727,6 +806,7 @@ mod tests {
         let model = CatalogModel {
             id: "test/model",
             revision: "cccccccccccccccccccccccccccccccccccccccc",
+            supports_text: true,
             supports_images: false,
             license: "test",
             files: &[CatalogFile {
@@ -748,6 +828,7 @@ mod tests {
         let model = CatalogModel {
             id: "test/model",
             revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            supports_text: true,
             supports_images: false,
             license: "test",
             files: FILES,
@@ -786,6 +867,7 @@ mod tests {
         let model = CatalogModel {
             id: "test/model",
             revision: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            supports_text: true,
             supports_images: false,
             license: "test",
             files: FILES,
@@ -836,6 +918,7 @@ mod tests {
         let model = CatalogModel {
             id: "test/model",
             revision: "dddddddddddddddddddddddddddddddddddddddd",
+            supports_text: true,
             supports_images: false,
             license: "test",
             files: FILES,
@@ -879,6 +962,7 @@ mod tests {
         let model = CatalogModel {
             id: "test/model",
             revision: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            supports_text: true,
             supports_images: false,
             license: "test",
             files: FILES,

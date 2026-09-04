@@ -599,7 +599,7 @@ pub fn install(
         match giga_res {
             Ok(()) => gigaam_ok = true,
             Err(e) => {
-                eprintln!(
+                log::warn!(
                     "[local-ai] GigaAM STT setup failed — continuing (STT stays on Whisper): {e:#}"
                 );
                 on(Progress::Step(
@@ -1124,13 +1124,35 @@ fn exe_path_for_pid(pid: &str) -> Option<String> {
 }
 
 #[cfg(windows)]
+fn is_pid_alive(pid_num: u32) -> bool {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    unsafe {
+        let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid_num) else {
+            return false;
+        };
+        let mut exit_code = 0u32;
+        let running = GetExitCodeProcess(handle, &mut exit_code).is_ok() && exit_code == 259;
+        let _ = CloseHandle(handle);
+        running
+    }
+}
+
+#[cfg(windows)]
 fn wait_for_pid_exit(pid: &str, budget: Duration) -> bool {
+    let pid_num = pid.parse::<u32>().ok();
     let deadline = Instant::now() + budget;
     while Instant::now() < deadline {
-        if exe_path_for_pid(pid).is_none() {
+        let alive = match pid_num {
+            Some(n) => is_pid_alive(n),
+            None => exe_path_for_pid(pid).is_some(),
+        };
+        if !alive {
             return true;
         }
-        std::thread::sleep(Duration::from_millis(100));
+        std::thread::sleep(Duration::from_millis(50));
     }
     false
 }
@@ -2933,7 +2955,7 @@ fn sha256_hex_of(path: &Path) -> Option<String> {
     use std::io::Read;
     let mut file = std::fs::File::open(path).ok()?;
     let mut hasher = Sha256::new();
-    let mut buf = [0u8; 1 << 16];
+    let mut buf = vec![0u8; 1024 * 1024];
     loop {
         let n = file.read(&mut buf).ok()?;
         if n == 0 {
@@ -2941,13 +2963,7 @@ fn sha256_hex_of(path: &Path) -> Option<String> {
         }
         hasher.update(&buf[..n]);
     }
-    Some(
-        hasher
-            .finalize()
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect(),
-    )
+    Some(crate::download::hex(&hasher.finalize()))
 }
 
 /// P1.5 — verify a downloaded OR size-reused model against its pinned SHA-256

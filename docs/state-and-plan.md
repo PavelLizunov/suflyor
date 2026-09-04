@@ -7,6 +7,38 @@
 > более новые post-release изменения. Активного handoff для `master` нет.
 > Разделы ниже — историческая летопись и текущее состояние не описывают.
 
+## Долгосрочный план рефакторинга (по итогам Codebase Audit 2026-09-03)
+
+### ✅ Этап 1: Очистка мертвого кода и быстрые фиксы (Сделано)
+- Удалены 7 файлов-призраков и дубликатов в `slint-experiment/src/` и `src/bin/` (~10 300 LOC).
+- Удалена мёртвая зависимость `Win32_Media_Speech` и `PlatformFeature::SapiTts`.
+- Исправлен баг `LocalContextPreset::context_tokens` (игнорирование `_prep: bool`), разблокировавший динамический свап серверов для конспектов.
+- Внедрён мгновенный `check_snapshot_fast` в `mlx_install::installed_snapshot` для устранения дискового фриза при открытии настроек на macOS.
+- Заменены сырые `eprintln!` в `overlay-backend` на `log::warn!` / `log::info!`.
+
+### 📋 Этап 2: Перформанс и системные вызовы (Бэклог)
+1. **Буфер хеширования моделей (`local_ai.rs:2936`):**
+   Увеличить размер буфера с 64 KB до 1 MB для GGUF-файлов, убрав ~160 000 лишних syscalls на моделях 10+ GB.
+2. **Win32 API вместо PowerShell-процессов (`local_ai.rs:1127`, `hardware_profile.rs`):**
+   Заменить цикл с вызовом `powershell.exe` в `wait_for_pid_exit` на прямые вызовы Win32 `OpenProcess` / `GetExitCodeProcess`, а запросы памяти и диска — на `GlobalMemoryStatusEx` и `GetDiskFreeSpaceExW`.
+3. **Оптимизация стриминга AI-тайлов (`tile_controller.rs:590`):**
+   Устранить полный репарсинг Markdown-дерева и пересоздание `ModelRc<VecModel>` на каждые 50 мс дельты.
+4. **Буферизованный stdin в `suflyor-mlx/main.swift`:**
+   Заменить побайтовое чтение `readStartupLine` на буферизованный ридер строки (устранение до 65 536 вызовов read).
+5. **Очистка GPU Metal Cache в MLX:**
+   Вызывать `MLX.GPU.clearCache()` после завершения потока генерации для стабилизации VRAM на машинах с 16 GiB.
+
+### 📋 Этап 3: Декомпозиция God Objects (Бэклог)
+1. **`slint-experiment/src/bin/overlay_host_windows.rs` (5 030 LOC):**
+   Декомпозировать функцию `main()` (4 492 LOC) на модули в `overlay_host/`:
+   `app_bootstrap.rs`, `hotkey_dispatcher.rs`, `bar_controller.rs`, `tile_spawn_loop.rs`, `ptt_controller.rs`, `lock_menu_controller.rs`.
+2. **`slint-experiment/ui/settings_panel.slint` (4 287 LOC):**
+   Вынести 16 вкладок в отдельные файлы `ui/settings/tab_*.slint`, изолировав локальные свойства и вёрстку.
+3. **`overlay-backend/src/local_ai.rs` (3 149 LOC):**
+   Разбить на `process.rs` (супервизор и JobObjects), `downloader.rs` (скачивание и распаковка), `engine_update.rs` (GitHub API и ротация), `installer.rs` (оркестратор мастера).
+4. **`overlay-backend/src/tts.rs` (2 218 LOC) & `ai.rs` (2 187 LOC):**
+   Вынести в подмодули `tts/{sidecar, tracker, speech_text, catalog}.rs` и `ai/{types, pricing, stream, prompt, completion}.rs`.
+
 > **ПОСТ-0.23.0 ПАКЕТ ФИКСОВ (2026-06-27) — по live-логам тестера. Копится ЛОКАЛЬНО в один релиз (0.23.1/0.24.0); НЕ запушено/не опубликовано; жду «релизь».**
 > Каждый фикс: гейт (ci.ps1) + состязательное ревью 0/0. Сделано+закоммичено:
 > - **Коучинг «разбор не появляется»** — ГЛАВНОЕ (лог: «debrief skipped: session too short» на 80-строчных): `overlay_host.rs` сбрасывал `session_secs=0` на Stop ДО снапшота → duration всегда 0 → разбор НЕ запускался НИКОГДА. Фикс: захват до сброса (`1525cad`). + bearer-гейт → `readiness().ai.configured` для локального ИИ (`4a61ea4`). + видимый статус вместо тишины (ошибка ИИ / нет данных / ИИ-не-настроен → тайл, иначе молча; gate-reasons = общие consts) (`9a57b50`).
