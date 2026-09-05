@@ -1716,6 +1716,27 @@ fn mask_host_keeps_real_ports_and_dns_ipv4() {
     assert_eq!(mask_host("http://example.com/v1"), "http://***/v1");
 }
 
+#[test]
+fn mask_host_strips_userinfo_and_redacts_credentials() {
+    // URLs with embedded credentials (userinfo) must never leak password or host.
+    assert_eq!(
+        mask_host("http://user:secret@192.168.0.142/v1"),
+        "http://***/v1"
+    );
+    assert_eq!(
+        mask_host("http://user:secret@192.168.0.142:18902/v1"),
+        "http://***:18902/v1"
+    );
+    assert_eq!(
+        mask_host("http://user:sec:ret@example.com:8080/v1"),
+        "http://***:8080/v1"
+    );
+    assert_eq!(
+        mask_host("http://admin:pass@domain.com/api"),
+        "http://***/api"
+    );
+}
+
 // ===== Deep lock (bar lock chip, managed-local only) =====
 
 /// Default OFF, and the persisted flag survives a save/load-style serde
