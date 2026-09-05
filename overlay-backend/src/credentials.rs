@@ -121,11 +121,22 @@ mod posix_credentials {
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
     use std::path::{Path, PathBuf};
 
+    pub(super) fn ensure_credentials_dir(dir: &Path) -> Result<()> {
+        fs::create_dir_all(dir)?;
+        #[cfg(unix)]
+        {
+            // SECURITY: Ensure the credentials directory is restricted to owner-only
+            // access (0700 / rwx------) to prevent local multi-user reading or listing.
+            fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
+        }
+        Ok(())
+    }
+
     fn credentials_path() -> Result<PathBuf> {
         let dir = dirs::config_dir()
             .ok_or_else(|| anyhow!("could not resolve user config dir"))?
             .join("suflyor");
-        fs::create_dir_all(&dir)?;
+        ensure_credentials_dir(&dir)?;
         Ok(dir.join("credentials.json"))
     }
 
@@ -201,6 +212,27 @@ mod tests {
         assert_eq!(SecretSlot::OpenAi.target(), "suflyor/ai/openai/v1");
         assert_eq!(SecretSlot::Anthropic.target(), "suflyor/ai/anthropic/v1");
         assert_ne!(SecretSlot::OpenAi.target(), SecretSlot::Anthropic.target());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn posix_credentials_dir_has_mode_0700() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().expect("create temp directory");
+        let dir = temp.path().join("suflyor");
+        posix_credentials::ensure_credentials_dir(&dir).expect("ensure credentials dir");
+        assert_eq!(
+            std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        posix_credentials::ensure_credentials_dir(&dir).expect("re-ensure credentials dir");
+        assert_eq!(
+            std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
     }
 
     #[cfg(unix)]
