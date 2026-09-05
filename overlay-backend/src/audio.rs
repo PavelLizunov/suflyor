@@ -805,6 +805,20 @@ fn resample_and_quantise(input: &[f32], ratio: f64) -> Vec<i16> {
     }
     let out_len = (input.len() as f64 / ratio).floor() as usize;
     let mut out = Vec::with_capacity(out_len);
+
+    if (ratio - 3.0).abs() < 1e-6 {
+        const INV_3: f32 = 1.0 / 3.0;
+        let full_chunks = input.len() / 3;
+        for i in 0..full_chunks {
+            let idx = i * 3;
+            let sum = input[idx] + input[idx + 1] + input[idx + 2];
+            let mean = sum * INV_3;
+            let clamped = mean.clamp(-1.0, 1.0);
+            out.push((clamped * i16::MAX as f32) as i16);
+        }
+        return out;
+    }
+
     for i in 0..out_len {
         let start = (i as f64 * ratio).floor() as usize;
         let end = (((i + 1) as f64 * ratio).floor() as usize).min(input.len());
