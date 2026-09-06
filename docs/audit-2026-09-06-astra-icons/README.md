@@ -19,6 +19,29 @@ edited some of them. This is not evidence that Astra personally drew all 50
 icons. The user's explicit authorship requirement remains unmet. Do not label
 this candidate as an exclusively Astra-drawn final set.
 
+## Direct Astra redraw progress
+
+The lead Astra agent has now directly rewritten the SVG geometry for all 50
+files. These are source-coordinate drawings, not traced image sheets; no
+other model was delegated this corrective writing pass. The set shares
+monitor geometry across monitor/coach/diagnostics, speech-bubble geometry
+across bubble/STT, lock bodies, and mirrored seek controls. Historical draft
+provenance above remains relevant; these changes do not erase that history.
+XML parsing of all 50 assets, exact root contracts, identical lock/unlock body
+geometry, and zero brand changes relative to the original baseline passed;
+`git diff --check` passed. No brand files changed. A source raster atlas was
+rendered successfully using the already installed sharp library, at 14, 16,
+and 40 pixels per icon, and inspected by the lead agent. This is a source
+preview, not live Slint evidence. Local untracked evidence:
+`artifacts/astra-icons-direct/atlas-dark.png`, SHA-256
+`fc4f519588b0685105ce02d0084b537b2ec8b7469985a9216980631e23dc20d2`.
+The light-background atlas was also inspected:
+`artifacts/astra-icons-direct/atlas-light.png`, SHA-256
+`81f2b0a51d30dcadf0246f56ccb11dc83704c96be604f9e09bf526207df8b60b`.
+A 160-pixel raster alpha-boundary scan found no canvas-edge clipping across
+all 50 icons. Independent review and native verification of this new geometry
+remain pending. These edits do not inherit the older binary's acceptance evidence.
+
 ## Exact identities
 
 - Original baseline: `bffbfd44` (resolve the full SHA before a baseline build).
