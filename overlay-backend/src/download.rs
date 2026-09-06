@@ -159,8 +159,8 @@ mod tests {
         let dest = std::env::temp_dir().join("suflyor-sha256-test.txt");
         std::fs::write(&dest, b"test content").unwrap();
 
-        // SHA-256 of "test content" is 6ae8a75555209fd6c44157c0aed8016e763ff435a19cf186f76863140143ff2c
-        let expected = " 6ae8a75555209fd6c44157c0aed8016e763ff435a19cf186f76863140143ff2c\n ";
+        // SHA-256 of "test content" is 6ae8a75555209fd6c44157c0aed8016e763ff435a19cf186f76863140143ff72
+        let expected = " 6ae8a75555209fd6c44157c0aed8016e763ff435a19cf186f76863140143ff72\n ";
         assert!(verify_sha256(&dest, expected, "test file").is_ok());
 
         let _ = std::fs::remove_file(&dest);
