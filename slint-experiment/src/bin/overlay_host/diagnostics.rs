@@ -140,6 +140,45 @@ pub(crate) fn redact_urls(s: &str) -> String {
     out
 }
 
+/// Redact sensitive credential patterns (`Bearer <token>`, `gsk_<token>`, `sk-<token>`)
+/// from diagnostic outputs and log exports so exported files and reports never leak API keys
+/// or authorization tokens.
+pub(crate) fn redact_secrets(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while !rest.is_empty() {
+        if rest.starts_with("Bearer ") {
+            out.push_str("Bearer <redacted>");
+            rest = &rest[7..];
+            let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
+            rest = &rest[tok_len..];
+        } else if rest.starts_with("gsk_") {
+            out.push_str("gsk_<redacted>");
+            rest = &rest[4..];
+            let tok_len = rest
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+                .unwrap_or(rest.len());
+            rest = &rest[tok_len..];
+        } else if rest.starts_with("sk-")
+            && !out
+                .chars()
+                .last()
+                .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            out.push_str("sk-<redacted>");
+            rest = &rest[3..];
+            let tok_len = rest
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+                .unwrap_or(rest.len());
+            rest = &rest[tok_len..];
+        } else if let Some(next_char) = rest.chars().next() {
+            out.push(next_char);
+            rest = &rest[next_char.len_utf8()..];
+        }
+    }
+    out
+}
+
 /// Replace the current user's home directory with the `%USERPROFILE%` placeholder
 /// so the copied report never leaks the OS username via a model/cache path
 /// (`C:\Users\alice\suflyor-local-ai\…` → `%USERPROFILE%\suflyor-local-ai\…`).
@@ -336,9 +375,8 @@ pub(crate) fn build_diag_report(cfg: &overlay_backend::config::SharedConfig) -> 
     // Mask the user-home (→ %USERPROFILE%) so a local model path can't leak the
     // OS username; then the host of any base_url (IPv4 / IPv6 / DNS) keeping
     // scheme/port/path; redact_ipv4 is a backstop for any bare IPv4 that wasn't
-    // part of a URL. redact_ipv4 alone matched ONLY dotted-IPv4, so a DNS / IPv6
-    // bridge host used to leak verbatim into the copied report.
-    redact_ipv4(&redact_urls(&redact_user_home(&report)))
+    // part of a URL; and redact_secrets masks credential patterns.
+    redact_secrets(&redact_ipv4(&redact_urls(&redact_user_home(&report))))
 }
 
 /// P0 — the Diagnostics tab owns its two button callbacks. Settings only WIRES
@@ -696,7 +734,7 @@ fn collect_redacted_log() -> std::io::Result<std::path::PathBuf> {
         std::io::Error::new(std::io::ErrorKind::NotFound, "no data root for the log")
     })?;
     let raw = std::fs::read_to_string(root.join("overlay-host.log"))?;
-    let redacted = redact_user_home(&redact_ipv4(&redact_urls(&raw)));
+    let redacted = redact_secrets(&redact_user_home(&redact_ipv4(&redact_urls(&raw))));
     let dir = dirs::desktop_dir().unwrap_or(root);
     let out = dir.join("suflyor-log.txt");
     std::fs::write(&out, redacted)?;
@@ -886,6 +924,22 @@ mod tests {
         // Non-URL lines are untouched.
         assert!(masked.contains("suflyor diagnostics (v1.16.1)"));
         assert!(masked.contains("STT: ready — groq cloud"));
+    }
+
+    #[test]
+    fn redact_secrets_masks_bearer_gsk_and_sk_tokens() {
+        let sample = "Auth: Bearer secret_token_123\n\
+                      Groq: gsk_secret_key_456\n\
+                      OpenAI: sk-proj-secret_key_789\n\
+                      Normal word: desk-1 task-2\n";
+        let redacted = redact_secrets(sample);
+        assert!(!redacted.contains("secret_token_123"), "leaked bearer token: {redacted}");
+        assert!(!redacted.contains("secret_key_456"), "leaked gsk key: {redacted}");
+        assert!(!redacted.contains("secret_key_789"), "leaked sk key: {redacted}");
+        assert!(redacted.contains("Bearer <redacted>"));
+        assert!(redacted.contains("gsk_<redacted>"));
+        assert!(redacted.contains("sk-<redacted>"));
+        assert!(redacted.contains("desk-1 task-2"));
     }
 
     #[test]
