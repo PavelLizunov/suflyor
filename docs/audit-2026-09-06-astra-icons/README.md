@@ -1,6 +1,8 @@
 # Icon redesign — verification checkpoint
 
-Status: **incomplete; not accepted for release**.
+Historical checkpoint: **incomplete at the time recorded**. Superseded by
+[Mac RC2 verification](rc2-verification.md), which records the final direct Astra
+redraw, native builds, paired captures, and explicit remaining test limits.
 
 ## Scope and protected assets
 
