@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Suflyor v0.38.1-rc.2 — иконки, Mac</title>
+<style>body{max-width:850px;margin:32px auto;padding:0 20px;font:16px/1.5 system-ui;background:#101820;color:#e6edf3}h1{font-size:24px}.item{border:1px solid #41515e;padding:16px;margin:14px 0;border-radius:8px}.exp{color:#a9d8be}.note{color:#ffd18a}button,select,textarea{font:inherit;padding:8px}textarea{display:block;width:90%;margin-top:8px}button{margin:16px 0}</style></head><body>
+<h1>Suflyor v0.38.1-rc.2 — ретест иконок на Mac</h1>
+<p>Чек-лист по изменённым областям, адаптирован из retest-template.html. Это форма для проверки, а не утверждение, что все пункты уже пройдены.</p>
+<p class="note">Проверять установленный non-MCP пакет из текущего DMG. Старые артефакты с тем же номером версии не являются доказательством. Пакет arm64, macOS 14.2+. Локальная ad-hoc подпись не означает нотариализацию Apple; используйте штатный Open Anyway, не отключайте Gatekeeper.</p>
+<div id="items">
+<div class="item" data-id="install"><b>Установка и версия</b><p>Открыть DMG, перенести Suflyor в Applications после закрытия прежней версии, запустить. Проверить версию 0.38.1-rc.2.</p><p class="exp">Пакет открывается; панель отображается; нет аварийного завершения.</p></div>
+<div class="item" data-id="brand"><b>Логотип и маскот</b><p>Сравнить значок приложения и брендовые изображения с прежней версией.</p><p class="exp">Брендовые изображения не перерисованы; обновлены только 50 служебных SVG.</p></div>
+<div class="item" data-id="bar"><b>Панель — RU / EN</b><p>Проверить служебные значки панели в обычном, наведённом и доступном активном состоянии, затем сменить язык.</p><p class="exp">Значки различимы, не обрезаны, не сливаются с текстом; назначение кнопок сохранено.</p></div>
+<div class="item" data-id="settings"><b>Настройки — RU / EN</b><p>Открыть все доступные вкладки при 720×600, прокрутить длинные страницы.</p><p class="exp">Навигационные значки читаемы, контент доступен прокруткой, кнопки не перекрыты.</p></div>
+<div class="item" data-id="themes"><b>Четыре темы</b><p>Проверить Glacier, Graphite, Obsidian и Light Frost на панели и в настройках.</p><p class="exp">Контраст значков достаточен; толщина штрихов визуально согласована.</p></div>
+<div class="item" data-id="surfaces"><b>Справка, палитра, архив и плитка</b><p>Открыть поверхности, используя тестовые данные; проверить пустое состояние, длинный текст и доступные кнопки.</p><p class="exp">Новые значки соответствуют действиям; фон, текст и геометрия не изменены.</p></div>
+<div class="item" data-id="hotkeys"><b>Горячие клавиши</b><p>Проверить применимые Mac-комбинации из встроенной справки; записать каждую непроверенную комбинацию и требуемое разрешение.</p><p class="exp">Подтверждено действие, а не только регистрация. Сетевые/записывающие функции проверять только на разрешённых тестовых данных.</p></div>
+</div>
+<button onclick="save()">Экспортировать результаты</button><span id="count"></span>
+<script>
+const rows=[...document.querySelectorAll('.item')];for(const r of rows){const s=document.createElement('select');for(const [v,t] of [['','Не проверено'],['pass','Прошло'],['fail','Не прошло'],['na','Недоступно']]){s.add(new Option(t,v));}r.append(s);const c=document.createElement('textarea');c.placeholder='Наблюдение, ограничение или ошибка';r.append(c);}
+function save(){const data={version:'0.38.1-rc.2',date:new Date().toISOString(),items:rows.map(r=>({id:r.dataset.id,status:r.querySelector('select').value,comment:r.querySelector('textarea').value}))};const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='suflyor-rc2-icons-retest.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+</script></body></html>
