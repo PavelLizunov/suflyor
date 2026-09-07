@@ -489,7 +489,7 @@ export component OverlayBarWindow inherits Window {
     // ≈ 30 px) with the same RU worst-case slack (review-agent finding).
     // v0.36.1-rc.2 — 1200 → 1280 so the permanent RU deep-lock label still
     // leaves room for Pause + Close all in the running/open-tile worst case.
-    preferred-width: root.bootstrap-mode ? 560px : 1280px;
+    preferred-width: root.bootstrap-mode ? 560px : (root.compact-bar ? 680px : 1280px);
     // 64px (was 86) — the chip row is only 22px, so 86 left a wide empty band
     // around one status line (design review #1). Kept in sync with apply_bar_size
     // in overlay_host.rs.

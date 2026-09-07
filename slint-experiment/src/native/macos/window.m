@@ -32,6 +32,7 @@ int32_t suflyor_macos_configure_floating_window(void *raw_view) {
     window.movableByWindowBackground = NO;
     window.releasedWhenClosed = NO;
     window.ignoresMouseEvents = NO;
+    window.styleMask &= ~NSWindowStyleMaskResizable;
     return 1;
 }
 

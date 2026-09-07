@@ -39,6 +39,7 @@ fn production_macos_window_uses_the_proven_minimal_appkit_bridge() {
     assert!(objc.contains("NSPopUpMenuWindowLevel"));
     assert!(objc.contains("NSWindowCollectionBehaviorCanJoinAllSpaces"));
     assert!(objc.contains("1UL << 18"));
+    assert!(objc.contains("window.styleMask &= ~NSWindowStyleMaskResizable;"));
     assert!(!objc.contains("NSStatusItem"));
     assert!(!objc.contains("Gate 0A"));
     // The key/front raise reuses the shared view-to-window helper and stays
@@ -92,5 +93,6 @@ fn production_macos_window_uses_the_proven_minimal_appkit_bridge() {
     assert!(!objc.contains("center_window"));
     assert!(ui.contains("!root.compact-bar && !root.bootstrap-mode"));
     assert!(ui.contains("root.compact-bar && !root.bootstrap-mode"));
+    assert!(ui.contains("preferred-width: root.bootstrap-mode ? 560px : (root.compact-bar ? 680px : 1280px);"));
     assert!(build.contains("cargo:rustc-link-lib=framework=AppKit"));
 }
