@@ -93,6 +93,8 @@ fn production_macos_window_uses_the_proven_minimal_appkit_bridge() {
     assert!(!objc.contains("center_window"));
     assert!(ui.contains("!root.compact-bar && !root.bootstrap-mode"));
     assert!(ui.contains("root.compact-bar && !root.bootstrap-mode"));
-    assert!(ui.contains("preferred-width: root.bootstrap-mode ? 560px : (root.compact-bar ? 680px : 1280px);"));
+    assert!(ui.contains(
+        "preferred-width: root.bootstrap-mode ? 560px : (root.compact-bar ? 680px : 1280px);"
+    ));
     assert!(build.contains("cargo:rustc-link-lib=framework=AppKit"));
 }
