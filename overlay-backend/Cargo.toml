@@ -38,7 +38,7 @@ reqwest = { version = "0.13", features = ["json", "multipart", "native-tls"], de
 base64 = "0.23"
 
 # Filesystem paths (config, journal)
-dirs = "6"
+dirs = "7"
 
 # Logging & errors
 log = "0.4"
