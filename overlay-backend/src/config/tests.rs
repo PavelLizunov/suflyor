@@ -1874,3 +1874,25 @@ fn legacy_config_loads_and_startup_stays_visible() {
     let fresh: Config = serde_json::from_str("{}").unwrap();
     assert!(!fresh.compact_bar);
 }
+
+#[cfg(unix)]
+#[test]
+fn config_save_sets_unix_mode_0600() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().expect("create temp directory");
+    let path = temp.path().join("config.json");
+    let cfg = Config::defaults();
+
+    save_to_path(&path, &cfg).expect("save_to_path should succeed");
+
+    let mode = std::fs::metadata(&path)
+        .expect("read config metadata")
+        .permissions()
+        .mode();
+    assert_eq!(
+        mode & 0o777,
+        0o600,
+        "config.json should be saved with 0600 mode permissions"
+    );
+}
