@@ -1,3 +1,8 @@
+## 2026-09-08 - Plaintext URL / Credential Leak in reqwest Error Log Formatting
+**Vulnerability:** Logging raw `reqwest::Error` instances via `{e:#}` in STT error handlers printed the full request URL into `overlay-host.log`. For HTTP endpoints with embedded credentials (`http://user:secret@host/v1`) or private LAN hostnames, transport failures leaked secrets into the shareable log file.
+**Learning:** `reqwest::Error`'s `Display` / `Debug` representation (`{e:#}`) embeds the target URL. Formatting `reqwest::Error` directly in log calls bypasses URL/credential redaction rules.
+**Prevention:** Always log high-level transport failure categories (e.g. `transport_failure_kind(&e)`) rather than formatting raw `reqwest::Error` chains in log calls.
+
 ## 2026-09-04 - URL Scheme Case Sensitivity Redaction Bypass
 **Vulnerability:** `redact_urls` in `diagnostics.rs` searched for `"http://"` and `"https://"` case-sensitively. When log output or URL strings used uppercase or mixed-case schemes (e.g. `HTTP://user:secret@192.168.0.142/v1` or `Https://bridge.internal/v1`), the search missed the URL prefix, leaving embedded user credentials (`user:secret@`) and hostnames unmasked in exported log files and clipboard diagnostic reports.
 **Learning:** URL scheme matching in redaction filters must be case-insensitive per RFC 3986. Case-sensitive substring searching allows non-canonical URL schemes to completely bypass security redaction passes.

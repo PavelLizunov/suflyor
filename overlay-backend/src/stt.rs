@@ -167,12 +167,16 @@ pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> 
                 req = req.bearer_auth(bearer);
             }
             // Generic on transport failure: a reqwest error's chain embeds the
-            // request `url` (the LAN base_url), which must NOT reach the screen-
-            // capturable Settings/Diagnostics field. Full detail → file log only.
+            // request `url` (which may carry embedded credentials or private LAN
+            // hostnames). Log the high-level transport failure kind instead of {e:#}
+            // so credentials/hosts never reach the shareable overlay-host.log.
             let resp = match req.send().await {
                 Ok(r) => r,
                 Err(e) => {
-                    log::warn!("STT whisper-server GET failed: {e:#}");
+                    log::warn!(
+                        "STT whisper-server GET failed ({})",
+                        crate::ai::control::transport_failure_kind(&e)
+                    );
                     anyhow::bail!("whisper-server unreachable");
                 }
             };
@@ -916,14 +920,18 @@ async fn transcribe_once_attempt(
         req = req.bearer_auth(b);
     }
     // Generic on transport failure: a reqwest error's chain embeds the request
-    // `url` (the local Whisper base_url / LAN IP), which must NOT surface in the
-    // screen-capturable PTT tile or Diagnostics field. Log full detail to the
-    // file log; return a secret-free message. Network errors stay retryable
-    // (no "HTTP 4xx" in the text, so is_permanent_error keeps them in the loop).
+    // `url` (which may carry embedded credentials or private LAN IP), which must
+    // NOT surface in the screen-capturable PTT tile, Diagnostics field, or the
+    // shareable overlay-host.log. Log transport failure kind only; return a
+    // secret-free message. Network errors stay retryable (no "HTTP 4xx" in the
+    // text, so is_permanent_error keeps them in the loop).
     let resp = match req.multipart(form).send().await {
         Ok(r) => r,
         Err(e) => {
-            log::warn!("STT POST failed: {e:#}");
+            log::warn!(
+                "STT POST transport error ({})",
+                crate::ai::control::transport_failure_kind(&e)
+            );
             anyhow::bail!("STT network error");
         }
     };
@@ -1347,6 +1355,35 @@ mod tests {
         assert!(is_permanent_error("HTTP 403 Forbidden — IP blocked"));
         assert!(is_permanent_error("HTTP 404: model not found"));
         assert!(is_permanent_error("HTTP 413: payload too large"));
+    }
+
+    #[tokio::test]
+    async fn stt_transport_failure_kind_does_not_leak_urls() {
+        // Construct an actual reqwest::Error containing sensitive credentials in the URL
+        let client = reqwest::Client::builder().build().unwrap();
+        let err = client
+            .get("http://user:secret_pass@127.0.0.1:1/test")
+            .send()
+            .await
+            .unwrap_err();
+
+        // Ensure {err:#} would have leaked the URL/credentials
+        let err_chain = format!("{err:#}");
+        assert!(
+            err_chain.contains("secret_pass") || err_chain.contains("127.0.0.1"),
+            "reqwest error chain should contain URL details"
+        );
+
+        // Verify transport_failure_kind returns only a safe category label
+        let kind = crate::ai::control::transport_failure_kind(&err);
+        assert!(!kind.contains("user"));
+        assert!(!kind.contains("secret_pass"));
+        assert!(!kind.contains("http"));
+        assert!(!kind.contains("127.0.0.1"));
+        assert!(matches!(
+            kind,
+            "connect" | "timeout" | "request" | "transport"
+        ));
     }
 
     // ── build_whisper_prompt ──
