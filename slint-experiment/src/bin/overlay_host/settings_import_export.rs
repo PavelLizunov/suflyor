@@ -220,16 +220,33 @@ pub(crate) fn apply_server_preview(
     win.set_server_preview_vision(SharedString::from(line(&p.vision)));
     win.set_server_preview_stt(SharedString::from(line(&p.stt)));
     // GigaAM local model path: kept from THIS PC on apply. Show the incoming
-    // path (masked is unnecessary — a filesystem path is not a secret, but it
-    // IS machine-local) only when one side carries it, to keep the line useful.
+    // path only when one side carries it, to keep the line useful.
+    // SECURITY: Redact user home directory paths (→ %USERPROFILE%) so screen-sharing
+    // or copying the Settings preview never leaks the OS username (C:\Users\<name> or /Users/<name>).
     let gig = if p.gigaam_dir_incoming.trim().is_empty() && p.gigaam_dir_current.trim().is_empty() {
         String::new()
     } else {
-        format!(
+        super::diagnostics::redact_user_home(&format!(
             "local GigaAM model path kept from this PC ({}); the imported file's path ({}) is NOT applied",
             v(&p.gigaam_dir_current),
             v(&p.gigaam_dir_incoming),
-        )
+        ))
     };
     win.set_server_preview_gigaam(SharedString::from(gig));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gigaam_preview_path_redacts_user_home_directory() {
+        let home = r"C:\Users\alice";
+        let sample = format!(
+            "local GigaAM model path kept from this PC ({home}\\suflyor-local-ai\\gigaam-v3); the imported file's path ({home}\\imported\\gigaam-v3) is NOT applied"
+        );
+        let redacted = super::diagnostics::redact_user_home(&sample);
+        assert!(!redacted.contains("alice"), "leaked OS username in preview: {redacted}");
+        assert!(redacted.contains("%USERPROFILE%"));
+    }
 }
