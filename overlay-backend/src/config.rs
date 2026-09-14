@@ -1558,8 +1558,7 @@ fn migrate_macos_gigaam_default(cfg: &mut Config, managed_ready: bool) -> bool {
     }
 }
 
-pub fn save(cfg: &Config) -> Result<()> {
-    let path = config_path()?;
+pub(crate) fn save_to_path(path: &std::path::Path, cfg: &Config) -> Result<()> {
     let bytes = serde_json::to_vec_pretty(cfg)?;
     // Atomic write: stream into a sibling temp file, then rename over the
     // target. A rename within the same directory is atomic on NTFS, so a crash
@@ -1569,7 +1568,24 @@ pub fn save(cfg: &Config) -> Result<()> {
     // (wiping the user's live keys / profiles / devices / hotkeys). On Windows
     // std::fs::rename overwrites the destination (MoveFileEx replace-existing).
     let tmp = path.with_extension("json.tmp");
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&tmp)
+            .context("write config (tmp)")?;
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        file.write_all(&bytes).context("write config (tmp)")?;
+    }
+    #[cfg(not(unix))]
     std::fs::write(&tmp, &bytes).context("write config (tmp)")?;
+
     // Keep ONE generation of the previous on-disk config as config.json.bak
     // before we replace it. Atomic-save already guarantees we never see a torn
     // file; the .bak adds a manual escape hatch when a future *valid* write
@@ -1586,7 +1602,7 @@ pub fn save(cfg: &Config) -> Result<()> {
         // only in config.json (where the user can re-enter them). Best-effort —
         // any read / parse / serialize error just skips the .bak, exactly as the
         // prior copy-error path did.
-        match std::fs::read(&path)
+        match std::fs::read(path)
             .ok()
             .and_then(|b| parse_config_bytes(&b).ok())
             .and_then(|old| serde_json::to_vec_pretty(&secret_redacted(&old)).ok())
@@ -1599,8 +1615,13 @@ pub fn save(cfg: &Config) -> Result<()> {
             None => log::debug!("config .bak snapshot skipped (unreadable/unparseable)"),
         }
     }
-    std::fs::rename(&tmp, &path).context("replace config")?;
+    std::fs::rename(&tmp, path).context("replace config")?;
     Ok(())
+}
+
+pub fn save(cfg: &Config) -> Result<()> {
+    let path = config_path()?;
+    save_to_path(&path, cfg)
 }
 
 /// A clone of `cfg` with every at-rest secret blanked, for the `config.json.bak`
