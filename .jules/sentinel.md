@@ -3,6 +3,11 @@
 **Learning:** Naive URL parsing helpers that use string searching (like `rfind(':')`) instead of proper URL component splitting can mistake credential delimiters in authority fields for port numbers, completely exposing secrets intended to be masked.
 **Prevention:** Always strip userinfo (everything before `@` in the authority component) before parsing host and port, and validate that non-bracketed port suffixes consist exclusively of ASCII digits.
 
+## 2026-09-06 - Plaintext API Keys and Bearer Tokens in Diagnostic Log Exports
+**Vulnerability:** `collect_redacted_log` and `build_diag_report` in `diagnostics.rs` masked hostnames, IP addresses, and user home paths, but did not sanitize credential token patterns (`Bearer <token>`, `gsk_<token>`, `sk-<token>`). Exported diagnostic logs on Desktop (`suflyor-log.txt`) could contain raw API keys or Authorization headers verbatim.
+**Learning:** Diagnostic export sanitization must explicitly strip known credential token patterns in addition to infrastructure host/IP and user path redaction.
+**Prevention:** Always pipe log and diagnostic string exports through `redact_secrets` token-pattern masking before writing to files or the clipboard.
+
 ## 2026-07-04 - Cross-Platform Home Directory Log Redaction
 **Vulnerability:** `redact_user_home` in `diagnostics.rs` only inspected `%USERPROFILE%`, leaving user home directory paths and OS usernames unredacted in exported logs on macOS (`/Users/<username>`) or when `%USERPROFILE%` is missing.
 **Learning:** Checking only platform-specific environment variables for log sanitization risks unmasked privacy leaks when porting or running under non-standard shells.
