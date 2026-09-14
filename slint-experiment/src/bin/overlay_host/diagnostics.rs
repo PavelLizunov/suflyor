@@ -120,11 +120,15 @@ pub(crate) fn redact_urls(s: &str) -> String {
     // Take the EARLIEST of either scheme each iteration (not http-then-https):
     // a report with `https://b … http://a` must mask `https://b` first, else
     // the text before the (later) http match would echo it verbatim.
-    while let Some(pos) = [rest.find("http://"), rest.find("https://")]
-        .into_iter()
-        .flatten()
-        .min()
-    {
+    // ASCII case-insensitive search prevents uppercase/mixed-case schemes
+    // (e.g. `HTTP://user:secret@host/v1`) from bypassing redaction.
+    while let Some(pos) = {
+        let hay = rest.to_ascii_lowercase();
+        [hay.find("http://"), hay.find("https://")]
+            .into_iter()
+            .flatten()
+            .min()
+    } {
         out.push_str(&rest[..pos]);
         let tail = &rest[pos..];
         // URL ends at the first whitespace — base_url has no spaces.
@@ -845,6 +849,18 @@ mod tests {
         );
         // No URL → untouched.
         assert_eq!(redact_urls("Hotkeys: ok (F9, F4)"), "Hotkeys: ok (F9, F4)");
+    }
+
+    #[test]
+    fn redact_urls_masks_uppercase_and_mixed_case_schemes() {
+        assert_eq!(
+            redact_urls("AI: ready — HTTP://user:secret@192.168.0.142:18902/v1"),
+            "AI: ready — HTTP://***:18902/v1"
+        );
+        assert_eq!(
+            redact_urls("STT: Https://admin:pass@bridge.tailnet.ts.net/v1 ok"),
+            "STT: Https://***/v1 ok"
+        );
     }
 
     #[test]
