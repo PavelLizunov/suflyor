@@ -143,7 +143,12 @@ pub(super) fn refresh(win: &SettingsWindow, cfg: &config::SharedConfig) {
             let Some(win) = weak.upgrade() else { return };
             match devices {
                 Ok(devices) => show_devices(&win, &cfg, devices.inputs, devices.outputs),
-                Err(_) => win.set_audio_devices_failed(true),
+                Err(_) => {
+                    // Availability is unknown, but the saved choice is known.
+                    // Do not leave a first-open loading placeholder selected.
+                    show_devices(&win, &cfg, Vec::new(), Vec::new());
+                    win.set_audio_devices_failed(true);
+                }
             }
             win.set_audio_devices_loading(false);
         });
@@ -370,6 +375,24 @@ mod tests {
             cfg.read().system_audio_device.as_deref(),
             Some("A50 Stream Out")
         );
+        win.set_audio_devices_failed(false);
+        slint::select_bundled_translation("ru").unwrap();
+        show_devices(&win, &cfg, vec!["A50 Stream Out".into()], vec![]);
+        assert_eq!(
+            win.get_system_devices().row_data(0).unwrap(),
+            "По умолчанию Windows"
+        );
+        assert_eq!(
+            win.get_system_devices().row_data(1).unwrap(),
+            "A50 Stream Out"
+        );
+        choose(&win, &cfg, false, 1, |_| Ok(()));
+        assert_eq!(cfg.read().mic_device.as_deref(), Some("A50 Stream Out"));
+        assert_eq!(
+            cfg.read().system_audio_device.as_deref(),
+            Some("A50 Stream Out")
+        );
+        slint::select_bundled_translation("en").unwrap();
     }
 
     #[test]
