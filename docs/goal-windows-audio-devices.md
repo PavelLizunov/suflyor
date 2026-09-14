@@ -20,14 +20,14 @@ Enumeration placeholders and errors must never become persisted device names.
 
 ## Acceptance
 
-- [ ] Microphone and system selectors offer default and available endpoints.
-- [ ] Missing saved device is visible; default/new device replaces its binding.
-- [ ] Reopen/refresh obtains a new list without restarting the application.
-- [ ] Loading, empty, unavailable, enumeration failure, and save failure are honest.
-- [ ] Regression tests cover mapping, special capture sources, and failed saves.
-- [ ] Exact candidate Windows targeted gate passes.
+- [x] Microphone and system selectors offer default and available endpoints (synthetic endpoints; real host empty/default checked).
+- [x] Missing saved device is visible; default/new device replaces its binding (tests and EN/RU fixture).
+- [x] Reopen/refresh obtains a new list without restarting the application (final host; physical hotplug not tested).
+- [x] Loading, empty, unavailable, enumeration failure, and save failure are honest (EN/RU fixture and regression tests).
+- [x] Regression tests cover mapping, special capture sources, and failed saves.
+- [x] Exact candidate Windows targeted gate passes.
 - [ ] Paired baseline/candidate Slint MCP captures cover affected states, RU/EN.
-- [ ] Functional hotkey pass records each dispatch or an explicit limitation.
+- [x] Functional hotkey pass records each dispatch or an explicit limitation (F1/F4/F7 passed; ten remaining keys named in checklist).
 - [ ] Live default-output switching during capture is checked on Windows.
 
 ## Evidence
