@@ -371,6 +371,21 @@ export component SettingsWindow inherits Window {
     in-out property <string> mic-test-result: "";
     callback mic-device-selected(string);
     callback mic-test-clicked();
+    // Windows only. Names stay raw; default is mapped by index, not its label.
+    out property <string> audio-default-label: @tr("Windows default");
+    in-out property <[string]> system-devices;
+    in-out property <int> system-device-index: 0;
+    in-out property <bool> audio-devices-loading: false;
+    in-out property <bool> audio-devices-failed: false;
+    in-out property <bool> mic-device-missing: false;
+    in-out property <bool> system-device-missing: false;
+    in-out property <bool> mic-devices-empty: false;
+    in-out property <bool> system-devices-empty: false;
+    // 0 idle, 1 saved for next capture, 2 save failed (selection restored).
+    in-out property <int> audio-save-state: 0;
+    callback audio-devices-refresh();
+    callback mic-device-index-selected(int);
+    callback system-device-selected(int);
 
     callback always-on-top-changed(bool);
     callback stealth-changed(bool);
@@ -1598,6 +1613,34 @@ export component SettingsWindow inherits Window {
                     }
                     if root.active-tab == 6 : VerticalLayout {
                         spacing: 10px;
+                        if !Platform.is-macos : VerticalLayout {
+                            spacing: 6px;
+                            Button {
+                                text: root.audio-devices-loading ? @tr("Loading audio devices...") : @tr("Refresh devices");
+                                enabled: !root.audio-devices-loading;
+                                clicked => { root.audio-devices-refresh(); }
+                            }
+                            if root.audio-devices-failed : Text {
+                                text: @tr("Could not load audio devices. Your saved choices are unchanged. Try Refresh devices.");
+                                font-size: 11px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: @tr("Device changes apply to the next capture. Stop and start an active session to use the new choice.");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            if root.audio-save-state != 0 : Text {
+                                text: root.audio-save-state == 1
+                                    ? @tr("Saved for the next capture.")
+                                    : @tr("Could not save the device. The previous choice is unchanged.");
+                                font-size: 11px;
+                                color: root.audio-save-state == 1 ? Theme.accent : Theme.warning;
+                                wrap: word-wrap;
+                            }
+                        }
                         SettingsCard {
                             title: @tr("Microphone");
                         Text {
@@ -1611,12 +1654,33 @@ export component SettingsWindow inherits Window {
                         // Phase E6 v23 — real device list from
                         // audio::list_devices().inputs, wired by Rust.
                         SettingsComboBox {
+                            accessible-label: @tr("Microphone device");
                             model: root.mic-devices;
                             current-index <=> root.mic-device-index;
-                            selected(val) => { root.mic-device-selected(val); }
+                            enabled: Platform.is-macos || (!root.audio-devices-loading && !root.audio-devices-failed);
+                            selected(val) => {
+                                if Platform.is-macos {
+                                    root.mic-device-selected(val);
+                                } else {
+                                    root.mic-device-index-selected(root.mic-device-index);
+                                }
+                            }
+                        }
+                        if !Platform.is-macos && !root.audio-devices-loading && !root.audio-devices-failed && root.mic-device-missing : Text {
+                            text: @tr("Saved device is unavailable. Choose another device or Windows default.");
+                            font-size: 11px;
+                            color: Theme.warning;
+                            wrap: word-wrap;
+                        }
+                        if !Platform.is-macos && !root.audio-devices-loading && !root.audio-devices-failed && root.mic-devices-empty : Text {
+                            text: @tr("No microphone devices found.");
+                            font-size: 11px;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
                         }
                         Button {
                             text: @tr("Test microphone (3s record)");
+                            enabled: Platform.is-macos || (!root.audio-devices-loading && !root.audio-devices-failed && !root.mic-device-missing && !root.mic-devices-empty);
                             clicked => { root.mic-test-clicked(); }
                         }
                         if root.mic-test-result != "" : Text {
@@ -1625,6 +1689,34 @@ export component SettingsWindow inherits Window {
                             color: Theme.accent;
                             wrap: word-wrap;
                         }
+                        }
+                        if !Platform.is-macos : SettingsCard {
+                            title: @tr("System audio - headphones / speakers");
+                            Text {
+                                text: @tr("Capture sound played through this device. Capture inputs also include headset mixes such as A50 Stream Out. This does not change Windows or read-aloud playback.");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            SettingsComboBox {
+                                accessible-label: @tr("System audio device");
+                                model: root.system-devices;
+                                current-index <=> root.system-device-index;
+                                enabled: !root.audio-devices-loading && !root.audio-devices-failed;
+                                selected(val) => { root.system-device-selected(root.system-device-index); }
+                            }
+                            if !root.audio-devices-loading && !root.audio-devices-failed && root.system-device-missing : Text {
+                                text: @tr("Saved device is unavailable. Choose another device or Windows default.");
+                                font-size: 11px;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                            }
+                            if !root.audio-devices-loading && !root.audio-devices-failed && root.system-devices-empty : Text {
+                                text: @tr("No system audio devices found.");
+                                font-size: 11px;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
                         }
                         SettingsCard {
                             title: @tr("Recording");
