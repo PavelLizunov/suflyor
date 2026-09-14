@@ -108,7 +108,7 @@ windows = { version = "0.62", features = [
 ] }
 # The `#[implement(IMMNotificationClient)]` macro expands against the direct
 # crate name even though `windows` re-exports its public types.
-windows-core = "0.62"
+windows-core = "0.100"
 
 # The same in-process GigaAM-v3 model runs on Apple Silicon through ONNX
 # Runtime's Core ML execution provider, with CPU as the built-in fallback.
