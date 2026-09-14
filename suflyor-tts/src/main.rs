@@ -106,7 +106,12 @@ fn parse_cmd(line: &str) -> Option<Cmd> {
             .map(Cmd::SetPlaybackSpeed);
     }
     if let Some(rest) = line.strip_prefix("VOICE ") {
-        return Some(Cmd::SetVoice(rest.trim().to_string()));
+        let voice_dir = rest.trim();
+        // Validate directory name to prevent path traversal attempts via command protocol.
+        if engine::is_valid_voice_dir(voice_dir) {
+            return Some(Cmd::SetVoice(voice_dir.to_string()));
+        }
+        return None;
     }
     if let Some(rest) = line.strip_prefix("SPEAK ") {
         let bytes = base64::engine::general_purpose::STANDARD
@@ -384,5 +389,16 @@ mod tests {
         assert_eq!(take_finished_playback(&mut current, 6), None);
         assert_eq!(take_finished_playback(&mut current, 7), Some("player"));
         assert_eq!(take_finished_playback(&mut current, 7), None);
+    }
+
+    #[test]
+    fn parses_voice_cmd_rejects_path_traversal() {
+        assert!(matches!(
+            parse_cmd("VOICE irina"),
+            Some(Cmd::SetVoice(id)) if id == "irina"
+        ));
+        assert!(parse_cmd("VOICE ../irina").is_none());
+        assert!(parse_cmd("VOICE C:\\irina").is_none());
+        assert!(parse_cmd("VOICE irina/model").is_none());
     }
 }
