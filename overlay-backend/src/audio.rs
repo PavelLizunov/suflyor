@@ -100,11 +100,12 @@ fn enumerate(dir: &Direction) -> Result<Vec<String>> {
     let n = coll.get_nbr_devices()?;
     let mut v = Vec::with_capacity(n as usize);
     for i in 0..n {
-        if let Ok(d) = coll.get_device_at_index(i) {
-            if let Ok(name) = d.get_friendlyname() {
-                v.push(name);
-            }
-        }
+        let device = coll.get_device_at_index(i).context("read audio endpoint")?;
+        v.push(
+            device
+                .get_friendlyname()
+                .context("read audio endpoint name")?,
+        );
     }
     // Warn on duplicate friendly names: find_device_by_name matches on friendly
     // name only, so two identically-named endpoints (e.g. two identical USB

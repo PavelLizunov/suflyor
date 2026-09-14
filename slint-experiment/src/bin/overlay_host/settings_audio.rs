@@ -395,6 +395,75 @@ mod tests {
         slint::select_bundled_translation("en").unwrap();
     }
 
+    /// Manual MCP audit surface. It never loads or saves the user's config.
+    #[cfg(feature = "ui-mcp")]
+    #[test]
+    #[ignore = "interactive Slint MCP fixture; requires a Windows desktop"]
+    fn live_audio_fixture() {
+        use slint::winit_030::{winit, SlintEvent};
+        use winit::platform::windows::EventLoopBuilderExtWindows;
+        let mut event_loop = winit::event_loop::EventLoop::<SlintEvent>::with_user_event();
+        event_loop.with_any_thread(true);
+        slint::BackendSelector::new()
+            .with_winit_event_loop_builder(event_loop)
+            .select()
+            .unwrap();
+        let lang = std::env::var("AUDIO_FIXTURE_LANGUAGE").unwrap_or_else(|_| "en".into());
+        slint::select_bundled_translation(&lang).unwrap();
+        let win = SettingsWindow::new().unwrap();
+        win.set_active_tab(6);
+        let cfg: config::SharedConfig = Default::default();
+        cfg.write().mic_device = Some("Disconnected microphone".into());
+        cfg.write().system_audio_device = Some("Disconnected headphones".into());
+        let empty = std::env::var("AUDIO_FIXTURE_EMPTY").is_ok();
+        let populate = move |win: &SettingsWindow, cfg: &config::SharedConfig| {
+            let inputs = if empty {
+                vec![]
+            } else {
+                vec!["USB microphone".into(), "A50 Stream Out".into()]
+            };
+            let outputs = if empty {
+                vec![]
+            } else {
+                vec!["USB headphones".into(), "Monitor speakers".into()]
+            };
+            show_devices(win, cfg, inputs, outputs);
+        };
+        populate(&win, &cfg);
+        win.set_audio_devices_loading(std::env::var("AUDIO_FIXTURE_LOADING").is_ok());
+        win.set_audio_devices_failed(std::env::var("AUDIO_FIXTURE_ERROR").is_ok());
+        for system in [false, true] {
+            let weak = win.as_weak();
+            let cfg = cfg.clone();
+            let callback = move |index| {
+                if let Some(win) = weak.upgrade() {
+                    choose(&win, &cfg, system, index, |_| {
+                        if std::env::var("AUDIO_FIXTURE_SAVE_ERROR").is_ok() {
+                            anyhow::bail!("synthetic save failure");
+                        }
+                        Ok(())
+                    });
+                }
+            };
+            if system {
+                win.on_system_device_selected(callback);
+            } else {
+                win.on_mic_device_index_selected(callback);
+            }
+        }
+        let weak = win.as_weak();
+        win.on_audio_devices_refresh(move || {
+            if let Some(win) = weak.upgrade() {
+                populate(&win, &cfg);
+                win.set_audio_save_state(0);
+            }
+        });
+        win.on_close_clicked(|| {
+            let _ = slint::quit_event_loop();
+        });
+        win.run().unwrap();
+    }
+
     #[test]
     fn save_failure_keeps_config_and_unrelated_fields() {
         let initial = config::Config {
