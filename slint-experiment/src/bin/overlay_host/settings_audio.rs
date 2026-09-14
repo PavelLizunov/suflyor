@@ -408,9 +408,10 @@ mod tests {
             .with_winit_event_loop_builder(event_loop)
             .select()
             .unwrap();
+        // Creating a component registers its bundled translation catalog.
+        let win = SettingsWindow::new().unwrap();
         let lang = std::env::var("AUDIO_FIXTURE_LANGUAGE").unwrap_or_else(|_| "en".into());
         slint::select_bundled_translation(&lang).unwrap();
-        let win = SettingsWindow::new().unwrap();
         win.set_active_tab(6);
         let cfg: config::SharedConfig = Default::default();
         cfg.write().mic_device = Some("Disconnected microphone".into());
