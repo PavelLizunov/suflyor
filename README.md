@@ -94,6 +94,14 @@ The `master` branch may contain unreleased work.
 
 Configuration is stored in `%APPDATA%\suflyor\config.json`.
 
+In **Settings → Audio**, choose the microphone and the **System audio -
+headphones / speakers** device whose playback Suflyor captures. **Windows
+default** follows the operating system's default device; a named choice stays
+pinned. After replacing a headset, use **Refresh devices** or reopen Settings.
+An unavailable saved device is shown explicitly; choose its replacement or
+Windows default. Changes apply to the next capture, so stop and start an active
+session. This selection does not change Windows or read-aloud playback routing.
+
 ### macOS (Apple Silicon)
 
 Download the versioned `.dmg` from

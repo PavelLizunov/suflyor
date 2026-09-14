@@ -47,6 +47,9 @@
 mod settings_mlx {
     include!("settings_mlx.rs");
 }
+#[cfg(windows)]
+#[path = "settings_audio.rs"]
+mod settings_audio;
 
 #[cfg(windows)]
 use super::open_wizard;
@@ -104,6 +107,8 @@ pub(crate) fn open_settings(
         // Refresh token status + profiles — config might have changed since last open.
         reset_component_install_state(existing);
         populate_token_status(existing, cfg);
+        #[cfg(windows)]
+        settings_audio::refresh(existing, cfg);
         {
             let snap = cfg.read();
             if !cfg!(target_os = "macos")
@@ -292,9 +297,11 @@ pub(crate) fn open_settings(
         });
     }
 
-    // Phase E6 v23 — populate the Audio tab's mic dropdown from real
-    // WASAPI capture endpoints + select the saved device. User: "Audio
-    // не подгружает реальные микрофоны".
+    #[cfg(windows)]
+    settings_audio::wire(&win, cfg);
+
+    // Preserve the existing macOS microphone settings behavior.
+    #[cfg(not(windows))]
     {
         // V0.8.4 — WASAPI device enumeration (cold COM + a per-endpoint
         // friendly-name RPC to the audio service) was ~30-300ms of SYNCHRONOUS
@@ -331,6 +338,7 @@ pub(crate) fn open_settings(
             });
         });
     }
+    #[cfg(not(windows))]
     {
         let cfg_c = cfg.clone();
         win.on_mic_device_selected(move |name| {
@@ -573,6 +581,8 @@ pub(crate) fn open_settings(
                 populate_tile_monitors(&w, &snap);
                 populate_component_rows(&w, &snap);
                 populate_tts_voices(&w, &snap);
+                #[cfg(windows)]
+                settings_audio::refresh(&w, &cfg_lang);
                 w.set_tts_install_label(SharedString::from(
                     overlay_backend::tts_install::relocalize_voice_labels(
                         w.get_tts_install_label().as_str(),
@@ -1749,6 +1759,7 @@ pub(crate) fn populate_token_status(
     win.set_ai_bridge_test_result(blank());
     win.set_stt_test_result(blank());
     win.set_mic_test_result(blank());
+    win.set_audio_save_state(0);
     win.set_meeting_context_result(blank());
     win.set_profile_io_result(blank());
     win.set_server_preview_ready(false);

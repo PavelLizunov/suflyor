@@ -90,8 +90,8 @@ pub fn list_devices() -> Result<DeviceList> {
     wasapi::initialize_mta().ok().map(|_| ()).unwrap_or(());
 
     Ok(DeviceList {
-        outputs: enumerate(&Direction::Render).unwrap_or_default(),
-        inputs: enumerate(&Direction::Capture).unwrap_or_default(),
+        outputs: enumerate(&Direction::Render).context("enumerate output devices")?,
+        inputs: enumerate(&Direction::Capture).context("enumerate input devices")?,
     })
 }
 
