@@ -34,7 +34,12 @@ impl DeviceChoices {
                 }
             },
         };
-        Self { names, selected: selected as i32, missing, empty }
+        Self {
+            names,
+            selected: selected as i32,
+            missing,
+            empty,
+        }
     }
 }
 
@@ -43,13 +48,24 @@ fn selection(names: &[String], index: i32, missing: bool) -> Option<Option<Strin
     if index >= names.len() || (missing && index == names.len() - 1) {
         return None;
     }
-    Some(if index == 0 { None } else { Some(names[index].clone()) })
+    Some(if index == 0 {
+        None
+    } else {
+        Some(names[index].clone())
+    })
 }
 
 fn saved_index(names: &[String], saved: Option<&str>) -> i32 {
-    saved.filter(|name| !name.trim().is_empty()).and_then(|name| {
-        names.iter().skip(1).position(|item| item == name).map(|index| index + 1)
-    }).unwrap_or(0) as i32
+    saved
+        .filter(|name| !name.trim().is_empty())
+        .and_then(|name| {
+            names
+                .iter()
+                .skip(1)
+                .position(|item| item == name)
+                .map(|index| index + 1)
+        })
+        .unwrap_or(0) as i32
 }
 
 fn persist_selection(
@@ -73,16 +89,34 @@ fn persist_selection(
 }
 
 fn model(names: Vec<String>) -> ModelRc<SharedString> {
-    ModelRc::new(VecModel::from(names.into_iter().map(SharedString::from).collect::<Vec<_>>()))
+    ModelRc::new(VecModel::from(
+        names
+            .into_iter()
+            .map(SharedString::from)
+            .collect::<Vec<_>>(),
+    ))
 }
 
-fn show_devices(win: &SettingsWindow, cfg: &config::SharedConfig, inputs: Vec<String>, outputs: Vec<String>) {
+fn show_devices(
+    win: &SettingsWindow,
+    cfg: &config::SharedConfig,
+    inputs: Vec<String>,
+    outputs: Vec<String>,
+) {
     let current = cfg.read();
     let label = win.get_audio_default_label();
-    let mic = DeviceChoices::new(inputs.clone(), current.mic_device.as_deref(), label.as_str());
+    let mic = DeviceChoices::new(
+        inputs.clone(),
+        current.mic_device.as_deref(),
+        label.as_str(),
+    );
     // Some headsets expose their mixed system stream as a Capture endpoint
     // (A50 Stream Out). The backend already resolves Render, then Capture.
-    let system = DeviceChoices::new(outputs.into_iter().chain(inputs).collect(), current.system_audio_device.as_deref(), label.as_str());
+    let system = DeviceChoices::new(
+        outputs.into_iter().chain(inputs).collect(),
+        current.system_audio_device.as_deref(),
+        label.as_str(),
+    );
     win.set_mic_devices(model(mic.names));
     win.set_mic_device_index(mic.selected);
     win.set_mic_device_missing(mic.missing);
@@ -116,7 +150,13 @@ pub(super) fn refresh(win: &SettingsWindow, cfg: &config::SharedConfig) {
     });
 }
 
-fn choose(win: &SettingsWindow, cfg: &config::SharedConfig, system: bool, index: i32, persist: impl FnOnce(&config::Config) -> anyhow::Result<()>) {
+fn choose(
+    win: &SettingsWindow,
+    cfg: &config::SharedConfig,
+    system: bool,
+    index: i32,
+    persist: impl FnOnce(&config::Config) -> anyhow::Result<()>,
+) {
     if win.get_audio_devices_loading() || win.get_audio_devices_failed() {
         return;
     }
@@ -128,7 +168,14 @@ fn choose(win: &SettingsWindow, cfg: &config::SharedConfig, system: bool, index:
     let names: Vec<String> = items.iter().map(|item| item.to_string()).collect();
     let previous = {
         let current = cfg.read();
-        saved_index(&names, if system { current.system_audio_device.as_deref() } else { current.mic_device.as_deref() })
+        saved_index(
+            &names,
+            if system {
+                current.system_audio_device.as_deref()
+            } else {
+                current.mic_device.as_deref()
+            },
+        )
     };
     let chosen = selection(&names, index, missing);
     let restored_index = match chosen {
@@ -148,7 +195,9 @@ fn choose(win: &SettingsWindow, cfg: &config::SharedConfig, system: bool, index:
                         win.set_mic_device_missing(false);
                     }
                 }
-                if !system { win.set_mic_test_result(SharedString::default()); }
+                if !system {
+                    win.set_mic_test_result(SharedString::default());
+                }
                 index
             }
             Err(_) => {
@@ -170,17 +219,23 @@ pub(super) fn wire(win: &SettingsWindow, cfg: &config::SharedConfig) {
     let weak = win.as_weak();
     let current = cfg.clone();
     win.on_audio_devices_refresh(move || {
-        if let Some(win) = weak.upgrade() { refresh(&win, &current); }
+        if let Some(win) = weak.upgrade() {
+            refresh(&win, &current);
+        }
     });
     let weak = win.as_weak();
     let current = cfg.clone();
     win.on_mic_device_index_selected(move |index| {
-        if let Some(win) = weak.upgrade() { choose(&win, &current, false, index, config::save); }
+        if let Some(win) = weak.upgrade() {
+            choose(&win, &current, false, index, config::save);
+        }
     });
     let weak = win.as_weak();
     let current = cfg.clone();
     win.on_system_device_selected(move |index| {
-        if let Some(win) = weak.upgrade() { choose(&win, &current, true, index, config::save); }
+        if let Some(win) = weak.upgrade() {
+            choose(&win, &current, true, index, config::save);
+        }
     });
     refresh(win, cfg);
 }
@@ -192,23 +247,41 @@ mod tests {
 
     #[test]
     fn default_is_not_the_first_endpoint_or_a_translated_name() {
-        let choices = DeviceChoices::new(vec!["Mic B".into(), "Mic A".into()], None, "Windows default");
+        let choices = DeviceChoices::new(
+            vec!["Mic B".into(), "Mic A".into()],
+            None,
+            "Windows default",
+        );
         assert_eq!(choices.selected, 0);
         assert_eq!(selection(&choices.names, 0, choices.missing), Some(None));
-        assert_eq!(selection(&choices.names, 1, false), Some(Some("Mic B".into())));
-        let same_label = DeviceChoices::new(vec!["Windows default".into()], Some("Windows default"), "Windows default");
+        assert_eq!(
+            selection(&choices.names, 1, false),
+            Some(Some("Mic B".into()))
+        );
+        let same_label = DeviceChoices::new(
+            vec!["Windows default".into()],
+            Some("Windows default"),
+            "Windows default",
+        );
         assert_eq!(same_label.selected, 1);
-        assert_eq!(selection(&same_label.names, 1, false), Some(Some("Windows default".into())));
+        assert_eq!(
+            selection(&same_label.names, 1, false),
+            Some(Some("Windows default".into()))
+        );
     }
 
     #[test]
     fn missing_saved_device_is_preserved_but_not_selectable() {
-        let choices = DeviceChoices::new(vec!["New headset".into()], Some("Old headset"), "Default");
+        let choices =
+            DeviceChoices::new(vec!["New headset".into()], Some("Old headset"), "Default");
         assert!(choices.missing);
         assert_eq!(choices.selected, 2);
         assert_eq!(choices.names[2], "Old headset");
         assert_eq!(selection(&choices.names, 2, true), None);
-        assert_eq!(selection(&choices.names, 1, true), Some(Some("New headset".into())));
+        assert_eq!(
+            selection(&choices.names, 1, true),
+            Some(Some("New headset".into()))
+        );
         assert_eq!(saved_index(&choices.names, Some("Old headset")), 2);
         assert_eq!(selection(&choices.names, -1, true), None);
         assert_eq!(selection(&choices.names, 99, true), None);
@@ -228,7 +301,12 @@ mod tests {
 
     #[test]
     fn capture_mixes_remain_selectable_and_duplicates_do_not_shift_selection() {
-        let devices = vec!["Headphones".into(), "A50 Stream Out".into(), "Headphones".into(), "".into()];
+        let devices = vec![
+            "Headphones".into(),
+            "A50 Stream Out".into(),
+            "Headphones".into(),
+            "".into(),
+        ];
         let choices = DeviceChoices::new(devices, Some("A50 Stream Out"), "Default");
         assert_eq!(choices.names.len(), 3);
         assert_eq!(choices.selected, 2);
@@ -241,20 +319,33 @@ mod tests {
         let win = SettingsWindow::new().unwrap();
         let cfg: config::SharedConfig = Default::default();
         cfg.write().system_audio_device = Some("Old headset".into());
-        show_devices(&win, &cfg, vec!["A50 Stream Out".into()], vec!["New headset".into()]);
+        show_devices(
+            &win,
+            &cfg,
+            vec!["A50 Stream Out".into()],
+            vec!["New headset".into()],
+        );
         assert!(win.get_system_device_missing());
         assert_eq!(win.get_system_device_index(), 3);
         choose(&win, &cfg, true, 1, |_| Ok(()));
-        assert_eq!(cfg.read().system_audio_device.as_deref(), Some("New headset"));
+        assert_eq!(
+            cfg.read().system_audio_device.as_deref(),
+            Some("New headset")
+        );
         assert!(!win.get_system_device_missing());
         assert_eq!(win.get_system_device_index(), 1);
         assert_eq!(win.get_system_devices().row_count(), 3);
         assert_eq!(win.get_audio_save_state(), 1);
         // Slint changes its bound index before delivering the callback.
         win.set_system_device_index(0);
-        choose(&win, &cfg, true, 0, |_| Err(anyhow::anyhow!("synthetic failure")));
+        choose(&win, &cfg, true, 0, |_| {
+            Err(anyhow::anyhow!("synthetic failure"))
+        });
         assert_eq!(win.get_system_device_index(), 1);
-        assert_eq!(cfg.read().system_audio_device.as_deref(), Some("New headset"));
+        assert_eq!(
+            cfg.read().system_audio_device.as_deref(),
+            Some("New headset")
+        );
         assert_eq!(win.get_audio_save_state(), 2);
         choose(&win, &cfg, true, 0, |_| Ok(()));
         assert!(cfg.read().system_audio_device.is_none());
@@ -267,30 +358,42 @@ mod tests {
         assert!(!win.get_system_devices_empty());
         assert!(!win.get_system_device_missing());
         win.set_audio_devices_loading(true);
-        choose(&win, &cfg, true, 0, |_| panic!("must not save during enumeration"));
+        choose(&win, &cfg, true, 0, |_| {
+            panic!("must not save during enumeration")
+        });
         win.set_audio_devices_loading(false);
         win.set_audio_devices_failed(true);
-        choose(&win, &cfg, true, 0, |_| panic!("must not save after enumeration failure"));
-        assert_eq!(cfg.read().system_audio_device.as_deref(), Some("A50 Stream Out"));
+        choose(&win, &cfg, true, 0, |_| {
+            panic!("must not save after enumeration failure")
+        });
+        assert_eq!(
+            cfg.read().system_audio_device.as_deref(),
+            Some("A50 Stream Out")
+        );
     }
 
     #[test]
     fn save_failure_keeps_config_and_unrelated_fields() {
-        let mut initial = config::Config::default();
-        initial.mic_device = Some("Mic".into());
-        initial.system_audio_device = Some("Old".into());
-        initial.meeting_context = "synthetic sentinel".into();
+        let initial = config::Config {
+            mic_device: Some("Mic".into()),
+            system_audio_device: Some("Old".into()),
+            meeting_context: "synthetic sentinel".into(),
+            ..Default::default()
+        };
         let cfg: config::SharedConfig = Default::default();
         *cfg.write() = initial;
         let before = serde_json::to_value(&*cfg.read()).unwrap();
-        let result = persist_selection(&cfg, true, None, |_| Err(anyhow::anyhow!("synthetic failure")));
+        let result = persist_selection(&cfg, true, None, |_| {
+            Err(anyhow::anyhow!("synthetic failure"))
+        });
         assert!(result.is_err());
         assert_eq!(serde_json::to_value(&*cfg.read()).unwrap(), before);
         persist_selection(&cfg, true, None, |candidate| {
             assert!(candidate.system_audio_device.is_none());
             assert_eq!(candidate.mic_device.as_deref(), Some("Mic"));
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
         let mut expected = before;
         expected["system_audio_device"] = serde_json::Value::Null;
         assert_eq!(serde_json::to_value(&*cfg.read()).unwrap(), expected);
