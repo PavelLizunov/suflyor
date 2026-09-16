@@ -1817,8 +1817,7 @@ mod tests {
         SYSTEM_AUDIO_OWNER.store(SYSTEM_AUDIO_OWNER_NONE, Ordering::Release);
 
         // Simulate a running session holding the owner
-        let mut session =
-            SystemAudioSessionStartGuard::acquire().expect("initial session acquire");
+        let mut session = SystemAudioSessionStartGuard::acquire().expect("initial session acquire");
         session.disarm(); // Leaves SYSTEM_AUDIO_OWNER as SESSION, simulating running state
         assert_eq!(
             SYSTEM_AUDIO_OWNER.load(Ordering::Acquire),
