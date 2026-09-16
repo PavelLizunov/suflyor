@@ -1827,8 +1827,8 @@ mod tests {
 
         // Releasing prior session allows subsequent acquire
         release_system_audio_session();
-        let session2 =
-            SystemAudioSessionStartGuard::acquire().expect("restarted session acquire should succeed");
+        let session2 = SystemAudioSessionStartGuard::acquire()
+            .expect("restarted session acquire should succeed");
         drop(session2);
         assert_eq!(
             SYSTEM_AUDIO_OWNER.load(Ordering::Acquire),
