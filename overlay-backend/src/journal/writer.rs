@@ -74,11 +74,16 @@ impl Journal {
         let rand: u32 = (now_unix_ms() & 0xFFFFFF) as u32;
         let path = dir.join(format!("{stamp}_{rand:06x}.jsonl"));
 
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .context("open journal file")?;
+        let mut opts = OpenOptions::new();
+        opts.create(true).append(true);
+        // SECURITY: Restrict session journal file permissions to owner-only (0o600) on POSIX
+        // so meeting transcripts, AI prompts, and AI responses are protected from other system users.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        let file = opts.open(&path).context("open journal file")?;
         log::info!("journal opened: {}", path.display());
 
         let keep = if keep_sessions == 0 {

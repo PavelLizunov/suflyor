@@ -182,6 +182,30 @@ async fn open_session_creates_writable_file() {
     let _ = tmp;
 }
 
+#[cfg(unix)]
+#[test]
+fn session_journal_file_created_with_mode_0600() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = std::env::temp_dir().join(format!("overlay-perm-test-{}", now_unix_ms()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    let session_file = tmp.join("test_session.jsonl");
+
+    let mut opts = std::fs::OpenOptions::new();
+    opts.create(true).append(true);
+    opts.mode(0o600);
+    let file = opts.open(&session_file).expect("create session file");
+    drop(file);
+
+    let mode = std::fs::metadata(&session_file)
+        .unwrap()
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(mode, 0o600, "session journal must be mode 0o600");
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
 // ── Prune-old-sessions tests ──
 // Manipulate `dir` directly rather than going via APPDATA so we don't
 // pollute the real journal directory on the dev machine.
