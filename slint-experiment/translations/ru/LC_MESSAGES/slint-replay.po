@@ -505,6 +505,48 @@ msgstr "Статистика сессий, агрегированная по в�
 
 # --- Tab 6: Audio ---
 
+msgid "Windows default"
+msgstr "По умолчанию Windows"
+
+msgid "Loading audio devices..."
+msgstr "Загрузка аудиоустройств..."
+
+msgid "Refresh devices"
+msgstr "Обновить устройства"
+
+msgid "Could not load audio devices. Your saved choices are unchanged. Try Refresh devices."
+msgstr "Не удалось загрузить аудиоустройства. Сохранённый выбор не изменён. Нажмите «Обновить устройства»."
+
+msgid "Device changes apply to the next capture. Stop and start an active session to use the new choice."
+msgstr "Выбор применяется при следующем запуске захвата. Если сессия идёт, остановите и запустите её заново."
+
+msgid "Saved for the next capture."
+msgstr "Сохранено для следующего запуска захвата."
+
+msgid "Could not save the device. The previous choice is unchanged."
+msgstr "Не удалось сохранить устройство. Предыдущий выбор не изменён."
+
+msgid "Microphone device"
+msgstr "Устройство микрофона"
+
+msgid "Saved device is unavailable. Choose another device or Windows default."
+msgstr "Сохранённое устройство недоступно. Выберите другое или «По умолчанию Windows»."
+
+msgid "No microphone devices found."
+msgstr "Микрофоны не найдены."
+
+msgid "System audio - headphones / speakers"
+msgstr "Системный звук — наушники / динамики"
+
+msgid "Capture sound played through this device. Capture inputs also include headset mixes such as A50 Stream Out. This does not change Windows or read-aloud playback."
+msgstr "Захват звука, воспроизводимого через это устройство. Входы захвата также включают миксы гарнитур, например A50 Stream Out. Вывод звука Windows и озвучки не меняется."
+
+msgid "System audio device"
+msgstr "Устройство системного звука"
+
+msgid "No system audio devices found."
+msgstr "Устройства системного звука не найдены."
+
 msgid "Microphone device selection. List is live from WASAPI capture endpoints."
 msgstr "Выбор устройства микрофона. Список берётся напрямую из точек захвата WASAPI."
 
