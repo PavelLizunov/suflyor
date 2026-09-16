@@ -276,12 +276,10 @@ fn start_session_inner(
     rt: SharedSlintRuntime,
     recovered_from: Option<String>,
 ) -> Result<()> {
-    let mut system_audio_owner = SystemAudioSessionStartGuard::acquire()?;
-
     // ===== 1. Stop any prior session + reset state =====
-    {
+    let prior_capture = {
         let mut s = lock(&rt);
-        s.capture = None; // Drop signals capture thread to stop.
+        let prior_cap = s.capture.take(); // Drop signals capture thread to stop.
         s.system_audio_collector = None;
         s.transcript.clear();
         // v0.12.0 — the Summary accumulator resets at session START (not
@@ -341,7 +339,16 @@ fn start_session_inner(
             // event; we replicate that pattern in stop_session, not here.)
             drop(j);
         }
+        prior_cap
+    };
+
+    if prior_capture.is_some() {
+        drop(prior_capture);
+        release_system_audio_session();
+        stt::reset_gigaam_cache();
     }
+
+    let mut system_audio_owner = SystemAudioSessionStartGuard::acquire()?;
 
     // Tell the UI cost is back to zero (chips depending on session_usd
     // get a chance to reset). Pre-port React side did the same.
@@ -1798,6 +1805,30 @@ mod tests {
             SystemAudioSessionStartGuard::acquire().expect("session should claim the idle owner");
         assert!(try_acquire_system_audio_aux().is_none());
         drop(session);
+        assert_eq!(
+            SYSTEM_AUDIO_OWNER.load(Ordering::Acquire),
+            SYSTEM_AUDIO_OWNER_NONE
+        );
+    }
+
+    #[test]
+    fn session_restart_releases_prior_owner_and_reacquires() {
+        SYSTEM_AUDIO_SESSION_STUCK.store(false, Ordering::Release);
+        SYSTEM_AUDIO_OWNER.store(SYSTEM_AUDIO_OWNER_NONE, Ordering::Release);
+
+        // Simulate a running session holding the owner
+        let mut session = SystemAudioSessionStartGuard::acquire().expect("initial session acquire");
+        session.disarm(); // Leaves SYSTEM_AUDIO_OWNER as SESSION, simulating running state
+        assert_eq!(
+            SYSTEM_AUDIO_OWNER.load(Ordering::Acquire),
+            SYSTEM_AUDIO_OWNER_SESSION
+        );
+
+        // Releasing prior session allows subsequent acquire
+        release_system_audio_session();
+        let session2 = SystemAudioSessionStartGuard::acquire()
+            .expect("restarted session acquire should succeed");
+        drop(session2);
         assert_eq!(
             SYSTEM_AUDIO_OWNER.load(Ordering::Acquire),
             SYSTEM_AUDIO_OWNER_NONE

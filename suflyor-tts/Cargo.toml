@@ -21,7 +21,7 @@ path = "src/main.rs"
 sherpa-onnx = "1.13.5"        # static (default) — safe here: no ort in this crate
 anyhow = "1"
 base64 = "0.23"
-dirs = "6"
+dirs = "7"
 suflyor-wsola = { path = "../suflyor-wsola" }
 
 # Windows-only dep — WASAPI output (playback) only applies on Windows;

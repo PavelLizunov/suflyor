@@ -114,7 +114,7 @@ pub fn scan_voices(tts_dir: &Path) -> Vec<VoiceInfo> {
     out
 }
 
-fn is_valid_voice_dir(voice_dir: &str) -> bool {
+pub(crate) fn is_valid_voice_dir(voice_dir: &str) -> bool {
     if voice_dir.trim().is_empty()
         || voice_dir == "."
         || voice_dir == ".."

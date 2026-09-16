@@ -3101,7 +3101,7 @@ fn launch_hidden(exe: &Path, args: &[&str]) -> Result<Child> {
 /// Settings → "Install local AI" (the only path that force-frees the port).
 /// Best-effort: any Win32 failure is logged and the child behaves as before.
 #[cfg(windows)]
-fn assign_to_lifetime_job(child: &Child) {
+pub(crate) fn assign_to_lifetime_job(child: &Child) {
     use std::os::windows::io::AsRawHandle;
     use std::sync::OnceLock;
     use windows::Win32::Foundation::HANDLE;

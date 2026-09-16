@@ -16,7 +16,10 @@ use std::process::Command;
 /// `--retry … --retry-all-errors` is essential. Follows redirects, fails on HTTP
 /// error, no console window. Blocking. Removes a partial file on failure.
 pub(crate) fn curl_download(url: &str, dest: &Path) -> Result<()> {
-    if !url.trim().starts_with("https://") {
+    // SECURITY: sanitize and trim input URL to prevent leading/trailing control characters or whitespace
+    // from reaching the external process command invocation.
+    let trimmed_url = url.trim();
+    if !trimmed_url.starts_with("https://") {
         bail!("refusing to download from a non-HTTPS URL");
     }
     let status = no_window(Command::new(system_curl()).args([
@@ -34,7 +37,7 @@ pub(crate) fn curl_download(url: &str, dest: &Path) -> Result<()> {
         "-o",
     ]))
     .arg(dest)
-    .arg(url)
+    .arg(trimmed_url)
     .status()
     .context("spawn curl")?;
     if !status.success() {
@@ -92,9 +95,11 @@ pub(crate) fn system_bsdtar() -> PathBuf {
 /// Verify a file's SHA-256 against `expected_hex`; delete + error on mismatch.
 pub(crate) fn verify_sha256(path: &Path, expected_hex: &str, label: &str) -> Result<()> {
     use sha2::{Digest, Sha256};
+    // SECURITY: sanitize expected digest string by trimming surrounding whitespace before comparison.
+    let expected_trimmed = expected_hex.trim();
     let bytes = std::fs::read(path).with_context(|| format!("read {label} to verify"))?;
     let got = hex(&Sha256::digest(&bytes));
-    if !got.eq_ignore_ascii_case(expected_hex) {
+    if !got.eq_ignore_ascii_case(expected_trimmed) {
         let _ = std::fs::remove_file(path);
         bail!(
             "{label}: SHA-256 не совпал — файл повреждён или подменён, удалён; повторите установку"
@@ -141,6 +146,18 @@ mod tests {
         for url in ["http://example.com/model", "file:///tmp/model", ""] {
             assert!(curl_download(url, &dest).is_err());
         }
+    }
+
+    #[test]
+    fn verify_sha256_trims_expected_hash() {
+        let dest = std::env::temp_dir().join("suflyor-sha256-test.txt");
+        std::fs::write(&dest, b"test content").unwrap();
+
+        // SHA-256 of "test content" is 6ae8a75555209fd6c44157c0aed8016e763ff435a19cf186f76863140143ff72
+        let expected = " 6ae8a75555209fd6c44157c0aed8016e763ff435a19cf186f76863140143ff72\n ";
+        assert!(verify_sha256(&dest, expected, "test file").is_ok());
+
+        let _ = std::fs::remove_file(&dest);
     }
 
     #[test]

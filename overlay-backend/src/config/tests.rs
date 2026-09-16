@@ -1737,6 +1737,19 @@ fn mask_host_strips_userinfo_and_redacts_credentials() {
     );
 }
 
+#[test]
+fn mask_host_handles_query_and_fragment_boundaries() {
+    // RFC 3986: authority is delimited by '/', '?', or '#' without requiring a trailing slash.
+    assert_eq!(
+        mask_host("http://192.168.0.142:18902?token=secret123"),
+        "http://***:18902?token=secret123"
+    );
+    assert_eq!(
+        mask_host("http://user:secret@192.168.0.142:18902#section"),
+        "http://***:18902#section"
+    );
+    assert_eq!(mask_host("10.0.0.5:9000?query=1"), "***:9000?query=1");
+}
 // ===== Deep lock (bar lock chip, managed-local only) =====
 
 /// Default OFF, and the persisted flag survives a save/load-style serde
@@ -1873,4 +1886,26 @@ fn legacy_config_loads_and_startup_stays_visible() {
     // config side has no opt-out by checking the default shape stays clean.
     let fresh: Config = serde_json::from_str("{}").unwrap();
     assert!(!fresh.compact_bar);
+}
+
+#[cfg(unix)]
+#[test]
+fn config_save_sets_unix_mode_0600() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().expect("create temp directory");
+    let path = temp.path().join("config.json");
+    let cfg = Config::defaults();
+
+    save_to_path(&path, &cfg).expect("save_to_path should succeed");
+
+    let mode = std::fs::metadata(&path)
+        .expect("read config metadata")
+        .permissions()
+        .mode();
+    assert_eq!(
+        mode & 0o777,
+        0o600,
+        "config.json should be saved with 0600 mode permissions"
+    );
 }

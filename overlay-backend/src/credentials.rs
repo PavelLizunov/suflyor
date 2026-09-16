@@ -156,22 +156,40 @@ mod posix_credentials {
     }
 
     pub(super) fn write_to_path(path: &Path, bytes: &[u8]) -> Result<()> {
+        // SECURITY: Atomic write via temp file prevents truncating or corrupting
+        // credentials.json on write/flush failure or process crash.
+        let tmp = path.with_extension("tmp");
         #[cfg(unix)]
         {
             use std::io::Write;
 
-            let mut file = fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .mode(0o600)
-                .open(path)?;
-            file.set_permissions(fs::Permissions::from_mode(0o600))?;
-            file.write_all(bytes)?;
+            let res = (|| -> Result<()> {
+                let mut file = fs::OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .mode(0o600)
+                    .open(&tmp)?;
+                file.set_permissions(fs::Permissions::from_mode(0o600))?;
+                file.write_all(bytes)?;
+                file.flush()?;
+                fs::rename(&tmp, path)?;
+                Ok(())
+            })();
+            if res.is_err() {
+                let _ = fs::remove_file(&tmp);
+            }
+            res
         }
         #[cfg(not(unix))]
-        fs::write(path, bytes)?;
-        Ok(())
+        {
+            fs::write(&tmp, bytes)?;
+            if let Err(e) = fs::rename(&tmp, path) {
+                let _ = fs::remove_file(&tmp);
+                return Err(e.into());
+            }
+            Ok(())
+        }
     }
 
     fn write_map(map: &HashMap<String, String>) -> Result<()> {
@@ -238,6 +256,10 @@ mod tests {
         assert_eq!(
             std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
             0o600
+        );
+        assert!(
+            !path.with_extension("tmp").exists(),
+            "temporary file must be cleaned up on completion"
         );
     }
 
