@@ -1875,8 +1875,11 @@ pub fn mask_host(url: &str) -> String {
         Some(i) => (&url[..i + 3], &url[i + 3..]),
         None => ("", url),
     };
-    // authority is up to the first '/', the remainder is the path.
-    let (authority, path) = match rest.find('/') {
+    // SECURITY: Per RFC 3986 URI generic syntax, the authority component is
+    // delimited by the first '/', '?', or '#' character (or end of string).
+    // Using rest.find(['/', '?', '#']) ensures query strings and fragments without
+    // a leading slash do not leak into authority parsing or corrupt port detection.
+    let (authority, path) = match rest.find(['/', '?', '#']) {
         Some(i) => (&rest[..i], &rest[i..]),
         None => (rest, ""),
     };
