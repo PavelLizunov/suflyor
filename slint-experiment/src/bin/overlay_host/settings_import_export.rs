@@ -237,7 +237,7 @@ pub(crate) fn apply_server_preview(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::super::diagnostics::redact_user_home;
 
     #[test]
     fn gigaam_preview_path_redacts_user_home_directory() {
@@ -246,7 +246,7 @@ mod tests {
         let sample = format!(
             "local GigaAM model path kept from this PC ({home}\\suflyor-local-ai\\gigaam-v3); the imported file's path ({home}\\imported\\gigaam-v3) is NOT applied"
         );
-        let redacted = super::super::diagnostics::redact_user_home(&sample);
+        let redacted = redact_user_home(&sample);
         assert!(!redacted.contains("alice"), "leaked OS username in preview: {redacted}");
         assert!(redacted.contains("%USERPROFILE%"));
     }
