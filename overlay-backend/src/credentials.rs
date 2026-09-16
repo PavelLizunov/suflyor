@@ -121,11 +121,27 @@ mod posix_credentials {
     use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
     use std::path::{Path, PathBuf};
 
+    pub(super) fn ensure_dir_permissions(dir: &Path) -> Result<()> {
+        fs::create_dir_all(dir)?;
+        // SECURITY: Enforce restricted 0o700 permissions on the credentials directory
+        // on POSIX/Unix so other local users on a multi-user system cannot list or
+        // access secret files stored within.
+        #[cfg(unix)]
+        {
+            let mut perms = fs::metadata(dir)?.permissions();
+            if perms.mode() & 0o777 != 0o700 {
+                perms.set_mode(0o700);
+                fs::set_permissions(dir, perms)?;
+            }
+        }
+        Ok(())
+    }
+
     fn credentials_path() -> Result<PathBuf> {
         let dir = dirs::config_dir()
             .ok_or_else(|| anyhow!("could not resolve user config dir"))?
             .join("suflyor");
-        fs::create_dir_all(&dir)?;
+        ensure_dir_permissions(&dir)?;
         Ok(dir.join("credentials.json"))
     }
 
@@ -222,6 +238,23 @@ mod tests {
         assert_eq!(
             std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
             0o600
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn posix_credentials_directory_has_mode_0700() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().expect("create temp directory");
+        let dir = temp.path().join("suflyor");
+        std::fs::create_dir_all(&dir).expect("create test dir");
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        posix_credentials::ensure_dir_permissions(&dir).expect("ensure dir permissions");
+        assert_eq!(
+            std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777,
+            0o700
         );
     }
 }
