@@ -242,10 +242,11 @@ mod tests {
     #[test]
     fn gigaam_preview_path_redacts_user_home_directory() {
         let home = r"C:\Users\alice";
+        std::env::set_var("USERPROFILE", home);
         let sample = format!(
             "local GigaAM model path kept from this PC ({home}\\suflyor-local-ai\\gigaam-v3); the imported file's path ({home}\\imported\\gigaam-v3) is NOT applied"
         );
-        let redacted = super::diagnostics::redact_user_home(&sample);
+        let redacted = super::super::diagnostics::redact_user_home(&sample);
         assert!(!redacted.contains("alice"), "leaked OS username in preview: {redacted}");
         assert!(redacted.contains("%USERPROFILE%"));
     }
