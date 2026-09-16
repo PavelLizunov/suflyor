@@ -1596,7 +1596,10 @@ fn spawn_engine_sidecar(exe: &Path, kind: EngineKind) -> std::io::Result<Proc> {
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(sidecar_stderr(kind));
-    crate::download::no_window(&mut cmd).spawn()
+    let proc = crate::download::no_window(&mut cmd).spawn()?;
+    #[cfg(windows)]
+    crate::local_ai::assign_to_lifetime_job(&proc);
+    Ok(proc)
 }
 
 /// `%APPDATA%\suflyor\tts`.
