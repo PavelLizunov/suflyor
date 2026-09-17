@@ -147,7 +147,7 @@ pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while !rest.is_empty() {
-        if rest.starts_with("Bearer ") {
+        if rest.get(..7).is_some_and(|s| s.eq_ignore_ascii_case("bearer ")) {
             out.push_str("Bearer <redacted>");
             rest = &rest[7..];
             let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
@@ -929,11 +929,15 @@ mod tests {
     #[test]
     fn redact_secrets_masks_bearer_gsk_and_sk_tokens() {
         let sample = "Auth: Bearer secret_token_123\n\
+                      Lowercase: bearer secret_token_abc\n\
+                      Uppercase: BEARER secret_token_xyz\n\
                       Groq: gsk_secret_key_456\n\
                       OpenAI: sk-proj-secret_key_789\n\
                       Normal word: desk-1 task-2\n";
         let redacted = redact_secrets(sample);
         assert!(!redacted.contains("secret_token_123"), "leaked bearer token: {redacted}");
+        assert!(!redacted.contains("secret_token_abc"), "leaked lowercase bearer token: {redacted}");
+        assert!(!redacted.contains("secret_token_xyz"), "leaked uppercase bearer token: {redacted}");
         assert!(!redacted.contains("secret_key_456"), "leaked gsk key: {redacted}");
         assert!(!redacted.contains("secret_key_789"), "leaked sk key: {redacted}");
         assert!(redacted.contains("Bearer <redacted>"));
