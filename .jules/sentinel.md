@@ -27,3 +27,8 @@
 **Vulnerability:** `save()` in `config.rs` saved `config.json` via default `std::fs::write`, which on Unix/POSIX targets created files subject to default umask permissions (`0644`/`0664`), leaving plain-text secrets and bearer tokens in `config.json` readable by other local system users.
 **Learning:** While `credentials.json` had explicit `0o600` permissions on POSIX, `config.json` also holds sensitive API keys and tokens (`ai_bearer`, `groq_api_key`, `hermes_bridge_token`) but relied on default file creation options.
 **Prevention:** Always enforce owner-only permissions (`0o600`) when creating temporary files before atomic renames for any file containing sensitive API keys or credentials on POSIX platforms.
+
+## 2026-10-15 - Case and Delimiter Sensitivity Redaction Bypass in Bearer Tokens
+**Vulnerability:** `redact_secrets` in `diagnostics.rs` performed an exact, case-sensitive match for `"Bearer "`. When HTTP logs or diagnostic exports contained lowercase `bearer`, uppercase `BEARER`, or colon-formatted headers (`Bearer:`, `bearer:`), `redact_secrets` failed to match the prefix, causing secret authorization tokens to be exported verbatim into `suflyor-log.txt` and clipboard diagnostic reports.
+**Learning:** Hardcoded exact-case or single-delimiter string matching in secret sanitizers creates trivial redaction bypasses when third-party libraries, HTTP loggers, or server responses output alternative header encodings or casing.
+**Prevention:** Always use case-insensitive matching (`eq_ignore_ascii_case`) and support both colons and ASCII whitespace delimiters when searching for credential header prefixes.

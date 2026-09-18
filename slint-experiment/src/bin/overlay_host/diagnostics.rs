@@ -142,14 +142,20 @@ pub(crate) fn redact_urls(s: &str) -> String {
 
 /// Redact sensitive credential patterns (`Bearer <token>`, `gsk_<token>`, `sk-<token>`)
 /// from diagnostic outputs and log exports so exported files and reports never leak API keys
-/// or authorization tokens.
+/// or authorization tokens. Matches `bearer` case-insensitively and handles colons/whitespace.
 pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while !rest.is_empty() {
-        if rest.starts_with("Bearer ") {
+        if rest.get(..6).is_some_and(|b| b.eq_ignore_ascii_case("bearer"))
+            && rest.as_bytes().get(6).is_some_and(|&c| c == b':' || (c as char).is_ascii_whitespace())
+        {
             out.push_str("Bearer <redacted>");
-            rest = &rest[7..];
+            rest = &rest[6..];
+            let skip_len = rest
+                .find(|c: char| c != ':' && !c.is_ascii_whitespace())
+                .unwrap_or(rest.len());
+            rest = &rest[skip_len..];
             let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
             rest = &rest[tok_len..];
         } else if rest.starts_with("gsk_") {
@@ -940,6 +946,21 @@ mod tests {
         assert!(redacted.contains("gsk_<redacted>"));
         assert!(redacted.contains("sk-<redacted>"));
         assert!(redacted.contains("desk-1 task-2"));
+    }
+
+    #[test]
+    fn redact_secrets_masks_bearer_case_and_delimiter_variants() {
+        let sample = "Auth1: bearer secret_token_abc\n\
+                      Auth2: BEARER: secret_token_def\n\
+                      Auth3: Bearer: secret_token_ghi\n\
+                      Auth4: BEARER   secret_token_jkl\n\
+                      Word: bearertoken_normal\n";
+        let redacted = redact_secrets(sample);
+        assert!(!redacted.contains("secret_token_abc"), "leaked lowercase bearer token: {redacted}");
+        assert!(!redacted.contains("secret_token_def"), "leaked UPPERCASE BEARER: token: {redacted}");
+        assert!(!redacted.contains("secret_token_ghi"), "leaked Bearer: token: {redacted}");
+        assert!(!redacted.contains("secret_token_jkl"), "leaked multi-space BEARER token: {redacted}");
+        assert!(redacted.contains("bearertoken_normal"), "normal word was wrongly redacted: {redacted}");
     }
 
     #[test]
