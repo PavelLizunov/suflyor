@@ -82,11 +82,15 @@ fn default_journal_write_is_noop() {
 
 /// Open a real journal (writer thread + file) at an explicit path.
 fn open_journal_at(path: &Path) -> Journal {
-    let file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)
-        .unwrap();
+    #[cfg(unix)]
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let mut opts = OpenOptions::new();
+    opts.create(true).append(true);
+    #[cfg(unix)]
+    opts.mode(0o600);
+
+    let file = opts.open(path).unwrap();
     let (tx, rx) = mpsc::unbounded_channel::<WriterCmd>();
     let join = spawn_writer(rx, file).unwrap();
     Journal {
@@ -835,6 +839,31 @@ fn graceful_stop_returns_none() {
     );
     assert!(find_unfinished_session(&dir).is_none());
     std::fs::remove_dir_all(&dir).ok();
+}
+
+#[cfg(unix)]
+#[test]
+fn posix_journal_session_files_have_mode_0600() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = std::env::temp_dir().join(format!("overlay-journal-mode-{}.jsonl", now_unix_ms()));
+    let _ = std::fs::remove_file(&tmp);
+    let j = open_journal_at(&tmp);
+    j.write(&JournalEvent::TranscriptLine {
+        unix_ms: 1,
+        source: "mic",
+        text: "test",
+        audio_ms: 1,
+    });
+    j.shutdown(Duration::from_secs(5)).unwrap();
+
+    let meta = std::fs::metadata(&tmp).expect("read metadata");
+    assert_eq!(
+        meta.permissions().mode() & 0o777,
+        0o600,
+        "session journal file permissions must be 0600 on POSIX"
+    );
+    let _ = std::fs::remove_file(&tmp);
 }
 
 #[test]
