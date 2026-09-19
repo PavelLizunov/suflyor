@@ -27,3 +27,8 @@
 **Vulnerability:** `save()` in `config.rs` saved `config.json` via default `std::fs::write`, which on Unix/POSIX targets created files subject to default umask permissions (`0644`/`0664`), leaving plain-text secrets and bearer tokens in `config.json` readable by other local system users.
 **Learning:** While `credentials.json` had explicit `0o600` permissions on POSIX, `config.json` also holds sensitive API keys and tokens (`ai_bearer`, `groq_api_key`, `hermes_bridge_token`) but relied on default file creation options.
 **Prevention:** Always enforce owner-only permissions (`0o600`) when creating temporary files before atomic renames for any file containing sensitive API keys or credentials on POSIX platforms.
+
+## 2026-10-02 - World-Readable Journal Session Files on POSIX
+**Vulnerability:** `open_new_session_with_limits` in `journal/writer.rs` created session journal files (`*.jsonl`) using default `OpenOptions::new().create(true).append(true).open(&path)`, which on Unix/POSIX targets resulted in default umask permissions (`0644`/`0664`). This left sensitive meeting transcripts, user speech data, and AI responses readable by all local system users.
+**Learning:** File creation for user data and transcripts (like session journals) must explicitly restrict permissions on Unix rather than inheriting default umask permissions.
+**Prevention:** Always set `OpenOptionsExt::mode(0o600)` on Unix targets when opening or creating files that contain user transcripts, audio recordings, or sensitive session data.
