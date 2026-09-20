@@ -147,9 +147,20 @@ pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while !rest.is_empty() {
-        if rest.starts_with("Bearer ") {
+        // SECURITY: ASCII case-insensitive match on "bearer" scheme prefix with space or colon
+        // delimiter prevents case variations (e.g. `bearer <token>`, `BEARER <token>`, `Bearer: <token>`)
+        // from bypassing diagnostic log sanitization. Uses `get(..6)` to prevent UTF-8 boundary panics.
+        if rest
+            .get(..6)
+            .is_some_and(|p| p.eq_ignore_ascii_case("bearer"))
+            && rest.as_bytes().get(6).is_some_and(|&b| b == b' ' || b == b':')
+        {
             out.push_str("Bearer <redacted>");
-            rest = &rest[7..];
+            rest = &rest[6..];
+            let tok_start = rest
+                .find(|c: char| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+                .unwrap_or(rest.len());
+            rest = &rest[tok_start..];
             let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
             rest = &rest[tok_len..];
         } else if rest.starts_with("gsk_") {
@@ -940,6 +951,23 @@ mod tests {
         assert!(redacted.contains("gsk_<redacted>"));
         assert!(redacted.contains("sk-<redacted>"));
         assert!(redacted.contains("desk-1 task-2"));
+    }
+
+    #[test]
+    fn redact_secrets_masks_case_insensitive_and_colon_bearer_tokens() {
+        let sample = "auth: bearer secret_token_abc\n\
+                      Header: BEARER secret_token_def\n\
+                      Colon: Bearer: secret_token_ghi\n\
+                      Cyrillic & Emojis 🔐: bearer secret_token_jkl\n";
+        let redacted = redact_secrets(sample);
+        assert!(!redacted.contains("secret_token_abc"), "leaked lowercase bearer token: {redacted}");
+        assert!(!redacted.contains("secret_token_def"), "leaked uppercase bearer token: {redacted}");
+        assert!(!redacted.contains("secret_token_ghi"), "leaked colon bearer token: {redacted}");
+        assert!(!redacted.contains("secret_token_jkl"), "leaked utf8 bearer token: {redacted}");
+        assert!(redacted.contains("auth: Bearer <redacted>"));
+        assert!(redacted.contains("Header: Bearer <redacted>"));
+        assert!(redacted.contains("Colon: Bearer <redacted>"));
+        assert!(redacted.contains("Cyrillic & Emojis 🔐: Bearer <redacted>"));
     }
 
     #[test]

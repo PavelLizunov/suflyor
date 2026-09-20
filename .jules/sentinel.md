@@ -1,3 +1,8 @@
+## 2026-10-15 - Case-Sensitive Bearer Token Redaction Bypass
+**Vulnerability:** `redact_secrets` in `diagnostics.rs` checked `rest.starts_with("Bearer ")` using exact ASCII case sensitivity. When log files, HTTP headers, or error messages used lowercase (`bearer <token>`), uppercase (`BEARER <token>`), or colon delimiters (`Bearer: <token>`), the search missed the token prefix, leaving sensitive authorization bearer tokens unmasked in `collect_redacted_log()` (`suflyor-log.txt`) and `build_diag_report()`.
+**Learning:** Secret token detection filters that rely on exact string equality (`starts_with("Bearer ")`) fail to redact non-canonical casing or colon-separated authorization header formats. Additionally, string slicing `[..N]` in Rust string search passes must use safe indexing (`.get(..N)`) to avoid UTF-8 character boundary panics on non-ASCII text.
+**Prevention:** Always use ASCII case-insensitive prefix checks (`get(..N).is_some_and(|p| p.eq_ignore_ascii_case(...))`) with delimiter checks when matching credential prefixes in logs or diagnostic exports.
+
 ## 2026-09-08 - Plaintext URL / Credential Leak in reqwest Error Log Formatting
 **Vulnerability:** Logging raw `reqwest::Error` instances via `{e:#}` in STT error handlers printed the full request URL into `overlay-host.log`. For HTTP endpoints with embedded credentials (`http://user:secret@host/v1`) or private LAN hostnames, transport failures leaked secrets into the shareable log file.
 **Learning:** `reqwest::Error`'s `Display` / `Debug` representation (`{e:#}`) embeds the target URL. Formatting `reqwest::Error` directly in log calls bypasses URL/credential redaction rules.
