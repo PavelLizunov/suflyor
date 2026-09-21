@@ -147,11 +147,26 @@ pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while !rest.is_empty() {
-        if rest.starts_with("Bearer ") {
-            out.push_str("Bearer <redacted>");
-            rest = &rest[7..];
-            let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
-            rest = &rest[tok_len..];
+        // SECURITY: Case-insensitive 'Bearer' token matching with variable whitespace/delimiters
+        // ensures non-canonical or multi-space Authorization headers never leak raw keys.
+        // Use rest.get(..6) to safely check prefix without panicking on multi-byte UTF-8 boundaries.
+        if rest.get(..6).map_or(false, |s| s.eq_ignore_ascii_case("bearer")) {
+            let after_bearer = &rest[6..];
+            let space_len = after_bearer
+                .chars()
+                .take_while(|c| c.is_ascii_whitespace() || *c == ':')
+                .map(|c| c.len_utf8())
+                .sum::<usize>();
+            if space_len > 0 {
+                out.push_str("Bearer <redacted>");
+                rest = &after_bearer[space_len..];
+                let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
+                rest = &rest[tok_len..];
+            } else {
+                let next_char = rest.chars().next().unwrap_or(' ');
+                out.push(next_char);
+                rest = &rest[next_char.len_utf8()..];
+            }
         } else if rest.starts_with("gsk_") {
             out.push_str("gsk_<redacted>");
             rest = &rest[4..];
@@ -929,11 +944,16 @@ mod tests {
     #[test]
     fn redact_secrets_masks_bearer_gsk_and_sk_tokens() {
         let sample = "Auth: Bearer secret_token_123\n\
+                      Auth2: bearer   secret_token_456\n\
+                      Auth3: BEARER: secret_token_789\n\
                       Groq: gsk_secret_key_456\n\
                       OpenAI: sk-proj-secret_key_789\n\
-                      Normal word: desk-1 task-2\n";
+                      Multibyte UTF-8: 😀😀😀 Bearer token_multibyte_123\n\
+                      Normal word: desk-1 task-2 bearerer_word\n";
         let redacted = redact_secrets(sample);
         assert!(!redacted.contains("secret_token_123"), "leaked bearer token: {redacted}");
+        assert!(!redacted.contains("secret_token_456"), "leaked case/space bearer token: {redacted}");
+        assert!(!redacted.contains("secret_token_789"), "leaked colon bearer token: {redacted}");
         assert!(!redacted.contains("secret_key_456"), "leaked gsk key: {redacted}");
         assert!(!redacted.contains("secret_key_789"), "leaked sk key: {redacted}");
         assert!(redacted.contains("Bearer <redacted>"));
