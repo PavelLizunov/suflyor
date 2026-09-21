@@ -150,7 +150,7 @@ pub(crate) fn redact_secrets(s: &str) -> String {
         // SECURITY: Case-insensitive 'Bearer' token matching with variable whitespace/delimiters
         // ensures non-canonical or multi-space Authorization headers never leak raw keys.
         // Use rest.get(..6) to safely check prefix without panicking on multi-byte UTF-8 boundaries.
-        if rest.get(..6).map_or(false, |s| s.eq_ignore_ascii_case("bearer")) {
+        if rest.get(..6).is_some_and(|s| s.eq_ignore_ascii_case("bearer")) {
             let after_bearer = &rest[6..];
             let space_len = after_bearer
                 .chars()
