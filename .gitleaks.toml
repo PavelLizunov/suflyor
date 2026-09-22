@@ -17,6 +17,7 @@ regexes = [
   '''BRIDGE_SECRET''',
   '''your-api-key''',
   '''<current access token>''',
+  '''test_x_api_key''',
 ]
 # Generated tester checklists (docs/*.html) embed a `localStorage` progress-KEY
 # whose 23-char value trips gitleaks' generic high-entropy rule — but it is a

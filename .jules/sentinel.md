@@ -27,3 +27,8 @@
 **Vulnerability:** `save()` in `config.rs` saved `config.json` via default `std::fs::write`, which on Unix/POSIX targets created files subject to default umask permissions (`0644`/`0664`), leaving plain-text secrets and bearer tokens in `config.json` readable by other local system users.
 **Learning:** While `credentials.json` had explicit `0o600` permissions on POSIX, `config.json` also holds sensitive API keys and tokens (`ai_bearer`, `groq_api_key`, `hermes_bridge_token`) but relied on default file creation options.
 **Prevention:** Always enforce owner-only permissions (`0o600`) when creating temporary files before atomic renames for any file containing sensitive API keys or credentials on POSIX platforms.
+
+## 2026-10-15 - Case-Sensitivity Bypass in Diagnostic Log Secret Redaction
+**Vulnerability:** `redact_secrets` in `diagnostics.rs` performed exact case-sensitive prefix matching for `"Bearer "`, `"gsk_"`, and `"sk-"`. Non-canonical or mixed-case headers/tokens (e.g. `bearer <token>`, `BEARER <token>`, `GSK_<token>`, `x-api-key: <token>`) bypassed the redaction check, leaking raw API keys and Bearer tokens into `suflyor-log.txt` and clipboard diagnostic reports.
+**Learning:** Hardcoded case-sensitive token prefix matching allows non-canonical HTTP headers and token variants to evade pattern-based secret redaction passes.
+**Prevention:** Always perform case-insensitive ASCII comparison (`eq_ignore_ascii_case`) on token prefixes and header keys when redacting secrets from exported logs and reports.
