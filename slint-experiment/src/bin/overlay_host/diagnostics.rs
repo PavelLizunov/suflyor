@@ -149,19 +149,19 @@ pub(crate) fn redact_secrets(s: &str) -> String {
     while !rest.is_empty() {
         // SECURITY: case-insensitive ASCII comparison for token prefixes (Bearer, gsk_, sk-, x-api-key:)
         // so lower/upper/mixed-case headers in log exports never bypass secret redaction.
-        if rest.as_bytes().get(..7).map_or(false, |b| b.eq_ignore_ascii_case(b"bearer ")) {
+        if rest.as_bytes().get(..7).is_some_and(|b| b.eq_ignore_ascii_case(b"bearer ")) {
             out.push_str("Bearer <redacted>");
             rest = &rest[7..];
             let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
             rest = &rest[tok_len..];
-        } else if rest.as_bytes().get(..4).map_or(false, |b| b.eq_ignore_ascii_case(b"gsk_")) {
+        } else if rest.as_bytes().get(..4).is_some_and(|b| b.eq_ignore_ascii_case(b"gsk_")) {
             out.push_str("gsk_<redacted>");
             rest = &rest[4..];
             let tok_len = rest
                 .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
                 .unwrap_or(rest.len());
             rest = &rest[tok_len..];
-        } else if rest.as_bytes().get(..3).map_or(false, |b| b.eq_ignore_ascii_case(b"sk-"))
+        } else if rest.as_bytes().get(..3).is_some_and(|b| b.eq_ignore_ascii_case(b"sk-"))
             && !out
                 .chars()
                 .last()
@@ -173,7 +173,7 @@ pub(crate) fn redact_secrets(s: &str) -> String {
                 .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
                 .unwrap_or(rest.len());
             rest = &rest[tok_len..];
-        } else if rest.as_bytes().get(..11).map_or(false, |b| b.eq_ignore_ascii_case(b"x-api-key: "))
+        } else if rest.as_bytes().get(..11).is_some_and(|b| b.eq_ignore_ascii_case(b"x-api-key: "))
             && !out
                 .chars()
                 .last()
