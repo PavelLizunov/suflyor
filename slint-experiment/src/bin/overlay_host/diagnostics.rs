@@ -147,19 +147,21 @@ pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while !rest.is_empty() {
-        if rest.starts_with("Bearer ") {
+        // SECURITY: case-insensitive ASCII comparison for token prefixes (Bearer, gsk_, sk-, x-api-key:)
+        // so lower/upper/mixed-case headers in log exports never bypass secret redaction.
+        if rest.as_bytes().get(..7).map_or(false, |b| b.eq_ignore_ascii_case(b"bearer ")) {
             out.push_str("Bearer <redacted>");
             rest = &rest[7..];
             let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
             rest = &rest[tok_len..];
-        } else if rest.starts_with("gsk_") {
+        } else if rest.as_bytes().get(..4).map_or(false, |b| b.eq_ignore_ascii_case(b"gsk_")) {
             out.push_str("gsk_<redacted>");
             rest = &rest[4..];
             let tok_len = rest
                 .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
                 .unwrap_or(rest.len());
             rest = &rest[tok_len..];
-        } else if rest.starts_with("sk-")
+        } else if rest.as_bytes().get(..3).map_or(false, |b| b.eq_ignore_ascii_case(b"sk-"))
             && !out
                 .chars()
                 .last()
@@ -170,6 +172,16 @@ pub(crate) fn redact_secrets(s: &str) -> String {
             let tok_len = rest
                 .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
                 .unwrap_or(rest.len());
+            rest = &rest[tok_len..];
+        } else if rest.as_bytes().get(..11).map_or(false, |b| b.eq_ignore_ascii_case(b"x-api-key: "))
+            && !out
+                .chars()
+                .last()
+                .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            out.push_str("x-api-key: <redacted>");
+            rest = &rest[11..];
+            let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
             rest = &rest[tok_len..];
         } else if let Some(next_char) = rest.chars().next() {
             out.push(next_char);
@@ -940,6 +952,25 @@ mod tests {
         assert!(redacted.contains("gsk_<redacted>"));
         assert!(redacted.contains("sk-<redacted>"));
         assert!(redacted.contains("desk-1 task-2"));
+    }
+
+    #[test]
+    fn redact_secrets_masks_case_insensitive_tokens() {
+        let sample = "Auth: bearer secret_bearer_token_123\n\
+                      Auth2: BEARER secret_bearer_token_456\n\
+                      Groq: GSK_secret_key_789\n\
+                      OpenAI: SK-proj-secret_key_012\n\
+                      Anthropic: x-api-key: secret_x_api_key_345\n";
+        let redacted = redact_secrets(sample);
+        assert!(!redacted.contains("secret_bearer_token_123"), "leaked lowercase bearer: {redacted}");
+        assert!(!redacted.contains("secret_bearer_token_456"), "leaked uppercase bearer: {redacted}");
+        assert!(!redacted.contains("secret_key_789"), "leaked uppercase gsk: {redacted}");
+        assert!(!redacted.contains("secret_key_012"), "leaked uppercase sk: {redacted}");
+        assert!(!redacted.contains("secret_x_api_key_345"), "leaked x-api-key: {redacted}");
+        assert!(redacted.contains("Bearer <redacted>"));
+        assert!(redacted.contains("gsk_<redacted>"));
+        assert!(redacted.contains("sk-<redacted>"));
+        assert!(redacted.contains("x-api-key: <redacted>"));
     }
 
     #[test]
