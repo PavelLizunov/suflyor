@@ -960,13 +960,13 @@ mod tests {
                       Auth2: BEARER secret_bearer_token_456\n\
                       Groq: GSK_secret_key_789\n\
                       OpenAI: SK-proj-secret_key_012\n\
-                      Anthropic: x-api-key: secret_x_api_key_345\n";
+                      Anthropic: x-api-key: test_x_api_key_345\n";
         let redacted = redact_secrets(sample);
         assert!(!redacted.contains("secret_bearer_token_123"), "leaked lowercase bearer: {redacted}");
         assert!(!redacted.contains("secret_bearer_token_456"), "leaked uppercase bearer: {redacted}");
         assert!(!redacted.contains("secret_key_789"), "leaked uppercase gsk: {redacted}");
         assert!(!redacted.contains("secret_key_012"), "leaked uppercase sk: {redacted}");
-        assert!(!redacted.contains("secret_x_api_key_345"), "leaked x-api-key: {redacted}");
+        assert!(!redacted.contains("test_x_api_key_345"), "leaked x-api-key: {redacted}");
         assert!(redacted.contains("Bearer <redacted>"));
         assert!(redacted.contains("gsk_<redacted>"));
         assert!(redacted.contains("sk-<redacted>"));
