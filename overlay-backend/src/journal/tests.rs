@@ -1074,3 +1074,42 @@ fn append_bookmark_creates_file_with_header_then_appends_entries() {
     assert!(content.contains("## Q1"));
     assert!(content.contains("## Q2"));
 }
+
+#[cfg(unix)]
+#[test]
+fn session_journal_permissions_are_owner_only_on_posix() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().expect("create temp directory");
+    std::env::set_var("XDG_CONFIG_HOME", temp.path());
+
+    let journal = Journal::open_new_session_with_limits(10, 1_000_000)
+        .expect("open_new_session_with_limits must succeed");
+
+    let session_path = journal.path().expect("journal must have a path");
+    let sessions_dir = session_path
+        .parent()
+        .expect("journal file must have a parent dir");
+
+    assert_eq!(
+        std::fs::metadata(sessions_dir)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700,
+        "sessions directory must be restricted to 0o700"
+    );
+
+    assert_eq!(
+        std::fs::metadata(session_path)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o600,
+        "session jsonl file must be restricted to 0o600"
+    );
+
+    journal.close();
+}
