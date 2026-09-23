@@ -70,10 +70,35 @@ impl Journal {
     pub fn open_new_session_with_limits(keep_sessions: usize, max_bytes: u64) -> Result<Self> {
         let dir = sessions_dir()?;
         std::fs::create_dir_all(&dir).context("create sessions dir")?;
+        // SECURITY: Restrict sessions directory to 0o700 on POSIX/Unix so other
+        // local users cannot list or access private meeting/interview transcripts.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(meta) = std::fs::metadata(&dir) {
+                let mut perms = meta.permissions();
+                if perms.mode() & 0o777 != 0o700 {
+                    perms.set_mode(0o700);
+                    let _ = std::fs::set_permissions(&dir, perms);
+                }
+            }
+        }
         let stamp = chrono_like_stamp();
         let rand: u32 = (now_unix_ms() & 0xFFFFFF) as u32;
         let path = dir.join(format!("{stamp}_{rand:06x}.jsonl"));
 
+        // SECURITY: Enforce mode 0o600 on session JSONL files so transcripts
+        // and AI interaction logs are readable and writable only by the owner.
+        #[cfg(unix)]
+        let file = {
+            use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+            let mut opts = OpenOptions::new();
+            opts.create(true).append(true).mode(0o600);
+            let f = opts.open(&path).context("open journal file")?;
+            let _ = f.set_permissions(std::fs::Permissions::from_mode(0o600));
+            f
+        };
+        #[cfg(not(unix))]
         let file = OpenOptions::new()
             .create(true)
             .append(true)
