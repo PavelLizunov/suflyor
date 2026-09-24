@@ -143,23 +143,41 @@ pub(crate) fn redact_urls(s: &str) -> String {
 /// Redact sensitive credential patterns (`Bearer <token>`, `gsk_<token>`, `sk-<token>`)
 /// from diagnostic outputs and log exports so exported files and reports never leak API keys
 /// or authorization tokens.
+/// SECURITY: Case-insensitive prefix matching (`bearer`, `gsk_`, `sk-`) and flexible delimiter
+/// handling (`:`, `=`, whitespace) prevent non-canonical schemes or log formats from bypassing redaction.
 pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while !rest.is_empty() {
-        if rest.starts_with("Bearer ") {
+        if rest
+            .get(..6)
+            .is_some_and(|p| p.eq_ignore_ascii_case("bearer"))
+            && rest[6..]
+                .chars()
+                .next()
+                .is_some_and(|c| c == ' ' || c == '\t' || c == ':' || c == '=')
+        {
             out.push_str("Bearer <redacted>");
-            rest = &rest[7..];
+            rest = &rest[6..];
+            let skip_delim = rest
+                .find(|c: char| c != ' ' && c != '\t' && c != ':' && c != '=')
+                .unwrap_or(rest.len());
+            rest = &rest[skip_delim..];
             let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
             rest = &rest[tok_len..];
-        } else if rest.starts_with("gsk_") {
+        } else if rest
+            .get(..4)
+            .is_some_and(|p| p.eq_ignore_ascii_case("gsk_"))
+        {
             out.push_str("gsk_<redacted>");
             rest = &rest[4..];
             let tok_len = rest
                 .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
                 .unwrap_or(rest.len());
             rest = &rest[tok_len..];
-        } else if rest.starts_with("sk-")
+        } else if rest
+            .get(..3)
+            .is_some_and(|p| p.eq_ignore_ascii_case("sk-"))
             && !out
                 .chars()
                 .last()
@@ -940,6 +958,26 @@ mod tests {
         assert!(redacted.contains("gsk_<redacted>"));
         assert!(redacted.contains("sk-<redacted>"));
         assert!(redacted.contains("desk-1 task-2"));
+    }
+
+    #[test]
+    fn redact_secrets_handles_case_insensitivity_and_delimiters() {
+        let sample = "Lower: bearer secret_tok_1\n\
+                      Upper: BEARER secret_tok_2\n\
+                      Colon: Bearer: secret_tok_3\n\
+                      Equal: bearer=secret_tok_4\n\
+                      Mixed GSK: GSK_secret_key_555\n\
+                      Upper SK: SK-PROJ-secret_key_666\n\
+                      Unicode: 🦀 Ошибка bearer secret_tok_7\n";
+        let redacted = redact_secrets(sample);
+        assert!(!redacted.contains("secret_tok_1"), "leaked lower bearer: {redacted}");
+        assert!(!redacted.contains("secret_tok_2"), "leaked upper bearer: {redacted}");
+        assert!(!redacted.contains("secret_tok_3"), "leaked colon bearer: {redacted}");
+        assert!(!redacted.contains("secret_tok_4"), "leaked equal bearer: {redacted}");
+        assert!(!redacted.contains("secret_key_555"), "leaked upper GSK: {redacted}");
+        assert!(!redacted.contains("secret_key_666"), "leaked upper SK: {redacted}");
+        assert!(!redacted.contains("secret_tok_7"), "leaked unicode bearer: {redacted}");
+        assert!(redacted.contains("🦀 Ошибка Bearer <redacted>"));
     }
 
     #[test]
