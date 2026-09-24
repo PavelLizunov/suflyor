@@ -1,3 +1,8 @@
+## 2026-10-15 - Case Sensitivity and Delimiter Token Redaction Bypass
+**Vulnerability:** `redact_secrets` in `diagnostics.rs` matched token prefixes case-sensitively (`rest.starts_with("Bearer ")`). When log output or HTTP headers contained lowercase (`bearer <token>`), uppercase (`BEARER <token>`), or non-space delimiters (`bearer:<token>`, `bearer=<token>`), the prefix check failed, leaking bearer tokens in plaintext into exported log files (`suflyor-log.txt`) and diagnostic reports.
+**Learning:** Hardcoded single-case string prefix matching (`starts_with("Bearer ")`) fails when third-party libraries, HTTP headers, or CLI tools format tokens using lowercase or different delimiters (`:`, `=`).
+**Prevention:** Always perform case-insensitive prefix matching (`eq_ignore_ascii_case`) and support common delimiter variations (`:`, `=`, whitespace) when redacting credential patterns.
+
 ## 2026-09-08 - Plaintext URL / Credential Leak in reqwest Error Log Formatting
 **Vulnerability:** Logging raw `reqwest::Error` instances via `{e:#}` in STT error handlers printed the full request URL into `overlay-host.log`. For HTTP endpoints with embedded credentials (`http://user:secret@host/v1`) or private LAN hostnames, transport failures leaked secrets into the shareable log file.
 **Learning:** `reqwest::Error`'s `Display` / `Debug` representation (`{e:#}`) embeds the target URL. Formatting `reqwest::Error` directly in log calls bypasses URL/credential redaction rules.
