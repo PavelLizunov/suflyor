@@ -27,3 +27,8 @@
 **Vulnerability:** `save()` in `config.rs` saved `config.json` via default `std::fs::write`, which on Unix/POSIX targets created files subject to default umask permissions (`0644`/`0664`), leaving plain-text secrets and bearer tokens in `config.json` readable by other local system users.
 **Learning:** While `credentials.json` had explicit `0o600` permissions on POSIX, `config.json` also holds sensitive API keys and tokens (`ai_bearer`, `groq_api_key`, `hermes_bridge_token`) but relied on default file creation options.
 **Prevention:** Always enforce owner-only permissions (`0o600`) when creating temporary files before atomic renames for any file containing sensitive API keys or credentials on POSIX platforms.
+
+## 2026-10-15 - World-Readable Hermes Dotenv File Permissions on POSIX
+**Vulnerability:** `install_plugin` in `hermes_install.rs` saved `<hermes home>/.env` via default `std::fs::write`, leaving secret bridge tokens (`SUFLYOR_BRIDGE_TOKEN`) and Hermes credentials in `.env` subject to default umask permissions (`0644`/`0664`) and readable by other local system users.
+**Learning:** Writing configuration or environment files containing authentication tokens via standard `std::fs::write` bypasses POSIX permission restrictions, exposing bridge secrets on multi-user systems.
+**Prevention:** Always use atomic temp-file creation with explicit `0o600` owner-only mode on POSIX platforms whenever writing `.env` or credential files.

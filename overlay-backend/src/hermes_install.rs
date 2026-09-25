@@ -93,7 +93,7 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
     };
     let env_new = merge_env_text(&env_old, bridge_url, token);
     if env_new != env_old {
-        std::fs::write(&env_path, env_new).map_err(|e| format!("запись .env: {e}"))?;
+        write_env_file(&env_path, &env_new).map_err(|e| format!("запись .env: {e}"))?;
     }
 
     // 3. config.yaml enable.
@@ -405,6 +405,49 @@ pub enum EnableEdit {
     /// The `plugins:` block has a shape we refuse to touch (flow mapping,
     /// non-list `enabled:` …) — the caller shows a manual hint instead.
     Unsupported,
+}
+
+/// Write `.env` atomically with restricted `0o600` permissions on Unix/POSIX targets.
+///
+/// SECURITY: On multi-user POSIX systems (Linux/macOS), `.env` carries the sensitive
+/// `SUFLYOR_BRIDGE_TOKEN` and Hermes credentials. Creating or writing `.env` via
+/// default `std::fs::write` leaves it subject to default umask permissions (`0644`/`0664`),
+/// making secret bridge tokens readable by other local users. Enforcing `0o600` mode
+/// ensures only the owner can read/write the file.
+fn write_env_file(path: &std::path::Path, content: &str) -> std::io::Result<()> {
+    let tmp = path.with_extension("tmp");
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+        let res = (|| -> std::io::Result<()> {
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&tmp)?;
+            file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+            file.write_all(content.as_bytes())?;
+            file.flush()?;
+            std::fs::rename(&tmp, path)?;
+            Ok(())
+        })();
+        if res.is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+        res
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(&tmp, content)?;
+        if let Err(e) = std::fs::rename(&tmp, path) {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(e);
+        }
+        Ok(())
+    }
 }
 
 /// Detect the file's dominant line ending so the edit doesn't churn it.
@@ -868,6 +911,35 @@ mod tests {
         assert_eq!(
             bridge_url_for_env("100.64.0.5", 9000),
             "http://100.64.0.5:9000"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn posix_env_file_is_written_with_mode_0600() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().expect("create temp directory");
+        let path = temp.path().join(".env");
+        write_env_file(&path, "SUFLYOR_BRIDGE_TOKEN=secret").expect("write env file");
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+
+        // Update existing .env file
+        write_env_file(&path, "SUFLYOR_BRIDGE_TOKEN=updated").expect("update env file");
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "SUFLYOR_BRIDGE_TOKEN=updated"
+        );
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert!(
+            !path.with_extension("tmp").exists(),
+            "temporary file must be cleaned up"
         );
     }
 }
