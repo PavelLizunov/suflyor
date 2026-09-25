@@ -653,7 +653,7 @@ fn finish(text: String, eol: &str) -> EnableEdit {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::panic)]
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
 
     #[test]
