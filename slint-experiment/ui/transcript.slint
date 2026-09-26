@@ -141,6 +141,8 @@ export component TranscriptWindow inherits Window {
     in-out property <bool> needs-diar-models: false;
     // The diarization models are downloading (progress in diar-status).
     in-out property <bool> installing-diar-models: false;
+    // Windows RC: optional Nemotron engine. Legacy remains the default.
+    in-out property <bool> use-nemotron: false;
     // I-1 (fable review): this session's recording predates the wall-clock-padding fix
     // (D0.5), so audio_ms→sample drifts and speaker timings may be approximate → banner.
     in-out property <bool> timeline-unreliable: false;
@@ -196,6 +198,7 @@ export component TranscriptWindow inherits Window {
     // V-1 — download the diarization models (shown only when the session is
     // diarizable but the models are absent).
     callback install-diar-models();
+    callback select-diar-engine(bool);
     callback rename-speaker(int, string);
     // I — in-transcript search: `search-edited` re-flags matches on each keystroke; `search-jump(+1/-1)`
     // moves to the next/prev match (Rust jumps the player via play-line + calls scroll-to-line here).
@@ -435,10 +438,10 @@ export component TranscriptWindow inherits Window {
                     }
                     // V-1 (fable review) — models missing: offer the one-time download. The
                     // detect controls (below) stay hidden until can-diarize flips true.
-                    if root.needs-diar-models && !root.can-diarize : VerticalLayout {
+                    if root.needs-diar-models : VerticalLayout {
                         spacing: 4px;
                         Text {
-                            text: @tr("Speaker detection needs a one-time model download (~30 MB).");
+                            text: root.use-nemotron ? @tr("Nemotron requires a one-time model download (~102 MB).") : @tr("Speaker detection needs a one-time model download (~30 MB).");
                             font-size: Metrics.font-caption;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -470,6 +473,38 @@ export component TranscriptWindow inherits Window {
                             Rectangle { horizontal-stretch: 1; }
                         }
                     }
+                    // Optional Windows RC engine toggle. Do not change archived results
+                    // or the legacy default just by switching the choice.
+                    if root.can-diarize || root.needs-diar-models : HorizontalLayout {
+                        spacing: Metrics.space-sm;
+                        Text {
+                            text: @tr("Speaker engine:");
+                            font-size: Metrics.font-label;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+                        Rectangle {
+                            width: 112px;
+                            height: 28px;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            background: !root.use-nemotron ? Theme.accent.with-alpha(0.20) : Theme.bg-surface;
+                            TouchArea { clicked => { if (!root.diarizing && !root.installing-diar-models) { root.select-diar-engine(false); } } }
+                            Text { text: @tr("Legacy"); color: Theme.text-primary; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                        Rectangle {
+                            width: 112px;
+                            height: 28px;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            background: root.use-nemotron ? Theme.accent.with-alpha(0.20) : Theme.bg-surface;
+                            TouchArea { clicked => { if (!root.diarizing && !root.installing-diar-models) { root.select-diar-engine(true); } } }
+                            Text { text: @tr("Nemotron 3"); color: Theme.text-primary; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
                     // ── Row 2 — detect controls (count stepper + run button; own row so
                     // the fixed-width controls never overflow the min-width window). Gated on
                     // can-diarize (V-1) — hidden until the models are installed. ──
@@ -478,13 +513,13 @@ export component TranscriptWindow inherits Window {
                         // Speaker-count stepper — the PRIMARY control («сколько собеседников»).
                         // V-2: the count is OTHER voices (diarization runs on system.wav; your
                         // mic is a separate channel), so «besides you».
-                        Text {
+                        if !root.use-nemotron : Text {
                             text: @tr("Speakers (besides you):");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                             vertical-alignment: center;
                         }
-                        Rectangle {
+                        if !root.use-nemotron : Rectangle {
                             width: 26px;
                             height: 28px;
                             border-radius: 6px;
@@ -499,7 +534,7 @@ export component TranscriptWindow inherits Window {
                                 vertical-alignment: center;
                             }
                         }
-                        Text {
+                        if !root.use-nemotron : Text {
                             text: root.speaker-count == 0 ? @tr("Auto") : "\{root.speaker-count}";
                             width: 22px;
                             font-size: Metrics.font-body;
@@ -508,7 +543,7 @@ export component TranscriptWindow inherits Window {
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
-                        Rectangle {
+                        if !root.use-nemotron : Rectangle {
                             width: 26px;
                             height: 28px;
                             border-radius: 6px;
@@ -522,6 +557,12 @@ export component TranscriptWindow inherits Window {
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
                             }
+                        }
+                        if root.use-nemotron : Text {
+                            text: @tr("Speakers: automatic (up to 8)");
+                            font-size: Metrics.font-label;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
                         }
                         Rectangle { horizontal-stretch: 1; }
                         Rectangle {

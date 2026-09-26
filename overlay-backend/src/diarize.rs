@@ -65,6 +65,26 @@ pub fn models_ready() -> bool {
     crate::diar_install::models_installed()
 }
 
+/// Per-run engine selection; existing archived results retain their own model_id.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DiarEngine {
+    Legacy,
+    Nemotron3,
+}
+
+/// Whether the selected engine has its assets installed. Never treat the
+/// legacy sentinel as evidence that Nemotron is available.
+#[must_use]
+pub fn engine_ready(engine: DiarEngine) -> bool {
+    match engine {
+        DiarEngine::Legacy => models_ready(),
+        DiarEngine::Nemotron3 => {
+            #[cfg(windows)] { crate::diar_install::nemotron_installed() }
+            #[cfg(not(windows))] { false }
+        }
+    }
+}
+
 /// Whether `system.wav`'s length covers the SYSTEM-line span, so speaker segments
 /// align to the right lines. `recording_ms` is the WAV length (see
 /// `session_audio::system_recording_ms`); the span is the max `audio_ms` over SYSTEM
@@ -117,6 +137,23 @@ pub fn run_diarization(
     utts: &[Utterance],
     on_progress: &impl Fn(Progress),
 ) -> Result<Diarization> {
+    run_diarization_with_engine(session_id, num_speakers, DiarEngine::Legacy, utts, on_progress)
+}
+
+/// Same persisted result, with an explicit engine selected for this run.
+///
+/// # Errors
+/// Returns an error if the selected engine is unavailable or its output is invalid.
+pub fn run_diarization_with_engine(
+    session_id: &str,
+    num_speakers: i32,
+    engine: DiarEngine,
+    utts: &[Utterance],
+    on_progress: &impl Fn(Progress),
+) -> Result<Diarization> {
+    if engine == DiarEngine::Nemotron3 {
+        return run_nemotron(session_id, utts, on_progress);
+    }
     let started = Instant::now();
     let seg = crate::diar_install::seg_model_path()
         .filter(|p| p.is_file())
@@ -188,6 +225,38 @@ pub fn run_diarization(
         segments,
         speaker_names: std::collections::BTreeMap::new(),
     })
+}
+
+fn run_nemotron(
+    session_id: &str,
+    utts: &[Utterance],
+    on_progress: &impl Fn(Progress),
+) -> Result<Diarization> {
+    #[cfg(not(windows))]
+    { let _ = (session_id, utts, on_progress); bail!("Nemotron is Windows-only in this RC"); }
+    #[cfg(windows)]
+    {
+        let wav = crate::recorder::recordings_dir()?.join(session_id).join("system.wav");
+        if !wav.is_file() { bail!("no system-audio recording for this session"); }
+        guard_wav_len(&wav)?;
+        let reader = hound::WavReader::open(&wav).context("open system recording")?;
+        let spec = reader.spec();
+        if spec.sample_rate != 16_000 { bail!("unsupported sample rate"); }
+        let duration_ms = i64::from(reader.duration()) * 1000 / i64::from(spec.sample_rate);
+        on_progress(Progress::Step("Определение говорящих: Nemotron…".to_string()));
+        let (segments, speakers, model_id) = crate::nemotron_diar::diarize(&wav, duration_ms)?;
+        // Preserve the native speaker activity and overlap. In contrast to the
+        // legacy path, a voice without a matching GigaAM line is not a phantom.
+        let _ = utts;
+        Ok(Diarization {
+            session_id: session_id.to_string(),
+            created_at_ms: crate::journal::now_unix_ms() as i64,
+            num_speakers: speakers,
+            model_id,
+            segments,
+            speaker_names: std::collections::BTreeMap::new(),
+        })
+    }
 }
 
 struct AutoCandidate {

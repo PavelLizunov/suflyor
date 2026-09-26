@@ -42,6 +42,8 @@ pub mod journal;
 pub mod kb;
 pub mod local_ai;
 pub mod memory;
+#[cfg(windows)]
+pub mod nemotron_diar;
 pub mod mlx_install;
 pub mod mlx_runtime;
 pub mod ocr;

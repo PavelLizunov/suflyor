@@ -10,7 +10,7 @@
 ;   slint-experiment/target/release/bundle/suflyor-slint-setup.exe
 
 !define PRODUCT_NAME "suflyor"
-!define PRODUCT_VERSION "0.38.1-rc.3"
+!define PRODUCT_VERSION "0.38.1-rc.4"
 !define PRODUCT_PUBLISHER "x3d_mutant"
 !define PRODUCT_EXE "overlay-host.exe"
 !define PRODUCT_INSTALL_DIR "$LOCALAPPDATA\suflyor-slint"
@@ -65,6 +65,21 @@ Section "Main" SEC_MAIN
   ; See suflyor-teratts/NOTICE.md: upstream ships no LICENSE, so redistribution
   ; of the weights is gated until an archived author grant is on file.
   File "..\slint-experiment\target\release\suflyor-teratts.exe"
+  ; Nemotron V3 offline diarization: pinned native CLI + dependent DLLs.
+  ; GGUF weights are downloaded and SHA-verified on demand, NEVER bundled.
+  File "..\slint-experiment\target\release\nemo-speech.exe"
+  File "..\slint-experiment\target\release\nemo_speech_asr.dll"
+  File "..\slint-experiment\target\release\nemo_speech_asr_c.dll"
+  File "..\slint-experiment\target\release\ggml.dll"
+  File "..\slint-experiment\target\release\ggml-base.dll"
+  File "..\slint-experiment\target\release\ggml-cpu.dll"
+  SetOutPath "$INSTDIR\licenses\nemotron"
+  File /oname=LICENSE "..\slint-experiment\target\release\licenses\nemotron\LICENSE"
+  File /oname=NOTICE "..\slint-experiment\target\release\licenses\nemotron\NOTICE"
+  File /oname=THIRD_PARTY_NOTICES.md "..\slint-experiment\target\release\licenses\nemotron\THIRD_PARTY_NOTICES.md"
+  File /oname=MODEL_LICENSE "..\slint-experiment\target\release\licenses\nemotron\MODEL_LICENSE"
+  File /oname=GGML_LICENSE "..\slint-experiment\target\release\licenses\nemotron\GGML_LICENSE"
+  SetOutPath "$INSTDIR"
   ; onnxruntime (GigaAM STT) is STATICALLY linked into the exe (ort 2.0
   ; download-binaries, no load-dynamic) -> no onnxruntime.dll to ship.
   ; The statically linked DirectML provider imports DMLCreateDevice1 at process
@@ -105,6 +120,19 @@ Section "Uninstall"
   Delete "$INSTDIR\${PRODUCT_EXE}"
   Delete "$INSTDIR\suflyor-tts.exe"
   Delete "$INSTDIR\suflyor-teratts.exe"
+  Delete "$INSTDIR\nemo-speech.exe"
+  Delete "$INSTDIR\nemo_speech_asr.dll"
+  Delete "$INSTDIR\nemo_speech_asr_c.dll"
+  Delete "$INSTDIR\ggml.dll"
+  Delete "$INSTDIR\ggml-base.dll"
+  Delete "$INSTDIR\ggml-cpu.dll"
+  Delete "$INSTDIR\licenses\nemotron\LICENSE"
+  Delete "$INSTDIR\licenses\nemotron\NOTICE"
+  Delete "$INSTDIR\licenses\nemotron\THIRD_PARTY_NOTICES.md"
+  Delete "$INSTDIR\licenses\nemotron\MODEL_LICENSE"
+  Delete "$INSTDIR\licenses\nemotron\GGML_LICENSE"
+  RMDir "$INSTDIR\licenses\nemotron"
+  RMDir "$INSTDIR\licenses"
   Delete "$INSTDIR\DirectML.dll"
   Delete "$INSTDIR\icon.ico"
   Delete "$INSTDIR\uninstall.exe"

@@ -747,7 +747,12 @@ fn start_diar_install_poll(weak: slint::Weak<TranscriptWindow>, slot: DiarInstal
                 Ok(()) => {
                     // Re-check the fs rather than assume — only enable detect if BOTH
                     // models really landed (a partial install keeps the prompt up).
-                    let ready = overlay_backend::diarize::models_ready();
+                    let engine = if w.get_use_nemotron() {
+                        overlay_backend::diarize::DiarEngine::Nemotron3
+                    } else {
+                        overlay_backend::diarize::DiarEngine::Legacy
+                    };
+                    let ready = overlay_backend::diarize::engine_ready(engine);
                     w.set_can_diarize(ready);
                     w.set_needs_diar_models(!ready);
                     w.set_diar_status(SharedString::default());
@@ -930,6 +935,7 @@ fn wire_transcript_diarization(
     ));
     let utts_rc: Rc<Vec<Utterance>> = Rc::new(utts_display.to_vec());
 
+    win.set_use_nemotron(false); // per-open default is always the legacy engine
     win.set_can_diarize(can_diarize);
     win.set_needs_diar_models(needs_diar_models);
     // V-1 — honest busy state: a download that outlived the window shows as
@@ -985,6 +991,30 @@ fn wire_transcript_diarization(
     // (same lifecycle as above; the worker commits on disk window-independently).
     if let Some(slot) = live_install {
         start_diar_install_poll(win.as_weak(), slot);
+    }
+
+    // Per-run engine selection is a visible UI choice, never a silent fallback.
+    {
+        let weak = win.as_weak();
+        let available = session_diarizable;
+        win.on_select_diar_engine(move |use_nemotron| {
+            let Some(w) = weak.upgrade() else { return; };
+            #[cfg(windows)]
+            let selected = use_nemotron;
+            #[cfg(not(windows))]
+            let selected = { let _ = use_nemotron; false };
+            if !available || w.get_diarizing() || w.get_installing_diar_models() { return; }
+            let engine = if selected {
+                overlay_backend::diarize::DiarEngine::Nemotron3
+            } else {
+                overlay_backend::diarize::DiarEngine::Legacy
+            };
+            let ready = overlay_backend::diarize::engine_ready(engine);
+            w.set_use_nemotron(selected);
+            w.set_can_diarize(ready);
+            w.set_needs_diar_models(!ready);
+            w.set_diar_status(SharedString::default());
+        });
     }
 
     // Toggle role ↔ voice.
@@ -1088,6 +1118,16 @@ fn wire_transcript_diarization(
                 return;
             };
             let count = w.get_speaker_count().clamp(0, 8);
+            let engine = if w.get_use_nemotron() {
+                overlay_backend::diarize::DiarEngine::Nemotron3
+            } else {
+                overlay_backend::diarize::DiarEngine::Legacy
+            };
+            if !overlay_backend::diarize::engine_ready(engine) {
+                drop(guard);
+                w.set_diar_status(SharedString::from("Установите выбранную модель говорящих."));
+                return;
+            }
             w.set_diarizing(true);
             w.set_diar_status(SharedString::from("Определение говорящих…"));
 
@@ -1107,9 +1147,10 @@ fn wire_transcript_diarization(
                     // a panic unwinding the sidecar run (RAII; the latch can't be
                     // leaked and wedge the feature until restart).
                     let guard = guard;
-                    let outcome = match overlay_backend::diarize::run_diarization(
+                    let outcome = match overlay_backend::diarize::run_diarization_with_engine(
                         &sid_w,
                         count,
+                        engine,
                         &utts_owned,
                         &|overlay_backend::diarize::Progress::Step(message)| {
                             if let Ok(mut value) = progress_w.lock() {
@@ -1168,6 +1209,7 @@ fn wire_transcript_diarization(
             let Some(w) = weak.upgrade() else {
                 return;
             };
+            let use_nemotron = w.get_use_nemotron();
             let Some(guard) = try_acquire_busy(&DIAR_INSTALL_BUSY) else {
                 // An install from another (possibly closed) window is still
                 // running: honest busy state, NO second worker. The running
@@ -1191,8 +1233,11 @@ fn wire_transcript_diarization(
                     let cancel = AtomicBool::new(false);
                     // ponytail: no per-file progress marshalling — the button's
                     // "Downloading…" state is enough for a one-time ~30 MB fetch.
-                    let r = overlay_backend::diar_install::install_models(&cancel, &|_| {})
-                        .map_err(|e| format!("{e:#}"));
+                    let r = if use_nemotron {
+                        overlay_backend::diar_install::install_nemotron()
+                    } else {
+                        overlay_backend::diar_install::install_models(&cancel, &|_| {})
+                    }.map_err(|e| format!("{e:#}"));
                     if let Ok(mut g) = slot_w.lock() {
                         *g = Some(r);
                         // Keep result publication + latch release ordered for

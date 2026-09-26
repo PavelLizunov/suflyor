@@ -68,6 +68,7 @@ getrandom = "0.2"
 # them out of the macOS dependency graph. Other targets keep the honest
 # unsupported audio seam (`audio_unavailable.rs`) — no silent fallback.
 [target.'cfg(windows)'.dependencies]
+tempfile = "3"
 # Audio capture (audio.rs)
 wasapi = "0.23"
 

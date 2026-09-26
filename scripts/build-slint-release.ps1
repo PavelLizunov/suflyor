@@ -72,6 +72,33 @@ if (-not (Test-Path $teraSidecar)) {
 }
 Write-Host "  teratts sidecar: $teraSidecar" -ForegroundColor Green
 
+# Windows RC Nemotron: use ONLY the pinned native runtime staged on the build
+# worker. Never download/execute unreviewed binaries in this release script.
+$native = Join-Path $env:LOCALAPPDATA 'suflyor-nemotron-v3-rc4'
+$pins = @{
+  'nemo-speech.exe' = 'C1CAEA9E7308F67E6707FEBCA73C82328A49A4ADB93591F02B1649D4329D247E'
+  'nemo_speech_asr.dll' = '0121CE6A581B274111106249181376E95504AE5B42F87108B32DF10D8684F703'
+  'nemo_speech_asr_c.dll' = '204B49D029A9C4DE800EEDC8F623D85216B01A47755A0C9CF1DDA73D091C8DA2'
+  'ggml.dll' = '0C8D2F62D13A51CE7DECDF5A342ED7BA08423179FF58CF3CC6C67340A155FC51'
+  'ggml-base.dll' = 'DAB65D84B1E67B0303B645012649B74A61938178F2395C220B6D4656CC2B7452'
+  'ggml-cpu.dll' = '9220E4CC9F299C071008269054617A244219255EA4E57EC594C79BD3C447D4AE'
+}
+if (-not (Test-Path $native)) { throw 'Pinned Nemotron native runtime is not staged' }
+$nativeFiles = @('nemo-speech.exe','nemo_speech_asr.dll','nemo_speech_asr_c.dll','ggml.dll','ggml-base.dll','ggml-cpu.dll')
+foreach ($file in $nativeFiles) {
+    $path = Join-Path $native $file
+    if (-not (Test-Path $path)) { throw "Nemotron binary missing: $file" }
+    if ((Get-FileHash $path -Algorithm SHA256).Hash -ne $pins[$file]) { throw "Nemotron binary SHA mismatch: $file" }
+    Copy-Item -LiteralPath $path -Destination (Join-Path $crate "target\release\$file") -Force
+}
+$licenseDir = Join-Path $crate 'target\release\licenses\nemotron'
+New-Item -ItemType Directory -Path $licenseDir -Force | Out-Null
+foreach ($file in @('LICENSE','NOTICE','THIRD_PARTY_NOTICES.md','MODEL_LICENSE','GGML_LICENSE')) {
+    $path = Join-Path $native $file
+    if (-not (Test-Path $path)) { throw "Nemotron notice missing: $file" }
+    Copy-Item -LiteralPath $path -Destination (Join-Path $licenseDir $file) -Force
+}
+
 # DirectML EP (GigaAM GPU): ort links DMLCreateDevice1 at process startup, so
 # Windows builds must ship the matching DirectML redistributable. Older Windows
 # 10 releases have a system DirectML.dll without that export and otherwise fail

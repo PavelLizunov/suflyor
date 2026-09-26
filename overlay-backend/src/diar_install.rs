@@ -383,6 +383,74 @@ fn marker_top(m: &DiarModel) -> &str {
     m.marker.split(['/', '\\']).next().unwrap_or(m.marker)
 }
 
+/// Pinned official V3 Q8 asset; separate from the legacy pyannote/WeSpeaker sentinel.
+const NEMOTRON_FILE: &str = "Nemotron-3-Diarization.q8_0.gguf";
+const NEMOTRON_SHA256: &str = "08456d9e22cd9a323c0364d98375f3746d6e68507ebb705cd46438c534c7a3a1";
+const NEMOTRON_BYTES: u64 = 107_012_128;
+const NEMOTRON_REV: &str = "f667ed73aee57d40cc39428eb768b4fd87a0a29e";
+const NEMOTRON_SENTINEL: &str = "installed-nemotron-v3.txt";
+static NEMOTRON_INSTALL_BUSY: AtomicBool = AtomicBool::new(false);
+
+#[must_use]
+pub fn nemotron_model_path() -> Option<PathBuf> {
+    diar_dir().map(|d| d.join("nemotron-v3").join(NEMOTRON_FILE))
+}
+
+/// A ready flag is never shared with the legacy model pair.
+#[must_use]
+pub fn nemotron_installed() -> bool {
+    let Some(path) = nemotron_model_path() else { return false; };
+    let Some(root) = path.parent() else { return false; };
+    nemotron_installed_in(root)
+}
+
+fn nemotron_installed_in(root: &Path) -> bool {
+    let path = root.join(NEMOTRON_FILE);
+    let good_size = std::fs::metadata(path).is_ok_and(|m| m.len() == NEMOTRON_BYTES);
+    let sentinel = std::fs::read_to_string(root.join(NEMOTRON_SENTINEL))
+        .is_ok_and(|s| s.trim() == format!("{NEMOTRON_REV}:{NEMOTRON_SHA256}"));
+    good_size && sentinel
+}
+
+/// Download, verify and commit the independent GGUF without touching legacy files.
+/// A stale or interrupted staging file is never reported as installed.
+///
+/// # Errors
+/// Fails on an unavailable data dir, another install, download failure or digest mismatch.
+pub fn install_nemotron() -> Result<()> {
+    if NEMOTRON_INSTALL_BUSY.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).is_err() {
+        bail!("Nemotron installation already running");
+    }
+    struct BusyReset;
+    impl Drop for BusyReset {
+        fn drop(&mut self) { NEMOTRON_INSTALL_BUSY.store(false, Ordering::Release); }
+    }
+    let _guard = BusyReset;
+    let path = nemotron_model_path().context("data dir unavailable")?;
+    let root = path.parent().context("invalid model path")?;
+    std::fs::create_dir_all(root).context("create model directory")?;
+    if nemotron_installed_in(root) { return Ok(()); }
+    let stage = root.join(format!("{NEMOTRON_FILE}.download"));
+    if stage.exists() { std::fs::remove_file(&stage).context("remove stale download")?; }
+    let url = format!("https://huggingface.co/nvidia/Nemotron-3-Diarization/resolve/{NEMOTRON_REV}/{NEMOTRON_FILE}");
+    curl_download(&url, &stage).context("download Nemotron")?;
+    if std::fs::metadata(&stage).context("model metadata")?.len() != NEMOTRON_BYTES {
+        let _ = std::fs::remove_file(&stage);
+        bail!("Nemotron model length mismatch");
+    }
+    verify_sha256(&stage, NEMOTRON_SHA256, "Nemotron Q8")?;
+    // A failed replacement must not mark an old or partial file as ready.
+    let sentinel = root.join(NEMOTRON_SENTINEL);
+    if sentinel.exists() { std::fs::remove_file(&sentinel).context("invalidate old Nemotron sentinel")?; }
+    if path.exists() { std::fs::remove_file(&path).context("replace old Nemotron model")?; }
+    std::fs::rename(&stage, &path).context("commit verified Nemotron model")?;
+    let temp_sentinel = root.join(format!("{NEMOTRON_SENTINEL}.tmp"));
+    std::fs::write(&temp_sentinel, format!("{NEMOTRON_REV}:{NEMOTRON_SHA256}\n"))
+        .context("write Nemotron sentinel")?;
+    std::fs::rename(&temp_sentinel, &sentinel).context("commit Nemotron sentinel")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
