@@ -79,8 +79,14 @@ pub fn engine_ready(engine: DiarEngine) -> bool {
     match engine {
         DiarEngine::Legacy => models_ready(),
         DiarEngine::Nemotron3 => {
-            #[cfg(windows)] { crate::diar_install::nemotron_installed() }
-            #[cfg(not(windows))] { false }
+            #[cfg(windows)]
+            {
+                crate::diar_install::nemotron_installed()
+            }
+            #[cfg(not(windows))]
+            {
+                false
+            }
         }
     }
 }
@@ -137,7 +143,13 @@ pub fn run_diarization(
     utts: &[Utterance],
     on_progress: &impl Fn(Progress),
 ) -> Result<Diarization> {
-    run_diarization_with_engine(session_id, num_speakers, DiarEngine::Legacy, utts, on_progress)
+    run_diarization_with_engine(
+        session_id,
+        num_speakers,
+        DiarEngine::Legacy,
+        utts,
+        on_progress,
+    )
 }
 
 /// Same persisted result, with an explicit engine selected for this run.
@@ -233,17 +245,28 @@ fn run_nemotron(
     on_progress: &impl Fn(Progress),
 ) -> Result<Diarization> {
     #[cfg(not(windows))]
-    { let _ = (session_id, utts, on_progress); bail!("Nemotron is Windows-only in this RC"); }
+    {
+        let _ = (session_id, utts, on_progress);
+        bail!("Nemotron is Windows-only in this RC");
+    }
     #[cfg(windows)]
     {
-        let wav = crate::recorder::recordings_dir()?.join(session_id).join("system.wav");
-        if !wav.is_file() { bail!("no system-audio recording for this session"); }
+        let wav = crate::recorder::recordings_dir()?
+            .join(session_id)
+            .join("system.wav");
+        if !wav.is_file() {
+            bail!("no system-audio recording for this session");
+        }
         guard_wav_len(&wav)?;
         let reader = hound::WavReader::open(&wav).context("open system recording")?;
         let spec = reader.spec();
-        if spec.sample_rate != 16_000 { bail!("unsupported sample rate"); }
+        if spec.sample_rate != 16_000 {
+            bail!("unsupported sample rate");
+        }
         let duration_ms = i64::from(reader.duration()) * 1000 / i64::from(spec.sample_rate);
-        on_progress(Progress::Step("Определение говорящих: Nemotron…".to_string()));
+        on_progress(Progress::Step(
+            "Определение говорящих: Nemotron…".to_string(),
+        ));
         let (segments, speakers, model_id) = crate::nemotron_diar::diarize(&wav, duration_ms)?;
         // Preserve the native speaker activity and overlap. In contrast to the
         // legacy path, a voice without a matching GigaAM line is not a phantom.

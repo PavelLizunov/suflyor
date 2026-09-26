@@ -4303,6 +4303,7 @@ dependencies = [
  "serde_json",
  "sha1",
  "sha2",
+ "tempfile",
  "tiny_http",
  "tokio",
  "transcribe-rs",

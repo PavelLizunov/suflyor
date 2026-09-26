@@ -399,8 +399,12 @@ pub fn nemotron_model_path() -> Option<PathBuf> {
 /// A ready flag is never shared with the legacy model pair.
 #[must_use]
 pub fn nemotron_installed() -> bool {
-    let Some(path) = nemotron_model_path() else { return false; };
-    let Some(root) = path.parent() else { return false; };
+    let Some(path) = nemotron_model_path() else {
+        return false;
+    };
+    let Some(root) = path.parent() else {
+        return false;
+    };
     nemotron_installed_in(root)
 }
 
@@ -418,20 +422,29 @@ fn nemotron_installed_in(root: &Path) -> bool {
 /// # Errors
 /// Fails on an unavailable data dir, another install, download failure or digest mismatch.
 pub fn install_nemotron() -> Result<()> {
-    if NEMOTRON_INSTALL_BUSY.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).is_err() {
+    if NEMOTRON_INSTALL_BUSY
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
         bail!("Nemotron installation already running");
     }
     struct BusyReset;
     impl Drop for BusyReset {
-        fn drop(&mut self) { NEMOTRON_INSTALL_BUSY.store(false, Ordering::Release); }
+        fn drop(&mut self) {
+            NEMOTRON_INSTALL_BUSY.store(false, Ordering::Release);
+        }
     }
     let _guard = BusyReset;
     let path = nemotron_model_path().context("data dir unavailable")?;
     let root = path.parent().context("invalid model path")?;
     std::fs::create_dir_all(root).context("create model directory")?;
-    if nemotron_installed_in(root) { return Ok(()); }
+    if nemotron_installed_in(root) {
+        return Ok(());
+    }
     let stage = root.join(format!("{NEMOTRON_FILE}.download"));
-    if stage.exists() { std::fs::remove_file(&stage).context("remove stale download")?; }
+    if stage.exists() {
+        std::fs::remove_file(&stage).context("remove stale download")?;
+    }
     let url = format!("https://huggingface.co/nvidia/Nemotron-3-Diarization/resolve/{NEMOTRON_REV}/{NEMOTRON_FILE}");
     curl_download(&url, &stage).context("download Nemotron")?;
     if std::fs::metadata(&stage).context("model metadata")?.len() != NEMOTRON_BYTES {
@@ -441,12 +454,19 @@ pub fn install_nemotron() -> Result<()> {
     verify_sha256(&stage, NEMOTRON_SHA256, "Nemotron Q8")?;
     // A failed replacement must not mark an old or partial file as ready.
     let sentinel = root.join(NEMOTRON_SENTINEL);
-    if sentinel.exists() { std::fs::remove_file(&sentinel).context("invalidate old Nemotron sentinel")?; }
-    if path.exists() { std::fs::remove_file(&path).context("replace old Nemotron model")?; }
+    if sentinel.exists() {
+        std::fs::remove_file(&sentinel).context("invalidate old Nemotron sentinel")?;
+    }
+    if path.exists() {
+        std::fs::remove_file(&path).context("replace old Nemotron model")?;
+    }
     std::fs::rename(&stage, &path).context("commit verified Nemotron model")?;
     let temp_sentinel = root.join(format!("{NEMOTRON_SENTINEL}.tmp"));
-    std::fs::write(&temp_sentinel, format!("{NEMOTRON_REV}:{NEMOTRON_SHA256}\n"))
-        .context("write Nemotron sentinel")?;
+    std::fs::write(
+        &temp_sentinel,
+        format!("{NEMOTRON_REV}:{NEMOTRON_SHA256}\n"),
+    )
+    .context("write Nemotron sentinel")?;
     std::fs::rename(&temp_sentinel, &sentinel).context("commit Nemotron sentinel")?;
     Ok(())
 }
