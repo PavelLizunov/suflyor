@@ -504,11 +504,16 @@ mod tests {
     #[test]
     fn nemotron_rejects_tampered_equal_length_model() {
         let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join(NEMOTRON_FILE), vec![0_u8; NEMOTRON_BYTES as usize]).unwrap();
+        std::fs::write(
+            tmp.path().join(NEMOTRON_FILE),
+            vec![0_u8; NEMOTRON_BYTES as usize],
+        )
+        .unwrap();
         std::fs::write(
             tmp.path().join(NEMOTRON_SENTINEL),
             format!("{NEMOTRON_REV}:{NEMOTRON_SHA256}\n"),
-        ).unwrap();
+        )
+        .unwrap();
         assert!(!nemotron_installed_in(tmp.path()));
     }
 
