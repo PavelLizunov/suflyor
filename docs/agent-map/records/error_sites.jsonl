@@ -1,0 +1,461 @@
+{"path": "slint-experiment/tests/icon_guard.rs", "line": 79, "kind": "format_err", "message": "\"{name}: element <{tag}> is forbidden\""}
+{"path": "slint-experiment/tests/icon_guard.rs", "line": 84, "kind": "format_err", "message": "\"{name}: <{tag}> has no geometry\""}
+{"path": "slint-experiment/tests/icon_guard.rs", "line": 92, "kind": "format_err", "message": "\"{name}: attribute {attribute} is forbidden on <{tag}>\""}
+{"path": "slint-experiment/tests/icon_guard.rs", "line": 98, "kind": "format_err", "message": "\"{name}: attribute {attribute} must use double quotes\""}
+{"path": "slint-experiment/tests/icon_guard.rs", "line": 107, "kind": "format_err", "message": "\"{name}: attribute {attribute} is empty\""}
+{"path": "slint-experiment/src/replay_backend.rs", "line": 83, "kind": "anyhow_bail", "message": "\"path is outside sessions dir\""}
+{"path": "slint-experiment/src/replay_backend.rs", "line": 88, "kind": "anyhow_bail", "message": "\"session file too large ({} bytes, max {MAX_BYTES}"}
+{"path": "slint-experiment/src/replay_backend.rs", "line": 37, "kind": "anyhow_context", "message": "\"read sessions dir\""}
+{"path": "slint-experiment/src/replay_backend.rs", "line": 80, "kind": "anyhow_context", "message": "\"canonicalize sessions dir\""}
+{"path": "slint-experiment/src/replay_backend.rs", "line": 81, "kind": "anyhow_context", "message": "\"canonicalize session path\""}
+{"path": "slint-experiment/src/replay_backend.rs", "line": 86, "kind": "anyhow_context", "message": "\"stat session file\""}
+{"path": "slint-experiment/src/replay_backend.rs", "line": 94, "kind": "anyhow_context", "message": "\"read session file\""}
+{"path": "slint-experiment/src/tray.rs", "line": 276, "kind": "format_err", "message": "\"RegisterClassExW failed: {err:?}\""}
+{"path": "slint-experiment/src/tray.rs", "line": 298, "kind": "format_err", "message": "\"RegisterWindowMessageW failed: {err:?}\""}
+{"path": "slint-experiment/src/tray.rs", "line": 403, "kind": "format_err", "message": "\"Shell_NotifyIconW(NIM_ADD) failed: {err:?}\""}
+{"path": "slint-experiment/src/tray.rs", "line": 409, "kind": "format_err", "message": "\"Shell_NotifyIconW(NIM_SETVERSION) failed: {err:?}\""}
+{"path": "slint-experiment/src/win32.rs", "line": 132, "kind": "format_err", "message": "\"not a Win32 window handle: {other:?}\").into("}
+{"path": "slint-experiment/src/win32.rs", "line": 346, "kind": "format_err", "message": "\"display affinity readback mismatch: wanted 0x{:x}, got 0x{:x}\", affinity.0, actual ) .into("}
+{"path": "slint-experiment/src/capture.rs", "line": 73, "kind": "format_err", "message": "\"bgra len {} != expected {expected}\", bgra.len("}
+{"path": "slint-experiment/src/capture.rs", "line": 117, "kind": "format_err", "message": "\"virtual desktop has zero size {vw}x{vh}\").into("}
+{"path": "slint-experiment/src/slint_session.rs", "line": 372, "kind": "anyhow_bail", "message": "\"Groq API key not set in settings (cfg.groq_api_key empty"}
+{"path": "slint-experiment/src/slint_session.rs", "line": 379, "kind": "anyhow_bail", "message": "\"GigaAM model dir invalid: {e}\""}
+{"path": "slint-experiment/src/slint_session.rs", "line": 464, "kind": "anyhow_context", "message": "\"audio::start_capture failed (check mic / system audio devices in Settings"}
+{"path": "slint-experiment/src/bin/overlay_spike.rs", "line": 211, "kind": "format_err", "message": "\"not a Win32 window handle: {other:?}\").into("}
+{"path": "slint-experiment/src/bin/overlay_host/settings_stt.rs", "line": 163, "kind": "anyhow_bail", "message": "\"managed GigaAM install did not produce a ready model\""}
+{"path": "slint-experiment/src/bin/overlay_host/settings_memory.rs", "line": 184, "kind": "format_err", "message": "\"{e:#}\""}
+{"path": "slint-experiment/src/bin/overlay_host/settings_audio.rs", "line": 443, "kind": "anyhow_bail", "message": "\"synthetic save failure\""}
+{"path": "slint-experiment/src/native/macos/status.rs", "line": 26, "kind": "format_err", "message": "\"expected an AppKit window handle, got {other:?}\").into("}
+{"path": "slint-experiment/src/native/macos/window.rs", "line": 24, "kind": "format_err", "message": "\"expected an AppKit window handle, got {other:?}\").into("}
+{"path": "slint-experiment/src/native/macos/screen.rs", "line": 170, "kind": "format_err", "message": "\"ScreenCaptureKit screenshot failed with code {status}\").into("}
+{"path": "slint-experiment/src/native/macos/screen.rs", "line": 213, "kind": "format_err", "message": "\"Apple Vision OCR failed with code {status}\").into("}
+{"path": "slint-experiment/src/native/windows/screen.rs", "line": 20, "kind": "format_err", "message": "\"invalid capture size {w}x{h}\").into("}
+{"path": "overlay-backend/examples/stt_macos_probe.rs", "line": 31, "kind": "anyhow_context", "message": "\"open probe WAV\""}
+{"path": "overlay-backend/examples/stt_macos_probe.rs", "line": 43, "kind": "anyhow_context", "message": "\"decode probe WAV\""}
+{"path": "overlay-backend/examples/stt_macos_probe.rs", "line": 55, "kind": "anyhow_context", "message": "usage("}
+{"path": "overlay-backend/examples/stt_macos_probe.rs", "line": 56, "kind": "anyhow_context", "message": "usage("}
+{"path": "overlay-backend/examples/stt_macos_probe.rs", "line": 57, "kind": "anyhow_context", "message": "usage("}
+{"path": "overlay-backend/examples/stt_macos_probe.rs", "line": 58, "kind": "anyhow_context", "message": "usage("}
+{"path": "overlay-backend/examples/stt_macos_probe.rs", "line": 60, "kind": "anyhow_context", "message": "\"repeats must be an integer\""}
+{"path": "overlay-backend/examples/stt_macos_probe.rs", "line": 98, "kind": "anyhow_context", "message": "\"STT probe transcription failed\""}
+{"path": "overlay-backend/examples/stt_macos_lifecycle_probe.rs", "line": 53, "kind": "anyhow_context", "message": "\"open probe WAV\""}
+{"path": "overlay-backend/examples/stt_macos_lifecycle_probe.rs", "line": 65, "kind": "anyhow_context", "message": "\"decode probe WAV\""}
+{"path": "overlay-backend/examples/stt_macos_lifecycle_probe.rs", "line": 78, "kind": "anyhow_context", "message": "\"flush phase marker\""}
+{"path": "overlay-backend/examples/stt_macos_lifecycle_probe.rs", "line": 108, "kind": "anyhow_context", "message": "\"send probe speech\""}
+{"path": "overlay-backend/examples/stt_macos_lifecycle_probe.rs", "line": 119, "kind": "anyhow_context", "message": "\"send probe silence\""}
+{"path": "overlay-backend/examples/stt_macos_lifecycle_probe.rs", "line": 123, "kind": "anyhow_context", "message": "\"live transcript timeout\""}
+{"path": "overlay-backend/examples/stt_macos_lifecycle_probe.rs", "line": 124, "kind": "anyhow_context", "message": "\"live STT pipeline closed without a transcript\""}
+{"path": "overlay-backend/examples/stt_macos_lifecycle_probe.rs", "line": 141, "kind": "anyhow_context", "message": "\"live STT pipeline did not stop\""}
+{"path": "overlay-backend/examples/stt_macos_lifecycle_probe.rs", "line": 158, "kind": "anyhow_context", "message": "usage("}
+{"path": "overlay-backend/examples/stt_macos_lifecycle_probe.rs", "line": 159, "kind": "anyhow_context", "message": "usage("}
+{"path": "overlay-backend/examples/stt_macos_lifecycle_probe.rs", "line": 160, "kind": "anyhow_context", "message": "usage("}
+{"path": "overlay-backend/examples/stt_macos_lifecycle_probe.rs", "line": 161, "kind": "anyhow_context", "message": "usage("}
+{"path": "overlay-backend/src/nemotron_diar.rs", "line": 26, "kind": "anyhow_context", "message": "\"Nemotron model unavailable\""}
+{"path": "overlay-backend/src/nemotron_diar.rs", "line": 31, "kind": "anyhow_context", "message": "\"resolve application executable\""}
+{"path": "overlay-backend/src/nemotron_diar.rs", "line": 36, "kind": "anyhow_context", "message": "\"create private diarization workspace\""}
+{"path": "overlay-backend/src/nemotron_diar.rs", "line": 60, "kind": "anyhow_context", "message": "\"start Nemotron\""}
+{"path": "overlay-backend/src/nemotron_diar.rs", "line": 74, "kind": "anyhow_context", "message": "\"wait for Nemotron\""}
+{"path": "overlay-backend/src/nemotron_diar.rs", "line": 85, "kind": "anyhow_context", "message": "\"open Nemotron RTTM\""}
+{"path": "overlay-backend/src/nemotron_diar.rs", "line": 86, "kind": "anyhow_context", "message": "\"read RTTM size\""}
+{"path": "overlay-backend/src/nemotron_diar.rs", "line": 99, "kind": "anyhow_context", "message": "\"read RTTM\""}
+{"path": "overlay-backend/src/nemotron_diar.rs", "line": 104, "kind": "anyhow_context", "message": "\"RTTM start\""}
+{"path": "overlay-backend/src/nemotron_diar.rs", "line": 105, "kind": "anyhow_context", "message": "\"RTTM duration\""}
+{"path": "overlay-backend/src/tts_install.rs", "line": 126, "kind": "anyhow_context", "message": "\"APPDATA not set — no voices dir\""}
+{"path": "overlay-backend/src/update.rs", "line": 106, "kind": "anyhow_context", "message": "\"build reqwest client\""}
+{"path": "overlay-backend/src/update.rs", "line": 111, "kind": "anyhow_context", "message": "\"GET releases/latest\""}
+{"path": "overlay-backend/src/update.rs", "line": 113, "kind": "anyhow_context", "message": "\"releases/latest returned an error status\""}
+{"path": "overlay-backend/src/update.rs", "line": 116, "kind": "anyhow_context", "message": "\"parse releases/latest JSON\""}
+{"path": "overlay-backend/src/update.rs", "line": 176, "kind": "anyhow_context", "message": "\"GET releases/latest (for digest"}
+{"path": "overlay-backend/src/update.rs", "line": 178, "kind": "anyhow_context", "message": "\"releases/latest (for digest"}
+{"path": "overlay-backend/src/update.rs", "line": 181, "kind": "anyhow_context", "message": "\"parse releases/latest JSON (for digest"}
+{"path": "overlay-backend/src/update.rs", "line": 202, "kind": "anyhow_context", "message": "\"build reqwest client\""}
+{"path": "overlay-backend/src/update.rs", "line": 207, "kind": "anyhow_context", "message": "\"GET installer asset\""}
+{"path": "overlay-backend/src/update.rs", "line": 209, "kind": "anyhow_context", "message": "\"installer download returned an error status\""}
+{"path": "overlay-backend/src/update.rs", "line": 212, "kind": "anyhow_context", "message": "\"read installer bytes\""}
+{"path": "overlay-backend/src/update.rs", "line": 256, "kind": "anyhow_context", "message": "\"create temp update dir\""}
+{"path": "overlay-backend/src/update.rs", "line": 258, "kind": "anyhow_context", "message": "\"write installer to temp\""}
+{"path": "overlay-backend/src/update.rs", "line": 268, "kind": "anyhow_context", "message": "\"launch installer\""}
+{"path": "overlay-backend/src/ocr_install.rs", "line": 50, "kind": "anyhow_context", "message": "\"APPDATA not set — no data dir\""}
+{"path": "overlay-backend/src/ocr_install.rs", "line": 57, "kind": "anyhow_context", "message": "\"download OCR engine\""}
+{"path": "overlay-backend/src/ocr_install.rs", "line": 66, "kind": "anyhow_context", "message": "\"extract OCR engine\""}
+{"path": "overlay-backend/src/runtime.rs", "line": 461, "kind": "anyhow_bail", "message": "crate::deep_lock::BLOCKED_ERROR"}
+{"path": "overlay-backend/src/runtime.rs", "line": 498, "kind": "anyhow_bail", "message": "\"managed prep server did not become ready\""}
+{"path": "overlay-backend/src/runtime.rs", "line": 708, "kind": "anyhow_bail", "message": "\"one conspectus cannot fit the active context\""}
+{"path": "overlay-backend/src/runtime.rs", "line": 723, "kind": "anyhow_bail", "message": "\"one conspectus cannot fit the active context\""}
+{"path": "overlay-backend/src/runtime.rs", "line": 770, "kind": "anyhow_bail", "message": "\"summary reduce cannot fit the active context\""}
+{"path": "overlay-backend/src/runtime.rs", "line": 803, "kind": "anyhow_bail", "message": "\"summary reduce made no progress\""}
+{"path": "overlay-backend/src/hermes_install.rs", "line": 71, "kind": "format_err", "message": "\"Hermes не найден на этой машине (нет {})\", home.display()"}
+{"path": "overlay-backend/src/hermes_install.rs", "line": 92, "kind": "format_err", "message": "\"чтение .env: {e}\""}
+{"path": "overlay-backend/src/hermes_install.rs", "line": 131, "kind": "format_err", "message": "\"Hermes не найден на этой машине (нет {})\", home.display()"}
+{"path": "overlay-backend/src/hermes_install.rs", "line": 140, "kind": "format_err", "message": "\"чтение config.yaml: {e}\""}
+{"path": "overlay-backend/src/credentials.rs", "line": 48, "kind": "anyhow_bail", "message": "\"credential is too large\""}
+{"path": "overlay-backend/src/credentials.rs", "line": 50, "kind": "anyhow_context", "message": "\"credential is too large\""}
+{"path": "overlay-backend/src/credentials.rs", "line": 62, "kind": "anyhow_context", "message": "\"store protected credential\""}
+{"path": "overlay-backend/src/credentials.rs", "line": 80, "kind": "anyhow_context", "message": "\"read protected credential\""}
+{"path": "overlay-backend/src/credentials.rs", "line": 96, "kind": "anyhow_context", "message": "\"decode protected credential\""}
+{"path": "overlay-backend/src/credentials.rs", "line": 111, "kind": "anyhow_context", "message": "\"delete protected credential\""}
+{"path": "overlay-backend/src/credentials.rs", "line": 83, "kind": "anyhow_err", "message": "\"credential store returned no value\""}
+{"path": "overlay-backend/src/stt.rs", "line": 180, "kind": "anyhow_bail", "message": "\"whisper-server unreachable\""}
+{"path": "overlay-backend/src/stt.rs", "line": 935, "kind": "anyhow_bail", "message": "\"STT network error\""}
+{"path": "overlay-backend/src/stt.rs", "line": 950, "kind": "anyhow_bail", "message": "\"STT HTTP {status}\""}
+{"path": "overlay-backend/src/stt.rs", "line": 136, "kind": "anyhow_context", "message": "\"build reqwest client\""}
+{"path": "overlay-backend/src/stt.rs", "line": 142, "kind": "anyhow_context", "message": "\"GET groq models\""}
+{"path": "overlay-backend/src/stt.rs", "line": 163, "kind": "anyhow_context", "message": "\"build reqwest client\""}
+{"path": "overlay-backend/src/stt.rs", "line": 787, "kind": "anyhow_context", "message": "\"build client\""}
+{"path": "overlay-backend/src/stt.rs", "line": 807, "kind": "anyhow_context", "message": "\"build client\""}
+{"path": "overlay-backend/src/stt.rs", "line": 953, "kind": "anyhow_context", "message": "\"parse stt json\""}
+{"path": "overlay-backend/src/download.rs", "line": 42, "kind": "anyhow_context", "message": "\"spawn curl\""}
+{"path": "overlay-backend/src/download.rs", "line": 73, "kind": "anyhow_context", "message": "\"spawn bsdtar\""}
+{"path": "overlay-backend/src/re_transcribe.rs", "line": 98, "kind": "anyhow_context", "message": "\"read WAV samples\""}
+{"path": "overlay-backend/src/re_transcribe.rs", "line": 145, "kind": "anyhow_context", "message": "\"read WAV samples\""}
+{"path": "overlay-backend/src/diarize.rs", "line": 172, "kind": "anyhow_context", "message": "\"segmentation model not installed\""}
+{"path": "overlay-backend/src/diarize.rs", "line": 175, "kind": "anyhow_context", "message": "\"embedding model not installed\""}
+{"path": "overlay-backend/src/diarize.rs", "line": 195, "kind": "anyhow_context", "message": "\"parse diarizer output\""}
+{"path": "overlay-backend/src/diarize.rs", "line": 210, "kind": "anyhow_context", "message": "\"parse diarizer output\""}
+{"path": "overlay-backend/src/diarize.rs", "line": 219, "kind": "anyhow_context", "message": "\"no speakers detected during automatic selection\""}
+{"path": "overlay-backend/src/diarize.rs", "line": 261, "kind": "anyhow_context", "message": "\"open system recording\""}
+{"path": "overlay-backend/src/diarize.rs", "line": 415, "kind": "anyhow_context", "message": "\"spawn suflyor-tts diarize\""}
+{"path": "overlay-backend/src/diarize.rs", "line": 420, "kind": "anyhow_context", "message": "\"diarizer stdout is not UTF-8\""}
+{"path": "overlay-backend/src/local_ai.rs", "line": 371, "kind": "anyhow_context", "message": "\"environment preflight failed\""}
+{"path": "overlay-backend/src/local_ai.rs", "line": 622, "kind": "anyhow_context", "message": "\"llama-server.exe not found after install\""}
+{"path": "overlay-backend/src/local_ai.rs", "line": 674, "kind": "anyhow_context", "message": "\"whisper-server.exe not found after install\""}
+{"path": "overlay-backend/src/local_ai.rs", "line": 753, "kind": "anyhow_context", "message": "NOT_READY_RU"}
+{"path": "overlay-backend/src/local_ai.rs", "line": 764, "kind": "anyhow_context", "message": "\"llama-server.exe missing for 12B fallback\""}
+{"path": "overlay-backend/src/local_ai.rs", "line": 791, "kind": "anyhow_context", "message": "NOT_READY_RU"}
+{"path": "overlay-backend/src/local_ai.rs", "line": 803, "kind": "anyhow_context", "message": "NOT_READY_RU"}
+{"path": "overlay-backend/src/local_ai.rs", "line": 827, "kind": "anyhow_context", "message": "NOT_READY_RU"}
+{"path": "overlay-backend/src/local_ai.rs", "line": 835, "kind": "anyhow_context", "message": "NOT_READY_RU"}
+{"path": "overlay-backend/src/local_ai.rs", "line": 861, "kind": "anyhow_context", "message": "\"whisper-server did not become ready\""}
+{"path": "overlay-backend/src/local_ai.rs", "line": 1636, "kind": "anyhow_context", "message": "\"latest llama.cpp release has no build tag\""}
+{"path": "overlay-backend/src/local_ai.rs", "line": 1650, "kind": "anyhow_context", "message": "\"create engine staging dir\""}
+{"path": "overlay-backend/src/local_ai.rs", "line": 1711, "kind": "anyhow_context", "message": "\"swap engine binaries (engine still locked after retries"}
+{"path": "overlay-backend/src/local_ai.rs", "line": 1799, "kind": "anyhow_context", "message": "\"create engine backup dir\""}
+{"path": "overlay-backend/src/local_ai.rs", "line": 2599, "kind": "anyhow_context", "message": "\"poll curl\""}
+{"path": "overlay-backend/src/local_ai.rs", "line": 750, "kind": "anyhow_err", "message": "\"could not reclaim :8080 after the failed llama launch\""}
+{"path": "overlay-backend/src/local_ai.rs", "line": 800, "kind": "anyhow_err", "message": "\"could not reclaim :8080 after the failed 12B GPU launch\""}
+{"path": "overlay-backend/src/local_ai.rs", "line": 824, "kind": "anyhow_err", "message": "\"the newly launched 12B CPU fallback did not become ready\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 295, "kind": "anyhow_context", "message": "\"managed data directory unavailable\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 308, "kind": "anyhow_context", "message": "\"unsupported MLX model\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 325, "kind": "anyhow_context", "message": "\"prepare managed data directory\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 337, "kind": "anyhow_context", "message": "\"invalid MLX staging directory\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 344, "kind": "anyhow_context", "message": "\"MLX catalog size overflow\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 375, "kind": "anyhow_context", "message": "\"prepare MLX file directory\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 383, "kind": "anyhow_context", "message": "\"publish verified MLX file\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 402, "kind": "anyhow_context", "message": "\"publish verified MLX file\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 412, "kind": "anyhow_context", "message": "\"write MLX publish marker\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 416, "kind": "anyhow_context", "message": "\"publish MLX snapshot\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 444, "kind": "anyhow_context", "message": "\"start MLX download\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 451, "kind": "anyhow_context", "message": "\"monitor MLX download\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 469, "kind": "anyhow_context", "message": "\"read MLX model file\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 473, "kind": "anyhow_context", "message": "\"verify MLX model file\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 516, "kind": "anyhow_context", "message": "\"MLX catalog size overflow\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 566, "kind": "anyhow_context", "message": "\"MLX disk requirement overflow\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 576, "kind": "anyhow_context", "message": "\"check MLX disk space\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 582, "kind": "anyhow_context", "message": "\"check MLX disk space\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 617, "kind": "anyhow_context", "message": "\"inspect MLX directory\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 642, "kind": "anyhow_context", "message": "\"prepare MLX model directory\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 645, "kind": "anyhow_context", "message": "\"inspect MLX directory\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 651, "kind": "anyhow_context", "message": "\"inspect MLX directory\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 652, "kind": "anyhow_context", "message": "\"inspect MLX directory\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 668, "kind": "anyhow_context", "message": "\"recover incomplete MLX snapshot\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 677, "kind": "anyhow_context", "message": "\"recover verified MLX file\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 686, "kind": "anyhow_context", "message": "\"remove invalid MLX snapshot\""}
+{"path": "overlay-backend/src/mlx_install.rs", "line": 704, "kind": "anyhow_context", "message": "\"remove invalid MLX file\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 240, "kind": "anyhow_context", "message": "\"too many MLX requests\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 300, "kind": "anyhow_context", "message": "\"invalid MLX startup response\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 419, "kind": "anyhow_context", "message": "\"unsupported MLX model\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 421, "kind": "anyhow_context", "message": "\"MLX model is not installed\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 430, "kind": "anyhow_context", "message": "\"locate MLX sidecar\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 432, "kind": "anyhow_context", "message": "\"locate MLX sidecar\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 438, "kind": "anyhow_context", "message": "\"invalid MLX snapshot path\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 445, "kind": "anyhow_context", "message": "\"encode MLX startup\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 451, "kind": "anyhow_context", "message": "\"start MLX sidecar\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 463, "kind": "anyhow_context", "message": "\"start MLX stderr drain\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 466, "kind": "anyhow_context", "message": "\"open MLX sidecar stdin\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 467, "kind": "anyhow_context", "message": "\"configure MLX sidecar\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 468, "kind": "anyhow_context", "message": "\"configure MLX sidecar\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 469, "kind": "anyhow_context", "message": "\"open MLX sidecar stdout\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 552, "kind": "anyhow_context", "message": "\"invalid MLX endpoint\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 555, "kind": "anyhow_context", "message": "\"connect MLX readiness check\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 558, "kind": "anyhow_context", "message": "\"configure MLX readiness check\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 559, "kind": "anyhow_context", "message": "\"send MLX readiness check\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 564, "kind": "anyhow_context", "message": "\"read MLX readiness check\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 565, "kind": "anyhow_context", "message": "\"decode MLX readiness check\""}
+{"path": "overlay-backend/src/mlx_runtime.rs", "line": 576, "kind": "anyhow_context", "message": "\"parse MLX model check\""}
+{"path": "overlay-backend/src/diar_install.rs", "line": 199, "kind": "anyhow_context", "message": "\"APPDATA not set — no diar dir\""}
+{"path": "overlay-backend/src/diar_install.rs", "line": 254, "kind": "anyhow_context", "message": "\"commit diar install sentinel\""}
+{"path": "overlay-backend/src/diar_install.rs", "line": 343, "kind": "anyhow_context", "message": "\"encode sentinel\""}
+{"path": "overlay-backend/src/diar_install.rs", "line": 422, "kind": "anyhow_context", "message": "\"open Nemotron model\""}
+{"path": "overlay-backend/src/diar_install.rs", "line": 426, "kind": "anyhow_context", "message": "\"read Nemotron model\""}
+{"path": "overlay-backend/src/diar_install.rs", "line": 461, "kind": "anyhow_context", "message": "\"data dir unavailable\""}
+{"path": "overlay-backend/src/diar_install.rs", "line": 462, "kind": "anyhow_context", "message": "\"invalid model path\""}
+{"path": "overlay-backend/src/diar_install.rs", "line": 463, "kind": "anyhow_context", "message": "\"create model directory\""}
+{"path": "overlay-backend/src/diar_install.rs", "line": 471, "kind": "anyhow_context", "message": "\"remove stale download\""}
+{"path": "overlay-backend/src/diar_install.rs", "line": 474, "kind": "anyhow_context", "message": "\"download Nemotron\""}
+{"path": "overlay-backend/src/diar_install.rs", "line": 475, "kind": "anyhow_context", "message": "\"model metadata\""}
+{"path": "overlay-backend/src/diar_install.rs", "line": 483, "kind": "anyhow_context", "message": "\"invalidate old Nemotron sentinel\""}
+{"path": "overlay-backend/src/diar_install.rs", "line": 486, "kind": "anyhow_context", "message": "\"replace old Nemotron model\""}
+{"path": "overlay-backend/src/diar_install.rs", "line": 488, "kind": "anyhow_context", "message": "\"commit verified Nemotron model\""}
+{"path": "overlay-backend/src/diar_install.rs", "line": 494, "kind": "anyhow_context", "message": "\"write Nemotron sentinel\""}
+{"path": "overlay-backend/src/diar_install.rs", "line": 495, "kind": "anyhow_context", "message": "\"commit Nemotron sentinel\""}
+{"path": "overlay-backend/src/config.rs", "line": 1354, "kind": "anyhow_context", "message": "\"no config dir\""}
+{"path": "overlay-backend/src/config.rs", "line": 1582, "kind": "anyhow_context", "message": "\"write config (tmp"}
+{"path": "overlay-backend/src/config.rs", "line": 1584, "kind": "anyhow_context", "message": "\"write config (tmp"}
+{"path": "overlay-backend/src/config.rs", "line": 1587, "kind": "anyhow_context", "message": "\"write config (tmp"}
+{"path": "overlay-backend/src/config.rs", "line": 1618, "kind": "anyhow_context", "message": "\"replace config\""}
+{"path": "overlay-backend/src/config.rs", "line": 1650, "kind": "anyhow_context", "message": "\"serialize config\""}
+{"path": "overlay-backend/src/config.rs", "line": 1651, "kind": "anyhow_context", "message": "\"write export\""}
+{"path": "overlay-backend/src/config.rs", "line": 1656, "kind": "anyhow_context", "message": "\"serialize config value\""}
+{"path": "overlay-backend/src/config.rs", "line": 1660, "kind": "anyhow_context", "message": "\"serialize portable config\""}
+{"path": "overlay-backend/src/config.rs", "line": 1670, "kind": "anyhow_context", "message": "\"read import file\""}
+{"path": "overlay-backend/src/config.rs", "line": 1671, "kind": "anyhow_context", "message": "\"parse import JSON\""}
+{"path": "overlay-backend/src/config.rs", "line": 1673, "kind": "anyhow_context", "message": "\"persist imported config\""}
+{"path": "overlay-backend/src/config.rs", "line": 1766, "kind": "anyhow_context", "message": "\"read server settings import file\""}
+{"path": "overlay-backend/src/config.rs", "line": 1767, "kind": "anyhow_context", "message": "\"parse server settings JSON\""}
+{"path": "overlay-backend/src/config.rs", "line": 1769, "kind": "anyhow_context", "message": "\"persist imported server settings\""}
+{"path": "overlay-backend/src/config.rs", "line": 1795, "kind": "anyhow_context", "message": "\"serialize server settings\""}
+{"path": "overlay-backend/src/config.rs", "line": 1796, "kind": "anyhow_context", "message": "\"write server-settings export\""}
+{"path": "overlay-backend/src/config.rs", "line": 2039, "kind": "anyhow_context", "message": "\"read server settings file\""}
+{"path": "overlay-backend/src/config.rs", "line": 2040, "kind": "anyhow_context", "message": "\"parse server settings JSON\""}
+{"path": "overlay-backend/src/teratts_install.rs", "line": 182, "kind": "anyhow_context", "message": "\"APPDATA not set — no tts dir\""}
+{"path": "overlay-backend/src/teratts_install.rs", "line": 258, "kind": "anyhow_context", "message": "\"quarantine broken release\""}
+{"path": "overlay-backend/src/teratts_install.rs", "line": 271, "kind": "anyhow_context", "message": "\"write publish marker\""}
+{"path": "overlay-backend/src/teratts_install.rs", "line": 274, "kind": "anyhow_context", "message": "\"publish release dir\""}
+{"path": "overlay-backend/src/audio_macos.rs", "line": 498, "kind": "anyhow_err", "message": "\"audio capture unavailable: no capture worker could start\""}
+{"path": "overlay-backend/src/audio_macos.rs", "line": 539, "kind": "anyhow_err", "message": "\"{}\", system_start_error_message(error_code"}
+{"path": "overlay-backend/src/audio_unavailable.rs", "line": 57, "kind": "anyhow_bail", "message": "UNSUPPORTED"}
+{"path": "overlay-backend/src/audio_unavailable.rs", "line": 71, "kind": "anyhow_bail", "message": "UNSUPPORTED"}
+{"path": "overlay-backend/src/audio_unavailable.rs", "line": 81, "kind": "anyhow_bail", "message": "UNSUPPORTED"}
+{"path": "overlay-backend/src/audio_unavailable.rs", "line": 87, "kind": "anyhow_bail", "message": "UNSUPPORTED"}
+{"path": "overlay-backend/src/audio_unavailable.rs", "line": 114, "kind": "anyhow_bail", "message": "UNSUPPORTED"}
+{"path": "overlay-backend/src/audio_unavailable.rs", "line": 119, "kind": "anyhow_bail", "message": "UNSUPPORTED"}
+{"path": "overlay-backend/src/ocr.rs", "line": 118, "kind": "anyhow_context", "message": "\"spawn tesseract\""}
+{"path": "overlay-backend/src/ocr.rs", "line": 132, "kind": "anyhow_context", "message": "\"tesseract wait\""}
+{"path": "overlay-backend/src/audio.rs", "line": 37, "kind": "anyhow_context", "message": "\"DeviceEnumerator::new\""}
+{"path": "overlay-backend/src/audio.rs", "line": 38, "kind": "anyhow_context", "message": "\"get_default_device\""}
+{"path": "overlay-backend/src/audio.rs", "line": 42, "kind": "anyhow_context", "message": "\"DeviceEnumerator::new\""}
+{"path": "overlay-backend/src/audio.rs", "line": 44, "kind": "anyhow_context", "message": "\"get_device_collection\""}
+{"path": "overlay-backend/src/audio.rs", "line": 93, "kind": "anyhow_context", "message": "\"enumerate output devices\""}
+{"path": "overlay-backend/src/audio.rs", "line": 94, "kind": "anyhow_context", "message": "\"enumerate input devices\""}
+{"path": "overlay-backend/src/audio.rs", "line": 103, "kind": "anyhow_context", "message": "\"read audio endpoint\""}
+{"path": "overlay-backend/src/audio.rs", "line": 107, "kind": "anyhow_context", "message": "\"read audio endpoint name\""}
+{"path": "overlay-backend/src/audio.rs", "line": 314, "kind": "anyhow_context", "message": "\"get default device\""}
+{"path": "overlay-backend/src/audio.rs", "line": 320, "kind": "anyhow_context", "message": "\"get endpoint id\""}
+{"path": "overlay-backend/src/audio.rs", "line": 337, "kind": "anyhow_context", "message": "\"get IAudioClient\""}
+{"path": "overlay-backend/src/audio.rs", "line": 338, "kind": "anyhow_context", "message": "\"get mixformat\""}
+{"path": "overlay-backend/src/audio.rs", "line": 350, "kind": "anyhow_context", "message": "\"get device period\""}
+{"path": "overlay-backend/src/audio.rs", "line": 360, "kind": "anyhow_context", "message": "\"initialize_client\""}
+{"path": "overlay-backend/src/audio.rs", "line": 362, "kind": "anyhow_context", "message": "\"event handle\""}
+{"path": "overlay-backend/src/audio.rs", "line": 365, "kind": "anyhow_context", "message": "\"get audiocaptureclient\""}
+{"path": "overlay-backend/src/audio.rs", "line": 367, "kind": "anyhow_context", "message": "\"start_stream\""}
+{"path": "overlay-backend/src/audio.rs", "line": 428, "kind": "anyhow_context", "message": "\"read_from_device_to_deque\""}
+{"path": "overlay-backend/src/audio.rs", "line": 536, "kind": "anyhow_context", "message": "\"get default device\""}
+{"path": "overlay-backend/src/audio.rs", "line": 671, "kind": "anyhow_context", "message": "\"default render device\""}
+{"path": "overlay-backend/src/audio.rs", "line": 753, "kind": "anyhow_context", "message": "\"default capture device\""}
+{"path": "overlay-backend/src/audio.rs", "line": 306, "kind": "anyhow_err", "message": "\"device '{}' not found in either Render or Capture endpoints\", name"}
+{"path": "overlay-backend/src/audio.rs", "line": 531, "kind": "anyhow_err", "message": "\"device '{}' not found\", name"}
+{"path": "overlay-backend/src/recorder.rs", "line": 466, "kind": "anyhow_bail", "message": "\"parse TTS mask line {}: unknown source\", index + 1"}
+{"path": "overlay-backend/src/recorder.rs", "line": 469, "kind": "anyhow_bail", "message": "\"parse TTS mask line {}: empty interval\", index + 1"}
+{"path": "overlay-backend/src/recorder.rs", "line": 175, "kind": "anyhow_context", "message": "\"spawn audio-recorder thread\""}
+{"path": "overlay-backend/src/recorder.rs", "line": 487, "kind": "anyhow_context", "message": "\"no config dir\""}
+{"path": "overlay-backend/src/recorder.rs", "line": 748, "kind": "anyhow_context", "message": "\"stat\""}
+{"path": "overlay-backend/src/recorder.rs", "line": 758, "kind": "anyhow_context", "message": "\"read header\""}
+{"path": "overlay-backend/src/recorder.rs", "line": 773, "kind": "anyhow_context", "message": "\"seek data size\""}
+{"path": "overlay-backend/src/recorder.rs", "line": 775, "kind": "anyhow_context", "message": "\"read data size\""}
+{"path": "overlay-backend/src/recorder.rs", "line": 779, "kind": "anyhow_context", "message": "\"seek riff size\""}
+{"path": "overlay-backend/src/recorder.rs", "line": 781, "kind": "anyhow_context", "message": "\"write riff size\""}
+{"path": "overlay-backend/src/recorder.rs", "line": 782, "kind": "anyhow_context", "message": "\"seek data size 2\""}
+{"path": "overlay-backend/src/recorder.rs", "line": 784, "kind": "anyhow_context", "message": "\"write data size\""}
+{"path": "overlay-backend/src/recorder.rs", "line": 785, "kind": "anyhow_context", "message": "\"flush header\""}
+{"path": "overlay-backend/src/audio_route.rs", "line": 274, "kind": "anyhow_context", "message": "\"create MMDeviceEnumerator\""}
+{"path": "overlay-backend/src/audio_route.rs", "line": 278, "kind": "anyhow_context", "message": "\"register endpoint notification callback\""}
+{"path": "overlay-backend/src/persistence/mod.rs", "line": 54, "kind": "anyhow_context", "message": "\"resolve catalog path\""}
+{"path": "overlay-backend/src/persistence/mod.rs", "line": 55, "kind": "anyhow_context", "message": "\"resolve sessions dir\""}
+{"path": "overlay-backend/src/persistence/mod.rs", "line": 76, "kind": "anyhow_context", "message": "\"resolve catalog path\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 38, "kind": "anyhow_context", "message": "\"create catalog dir\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 41, "kind": "anyhow_context", "message": "\"open catalog\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 51, "kind": "anyhow_context", "message": "\"set pragmas\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 55, "kind": "anyhow_context", "message": "\"read user_version\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 73, "kind": "anyhow_context", "message": "\"open in-memory catalog\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 75, "kind": "anyhow_context", "message": "\"enable foreign_keys\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 90, "kind": "anyhow_context", "message": "\"begin index tx\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 92, "kind": "anyhow_context", "message": "\"clear prior session rows\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 99, "kind": "anyhow_context", "message": "\"clear prior search rows\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 117, "kind": "anyhow_context", "message": "\"insert session\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 121, "kind": "anyhow_context", "message": "\"prepare utterance insert\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 130, "kind": "anyhow_context", "message": "\"insert utterance\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 137, "kind": "anyhow_context", "message": "\"prepare ai_turn insert\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 149, "kind": "anyhow_context", "message": "\"insert ai_turn\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 152, "kind": "anyhow_context", "message": "\"commit index tx\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 163, "kind": "anyhow_context", "message": "\"begin delete tx\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 168, "kind": "anyhow_context", "message": "\"clear search rows\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 173, "kind": "anyhow_context", "message": "\"clear diarization row\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 175, "kind": "anyhow_context", "message": "\"delete session row\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 176, "kind": "anyhow_context", "message": "\"commit delete tx\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 190, "kind": "anyhow_context", "message": "\"prepare list_sessions\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 193, "kind": "anyhow_context", "message": "\"query list_sessions\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 196, "kind": "anyhow_context", "message": "\"map session row\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 210, "kind": "anyhow_context", "message": "\"prepare get_session\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 213, "kind": "anyhow_context", "message": "\"query get_session\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 215, "kind": "anyhow_context", "message": "\"map session row\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 229, "kind": "anyhow_context", "message": "\"count utterances\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 240, "kind": "anyhow_context", "message": "\"count ai_turns\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 252, "kind": "anyhow_context", "message": "\"prepare get_diarization\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 263, "kind": "anyhow_context", "message": "\"query get_diarization\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 268, "kind": "anyhow_context", "message": "\"map diarization row\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 270, "kind": "anyhow_context", "message": "\"parse segments_json\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 272, "kind": "anyhow_context", "message": "\"parse speaker_names_json\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 286, "kind": "anyhow_context", "message": "\"serialize segments\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 288, "kind": "anyhow_context", "message": "\"serialize speaker_names\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 303, "kind": "anyhow_context", "message": "\"insert diarization\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 345, "kind": "anyhow_context", "message": "\"backfill session models\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 358, "kind": "anyhow_context", "message": "\"prepare finalized ids\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 361, "kind": "anyhow_context", "message": "\"query finalized ids\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 364, "kind": "anyhow_context", "message": "\"map id\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 377, "kind": "anyhow_context", "message": "\"prepare session_utterances\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 380, "kind": "anyhow_context", "message": "\"query session_utterances\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 383, "kind": "anyhow_context", "message": "\"map utterance\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 396, "kind": "anyhow_context", "message": "\"prepare session_ai_turns\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 399, "kind": "anyhow_context", "message": "\"query session_ai_turns\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 402, "kind": "anyhow_context", "message": "\"map ai_turn\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 418, "kind": "anyhow_context", "message": "\"prepare search\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 429, "kind": "anyhow_context", "message": "\"query search\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 432, "kind": "anyhow_context", "message": "\"map search hit\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 461, "kind": "anyhow_context", "message": "\"insert memory candidate\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 485, "kind": "anyhow_context", "message": "\"prepare list_candidates\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 488, "kind": "anyhow_context", "message": "\"query list_candidates\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 491, "kind": "anyhow_context", "message": "\"map candidate\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 504, "kind": "anyhow_context", "message": "\"prepare candidate_texts\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 507, "kind": "anyhow_context", "message": "\"query candidate_texts\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 510, "kind": "anyhow_context", "message": "\"map candidate text\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 523, "kind": "anyhow_context", "message": "\"count candidates\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 534, "kind": "anyhow_context", "message": "\"set candidate status\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 545, "kind": "anyhow_context", "message": "\"update candidate text\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 553, "kind": "anyhow_context", "message": "\"begin approve tx\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 561, "kind": "anyhow_context", "message": "\"load candidate to approve\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 566, "kind": "anyhow_context", "message": "\"mark candidate approved\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 573, "kind": "anyhow_context", "message": "\"mint memory item\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 575, "kind": "anyhow_context", "message": "\"commit approve tx\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 598, "kind": "anyhow_context", "message": "\"insert memory item\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 628, "kind": "anyhow_context", "message": "\"prepare list_memory_items\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 631, "kind": "anyhow_context", "message": "\"query list_memory_items\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 634, "kind": "anyhow_context", "message": "\"map memory item\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 647, "kind": "anyhow_context", "message": "\"update memory item text\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 665, "kind": "anyhow_context", "message": "\"restore memory item source\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 677, "kind": "anyhow_context", "message": "\"archive memory item\""}
+{"path": "overlay-backend/src/persistence/sqlite_store.rs", "line": 685, "kind": "anyhow_context", "message": "\"delete memory item\""}
+{"path": "overlay-backend/src/persistence/migrations.rs", "line": 35, "kind": "anyhow_context", "message": "\"read user_version\""}
+{"path": "overlay-backend/src/persistence/migrations.rs", "line": 41, "kind": "anyhow_context", "message": "\"begin migration tx\""}
+{"path": "overlay-backend/src/persistence/maintenance.rs", "line": 94, "kind": "anyhow_context", "message": "\"create backups dir\""}
+{"path": "overlay-backend/src/persistence/maintenance.rs", "line": 149, "kind": "anyhow_context", "message": "\"open catalog\""}
+{"path": "overlay-backend/src/persistence/maintenance.rs", "line": 153, "kind": "anyhow_context", "message": "\"set pragmas\""}
+{"path": "overlay-backend/src/persistence/maintenance.rs", "line": 461, "kind": "anyhow_context", "message": "\"create backups dir\""}
+{"path": "overlay-backend/src/ai/provider.rs", "line": 125, "kind": "anyhow_err", "message": "\"Codex subscription live answers are unavailable\""}
+{"path": "overlay-backend/src/ai/provider.rs", "line": 186, "kind": "anyhow_err", "message": "\"unsupported image format\""}
+{"path": "overlay-backend/src/ai/stream.rs", "line": 234, "kind": "anyhow_context", "message": "\"read sse chunk\""}
+{"path": "overlay-backend/src/ai/stream.rs", "line": 166, "kind": "anyhow_err", "message": "crate::deep_lock::BLOCKED_ERROR"}
+{"path": "overlay-backend/src/ai/stream.rs", "line": 212, "kind": "anyhow_err", "message": "\"AI connection error\""}
+{"path": "overlay-backend/src/ai/stream.rs", "line": 223, "kind": "anyhow_err", "message": "\"HTTP {status}\""}
+{"path": "overlay-backend/src/ai/stream.rs", "line": 274, "kind": "anyhow_err", "message": "\"AI provider stream error\""}
+{"path": "overlay-backend/src/ai/stream.rs", "line": 320, "kind": "anyhow_err", "message": "\"AI connection error\""}
+{"path": "overlay-backend/src/ai/completion.rs", "line": 261, "kind": "anyhow_bail", "message": "\"HTTP {status}\""}
+{"path": "overlay-backend/src/ai/completion.rs", "line": 298, "kind": "anyhow_bail", "message": "\"local prompt token count failed\""}
+{"path": "overlay-backend/src/ai/completion.rs", "line": 263, "kind": "anyhow_context", "message": "\"parse json\""}
+{"path": "overlay-backend/src/ai/completion.rs", "line": 296, "kind": "anyhow_context", "message": "\"count local prompt tokens\""}
+{"path": "overlay-backend/src/ai/completion.rs", "line": 303, "kind": "anyhow_context", "message": "\"parse local prompt token count\""}
+{"path": "overlay-backend/src/ai/completion.rs", "line": 212, "kind": "anyhow_err", "message": "crate::deep_lock::BLOCKED_ERROR"}
+{"path": "overlay-backend/src/ai/completion.rs", "line": 251, "kind": "anyhow_err", "message": "\"AI connection error\""}
+{"path": "overlay-backend/src/ai/completion.rs", "line": 276, "kind": "anyhow_err", "message": "crate::deep_lock::BLOCKED_ERROR"}
+{"path": "overlay-backend/src/ai/inspect.rs", "line": 184, "kind": "anyhow_context", "message": "\"parse models json\""}
+{"path": "overlay-backend/src/ai/inspect.rs", "line": 53, "kind": "anyhow_err", "message": "\"Selected Codex model unavailable\""}
+{"path": "overlay-backend/src/ai/inspect.rs", "line": 65, "kind": "anyhow_err", "message": "\"Selected Codex model does not accept images\""}
+{"path": "overlay-backend/src/ai/inspect.rs", "line": 81, "kind": "anyhow_err", "message": "\"Codex account unavailable\""}
+{"path": "overlay-backend/src/ai/inspect.rs", "line": 86, "kind": "anyhow_err", "message": "crate::deep_lock::BLOCKED_ERROR"}
+{"path": "overlay-backend/src/ai/inspect.rs", "line": 116, "kind": "anyhow_err", "message": "\"connection failed\""}
+{"path": "overlay-backend/src/ai/inspect.rs", "line": 128, "kind": "anyhow_err", "message": "\"HTTP {}\", status.as_u16("}
+{"path": "overlay-backend/src/ai/inspect.rs", "line": 157, "kind": "anyhow_err", "message": "crate::deep_lock::BLOCKED_ERROR"}
+{"path": "overlay-backend/src/ai/inspect.rs", "line": 172, "kind": "anyhow_err", "message": "\"connection failed\""}
+{"path": "overlay-backend/src/ai/inspect.rs", "line": 182, "kind": "anyhow_err", "message": "\"HTTP {}\", status.as_u16("}
+{"path": "overlay-backend/src/ai/control.rs", "line": 122, "kind": "anyhow_err", "message": "\"MLX model unavailable\""}
+{"path": "overlay-backend/src/journal/legacy.rs", "line": 9, "kind": "anyhow_context", "message": "\"no config dir\""}
+{"path": "overlay-backend/src/journal/legacy.rs", "line": 10, "kind": "anyhow_context", "message": "\"create data dir\""}
+{"path": "overlay-backend/src/journal/legacy.rs", "line": 17, "kind": "anyhow_context", "message": "\"open bookmarks.md\""}
+{"path": "overlay-backend/src/journal/legacy.rs", "line": 23, "kind": "anyhow_context", "message": "\"write bookmarks header\""}
+{"path": "overlay-backend/src/journal/legacy.rs", "line": 32, "kind": "anyhow_context", "message": "\"write bookmark entry\""}
+{"path": "overlay-backend/src/journal/retention.rs", "line": 14, "kind": "anyhow_context", "message": "\"read sessions dir\""}
+{"path": "overlay-backend/src/journal/writer.rs", "line": 13, "kind": "anyhow_context", "message": "\"no config dir\""}
+{"path": "overlay-backend/src/journal/writer.rs", "line": 72, "kind": "anyhow_context", "message": "\"create sessions dir\""}
+{"path": "overlay-backend/src/journal/writer.rs", "line": 81, "kind": "anyhow_context", "message": "\"open journal file\""}
+{"path": "overlay-backend/src/journal/writer.rs", "line": 96, "kind": "anyhow_context", "message": "\"spawn journal writer thread\""}
+{"path": "overlay-backend/src/journal/writer.rs", "line": 182, "kind": "format_err", "message": "\"journal shutdown timed out after {timeout:?}; queued entries may not be durable\""}
+{"path": "overlay-backend/src/journal/writer.rs", "line": 270, "kind": "format_err", "message": "\"earlier journal write failed: {e}\""}
+{"path": "experiments/macos-gate0a/src/main.rs", "line": 186, "kind": "format_err", "message": "\"expected an AppKit window handle, got {other:?}\").into("}
+{"path": "suflyor-teratts/src/textnorm.rs", "line": 203, "kind": "anyhow_err", "message": "\"unsupported language tag <{lang_str}>; use <ru> or <en>\""}
+{"path": "suflyor-teratts/src/textnorm.rs", "line": 211, "kind": "anyhow_err", "message": "\"language tags must be balanced: use <ru>...</ru> or <en>...</en>\""}
+{"path": "suflyor-teratts/src/textnorm.rs", "line": 216, "kind": "anyhow_err", "message": "\"language tags must be balanced: use <ru>...</ru> or <en>...</en>\""}
+{"path": "suflyor-teratts/src/textnorm.rs", "line": 225, "kind": "anyhow_err", "message": "\"language tags must be balanced: use <ru>...</ru> or <en>...</en>\""}
+{"path": "suflyor-teratts/src/npy.rs", "line": 24, "kind": "anyhow_err", "message": "\"missing NPY magic\""}
+{"path": "suflyor-teratts/src/npy.rs", "line": 31, "kind": "anyhow_err", "message": "\"truncated v{major} header\""}
+{"path": "suflyor-teratts/src/npy.rs", "line": 35, "kind": "anyhow_err", "message": "\"unsupported NPY version {major}\""}
+{"path": "suflyor-teratts/src/npy.rs", "line": 42, "kind": "anyhow_err", "message": "\"truncated header\""}
+{"path": "suflyor-teratts/src/npy.rs", "line": 49, "kind": "anyhow_err", "message": "\"unsupported dtype '{descr}'\""}
+{"path": "suflyor-teratts/src/npy.rs", "line": 52, "kind": "anyhow_err", "message": "\"fortran-order arrays are not supported\""}
+{"path": "suflyor-teratts/src/npy.rs", "line": 62, "kind": "anyhow_err", "message": "\"data shorter than shape\""}
+{"path": "suflyor-teratts/src/npy.rs", "line": 70, "kind": "anyhow_err", "message": "\"data shorter than shape\""}
+{"path": "suflyor-teratts/src/npy.rs", "line": 78, "kind": "anyhow_err", "message": "\"unsupported dtype '{descr}'\""}
+{"path": "suflyor-teratts/src/npy.rs", "line": 114, "kind": "anyhow_err", "message": "\"bad bool for '{key}'\""}
+{"path": "suflyor-teratts/src/npy.rs", "line": 127, "kind": "anyhow_err", "message": "\"bad shape\""}
+{"path": "suflyor-teratts/src/npy.rs", "line": 142, "kind": "anyhow_err", "message": "\"empty shape\""}
+{"path": "suflyor-teratts/src/indexer.rs", "line": 27, "kind": "anyhow_err", "message": "\"unicode_indexer.json must have {} entries, got {}\", TABLE_LEN, table.len()"}
+{"path": "suflyor-teratts/src/indexer.rs", "line": 66, "kind": "anyhow_err", "message": "\"unsupported character U+{:04X}\", c as u32"}
+{"path": "suflyor-teratts/src/indexer.rs", "line": 71, "kind": "anyhow_err", "message": "\"text produced no tokens\""}
+{"path": "suflyor-teratts/src/manifest.rs", "line": 47, "kind": "anyhow_err", "message": "\"manifest revision must be a 40-char git sha\""}
+{"path": "suflyor-teratts/src/manifest.rs", "line": 50, "kind": "anyhow_err", "message": "\"manifest lists no files\""}
+{"path": "suflyor-teratts/src/manifest.rs", "line": 58, "kind": "anyhow_err", "message": "\"manifest path is unsafe: {:?}\", file.path"}
+{"path": "suflyor-teratts/src/manifest.rs", "line": 61, "kind": "anyhow_err", "message": "\"manifest file has no integrity pin: {:?}\", file.path"}
+{"path": "suflyor-teratts/src/manifest.rs", "line": 82, "kind": "anyhow_err", "message": "\"publish marker missing\""}
+{"path": "suflyor-teratts/src/manifest.rs", "line": 88, "kind": "anyhow_err", "message": "\"{}: size {} != pinned {}\", entry.path, meta.len(), entry.size"}
+{"path": "suflyor-teratts/src/tera.rs", "line": 142, "kind": "anyhow_err", "message": "\"invalid-rate\""}
+{"path": "suflyor-teratts/src/tera.rs", "line": 207, "kind": "anyhow_err", "message": "\"synth: duration predictor returned no value\""}
+{"path": "suflyor-teratts/src/tera.rs", "line": 211, "kind": "anyhow_err", "message": "\"synth: non-positive duration\""}
+{"path": "suflyor-teratts/src/tera.rs", "line": 311, "kind": "anyhow_err", "message": "\"unknown-voice\""}
+{"path": "suflyor-teratts/src/tera.rs", "line": 315, "kind": "anyhow_err", "message": "\"synth: style asset has unexpected shape\""}
+{"path": "suflyor-teratts/src/tera.rs", "line": 332, "kind": "anyhow_err", "message": "\"synth: invalid latent frame window\""}
+{"path": "suflyor-teratts/src/tera.rs", "line": 338, "kind": "anyhow_err", "message": "\"synth: latent shape/data length mismatch\""}
+{"path": "suflyor-teratts/src/tera.rs", "line": 368, "kind": "anyhow_err", "message": "\"load {graph}: graph declares multiple outputs\""}
+{"path": "suflyor-teratts/src/tera.rs", "line": 383, "kind": "anyhow_err", "message": "\"synth: graph returned no output named {name}\""}
+{"path": "suflyor-teratts/src/tera.rs", "line": 405, "kind": "anyhow_err", "message": "\"synth: {what} shape/data length mismatch\""}
+{"path": "suflyor-teratts/src/tera.rs", "line": 412, "kind": "anyhow_err", "message": "\"empty shape\""}
+{"path": "suflyor-teratts/src/tera.rs", "line": 417, "kind": "anyhow_err", "message": "\"zero dimension\""}
+{"path": "suflyor-teratts/src/tera.rs", "line": 432, "kind": "anyhow_err", "message": "\"synth: sampler output shape mismatch\""}
+{"path": "suflyor-teratts/src/tera.rs", "line": 441, "kind": "anyhow_err", "message": "\"synth: vocoder output shape mismatch\""}
+{"path": "suflyor-teratts/src/tera.rs", "line": 444, "kind": "anyhow_err", "message": "\"synth: vocoder shape/data length mismatch\""}
+{"path": "suflyor-teratts/src/tera.rs", "line": 447, "kind": "anyhow_err", "message": "\"synth: vocoder returned too few samples\""}
+{"path": "suflyor-tts/src/playback_unavailable.rs", "line": 14, "kind": "anyhow_bail", "message": "UNSUPPORTED"}
+{"path": "suflyor-tts/src/engine.rs", "line": 18, "kind": "anyhow_err", "message": "\"tts model not found\""}
+{"path": "suflyor-tts/src/engine.rs", "line": 21, "kind": "anyhow_err", "message": "\"tts tokens not found\""}
+{"path": "suflyor-tts/src/engine.rs", "line": 136, "kind": "anyhow_err", "message": "\"invalid voice directory\""}
+{"path": "artifacts/audio-devices/settings_audio-final.formatted.rs", "line": 434, "kind": "anyhow_bail", "message": "\"synthetic save failure\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 37, "kind": "anyhow_context", "message": "\"DeviceEnumerator::new\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 38, "kind": "anyhow_context", "message": "\"get_default_device\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 42, "kind": "anyhow_context", "message": "\"DeviceEnumerator::new\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 44, "kind": "anyhow_context", "message": "\"get_device_collection\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 93, "kind": "anyhow_context", "message": "\"enumerate output devices\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 94, "kind": "anyhow_context", "message": "\"enumerate input devices\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 103, "kind": "anyhow_context", "message": "\"read audio endpoint\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 107, "kind": "anyhow_context", "message": "\"read audio endpoint name\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 314, "kind": "anyhow_context", "message": "\"get default device\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 320, "kind": "anyhow_context", "message": "\"get endpoint id\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 337, "kind": "anyhow_context", "message": "\"get IAudioClient\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 338, "kind": "anyhow_context", "message": "\"get mixformat\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 350, "kind": "anyhow_context", "message": "\"get device period\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 360, "kind": "anyhow_context", "message": "\"initialize_client\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 362, "kind": "anyhow_context", "message": "\"event handle\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 365, "kind": "anyhow_context", "message": "\"get audiocaptureclient\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 367, "kind": "anyhow_context", "message": "\"start_stream\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 428, "kind": "anyhow_context", "message": "\"read_from_device_to_deque\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 536, "kind": "anyhow_context", "message": "\"get default device\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 671, "kind": "anyhow_context", "message": "\"default render device\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 753, "kind": "anyhow_context", "message": "\"default capture device\""}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 306, "kind": "anyhow_err", "message": "\"device '{}' not found in either Render or Capture endpoints\", name"}
+{"path": "artifacts/audio-devices/audio-final.formatted.rs", "line": 531, "kind": "anyhow_err", "message": "\"device '{}' not found\", name"}

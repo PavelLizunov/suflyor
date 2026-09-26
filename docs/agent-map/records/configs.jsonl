@@ -1,0 +1,213 @@
+{"path": "overlay-backend/examples/ai_probe.rs", "config": "Configuration read at L27: `let ep = cfg.ai_endpoint(false);`", "batch_id": "B09"}
+{"path": "overlay-backend/examples/ai_probe.rs", "config": "Configuration read at L30: `ai::set_local_no_think(ep.is_local && !cfg.ai_local_thinking);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config.rs", "config": "Configuration read at L1371: `// config.json interleaves live secrets (ai_bearer / groq_api_key /`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config.rs", "config": "Configuration read at L1519: `let replacement = match cfg.ai_provider.as_str() {`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config.rs", "config": "Configuration read at L1533: `if !cfg!(target_os = \"macos\") || cfg.config_version >= 2 || !cfg.stt_gigaam_gpu `", "batch_id": "B09"}
+{"path": "overlay-backend/src/config.rs", "config": "Configuration read at L1942: `let ai_profile = |cfg: &Config| match cfg.ai_provider.as_str() {`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config.rs", "config": "Configuration read at L1944: `cfg.openai_base_url.clone(),`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config.rs", "config": "Configuration read at L1945: `cfg.openai_model.clone(),`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config.rs", "config": "Configuration read at L1957: `cfg.ai_base_url.clone(),`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config.rs", "config": "Configuration read at L1958: `cfg.ai_model.clone(),`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config.rs", "config": "Configuration read at L1959: `present(&cfg.ai_bearer),`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L179: `cfg.system_audio_device = Some(\"My Loopback\".into());`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L476: `assert_eq!(cfg.ai_model, \"claude-old\");`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L478: `assert_eq!(cfg.ai_bearer, \"\");`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L579: `assert_eq!(cfg.ai_bearer, \"\");`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L580: `assert_eq!(cfg.ai_model, \"\");`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L581: `assert_eq!(cfg.ai_local_context, \"auto\");`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L692: `cfg.ai_provider = \"openai\".into();`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L693: `cfg.openai_base_url = \"https://openai.example/v1\".into();`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L694: `cfg.openai_model = \"gpt-test\".into();`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L695: `let openai = cfg.ai_endpoint(false);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L700: `cfg.ai_provider = \"anthropic\".into();`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L703: `let anthropic = cfg.ai_endpoint(false);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L716: `cfg.ai_provider = \"codex\".into();`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L720: `let endpoint = cfg.ai_endpoint(false);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L740: `let cloud_endpoint = cfg.ai_endpoint_cloud();`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L769: `cfg.ai_provider = \"local\".into();`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L770: `cfg.ai_base_url = \"https://bridge.example/v1\".into();`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L771: `cfg.ai_bearer = \"bridge-secret\".into();`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L773: `let legacy = cfg.ai_endpoint_cloud();`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L777: `cfg.ai_provider = \"openai\".into();`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L778: `cfg.openai_model = \"gpt-test\".into();`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L779: `let direct = cfg.ai_endpoint_cloud();`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L1063: `assert_eq!(cfg.ai_provider, \"cloud\");`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L1064: `assert_eq!(cfg.ai_mlx_model, crate::mlx_install::DEFAULT_TEXT_MODEL);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L1070: `cfg.ai_provider = \"mlx\".into();`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L1071: `let text = cfg.ai_endpoint(false);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L1089: `cfg.ai_mlx_model = crate::mlx_install::GEMMA4_MODEL.into();`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L1242: `assert_eq!(cfg.stt_is_local(), cfg!(target_os = \"macos\"));`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L1244: `assert!(!cfg.ai_local_thinking);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L1246: `assert_eq!(cfg.stt_gigaam_gpu, !cfg!(target_os = \"macos\"));`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L1313: `assert_eq!(cfg.ai_provider, \"cloud\");`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L1314: `assert_eq!(cfg.ai_local_base_url, \"http://127.0.0.1:8080/v1\");`", "batch_id": "B09"}
+{"path": "overlay-backend/src/config/tests.rs", "config": "Configuration read at L1315: `assert!(!cfg.ai_endpoint(false).is_local);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/deep_lock.rs", "config": "Configuration read at L68: `(cfg.ai_provider == \"local\"`", "batch_id": "B06"}
+{"path": "overlay-backend/src/deep_lock.rs", "config": "Configuration read at L69: `&& crate::local_ai::is_managed_llama_endpoint(&cfg.ai_local_base_url))`", "batch_id": "B06"}
+{"path": "overlay-backend/src/deep_lock.rs", "config": "Configuration read at L70: `|| (cfg.ai_provider == \"mlx\" && cfg!(target_os = \"macos\"))`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai.rs", "config": "Configuration read at L339: `cfg.ai_provider = \"local\".to_string();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai.rs", "config": "Configuration read at L340: `cfg.ai_local_base_url = LLAMA_BASE_URL.to_string();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai.rs", "config": "Configuration read at L341: `cfg.ai_local_model = res.ai_local_model.clone();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai.rs", "config": "Configuration read at L342: `cfg.ai_local_custom_gguf.clear();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai.rs", "config": "Configuration read at L343: `cfg.ai_local_prep_model.clear();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai.rs", "config": "Configuration read at L344: `cfg.ai_local_quality = res.ai_local_quality;`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai.rs", "config": "Configuration read at L353: `cfg.ai_local_vision = res.ai_local_vision;`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai.rs", "config": "Configuration read at L354: `if cfg.ai_local_vision {`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L17: `let provider_changed = cfg.ai_provider != \"local\";`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L18: `cfg.ai_provider = \"local\".to_string();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L36: `cfg.ai_local_base_url = LLAMA_BASE_URL.to_string();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L37: `cfg.ai_local_quality = false;`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L38: `cfg.ai_local_prep_model.clear();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L43: `cfg.ai_local_custom_gguf = path.to_string_lossy().into_owned();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L44: `cfg.ai_local_model = alias;`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L45: `cfg.ai_local_vision = false;`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L50: `cfg.ai_local_custom_gguf.clear();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L51: `cfg.ai_local_model = choice.model.file_name().to_string();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L52: `cfg.ai_local_quality = choice.model.is_quality();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L54: `cfg.ai_local_vision &= vision_capable;`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L183: `if !is_managed_llama_endpoint(&cfg.ai_local_base_url) {`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L186: `let custom_was_set = !cfg.ai_local_custom_gguf.trim().is_empty();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L190: `cfg.ai_local_custom_gguf.clear();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L191: `let requested = ManagedModel::from_config(&cfg.ai_local_model, cfg.ai_local_qual`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L203: `if !is_managed_llama_endpoint(&cfg.ai_local_base_url) {`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L206: `let custom_was_set = !cfg.ai_local_custom_gguf.trim().is_empty();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L210: `cfg.ai_local_custom_gguf.clear();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L211: `let requested = ManagedModel::from_config(&cfg.ai_local_model, cfg.ai_local_qual`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L225: `!is_managed_llama_endpoint(&cfg.ai_local_base_url)`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L226: `|| (cfg.ai_local_custom_gguf.trim().is_empty()`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L231: `ManagedModel::from_config(&cfg.ai_local_model, cfg.ai_local_quality),`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L238: `cfg.ai_local_vision && local_vision_available(cfg, root)`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L243: `cfg.ai_local_vision = enabled;`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L256: `let path = valid_custom_gguf_path(&cfg.ai_local_custom_gguf)?;`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L258: `let changed = cfg.ai_local_base_url != LLAMA_BASE_URL`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L259: `|| cfg.ai_local_quality`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L260: `|| cfg.ai_local_model != alias`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L261: `|| !cfg.ai_local_prep_model.is_empty()`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L262: `|| cfg.ai_local_vision`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L266: `LocalContextPreset::from_config(&cfg.ai_local_context),`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L280: `let local_vision = cfg.ai_local_vision && vision_capable;`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L286: `let changed = cfg.ai_local_base_url != LLAMA_BASE_URL`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L287: `|| cfg.ai_local_quality != quality`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L288: `|| cfg.ai_local_model != model_name`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L289: `|| !cfg.ai_local_prep_model.is_empty()`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L290: `|| cfg.ai_local_vision != local_vision`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L294: `cfg.ai_local_base_url = LLAMA_BASE_URL.to_string();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L295: `cfg.ai_local_quality = quality;`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L296: `cfg.ai_local_model = model_name;`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L297: `cfg.ai_local_prep_model.clear();`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L298: `cfg.ai_local_vision = local_vision;`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/model_state.rs", "config": "Configuration read at L518: `&cfg.ai_local_base_url`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L341: `assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L342: `assert!(!cfg.ai_local_quality);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L343: `assert_eq!(cfg.ai_local_model, GEMMA_FILE);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L344: `assert!(cfg.ai_local_prep_model.is_empty());`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L345: `assert!(!cfg.ai_local_vision);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L373: `assert!(cfg.ai_local_vision);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L420: `assert!(cfg.ai_local_vision);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L425: `assert!(!cfg.ai_local_vision);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L454: `assert_eq!(cfg.ai_local_custom_gguf, good.to_string_lossy());`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L455: `assert_eq!(cfg.ai_local_model, \"my-model.GGUF\");`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L456: `assert!(!cfg.ai_local_quality);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L457: `assert!(!cfg.ai_local_vision);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L463: `assert!(cfg.ai_local_custom_gguf.is_empty());`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L464: `assert_eq!(cfg.ai_local_model, GEMMA_FILE);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L494: `assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L495: `assert!(!cfg.ai_local_quality);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L496: `assert_eq!(cfg.ai_local_model, LEGACY_GEMMA_FILE);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L497: `assert!(cfg.ai_local_prep_model.is_empty());`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L499: `assert!(!cfg.ai_local_vision);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L507: `assert_eq!(cfg.ai_local_model, LEGACY_GEMMA_FILE);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L540: `assert_eq!(cfg.ai_provider, \"local\");`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L541: `assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L542: `assert_eq!(cfg.ai_local_model, GEMMA_FILE);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L543: `assert!(cfg.ai_local_prep_model.is_empty());`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L544: `assert_eq!(cfg.ai_endpoint(true).model, GEMMA_FILE);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L1539: `assert_eq!(cfg.ai_provider, \"local\");`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L1540: `assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L1541: `assert_eq!(cfg.ai_local_model, GEMMA_FILE);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L1542: `assert!(!cfg.ai_local_quality);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L1543: `assert!(cfg.ai_local_prep_model.is_empty());`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L1549: `assert_eq!(cfg.ai_bearer, \"bridge_secret\");`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L1552: `assert!(cfg.ai_local_vision);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L1564: `assert_eq!(cloud_cfg.ai_local_model, GEMMA26_FILE);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L1565: `assert!(cloud_cfg.ai_local_quality);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L1566: `assert!(cloud_cfg.ai_local_prep_model.is_empty());`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L1567: `assert!(!cloud_cfg.ai_local_vision);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L1578: `assert!(stale_same_cfg.ai_local_vision);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "config": "Configuration read at L1968: `assert_eq!(cfg.ai_local_model, LEGACY_GEMMA_FILE);`", "batch_id": "B06"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L281: `assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L282: `assert!(!cfg.ai_local_quality);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L283: `assert_eq!(cfg.ai_local_model, GEMMA_FILE);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L284: `assert!(cfg.ai_local_prep_model.is_empty());`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L285: `assert!(!cfg.ai_local_vision);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L313: `assert!(cfg.ai_local_vision);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L360: `assert!(cfg.ai_local_vision);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L365: `assert!(!cfg.ai_local_vision);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L394: `assert_eq!(cfg.ai_local_custom_gguf, good.to_string_lossy());`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L395: `assert_eq!(cfg.ai_local_model, \"my-model.GGUF\");`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L396: `assert!(!cfg.ai_local_quality);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L397: `assert!(!cfg.ai_local_vision);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L403: `assert!(cfg.ai_local_custom_gguf.is_empty());`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L404: `assert_eq!(cfg.ai_local_model, GEMMA_FILE);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L432: `assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L433: `assert!(!cfg.ai_local_quality);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L434: `assert_eq!(cfg.ai_local_model, LEGACY_GEMMA_FILE);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L435: `assert!(cfg.ai_local_prep_model.is_empty());`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L442: `assert_eq!(cfg.ai_local_model, LEGACY_GEMMA_FILE);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L475: `assert_eq!(cfg.ai_provider, \"local\");`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L476: `assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L477: `assert_eq!(cfg.ai_local_model, GEMMA_FILE);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L478: `assert!(cfg.ai_local_prep_model.is_empty());`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L479: `assert_eq!(cfg.ai_endpoint(true).model, GEMMA_FILE);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L1474: `assert_eq!(cfg.ai_provider, \"local\");`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L1475: `assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L1476: `assert_eq!(cfg.ai_local_model, GEMMA_FILE);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L1477: `assert!(!cfg.ai_local_quality);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L1478: `assert!(cfg.ai_local_prep_model.is_empty());`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L1484: `assert_eq!(cfg.ai_bearer, \"bridge_secret\");`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L1487: `assert!(cfg.ai_local_vision);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L1499: `assert_eq!(cloud_cfg.ai_local_model, GEMMA26_FILE);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L1500: `assert!(cloud_cfg.ai_local_quality);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L1501: `assert!(cloud_cfg.ai_local_prep_model.is_empty());`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L1502: `assert!(!cloud_cfg.ai_local_vision);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L1513: `assert!(stale_same_cfg.ai_local_vision);`", "batch_id": "B09"}
+{"path": "overlay-backend/src/tests.rs", "config": "Configuration read at L1903: `assert_eq!(cfg.ai_local_model, LEGACY_GEMMA_FILE);`", "batch_id": "B09"}
+{"path": "slint-experiment/src/bin/overlay_host/mlx_lifecycle.rs", "config": "Configuration read at L16: `AskRoute::Text if config.ai_provider == \"mlx\" => Some(config.ai_mlx_model.clone(`", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/mlx_lifecycle.rs", "config": "Configuration read at L22: `&& config.ai_provider == \"mlx\"`", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/mlx_lifecycle.rs", "config": "Configuration read at L23: `&& overlay_backend::mlx_install::catalog_model(&config.ai_mlx_model)`", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/mlx_lifecycle.rs", "config": "Configuration read at L26: `Some(config.ai_mlx_model.clone())`", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/mlx_lifecycle.rs", "config": "Configuration read at L219: `config.ai_provider = \"mlx\".into();`", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/mlx_lifecycle.rs", "config": "Configuration read at L234: `config.ai_mlx_model = overlay_backend::mlx_install::DEFAULT_VISION_MODEL.into();`", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_ai.rs", "config": "Configuration read at L561: `eprintln!(\"[overlay-host] ai_bearer saved to config.json\");`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_audio.rs", "config": "Configuration read at L326: `cfg.write().system_audio_device = Some(\"Old headset\".into());`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_audio.rs", "config": "Configuration read at L337: `cfg.read().system_audio_device.as_deref(),`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_audio.rs", "config": "Configuration read at L351: `cfg.read().system_audio_device.as_deref(),`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_audio.rs", "config": "Configuration read at L356: `assert!(cfg.read().system_audio_device.is_none());`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_audio.rs", "config": "Configuration read at L360: `cfg.write().system_audio_device = Some(\"A50 Stream Out\".into());`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_audio.rs", "config": "Configuration read at L375: `cfg.read().system_audio_device.as_deref(),`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_audio.rs", "config": "Configuration read at L392: `cfg.read().system_audio_device.as_deref(),`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_audio.rs", "config": "Configuration read at L418: `cfg.write().system_audio_device = Some(\"Disconnected headphones\".into());`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_local_ai.rs", "config": "Configuration read at L43: `&cfg.ai_local_model,`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_local_ai.rs", "config": "Configuration read at L44: `cfg.ai_local_quality,`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_local_ai.rs", "config": "Configuration read at L47: `overlay_backend::local_ai::custom_gguf_display_name(&cfg.ai_local_custom_gguf);`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_local_ai.rs", "config": "Configuration read at L55: `let preset = overlay_backend::local_ai::LocalContextPreset::from_config(&cfg.ai_`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_local_ai.rs", "config": "Configuration read at L687: `// cfg.ai_local_model; the request \"model\" field is ignored by`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_mlx.rs", "config": "Configuration read at L137: `config.ai_provider.clone(),`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_mlx.rs", "config": "Configuration read at L138: `config.ai_mlx_model.clone(),`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_mlx.rs", "config": "Configuration read at L144: `config.ai_mlx_model = role.model().into();`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_mlx.rs", "config": "Configuration read at L145: `config.ai_provider = \"mlx\".into();`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_mlx.rs", "config": "Configuration read at L158: `config.ai_provider = previous.0;`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_mlx.rs", "config": "Configuration read at L159: `config.ai_mlx_model = previous.1;`", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/status_copy.rs", "config": "Configuration read at L259: `cfg.ai_model = \"claude-haiku-4-5\".into();`", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/status_copy.rs", "config": "Configuration read at L260: `cfg.ai_provider = \"codex\".into();`", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/tile_routes.rs", "config": "Configuration read at L104: `config.ai_bearer = \"token\".into();`", "batch_id": "B03"}
+{"path": "slint-experiment/src/bin/overlay_host/tile_routes.rs", "config": "Configuration read at L108: `config.ai_provider = \"local\".into();`", "batch_id": "B03"}
+{"path": "slint-experiment/src/bin/overlay_host/tile_routes.rs", "config": "Configuration read at L109: `config.ai_local_bearer.clear();`", "batch_id": "B03"}
+{"path": "slint-experiment/src/bin/overlay_host/tile_routes.rs", "config": "Configuration read at L112: `config.ai_provider = \"codex\".into();`", "batch_id": "B03"}
+{"path": "slint-experiment/src/bin/overlay_host/tile_routes.rs", "config": "Configuration read at L138: `config.ai_provider = \"codex\".into();`", "batch_id": "B03"}
+{"path": "slint-experiment/src/bin/overlay_host/vision_capture.rs", "config": "Configuration read at L624: `&& !cfg.read().ai_bearer.trim().is_empty()`", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "config": "Configuration read at L610: `ai::set_prompt_cache(cfg.read().ai_prompt_cache);`", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "config": "Configuration read at L4229: `config.ai_provider == \"mlx\"`", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "config": "Configuration read at L4240: `config.suppress_tiles = target_listening;`", "batch_id": "B01"}
+{"path": "slint-experiment/src/session_namer.rs", "config": "Configuration read at L132: `let ep = cfg.read().ai_endpoint(true);`", "batch_id": "B01"}
+{"path": "slint-experiment/tests/macos_settings_guard.rs", "config": "Configuration read at L183: `assert!(config.contains(\"if cfg!(target_os = \\\"macos\\\") {\\n        \\\"gigaam\\\".in`", "batch_id": "B05"}

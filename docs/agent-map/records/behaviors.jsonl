@@ -1,0 +1,457 @@
+{"path": "experiments/macos-gate0a/ui/gate0a.slint", "behavior": "UI Callback `clicked` declared at L6", "batch_id": "B15"}
+{"path": "experiments/macos-gate0a/ui/gate0a.slint", "behavior": "UI Callback `drag-start-requested` declared at L39", "batch_id": "B15"}
+{"path": "experiments/macos-gate0a/ui/gate0a.slint", "behavior": "UI Callback `chip-clicked` declared at L41", "batch_id": "B15"}
+{"path": "experiments/macos-gate0a/ui/gate0a.slint", "behavior": "UI Callback `toggle-tile` declared at L42", "batch_id": "B15"}
+{"path": "experiments/macos-gate0a/ui/gate0a.slint", "behavior": "UI Callback `open-settings` declared at L43", "batch_id": "B15"}
+{"path": "experiments/macos-gate0a/ui/gate0a.slint", "behavior": "UI Callback `hide-overlay` declared at L44", "batch_id": "B15"}
+{"path": "experiments/macos-gate0a/ui/gate0a.slint", "behavior": "UI Callback `drag-start-requested` declared at L138", "batch_id": "B15"}
+{"path": "experiments/macos-gate0a/ui/gate0a.slint", "behavior": "UI Callback `hide-tile` declared at L140", "batch_id": "B15"}
+{"path": "experiments/macos-gate0a/ui/gate0a.slint", "behavior": "UI Callback `hide-settings` declared at L219", "batch_id": "B15"}
+{"path": "experiments/macos-gate0b/ui/gate0b.slint", "behavior": "UI Callback `clicked` declared at L3", "batch_id": "B15"}
+{"path": "experiments/macos-gate0b/ui/gate0b.slint", "behavior": "UI Callback `primary` declared at L35", "batch_id": "B15"}
+{"path": "experiments/macos-gate0b/ui/gate0b.slint", "behavior": "UI Callback `secondary` declared at L36", "batch_id": "B15"}
+{"path": "experiments/macos-gate0b/ui/gate0b.slint", "behavior": "UI Callback `settings` declared at L37", "batch_id": "B15"}
+{"path": "experiments/macos-gate0b/ui/gate0b.slint", "behavior": "UI Callback `request-microphone` declared at L107", "batch_id": "B15"}
+{"path": "experiments/macos-gate0b/ui/gate0b.slint", "behavior": "UI Callback `start-microphone` declared at L109", "batch_id": "B15"}
+{"path": "experiments/macos-gate0b/ui/gate0b.slint", "behavior": "UI Callback `stop-microphone` declared at L110", "batch_id": "B15"}
+{"path": "experiments/macos-gate0b/ui/gate0b.slint", "behavior": "UI Callback `start-system` declared at L111", "batch_id": "B15"}
+{"path": "experiments/macos-gate0b/ui/gate0b.slint", "behavior": "UI Callback `stop-system` declared at L112", "batch_id": "B15"}
+{"path": "experiments/macos-gate0b/ui/gate0b.slint", "behavior": "UI Callback `open-system-settings` declared at L113", "batch_id": "B15"}
+{"path": "experiments/macos-gate0b/ui/gate0b.slint", "behavior": "UI Callback `capture-screen` declared at L114", "batch_id": "B15"}
+{"path": "experiments/macos-gate0b/ui/gate0b.slint", "behavior": "UI Callback `open-mic-settings` declared at L115", "batch_id": "B15"}
+{"path": "experiments/macos-gate0b/ui/gate0b.slint", "behavior": "UI Callback `open-screen-settings` declared at L116", "batch_id": "B15"}
+{"path": "experiments/macos-gate0b/ui/gate0b.slint", "behavior": "UI Callback `refresh` declared at L117", "batch_id": "B15"}
+{"path": "overlay-backend/examples/stt_macos_lifecycle_probe.rs", "behavior": "Spawns asynchronous thread/task at L152", "batch_id": "B09"}
+{"path": "overlay-backend/src/ai/stream.rs", "behavior": "Instantiates IPC channel at L40", "batch_id": "B06"}
+{"path": "overlay-backend/src/ai/stream.rs", "behavior": "Spawns asynchronous thread/task at L42", "batch_id": "B06"}
+{"path": "overlay-backend/src/ai/tests.rs", "behavior": "Spawns asynchronous thread/task at L409", "batch_id": "B06"}
+{"path": "overlay-backend/src/ai/tests.rs", "behavior": "Spawns asynchronous thread/task at L437", "batch_id": "B06"}
+{"path": "overlay-backend/src/ai/tests.rs", "behavior": "Spawns asynchronous thread/task at L549", "batch_id": "B06"}
+{"path": "overlay-backend/src/audio.rs", "behavior": "Instantiates IPC channel at L158", "batch_id": "B07"}
+{"path": "overlay-backend/src/audio.rs", "behavior": "Spawns asynchronous thread/task at L499", "batch_id": "B07"}
+{"path": "overlay-backend/src/audio.rs", "behavior": "Spawns asynchronous thread/task at L611", "batch_id": "B07"}
+{"path": "overlay-backend/src/audio.rs", "behavior": "Spawns asynchronous thread/task at L732", "batch_id": "B07"}
+{"path": "overlay-backend/src/audio_macos.rs", "behavior": "Instantiates IPC channel at L411", "batch_id": "B07"}
+{"path": "overlay-backend/src/audio_macos.rs", "behavior": "Instantiates IPC channel at L414", "batch_id": "B07"}
+{"path": "overlay-backend/src/audio_macos.rs", "behavior": "Spawns asynchronous thread/task at L595", "batch_id": "B07"}
+{"path": "overlay-backend/src/audio_macos.rs", "behavior": "Spawns asynchronous thread/task at L633", "batch_id": "B07"}
+{"path": "overlay-backend/src/codex_subscription.rs", "behavior": "Spawns asynchronous thread/task at L171", "batch_id": "B06"}
+{"path": "overlay-backend/src/codex_subscription.rs", "behavior": "Spawns asynchronous thread/task at L182", "batch_id": "B06"}
+{"path": "overlay-backend/src/journal/tests.rs", "behavior": "Instantiates IPC channel at L90", "batch_id": "B08"}
+{"path": "overlay-backend/src/journal/writer.rs", "behavior": "Instantiates IPC channel at L53", "batch_id": "B08"}
+{"path": "overlay-backend/src/journal/writer.rs", "behavior": "Instantiates IPC channel at L95", "batch_id": "B08"}
+{"path": "overlay-backend/src/journal/writer.rs", "behavior": "Instantiates IPC channel at L176", "batch_id": "B08"}
+{"path": "overlay-backend/src/local_ai/tests.rs", "behavior": "Spawns asynchronous thread/task at L1039", "batch_id": "B06"}
+{"path": "overlay-backend/src/mlx_runtime.rs", "behavior": "Instantiates IPC channel at L480", "batch_id": "B06"}
+{"path": "overlay-backend/src/mlx_runtime.rs", "behavior": "Spawns asynchronous thread/task at L481", "batch_id": "B06"}
+{"path": "overlay-backend/src/ocr.rs", "behavior": "Spawns asynchronous thread/task at L125", "batch_id": "B10"}
+{"path": "overlay-backend/src/recorder.rs", "behavior": "Instantiates IPC channel at L169", "batch_id": "B07"}
+{"path": "overlay-backend/src/runtime.rs", "behavior": "Spawns asynchronous thread/task at L1759", "batch_id": "B06"}
+{"path": "overlay-backend/src/runtime.rs", "behavior": "Spawns asynchronous thread/task at L1773", "batch_id": "B06"}
+{"path": "overlay-backend/src/runtime.rs", "behavior": "Spawns asynchronous thread/task at L1777", "batch_id": "B06"}
+{"path": "overlay-backend/src/runtime/tests.rs", "behavior": "Instantiates IPC channel at L736", "batch_id": "B06"}
+{"path": "overlay-backend/src/runtime/tests.rs", "behavior": "Spawns asynchronous thread/task at L738", "batch_id": "B06"}
+{"path": "overlay-backend/src/runtime/tests.rs", "behavior": "Instantiates IPC channel at L802", "batch_id": "B06"}
+{"path": "overlay-backend/src/runtime/tests.rs", "behavior": "Spawns asynchronous thread/task at L803", "batch_id": "B06"}
+{"path": "overlay-backend/src/runtime/tests.rs", "behavior": "Instantiates IPC channel at L865", "batch_id": "B06"}
+{"path": "overlay-backend/src/runtime/tests.rs", "behavior": "Spawns asynchronous thread/task at L866", "batch_id": "B06"}
+{"path": "overlay-backend/src/runtime/tests.rs", "behavior": "Instantiates IPC channel at L937", "batch_id": "B06"}
+{"path": "overlay-backend/src/runtime/tests.rs", "behavior": "Spawns asynchronous thread/task at L938", "batch_id": "B06"}
+{"path": "overlay-backend/src/stt.rs", "behavior": "Instantiates IPC channel at L296", "batch_id": "B07"}
+{"path": "overlay-backend/src/stt.rs", "behavior": "Spawns asynchronous thread/task at L310", "batch_id": "B07"}
+{"path": "overlay-backend/src/stt.rs", "behavior": "Spawns asynchronous thread/task at L513", "batch_id": "B07"}
+{"path": "overlay-backend/src/stt.rs", "behavior": "Spawns asynchronous thread/task at L552", "batch_id": "B07"}
+{"path": "overlay-backend/src/tests.rs", "behavior": "Spawns asynchronous thread/task at L974", "batch_id": "B09"}
+{"path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs", "behavior": "Spawns asynchronous thread/task at L115", "batch_id": "B03"}
+{"path": "slint-experiment/src/bin/overlay_host/diagnostics.rs", "behavior": "Spawns asynchronous thread/task at L264", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/diagnostics.rs", "behavior": "Spawns asynchronous thread/task at L421", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/diagnostics.rs", "behavior": "Spawns asynchronous thread/task at L461", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/diagnostics.rs", "behavior": "Spawns asynchronous thread/task at L488", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/diagnostics.rs", "behavior": "Spawns asynchronous thread/task at L541", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/diagnostics.rs", "behavior": "Spawns asynchronous thread/task at L694", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/mlx_lifecycle.rs", "behavior": "Acquires synchronization mutex at L9", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_ai.rs", "behavior": "Spawns asynchronous thread/task at L211", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_ai.rs", "behavior": "Spawns asynchronous thread/task at L452", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_ai.rs", "behavior": "Spawns asynchronous thread/task at L517", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_ai.rs", "behavior": "Spawns asynchronous thread/task at L897", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_ai.rs", "behavior": "Spawns asynchronous thread/task at L1091", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_ai.rs", "behavior": "Spawns asynchronous thread/task at L1321", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_ai.rs", "behavior": "Spawns asynchronous thread/task at L1385", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_audio.rs", "behavior": "Spawns asynchronous thread/task at L140", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_controller.rs", "behavior": "Spawns asynchronous thread/task at L224", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_controller.rs", "behavior": "Spawns asynchronous thread/task at L317", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_controller.rs", "behavior": "Spawns asynchronous thread/task at L360", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_controller.rs", "behavior": "Spawns asynchronous thread/task at L1057", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_controller.rs", "behavior": "Spawns asynchronous thread/task at L1180", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_controller.rs", "behavior": "Spawns asynchronous thread/task at L1793", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_hermes.rs", "behavior": "Spawns asynchronous thread/task at L188", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_hermes.rs", "behavior": "Spawns asynchronous thread/task at L251", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_hermes.rs", "behavior": "Spawns asynchronous thread/task at L297", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_hermes.rs", "behavior": "Spawns asynchronous thread/task at L347", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_local_ai.rs", "behavior": "Spawns asynchronous thread/task at L173", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_local_ai.rs", "behavior": "Spawns asynchronous thread/task at L607", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_local_ai.rs", "behavior": "Spawns asynchronous thread/task at L919", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_local_ai.rs", "behavior": "Spawns asynchronous thread/task at L1070", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_local_ai.rs", "behavior": "Spawns asynchronous thread/task at L1186", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_local_ai.rs", "behavior": "Spawns asynchronous thread/task at L1359", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_memory.rs", "behavior": "Spawns asynchronous thread/task at L140", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_memory.rs", "behavior": "Spawns asynchronous thread/task at L167", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_memory.rs", "behavior": "Spawns asynchronous thread/task at L231", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_memory.rs", "behavior": "Spawns asynchronous thread/task at L293", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_memory.rs", "behavior": "Spawns asynchronous thread/task at L314", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_mlx.rs", "behavior": "Spawns asynchronous thread/task at L97", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_mlx.rs", "behavior": "Spawns asynchronous thread/task at L131", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_mlx.rs", "behavior": "Spawns asynchronous thread/task at L191", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_stt.rs", "behavior": "Spawns asynchronous thread/task at L129", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_stt.rs", "behavior": "Spawns asynchronous thread/task at L214", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_updates.rs", "behavior": "Spawns asynchronous thread/task at L50", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_updates.rs", "behavior": "Spawns asynchronous thread/task at L104", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_vision.rs", "behavior": "Spawns asynchronous thread/task at L228", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_vision.rs", "behavior": "Spawns asynchronous thread/task at L273", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_vision.rs", "behavior": "Spawns asynchronous thread/task at L332", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_voice.rs", "behavior": "Spawns asynchronous thread/task at L222", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/settings_voice.rs", "behavior": "Spawns asynchronous thread/task at L334", "batch_id": "B02"}
+{"path": "slint-experiment/src/bin/overlay_host/tile_ask.rs", "behavior": "Spawns asynchronous thread/task at L540", "batch_id": "B03"}
+{"path": "slint-experiment/src/bin/overlay_host/tile_ask.rs", "behavior": "Spawns asynchronous thread/task at L638", "batch_id": "B03"}
+{"path": "slint-experiment/src/bin/overlay_host/tile_followup.rs", "behavior": "Spawns asynchronous thread/task at L287", "batch_id": "B03"}
+{"path": "slint-experiment/src/bin/overlay_host/tile_followup.rs", "behavior": "Spawns asynchronous thread/task at L524", "batch_id": "B03"}
+{"path": "slint-experiment/src/bin/overlay_host/tile_followup.rs", "behavior": "Spawns asynchronous thread/task at L740", "batch_id": "B03"}
+{"path": "slint-experiment/src/bin/overlay_host/tile_ptt.rs", "behavior": "Spawns asynchronous thread/task at L27", "batch_id": "B03"}
+{"path": "slint-experiment/src/bin/overlay_host/wizard.rs", "behavior": "Spawns asynchronous thread/task at L164", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/wizard.rs", "behavior": "Spawns asynchronous thread/task at L206", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/wizard.rs", "behavior": "Spawns asynchronous thread/task at L241", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host/wizard.rs", "behavior": "Spawns asynchronous thread/task at L285", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "behavior": "Spawns asynchronous thread/task at L539", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "behavior": "Instantiates IPC channel at L745", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "behavior": "Spawns asynchronous thread/task at L957", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "behavior": "Spawns asynchronous thread/task at L2178", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "behavior": "Instantiates IPC channel at L2835", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "behavior": "Instantiates IPC channel at L2838", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "behavior": "Spawns asynchronous thread/task at L2890", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "behavior": "Spawns asynchronous thread/task at L2966", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "behavior": "Spawns asynchronous thread/task at L4151", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "behavior": "Spawns asynchronous thread/task at L4225", "batch_id": "B01"}
+{"path": "slint-experiment/src/session_namer.rs", "behavior": "Spawns asynchronous thread/task at L142", "batch_id": "B01"}
+{"path": "slint-experiment/src/slint_session.rs", "behavior": "Spawns asynchronous thread/task at L241", "batch_id": "B01"}
+{"path": "slint-experiment/src/slint_session.rs", "behavior": "Spawns asynchronous thread/task at L526", "batch_id": "B01"}
+{"path": "slint-experiment/src/slint_session.rs", "behavior": "Spawns asynchronous thread/task at L580", "batch_id": "B01"}
+{"path": "slint-experiment/src/slint_session.rs", "behavior": "Instantiates IPC channel at L603", "batch_id": "B01"}
+{"path": "slint-experiment/src/slint_session.rs", "behavior": "Spawns asynchronous thread/task at L604", "batch_id": "B01"}
+{"path": "slint-experiment/src/slint_session.rs", "behavior": "Spawns asynchronous thread/task at L762", "batch_id": "B01"}
+{"path": "slint-experiment/src/slint_session.rs", "behavior": "Spawns asynchronous thread/task at L1487", "batch_id": "B01"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `clicked` declared at L41", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `query-changed` declared at L112", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `result-activated` declared at L114", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `retranscribe-requested` declared at L115", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `view-summary-requested` declared at L118", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `view-debrief-requested` declared at L120", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `rename-requested` declared at L124", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `rename-confirmed` declared at L125", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `rename-cancelled` declared at L126", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `regen-name-requested` declared at L127", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `delete-requested` declared at L130", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `delete-confirmed` declared at L135", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `delete-cancelled` declared at L136", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `resummary-confirmed` declared at L142", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `resummary-cancelled` declared at L143", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `transcript-requested` declared at L145", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `close-requested` declared at L146", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `drag-start-requested` declared at L149", "batch_id": "B05"}
+{"path": "slint-experiment/ui/archive.slint", "behavior": "UI Callback `drag-moved` declared at L150", "batch_id": "B05"}
+{"path": "slint-experiment/ui/capture_overlay.slint", "behavior": "UI Callback `region-selected` declared at L48", "batch_id": "B05"}
+{"path": "slint-experiment/ui/capture_overlay.slint", "behavior": "UI Callback `cancelled` declared at L49", "batch_id": "B05"}
+{"path": "slint-experiment/ui/controls.slint", "behavior": "UI Callback `clicked` declared at L26", "batch_id": "B05"}
+{"path": "slint-experiment/ui/controls.slint", "behavior": "UI Callback `capture` declared at L128", "batch_id": "B05"}
+{"path": "slint-experiment/ui/help.slint", "behavior": "UI Callback `cancelled` declared at L143", "batch_id": "B05"}
+{"path": "slint-experiment/ui/help.slint", "behavior": "UI Callback `drag-start-requested` declared at L145", "batch_id": "B05"}
+{"path": "slint-experiment/ui/help.slint", "behavior": "UI Callback `drag-moved` declared at L146", "batch_id": "B05"}
+{"path": "slint-experiment/ui/lock_mode_menu.slint", "behavior": "UI Callback `mode-selected` declared at L16", "batch_id": "B05"}
+{"path": "slint-experiment/ui/lock_mode_menu.slint", "behavior": "UI Callback `dismissed` declared at L17", "batch_id": "B05"}
+{"path": "slint-experiment/ui/macos_ai_setup.slint", "behavior": "UI Callback `save-clicked` declared at L31", "batch_id": "B05"}
+{"path": "slint-experiment/ui/macos_ai_setup.slint", "behavior": "UI Callback `cancel-clicked` declared at L33", "batch_id": "B05"}
+{"path": "slint-experiment/ui/macos_ai_setup.slint", "behavior": "UI Callback `drag-start-requested` declared at L35", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `clicked` declared at L79", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `clicked` declared at L140", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `mode-selected` declared at L201", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `menu-opened` declared at L202", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `clicked` declared at L276", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `pressed` declared at L332", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `released` declared at L333", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `mic-toggle-clicked` declared at L654", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `lock-menu-opened` declared at L655", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `sys-toggle-clicked` declared at L656", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `ptt-mic-pressed` declared at L658", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `ptt-mic-released` declared at L659", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `ptt-sys-pressed` declared at L660", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `ptt-sys-released` declared at L661", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `timer-toggle-clicked` declared at L662", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `pause-toggle-clicked` declared at L664", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `spawn-tile-clicked` declared at L665", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `text-ask-clicked` declared at L667", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `close-all-tiles-clicked` declared at L668", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `restore-tile-clicked` declared at L669", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `capture-clicked` declared at L670", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `stealth-toggle-clicked` declared at L671", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `aggressive-toggle-clicked` declared at L672", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `lock-mode-selected` declared at L673", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `open-settings-clicked` declared at L674", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `help-clicked` declared at L675", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `archive-clicked` declared at L676", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `summary-clicked` declared at L677", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `quit-clicked` declared at L678", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `restart-clicked` declared at L680", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `restart-confirm` declared at L681", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `restart-cancel` declared at L682", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `quit-confirm` declared at L683", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `quit-cancel` declared at L684", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `drag-start-requested` declared at L688", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `drag-moved` declared at L689", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `compact-toggle-clicked` declared at L691", "batch_id": "B05"}
+{"path": "slint-experiment/ui/overlay_bar.slint", "behavior": "UI Callback `hide-to-tray-clicked` declared at L694", "batch_id": "B05"}
+{"path": "slint-experiment/ui/palette.slint", "behavior": "UI Callback `query-changed` declared at L51", "batch_id": "B05"}
+{"path": "slint-experiment/ui/palette.slint", "behavior": "UI Callback `chip-clicked` declared at L53", "batch_id": "B05"}
+{"path": "slint-experiment/ui/palette.slint", "behavior": "UI Callback `result-activated` declared at L54", "batch_id": "B05"}
+{"path": "slint-experiment/ui/palette.slint", "behavior": "UI Callback `close-requested` declared at L55", "batch_id": "B05"}
+{"path": "slint-experiment/ui/palette.slint", "behavior": "UI Callback `drag-start-requested` declared at L56", "batch_id": "B05"}
+{"path": "slint-experiment/ui/palette.slint", "behavior": "UI Callback `drag-moved` declared at L57", "batch_id": "B05"}
+{"path": "slint-experiment/ui/recover_offer.slint", "behavior": "UI Callback `recover-accepted` declared at L47", "batch_id": "B05"}
+{"path": "slint-experiment/ui/recover_offer.slint", "behavior": "UI Callback `dismissed` declared at L49", "batch_id": "B05"}
+{"path": "slint-experiment/ui/recover_offer.slint", "behavior": "UI Callback `drag-start-requested` declared at L50", "batch_id": "B05"}
+{"path": "slint-experiment/ui/recover_offer.slint", "behavior": "UI Callback `drag-moved` declared at L51", "batch_id": "B05"}
+{"path": "slint-experiment/ui/replay.slint", "behavior": "UI Callback `session-changed` declared at L62", "batch_id": "B05"}
+{"path": "slint-experiment/ui/replay.slint", "behavior": "UI Callback `chip-clicked` declared at L63", "batch_id": "B05"}
+{"path": "slint-experiment/ui/replay.slint", "behavior": "UI Callback `reset-filter` declared at L64", "batch_id": "B05"}
+{"path": "slint-experiment/ui/replay.slint", "behavior": "UI Callback `back-clicked` declared at L65", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_controls.slint", "behavior": "UI Callback `toggled` declared at L50", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_controls.slint", "behavior": "UI Callback `chosen` declared at L149", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `component-install` declared at L111", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `memory-approve` declared at L113", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `memory-reject` declared at L114", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `memory-delete-item` declared at L115", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `memory-restore-item` declared at L116", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `memory-extract` declared at L117", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `memory-add-fact` declared at L122", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `memory-edit-save` declared at L128", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `hermes-bridge-toggled` declared at L183", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `hermes-bridge-port-save` declared at L184", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `hermes-bridge-host-save` declared at L185", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `hermes-bridge-regen-token` declared at L186", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `hermes-plugin-install` declared at L189", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `hermes-api-setup` declared at L196", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `hermes-api-url-save` declared at L199", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `hermes-api-key-save` declared at L200", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `hermes-api-test` declared at L201", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `hermes-prepare-profile` declared at L202", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `mlx-text-model-changed` declared at L212", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `mlx-text-download` declared at L222", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `mlx-text-cancel` declared at L223", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `mlx-text-enable` declared at L224", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `mlx-vision-model-changed` declared at L226", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `mlx-vision-download` declared at L236", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `mlx-vision-cancel` declared at L237", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `mlx-vision-enable` declared at L238", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `vision-provider-changed` declared at L253", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `vision-phonetics-changed` declared at L254", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `vision-test-practice-changed` declared at L255", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `vision-base-url-save` declared at L256", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `vision-bearer-save` declared at L257", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `vision-model-save` declared at L258", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `vision-local-base-url-save` declared at L259", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `vision-local-bearer-save` declared at L260", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `vision-local-model-save` declared at L261", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `vision-test-clicked` declared at L262", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `tts-voice-changed` declared at L273", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `tts-rate-changed` declared at L274", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `tts-test-clicked` declared at L275", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `tts-install-clicked` declared at L276", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `tts-engine-changed` declared at L281", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `tera-install-clicked` declared at L286", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `tera-install-cancel-clicked` declared at L287", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ocr-install-clicked` declared at L294", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `diar-install-clicked` declared at L300", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `install-local-ai-clicked` declared at L357", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `cancel-local-ai-clicked` declared at L358", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `tile-body-opacity-changed` declared at L364", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `mic-device-selected` declared at L372", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `mic-test-clicked` declared at L373", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `audio-devices-refresh` declared at L386", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `mic-device-index-selected` declared at L387", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `system-device-selected` declared at L388", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `always-on-top-changed` declared at L389", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `stealth-changed` declared at L391", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `tile-monitor-changed` declared at L392", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `open-wizard-clicked` declared at L393", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `close-clicked` declared at L394", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `tab-selected` declared at L395", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `drag-start-requested` declared at L397", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `drag-moved` declared at L398", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ai-bearer-save` declared at L399", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `groq-api-key-save` declared at L400", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ai-base-url-save` declared at L401", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `openai-key-save` declared at L402", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `openai-base-url-save` declared at L403", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `openai-model-save` declared at L404", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `anthropic-key-save` declared at L405", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `anthropic-base-url-save` declared at L406", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `anthropic-model-save` declared at L407", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `codex-connect-clicked` declared at L408", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `codex-disconnect-clicked` declared at L409", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `codex-open-signin-clicked` declared at L410", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `codex-copy-code-clicked` declared at L411", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `codex-model-selected` declared at L412", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `codex-reasoning-selected` declared at L413", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `codex-vision-model-selected` declared at L414", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `codex-models-refresh` declared at L415", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ai-model-selected` declared at L416", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ai-models-refresh` declared at L417", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ai-prompt-cache-changed` declared at L418", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ai-provider-changed` declared at L419", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ai-local-base-url-save` declared at L420", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ai-local-bearer-save` declared at L421", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ai-local-model-selected` declared at L422", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ai-local-models-refresh` declared at L423", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ai-local-vision-changed` declared at L424", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ai-local-thinking-changed` declared at L425", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `model-profile-changed` declared at L430", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ai-local-context-preview-changed` declared at L431", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ai-local-context-changed` declared at L432", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `download-model-clicked` declared at L433", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `choose-custom-gguf-clicked` declared at L434", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `download-vision12b-clicked` declared at L436", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `update-engine-clicked` declared at L437", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ai-local-test-clicked` declared at L438", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `stt-gigaam-install` declared at L456", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `stt-gigaam-install-cancel` declared at L457", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `ai-bridge-test-clicked` declared at L463", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `stt-test-clicked` declared at L464", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `stt-provider-changed` declared at L465", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `stt-cloud-model-changed` declared at L466", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `stt-language-changed` declared at L467", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `stt-gigaam-dir-save` declared at L468", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `stt-gigaam-gpu-changed` declared at L469", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `stt-whisper-url-save` declared at L470", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `stt-whisper-bearer-save` declared at L471", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `stt-whisper-model-save` declared at L472", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `export-profile-clicked` declared at L475", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `import-profile-clicked` declared at L476", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `import-server-settings-clicked` declared at L478", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `export-server-settings-clicked` declared at L481", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `apply-server-settings-clicked` declared at L482", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `cancel-server-settings-clicked` declared at L483", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `diagnostics-check-all-clicked` declared at L525", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `diagnostics-copy-report-clicked` declared at L526", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `diagnostics-collect-logs-clicked` declared at L527", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `db-repair-clicked` declared at L530", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `db-clear-queue-clicked` declared at L535", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `db-clear-memory-clicked` declared at L536", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `meeting-context-save` declared at L540", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `profile-selected` declared at L546", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `profile-add` declared at L547", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `profile-rename` declared at L548", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `profile-delete` declared at L549", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `coaching-debrief-changed` declared at L552", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `coaching-live-tiles-changed` declared at L554", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `record-audio-changed` declared at L557", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `retention-changed` declared at L563", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `journal-retention-changed` declared at L567", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `open-recordings-clicked` declared at L568", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `open-data-folder-clicked` declared at L569", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `open-groq-keys-clicked` declared at L570", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `auto-tiles-enabled-changed` declared at L572", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `suppress-tiles-changed` declared at L576", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `trigger-keywords-save` declared at L578", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `context-process-clicked` declared at L584", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `context-dictate-clicked` declared at L590", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `language-selected` declared at L597", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `color-scheme-selected` declared at L604", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `check-updates-clicked` declared at L617", "batch_id": "B05"}
+{"path": "slint-experiment/ui/settings_panel.slint", "behavior": "UI Callback `install-update-clicked` declared at L618", "batch_id": "B05"}
+{"path": "slint-experiment/ui/text_ask.slint", "behavior": "UI Callback `submitted` declared at L54", "batch_id": "B05"}
+{"path": "slint-experiment/ui/text_ask.slint", "behavior": "UI Callback `cancelled` declared at L56", "batch_id": "B05"}
+{"path": "slint-experiment/ui/text_ask.slint", "behavior": "UI Callback `drag-start-requested` declared at L59", "batch_id": "B05"}
+{"path": "slint-experiment/ui/text_ask.slint", "behavior": "UI Callback `drag-moved` declared at L60", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `clicked` declared at L33", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `clicked` declared at L63", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `clicked` declared at L102", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `toggle-block-marked` declared at L220", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `save-marked` declared at L221", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `clear-marks` declared at L222", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `copy-marked` declared at L224", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `capture-selection` declared at L231", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `save-capture` declared at L233", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `cancel-capture` declared at L234", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `toggle-select-mode` declared at L242", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `close-clicked` declared at L263", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `pin-clicked` declared at L265", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `maximize-clicked` declared at L266", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `regenerate-clicked` declared at L268", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `escalate-clicked` declared at L270", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `copy-clicked` declared at L272", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `copy-block-clicked` declared at L274", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `retry-clicked` declared at L276", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `speak-clicked` declared at L278", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `speak-pause-clicked` declared at L279", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `speak-seek-clicked` declared at L280", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `speak-speed-next-clicked` declared at L281", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `drag-start-requested` declared at L286", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `drag-moved` declared at L287", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `followup-submitted` declared at L289", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tile.slint", "behavior": "UI Callback `followup-voice-toggled` declared at L292", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `clicked` declared at L40", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `toggle-play` declared at L166", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `play-line` declared at L168", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `seek-fraction` declared at L169", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `set-speed` declared at L172", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `set-volume` declared at L173", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `copy-all-requested` declared at L174", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `copy-selected-requested` declared at L175", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `toggle-line` declared at L176", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `toggle-all` declared at L177", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `close-requested` declared at L178", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `drag-start-requested` declared at L179", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `drag-moved` declared at L180", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `toggle-line-marked` declared at L184", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `save-marked` declared at L185", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `clear-marks` declared at L186", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `save-capture` declared at L188", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `cancel-capture` declared at L189", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `capture-line-selection` declared at L193", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `toggle-by-voice` declared at L197", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `run-diarization` declared at L198", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `install-diar-models` declared at L201", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `select-diar-engine` declared at L202", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `rename-speaker` declared at L203", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `search-edited` declared at L206", "batch_id": "B05"}
+{"path": "slint-experiment/ui/transcript.slint", "behavior": "UI Callback `search-jump` declared at L207", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tray_menu.slint", "behavior": "UI Callback `selected` declared at L8", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tray_menu.slint", "behavior": "UI Callback `action-selected` declared at L60", "batch_id": "B05"}
+{"path": "slint-experiment/ui/tray_menu.slint", "behavior": "UI Callback `dismissed` declared at L61", "batch_id": "B05"}
+{"path": "slint-experiment/ui/wizard.slint", "behavior": "UI Callback `chosen` declared at L91", "batch_id": "B05"}
+{"path": "slint-experiment/ui/wizard.slint", "behavior": "UI Callback `mode-selected` declared at L139", "batch_id": "B05"}
+{"path": "slint-experiment/ui/wizard.slint", "behavior": "UI Callback `ai-test-clicked` declared at L141", "batch_id": "B05"}
+{"path": "slint-experiment/ui/wizard.slint", "behavior": "UI Callback `stt-test-clicked` declared at L142", "batch_id": "B05"}
+{"path": "slint-experiment/ui/wizard.slint", "behavior": "UI Callback `mic-test-clicked` declared at L143", "batch_id": "B05"}
+{"path": "slint-experiment/ui/wizard.slint", "behavior": "UI Callback `sys-test-clicked` declared at L144", "batch_id": "B05"}
+{"path": "slint-experiment/ui/wizard.slint", "behavior": "UI Callback `install-local-clicked` declared at L145", "batch_id": "B05"}
+{"path": "slint-experiment/ui/wizard.slint", "behavior": "UI Callback `stealth-toggled` declared at L146", "batch_id": "B05"}
+{"path": "slint-experiment/ui/wizard.slint", "behavior": "UI Callback `open-diagnostics` declared at L147", "batch_id": "B05"}
+{"path": "slint-experiment/ui/wizard.slint", "behavior": "UI Callback `nav-back` declared at L148", "batch_id": "B05"}
+{"path": "slint-experiment/ui/wizard.slint", "behavior": "UI Callback `nav-next` declared at L149", "batch_id": "B05"}
+{"path": "slint-experiment/ui/wizard.slint", "behavior": "UI Callback `nav-skip` declared at L150", "batch_id": "B05"}
+{"path": "slint-experiment/ui/wizard.slint", "behavior": "UI Callback `finished` declared at L151", "batch_id": "B05"}
+{"path": "slint-experiment/ui/wizard.slint", "behavior": "UI Callback `cancelled` declared at L152", "batch_id": "B05"}
+{"path": "slint-experiment/ui/wizard.slint", "behavior": "UI Callback `drag-start-requested` declared at L154", "batch_id": "B05"}
+{"path": "slint-experiment/ui/wizard.slint", "behavior": "UI Callback `drag-moved` declared at L155", "batch_id": "B05"}
+{"path": "suflyor-teratts/src/main.rs", "behavior": "Instantiates IPC channel at L594", "batch_id": "B12"}
+{"path": "suflyor-teratts/src/main.rs", "behavior": "Instantiates IPC channel at L595", "batch_id": "B12"}
+{"path": "suflyor-teratts/src/main.rs", "behavior": "Spawns asynchronous thread/task at L648", "batch_id": "B12"}
+{"path": "suflyor-teratts/src/playback.rs", "behavior": "Instantiates IPC channel at L133", "batch_id": "B12"}
+{"path": "suflyor-teratts/src/playback.rs", "behavior": "Instantiates IPC channel at L134", "batch_id": "B12"}
+{"path": "suflyor-teratts/src/playback_macos.rs", "behavior": "Instantiates IPC channel at L131", "batch_id": "B12"}
+{"path": "suflyor-teratts/src/playback_macos.rs", "behavior": "Instantiates IPC channel at L132", "batch_id": "B12"}
+{"path": "suflyor-tts/src/main.rs", "behavior": "Instantiates IPC channel at L138", "batch_id": "B11"}
+{"path": "suflyor-tts/src/main.rs", "behavior": "Spawns asynchronous thread/task at L140", "batch_id": "B11"}
+{"path": "suflyor-tts/src/playback.rs", "behavior": "Instantiates IPC channel at L132", "batch_id": "B11"}
+{"path": "suflyor-tts/src/playback.rs", "behavior": "Instantiates IPC channel at L133", "batch_id": "B11"}
+{"path": "suflyor-tts/src/playback_macos.rs", "behavior": "Instantiates IPC channel at L118", "batch_id": "B11"}
+{"path": "suflyor-tts/src/playback_macos.rs", "behavior": "Instantiates IPC channel at L119", "batch_id": "B11"}

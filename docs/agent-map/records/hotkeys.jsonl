@@ -1,0 +1,18 @@
+{"path": "slint-experiment/src/bin/overlay_host/hotkeys.rs", "hotkey": "Hotkey binding/dispatch at L5: `//! This module owns the one-time global-hotkey REGISTRATION ([`register_hotkeys`", "batch_id": "B04"}
+{"path": "slint-experiment/src/bin/overlay_host/hotkeys.rs", "hotkey": "Hotkey binding/dispatch at L6: `//! — it builds the process-wide `GlobalHotKeyManager`, registers every F-key`", "batch_id": "B04"}
+{"path": "slint-experiment/src/bin/overlay_host/hotkeys.rs", "hotkey": "Hotkey binding/dispatch at L15: `//! (the `GlobalHotKeyEvent::receiver()` poll loop), because it captures a dozen`", "batch_id": "B04"}
+{"path": "slint-experiment/src/bin/overlay_host/hotkeys.rs", "hotkey": "Hotkey binding/dispatch at L18: `//! [`register_hotkeys`] returns a [`RegisteredHotkeys`] carrying the manager`", "batch_id": "B04"}
+{"path": "slint-experiment/src/bin/overlay_host/hotkeys.rs", "hotkey": "Hotkey binding/dispatch at L62: `/// Result of [`register_hotkeys`]: the live `GlobalHotKeyManager` (which the`", "batch_id": "B04"}
+{"path": "slint-experiment/src/bin/overlay_host/hotkeys.rs", "hotkey": "Hotkey binding/dispatch at L65: `/// `GlobalHotKeyEvent` against the right action. `manager` is `None` when the`", "batch_id": "B04"}
+{"path": "slint-experiment/src/bin/overlay_host/hotkeys.rs", "hotkey": "Hotkey binding/dispatch at L71: `pub manager: Option<global_hotkey::GlobalHotKeyManager>,`", "batch_id": "B04"}
+{"path": "slint-experiment/src/bin/overlay_host/hotkeys.rs", "hotkey": "Hotkey binding/dispatch at L104: `pub(crate) fn register_hotkeys() -> RegisteredHotkeys {`", "batch_id": "B04"}
+{"path": "slint-experiment/src/bin/overlay_host/hotkeys.rs", "hotkey": "Hotkey binding/dispatch at L105: `let hotkey_manager = match global_hotkey::GlobalHotKeyManager::new() {`", "batch_id": "B04"}
+{"path": "slint-experiment/src/bin/overlay_host/hotkeys.rs", "hotkey": "Hotkey binding/dispatch at L108: `eprintln!(\"[overlay-host] GlobalHotKeyManager init failed: {e}. Hotkeys disabled`", "batch_id": "B04"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "hotkey": "Hotkey binding/dispatch at L75: `// glob), and the extracted `register_hotkeys` / `RegisteredHotkeys` so the inli`", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "hotkey": "Hotkey binding/dispatch at L78: `// ids `register_hotkeys` hands back.`", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "hotkey": "Hotkey binding/dispatch at L2493: `// `hotkeys::register_hotkeys` (Phase 3, docs/overlay-host-modularization-plan`", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "hotkey": "Hotkey binding/dispatch at L2495: `// dropping the `GlobalHotKeyManager` unregisters every hotkey. The returned`", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "hotkey": "Hotkey binding/dispatch at L2516: `} = register_hotkeys();`", "batch_id": "B01"}
+{"path": "slint-experiment/src/bin/overlay_host_windows.rs", "hotkey": "Hotkey binding/dispatch at L2536: `while let Ok(event) = global_hotkey::GlobalHotKeyEvent::receiver().try_recv() {`", "batch_id": "B01"}
+{"path": "slint-experiment/tests/macos_global_hotkeys_guard.rs", "hotkey": "Hotkey binding/dispatch at L18: `assert!(host.contains(\"} = register_hotkeys();\"));`", "batch_id": "B05"}
+{"path": "slint-experiment/tests/macos_global_hotkeys_guard.rs", "hotkey": "Hotkey binding/dispatch at L21: `assert!(host.contains(\"global_hotkey::GlobalHotKeyEvent::receiver()\"));`", "batch_id": "B05"}

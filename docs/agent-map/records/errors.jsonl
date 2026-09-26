@@ -1,0 +1,1 @@
+{"enum_name": "WsolaError", "line": 6, "path": "suflyor-wsola/src/error.rs", "variants": ["InvalidRatio", "InputTooShort", "minimum: usize"]}
