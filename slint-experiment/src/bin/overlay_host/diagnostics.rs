@@ -147,19 +147,27 @@ pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while !rest.is_empty() {
-        if rest.starts_with("Bearer ") {
+        if rest.len() >= 6
+            && rest[..6].eq_ignore_ascii_case("bearer")
+            && rest.as_bytes().get(6).is_some_and(|&b| b == b' ' || b == b':' || b == b'\t')
+        {
             out.push_str("Bearer <redacted>");
-            rest = &rest[7..];
+            rest = &rest[6..];
+            let skip = rest
+                .find(|c: char| !(c == ':' || c.is_ascii_whitespace()))
+                .unwrap_or(rest.len());
+            rest = &rest[skip..];
             let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
             rest = &rest[tok_len..];
-        } else if rest.starts_with("gsk_") {
+        } else if rest.len() >= 4 && rest[..4].eq_ignore_ascii_case("gsk_") {
             out.push_str("gsk_<redacted>");
             rest = &rest[4..];
             let tok_len = rest
                 .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
                 .unwrap_or(rest.len());
             rest = &rest[tok_len..];
-        } else if rest.starts_with("sk-")
+        } else if rest.len() >= 3
+            && rest[..3].eq_ignore_ascii_case("sk-")
             && !out
                 .chars()
                 .last()
@@ -940,6 +948,25 @@ mod tests {
         assert!(redacted.contains("gsk_<redacted>"));
         assert!(redacted.contains("sk-<redacted>"));
         assert!(redacted.contains("desk-1 task-2"));
+    }
+
+    #[test]
+    fn redact_secrets_masks_case_insensitive_and_colon_delimiters() {
+        let sample = "Auth1: bearer token_lowercase_123\n\
+                      Auth2: BEARER: token_uppercase_456\n\
+                      Auth3: Bearer:\ttoken_tab_789\n\
+                      Groq: GSK_UPPER_012\n\
+                      OpenAI: SK-PROJ-UPPER_345\n";
+        let redacted = redact_secrets(sample);
+        assert!(!redacted.contains("token_lowercase_123"), "leaked lowercase bearer: {redacted}");
+        assert!(!redacted.contains("token_uppercase_456"), "leaked uppercase bearer: {redacted}");
+        assert!(!redacted.contains("token_tab_789"), "leaked tab bearer: {redacted}");
+        assert!(!redacted.contains("GSK_UPPER_012"), "leaked uppercase gsk key: {redacted}");
+        assert!(!redacted.contains("SK-PROJ-UPPER_345"), "leaked uppercase sk key: {redacted}");
+        assert_eq!(redacted.lines().count(), 5);
+        for line in redacted.lines() {
+            assert!(line.contains("<redacted>"), "unredacted line: {line}");
+        }
     }
 
     #[test]
