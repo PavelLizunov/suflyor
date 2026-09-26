@@ -416,7 +416,7 @@ pub fn nemotron_installed() -> bool {
 pub fn nemotron_model_digest_ok(path: &Path) -> Result<bool> {
     use sha2::{Digest, Sha256};
     use std::io::Read;
-    if std::fs::metadata(path).is_err_or(|m| m.len() != NEMOTRON_BYTES) {
+    if !std::fs::metadata(path).is_ok_and(|m| m.len() == NEMOTRON_BYTES) {
         return Ok(false);
     }
     let mut input = std::fs::File::open(path).context("open Nemotron model")?;
