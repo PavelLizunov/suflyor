@@ -72,9 +72,9 @@ if (-not (Test-Path $teraSidecar)) {
 }
 Write-Host "  teratts sidecar: $teraSidecar" -ForegroundColor Green
 
-# Windows RC Nemotron: use ONLY the pinned native runtime staged on the build
-# worker. Never download/execute unreviewed binaries in this release script.
-$native = Join-Path $env:LOCALAPPDATA 'suflyor-nemotron-v3-rc4'
+# Windows RC Nemotron: bundle the SHA-pinned native runtime from the committed
+# source tree. Never download/execute unreviewed binaries in this release script.
+$native = Join-Path $projectRoot 'vendor\nemotron-win-x64'
 $pins = @{
   'nemo-speech.exe' = 'C1CAEA9E7308F67E6707FEBCA73C82328A49A4ADB93591F02B1649D4329D247E'
   'nemo_speech_asr.dll' = '0121CE6A581B274111106249181376E95504AE5B42F87108B32DF10D8684F703'
