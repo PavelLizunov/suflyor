@@ -1,3 +1,8 @@
+## 2026-10-02 - Case Sensitivity and Delimiter Bypass in Diagnostic Secret Redaction
+**Vulnerability:** `redact_secrets` in `diagnostics.rs` searched for `"Bearer "` exact case with trailing space. When logs or diagnostic reports contained lower/uppercase schemes (`bearer <token>`, `BEARER <token>`), colon formatting (`Bearer: <token>`), or uppercase keys (`GSK_...`, `SK-...`), secret redaction was bypassed and raw credentials leaked into diagnostic reports and exported log files (`suflyor-log.txt`).
+**Learning:** Exact-string prefix matching for credentials fails when logs contain non-canonical casing or alternative header delimiters (`:`, tabs).
+**Prevention:** Always use ASCII case-insensitive matching (`eq_ignore_ascii_case`) and flexible delimiter checks (`:`, whitespace) when scanning text for sensitive credential tokens.
+
 ## 2026-09-08 - Plaintext URL / Credential Leak in reqwest Error Log Formatting
 **Vulnerability:** Logging raw `reqwest::Error` instances via `{e:#}` in STT error handlers printed the full request URL into `overlay-host.log`. For HTTP endpoints with embedded credentials (`http://user:secret@host/v1`) or private LAN hostnames, transport failures leaked secrets into the shareable log file.
 **Learning:** `reqwest::Error`'s `Display` / `Debug` representation (`{e:#}`) embeds the target URL. Formatting `reqwest::Error` directly in log calls bypasses URL/credential redaction rules.
