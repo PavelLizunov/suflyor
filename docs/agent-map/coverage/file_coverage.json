@@ -1,0 +1,2426 @@
+[
+  {
+    "path": ".claude/hooks/banned-phrases.ps1",
+    "file_id": "F_6e9b885ad25e",
+    "batch_id": "B15",
+    "total_lines": 101,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": ".claude/hooks/block-asks.ps1",
+    "file_id": "F_d84ac7271555",
+    "batch_id": "B15",
+    "total_lines": 50,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": ".claude/hooks/git-gate.ps1",
+    "file_id": "F_821da291bed4",
+    "batch_id": "B15",
+    "total_lines": 241,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": ".claude/hooks/plan-progress-check.ps1",
+    "file_id": "F_8ca9a3406972",
+    "batch_id": "B15",
+    "total_lines": 63,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": ".claude/hooks/stop-guard.ps1",
+    "file_id": "F_216a86414bc5",
+    "batch_id": "B15",
+    "total_lines": 130,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": ".github/scripts/is-docs-only.sh",
+    "file_id": "F_f418d24ccfd2",
+    "batch_id": "B14",
+    "total_lines": 55,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": ".github/scripts/test-docs-only-detection.sh",
+    "file_id": "F_6bc62a4e6491",
+    "batch_id": "B14",
+    "total_lines": 117,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": ".github/scripts/test-gate-logic.sh",
+    "file_id": "F_c23879eac2e5",
+    "batch_id": "B14",
+    "total_lines": 54,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "experiments/macos-gate0a/build.rs",
+    "file_id": "F_6a96781b689c",
+    "batch_id": "B15",
+    "total_lines": 18,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "experiments/macos-gate0a/scripts/build-app.sh",
+    "file_id": "F_1b29da709bad",
+    "batch_id": "B15",
+    "total_lines": 23,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "experiments/macos-gate0a/src/appkit.m",
+    "file_id": "F_bcbfc436efa6",
+    "batch_id": "B15",
+    "total_lines": 151,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "experiments/macos-gate0a/src/main.rs",
+    "file_id": "F_102d5af3955a",
+    "batch_id": "B15",
+    "total_lines": 222,
+    "symbols_count": 15,
+    "types_count": 0
+  },
+  {
+    "path": "experiments/macos-gate0a/ui/gate0a.slint",
+    "file_id": "F_a736104d913f",
+    "batch_id": "B15",
+    "total_lines": 257,
+    "symbols_count": 31,
+    "types_count": 4
+  },
+  {
+    "path": "experiments/macos-gate0b/build.rs",
+    "file_id": "F_75b50cf7e64d",
+    "batch_id": "B15",
+    "total_lines": 30,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "experiments/macos-gate0b/scripts/build-app.sh",
+    "file_id": "F_e4cb402f374d",
+    "batch_id": "B15",
+    "total_lines": 24,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "experiments/macos-gate0b/scripts/check.sh",
+    "file_id": "F_0b6f75c88aac",
+    "batch_id": "B15",
+    "total_lines": 11,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "experiments/macos-gate0b/src/capture.m",
+    "file_id": "F_2b6342576bcf",
+    "batch_id": "B15",
+    "total_lines": 548,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "experiments/macos-gate0b/src/main.rs",
+    "file_id": "F_cc5e026d3800",
+    "batch_id": "B15",
+    "total_lines": 281,
+    "symbols_count": 20,
+    "types_count": 1
+  },
+  {
+    "path": "experiments/macos-gate0b/ui/gate0b.slint",
+    "file_id": "F_71ccb2ef57d5",
+    "batch_id": "B15",
+    "total_lines": 197,
+    "symbols_count": 45,
+    "types_count": 3
+  },
+  {
+    "path": "integrations/hermes-plugin/suflyor/__init__.py",
+    "file_id": "F_b47eb0d696a1",
+    "batch_id": "B15",
+    "total_lines": 272,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "integrations/hermes-plugin/tests/test_limits.py",
+    "file_id": "F_55c626d2ddca",
+    "batch_id": "B15",
+    "total_lines": 61,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/build.rs",
+    "file_id": "F_d3f067e21c94",
+    "batch_id": "B14",
+    "total_lines": 64,
+    "symbols_count": 7,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/examples/ai_probe.rs",
+    "file_id": "F_f63cdf80faf8",
+    "batch_id": "B09",
+    "total_lines": 58,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/examples/audio_capture_probe.rs",
+    "file_id": "F_d3ad2723196c",
+    "batch_id": "B09",
+    "total_lines": 259,
+    "symbols_count": 9,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/examples/stt_double.rs",
+    "file_id": "F_3fbf40c7dc28",
+    "batch_id": "B09",
+    "total_lines": 40,
+    "symbols_count": 3,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/examples/stt_macos_lifecycle_probe.rs",
+    "file_id": "F_b0904b6667b4",
+    "batch_id": "B09",
+    "total_lines": 206,
+    "symbols_count": 8,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/examples/stt_macos_probe.rs",
+    "file_id": "F_65085e8b2eb1",
+    "batch_id": "B09",
+    "total_lines": 118,
+    "symbols_count": 4,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/native/macos/mic_capture.m",
+    "file_id": "F_fc9df146ae01",
+    "batch_id": "B09",
+    "total_lines": 355,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/native/macos/process_memory.c",
+    "file_id": "F_dc7ffae2ebae",
+    "batch_id": "B09",
+    "total_lines": 17,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/native/macos/system_capture.m",
+    "file_id": "F_19cb77c1e275",
+    "batch_id": "B09",
+    "total_lines": 463,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/ai/completion.rs",
+    "file_id": "F_32484e64ed9b",
+    "batch_id": "B06",
+    "total_lines": 307,
+    "symbols_count": 9,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/ai/control.rs",
+    "file_id": "F_678630582df1",
+    "batch_id": "B06",
+    "total_lines": 129,
+    "symbols_count": 10,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/ai/inspect.rs",
+    "file_id": "F_e0029b029c1e",
+    "batch_id": "B06",
+    "total_lines": 195,
+    "symbols_count": 5,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/ai/mod.rs",
+    "file_id": "F_1aa31ac30a21",
+    "batch_id": "B06",
+    "total_lines": 24,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/ai/pricing.rs",
+    "file_id": "F_c5aecc233372",
+    "batch_id": "B06",
+    "total_lines": 60,
+    "symbols_count": 3,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/ai/prompt.rs",
+    "file_id": "F_9a2579ad9e5a",
+    "batch_id": "B06",
+    "total_lines": 126,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/ai/provider.rs",
+    "file_id": "F_e7890948f74e",
+    "batch_id": "B06",
+    "total_lines": 518,
+    "symbols_count": 14,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/ai/stream.rs",
+    "file_id": "F_c3c7e79e26a1",
+    "batch_id": "B06",
+    "total_lines": 366,
+    "symbols_count": 5,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/ai/tests.rs",
+    "file_id": "F_ab9ab44fb491",
+    "batch_id": "B06",
+    "total_lines": 707,
+    "symbols_count": 38,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/ai/tps.rs",
+    "file_id": "F_585b11f96b16",
+    "batch_id": "B06",
+    "total_lines": 282,
+    "symbols_count": 17,
+    "types_count": 3
+  },
+  {
+    "path": "overlay-backend/src/ai/types.rs",
+    "file_id": "F_3c939c2ef666",
+    "batch_id": "B06",
+    "total_lines": 124,
+    "symbols_count": 8,
+    "types_count": 7
+  },
+  {
+    "path": "overlay-backend/src/audio.rs",
+    "file_id": "F_08a762fee291",
+    "batch_id": "B07",
+    "total_lines": 962,
+    "symbols_count": 24,
+    "types_count": 6
+  },
+  {
+    "path": "overlay-backend/src/audio_macos.rs",
+    "file_id": "F_58e3146c37bb",
+    "batch_id": "B07",
+    "total_lines": 1302,
+    "symbols_count": 57,
+    "types_count": 11
+  },
+  {
+    "path": "overlay-backend/src/audio_metrics.rs",
+    "file_id": "F_9dd1eb8c69cc",
+    "batch_id": "B07",
+    "total_lines": 191,
+    "symbols_count": 11,
+    "types_count": 5
+  },
+  {
+    "path": "overlay-backend/src/audio_route.rs",
+    "file_id": "F_03105b92ee6c",
+    "batch_id": "B07",
+    "total_lines": 434,
+    "symbols_count": 24,
+    "types_count": 9
+  },
+  {
+    "path": "overlay-backend/src/audio_unavailable.rs",
+    "file_id": "F_8e46d80a3290",
+    "batch_id": "B07",
+    "total_lines": 160,
+    "symbols_count": 10,
+    "types_count": 5
+  },
+  {
+    "path": "overlay-backend/src/bridge.rs",
+    "file_id": "F_4337aa9fc85f",
+    "batch_id": "B06",
+    "total_lines": 750,
+    "symbols_count": 21,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/capabilities.rs",
+    "file_id": "F_35e49a125b04",
+    "batch_id": "B09",
+    "total_lines": 154,
+    "symbols_count": 5,
+    "types_count": 4
+  },
+  {
+    "path": "overlay-backend/src/codex_subscription.rs",
+    "file_id": "F_d8be9762539b",
+    "batch_id": "B06",
+    "total_lines": 2065,
+    "symbols_count": 82,
+    "types_count": 11
+  },
+  {
+    "path": "overlay-backend/src/components.rs",
+    "file_id": "F_2a90759f91ff",
+    "batch_id": "B09",
+    "total_lines": 177,
+    "symbols_count": 6,
+    "types_count": 2
+  },
+  {
+    "path": "overlay-backend/src/config.rs",
+    "file_id": "F_a9ff4ad99048",
+    "batch_id": "B09",
+    "total_lines": 2074,
+    "symbols_count": 72,
+    "types_count": 9
+  },
+  {
+    "path": "overlay-backend/src/config/repair.rs",
+    "file_id": "F_a79d2c877dfe",
+    "batch_id": "B09",
+    "total_lines": 183,
+    "symbols_count": 10,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/config/snippets.rs",
+    "file_id": "F_0c2f6f5ca92b",
+    "batch_id": "B09",
+    "total_lines": 1067,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/config/tests.rs",
+    "file_id": "F_4eda19a34a8e",
+    "batch_id": "B09",
+    "total_lines": 1911,
+    "symbols_count": 82,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/conspect.rs",
+    "file_id": "F_4d80a1dc46a6",
+    "batch_id": "B08",
+    "total_lines": 761,
+    "symbols_count": 49,
+    "types_count": 2
+  },
+  {
+    "path": "overlay-backend/src/credentials.rs",
+    "file_id": "F_313da15f08cb",
+    "batch_id": "B09",
+    "total_lines": 282,
+    "symbols_count": 16,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/deep_lock.rs",
+    "file_id": "F_cb3148ceb9d6",
+    "batch_id": "B06",
+    "total_lines": 417,
+    "symbols_count": 23,
+    "types_count": 3
+  },
+  {
+    "path": "overlay-backend/src/diar_install.rs",
+    "file_id": "F_4233de2c705d",
+    "batch_id": "B07",
+    "total_lines": 820,
+    "symbols_count": 39,
+    "types_count": 5
+  },
+  {
+    "path": "overlay-backend/src/diarize.rs",
+    "file_id": "F_1a72846df745",
+    "batch_id": "B07",
+    "total_lines": 744,
+    "symbols_count": 31,
+    "types_count": 4
+  },
+  {
+    "path": "overlay-backend/src/download.rs",
+    "file_id": "F_ac24827e0dae",
+    "batch_id": "B09",
+    "total_lines": 167,
+    "symbols_count": 12,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/events.rs",
+    "file_id": "F_c7cb4493cd3a",
+    "batch_id": "B06",
+    "total_lines": 384,
+    "symbols_count": 15,
+    "types_count": 9
+  },
+  {
+    "path": "overlay-backend/src/health.rs",
+    "file_id": "F_819e9fd22d83",
+    "batch_id": "B06",
+    "total_lines": 246,
+    "symbols_count": 10,
+    "types_count": 2
+  },
+  {
+    "path": "overlay-backend/src/hermes_install.rs",
+    "file_id": "F_756230e465b0",
+    "batch_id": "B09",
+    "total_lines": 873,
+    "symbols_count": 35,
+    "types_count": 2
+  },
+  {
+    "path": "overlay-backend/src/http_log.rs",
+    "file_id": "F_cd36018ac53a",
+    "batch_id": "B09",
+    "total_lines": 47,
+    "symbols_count": 3,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/journal/legacy.rs",
+    "file_id": "F_9fa0d6680789",
+    "batch_id": "B08",
+    "total_lines": 34,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/journal/mod.rs",
+    "file_id": "F_d3628a91b2dc",
+    "batch_id": "B08",
+    "total_lines": 18,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/journal/recovery.rs",
+    "file_id": "F_65a6d1836dd3",
+    "batch_id": "B08",
+    "total_lines": 176,
+    "symbols_count": 5,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/journal/retention.rs",
+    "file_id": "F_7f56970bd1cf",
+    "batch_id": "B08",
+    "total_lines": 55,
+    "symbols_count": 2,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/journal/tests.rs",
+    "file_id": "F_e27298c7e609",
+    "batch_id": "B08",
+    "total_lines": 1076,
+    "symbols_count": 55,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/journal/time.rs",
+    "file_id": "F_0ea5ac552d43",
+    "batch_id": "B08",
+    "total_lines": 92,
+    "symbols_count": 6,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/journal/types.rs",
+    "file_id": "F_463cdc6817ba",
+    "batch_id": "B08",
+    "total_lines": 98,
+    "symbols_count": 0,
+    "types_count": 2
+  },
+  {
+    "path": "overlay-backend/src/journal/writer.rs",
+    "file_id": "F_209c0774711d",
+    "batch_id": "B08",
+    "total_lines": 363,
+    "symbols_count": 17,
+    "types_count": 4
+  },
+  {
+    "path": "overlay-backend/src/kb.rs",
+    "file_id": "F_a47913f2d4e8",
+    "batch_id": "B08",
+    "total_lines": 503,
+    "symbols_count": 19,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/lib.rs",
+    "file_id": "F_99f33b7a45ba",
+    "batch_id": "B09",
+    "total_lines": 67,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/local_ai.rs",
+    "file_id": "F_2e56170c8fa7",
+    "batch_id": "B06",
+    "total_lines": 3165,
+    "symbols_count": 93,
+    "types_count": 11
+  },
+  {
+    "path": "overlay-backend/src/local_ai/hardware_profile.rs",
+    "file_id": "F_28199aa3a8ff",
+    "batch_id": "B06",
+    "total_lines": 351,
+    "symbols_count": 24,
+    "types_count": 2
+  },
+  {
+    "path": "overlay-backend/src/local_ai/model_choice.rs",
+    "file_id": "F_fa9750e4bc3f",
+    "batch_id": "B06",
+    "total_lines": 370,
+    "symbols_count": 27,
+    "types_count": 4
+  },
+  {
+    "path": "overlay-backend/src/local_ai/model_state.rs",
+    "file_id": "F_bc57ae5659e2",
+    "batch_id": "B06",
+    "total_lines": 526,
+    "symbols_count": 39,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/local_ai/tests.rs",
+    "file_id": "F_8adcd8be8225",
+    "batch_id": "B06",
+    "total_lines": 1969,
+    "symbols_count": 84,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/memory/candidates.rs",
+    "file_id": "F_0b479d12453a",
+    "batch_id": "B08",
+    "total_lines": 301,
+    "symbols_count": 16,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/memory/context_builder.rs",
+    "file_id": "F_51c8660d6495",
+    "batch_id": "B08",
+    "total_lines": 344,
+    "symbols_count": 23,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/memory/mod.rs",
+    "file_id": "F_0fb7eadd3d76",
+    "batch_id": "B08",
+    "total_lines": 26,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/memory/normalize.rs",
+    "file_id": "F_46fc1aad3d86",
+    "batch_id": "B08",
+    "total_lines": 956,
+    "symbols_count": 38,
+    "types_count": 4
+  },
+  {
+    "path": "overlay-backend/src/memory/summary_ref.rs",
+    "file_id": "F_2c192ecdadfd",
+    "batch_id": "B08",
+    "total_lines": 284,
+    "symbols_count": 13,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/mlx_install.rs",
+    "file_id": "F_935e9c8cd0dd",
+    "batch_id": "B06",
+    "total_lines": 997,
+    "symbols_count": 32,
+    "types_count": 3
+  },
+  {
+    "path": "overlay-backend/src/mlx_runtime.rs",
+    "file_id": "F_3bf96515833b",
+    "batch_id": "B06",
+    "total_lines": 749,
+    "symbols_count": 41,
+    "types_count": 6
+  },
+  {
+    "path": "overlay-backend/src/nemotron_diar.rs",
+    "file_id": "F_77a24268cab1",
+    "batch_id": "B07",
+    "total_lines": 182,
+    "symbols_count": 5,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/ocr.rs",
+    "file_id": "F_12f364d37dad",
+    "batch_id": "B10",
+    "total_lines": 270,
+    "symbols_count": 12,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/ocr_install.rs",
+    "file_id": "F_bad079dcd257",
+    "batch_id": "B10",
+    "total_lines": 127,
+    "symbols_count": 4,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/paths.rs",
+    "file_id": "F_5da1663dc0a3",
+    "batch_id": "B09",
+    "total_lines": 151,
+    "symbols_count": 8,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/persistence/indexer.rs",
+    "file_id": "F_2bdc0820cbe1",
+    "batch_id": "B08",
+    "total_lines": 449,
+    "symbols_count": 13,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/persistence/maintenance.rs",
+    "file_id": "F_71a93e035ed7",
+    "batch_id": "B08",
+    "total_lines": 757,
+    "symbols_count": 33,
+    "types_count": 2
+  },
+  {
+    "path": "overlay-backend/src/persistence/migrations.rs",
+    "file_id": "F_c2c493caee5b",
+    "batch_id": "B08",
+    "total_lines": 53,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/persistence/mod.rs",
+    "file_id": "F_f22b82ab5539",
+    "batch_id": "B08",
+    "total_lines": 78,
+    "symbols_count": 3,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/persistence/models.rs",
+    "file_id": "F_078f59e18788",
+    "batch_id": "B08",
+    "total_lines": 173,
+    "symbols_count": 0,
+    "types_count": 10
+  },
+  {
+    "path": "overlay-backend/src/persistence/sqlite_store.rs",
+    "file_id": "F_1e9d2e9d5f9e",
+    "batch_id": "B08",
+    "total_lines": 1403,
+    "symbols_count": 65,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/re_transcribe.rs",
+    "file_id": "F_8fa5ae321113",
+    "batch_id": "B07",
+    "total_lines": 428,
+    "symbols_count": 15,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/recorder.rs",
+    "file_id": "F_4a8e3266d4dd",
+    "batch_id": "B07",
+    "total_lines": 1353,
+    "symbols_count": 48,
+    "types_count": 5
+  },
+  {
+    "path": "overlay-backend/src/runtime.rs",
+    "file_id": "F_20dbd1d5e44a",
+    "batch_id": "B06",
+    "total_lines": 1908,
+    "symbols_count": 21,
+    "types_count": 7
+  },
+  {
+    "path": "overlay-backend/src/runtime/summary_plan.rs",
+    "file_id": "F_6ddbcc7df57f",
+    "batch_id": "B06",
+    "total_lines": 468,
+    "symbols_count": 14,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/runtime/tests.rs",
+    "file_id": "F_af12b658d7e9",
+    "batch_id": "B06",
+    "total_lines": 1165,
+    "symbols_count": 48,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/runtime/trigger_detect.rs",
+    "file_id": "F_0a6c79b8f115",
+    "batch_id": "B06",
+    "total_lines": 657,
+    "symbols_count": 16,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/session_admin.rs",
+    "file_id": "F_e3e78904112f",
+    "batch_id": "B08",
+    "total_lines": 146,
+    "symbols_count": 6,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/session_audio.rs",
+    "file_id": "F_4caf66e1498e",
+    "batch_id": "B07",
+    "total_lines": 375,
+    "symbols_count": 20,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/session_names.rs",
+    "file_id": "F_cd8ade15fd6c",
+    "batch_id": "B08",
+    "total_lines": 165,
+    "symbols_count": 12,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/stt.rs",
+    "file_id": "F_9f4acc902ca9",
+    "batch_id": "B07",
+    "total_lines": 1643,
+    "symbols_count": 62,
+    "types_count": 6
+  },
+  {
+    "path": "overlay-backend/src/summary_source.rs",
+    "file_id": "F_c874e8c421ec",
+    "batch_id": "B08",
+    "total_lines": 171,
+    "symbols_count": 7,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/src/teratts_install.rs",
+    "file_id": "F_9f1e1f92292e",
+    "batch_id": "B10",
+    "total_lines": 934,
+    "symbols_count": 40,
+    "types_count": 4
+  },
+  {
+    "path": "overlay-backend/src/tests.rs",
+    "file_id": "F_9d3189bcb76e",
+    "batch_id": "B09",
+    "total_lines": 1904,
+    "symbols_count": 82,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/text.rs",
+    "file_id": "F_ae595ef163ec",
+    "batch_id": "B09",
+    "total_lines": 23,
+    "symbols_count": 2,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/tts.rs",
+    "file_id": "F_3096c03234cb",
+    "batch_id": "B10",
+    "total_lines": 2221,
+    "symbols_count": 133,
+    "types_count": 10
+  },
+  {
+    "path": "overlay-backend/src/tts_install.rs",
+    "file_id": "F_afa5d1e8e11a",
+    "batch_id": "B10",
+    "total_lines": 248,
+    "symbols_count": 7,
+    "types_count": 2
+  },
+  {
+    "path": "overlay-backend/src/tts_normalize.rs",
+    "file_id": "F_5a34cf79858c",
+    "batch_id": "B10",
+    "total_lines": 395,
+    "symbols_count": 27,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/src/update.rs",
+    "file_id": "F_4e9c0dd67702",
+    "batch_id": "B09",
+    "total_lines": 374,
+    "symbols_count": 11,
+    "types_count": 3
+  },
+  {
+    "path": "overlay-backend/src/vision.rs",
+    "file_id": "F_24fadcad6c74",
+    "batch_id": "B10",
+    "total_lines": 459,
+    "symbols_count": 16,
+    "types_count": 1
+  },
+  {
+    "path": "overlay-backend/tests/ai_eval.rs",
+    "file_id": "F_195d940b954a",
+    "batch_id": "B09",
+    "total_lines": 114,
+    "symbols_count": 7,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/tests/archive_cycle.rs",
+    "file_id": "F_511e8d777368",
+    "batch_id": "B09",
+    "total_lines": 181,
+    "symbols_count": 5,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/tests/hermes_plugin_smoke.rs",
+    "file_id": "F_021c3656714d",
+    "batch_id": "B09",
+    "total_lines": 57,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "overlay-backend/tests/no_window_guard.rs",
+    "file_id": "F_bcb66b96701a",
+    "batch_id": "B09",
+    "total_lines": 72,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/build-slint-release.ps1",
+    "file_id": "F_ab096b4137b4",
+    "batch_id": "B14",
+    "total_lines": 174,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/capture-reference-shots.ps1",
+    "file_id": "F_dd1485b0a1eb",
+    "batch_id": "B14",
+    "total_lines": 335,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/ci.ps1",
+    "file_id": "F_510634a72de8",
+    "batch_id": "B14",
+    "total_lines": 159,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/find_overlay_windows.ps1",
+    "file_id": "F_088503ee9603",
+    "batch_id": "B14",
+    "total_lines": 48,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/gen_icon.ps1",
+    "file_id": "F_0cf85261dae8",
+    "batch_id": "B14",
+    "total_lines": 107,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/get_hwnd_rect.ps1",
+    "file_id": "F_716a287e6385",
+    "batch_id": "B14",
+    "total_lines": 35,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/get_tile_rect.ps1",
+    "file_id": "F_c6b379d228cf",
+    "batch_id": "B14",
+    "total_lines": 35,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/git-gate-macos.sh",
+    "file_id": "F_2fafa828f821",
+    "batch_id": "B14",
+    "total_lines": 103,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/git-gate-native.ps1",
+    "file_id": "F_0f0ca3a8d0b0",
+    "batch_id": "B14",
+    "total_lines": 184,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/list_overlay_windows.ps1",
+    "file_id": "F_0fb43a8a3b72",
+    "batch_id": "B14",
+    "total_lines": 31,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/macos-mcp-interactive-qa.py",
+    "file_id": "F_4dbc0c74d0a1",
+    "batch_id": "B14",
+    "total_lines": 176,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/post-release-cleanup.ps1",
+    "file_id": "F_f9a1b4499b41",
+    "batch_id": "B14",
+    "total_lines": 241,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/probe_bar.ps1",
+    "file_id": "F_72f21ea96f2e",
+    "batch_id": "B14",
+    "total_lines": 38,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/qwen-parallel-audit.ps1",
+    "file_id": "F_aa1a62fed773",
+    "batch_id": "B14",
+    "total_lines": 284,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/screenshot_region.ps1",
+    "file_id": "F_ca3b581bafca",
+    "batch_id": "B14",
+    "total_lines": 10,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/set_opacity.ps1",
+    "file_id": "F_22f57ac0f60c",
+    "batch_id": "B14",
+    "total_lines": 8,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/setup-local-ai.ps1",
+    "file_id": "F_d96ca79d0d89",
+    "batch_id": "B14",
+    "total_lines": 254,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/sim_click.ps1",
+    "file_id": "F_7d0351981210",
+    "batch_id": "B14",
+    "total_lines": 34,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/slint-installer.nsi",
+    "file_id": "F_ad790036a29c",
+    "batch_id": "B14",
+    "total_lines": 160,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/stop-installed-suflyor.ps1",
+    "file_id": "F_61aafbb6f208",
+    "batch_id": "B14",
+    "total_lines": 47,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "scripts/sync-release-docs.ps1",
+    "file_id": "F_aefca4938468",
+    "batch_id": "B14",
+    "total_lines": 32,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/build.rs",
+    "file_id": "F_268c46394850",
+    "batch_id": "B14",
+    "total_lines": 72,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/scripts/build-macos-app.sh",
+    "file_id": "F_537deecf64dc",
+    "batch_id": "B14",
+    "total_lines": 239,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/scripts/build-macos-dmg.sh",
+    "file_id": "F_ae72ceccf5dc",
+    "batch_id": "B14",
+    "total_lines": 127,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/scripts/capture_primary.ps1",
+    "file_id": "F_26988cca6d58",
+    "batch_id": "B14",
+    "total_lines": 24,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/scripts/capture_window.ps1",
+    "file_id": "F_b56d190a70a0",
+    "batch_id": "B14",
+    "total_lines": 49,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/scripts/click_at.ps1",
+    "file_id": "F_517da91cddf3",
+    "batch_id": "B14",
+    "total_lines": 25,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/scripts/hold_at.ps1",
+    "file_id": "F_41cef950eec1",
+    "batch_id": "B14",
+    "total_lines": 22,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/scripts/send_key.ps1",
+    "file_id": "F_324d8a400adf",
+    "batch_id": "B14",
+    "total_lines": 18,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/scripts/type_text.ps1",
+    "file_id": "F_7d85aabf2834",
+    "batch_id": "B14",
+    "total_lines": 5,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/app_state.rs",
+    "file_id": "F_46113cce7e0d",
+    "batch_id": "B01",
+    "total_lines": 504,
+    "symbols_count": 14,
+    "types_count": 5
+  },
+  {
+    "path": "slint-experiment/src/bin/markdown_spike.rs",
+    "file_id": "F_4d73bf3fddff",
+    "batch_id": "B01",
+    "total_lines": 247,
+    "symbols_count": 4,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host.rs",
+    "file_id": "F_9ac1a412a426",
+    "batch_id": "B01",
+    "total_lines": 24,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/app_bootstrap.rs",
+    "file_id": "F_8c278f90ee54",
+    "batch_id": "B01",
+    "total_lines": 71,
+    "symbols_count": 1,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/aux_windows.rs",
+    "file_id": "F_7250e02f5f92",
+    "batch_id": "B03",
+    "total_lines": 83,
+    "symbols_count": 3,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+    "file_id": "F_2f48fcaef3d7",
+    "batch_id": "B03",
+    "total_lines": 1455,
+    "symbols_count": 26,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/aux_windows/help_palette.rs",
+    "file_id": "F_8f597238d520",
+    "batch_id": "B03",
+    "total_lines": 248,
+    "symbols_count": 6,
+    "types_count": 2
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/aux_windows/text_ask.rs",
+    "file_id": "F_239f8b0ec857",
+    "batch_id": "B03",
+    "total_lines": 197,
+    "symbols_count": 5,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs",
+    "file_id": "F_ef896c2b73d4",
+    "batch_id": "B03",
+    "total_lines": 1534,
+    "symbols_count": 25,
+    "types_count": 3
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/bar_tray.rs",
+    "file_id": "F_bc554ea2702a",
+    "batch_id": "B01",
+    "total_lines": 480,
+    "symbols_count": 15,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/capture_watchdog.rs",
+    "file_id": "F_7f8a5c712d11",
+    "batch_id": "B01",
+    "total_lines": 155,
+    "symbols_count": 9,
+    "types_count": 3
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/diagnostics.rs",
+    "file_id": "F_3b3cd1ae8204",
+    "batch_id": "B01",
+    "total_lines": 955,
+    "symbols_count": 23,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/hotkeys.rs",
+    "file_id": "F_7c4efcd05886",
+    "batch_id": "B04",
+    "total_lines": 231,
+    "symbols_count": 2,
+    "types_count": 2
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/kbd_shortcuts.rs",
+    "file_id": "F_8c6791371210",
+    "batch_id": "B04",
+    "total_lines": 111,
+    "symbols_count": 5,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/local_watchdog.rs",
+    "file_id": "F_2b377895783d",
+    "batch_id": "B01",
+    "total_lines": 125,
+    "symbols_count": 7,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/mlx_lifecycle.rs",
+    "file_id": "F_380a36844183",
+    "batch_id": "B01",
+    "total_lines": 240,
+    "symbols_count": 11,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/read_aloud.rs",
+    "file_id": "F_09da0f5f23f2",
+    "batch_id": "B03",
+    "total_lines": 263,
+    "symbols_count": 4,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/recovery.rs",
+    "file_id": "F_69b63541f095",
+    "batch_id": "B01",
+    "total_lines": 465,
+    "symbols_count": 15,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/settings_ai.rs",
+    "file_id": "F_ff0eac62bb61",
+    "batch_id": "B02",
+    "total_lines": 1547,
+    "symbols_count": 25,
+    "types_count": 2
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/settings_audio.rs",
+    "file_id": "F_263a3f9d3007",
+    "batch_id": "B02",
+    "total_lines": 494,
+    "symbols_count": 16,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+    "file_id": "F_31dda21e86c9",
+    "batch_id": "B02",
+    "total_lines": 1979,
+    "symbols_count": 11,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/settings_hermes.rs",
+    "file_id": "F_b753c5fe9248",
+    "batch_id": "B02",
+    "total_lines": 448,
+    "symbols_count": 6,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/settings_import_export.rs",
+    "file_id": "F_1f67bc62d5c0",
+    "batch_id": "B02",
+    "total_lines": 253,
+    "symbols_count": 3,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/settings_local_ai.rs",
+    "file_id": "F_7887c16d9193",
+    "batch_id": "B02",
+    "total_lines": 1524,
+    "symbols_count": 3,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/settings_memory.rs",
+    "file_id": "F_62c2b62709d8",
+    "batch_id": "B02",
+    "total_lines": 391,
+    "symbols_count": 10,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/settings_mlx.rs",
+    "file_id": "F_7b60268bd40c",
+    "batch_id": "B02",
+    "total_lines": 334,
+    "symbols_count": 13,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/settings_stt.rs",
+    "file_id": "F_e2e0aa32fe0e",
+    "batch_id": "B02",
+    "total_lines": 404,
+    "symbols_count": 13,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/settings_updates.rs",
+    "file_id": "F_b1c47c4a0995",
+    "batch_id": "B02",
+    "total_lines": 151,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/settings_vision.rs",
+    "file_id": "F_ecf89aa70c98",
+    "batch_id": "B02",
+    "total_lines": 395,
+    "symbols_count": 3,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/settings_voice.rs",
+    "file_id": "F_c1d0dad06c53",
+    "batch_id": "B02",
+    "total_lines": 475,
+    "symbols_count": 12,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/status_copy.rs",
+    "file_id": "F_5dc4448057ef",
+    "batch_id": "B01",
+    "total_lines": 357,
+    "symbols_count": 20,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/tile_ask.rs",
+    "file_id": "F_3cfcce409a86",
+    "batch_id": "B03",
+    "total_lines": 688,
+    "symbols_count": 4,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
+    "file_id": "F_8642212f8284",
+    "batch_id": "B03",
+    "total_lines": 1013,
+    "symbols_count": 20,
+    "types_count": 8
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/tile_copy.rs",
+    "file_id": "F_a775bc5d75ec",
+    "batch_id": "B03",
+    "total_lines": 1311,
+    "symbols_count": 58,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/tile_cost.rs",
+    "file_id": "F_bf9b6f6095fc",
+    "batch_id": "B03",
+    "total_lines": 69,
+    "symbols_count": 2,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/tile_followup.rs",
+    "file_id": "F_9e27922fa3b3",
+    "batch_id": "B03",
+    "total_lines": 988,
+    "symbols_count": 15,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/tile_ptt.rs",
+    "file_id": "F_204c21d0e9ad",
+    "batch_id": "B03",
+    "total_lines": 510,
+    "symbols_count": 4,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/tile_routes.rs",
+    "file_id": "F_3a419a6e9338",
+    "batch_id": "B03",
+    "total_lines": 146,
+    "symbols_count": 7,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/tile_window.rs",
+    "file_id": "F_20e4ab8c9b94",
+    "batch_id": "B03",
+    "total_lines": 450,
+    "symbols_count": 10,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/transcript_player.rs",
+    "file_id": "F_d4e14495f117",
+    "batch_id": "B03",
+    "total_lines": 585,
+    "symbols_count": 39,
+    "types_count": 3
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/vision_capture.rs",
+    "file_id": "F_6c65ee883a2b",
+    "batch_id": "B01",
+    "total_lines": 917,
+    "symbols_count": 8,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+    "file_id": "F_29d8564bf478",
+    "batch_id": "B04",
+    "total_lines": 705,
+    "symbols_count": 34,
+    "types_count": 3
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host/wizard.rs",
+    "file_id": "F_196e40a174ac",
+    "batch_id": "B01",
+    "total_lines": 488,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+    "file_id": "F_01b67db06b65",
+    "batch_id": "B01",
+    "total_lines": 4962,
+    "symbols_count": 8,
+    "types_count": 2
+  },
+  {
+    "path": "slint-experiment/src/bin/overlay_spike.rs",
+    "file_id": "F_7f98646b6312",
+    "batch_id": "B01",
+    "total_lines": 213,
+    "symbols_count": 4,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/capture.rs",
+    "file_id": "F_95501bdc5a17",
+    "batch_id": "B04",
+    "total_lines": 225,
+    "symbols_count": 10,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/src/lib.rs",
+    "file_id": "F_6f33c228b521",
+    "batch_id": "B01",
+    "total_lines": 23,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/lock_menu.rs",
+    "file_id": "F_ec1fbe23bacf",
+    "batch_id": "B01",
+    "total_lines": 166,
+    "symbols_count": 15,
+    "types_count": 3
+  },
+  {
+    "path": "slint-experiment/src/logging.rs",
+    "file_id": "F_3d67e45bcbf6",
+    "batch_id": "B01",
+    "total_lines": 169,
+    "symbols_count": 9,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/src/main.rs",
+    "file_id": "F_05fd21ee5cf8",
+    "batch_id": "B01",
+    "total_lines": 469,
+    "symbols_count": 12,
+    "types_count": 2
+  },
+  {
+    "path": "slint-experiment/src/markdown.rs",
+    "file_id": "F_b757e4c951cf",
+    "batch_id": "B01",
+    "total_lines": 938,
+    "symbols_count": 30,
+    "types_count": 3
+  },
+  {
+    "path": "slint-experiment/src/math_display.rs",
+    "file_id": "F_0a9689ed453b",
+    "batch_id": "B01",
+    "total_lines": 652,
+    "symbols_count": 27,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/native/macos/clipboard.m",
+    "file_id": "F_cb09e11cbdfd",
+    "batch_id": "B04",
+    "total_lines": 70,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/native/macos/clipboard.rs",
+    "file_id": "F_2c99d8ec5010",
+    "batch_id": "B04",
+    "total_lines": 58,
+    "symbols_count": 11,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/native/macos/lifecycle.rs",
+    "file_id": "F_233562d7f96b",
+    "batch_id": "B04",
+    "total_lines": 67,
+    "symbols_count": 3,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/src/native/macos/screen.m",
+    "file_id": "F_1332aff2d342",
+    "batch_id": "B04",
+    "total_lines": 344,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/native/macos/screen.rs",
+    "file_id": "F_aad4fcb85e74",
+    "batch_id": "B04",
+    "total_lines": 267,
+    "symbols_count": 18,
+    "types_count": 3
+  },
+  {
+    "path": "slint-experiment/src/native/macos/status.m",
+    "file_id": "F_bd3801137d37",
+    "batch_id": "B04",
+    "total_lines": 117,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/native/macos/status.rs",
+    "file_id": "F_46c13bb943cc",
+    "batch_id": "B04",
+    "total_lines": 56,
+    "symbols_count": 4,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/src/native/macos/window.m",
+    "file_id": "F_d407e9cb973b",
+    "batch_id": "B04",
+    "total_lines": 80,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/native/macos/window.rs",
+    "file_id": "F_46e998ee916d",
+    "batch_id": "B04",
+    "total_lines": 104,
+    "symbols_count": 13,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/native/mod.rs",
+    "file_id": "F_6d4d00ff7fac",
+    "batch_id": "B04",
+    "total_lines": 109,
+    "symbols_count": 2,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/native/windows/clipboard.rs",
+    "file_id": "F_65222f59b797",
+    "batch_id": "B04",
+    "total_lines": 23,
+    "symbols_count": 4,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/native/windows/lifecycle.rs",
+    "file_id": "F_c2ce4fae88c9",
+    "batch_id": "B04",
+    "total_lines": 56,
+    "symbols_count": 2,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/src/native/windows/screen.rs",
+    "file_id": "F_30499a01fd5a",
+    "batch_id": "B04",
+    "total_lines": 87,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/src/replay_backend.rs",
+    "file_id": "F_6b53a0bd6e77",
+    "batch_id": "B01",
+    "total_lines": 372,
+    "symbols_count": 11,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/src/runtime_state.rs",
+    "file_id": "F_dd657258773b",
+    "batch_id": "B01",
+    "total_lines": 340,
+    "symbols_count": 8,
+    "types_count": 2
+  },
+  {
+    "path": "slint-experiment/src/session_namer.rs",
+    "file_id": "F_4b36527b1237",
+    "batch_id": "B01",
+    "total_lines": 358,
+    "symbols_count": 16,
+    "types_count": 2
+  },
+  {
+    "path": "slint-experiment/src/slint_events.rs",
+    "file_id": "F_1e6d97067940",
+    "batch_id": "B01",
+    "total_lines": 254,
+    "symbols_count": 12,
+    "types_count": 8
+  },
+  {
+    "path": "slint-experiment/src/slint_session.rs",
+    "file_id": "F_68cf2ea4a0ae",
+    "batch_id": "B01",
+    "total_lines": 2117,
+    "symbols_count": 48,
+    "types_count": 3
+  },
+  {
+    "path": "slint-experiment/src/tray.rs",
+    "file_id": "F_8a33c4be728e",
+    "batch_id": "B01",
+    "total_lines": 656,
+    "symbols_count": 23,
+    "types_count": 5
+  },
+  {
+    "path": "slint-experiment/src/win32.rs",
+    "file_id": "F_037b5dbfefd2",
+    "batch_id": "B04",
+    "total_lines": 1430,
+    "symbols_count": 86,
+    "types_count": 4
+  },
+  {
+    "path": "slint-experiment/tests/audio_settings_guard.rs",
+    "file_id": "F_e2ee02320200",
+    "batch_id": "B05",
+    "total_lines": 45,
+    "symbols_count": 2,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/codex_copy_guard.rs",
+    "file_id": "F_3f55f2a4dc6b",
+    "batch_id": "B05",
+    "total_lines": 208,
+    "symbols_count": 9,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/i18n_guard.rs",
+    "file_id": "F_4c9c11ffac09",
+    "batch_id": "B05",
+    "total_lines": 396,
+    "symbols_count": 9,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/tests/icon_guard.rs",
+    "file_id": "F_3b87e7c40cd4",
+    "batch_id": "B05",
+    "total_lines": 197,
+    "symbols_count": 5,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/lock_chip_geometry_guard.rs",
+    "file_id": "F_f5932b28c655",
+    "batch_id": "B05",
+    "total_lines": 29,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/lock_chip_layout_guard.rs",
+    "file_id": "F_3a8be1900b3f",
+    "batch_id": "B05",
+    "total_lines": 22,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/lock_mode_menu_guard.rs",
+    "file_id": "F_24a72d7589a2",
+    "batch_id": "B05",
+    "total_lines": 30,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/lock_mode_menu_interaction.rs",
+    "file_id": "F_82bc8e469679",
+    "batch_id": "B05",
+    "total_lines": 56,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/macos_app_packaging_guard.rs",
+    "file_id": "F_3ed0aae709a6",
+    "batch_id": "B05",
+    "total_lines": 343,
+    "symbols_count": 10,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/macos_capture_watchdog_guard.rs",
+    "file_id": "F_c2434e16b2bc",
+    "batch_id": "B05",
+    "total_lines": 134,
+    "symbols_count": 3,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/macos_global_hotkeys_guard.rs",
+    "file_id": "F_8061d7929f90",
+    "batch_id": "B05",
+    "total_lines": 41,
+    "symbols_count": 2,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/macos_popups_guard.rs",
+    "file_id": "F_0337f78d871f",
+    "batch_id": "B05",
+    "total_lines": 42,
+    "symbols_count": 2,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/macos_settings_guard.rs",
+    "file_id": "F_a575472c41c6",
+    "batch_id": "B05",
+    "total_lines": 227,
+    "symbols_count": 8,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/macos_text_ask_guard.rs",
+    "file_id": "F_00cd8968660d",
+    "batch_id": "B05",
+    "total_lines": 72,
+    "symbols_count": 4,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/macos_tile_manager_guard.rs",
+    "file_id": "F_eb388354d107",
+    "batch_id": "B05",
+    "total_lines": 22,
+    "symbols_count": 2,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/macos_ui_callbacks_guard.rs",
+    "file_id": "F_c03ff22ce630",
+    "batch_id": "B05",
+    "total_lines": 32,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/mlx_lifecycle_guard.rs",
+    "file_id": "F_62f92ebc6f12",
+    "batch_id": "B05",
+    "total_lines": 91,
+    "symbols_count": 6,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/tests/native_lifecycle_guard.rs",
+    "file_id": "F_f5516d01f2f2",
+    "batch_id": "B05",
+    "total_lines": 55,
+    "symbols_count": 3,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/native_macos_status_guard.rs",
+    "file_id": "F_7710d4bc1a32",
+    "batch_id": "B05",
+    "total_lines": 95,
+    "symbols_count": 6,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/tests/native_macos_window_guard.rs",
+    "file_id": "F_b1641d9af711",
+    "batch_id": "B05",
+    "total_lines": 96,
+    "symbols_count": 2,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/native_screen_guard.rs",
+    "file_id": "F_860af149e87b",
+    "batch_id": "B05",
+    "total_lines": 115,
+    "symbols_count": 5,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/overlay_bar_geometry.rs",
+    "file_id": "F_71435e7c14cf",
+    "batch_id": "B05",
+    "total_lines": 235,
+    "symbols_count": 7,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/rc3_regression_guard.rs",
+    "file_id": "F_464de69bdf80",
+    "batch_id": "B05",
+    "total_lines": 45,
+    "symbols_count": 2,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/settings_reset_guard.rs",
+    "file_id": "F_6efd8bec0c71",
+    "batch_id": "B05",
+    "total_lines": 158,
+    "symbols_count": 5,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/tera_tts_layout_guard.rs",
+    "file_id": "F_0f579e5d9c38",
+    "batch_id": "B05",
+    "total_lines": 53,
+    "symbols_count": 2,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/tile_player_layout_guard.rs",
+    "file_id": "F_dc29b9de0aad",
+    "batch_id": "B05",
+    "total_lines": 69,
+    "symbols_count": 3,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/tray_guard.rs",
+    "file_id": "F_fb771d5a5ee4",
+    "batch_id": "B05",
+    "total_lines": 313,
+    "symbols_count": 9,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/tts_speech_policy_guard.rs",
+    "file_id": "F_e4328a193fca",
+    "batch_id": "B05",
+    "total_lines": 85,
+    "symbols_count": 4,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/tests/version_guard.rs",
+    "file_id": "F_89bab30037f5",
+    "batch_id": "B05",
+    "total_lines": 78,
+    "symbols_count": 3,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/ui/archive.slint",
+    "file_id": "F_22a05989fc18",
+    "batch_id": "B05",
+    "total_lines": 724,
+    "symbols_count": 38,
+    "types_count": 2
+  },
+  {
+    "path": "slint-experiment/ui/capture_overlay.slint",
+    "file_id": "F_c5a2f626bea9",
+    "batch_id": "B05",
+    "total_lines": 235,
+    "symbols_count": 16,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/ui/controls.slint",
+    "file_id": "F_031c650a3e2e",
+    "batch_id": "B05",
+    "total_lines": 175,
+    "symbols_count": 19,
+    "types_count": 4
+  },
+  {
+    "path": "slint-experiment/ui/help.slint",
+    "file_id": "F_c928dd518547",
+    "batch_id": "B05",
+    "total_lines": 370,
+    "symbols_count": 19,
+    "types_count": 4
+  },
+  {
+    "path": "slint-experiment/ui/index.slint",
+    "file_id": "F_18f18d093a45",
+    "batch_id": "B05",
+    "total_lines": 53,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/ui/lock_mode_menu.slint",
+    "file_id": "F_de95fa0cd432",
+    "batch_id": "B05",
+    "total_lines": 58,
+    "symbols_count": 5,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/ui/macos_ai_setup.slint",
+    "file_id": "F_ade0a904bf80",
+    "batch_id": "B05",
+    "total_lines": 148,
+    "symbols_count": 8,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/ui/markdown_spike.slint",
+    "file_id": "F_0fe5748b1c6c",
+    "batch_id": "B05",
+    "total_lines": 148,
+    "symbols_count": 3,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/ui/metrics.slint",
+    "file_id": "F_37f246fc2307",
+    "batch_id": "B05",
+    "total_lines": 93,
+    "symbols_count": 27,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/ui/overlay_bar.slint",
+    "file_id": "F_1063a095537e",
+    "batch_id": "B05",
+    "total_lines": 1504,
+    "symbols_count": 134,
+    "types_count": 9
+  },
+  {
+    "path": "slint-experiment/ui/overlay_spike.slint",
+    "file_id": "F_5abfe202f987",
+    "batch_id": "B05",
+    "total_lines": 56,
+    "symbols_count": 1,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/ui/palette.slint",
+    "file_id": "F_486c3d8cfe9e",
+    "batch_id": "B05",
+    "total_lines": 268,
+    "symbols_count": 12,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/ui/platform.slint",
+    "file_id": "F_c091e73d59f1",
+    "batch_id": "B05",
+    "total_lines": 3,
+    "symbols_count": 1,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/ui/recover_offer.slint",
+    "file_id": "F_be0296d2a422",
+    "batch_id": "B05",
+    "total_lines": 183,
+    "symbols_count": 9,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/ui/replay.slint",
+    "file_id": "F_6c0d4874f031",
+    "batch_id": "B05",
+    "total_lines": 225,
+    "symbols_count": 13,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/ui/settings_controls.slint",
+    "file_id": "F_615bd21f0875",
+    "batch_id": "B05",
+    "total_lines": 185,
+    "symbols_count": 26,
+    "types_count": 9
+  },
+  {
+    "path": "slint-experiment/ui/settings_panel.slint",
+    "file_id": "F_7abb3fee5ac1",
+    "batch_id": "B05",
+    "total_lines": 4170,
+    "symbols_count": 378,
+    "types_count": 1
+  },
+  {
+    "path": "slint-experiment/ui/text_ask.slint",
+    "file_id": "F_306797a01dfe",
+    "batch_id": "B05",
+    "total_lines": 173,
+    "symbols_count": 12,
+    "types_count": 2
+  },
+  {
+    "path": "slint-experiment/ui/theme.slint",
+    "file_id": "F_b7cff4dd7cf1",
+    "batch_id": "B05",
+    "total_lines": 69,
+    "symbols_count": 22,
+    "types_count": 0
+  },
+  {
+    "path": "slint-experiment/ui/tile.slint",
+    "file_id": "F_ca55ef29ec2a",
+    "batch_id": "B05",
+    "total_lines": 1116,
+    "symbols_count": 79,
+    "types_count": 4
+  },
+  {
+    "path": "slint-experiment/ui/transcript.slint",
+    "file_id": "F_5d4daaad7255",
+    "batch_id": "B05",
+    "total_lines": 1083,
+    "symbols_count": 67,
+    "types_count": 2
+  },
+  {
+    "path": "slint-experiment/ui/tray_menu.slint",
+    "file_id": "F_df8ee98a173c",
+    "batch_id": "B05",
+    "total_lines": 105,
+    "symbols_count": 13,
+    "types_count": 2
+  },
+  {
+    "path": "slint-experiment/ui/wizard.slint",
+    "file_id": "F_e1ae3f03b7c9",
+    "batch_id": "B05",
+    "total_lines": 453,
+    "symbols_count": 36,
+    "types_count": 3
+  },
+  {
+    "path": "suflyor-mlx/Package.swift",
+    "file_id": "F_e9ec840b1378",
+    "batch_id": "B15",
+    "total_lines": 31,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "suflyor-mlx/Scripts/build-metallib.sh",
+    "file_id": "F_ee2839b9197c",
+    "batch_id": "B15",
+    "total_lines": 102,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "suflyor-mlx/Sources/SuflyorMLX/main.swift",
+    "file_id": "F_e5f0de62fae4",
+    "batch_id": "B15",
+    "total_lines": 41,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "suflyor-mlx/Sources/SuflyorMLXCore/Protocol.swift",
+    "file_id": "F_141789cc3569",
+    "batch_id": "B15",
+    "total_lines": 247,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "suflyor-mlx/Sources/SuflyorMLXCore/Server.swift",
+    "file_id": "F_33873fc88cb6",
+    "batch_id": "B15",
+    "total_lines": 516,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "suflyor-mlx/Tests/SuflyorMLXCoreTests/ProtocolTests.swift",
+    "file_id": "F_264791fd60be",
+    "batch_id": "B15",
+    "total_lines": 249,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "suflyor-teratts/src/chunk.rs",
+    "file_id": "F_65fa1d51efab",
+    "batch_id": "B12",
+    "total_lines": 107,
+    "symbols_count": 9,
+    "types_count": 0
+  },
+  {
+    "path": "suflyor-teratts/src/indexer.rs",
+    "file_id": "F_99ab94fcc6d4",
+    "batch_id": "B12",
+    "total_lines": 125,
+    "symbols_count": 10,
+    "types_count": 1
+  },
+  {
+    "path": "suflyor-teratts/src/main.rs",
+    "file_id": "F_89959d88732d",
+    "batch_id": "B12",
+    "total_lines": 1113,
+    "symbols_count": 62,
+    "types_count": 13
+  },
+  {
+    "path": "suflyor-teratts/src/manifest.rs",
+    "file_id": "F_75e14fb627ce",
+    "batch_id": "B12",
+    "total_lines": 243,
+    "symbols_count": 12,
+    "types_count": 2
+  },
+  {
+    "path": "suflyor-teratts/src/npy.rs",
+    "file_id": "F_426d54bada46",
+    "batch_id": "B12",
+    "total_lines": 211,
+    "symbols_count": 10,
+    "types_count": 1
+  },
+  {
+    "path": "suflyor-teratts/src/num2words.rs",
+    "file_id": "F_c25bc77cb21b",
+    "batch_id": "B12",
+    "total_lines": 424,
+    "symbols_count": 16,
+    "types_count": 1
+  },
+  {
+    "path": "suflyor-teratts/src/playback.rs",
+    "file_id": "F_8c18d742ed58",
+    "batch_id": "B12",
+    "total_lines": 470,
+    "symbols_count": 25,
+    "types_count": 4
+  },
+  {
+    "path": "suflyor-teratts/src/playback_macos.rs",
+    "file_id": "F_d85ad53c03fd",
+    "batch_id": "B12",
+    "total_lines": 513,
+    "symbols_count": 27,
+    "types_count": 6
+  },
+  {
+    "path": "suflyor-teratts/src/protocol.rs",
+    "file_id": "F_58fd0e4d2e6f",
+    "batch_id": "B12",
+    "total_lines": 332,
+    "symbols_count": 14,
+    "types_count": 3
+  },
+  {
+    "path": "suflyor-teratts/src/rng.rs",
+    "file_id": "F_6f433611bf27",
+    "batch_id": "B12",
+    "total_lines": 94,
+    "symbols_count": 8,
+    "types_count": 1
+  },
+  {
+    "path": "suflyor-teratts/src/tera.rs",
+    "file_id": "F_fd1c17174da1",
+    "batch_id": "B12",
+    "total_lines": 546,
+    "symbols_count": 19,
+    "types_count": 2
+  },
+  {
+    "path": "suflyor-teratts/src/textnorm.rs",
+    "file_id": "F_5dcacc9b3263",
+    "batch_id": "B12",
+    "total_lines": 480,
+    "symbols_count": 23,
+    "types_count": 2
+  },
+  {
+    "path": "suflyor-tts/src/diar.rs",
+    "file_id": "F_a1d180f259fa",
+    "batch_id": "B11",
+    "total_lines": 364,
+    "symbols_count": 17,
+    "types_count": 2
+  },
+  {
+    "path": "suflyor-tts/src/engine.rs",
+    "file_id": "F_82c260296648",
+    "batch_id": "B11",
+    "total_lines": 305,
+    "symbols_count": 18,
+    "types_count": 2
+  },
+  {
+    "path": "suflyor-tts/src/main.rs",
+    "file_id": "F_1bbe4d0007b8",
+    "batch_id": "B11",
+    "total_lines": 404,
+    "symbols_count": 12,
+    "types_count": 3
+  },
+  {
+    "path": "suflyor-tts/src/playback.rs",
+    "file_id": "F_831d09d04121",
+    "batch_id": "B11",
+    "total_lines": 472,
+    "symbols_count": 27,
+    "types_count": 5
+  },
+  {
+    "path": "suflyor-tts/src/playback_macos.rs",
+    "file_id": "F_5e78950e9966",
+    "batch_id": "B11",
+    "total_lines": 474,
+    "symbols_count": 25,
+    "types_count": 6
+  },
+  {
+    "path": "suflyor-tts/src/playback_unavailable.rs",
+    "file_id": "F_daf89e00fa35",
+    "batch_id": "B11",
+    "total_lines": 52,
+    "symbols_count": 8,
+    "types_count": 1
+  },
+  {
+    "path": "suflyor-wsola/src/error.rs",
+    "file_id": "F_eb05d9f31a2c",
+    "batch_id": "B13",
+    "total_lines": 43,
+    "symbols_count": 1,
+    "types_count": 1
+  },
+  {
+    "path": "suflyor-wsola/src/lib.rs",
+    "file_id": "F_923f89ede9c0",
+    "batch_id": "B13",
+    "total_lines": 14,
+    "symbols_count": 0,
+    "types_count": 0
+  },
+  {
+    "path": "suflyor-wsola/src/stream.rs",
+    "file_id": "F_e8e426e7f8dc",
+    "batch_id": "B13",
+    "total_lines": 105,
+    "symbols_count": 6,
+    "types_count": 1
+  },
+  {
+    "path": "suflyor-wsola/src/wsola.rs",
+    "file_id": "F_ba1e685b595a",
+    "batch_id": "B13",
+    "total_lines": 1018,
+    "symbols_count": 27,
+    "types_count": 1
+  },
+  {
+    "path": "suflyor-wsola/tests/speech_contract.rs",
+    "file_id": "F_0d5665d86303",
+    "batch_id": "B13",
+    "total_lines": 47,
+    "symbols_count": 3,
+    "types_count": 0
+  },
+  {
+    "path": "tests/live-corpus/tools/fetch-transcripts.py",
+    "file_id": "F_80d907f78fc7",
+    "batch_id": "B15",
+    "total_lines": 278,
+    "symbols_count": 0,
+    "types_count": 0
+  }
+]

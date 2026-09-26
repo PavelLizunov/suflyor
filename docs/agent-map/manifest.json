@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "campaign_id": "suflyor-map-v1",
+  "source_commit": "a4c998740de4d25c3939d1bcf63a7c07af820682",
+  "generated_at": "2026-09-26T14:23:44.037113+00:00",
+  "inventory": {
+    "total_paths": 828,
+    "code_files": 303,
+    "files_jsonl_sha256": "5eee27926b090c50c8080db03a7ccb785e77fb4d1572f28e92c68232241e7cfe",
+    "partitions_json_sha256": "68315ac47dab734cd9ba1d9f01acb0b20df54c17d1e05b0c063cbe1213c4f2bb"
+  },
+  "records": {
+    "symbols_count": 4500,
+    "types_count": 406,
+    "errors_count": 1,
+    "error_sites_count": 461,
+    "configs_count": 213,
+    "hotkeys_count": 18,
+    "behaviors_count": 457,
+    "symbols_jsonl_sha256": "d277aa7a7d2a0cad22dc3b975c08ce7329eb769de5a0b960de481d2471e39d5d",
+    "types_jsonl_sha256": "ab220e3ac7fc58e76771b0de07d5a8fe2d8449348ea92ee82a05d584517e1d30",
+    "errors_jsonl_sha256": "d5ccb2357997af810adbbd011ba5587c55773c621ef428ecd0e758c3377a882d",
+    "error_sites_jsonl_sha256": "dfd4f3a51451171abf7c864a74b3ddbc16f83213e26dd45de421728def108244"
+  },
+  "reviews": {
+    "O1_sha256": "9218d4d6e748366401bc3ea3ed3e871dd247c2f8da0fdb0aa48dc31233ff58e3",
+    "O2_sha256": "dea000aafe3f04c1574a2f865384986007506639da243bc04f531d696e38f5db",
+    "O3_sha256": "d7c26e78c1201a9d6d60b9e64baa9a75be74bf51e0a65626bc7b2e342f3ce02d",
+    "O4_sha256": "d60450aab40fe5ba7a56a5c7479dac91e34c7728da3e4f203928ea41dee42a3d",
+    "O5_sha256": "c282a65fdd94c9abf33ebad2c963587335e22d15e354094e52abb4cd4ecd21ff",
+    "O6_sha256": "b36efad8e18e9d8535bf652daa2627caef66462c856873a85b4fb3c2ee144b3f",
+    "O7_sha256": "c2dc9dee39f2fd0b72084d5d1556147067a2dd6d1d9944f9d1b31ffb613958ac",
+    "O8_sha256": "66dce507441ca6c98d90017030e4c0a69806e8991346575c56e3a23aabf5e342"
+  },
+  "coverage": {
+    "physical_lines_analyzed": 121388,
+    "physical_lines_covered": 121388,
+    "coverage_percentage": 100.0
+  },
+  "status": "COMPLETED_RECONCILED"
+}

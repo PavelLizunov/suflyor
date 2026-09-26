@@ -1,0 +1,3404 @@
+{
+  "B01": {
+    "total_files": 29,
+    "code_files": 27,
+    "files": [
+      {
+        "file_id": "F_c6926bba48eb",
+        "path": "slint-experiment/AGENTS.md"
+      },
+      {
+        "file_id": "F_46113cce7e0d",
+        "path": "slint-experiment/src/app_state.rs"
+      },
+      {
+        "file_id": "F_4d73bf3fddff",
+        "path": "slint-experiment/src/bin/markdown_spike.rs"
+      },
+      {
+        "file_id": "F_9ac1a412a426",
+        "path": "slint-experiment/src/bin/overlay_host.rs"
+      },
+      {
+        "file_id": "F_6591e692aa98",
+        "path": "slint-experiment/src/bin/overlay_host/AGENTS.md"
+      },
+      {
+        "file_id": "F_8c278f90ee54",
+        "path": "slint-experiment/src/bin/overlay_host/app_bootstrap.rs"
+      },
+      {
+        "file_id": "F_bc554ea2702a",
+        "path": "slint-experiment/src/bin/overlay_host/bar_tray.rs"
+      },
+      {
+        "file_id": "F_7f8a5c712d11",
+        "path": "slint-experiment/src/bin/overlay_host/capture_watchdog.rs"
+      },
+      {
+        "file_id": "F_3b3cd1ae8204",
+        "path": "slint-experiment/src/bin/overlay_host/diagnostics.rs"
+      },
+      {
+        "file_id": "F_2b377895783d",
+        "path": "slint-experiment/src/bin/overlay_host/local_watchdog.rs"
+      },
+      {
+        "file_id": "F_380a36844183",
+        "path": "slint-experiment/src/bin/overlay_host/mlx_lifecycle.rs"
+      },
+      {
+        "file_id": "F_69b63541f095",
+        "path": "slint-experiment/src/bin/overlay_host/recovery.rs"
+      },
+      {
+        "file_id": "F_5dc4448057ef",
+        "path": "slint-experiment/src/bin/overlay_host/status_copy.rs"
+      },
+      {
+        "file_id": "F_6c65ee883a2b",
+        "path": "slint-experiment/src/bin/overlay_host/vision_capture.rs"
+      },
+      {
+        "file_id": "F_196e40a174ac",
+        "path": "slint-experiment/src/bin/overlay_host/wizard.rs"
+      },
+      {
+        "file_id": "F_01b67db06b65",
+        "path": "slint-experiment/src/bin/overlay_host_windows.rs"
+      },
+      {
+        "file_id": "F_7f98646b6312",
+        "path": "slint-experiment/src/bin/overlay_spike.rs"
+      },
+      {
+        "file_id": "F_6f33c228b521",
+        "path": "slint-experiment/src/lib.rs"
+      },
+      {
+        "file_id": "F_ec1fbe23bacf",
+        "path": "slint-experiment/src/lock_menu.rs"
+      },
+      {
+        "file_id": "F_3d67e45bcbf6",
+        "path": "slint-experiment/src/logging.rs"
+      },
+      {
+        "file_id": "F_05fd21ee5cf8",
+        "path": "slint-experiment/src/main.rs"
+      },
+      {
+        "file_id": "F_b757e4c951cf",
+        "path": "slint-experiment/src/markdown.rs"
+      },
+      {
+        "file_id": "F_0a9689ed453b",
+        "path": "slint-experiment/src/math_display.rs"
+      },
+      {
+        "file_id": "F_6b53a0bd6e77",
+        "path": "slint-experiment/src/replay_backend.rs"
+      },
+      {
+        "file_id": "F_dd657258773b",
+        "path": "slint-experiment/src/runtime_state.rs"
+      },
+      {
+        "file_id": "F_4b36527b1237",
+        "path": "slint-experiment/src/session_namer.rs"
+      },
+      {
+        "file_id": "F_1e6d97067940",
+        "path": "slint-experiment/src/slint_events.rs"
+      },
+      {
+        "file_id": "F_68cf2ea4a0ae",
+        "path": "slint-experiment/src/slint_session.rs"
+      },
+      {
+        "file_id": "F_8a33c4be728e",
+        "path": "slint-experiment/src/tray.rs"
+      }
+    ]
+  },
+  "B02": {
+    "total_files": 12,
+    "code_files": 12,
+    "files": [
+      {
+        "file_id": "F_ff0eac62bb61",
+        "path": "slint-experiment/src/bin/overlay_host/settings_ai.rs"
+      },
+      {
+        "file_id": "F_263a3f9d3007",
+        "path": "slint-experiment/src/bin/overlay_host/settings_audio.rs"
+      },
+      {
+        "file_id": "F_31dda21e86c9",
+        "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs"
+      },
+      {
+        "file_id": "F_b753c5fe9248",
+        "path": "slint-experiment/src/bin/overlay_host/settings_hermes.rs"
+      },
+      {
+        "file_id": "F_1f67bc62d5c0",
+        "path": "slint-experiment/src/bin/overlay_host/settings_import_export.rs"
+      },
+      {
+        "file_id": "F_7887c16d9193",
+        "path": "slint-experiment/src/bin/overlay_host/settings_local_ai.rs"
+      },
+      {
+        "file_id": "F_62c2b62709d8",
+        "path": "slint-experiment/src/bin/overlay_host/settings_memory.rs"
+      },
+      {
+        "file_id": "F_7b60268bd40c",
+        "path": "slint-experiment/src/bin/overlay_host/settings_mlx.rs"
+      },
+      {
+        "file_id": "F_e2e0aa32fe0e",
+        "path": "slint-experiment/src/bin/overlay_host/settings_stt.rs"
+      },
+      {
+        "file_id": "F_b1c47c4a0995",
+        "path": "slint-experiment/src/bin/overlay_host/settings_updates.rs"
+      },
+      {
+        "file_id": "F_ecf89aa70c98",
+        "path": "slint-experiment/src/bin/overlay_host/settings_vision.rs"
+      },
+      {
+        "file_id": "F_c1d0dad06c53",
+        "path": "slint-experiment/src/bin/overlay_host/settings_voice.rs"
+      }
+    ]
+  },
+  "B03": {
+    "total_files": 15,
+    "code_files": 15,
+    "files": [
+      {
+        "file_id": "F_7250e02f5f92",
+        "path": "slint-experiment/src/bin/overlay_host/aux_windows.rs"
+      },
+      {
+        "file_id": "F_2f48fcaef3d7",
+        "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs"
+      },
+      {
+        "file_id": "F_8f597238d520",
+        "path": "slint-experiment/src/bin/overlay_host/aux_windows/help_palette.rs"
+      },
+      {
+        "file_id": "F_239f8b0ec857",
+        "path": "slint-experiment/src/bin/overlay_host/aux_windows/text_ask.rs"
+      },
+      {
+        "file_id": "F_ef896c2b73d4",
+        "path": "slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs"
+      },
+      {
+        "file_id": "F_09da0f5f23f2",
+        "path": "slint-experiment/src/bin/overlay_host/read_aloud.rs"
+      },
+      {
+        "file_id": "F_3cfcce409a86",
+        "path": "slint-experiment/src/bin/overlay_host/tile_ask.rs"
+      },
+      {
+        "file_id": "F_8642212f8284",
+        "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs"
+      },
+      {
+        "file_id": "F_a775bc5d75ec",
+        "path": "slint-experiment/src/bin/overlay_host/tile_copy.rs"
+      },
+      {
+        "file_id": "F_bf9b6f6095fc",
+        "path": "slint-experiment/src/bin/overlay_host/tile_cost.rs"
+      },
+      {
+        "file_id": "F_9e27922fa3b3",
+        "path": "slint-experiment/src/bin/overlay_host/tile_followup.rs"
+      },
+      {
+        "file_id": "F_204c21d0e9ad",
+        "path": "slint-experiment/src/bin/overlay_host/tile_ptt.rs"
+      },
+      {
+        "file_id": "F_3a419a6e9338",
+        "path": "slint-experiment/src/bin/overlay_host/tile_routes.rs"
+      },
+      {
+        "file_id": "F_20e4ab8c9b94",
+        "path": "slint-experiment/src/bin/overlay_host/tile_window.rs"
+      },
+      {
+        "file_id": "F_d4e14495f117",
+        "path": "slint-experiment/src/bin/overlay_host/transcript_player.rs"
+      }
+    ]
+  },
+  "B04": {
+    "total_files": 19,
+    "code_files": 18,
+    "files": [
+      {
+        "file_id": "F_7c4efcd05886",
+        "path": "slint-experiment/src/bin/overlay_host/hotkeys.rs"
+      },
+      {
+        "file_id": "F_8c6791371210",
+        "path": "slint-experiment/src/bin/overlay_host/kbd_shortcuts.rs"
+      },
+      {
+        "file_id": "F_29d8564bf478",
+        "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs"
+      },
+      {
+        "file_id": "F_95501bdc5a17",
+        "path": "slint-experiment/src/capture.rs"
+      },
+      {
+        "file_id": "F_d90b35a5aae7",
+        "path": "slint-experiment/src/native/AGENTS.md"
+      },
+      {
+        "file_id": "F_cb09e11cbdfd",
+        "path": "slint-experiment/src/native/macos/clipboard.m"
+      },
+      {
+        "file_id": "F_2c99d8ec5010",
+        "path": "slint-experiment/src/native/macos/clipboard.rs"
+      },
+      {
+        "file_id": "F_233562d7f96b",
+        "path": "slint-experiment/src/native/macos/lifecycle.rs"
+      },
+      {
+        "file_id": "F_1332aff2d342",
+        "path": "slint-experiment/src/native/macos/screen.m"
+      },
+      {
+        "file_id": "F_aad4fcb85e74",
+        "path": "slint-experiment/src/native/macos/screen.rs"
+      },
+      {
+        "file_id": "F_bd3801137d37",
+        "path": "slint-experiment/src/native/macos/status.m"
+      },
+      {
+        "file_id": "F_46c13bb943cc",
+        "path": "slint-experiment/src/native/macos/status.rs"
+      },
+      {
+        "file_id": "F_d407e9cb973b",
+        "path": "slint-experiment/src/native/macos/window.m"
+      },
+      {
+        "file_id": "F_46e998ee916d",
+        "path": "slint-experiment/src/native/macos/window.rs"
+      },
+      {
+        "file_id": "F_6d4d00ff7fac",
+        "path": "slint-experiment/src/native/mod.rs"
+      },
+      {
+        "file_id": "F_65222f59b797",
+        "path": "slint-experiment/src/native/windows/clipboard.rs"
+      },
+      {
+        "file_id": "F_c2ce4fae88c9",
+        "path": "slint-experiment/src/native/windows/lifecycle.rs"
+      },
+      {
+        "file_id": "F_30499a01fd5a",
+        "path": "slint-experiment/src/native/windows/screen.rs"
+      },
+      {
+        "file_id": "F_037b5dbfefd2",
+        "path": "slint-experiment/src/win32.rs"
+      }
+    ]
+  },
+  "B05": {
+    "total_files": 116,
+    "code_files": 52,
+    "files": [
+      {
+        "file_id": "F_348acc60d018",
+        "path": "slint-experiment/assets/AGENTS.md"
+      },
+      {
+        "file_id": "F_94f335b46eb1",
+        "path": "slint-experiment/assets/brand-head.svg"
+      },
+      {
+        "file_id": "F_1b5aac308bee",
+        "path": "slint-experiment/assets/brand-mark-light.png"
+      },
+      {
+        "file_id": "F_283c45051b7d",
+        "path": "slint-experiment/assets/brand-mark.png"
+      },
+      {
+        "file_id": "F_0b3e41c45ec1",
+        "path": "slint-experiment/assets/brand-penguin.svg"
+      },
+      {
+        "file_id": "F_d55795eae4aa",
+        "path": "slint-experiment/assets/icon-source.png"
+      },
+      {
+        "file_id": "F_6e1ac636af1d",
+        "path": "slint-experiment/assets/icon.ico"
+      },
+      {
+        "file_id": "F_fdd5d8ca89a2",
+        "path": "slint-experiment/assets/icon.png"
+      },
+      {
+        "file_id": "F_207ed7ca16d1",
+        "path": "slint-experiment/assets/icon.svg"
+      },
+      {
+        "file_id": "F_b18cc29c0f87",
+        "path": "slint-experiment/assets/icons/README.md"
+      },
+      {
+        "file_id": "F_a510c254289c",
+        "path": "slint-experiment/assets/icons/ai.svg"
+      },
+      {
+        "file_id": "F_7b7850aa5933",
+        "path": "slint-experiment/assets/icons/archive.svg"
+      },
+      {
+        "file_id": "F_04ea2114c3a6",
+        "path": "slint-experiment/assets/icons/arrow-up.svg"
+      },
+      {
+        "file_id": "F_d0dec50423e7",
+        "path": "slint-experiment/assets/icons/audio.svg"
+      },
+      {
+        "file_id": "F_94c95b07765c",
+        "path": "slint-experiment/assets/icons/brain.svg"
+      },
+      {
+        "file_id": "F_42d237505f60",
+        "path": "slint-experiment/assets/icons/bubble.svg"
+      },
+      {
+        "file_id": "F_36bdc4e82c3f",
+        "path": "slint-experiment/assets/icons/camera.svg"
+      },
+      {
+        "file_id": "F_2d866e580879",
+        "path": "slint-experiment/assets/icons/check.svg"
+      },
+      {
+        "file_id": "F_f6cf7ed33ca1",
+        "path": "slint-experiment/assets/icons/coach.svg"
+      },
+      {
+        "file_id": "F_c222ceabb241",
+        "path": "slint-experiment/assets/icons/copy.svg"
+      },
+      {
+        "file_id": "F_e08304c3b0bc",
+        "path": "slint-experiment/assets/icons/diag.svg"
+      },
+      {
+        "file_id": "F_afcc25cacb3c",
+        "path": "slint-experiment/assets/icons/flame.svg"
+      },
+      {
+        "file_id": "F_804670ffe62d",
+        "path": "slint-experiment/assets/icons/gear.svg"
+      },
+      {
+        "file_id": "F_010cce1b7d72",
+        "path": "slint-experiment/assets/icons/grip.svg"
+      },
+      {
+        "file_id": "F_01a6e8f67d08",
+        "path": "slint-experiment/assets/icons/kb.svg"
+      },
+      {
+        "file_id": "F_fba8d0be8e19",
+        "path": "slint-experiment/assets/icons/knowledge.svg"
+      },
+      {
+        "file_id": "F_5d5215287b89",
+        "path": "slint-experiment/assets/icons/lock.svg"
+      },
+      {
+        "file_id": "F_2f8648748e12",
+        "path": "slint-experiment/assets/icons/maximize.svg"
+      },
+      {
+        "file_id": "F_2f3a5d3b9dfb",
+        "path": "slint-experiment/assets/icons/mic.svg"
+      },
+      {
+        "file_id": "F_156babc42df9",
+        "path": "slint-experiment/assets/icons/micslash.svg"
+      },
+      {
+        "file_id": "F_ae5bfff91902",
+        "path": "slint-experiment/assets/icons/minimize.svg"
+      },
+      {
+        "file_id": "F_992a96e38547",
+        "path": "slint-experiment/assets/icons/monitor.svg"
+      },
+      {
+        "file_id": "F_a2f586621ef3",
+        "path": "slint-experiment/assets/icons/more.svg"
+      },
+      {
+        "file_id": "F_c8211fde2e2f",
+        "path": "slint-experiment/assets/icons/pause.svg"
+      },
+      {
+        "file_id": "F_9fdd958a1999",
+        "path": "slint-experiment/assets/icons/pencil.svg"
+      },
+      {
+        "file_id": "F_d5aaf37f4b55",
+        "path": "slint-experiment/assets/icons/play.svg"
+      },
+      {
+        "file_id": "F_57e491029551",
+        "path": "slint-experiment/assets/icons/plus.svg"
+      },
+      {
+        "file_id": "F_99c88a72b0ef",
+        "path": "slint-experiment/assets/icons/refresh.svg"
+      },
+      {
+        "file_id": "F_2e71443b7826",
+        "path": "slint-experiment/assets/icons/restart.svg"
+      },
+      {
+        "file_id": "F_ea0db99b43f1",
+        "path": "slint-experiment/assets/icons/restore.svg"
+      },
+      {
+        "file_id": "F_117d95690f85",
+        "path": "slint-experiment/assets/icons/seek-back.svg"
+      },
+      {
+        "file_id": "F_7cbe8ae9cd70",
+        "path": "slint-experiment/assets/icons/seek-forward.svg"
+      },
+      {
+        "file_id": "F_d54cdf65b979",
+        "path": "slint-experiment/assets/icons/select-text.svg"
+      },
+      {
+        "file_id": "F_92ea208d3390",
+        "path": "slint-experiment/assets/icons/session-start.svg"
+      },
+      {
+        "file_id": "F_cd3cb5e407b1",
+        "path": "slint-experiment/assets/icons/sos.svg"
+      },
+      {
+        "file_id": "F_7adc26bfe6c8",
+        "path": "slint-experiment/assets/icons/speed.svg"
+      },
+      {
+        "file_id": "F_20e7140c6c71",
+        "path": "slint-experiment/assets/icons/star.svg"
+      },
+      {
+        "file_id": "F_c810dfe9d312",
+        "path": "slint-experiment/assets/icons/stealth.svg"
+      },
+      {
+        "file_id": "F_d5a63548462b",
+        "path": "slint-experiment/assets/icons/stop.svg"
+      },
+      {
+        "file_id": "F_8f51305eb86b",
+        "path": "slint-experiment/assets/icons/stt.svg"
+      },
+      {
+        "file_id": "F_50993ce261fe",
+        "path": "slint-experiment/assets/icons/summary.svg"
+      },
+      {
+        "file_id": "F_b51b26979dbb",
+        "path": "slint-experiment/assets/icons/system-audio.svg"
+      },
+      {
+        "file_id": "F_c18dcf33f7ee",
+        "path": "slint-experiment/assets/icons/tiles.svg"
+      },
+      {
+        "file_id": "F_53f5ef307cd2",
+        "path": "slint-experiment/assets/icons/trash.svg"
+      },
+      {
+        "file_id": "F_3434b5aea0fd",
+        "path": "slint-experiment/assets/icons/tray.svg"
+      },
+      {
+        "file_id": "F_a540623f5871",
+        "path": "slint-experiment/assets/icons/unlock.svg"
+      },
+      {
+        "file_id": "F_b98f6c442ae4",
+        "path": "slint-experiment/assets/icons/update.svg"
+      },
+      {
+        "file_id": "F_ad7934d222a8",
+        "path": "slint-experiment/assets/icons/user.svg"
+      },
+      {
+        "file_id": "F_f15eeaa23b73",
+        "path": "slint-experiment/assets/icons/voice.svg"
+      },
+      {
+        "file_id": "F_6937cb3e83a4",
+        "path": "slint-experiment/assets/icons/x.svg"
+      },
+      {
+        "file_id": "F_435cc0e4418e",
+        "path": "slint-experiment/tests/AGENTS.md"
+      },
+      {
+        "file_id": "F_e2ee02320200",
+        "path": "slint-experiment/tests/audio_settings_guard.rs"
+      },
+      {
+        "file_id": "F_3f55f2a4dc6b",
+        "path": "slint-experiment/tests/codex_copy_guard.rs"
+      },
+      {
+        "file_id": "F_4c9c11ffac09",
+        "path": "slint-experiment/tests/i18n_guard.rs"
+      },
+      {
+        "file_id": "F_3b87e7c40cd4",
+        "path": "slint-experiment/tests/icon_guard.rs"
+      },
+      {
+        "file_id": "F_f5932b28c655",
+        "path": "slint-experiment/tests/lock_chip_geometry_guard.rs"
+      },
+      {
+        "file_id": "F_3a8be1900b3f",
+        "path": "slint-experiment/tests/lock_chip_layout_guard.rs"
+      },
+      {
+        "file_id": "F_24a72d7589a2",
+        "path": "slint-experiment/tests/lock_mode_menu_guard.rs"
+      },
+      {
+        "file_id": "F_82bc8e469679",
+        "path": "slint-experiment/tests/lock_mode_menu_interaction.rs"
+      },
+      {
+        "file_id": "F_3ed0aae709a6",
+        "path": "slint-experiment/tests/macos_app_packaging_guard.rs"
+      },
+      {
+        "file_id": "F_c2434e16b2bc",
+        "path": "slint-experiment/tests/macos_capture_watchdog_guard.rs"
+      },
+      {
+        "file_id": "F_8061d7929f90",
+        "path": "slint-experiment/tests/macos_global_hotkeys_guard.rs"
+      },
+      {
+        "file_id": "F_0337f78d871f",
+        "path": "slint-experiment/tests/macos_popups_guard.rs"
+      },
+      {
+        "file_id": "F_a575472c41c6",
+        "path": "slint-experiment/tests/macos_settings_guard.rs"
+      },
+      {
+        "file_id": "F_00cd8968660d",
+        "path": "slint-experiment/tests/macos_text_ask_guard.rs"
+      },
+      {
+        "file_id": "F_eb388354d107",
+        "path": "slint-experiment/tests/macos_tile_manager_guard.rs"
+      },
+      {
+        "file_id": "F_c03ff22ce630",
+        "path": "slint-experiment/tests/macos_ui_callbacks_guard.rs"
+      },
+      {
+        "file_id": "F_62f92ebc6f12",
+        "path": "slint-experiment/tests/mlx_lifecycle_guard.rs"
+      },
+      {
+        "file_id": "F_f5516d01f2f2",
+        "path": "slint-experiment/tests/native_lifecycle_guard.rs"
+      },
+      {
+        "file_id": "F_7710d4bc1a32",
+        "path": "slint-experiment/tests/native_macos_status_guard.rs"
+      },
+      {
+        "file_id": "F_b1641d9af711",
+        "path": "slint-experiment/tests/native_macos_window_guard.rs"
+      },
+      {
+        "file_id": "F_860af149e87b",
+        "path": "slint-experiment/tests/native_screen_guard.rs"
+      },
+      {
+        "file_id": "F_71435e7c14cf",
+        "path": "slint-experiment/tests/overlay_bar_geometry.rs"
+      },
+      {
+        "file_id": "F_464de69bdf80",
+        "path": "slint-experiment/tests/rc3_regression_guard.rs"
+      },
+      {
+        "file_id": "F_6efd8bec0c71",
+        "path": "slint-experiment/tests/settings_reset_guard.rs"
+      },
+      {
+        "file_id": "F_0f579e5d9c38",
+        "path": "slint-experiment/tests/tera_tts_layout_guard.rs"
+      },
+      {
+        "file_id": "F_dc29b9de0aad",
+        "path": "slint-experiment/tests/tile_player_layout_guard.rs"
+      },
+      {
+        "file_id": "F_fb771d5a5ee4",
+        "path": "slint-experiment/tests/tray_guard.rs"
+      },
+      {
+        "file_id": "F_e4328a193fca",
+        "path": "slint-experiment/tests/tts_speech_policy_guard.rs"
+      },
+      {
+        "file_id": "F_89bab30037f5",
+        "path": "slint-experiment/tests/version_guard.rs"
+      },
+      {
+        "file_id": "F_ad98dd14453a",
+        "path": "slint-experiment/translations/AGENTS.md"
+      },
+      {
+        "file_id": "F_fa785ed14051",
+        "path": "slint-experiment/translations/ru/LC_MESSAGES/slint-replay.po"
+      },
+      {
+        "file_id": "F_6e855f0c1b19",
+        "path": "slint-experiment/ui/AGENTS.md"
+      },
+      {
+        "file_id": "F_22a05989fc18",
+        "path": "slint-experiment/ui/archive.slint"
+      },
+      {
+        "file_id": "F_c5a2f626bea9",
+        "path": "slint-experiment/ui/capture_overlay.slint"
+      },
+      {
+        "file_id": "F_031c650a3e2e",
+        "path": "slint-experiment/ui/controls.slint"
+      },
+      {
+        "file_id": "F_c928dd518547",
+        "path": "slint-experiment/ui/help.slint"
+      },
+      {
+        "file_id": "F_18f18d093a45",
+        "path": "slint-experiment/ui/index.slint"
+      },
+      {
+        "file_id": "F_de95fa0cd432",
+        "path": "slint-experiment/ui/lock_mode_menu.slint"
+      },
+      {
+        "file_id": "F_ade0a904bf80",
+        "path": "slint-experiment/ui/macos_ai_setup.slint"
+      },
+      {
+        "file_id": "F_0fe5748b1c6c",
+        "path": "slint-experiment/ui/markdown_spike.slint"
+      },
+      {
+        "file_id": "F_37f246fc2307",
+        "path": "slint-experiment/ui/metrics.slint"
+      },
+      {
+        "file_id": "F_1063a095537e",
+        "path": "slint-experiment/ui/overlay_bar.slint"
+      },
+      {
+        "file_id": "F_5abfe202f987",
+        "path": "slint-experiment/ui/overlay_spike.slint"
+      },
+      {
+        "file_id": "F_486c3d8cfe9e",
+        "path": "slint-experiment/ui/palette.slint"
+      },
+      {
+        "file_id": "F_c091e73d59f1",
+        "path": "slint-experiment/ui/platform.slint"
+      },
+      {
+        "file_id": "F_be0296d2a422",
+        "path": "slint-experiment/ui/recover_offer.slint"
+      },
+      {
+        "file_id": "F_6c0d4874f031",
+        "path": "slint-experiment/ui/replay.slint"
+      },
+      {
+        "file_id": "F_615bd21f0875",
+        "path": "slint-experiment/ui/settings_controls.slint"
+      },
+      {
+        "file_id": "F_7abb3fee5ac1",
+        "path": "slint-experiment/ui/settings_panel.slint"
+      },
+      {
+        "file_id": "F_306797a01dfe",
+        "path": "slint-experiment/ui/text_ask.slint"
+      },
+      {
+        "file_id": "F_b7cff4dd7cf1",
+        "path": "slint-experiment/ui/theme.slint"
+      },
+      {
+        "file_id": "F_ca55ef29ec2a",
+        "path": "slint-experiment/ui/tile.slint"
+      },
+      {
+        "file_id": "F_5d4daaad7255",
+        "path": "slint-experiment/ui/transcript.slint"
+      },
+      {
+        "file_id": "F_df8ee98a173c",
+        "path": "slint-experiment/ui/tray_menu.slint"
+      },
+      {
+        "file_id": "F_e1ae3f03b7c9",
+        "path": "slint-experiment/ui/wizard.slint"
+      }
+    ]
+  },
+  "B06": {
+    "total_files": 27,
+    "code_files": 27,
+    "files": [
+      {
+        "file_id": "F_32484e64ed9b",
+        "path": "overlay-backend/src/ai/completion.rs"
+      },
+      {
+        "file_id": "F_678630582df1",
+        "path": "overlay-backend/src/ai/control.rs"
+      },
+      {
+        "file_id": "F_e0029b029c1e",
+        "path": "overlay-backend/src/ai/inspect.rs"
+      },
+      {
+        "file_id": "F_1aa31ac30a21",
+        "path": "overlay-backend/src/ai/mod.rs"
+      },
+      {
+        "file_id": "F_c5aecc233372",
+        "path": "overlay-backend/src/ai/pricing.rs"
+      },
+      {
+        "file_id": "F_9a2579ad9e5a",
+        "path": "overlay-backend/src/ai/prompt.rs"
+      },
+      {
+        "file_id": "F_e7890948f74e",
+        "path": "overlay-backend/src/ai/provider.rs"
+      },
+      {
+        "file_id": "F_c3c7e79e26a1",
+        "path": "overlay-backend/src/ai/stream.rs"
+      },
+      {
+        "file_id": "F_ab9ab44fb491",
+        "path": "overlay-backend/src/ai/tests.rs"
+      },
+      {
+        "file_id": "F_585b11f96b16",
+        "path": "overlay-backend/src/ai/tps.rs"
+      },
+      {
+        "file_id": "F_3c939c2ef666",
+        "path": "overlay-backend/src/ai/types.rs"
+      },
+      {
+        "file_id": "F_4337aa9fc85f",
+        "path": "overlay-backend/src/bridge.rs"
+      },
+      {
+        "file_id": "F_d8be9762539b",
+        "path": "overlay-backend/src/codex_subscription.rs"
+      },
+      {
+        "file_id": "F_cb3148ceb9d6",
+        "path": "overlay-backend/src/deep_lock.rs"
+      },
+      {
+        "file_id": "F_c7cb4493cd3a",
+        "path": "overlay-backend/src/events.rs"
+      },
+      {
+        "file_id": "F_819e9fd22d83",
+        "path": "overlay-backend/src/health.rs"
+      },
+      {
+        "file_id": "F_2e56170c8fa7",
+        "path": "overlay-backend/src/local_ai.rs"
+      },
+      {
+        "file_id": "F_28199aa3a8ff",
+        "path": "overlay-backend/src/local_ai/hardware_profile.rs"
+      },
+      {
+        "file_id": "F_fa9750e4bc3f",
+        "path": "overlay-backend/src/local_ai/model_choice.rs"
+      },
+      {
+        "file_id": "F_bc57ae5659e2",
+        "path": "overlay-backend/src/local_ai/model_state.rs"
+      },
+      {
+        "file_id": "F_8adcd8be8225",
+        "path": "overlay-backend/src/local_ai/tests.rs"
+      },
+      {
+        "file_id": "F_935e9c8cd0dd",
+        "path": "overlay-backend/src/mlx_install.rs"
+      },
+      {
+        "file_id": "F_3bf96515833b",
+        "path": "overlay-backend/src/mlx_runtime.rs"
+      },
+      {
+        "file_id": "F_20dbd1d5e44a",
+        "path": "overlay-backend/src/runtime.rs"
+      },
+      {
+        "file_id": "F_6ddbcc7df57f",
+        "path": "overlay-backend/src/runtime/summary_plan.rs"
+      },
+      {
+        "file_id": "F_af12b658d7e9",
+        "path": "overlay-backend/src/runtime/tests.rs"
+      },
+      {
+        "file_id": "F_0a6c79b8f115",
+        "path": "overlay-backend/src/runtime/trigger_detect.rs"
+      }
+    ]
+  },
+  "B07": {
+    "total_files": 12,
+    "code_files": 12,
+    "files": [
+      {
+        "file_id": "F_08a762fee291",
+        "path": "overlay-backend/src/audio.rs"
+      },
+      {
+        "file_id": "F_58e3146c37bb",
+        "path": "overlay-backend/src/audio_macos.rs"
+      },
+      {
+        "file_id": "F_9dd1eb8c69cc",
+        "path": "overlay-backend/src/audio_metrics.rs"
+      },
+      {
+        "file_id": "F_03105b92ee6c",
+        "path": "overlay-backend/src/audio_route.rs"
+      },
+      {
+        "file_id": "F_8e46d80a3290",
+        "path": "overlay-backend/src/audio_unavailable.rs"
+      },
+      {
+        "file_id": "F_4233de2c705d",
+        "path": "overlay-backend/src/diar_install.rs"
+      },
+      {
+        "file_id": "F_1a72846df745",
+        "path": "overlay-backend/src/diarize.rs"
+      },
+      {
+        "file_id": "F_77a24268cab1",
+        "path": "overlay-backend/src/nemotron_diar.rs"
+      },
+      {
+        "file_id": "F_8fa5ae321113",
+        "path": "overlay-backend/src/re_transcribe.rs"
+      },
+      {
+        "file_id": "F_4a8e3266d4dd",
+        "path": "overlay-backend/src/recorder.rs"
+      },
+      {
+        "file_id": "F_4caf66e1498e",
+        "path": "overlay-backend/src/session_audio.rs"
+      },
+      {
+        "file_id": "F_9f4acc902ca9",
+        "path": "overlay-backend/src/stt.rs"
+      }
+    ]
+  },
+  "B08": {
+    "total_files": 36,
+    "code_files": 24,
+    "files": [
+      {
+        "file_id": "F_7b7aa49fe447",
+        "path": "overlay-backend/knowledge/AGENTS.md"
+      },
+      {
+        "file_id": "F_6435eb463c64",
+        "path": "overlay-backend/knowledge/commands.md"
+      },
+      {
+        "file_id": "F_d0a8ab0f8b1c",
+        "path": "overlay-backend/knowledge/glossary.md"
+      },
+      {
+        "file_id": "F_17c2e4c42abb",
+        "path": "overlay-backend/knowledge/patterns.md"
+      },
+      {
+        "file_id": "F_b7526088851a",
+        "path": "overlay-backend/migrations/0001_session_catalog.sql"
+      },
+      {
+        "file_id": "F_cd916e7d2dac",
+        "path": "overlay-backend/migrations/0002_fts.sql"
+      },
+      {
+        "file_id": "F_01950f581a8d",
+        "path": "overlay-backend/migrations/0003_memory.sql"
+      },
+      {
+        "file_id": "F_b3d7d9cb46f3",
+        "path": "overlay-backend/migrations/0004_utterance_audio_ms.sql"
+      },
+      {
+        "file_id": "F_fa20ea70ea92",
+        "path": "overlay-backend/migrations/0005_memory_v2.sql"
+      },
+      {
+        "file_id": "F_126b290366b1",
+        "path": "overlay-backend/migrations/0006_diarization.sql"
+      },
+      {
+        "file_id": "F_4d80a1dc46a6",
+        "path": "overlay-backend/src/conspect.rs"
+      },
+      {
+        "file_id": "F_9fa0d6680789",
+        "path": "overlay-backend/src/journal/legacy.rs"
+      },
+      {
+        "file_id": "F_d3628a91b2dc",
+        "path": "overlay-backend/src/journal/mod.rs"
+      },
+      {
+        "file_id": "F_65a6d1836dd3",
+        "path": "overlay-backend/src/journal/recovery.rs"
+      },
+      {
+        "file_id": "F_7f56970bd1cf",
+        "path": "overlay-backend/src/journal/retention.rs"
+      },
+      {
+        "file_id": "F_e27298c7e609",
+        "path": "overlay-backend/src/journal/tests.rs"
+      },
+      {
+        "file_id": "F_0ea5ac552d43",
+        "path": "overlay-backend/src/journal/time.rs"
+      },
+      {
+        "file_id": "F_463cdc6817ba",
+        "path": "overlay-backend/src/journal/types.rs"
+      },
+      {
+        "file_id": "F_209c0774711d",
+        "path": "overlay-backend/src/journal/writer.rs"
+      },
+      {
+        "file_id": "F_a47913f2d4e8",
+        "path": "overlay-backend/src/kb.rs"
+      },
+      {
+        "file_id": "F_c62474969c76",
+        "path": "overlay-backend/src/memory/AGENTS.md"
+      },
+      {
+        "file_id": "F_0b479d12453a",
+        "path": "overlay-backend/src/memory/candidates.rs"
+      },
+      {
+        "file_id": "F_51c8660d6495",
+        "path": "overlay-backend/src/memory/context_builder.rs"
+      },
+      {
+        "file_id": "F_0fb7eadd3d76",
+        "path": "overlay-backend/src/memory/mod.rs"
+      },
+      {
+        "file_id": "F_46fc1aad3d86",
+        "path": "overlay-backend/src/memory/normalize.rs"
+      },
+      {
+        "file_id": "F_2c192ecdadfd",
+        "path": "overlay-backend/src/memory/summary_ref.rs"
+      },
+      {
+        "file_id": "F_d56aa16fabb5",
+        "path": "overlay-backend/src/persistence/AGENTS.md"
+      },
+      {
+        "file_id": "F_2bdc0820cbe1",
+        "path": "overlay-backend/src/persistence/indexer.rs"
+      },
+      {
+        "file_id": "F_71a93e035ed7",
+        "path": "overlay-backend/src/persistence/maintenance.rs"
+      },
+      {
+        "file_id": "F_c2c493caee5b",
+        "path": "overlay-backend/src/persistence/migrations.rs"
+      },
+      {
+        "file_id": "F_f22b82ab5539",
+        "path": "overlay-backend/src/persistence/mod.rs"
+      },
+      {
+        "file_id": "F_078f59e18788",
+        "path": "overlay-backend/src/persistence/models.rs"
+      },
+      {
+        "file_id": "F_1e9d2e9d5f9e",
+        "path": "overlay-backend/src/persistence/sqlite_store.rs"
+      },
+      {
+        "file_id": "F_e3e78904112f",
+        "path": "overlay-backend/src/session_admin.rs"
+      },
+      {
+        "file_id": "F_cd8ade15fd6c",
+        "path": "overlay-backend/src/session_names.rs"
+      },
+      {
+        "file_id": "F_c874e8c421ec",
+        "path": "overlay-backend/src/summary_source.rs"
+      }
+    ]
+  },
+  "B09": {
+    "total_files": 30,
+    "code_files": 27,
+    "files": [
+      {
+        "file_id": "F_5a5144088640",
+        "path": "overlay-backend/AGENTS.md"
+      },
+      {
+        "file_id": "F_c4a16cfb815b",
+        "path": "overlay-backend/assets/diag-chime.s16"
+      },
+      {
+        "file_id": "F_50e6dca6a80a",
+        "path": "overlay-backend/assets/gigaam-v3-vocab.txt"
+      },
+      {
+        "file_id": "F_f63cdf80faf8",
+        "path": "overlay-backend/examples/ai_probe.rs"
+      },
+      {
+        "file_id": "F_d3ad2723196c",
+        "path": "overlay-backend/examples/audio_capture_probe.rs"
+      },
+      {
+        "file_id": "F_3fbf40c7dc28",
+        "path": "overlay-backend/examples/stt_double.rs"
+      },
+      {
+        "file_id": "F_b0904b6667b4",
+        "path": "overlay-backend/examples/stt_macos_lifecycle_probe.rs"
+      },
+      {
+        "file_id": "F_65085e8b2eb1",
+        "path": "overlay-backend/examples/stt_macos_probe.rs"
+      },
+      {
+        "file_id": "F_fc9df146ae01",
+        "path": "overlay-backend/native/macos/mic_capture.m"
+      },
+      {
+        "file_id": "F_dc7ffae2ebae",
+        "path": "overlay-backend/native/macos/process_memory.c"
+      },
+      {
+        "file_id": "F_19cb77c1e275",
+        "path": "overlay-backend/native/macos/system_capture.m"
+      },
+      {
+        "file_id": "F_35e49a125b04",
+        "path": "overlay-backend/src/capabilities.rs"
+      },
+      {
+        "file_id": "F_2a90759f91ff",
+        "path": "overlay-backend/src/components.rs"
+      },
+      {
+        "file_id": "F_a9ff4ad99048",
+        "path": "overlay-backend/src/config.rs"
+      },
+      {
+        "file_id": "F_a79d2c877dfe",
+        "path": "overlay-backend/src/config/repair.rs"
+      },
+      {
+        "file_id": "F_0c2f6f5ca92b",
+        "path": "overlay-backend/src/config/snippets.rs"
+      },
+      {
+        "file_id": "F_4eda19a34a8e",
+        "path": "overlay-backend/src/config/tests.rs"
+      },
+      {
+        "file_id": "F_313da15f08cb",
+        "path": "overlay-backend/src/credentials.rs"
+      },
+      {
+        "file_id": "F_ac24827e0dae",
+        "path": "overlay-backend/src/download.rs"
+      },
+      {
+        "file_id": "F_756230e465b0",
+        "path": "overlay-backend/src/hermes_install.rs"
+      },
+      {
+        "file_id": "F_cd36018ac53a",
+        "path": "overlay-backend/src/http_log.rs"
+      },
+      {
+        "file_id": "F_99f33b7a45ba",
+        "path": "overlay-backend/src/lib.rs"
+      },
+      {
+        "file_id": "F_5da1663dc0a3",
+        "path": "overlay-backend/src/paths.rs"
+      },
+      {
+        "file_id": "F_9d3189bcb76e",
+        "path": "overlay-backend/src/tests.rs"
+      },
+      {
+        "file_id": "F_ae595ef163ec",
+        "path": "overlay-backend/src/text.rs"
+      },
+      {
+        "file_id": "F_4e9c0dd67702",
+        "path": "overlay-backend/src/update.rs"
+      },
+      {
+        "file_id": "F_195d940b954a",
+        "path": "overlay-backend/tests/ai_eval.rs"
+      },
+      {
+        "file_id": "F_511e8d777368",
+        "path": "overlay-backend/tests/archive_cycle.rs"
+      },
+      {
+        "file_id": "F_021c3656714d",
+        "path": "overlay-backend/tests/hermes_plugin_smoke.rs"
+      },
+      {
+        "file_id": "F_bcb66b96701a",
+        "path": "overlay-backend/tests/no_window_guard.rs"
+      }
+    ]
+  },
+  "B10": {
+    "total_files": 7,
+    "code_files": 7,
+    "files": [
+      {
+        "file_id": "F_12f364d37dad",
+        "path": "overlay-backend/src/ocr.rs"
+      },
+      {
+        "file_id": "F_bad079dcd257",
+        "path": "overlay-backend/src/ocr_install.rs"
+      },
+      {
+        "file_id": "F_9f1e1f92292e",
+        "path": "overlay-backend/src/teratts_install.rs"
+      },
+      {
+        "file_id": "F_3096c03234cb",
+        "path": "overlay-backend/src/tts.rs"
+      },
+      {
+        "file_id": "F_afa5d1e8e11a",
+        "path": "overlay-backend/src/tts_install.rs"
+      },
+      {
+        "file_id": "F_5a34cf79858c",
+        "path": "overlay-backend/src/tts_normalize.rs"
+      },
+      {
+        "file_id": "F_24fadcad6c74",
+        "path": "overlay-backend/src/vision.rs"
+      }
+    ]
+  },
+  "B11": {
+    "total_files": 7,
+    "code_files": 6,
+    "files": [
+      {
+        "file_id": "F_5b0e990be52b",
+        "path": "suflyor-tts/AGENTS.md"
+      },
+      {
+        "file_id": "F_a1d180f259fa",
+        "path": "suflyor-tts/src/diar.rs"
+      },
+      {
+        "file_id": "F_82c260296648",
+        "path": "suflyor-tts/src/engine.rs"
+      },
+      {
+        "file_id": "F_1bbe4d0007b8",
+        "path": "suflyor-tts/src/main.rs"
+      },
+      {
+        "file_id": "F_831d09d04121",
+        "path": "suflyor-tts/src/playback.rs"
+      },
+      {
+        "file_id": "F_5e78950e9966",
+        "path": "suflyor-tts/src/playback_macos.rs"
+      },
+      {
+        "file_id": "F_daf89e00fa35",
+        "path": "suflyor-tts/src/playback_unavailable.rs"
+      }
+    ]
+  },
+  "B12": {
+    "total_files": 15,
+    "code_files": 12,
+    "files": [
+      {
+        "file_id": "F_89ca41c5c925",
+        "path": "suflyor-teratts/AGENTS.md"
+      },
+      {
+        "file_id": "F_ff662e93621d",
+        "path": "suflyor-teratts/NOTICE.md"
+      },
+      {
+        "file_id": "F_50c76e81de85",
+        "path": "suflyor-teratts/manifest/teratts-v2.json"
+      },
+      {
+        "file_id": "F_65fa1d51efab",
+        "path": "suflyor-teratts/src/chunk.rs"
+      },
+      {
+        "file_id": "F_99ab94fcc6d4",
+        "path": "suflyor-teratts/src/indexer.rs"
+      },
+      {
+        "file_id": "F_89959d88732d",
+        "path": "suflyor-teratts/src/main.rs"
+      },
+      {
+        "file_id": "F_75e14fb627ce",
+        "path": "suflyor-teratts/src/manifest.rs"
+      },
+      {
+        "file_id": "F_426d54bada46",
+        "path": "suflyor-teratts/src/npy.rs"
+      },
+      {
+        "file_id": "F_c25bc77cb21b",
+        "path": "suflyor-teratts/src/num2words.rs"
+      },
+      {
+        "file_id": "F_8c18d742ed58",
+        "path": "suflyor-teratts/src/playback.rs"
+      },
+      {
+        "file_id": "F_d85ad53c03fd",
+        "path": "suflyor-teratts/src/playback_macos.rs"
+      },
+      {
+        "file_id": "F_58fd0e4d2e6f",
+        "path": "suflyor-teratts/src/protocol.rs"
+      },
+      {
+        "file_id": "F_6f433611bf27",
+        "path": "suflyor-teratts/src/rng.rs"
+      },
+      {
+        "file_id": "F_fd1c17174da1",
+        "path": "suflyor-teratts/src/tera.rs"
+      },
+      {
+        "file_id": "F_5dcacc9b3263",
+        "path": "suflyor-teratts/src/textnorm.rs"
+      }
+    ]
+  },
+  "B13": {
+    "total_files": 9,
+    "code_files": 5,
+    "files": [
+      {
+        "file_id": "F_781f4c735d63",
+        "path": "suflyor-wsola/AGENTS.md"
+      },
+      {
+        "file_id": "F_569b2b2805ee",
+        "path": "suflyor-wsola/LICENSE"
+      },
+      {
+        "file_id": "F_44c730b06d2f",
+        "path": "suflyor-wsola/LICENSE.upstream-MIT"
+      },
+      {
+        "file_id": "F_622bbcaefd1d",
+        "path": "suflyor-wsola/NOTICE"
+      },
+      {
+        "file_id": "F_eb05d9f31a2c",
+        "path": "suflyor-wsola/src/error.rs"
+      },
+      {
+        "file_id": "F_923f89ede9c0",
+        "path": "suflyor-wsola/src/lib.rs"
+      },
+      {
+        "file_id": "F_e8e426e7f8dc",
+        "path": "suflyor-wsola/src/stream.rs"
+      },
+      {
+        "file_id": "F_ba1e685b595a",
+        "path": "suflyor-wsola/src/wsola.rs"
+      },
+      {
+        "file_id": "F_0d5665d86303",
+        "path": "suflyor-wsola/tests/speech_contract.rs"
+      }
+    ]
+  },
+  "B14": {
+    "total_files": 55,
+    "code_files": 34,
+    "files": [
+      {
+        "file_id": "F_87320095d7c4",
+        "path": ".githooks/pre-commit"
+      },
+      {
+        "file_id": "F_d98b367aa518",
+        "path": ".githooks/pre-push"
+      },
+      {
+        "file_id": "F_f0cbd6aa0372",
+        "path": ".github/AGENTS.md"
+      },
+      {
+        "file_id": "F_dd4fbda47e51",
+        "path": ".github/dependabot.yml"
+      },
+      {
+        "file_id": "F_f418d24ccfd2",
+        "path": ".github/scripts/is-docs-only.sh"
+      },
+      {
+        "file_id": "F_6bc62a4e6491",
+        "path": ".github/scripts/test-docs-only-detection.sh"
+      },
+      {
+        "file_id": "F_c23879eac2e5",
+        "path": ".github/scripts/test-gate-logic.sh"
+      },
+      {
+        "file_id": "F_b803fcb7f17e",
+        "path": ".github/workflows/ci.yml"
+      },
+      {
+        "file_id": "F_451d41f148bf",
+        "path": ".github/workflows/docs-after-release.yml"
+      },
+      {
+        "file_id": "F_22b3aa4c17ee",
+        "path": ".github/workflows/package-windows.yml"
+      },
+      {
+        "file_id": "F_6102d4f2cddb",
+        "path": ".github/workflows/security.yml"
+      },
+      {
+        "file_id": "F_4681ac3c47d3",
+        "path": "overlay-backend/Cargo.toml"
+      },
+      {
+        "file_id": "F_d3f067e21c94",
+        "path": "overlay-backend/build.rs"
+      },
+      {
+        "file_id": "F_cb91064dc54b",
+        "path": "scripts/AGENTS.md"
+      },
+      {
+        "file_id": "F_25b96aa16f8b",
+        "path": "scripts/README.md"
+      },
+      {
+        "file_id": "F_ab096b4137b4",
+        "path": "scripts/build-slint-release.ps1"
+      },
+      {
+        "file_id": "F_dd1485b0a1eb",
+        "path": "scripts/capture-reference-shots.ps1"
+      },
+      {
+        "file_id": "F_510634a72de8",
+        "path": "scripts/ci.ps1"
+      },
+      {
+        "file_id": "F_088503ee9603",
+        "path": "scripts/find_overlay_windows.ps1"
+      },
+      {
+        "file_id": "F_0cf85261dae8",
+        "path": "scripts/gen_icon.ps1"
+      },
+      {
+        "file_id": "F_716a287e6385",
+        "path": "scripts/get_hwnd_rect.ps1"
+      },
+      {
+        "file_id": "F_c6b379d228cf",
+        "path": "scripts/get_tile_rect.ps1"
+      },
+      {
+        "file_id": "F_2fafa828f821",
+        "path": "scripts/git-gate-macos.sh"
+      },
+      {
+        "file_id": "F_0f0ca3a8d0b0",
+        "path": "scripts/git-gate-native.ps1"
+      },
+      {
+        "file_id": "F_0fb43a8a3b72",
+        "path": "scripts/list_overlay_windows.ps1"
+      },
+      {
+        "file_id": "F_4dbc0c74d0a1",
+        "path": "scripts/macos-mcp-interactive-qa.py"
+      },
+      {
+        "file_id": "F_f9a1b4499b41",
+        "path": "scripts/post-release-cleanup.ps1"
+      },
+      {
+        "file_id": "F_72f21ea96f2e",
+        "path": "scripts/probe_bar.ps1"
+      },
+      {
+        "file_id": "F_aa1a62fed773",
+        "path": "scripts/qwen-parallel-audit.ps1"
+      },
+      {
+        "file_id": "F_ca3b581bafca",
+        "path": "scripts/screenshot_region.ps1"
+      },
+      {
+        "file_id": "F_22f57ac0f60c",
+        "path": "scripts/set_opacity.ps1"
+      },
+      {
+        "file_id": "F_d96ca79d0d89",
+        "path": "scripts/setup-local-ai.ps1"
+      },
+      {
+        "file_id": "F_7d0351981210",
+        "path": "scripts/sim_click.ps1"
+      },
+      {
+        "file_id": "F_ad790036a29c",
+        "path": "scripts/slint-installer.nsi"
+      },
+      {
+        "file_id": "F_61aafbb6f208",
+        "path": "scripts/stop-installed-suflyor.ps1"
+      },
+      {
+        "file_id": "F_aefca4938468",
+        "path": "scripts/sync-release-docs.ps1"
+      },
+      {
+        "file_id": "F_25b43fa7ed6a",
+        "path": "slint-experiment/Cargo.lock"
+      },
+      {
+        "file_id": "F_1117fc892ef0",
+        "path": "slint-experiment/Cargo.toml"
+      },
+      {
+        "file_id": "F_268c46394850",
+        "path": "slint-experiment/build.rs"
+      },
+      {
+        "file_id": "F_d97d7e285650",
+        "path": "slint-experiment/macos/Info.plist"
+      },
+      {
+        "file_id": "F_273863839666",
+        "path": "slint-experiment/macos/entitlements.plist"
+      },
+      {
+        "file_id": "F_537deecf64dc",
+        "path": "slint-experiment/scripts/build-macos-app.sh"
+      },
+      {
+        "file_id": "F_ae72ceccf5dc",
+        "path": "slint-experiment/scripts/build-macos-dmg.sh"
+      },
+      {
+        "file_id": "F_26988cca6d58",
+        "path": "slint-experiment/scripts/capture_primary.ps1"
+      },
+      {
+        "file_id": "F_b56d190a70a0",
+        "path": "slint-experiment/scripts/capture_window.ps1"
+      },
+      {
+        "file_id": "F_517da91cddf3",
+        "path": "slint-experiment/scripts/click_at.ps1"
+      },
+      {
+        "file_id": "F_41cef950eec1",
+        "path": "slint-experiment/scripts/hold_at.ps1"
+      },
+      {
+        "file_id": "F_324d8a400adf",
+        "path": "slint-experiment/scripts/send_key.ps1"
+      },
+      {
+        "file_id": "F_7d85aabf2834",
+        "path": "slint-experiment/scripts/type_text.ps1"
+      },
+      {
+        "file_id": "F_3d4eadd49fa3",
+        "path": "suflyor-teratts/Cargo.lock"
+      },
+      {
+        "file_id": "F_9ac67db64bc6",
+        "path": "suflyor-teratts/Cargo.toml"
+      },
+      {
+        "file_id": "F_26dcb196377f",
+        "path": "suflyor-tts/Cargo.lock"
+      },
+      {
+        "file_id": "F_f8c993d9fb67",
+        "path": "suflyor-tts/Cargo.toml"
+      },
+      {
+        "file_id": "F_9cee0d2c8bd8",
+        "path": "suflyor-wsola/Cargo.lock"
+      },
+      {
+        "file_id": "F_cd86f80dd397",
+        "path": "suflyor-wsola/Cargo.toml"
+      }
+    ]
+  },
+  "B15": {
+    "total_files": 439,
+    "code_files": 25,
+    "files": [
+      {
+        "file_id": "F_d2bda1b25054",
+        "path": ".agents/AGENTS.md"
+      },
+      {
+        "file_id": "F_6e9266a35e2a",
+        "path": ".agents/skills/slint-mcp-ui-audit/SKILL.md"
+      },
+      {
+        "file_id": "F_4d2fa7a6a4e7",
+        "path": ".agents/skills/slint-mcp-ui-audit/agents/openai.yaml"
+      },
+      {
+        "file_id": "F_a668145bedfa",
+        "path": ".agents/skills/source-command-release/SKILL.md"
+      },
+      {
+        "file_id": "F_5f9ef3d20153",
+        "path": ".claude/AUTONOMOUS_RULES.md"
+      },
+      {
+        "file_id": "F_28ef0bd2ca60",
+        "path": ".claude/commands/auto-stop.md"
+      },
+      {
+        "file_id": "F_85c32798acad",
+        "path": ".claude/commands/auto.md"
+      },
+      {
+        "file_id": "F_e826f427ca92",
+        "path": ".claude/commands/release.md"
+      },
+      {
+        "file_id": "F_6e9b885ad25e",
+        "path": ".claude/hooks/banned-phrases.ps1"
+      },
+      {
+        "file_id": "F_d84ac7271555",
+        "path": ".claude/hooks/block-asks.ps1"
+      },
+      {
+        "file_id": "F_821da291bed4",
+        "path": ".claude/hooks/git-gate.ps1"
+      },
+      {
+        "file_id": "F_8ca9a3406972",
+        "path": ".claude/hooks/plan-progress-check.ps1"
+      },
+      {
+        "file_id": "F_216a86414bc5",
+        "path": ".claude/hooks/stop-guard.ps1"
+      },
+      {
+        "file_id": "F_f27ac6f39d89",
+        "path": ".claude/settings.json"
+      },
+      {
+        "file_id": "F_618cd5b83d62",
+        "path": ".gitattributes"
+      },
+      {
+        "file_id": "F_bc37d034bad5",
+        "path": ".gitignore"
+      },
+      {
+        "file_id": "F_f40ac94aac00",
+        "path": ".gitleaks.toml"
+      },
+      {
+        "file_id": "F_92c8ea7491b8",
+        "path": ".jules/sentinel.md"
+      },
+      {
+        "file_id": "F_c16655a98a3e",
+        "path": ".vscode/extensions.json"
+      },
+      {
+        "file_id": "F_a54ff182c7e8",
+        "path": "AGENTS.md"
+      },
+      {
+        "file_id": "F_6ebdb617a810",
+        "path": "CLAUDE.md"
+      },
+      {
+        "file_id": "F_eca12c0a30e2",
+        "path": "CONTRIBUTING.md"
+      },
+      {
+        "file_id": "F_c693279643b8",
+        "path": "LICENSE"
+      },
+      {
+        "file_id": "F_a498a9e0fcfa",
+        "path": "NIGHT_RUN_PLAN.md"
+      },
+      {
+        "file_id": "F_e8caf83bd4c7",
+        "path": "POST_MORTEM_v0034.md"
+      },
+      {
+        "file_id": "F_b33563055168",
+        "path": "README.md"
+      },
+      {
+        "file_id": "F_6022994b9700",
+        "path": "RELEASE_CHECKLIST.md"
+      },
+      {
+        "file_id": "F_f6ed156e4bf5",
+        "path": "SECURITY.md"
+      },
+      {
+        "file_id": "F_f411a5009131",
+        "path": "UPGRADING.md"
+      },
+      {
+        "file_id": "F_1040309c6484",
+        "path": "deny.toml"
+      },
+      {
+        "file_id": "F_e5935152d49e",
+        "path": "docs/ADR-001-stack.md"
+      },
+      {
+        "file_id": "F_f6777dd20849",
+        "path": "docs/ADR-002-license.md"
+      },
+      {
+        "file_id": "F_d00743dc4e87",
+        "path": "docs/AGENTS.md"
+      },
+      {
+        "file_id": "F_067ea28d5db6",
+        "path": "docs/AGENT_TASKS.md"
+      },
+      {
+        "file_id": "F_182b5c15988c",
+        "path": "docs/CODEX_HANDOFF.md"
+      },
+      {
+        "file_id": "F_49cd8b759265",
+        "path": "docs/GUIDE.md"
+      },
+      {
+        "file_id": "F_d58b98de82f3",
+        "path": "docs/I18N_PLAN.md"
+      },
+      {
+        "file_id": "F_a8f1084e3378",
+        "path": "docs/KICKOFF-SLINT-MIGRATION.md"
+      },
+      {
+        "file_id": "F_a38905086228",
+        "path": "docs/MIGRATION-COMPLETION-PLAN.md"
+      },
+      {
+        "file_id": "F_1adf553b7f08",
+        "path": "docs/MIGRATION-PLAN-SLINT.md"
+      },
+      {
+        "file_id": "F_e0dd5f8fb289",
+        "path": "docs/PHASE-7-CUT-PLAN.md"
+      },
+      {
+        "file_id": "F_50bee546224f",
+        "path": "docs/PHASE-B2-RUNTIME-PORT-PLAN.md"
+      },
+      {
+        "file_id": "F_4da9f48a7ee6",
+        "path": "docs/PILOT-REPORT-SLINT.md"
+      },
+      {
+        "file_id": "F_ed6b2d1ed9f7",
+        "path": "docs/PLAN-resilience-v0.8.0.md"
+      },
+      {
+        "file_id": "F_51abd9ae6ea1",
+        "path": "docs/REVIEW_AGENT_PROMPT.md"
+      },
+      {
+        "file_id": "F_942a9828cb6d",
+        "path": "docs/SETTINGS_POLISH_PLAN.md"
+      },
+      {
+        "file_id": "F_140eef3ba41b",
+        "path": "docs/architecture.md"
+      },
+      {
+        "file_id": "F_1fd91eb6b73f",
+        "path": "docs/archive-panel-fixes.md"
+      },
+      {
+        "file_id": "F_1ad548e7520f",
+        "path": "docs/archive-panel-retest-v0.22.2.html"
+      },
+      {
+        "file_id": "F_6ec077c98819",
+        "path": "docs/archive-panel-test-report.html"
+      },
+      {
+        "file_id": "F_f1abf9722a9f",
+        "path": "docs/archive-panel-test-report.md"
+      },
+      {
+        "file_id": "F_c7e7c2cbda3d",
+        "path": "docs/archive-panel-visual-checklist.md"
+      },
+      {
+        "file_id": "F_4b97b381591f",
+        "path": "docs/archive-retest-v0.23.0.html"
+      },
+      {
+        "file_id": "F_b231ea2fc838",
+        "path": "docs/audit-2026-07-31-results/README.md"
+      },
+      {
+        "file_id": "F_ba95d82cbb97",
+        "path": "docs/audit-2026-07-31-results/visual/ux-clarity/after-archive.png"
+      },
+      {
+        "file_id": "F_9a5378e3b228",
+        "path": "docs/audit-2026-07-31-results/visual/ux-clarity/after-help.png"
+      },
+      {
+        "file_id": "F_7287a987e45e",
+        "path": "docs/audit-2026-07-31-results/visual/ux-clarity/after-tile.png"
+      },
+      {
+        "file_id": "F_be96c3d4c99b",
+        "path": "docs/audit-2026-07-31-results/visual/ux-clarity/before-archive-full.png"
+      },
+      {
+        "file_id": "F_4a3993d63716",
+        "path": "docs/audit-2026-07-31-results/visual/ux-clarity/before-archive-meta.png"
+      },
+      {
+        "file_id": "F_70474d5348bb",
+        "path": "docs/audit-2026-07-31-results/visual/ux-clarity/before-help.png"
+      },
+      {
+        "file_id": "F_651b398174a0",
+        "path": "docs/audit-2026-07-31-results/visual/ux-clarity/before-tile.png"
+      },
+      {
+        "file_id": "F_48b2bd030ad1",
+        "path": "docs/audit-2026-08-02-docs/README.md"
+      },
+      {
+        "file_id": "F_924dfe4ac0f3",
+        "path": "docs/audit-2026-08-03-memory-structure/README.md"
+      },
+      {
+        "file_id": "F_4411c98c4e8e",
+        "path": "docs/audit-2026-08-03-readme-screenshots/README.md"
+      },
+      {
+        "file_id": "F_e48284d6a1c8",
+        "path": "docs/audit-2026-08-03-readme-screenshots/archive-header-after.png"
+      },
+      {
+        "file_id": "F_f670c9175948",
+        "path": "docs/audit-2026-08-03-readme-screenshots/archive-header-before.png"
+      },
+      {
+        "file_id": "F_ebbd4d7cf701",
+        "path": "docs/audit-2026-08-03-readme-screenshots/light-frost-model-after.png"
+      },
+      {
+        "file_id": "F_4945b71e34c9",
+        "path": "docs/audit-2026-08-03-readme-screenshots/light-frost-model-before.png"
+      },
+      {
+        "file_id": "F_5f587766d560",
+        "path": "docs/audit-2026-08-03-taskbar-exclusion/README.md"
+      },
+      {
+        "file_id": "F_127e4ad8f8ab",
+        "path": "docs/audit-2026-08-03-taskbar-exclusion/mcp-overlay-bar-after.png"
+      },
+      {
+        "file_id": "F_90d6a0e9a9e5",
+        "path": "docs/audit-2026-08-03-taskbar-exclusion/taskbar-after.png"
+      },
+      {
+        "file_id": "F_799a69a88068",
+        "path": "docs/audit-2026-08-03-taskbar-exclusion/taskbar-before-user-crop.png"
+      },
+      {
+        "file_id": "F_58ab9da0ed12",
+        "path": "docs/audit-2026-08-03-taskbar-windows/README.md"
+      },
+      {
+        "file_id": "F_c0e0a2757dc0",
+        "path": "docs/audit-2026-08-03-taskbar-windows/after-bar-mcp.png"
+      },
+      {
+        "file_id": "F_3ad410b29877",
+        "path": "docs/audit-2026-08-03-taskbar-windows/after-settings-mcp.png"
+      },
+      {
+        "file_id": "F_5469b51473f8",
+        "path": "docs/audit-2026-08-03-taskbar-windows/after-taskbar.png"
+      },
+      {
+        "file_id": "F_af99ad7f897a",
+        "path": "docs/audit-2026-08-03-taskbar-windows/after-tile-mcp.png"
+      },
+      {
+        "file_id": "F_491e8a5d2373",
+        "path": "docs/audit-2026-08-03-taskbar-windows/before-old-bar.png"
+      },
+      {
+        "file_id": "F_e4af34c598d9",
+        "path": "docs/audit-2026-08-03-taskbar-windows/before-taskbar.png"
+      },
+      {
+        "file_id": "F_57d669ece36f",
+        "path": "docs/audit-2026-08-03-ui-language-notices/README.md"
+      },
+      {
+        "file_id": "F_923e353e08aa",
+        "path": "docs/audit-2026-08-03-ui-language-notices/after-f6-en.png"
+      },
+      {
+        "file_id": "F_de36afbfc3dc",
+        "path": "docs/audit-2026-08-03-ui-language-notices/after-f6-ru.png"
+      },
+      {
+        "file_id": "F_39b64b806806",
+        "path": "docs/audit-2026-08-03-ui-language-notices/after-ptt-en.png"
+      },
+      {
+        "file_id": "F_e799cfaf16aa",
+        "path": "docs/audit-2026-08-03-ui-language-notices/after-ptt-ru.png"
+      },
+      {
+        "file_id": "F_778e11a4a83f",
+        "path": "docs/audit-2026-08-03-ui-language-notices/after-shift-f9-en.png"
+      },
+      {
+        "file_id": "F_5e5befc90427",
+        "path": "docs/audit-2026-08-03-ui-language-notices/after-shift-f9-ru.png"
+      },
+      {
+        "file_id": "F_6a7e8cf0c1e5",
+        "path": "docs/audit-2026-08-03-ui-language-notices/before-f6.png"
+      },
+      {
+        "file_id": "F_858d61bfb9df",
+        "path": "docs/audit-2026-08-03-ui-language-notices/before-shift-f9.png"
+      },
+      {
+        "file_id": "F_b26893e88981",
+        "path": "docs/audit-2026-08-03-ui-visual-method/.gitignore"
+      },
+      {
+        "file_id": "F_1bf2549a49f2",
+        "path": "docs/audit-2026-08-03-ui-visual-method/README.md"
+      },
+      {
+        "file_id": "F_63637530606b",
+        "path": "docs/audit-2026-08-03-ui-visual-method/after-archive.png"
+      },
+      {
+        "file_id": "F_c55b9679c8f6",
+        "path": "docs/audit-2026-08-03-ui-visual-method/after-help.png"
+      },
+      {
+        "file_id": "F_c0839ce918b3",
+        "path": "docs/audit-2026-08-03-ui-visual-method/after-palette-results.png"
+      },
+      {
+        "file_id": "F_e81ac8108ee6",
+        "path": "docs/audit-2026-08-03-ui-visual-method/after-tile.png"
+      },
+      {
+        "file_id": "F_91f2d1fdff8c",
+        "path": "docs/audit-2026-08-03-ui-visual-method/after-wizard.png"
+      },
+      {
+        "file_id": "F_ba951e90da74",
+        "path": "docs/audit-2026-08-03-ui-visual-method/before-archive.png"
+      },
+      {
+        "file_id": "F_39b4e38d6d24",
+        "path": "docs/audit-2026-08-03-ui-visual-method/before-help.png"
+      },
+      {
+        "file_id": "F_8d1c984b9258",
+        "path": "docs/audit-2026-08-03-ui-visual-method/before-palette-results.png"
+      },
+      {
+        "file_id": "F_553cca9f4aa4",
+        "path": "docs/audit-2026-08-03-ui-visual-method/before-tile.png"
+      },
+      {
+        "file_id": "F_996cb83ad64a",
+        "path": "docs/audit-2026-08-03-ui-visual-method/before-wizard.png"
+      },
+      {
+        "file_id": "F_5372c6325856",
+        "path": "docs/audit-2026-08-04-release-0360/README.md"
+      },
+      {
+        "file_id": "F_f7147ff0a1ef",
+        "path": "docs/audit-2026-08-04-release-0360/after-updates-v0.36.0-en.png"
+      },
+      {
+        "file_id": "F_4563b344a70c",
+        "path": "docs/audit-2026-08-04-release-0360/after-updates-v0.36.0-ru.png"
+      },
+      {
+        "file_id": "F_7a447985d3f4",
+        "path": "docs/audit-2026-08-04-release-0360/before-updates-v0.35.3-en.png"
+      },
+      {
+        "file_id": "F_b620b6f5f3f7",
+        "path": "docs/audit-2026-08-04-release-0360/installed-bar-after-5s.png"
+      },
+      {
+        "file_id": "F_b1b65fe3344a",
+        "path": "docs/audit-2026-08-04-release-0360/installed-bar-start.png"
+      },
+      {
+        "file_id": "F_3421d9ce9519",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/README.md"
+      },
+      {
+        "file_id": "F_3a463975980e",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/after-deep-en-compact.png"
+      },
+      {
+        "file_id": "F_2f07060f612d",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/after-deep-en-full.png"
+      },
+      {
+        "file_id": "F_e9261bca3192",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/after-deep-ru-compact.png"
+      },
+      {
+        "file_id": "F_aa335eb2aaed",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/after-deep-ru-full.png"
+      },
+      {
+        "file_id": "F_8c2647ee8926",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/after-f6-empty-deep-en.png"
+      },
+      {
+        "file_id": "F_32c566ac7be1",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/after-f6-empty-deep-ru.png"
+      },
+      {
+        "file_id": "F_c0042c084604",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/after-manual-tile-empty-deep-en.png"
+      },
+      {
+        "file_id": "F_e99ed2c46d3c",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/after-worstcase-ru-compact.png"
+      },
+      {
+        "file_id": "F_858e773fa766",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/after-worstcase-ru-full.png"
+      },
+      {
+        "file_id": "F_374cbae20371",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/before-deep-en-compact.png"
+      },
+      {
+        "file_id": "F_3e455f0f49eb",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/before-deep-en-full.png"
+      },
+      {
+        "file_id": "F_6776ebc7f29b",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/before-deep-ru-compact.png"
+      },
+      {
+        "file_id": "F_699790040e68",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/before-deep-ru-full.png"
+      },
+      {
+        "file_id": "F_32e3e30d5a42",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/before-f6-empty-deep-en.png"
+      },
+      {
+        "file_id": "F_504b9acbde6d",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/before-f6-empty-deep-ru.png"
+      },
+      {
+        "file_id": "F_558cde035bf1",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/before-worstcase-ru-compact.png"
+      },
+      {
+        "file_id": "F_1518ffac4e7f",
+        "path": "docs/audit-2026-08-07-rc2-deep-lock/before-worstcase-ru-full.png"
+      },
+      {
+        "file_id": "F_26843ef6447a",
+        "path": "docs/audit-2026-08-09-ai-providers/README.md"
+      },
+      {
+        "file_id": "F_a1de431e364c",
+        "path": "docs/audit-2026-08-09-ai-providers/after-rc13-anthropic-stored.png"
+      },
+      {
+        "file_id": "F_64c46182cd08",
+        "path": "docs/audit-2026-08-09-ai-providers/after-rc13-local.png"
+      },
+      {
+        "file_id": "F_633a2c9a2ce2",
+        "path": "docs/audit-2026-08-09-ai-providers/after-rc13-openai-ru.png"
+      },
+      {
+        "file_id": "F_a82129c43841",
+        "path": "docs/audit-2026-08-09-ai-providers/after-rc13-openai-stored.png"
+      },
+      {
+        "file_id": "F_ac6a3fc9e3ed",
+        "path": "docs/audit-2026-08-09-ai-providers/before-rc12-ai-tab.png"
+      },
+      {
+        "file_id": "F_e9ff0e070dd8",
+        "path": "docs/audit-2026-08-09-ai-providers/rc13-provider-popup.png"
+      },
+      {
+        "file_id": "F_761978898752",
+        "path": "docs/audit-2026-08-10-codex-real-provider/README.md"
+      },
+      {
+        "file_id": "F_71b7b7f9bbaf",
+        "path": "docs/audit-2026-08-10-codex-real-provider/after-empty-ru-720.png"
+      },
+      {
+        "file_id": "F_ac84009b631e",
+        "path": "docs/audit-2026-08-10-codex-real-provider/after-loading-ru-720.png"
+      },
+      {
+        "file_id": "F_81844618b947",
+        "path": "docs/audit-2026-08-10-codex-real-provider/after-models-en-1200.png"
+      },
+      {
+        "file_id": "F_d09632921ca0",
+        "path": "docs/audit-2026-08-10-codex-real-provider/after-models-ru-720.png"
+      },
+      {
+        "file_id": "F_d03f5f4cc575",
+        "path": "docs/audit-2026-08-10-codex-real-provider/before-empty-ru-720.png"
+      },
+      {
+        "file_id": "F_ab413c6f21ae",
+        "path": "docs/audit-2026-08-10-codex-real-provider/cancelled-f9-ru.png"
+      },
+      {
+        "file_id": "F_493b48b8f605",
+        "path": "docs/audit-2026-08-10-codex-real-provider/security-denial-ru.png"
+      },
+      {
+        "file_id": "F_289f198a0fde",
+        "path": "docs/audit-2026-08-10-codex-real-provider/streaming-f9-ru.png"
+      },
+      {
+        "file_id": "F_f9db2adff91e",
+        "path": "docs/audit-2026-08-12-codex-reasoning-vision/README.md"
+      },
+      {
+        "file_id": "F_c1b79c5f8bd7",
+        "path": "docs/audit-2026-08-12-codex-reasoning-vision/after-bar-luna-en-1280.png"
+      },
+      {
+        "file_id": "F_d02ecfe5d2fb",
+        "path": "docs/audit-2026-08-12-codex-reasoning-vision/after-reasoning-luna-en-720.png"
+      },
+      {
+        "file_id": "F_1a43215bfa04",
+        "path": "docs/audit-2026-08-12-codex-reasoning-vision/after-reasoning-spark-ru-720.png"
+      },
+      {
+        "file_id": "F_55bb104bbee3",
+        "path": "docs/audit-2026-08-12-codex-reasoning-vision/after-vision-luna-en-720.png"
+      },
+      {
+        "file_id": "F_50a420b2c5ca",
+        "path": "docs/audit-2026-08-12-codex-reasoning-vision/after-vision-spark-ru-720.png"
+      },
+      {
+        "file_id": "F_58534588ff51",
+        "path": "docs/audit-2026-08-12-codex-reasoning-vision/before-reasoning-ru-720.png"
+      },
+      {
+        "file_id": "F_c3d1e146f689",
+        "path": "docs/audit-2026-08-12-codex-reasoning-vision/before-vision-ru-720.png"
+      },
+      {
+        "file_id": "F_143760a4d0d7",
+        "path": "docs/audit-2026-08-15-macos-gate0a/README.md"
+      },
+      {
+        "file_id": "F_37722fdf2e2c",
+        "path": "docs/audit-2026-08-15-macos-gate0a/RESULTS.md"
+      },
+      {
+        "file_id": "F_4ec237a62a37",
+        "path": "docs/audit-2026-08-15-macos-gate0b/README.md"
+      },
+      {
+        "file_id": "F_b90f4d9ac6d2",
+        "path": "docs/audit-2026-08-15-macos-gate0b/RESULTS.md"
+      },
+      {
+        "file_id": "F_2f5afd3606a6",
+        "path": "docs/audit-2026-08-15-math-player-tray/README.md"
+      },
+      {
+        "file_id": "F_7811adf64a91",
+        "path": "docs/audit-2026-08-15-math-player-tray/after-math-player-ru.png"
+      },
+      {
+        "file_id": "F_39b114ba7111",
+        "path": "docs/audit-2026-08-15-math-player-tray/after-math-player.png"
+      },
+      {
+        "file_id": "F_0240f096f5c9",
+        "path": "docs/audit-2026-08-15-math-player-tray/after-tray-menu.png"
+      },
+      {
+        "file_id": "F_dea40aab94e1",
+        "path": "docs/audit-2026-08-15-math-player-tray/before-math-player.png"
+      },
+      {
+        "file_id": "F_fa9862759ff3",
+        "path": "docs/audit-2026-08-15-math-player-tray/before-tray-menu.png"
+      },
+      {
+        "file_id": "F_3e5b14883629",
+        "path": "docs/audit-2026-08-15-rc16-regressions/README.md"
+      },
+      {
+        "file_id": "F_426199eacbe9",
+        "path": "docs/audit-2026-08-15-rc16-regressions/math-player-accepted.png"
+      },
+      {
+        "file_id": "F_13b42ed219dc",
+        "path": "docs/audit-2026-08-15-rc16-regressions/tray-menu-accepted.png"
+      },
+      {
+        "file_id": "F_24589cde4cc6",
+        "path": "docs/audit-2026-08-29-macos-model-tps/README.md"
+      },
+      {
+        "file_id": "F_d869ca3498dc",
+        "path": "docs/audit-2026-08-29-macos-model-tps/mac-gate-summary.txt"
+      },
+      {
+        "file_id": "F_c72db88658ab",
+        "path": "docs/audit-2026-08-29-macos-model-tps/review-summary.txt"
+      },
+      {
+        "file_id": "F_5c2fbdc55d81",
+        "path": "docs/audit-2026-08-29-macos-model-tps/windows-gate-summary.txt"
+      },
+      {
+        "file_id": "F_814defc417a6",
+        "path": "docs/audit-2026-08-29-runtime-decomposition/README.md"
+      },
+      {
+        "file_id": "F_8a098a2f47a8",
+        "path": "docs/audit-2026-08-29-stt-macos/README.md"
+      },
+      {
+        "file_id": "F_3236dea2a98f",
+        "path": "docs/audit-2026-08-29-stt-macos/after-en.png"
+      },
+      {
+        "file_id": "F_0cf41b8478ef",
+        "path": "docs/audit-2026-08-29-stt-macos/after-ru.png"
+      },
+      {
+        "file_id": "F_b1182456f71a",
+        "path": "docs/audit-2026-08-29-stt-macos/before-en.png"
+      },
+      {
+        "file_id": "F_3a07a1ecad51",
+        "path": "docs/audit-2026-08-29-stt-macos/before-ru.png"
+      },
+      {
+        "file_id": "F_8c0bc9bd6960",
+        "path": "docs/audit-2026-08-29-tile-selection/README.md"
+      },
+      {
+        "file_id": "F_2494f39cb73f",
+        "path": "docs/audit-2026-08-29-tile-selection/before-c8fbc583-rich-view.png"
+      },
+      {
+        "file_id": "F_e19ba7a5f7cc",
+        "path": "docs/audit-2026-08-29-tile-selection/before-c8fbc583-select-mode.png"
+      },
+      {
+        "file_id": "F_e1daa816e9ca",
+        "path": "docs/audit-2026-08-30-macos-settings-rc2/README.md"
+      },
+      {
+        "file_id": "F_ff3e010d2a53",
+        "path": "docs/audit-2026-08-30-macos-settings-rc2/after-ai-mlx-text-ru.png"
+      },
+      {
+        "file_id": "F_c8ac496433a2",
+        "path": "docs/audit-2026-08-30-macos-settings-rc2/after-ai-mlx-vision-ru.png"
+      },
+      {
+        "file_id": "F_004f5b796ed8",
+        "path": "docs/audit-2026-08-30-macos-settings-rc2/after-backup-version-ru.png"
+      },
+      {
+        "file_id": "F_3ffb59c05428",
+        "path": "docs/audit-2026-08-30-macos-settings-rc2/after-read-aloud-short-text-ru.png"
+      },
+      {
+        "file_id": "F_5d728e44b0d6",
+        "path": "docs/audit-2026-08-30-stt-mlx-tts-concurrency/README.md"
+      },
+      {
+        "file_id": "F_13cb67f06360",
+        "path": "docs/audit-2026-08-31-macos-live-latency/README.md"
+      },
+      {
+        "file_id": "F_4b0e37b2df44",
+        "path": "docs/audit-2026-08-31-macos-live-latency/after-en-loading-full.png"
+      },
+      {
+        "file_id": "F_4e8ab3748b7e",
+        "path": "docs/audit-2026-08-31-macos-live-latency/after-en-perf-compact.png"
+      },
+      {
+        "file_id": "F_c14fbd13f48f",
+        "path": "docs/audit-2026-08-31-macos-live-latency/after-en-perf-full.png"
+      },
+      {
+        "file_id": "F_d22602257d31",
+        "path": "docs/audit-2026-08-31-macos-live-latency/after-en-ready-compact.png"
+      },
+      {
+        "file_id": "F_15e8d6e35ae6",
+        "path": "docs/audit-2026-08-31-macos-live-latency/after-en-ready-full.png"
+      },
+      {
+        "file_id": "F_2e7e0c0a71ec",
+        "path": "docs/audit-2026-08-31-macos-live-latency/after-ru-loading-full.png"
+      },
+      {
+        "file_id": "F_127ab7f7dac9",
+        "path": "docs/audit-2026-08-31-macos-live-latency/after-ru-perf-compact.png"
+      },
+      {
+        "file_id": "F_186a00b88e3a",
+        "path": "docs/audit-2026-08-31-macos-live-latency/after-ru-perf-full.png"
+      },
+      {
+        "file_id": "F_028ceca10444",
+        "path": "docs/audit-2026-08-31-macos-live-latency/after-ru-ready-compact.png"
+      },
+      {
+        "file_id": "F_913b5088ab64",
+        "path": "docs/audit-2026-08-31-macos-live-latency/after-ru-ready-full.png"
+      },
+      {
+        "file_id": "F_ebf6ec6a0a56",
+        "path": "docs/audit-2026-08-31-macos-live-latency/before-en-compact.png"
+      },
+      {
+        "file_id": "F_9adb9a60b1e2",
+        "path": "docs/audit-2026-08-31-macos-live-latency/before-en-full.png"
+      },
+      {
+        "file_id": "F_9b23f926f2d0",
+        "path": "docs/audit-2026-08-31-macos-live-latency/before-ru-compact.png"
+      },
+      {
+        "file_id": "F_00c5d17eb731",
+        "path": "docs/audit-2026-08-31-macos-live-latency/before-ru-full.png"
+      },
+      {
+        "file_id": "F_b5a48133562e",
+        "path": "docs/audit-2026-08-31-macos-live-latency/followup-after-en-compact.png"
+      },
+      {
+        "file_id": "F_c2cdee8a85d3",
+        "path": "docs/audit-2026-08-31-macos-live-latency/followup-after-en-full.png"
+      },
+      {
+        "file_id": "F_178fa1ada47c",
+        "path": "docs/audit-2026-08-31-macos-live-latency/followup-after-ru-compact.png"
+      },
+      {
+        "file_id": "F_ff00710e3018",
+        "path": "docs/audit-2026-08-31-macos-live-latency/followup-after-ru-full.png"
+      },
+      {
+        "file_id": "F_7237df6b3334",
+        "path": "docs/audit-2026-09-02-stt-question-boundary/README.md"
+      },
+      {
+        "file_id": "F_ae0313fad6d4",
+        "path": "docs/audit-2026-09-02-stt-question-boundary/after-auto-tile.png"
+      },
+      {
+        "file_id": "F_97fcda8c6ddb",
+        "path": "docs/audit-2026-09-02-stt-question-boundary/before-auto-tile.png"
+      },
+      {
+        "file_id": "F_38d9b2429194",
+        "path": "docs/audit-2026-09-02-stt-question-boundary/timing.txt"
+      },
+      {
+        "file_id": "F_e7f610b2b073",
+        "path": "docs/audit-2026-09-06-astra-icons/README.md"
+      },
+      {
+        "file_id": "F_7706cb3dd5fe",
+        "path": "docs/audit-2026-09-06-astra-icons/rc2-verification.md"
+      },
+      {
+        "file_id": "F_6b5bfc6dbb74",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/README.md"
+      },
+      {
+        "file_id": "F_9496127223b5",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/after-audio-en-bottom.png"
+      },
+      {
+        "file_id": "F_564cbaf01e8e",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/after-audio-en.png"
+      },
+      {
+        "file_id": "F_29d3a3c0ad8e",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/before-audio-en.png"
+      },
+      {
+        "file_id": "F_fbcb3ceffe92",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/checklist.md"
+      },
+      {
+        "file_id": "F_028edc4deef8",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/fixture-en-default.png"
+      },
+      {
+        "file_id": "F_1510d41b6f14",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/fixture-en-empty.png"
+      },
+      {
+        "file_id": "F_e603d7aad981",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/fixture-en-error.png"
+      },
+      {
+        "file_id": "F_46aafd003808",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/fixture-en-loading.png"
+      },
+      {
+        "file_id": "F_adc784d7d79b",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/fixture-en-missing.png"
+      },
+      {
+        "file_id": "F_0033645f59ca",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/fixture-en-save-error.png"
+      },
+      {
+        "file_id": "F_928ab9993d5d",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/fixture-en-selected.png"
+      },
+      {
+        "file_id": "F_4e321804ca93",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/fixture-ru-default.png"
+      },
+      {
+        "file_id": "F_ce6428da8002",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/fixture-ru-empty.png"
+      },
+      {
+        "file_id": "F_144dfcecfb87",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/fixture-ru-error.png"
+      },
+      {
+        "file_id": "F_aa29738b21d8",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/fixture-ru-loading.png"
+      },
+      {
+        "file_id": "F_1adeb646d5a5",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/fixture-ru-min-bottom.png"
+      },
+      {
+        "file_id": "F_61ce3c0e9481",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/fixture-ru-min-top.png"
+      },
+      {
+        "file_id": "F_1b112d98b771",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/fixture-ru-missing.png"
+      },
+      {
+        "file_id": "F_e98e798e62b9",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/fixture-ru-save-error.png"
+      },
+      {
+        "file_id": "F_c14cd1b13dac",
+        "path": "docs/audit-2026-09-14-windows-audio-devices/security-review.md"
+      },
+      {
+        "file_id": "F_32f3848a5071",
+        "path": "docs/codex-subscription-provider.md"
+      },
+      {
+        "file_id": "F_db656280795b",
+        "path": "docs/dependency-review-2026-07-09.md"
+      },
+      {
+        "file_id": "F_409b6b3e96b8",
+        "path": "docs/design-review-2026-06-20.md"
+      },
+      {
+        "file_id": "F_874c8bacbd4c",
+        "path": "docs/design-system-adoption-map.md"
+      },
+      {
+        "file_id": "F_7377dfc06322",
+        "path": "docs/design-system.md"
+      },
+      {
+        "file_id": "F_7838936c53a8",
+        "path": "docs/diarization-architecture.md"
+      },
+      {
+        "file_id": "F_a96334bdb247",
+        "path": "docs/fable-brief-2026-07-04.md"
+      },
+      {
+        "file_id": "F_061931bde8ad",
+        "path": "docs/fable-plan-2026-07-04.md"
+      },
+      {
+        "file_id": "F_70a78aa40264",
+        "path": "docs/feature-requests.md"
+      },
+      {
+        "file_id": "F_73048df6805d",
+        "path": "docs/first-run-wizard-and-readiness-dashboard-concept.md"
+      },
+      {
+        "file_id": "F_8e040b6bfc75",
+        "path": "docs/first-run-wizard-implementation-plan.md"
+      },
+      {
+        "file_id": "F_5551bf02655a",
+        "path": "docs/follow-up-audit-v0.8.4.md"
+      },
+      {
+        "file_id": "F_451f24e5b1e7",
+        "path": "docs/goal-codex-real-provider-rc16.md"
+      },
+      {
+        "file_id": "F_dd3019d2c254",
+        "path": "docs/goal-deps-updates-2026-07-09.md"
+      },
+      {
+        "file_id": "F_15083d1a1e5d",
+        "path": "docs/goal-fable-plan-2026-07-04.md"
+      },
+      {
+        "file_id": "F_9fda35ce9a4a",
+        "path": "docs/goal-grok-codebase-audit.md"
+      },
+      {
+        "file_id": "F_da993ae292e4",
+        "path": "docs/goal-hermes-inapp-install-2026-07-10.md"
+      },
+      {
+        "file_id": "F_32fae6d456e7",
+        "path": "docs/goal-hermes-integration-2026-07-09.md"
+      },
+      {
+        "file_id": "F_9a49c283fec7",
+        "path": "docs/goal-quality-2026-07-10.md"
+      },
+      {
+        "file_id": "F_6e2622079551",
+        "path": "docs/goal-suflyor-followups-2026-07-03.md"
+      },
+      {
+        "file_id": "F_191b34eb6144",
+        "path": "docs/goal-teratts-codex-rc2.md"
+      },
+      {
+        "file_id": "F_c2917b308833",
+        "path": "docs/goal-teratts-rc17.md"
+      },
+      {
+        "file_id": "F_a0d70bba8753",
+        "path": "docs/goal-tester-tz-2026-07-02.md"
+      },
+      {
+        "file_id": "F_1a9b2fa6a799",
+        "path": "docs/goal-tester-tz-2026-07-06.md"
+      },
+      {
+        "file_id": "F_dd3bec63308e",
+        "path": "docs/goal-text-selection-2026-07-03.md"
+      },
+      {
+        "file_id": "F_b04f8679ced4",
+        "path": "docs/goal-v0.30-plan-2026-07-05.md"
+      },
+      {
+        "file_id": "F_05fd5d80018e",
+        "path": "docs/goal-windows-audio-devices.md"
+      },
+      {
+        "file_id": "F_56ae0488f895",
+        "path": "docs/legacy-tauri-react-mentions.md"
+      },
+      {
+        "file_id": "F_571851e35237",
+        "path": "docs/local-whisper-options.md"
+      },
+      {
+        "file_id": "F_190205591184",
+        "path": "docs/macos-install.md"
+      },
+      {
+        "file_id": "F_3d9ff6a03683",
+        "path": "docs/memory-architecture.md"
+      },
+      {
+        "file_id": "F_27f2f6d634f7",
+        "path": "docs/memory-phase1-recovery-spec.md"
+      },
+      {
+        "file_id": "F_d49c35f950cd",
+        "path": "docs/onboarding-plan-v0220.md"
+      },
+      {
+        "file_id": "F_883f0a9f2d70",
+        "path": "docs/overlay-host-modularization-plan.md"
+      },
+      {
+        "file_id": "F_470ef686ead2",
+        "path": "docs/personal-memory-and-session-store-architecture.md"
+      },
+      {
+        "file_id": "F_59750d052e79",
+        "path": "docs/qwen-parallel-audit-2026-07-29.md"
+      },
+      {
+        "file_id": "F_72bf5b6005af",
+        "path": "docs/read-aloud-plan.md"
+      },
+      {
+        "file_id": "F_77cffbcc798d",
+        "path": "docs/read-aloud-status.md"
+      },
+      {
+        "file_id": "F_218c5f21e973",
+        "path": "docs/redesign-glacier-plan.md"
+      },
+      {
+        "file_id": "F_cc01ce1e4885",
+        "path": "docs/reference-shots/quality-2026-07-10/00-overlay-bar.png"
+      },
+      {
+        "file_id": "F_72ccbb42d193",
+        "path": "docs/reference-shots/quality-2026-07-10/01-profile-context.png"
+      },
+      {
+        "file_id": "F_34826d27ef21",
+        "path": "docs/reference-shots/quality-2026-07-10/02-coaching.png"
+      },
+      {
+        "file_id": "F_5a230f29b57f",
+        "path": "docs/reference-shots/quality-2026-07-10/03-components.png"
+      },
+      {
+        "file_id": "F_3fcf65afaf27",
+        "path": "docs/reference-shots/quality-2026-07-10/04-ai-bridge.png"
+      },
+      {
+        "file_id": "F_476a792c67e1",
+        "path": "docs/reference-shots/quality-2026-07-10/05-stt.png"
+      },
+      {
+        "file_id": "F_5ce38f0ade43",
+        "path": "docs/reference-shots/quality-2026-07-10/06-tts.png"
+      },
+      {
+        "file_id": "F_afc503f1abfb",
+        "path": "docs/reference-shots/quality-2026-07-10/07-auto-tiles.png"
+      },
+      {
+        "file_id": "F_3f066c9f8abc",
+        "path": "docs/reference-shots/quality-2026-07-10/08-knowledge-base.png"
+      },
+      {
+        "file_id": "F_1bd72c775079",
+        "path": "docs/reference-shots/quality-2026-07-10/09-hermes.png"
+      },
+      {
+        "file_id": "F_da6c57905bd2",
+        "path": "docs/reference-shots/quality-2026-07-10/10-audio.png"
+      },
+      {
+        "file_id": "F_3b1392fc4670",
+        "path": "docs/reference-shots/quality-2026-07-10/11-interface.png"
+      },
+      {
+        "file_id": "F_319ff5331086",
+        "path": "docs/reference-shots/quality-2026-07-10/12-hotkeys.png"
+      },
+      {
+        "file_id": "F_b20453e58c51",
+        "path": "docs/reference-shots/quality-2026-07-10/13-privacy.png"
+      },
+      {
+        "file_id": "F_cd780b38ce9b",
+        "path": "docs/reference-shots/quality-2026-07-10/14-updates.png"
+      },
+      {
+        "file_id": "F_32ed98808dab",
+        "path": "docs/reference-shots/quality-2026-07-10/15-diagnostics.png"
+      },
+      {
+        "file_id": "F_abd68b435ee1",
+        "path": "docs/reference-shots/quality-2026-07-10/16-memory.png"
+      },
+      {
+        "file_id": "F_cc5109298b6a",
+        "path": "docs/reference-shots/quality-2026-07-10/17-archive-empty.png"
+      },
+      {
+        "file_id": "F_f4755237e3ae",
+        "path": "docs/reference-shots/quality-2026-07-10/18-tile-error-state.png"
+      },
+      {
+        "file_id": "F_8368109587d7",
+        "path": "docs/regression-checklist.md"
+      },
+      {
+        "file_id": "F_bf9aaa1657d9",
+        "path": "docs/release-evidence-v0.35.3/README.md"
+      },
+      {
+        "file_id": "F_cac077a07dbc",
+        "path": "docs/release-evidence-v0.35.3/after-updates-v0.35.3-en.png"
+      },
+      {
+        "file_id": "F_0d8ebf2107f0",
+        "path": "docs/release-evidence-v0.35.3/before-updates-v0.35.2-en.png"
+      },
+      {
+        "file_id": "F_fd83a7b91548",
+        "path": "docs/release-evidence-v0.35.3/help-en.png"
+      },
+      {
+        "file_id": "F_ea298ad7bcf1",
+        "path": "docs/release-evidence-v0.36.0/README.md"
+      },
+      {
+        "file_id": "F_9015aa0784e2",
+        "path": "docs/release-notes-v0.23.0.md"
+      },
+      {
+        "file_id": "F_6be26b4357f6",
+        "path": "docs/release-notes-v0.34.0.md"
+      },
+      {
+        "file_id": "F_30e889f0fb4b",
+        "path": "docs/release-notes-v0.35.3.md"
+      },
+      {
+        "file_id": "F_8bfeca23bc57",
+        "path": "docs/release-notes-v0.36.0.md"
+      },
+      {
+        "file_id": "F_7755fef5475a",
+        "path": "docs/release-notes-v0.36.1-rc.1.md"
+      },
+      {
+        "file_id": "F_1ddd72097054",
+        "path": "docs/release-notes-v0.36.1-rc.2.md"
+      },
+      {
+        "file_id": "F_a45ef5a7cea3",
+        "path": "docs/release-notes-v0.36.1-rc.3.md"
+      },
+      {
+        "file_id": "F_26165d4f2ec1",
+        "path": "docs/release-notes-v0.38.0-rc.1.md"
+      },
+      {
+        "file_id": "F_a53a12e14f60",
+        "path": "docs/release-notes-v0.38.0-rc.2.md"
+      },
+      {
+        "file_id": "F_7ae580428374",
+        "path": "docs/release-notes-v0.38.0.md"
+      },
+      {
+        "file_id": "F_a854a4134008",
+        "path": "docs/release-notes-v0.38.1-rc.1.md"
+      },
+      {
+        "file_id": "F_82bb19681294",
+        "path": "docs/release-notes-v0.38.1-rc.2.md"
+      },
+      {
+        "file_id": "F_5b9f560c0d50",
+        "path": "docs/release-notes-v0.38.1-rc.3.md"
+      },
+      {
+        "file_id": "F_5bc08a7884b0",
+        "path": "docs/retest-context-window-2026-07-30.html"
+      },
+      {
+        "file_id": "F_4f6720c78cf9",
+        "path": "docs/retest-hermes-v0.33.0.html"
+      },
+      {
+        "file_id": "F_e9441c6dd739",
+        "path": "docs/retest-quality-q1-tts.html"
+      },
+      {
+        "file_id": "F_182349abd27b",
+        "path": "docs/retest-quality-q2-diarization.html"
+      },
+      {
+        "file_id": "F_87f690945af1",
+        "path": "docs/retest-quality-q3-icons.html"
+      },
+      {
+        "file_id": "F_c4cca1b382d0",
+        "path": "docs/retest-quality-q4-ui.html"
+      },
+      {
+        "file_id": "F_c70a4a85f6d0",
+        "path": "docs/retest-quality-q5-player.html"
+      },
+      {
+        "file_id": "F_749e8645b364",
+        "path": "docs/retest-selection-2026-07-03.html"
+      },
+      {
+        "file_id": "F_109c7a5ee4da",
+        "path": "docs/retest-selection-r2-2026-07-03.html"
+      },
+      {
+        "file_id": "F_0c96fbfb8e97",
+        "path": "docs/retest-selection-r3-2026-07-03.html"
+      },
+      {
+        "file_id": "F_f0087879ea27",
+        "path": "docs/retest-template.html"
+      },
+      {
+        "file_id": "F_18c697c10e84",
+        "path": "docs/retest-tile-lock-normalization.html"
+      },
+      {
+        "file_id": "F_7030a78a6260",
+        "path": "docs/retest-transcript-stars-r4-2026-07-03.html"
+      },
+      {
+        "file_id": "F_be37c98cc083",
+        "path": "docs/retest-v0.23.0-fixes.html"
+      },
+      {
+        "file_id": "F_c66bca6945f3",
+        "path": "docs/retest-v0.24.0.html"
+      },
+      {
+        "file_id": "F_75d58fcf7920",
+        "path": "docs/retest-v0.25.1-fixes.html"
+      },
+      {
+        "file_id": "F_abb4bcd528dc",
+        "path": "docs/retest-v0.26.0-fixes.html"
+      },
+      {
+        "file_id": "F_446dfdf0a060",
+        "path": "docs/retest-v0.27.0.html"
+      },
+      {
+        "file_id": "F_2ca98923e797",
+        "path": "docs/retest-v0.28.0-fixes.html"
+      },
+      {
+        "file_id": "F_7c7a2c146f95",
+        "path": "docs/retest-v0.28.0-round2.html"
+      },
+      {
+        "file_id": "F_9343b47bb129",
+        "path": "docs/retest-v0.29.0.html"
+      },
+      {
+        "file_id": "F_843fafaac99e",
+        "path": "docs/retest-v0.30-F-fix.html"
+      },
+      {
+        "file_id": "F_8416cf57d059",
+        "path": "docs/retest-v0.30-I.html"
+      },
+      {
+        "file_id": "F_8e43d245ce65",
+        "path": "docs/retest-v0.30-phase1.html"
+      },
+      {
+        "file_id": "F_214b4eb0bc2b",
+        "path": "docs/retest-v0.30-player-audiofix.html"
+      },
+      {
+        "file_id": "F_f839e43497ab",
+        "path": "docs/retest-v0.30-player.html"
+      },
+      {
+        "file_id": "F_b2c7e37750fc",
+        "path": "docs/retest-v0.31.0-tz.html"
+      },
+      {
+        "file_id": "F_2acd5ba109af",
+        "path": "docs/retest-v0.34.0-release.html"
+      },
+      {
+        "file_id": "F_8146ec010fd5",
+        "path": "docs/retest-v0.35.1.html"
+      },
+      {
+        "file_id": "F_9e3cba543057",
+        "path": "docs/retest-v0.35.2-fixes.html"
+      },
+      {
+        "file_id": "F_fb8ffd488b26",
+        "path": "docs/retest-v0.36.1-rc.1.html"
+      },
+      {
+        "file_id": "F_0c7c2798b76f",
+        "path": "docs/retest-v0.36.1-rc.10.html"
+      },
+      {
+        "file_id": "F_58bf41e9f9d3",
+        "path": "docs/retest-v0.36.1-rc.11.html"
+      },
+      {
+        "file_id": "F_0a0fb69a225b",
+        "path": "docs/retest-v0.36.1-rc.12.html"
+      },
+      {
+        "file_id": "F_c4491c356f2a",
+        "path": "docs/retest-v0.36.1-rc.13.html"
+      },
+      {
+        "file_id": "F_8f89d3a468ab",
+        "path": "docs/retest-v0.36.1-rc.14.html"
+      },
+      {
+        "file_id": "F_2e90e7cbde69",
+        "path": "docs/retest-v0.36.1-rc.15.html"
+      },
+      {
+        "file_id": "F_97cfc3543421",
+        "path": "docs/retest-v0.36.1-rc.16.html"
+      },
+      {
+        "file_id": "F_d86c5f8ac32d",
+        "path": "docs/retest-v0.36.1-rc.2.html"
+      },
+      {
+        "file_id": "F_a667737ee617",
+        "path": "docs/retest-v0.36.1-rc.3.html"
+      },
+      {
+        "file_id": "F_d2a4385ee2b7",
+        "path": "docs/retest-v0.36.1-rc.4.html"
+      },
+      {
+        "file_id": "F_0563d61b6660",
+        "path": "docs/retest-v0.36.1-rc.5.html"
+      },
+      {
+        "file_id": "F_5206a2f4b004",
+        "path": "docs/retest-v0.36.1-rc.6.html"
+      },
+      {
+        "file_id": "F_42806b8c8305",
+        "path": "docs/retest-v0.36.1-rc.7.html"
+      },
+      {
+        "file_id": "F_04126cb8ff32",
+        "path": "docs/retest-v0.36.1-rc.8.html"
+      },
+      {
+        "file_id": "F_8fb313e2c77a",
+        "path": "docs/retest-v0.36.1-rc.9.html"
+      },
+      {
+        "file_id": "F_30e1f2526d58",
+        "path": "docs/retest-v0.37.0-rc.1.html"
+      },
+      {
+        "file_id": "F_51553efa7c36",
+        "path": "docs/retest-v0.37.0-rc.10.html"
+      },
+      {
+        "file_id": "F_017b5887b0f8",
+        "path": "docs/retest-v0.37.0-rc.11.html"
+      },
+      {
+        "file_id": "F_02ead855a8ce",
+        "path": "docs/retest-v0.37.0-rc.12.html"
+      },
+      {
+        "file_id": "F_4944424c0bf6",
+        "path": "docs/retest-v0.37.0-rc.13.html"
+      },
+      {
+        "file_id": "F_fc4dde864e7a",
+        "path": "docs/retest-v0.37.0-rc.14.html"
+      },
+      {
+        "file_id": "F_a27f420e2fc3",
+        "path": "docs/retest-v0.37.0-rc.16.html"
+      },
+      {
+        "file_id": "F_798f33706aa9",
+        "path": "docs/retest-v0.37.0-rc.2.html"
+      },
+      {
+        "file_id": "F_93b3cec9f74c",
+        "path": "docs/retest-v0.37.0-rc.3.html"
+      },
+      {
+        "file_id": "F_132bafb99f79",
+        "path": "docs/retest-v0.37.0-rc.4.html"
+      },
+      {
+        "file_id": "F_bf314e85a7d1",
+        "path": "docs/retest-v0.37.0-rc.5.1.html"
+      },
+      {
+        "file_id": "F_3542e6930b89",
+        "path": "docs/retest-v0.37.0-rc.5.html"
+      },
+      {
+        "file_id": "F_327c8407452c",
+        "path": "docs/retest-v0.37.0-rc.6.html"
+      },
+      {
+        "file_id": "F_e87c076f20d4",
+        "path": "docs/retest-v0.37.0-rc.7.html"
+      },
+      {
+        "file_id": "F_73df63ac6912",
+        "path": "docs/retest-v0.37.0-rc.8.html"
+      },
+      {
+        "file_id": "F_5cfcc986fc09",
+        "path": "docs/retest-v0.37.0-rc.9.html"
+      },
+      {
+        "file_id": "F_16c0b70bdc69",
+        "path": "docs/retest-v0.37.0.html"
+      },
+      {
+        "file_id": "F_3405d2ed2df9",
+        "path": "docs/retest-v0.38.0-rc.1-stt.html"
+      },
+      {
+        "file_id": "F_a979a9e2530e",
+        "path": "docs/retest-v0.38.0-rc.2-macos-settings.html"
+      },
+      {
+        "file_id": "F_9ec4dc0c1a91",
+        "path": "docs/retest-v0.38.0-rc.3-macos-audio.html"
+      },
+      {
+        "file_id": "F_74dd0752dc5e",
+        "path": "docs/retest-v0.38.0.html"
+      },
+      {
+        "file_id": "F_1c45e4f1fd83",
+        "path": "docs/retest-v0.38.1-rc.1-macos-mlx.html"
+      },
+      {
+        "file_id": "F_fd450c303068",
+        "path": "docs/retest-v0.38.1-rc.2-astra-icons.html"
+      },
+      {
+        "file_id": "F_8a2869cb187b",
+        "path": "docs/retest-v0.38.1-rc.2-macos-stt.html"
+      },
+      {
+        "file_id": "F_f58bfec58505",
+        "path": "docs/retest-v0.38.1-rc.3-windows-audio.html"
+      },
+      {
+        "file_id": "F_be57e90ebaba",
+        "path": "docs/scout-report-v0.8.2.md"
+      },
+      {
+        "file_id": "F_1f3a36ea0735",
+        "path": "docs/screen-capture-vision-plan.md"
+      },
+      {
+        "file_id": "F_1dc56b1d70b4",
+        "path": "docs/screenshots/kb-palette.png"
+      },
+      {
+        "file_id": "F_022bf6e57ebd",
+        "path": "docs/screenshots/overlay-bar.png"
+      },
+      {
+        "file_id": "F_316da2ac892a",
+        "path": "docs/screenshots/settings.png"
+      },
+      {
+        "file_id": "F_66da31e4c834",
+        "path": "docs/screenshots/tile.png"
+      },
+      {
+        "file_id": "F_3a950537d892",
+        "path": "docs/security-audit-2026-05-26.md"
+      },
+      {
+        "file_id": "F_9548d6f78126",
+        "path": "docs/server-settings-import-plan.md"
+      },
+      {
+        "file_id": "F_2668d7f40073",
+        "path": "docs/showcase/overlay-bar-glacier.png"
+      },
+      {
+        "file_id": "F_3c9c2383732e",
+        "path": "docs/showcase/overlay-bar-graphite.png"
+      },
+      {
+        "file_id": "F_84442cef765d",
+        "path": "docs/showcase/overlay-bar-light-frost.png"
+      },
+      {
+        "file_id": "F_7cdb3b6d0554",
+        "path": "docs/showcase/overlay-bar-obsidian.png"
+      },
+      {
+        "file_id": "F_d2cedebc0240",
+        "path": "docs/showcase/session-archive.png"
+      },
+      {
+        "file_id": "F_5fb96e6c1546",
+        "path": "docs/showcase/settings-interface.png"
+      },
+      {
+        "file_id": "F_bf043c3e4365",
+        "path": "docs/showcase/settings-stt-cloud.png"
+      },
+      {
+        "file_id": "F_aef610557da0",
+        "path": "docs/showcase/setup-wizard.png"
+      },
+      {
+        "file_id": "F_5145476f6d79",
+        "path": "docs/showcase/tile-answer.png"
+      },
+      {
+        "file_id": "F_e7df85546089",
+        "path": "docs/slint-design-system-and-safe-redesign-plan.md"
+      },
+      {
+        "file_id": "F_1cf6f9bb27a4",
+        "path": "docs/slint-surface-audit.md"
+      },
+      {
+        "file_id": "F_e7cfc1804b6d",
+        "path": "docs/state-and-plan.md"
+      },
+      {
+        "file_id": "F_52bb700e0012",
+        "path": "docs/winbrat-recovery.md"
+      },
+      {
+        "file_id": "F_d879b9d84b6c",
+        "path": "experiments/AGENTS.md"
+      },
+      {
+        "file_id": "F_b0772ce80240",
+        "path": "experiments/macos-gate0a/Cargo.lock"
+      },
+      {
+        "file_id": "F_5693c167bb37",
+        "path": "experiments/macos-gate0a/Cargo.toml"
+      },
+      {
+        "file_id": "F_84275989fa1a",
+        "path": "experiments/macos-gate0a/Info.plist"
+      },
+      {
+        "file_id": "F_a711c29a9be7",
+        "path": "experiments/macos-gate0a/README.md"
+      },
+      {
+        "file_id": "F_6a96781b689c",
+        "path": "experiments/macos-gate0a/build.rs"
+      },
+      {
+        "file_id": "F_1b29da709bad",
+        "path": "experiments/macos-gate0a/scripts/build-app.sh"
+      },
+      {
+        "file_id": "F_bcbfc436efa6",
+        "path": "experiments/macos-gate0a/src/appkit.m"
+      },
+      {
+        "file_id": "F_102d5af3955a",
+        "path": "experiments/macos-gate0a/src/main.rs"
+      },
+      {
+        "file_id": "F_a736104d913f",
+        "path": "experiments/macos-gate0a/ui/gate0a.slint"
+      },
+      {
+        "file_id": "F_093bf8db84f1",
+        "path": "experiments/macos-gate0b/Cargo.lock"
+      },
+      {
+        "file_id": "F_5b727618d493",
+        "path": "experiments/macos-gate0b/Cargo.toml"
+      },
+      {
+        "file_id": "F_357aaab4875f",
+        "path": "experiments/macos-gate0b/Info.plist"
+      },
+      {
+        "file_id": "F_404e81675bd9",
+        "path": "experiments/macos-gate0b/README.md"
+      },
+      {
+        "file_id": "F_75b50cf7e64d",
+        "path": "experiments/macos-gate0b/build.rs"
+      },
+      {
+        "file_id": "F_0191b977ecc8",
+        "path": "experiments/macos-gate0b/entitlements.plist"
+      },
+      {
+        "file_id": "F_e4cb402f374d",
+        "path": "experiments/macos-gate0b/scripts/build-app.sh"
+      },
+      {
+        "file_id": "F_0b6f75c88aac",
+        "path": "experiments/macos-gate0b/scripts/check.sh"
+      },
+      {
+        "file_id": "F_2b6342576bcf",
+        "path": "experiments/macos-gate0b/src/capture.m"
+      },
+      {
+        "file_id": "F_cc5e026d3800",
+        "path": "experiments/macos-gate0b/src/main.rs"
+      },
+      {
+        "file_id": "F_71ccb2ef57d5",
+        "path": "experiments/macos-gate0b/ui/gate0b.slint"
+      },
+      {
+        "file_id": "F_e6665e72c3b4",
+        "path": "integrations/hermes-plugin/README.md"
+      },
+      {
+        "file_id": "F_b47eb0d696a1",
+        "path": "integrations/hermes-plugin/suflyor/__init__.py"
+      },
+      {
+        "file_id": "F_ad6c612c7ee3",
+        "path": "integrations/hermes-plugin/suflyor/plugin.yaml"
+      },
+      {
+        "file_id": "F_55c626d2ddca",
+        "path": "integrations/hermes-plugin/tests/test_limits.py"
+      },
+      {
+        "file_id": "F_b8095497c6a2",
+        "path": "suflyor-mlx/.gitignore"
+      },
+      {
+        "file_id": "F_1e4248049d2d",
+        "path": "suflyor-mlx/Package.resolved"
+      },
+      {
+        "file_id": "F_e9ec840b1378",
+        "path": "suflyor-mlx/Package.swift"
+      },
+      {
+        "file_id": "F_cacf5608f181",
+        "path": "suflyor-mlx/README.md"
+      },
+      {
+        "file_id": "F_ee2839b9197c",
+        "path": "suflyor-mlx/Scripts/build-metallib.sh"
+      },
+      {
+        "file_id": "F_e5f0de62fae4",
+        "path": "suflyor-mlx/Sources/SuflyorMLX/main.swift"
+      },
+      {
+        "file_id": "F_141789cc3569",
+        "path": "suflyor-mlx/Sources/SuflyorMLXCore/Protocol.swift"
+      },
+      {
+        "file_id": "F_33873fc88cb6",
+        "path": "suflyor-mlx/Sources/SuflyorMLXCore/Server.swift"
+      },
+      {
+        "file_id": "F_264791fd60be",
+        "path": "suflyor-mlx/Tests/SuflyorMLXCoreTests/ProtocolTests.swift"
+      },
+      {
+        "file_id": "F_1da480b16684",
+        "path": "tests/live-corpus/README.md"
+      },
+      {
+        "file_id": "F_c8412b052f68",
+        "path": "tests/live-corpus/cases/001-devops-sysadmin-1h/ground-truth.json"
+      },
+      {
+        "file_id": "F_9f7f32389e14",
+        "path": "tests/live-corpus/cases/example/ground-truth.json"
+      },
+      {
+        "file_id": "F_fa349471ea2d",
+        "path": "tests/live-corpus/cases/raw/QqF0656aBPc.srt"
+      },
+      {
+        "file_id": "F_5946456546c1",
+        "path": "tests/live-corpus/cases/raw/QqF0656aBPc/transcript.json"
+      },
+      {
+        "file_id": "F_dcd29be60f6e",
+        "path": "tests/live-corpus/cases/raw/QqF0656aBPc/transcript.txt"
+      },
+      {
+        "file_id": "F_e1b920dd0aac",
+        "path": "tests/live-corpus/cases/raw/manifest.json"
+      },
+      {
+        "file_id": "F_74a21179f4ae",
+        "path": "tests/live-corpus/cases/raw/manifest/transcript.json"
+      },
+      {
+        "file_id": "F_2b068054ce7e",
+        "path": "tests/live-corpus/cases/raw/manifest/transcript.txt"
+      },
+      {
+        "file_id": "F_80d907f78fc7",
+        "path": "tests/live-corpus/tools/fetch-transcripts.py"
+      }
+    ]
+  }
+}
