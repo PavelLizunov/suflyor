@@ -4303,6 +4303,7 @@ dependencies = [
  "serde_json",
  "sha1",
  "sha2",
+ "tempfile",
  "tiny_http",
  "tokio",
  "transcribe-rs",
@@ -5645,7 +5646,7 @@ dependencies = [
 
 [[package]]
 name = "slint-replay"
-version = "0.38.1-rc.3"
+version = "0.38.1-rc.4"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
