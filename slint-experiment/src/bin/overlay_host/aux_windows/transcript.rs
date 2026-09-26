@@ -486,7 +486,11 @@ struct DiarJobHandles {
 /// the UI-thread poll ([`start_diar_install_poll`]) takes it. Cloned between
 /// the install callback, `DIAR_INSTALL_JOB`, and the poll, so a re-attached
 /// poll after a close+reopen consumes the SAME install.
-type DiarInstallSlot = Arc<Mutex<Option<Result<(), String>>>>;
+#[derive(Clone)]
+struct DiarInstallSlot {
+    result: Arc<Mutex<Option<Result<(), String>>>>,
+    engine: overlay_backend::diarize::DiarEngine,
+}
 
 /// suflyor H3 — how a finished job failed, so the UI never paints a result that
 /// was NOT persisted. `Run` = the sidecar/parse failed (path-safe reason via
@@ -721,7 +725,7 @@ fn start_diar_install_poll(weak: slint::Weak<TranscriptWindow>, slot: DiarInstal
         slint::TimerMode::Repeated,
         std::time::Duration::from_millis(300),
         move || {
-            let done = slot.lock().ok().and_then(|mut g| g.take());
+            let done = slot.result.lock().ok().and_then(|mut g| g.take());
             let Some(result) = done else {
                 // Panic backstop (same as the diarization poll): the latch is
                 // free but no outcome was posted — the worker unwound.
@@ -742,6 +746,7 @@ fn start_diar_install_poll(weak: slint::Weak<TranscriptWindow>, slot: DiarInstal
                 // the next open recomputes readiness from the fs.
                 return;
             };
+            w.set_use_nemotron(slot.engine == overlay_backend::diarize::DiarEngine::Nemotron3);
             w.set_installing_diar_models(false);
             match result {
                 Ok(()) => {
@@ -917,8 +922,6 @@ fn wire_transcript_diarization(
         && has_sys_audio_ms
         && overlay_backend::session_audio::session_has_recordings(session_id);
     let models_ready = overlay_backend::diarize::models_ready();
-    let can_diarize = session_diarizable && models_ready;
-    let needs_diar_models = session_diarizable && !models_ready;
     // I-1: warn when the recording predates the wall-clock-padding fix — system.wav
     // shorter than the transcript span means audio_ms→sample drifts and speaker labels
     // can land on the wrong lines.
@@ -935,9 +938,17 @@ fn wire_transcript_diarization(
     ));
     let utts_rc: Rc<Vec<Utterance>> = Rc::new(utts_display.to_vec());
 
-    win.set_use_nemotron(false); // per-open default is always the legacy engine
-    win.set_can_diarize(can_diarize);
-    win.set_needs_diar_models(needs_diar_models);
+    let install_engine = live_install.as_ref().map(|job| job.engine);
+    let use_nemotron = install_engine == Some(overlay_backend::diarize::DiarEngine::Nemotron3);
+    win.set_nemotron_available(cfg!(windows));
+    win.set_use_nemotron(use_nemotron); // new jobs default to legacy; in-flight installs retain their engine
+    let selected_ready = if use_nemotron {
+        overlay_backend::diarize::engine_ready(overlay_backend::diarize::DiarEngine::Nemotron3)
+    } else {
+        models_ready
+    };
+    win.set_can_diarize(session_diarizable && selected_ready);
+    win.set_needs_diar_models(session_diarizable && !selected_ready);
     // V-1 — honest busy state: a download that outlived the window shows as
     // downloading on (re)open; the re-attached poll clears it when it lands.
     win.set_installing_diar_models(install_busy);
@@ -1221,10 +1232,17 @@ fn wire_transcript_diarization(
             w.set_installing_diar_models(true);
             w.set_diar_status(SharedString::default());
 
-            let slot: DiarInstallSlot = Arc::new(Mutex::new(None));
+            let slot = DiarInstallSlot {
+                result: Arc::new(Mutex::new(None)),
+                engine: if use_nemotron {
+                    overlay_backend::diarize::DiarEngine::Nemotron3
+                } else {
+                    overlay_backend::diarize::DiarEngine::Legacy
+                },
+            };
             DIAR_INSTALL_JOB.with(|j| *j.borrow_mut() = Some(slot.clone()));
             {
-                let slot_w = slot.clone();
+                let slot_w = slot.result.clone();
                 rt.spawn_blocking(move || {
                     // Held until the outcome is posted — on EVERY exit, including
                     // a panic unwinding the download (RAII; the latch can't be

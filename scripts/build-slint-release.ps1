@@ -83,8 +83,9 @@ $pins = @{
   'ggml-base.dll' = 'DAB65D84B1E67B0303B645012649B74A61938178F2395C220B6D4656CC2B7452'
   'ggml-cpu.dll' = '9220E4CC9F299C071008269054617A244219255EA4E57EC594C79BD3C447D4AE'
 }
-if (-not (Test-Path $native)) { throw 'Pinned Nemotron native runtime is not staged' }
+if ($Installer -and -not (Test-Path $native)) { throw 'Pinned Nemotron native runtime is not staged' }
 $nativeFiles = @('nemo-speech.exe','nemo_speech_asr.dll','nemo_speech_asr_c.dll','ggml.dll','ggml-base.dll','ggml-cpu.dll')
+if ($Installer) {
 foreach ($file in $nativeFiles) {
     $path = Join-Path $native $file
     if (-not (Test-Path $path)) { throw "Nemotron binary missing: $file" }
@@ -97,6 +98,7 @@ foreach ($file in @('LICENSE','NOTICE','THIRD_PARTY_NOTICES.md','MODEL_LICENSE',
     $path = Join-Path $native $file
     if (-not (Test-Path $path)) { throw "Nemotron notice missing: $file" }
     Copy-Item -LiteralPath $path -Destination (Join-Path $licenseDir $file) -Force
+}
 }
 
 # DirectML EP (GigaAM GPU): ort links DMLCreateDevice1 at process startup, so

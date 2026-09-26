@@ -408,12 +408,35 @@ pub fn nemotron_installed() -> bool {
     nemotron_installed_in(root)
 }
 
+/// Verify the actual bytes again immediately before execution. This must not
+/// delete a user's model on a bad digest; installation owns repair explicitly.
+///
+/// # Errors
+/// Returns an error for unreadable data or an invalid digest.
+pub fn nemotron_model_digest_ok(path: &Path) -> Result<bool> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    if std::fs::metadata(path).is_err_or(|m| m.len() != NEMOTRON_BYTES) {
+        return Ok(false);
+    }
+    let mut input = std::fs::File::open(path).context("open Nemotron model")?;
+    let mut digest = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = input.read(&mut buffer).context("read Nemotron model")?;
+        if count == 0 {
+            break;
+        }
+        digest.update(&buffer[..count]);
+    }
+    Ok(crate::download::hex(&digest.finalize()).eq_ignore_ascii_case(NEMOTRON_SHA256))
+}
+
 fn nemotron_installed_in(root: &Path) -> bool {
     let path = root.join(NEMOTRON_FILE);
-    let good_size = std::fs::metadata(path).is_ok_and(|m| m.len() == NEMOTRON_BYTES);
     let sentinel = std::fs::read_to_string(root.join(NEMOTRON_SENTINEL))
         .is_ok_and(|s| s.trim() == format!("{NEMOTRON_REV}:{NEMOTRON_SHA256}"));
-    good_size && sentinel
+    sentinel && nemotron_model_digest_ok(&path).unwrap_or(false)
 }
 
 /// Download, verify and commit the independent GGUF without touching legacy files.
@@ -438,6 +461,8 @@ pub fn install_nemotron() -> Result<()> {
     let path = nemotron_model_path().context("data dir unavailable")?;
     let root = path.parent().context("invalid model path")?;
     std::fs::create_dir_all(root).context("create model directory")?;
+    // A sentinel proves a verified install occurred, not that a user-writable
+    // model file has remained intact since then. Recheck before skipping repair.
     if nemotron_installed_in(root) {
         return Ok(());
     }
@@ -475,6 +500,17 @@ pub fn install_nemotron() -> Result<()> {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
+
+    #[test]
+    fn nemotron_rejects_tampered_equal_length_model() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join(NEMOTRON_FILE), vec![0_u8; NEMOTRON_BYTES as usize]).unwrap();
+        std::fs::write(
+            tmp.path().join(NEMOTRON_SENTINEL),
+            format!("{NEMOTRON_REV}:{NEMOTRON_SHA256}\n"),
+        ).unwrap();
+        assert!(!nemotron_installed_in(tmp.path()));
+    }
 
     /// Force the segmentation marker on disk (a fake extracted tree).
     fn force_seg_marker(root: &Path) {

@@ -143,6 +143,7 @@ export component TranscriptWindow inherits Window {
     in-out property <bool> installing-diar-models: false;
     // Windows RC: optional Nemotron engine. Legacy remains the default.
     in-out property <bool> use-nemotron: false;
+    in-out property <bool> nemotron-available: false;
     // I-1 (fable review): this session's recording predates the wall-clock-padding fix
     // (D0.5), so audio_ms→sample drifts and speaker timings may be approximate → banner.
     in-out property <bool> timeline-unreliable: false;
@@ -493,7 +494,7 @@ export component TranscriptWindow inherits Window {
                             TouchArea { clicked => { if (!root.diarizing && !root.installing-diar-models) { root.select-diar-engine(false); } } }
                             Text { text: @tr("Legacy"); color: Theme.text-primary; horizontal-alignment: center; vertical-alignment: center; }
                         }
-                        Rectangle {
+                        if root.nemotron-available : Rectangle {
                             width: 112px;
                             height: 28px;
                             border-radius: 6px;

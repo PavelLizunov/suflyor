@@ -24,6 +24,9 @@ pub fn diarize(wav: &Path, duration_ms: i64) -> Result<(Vec<DiarSegment>, i64, S
     let model = crate::diar_install::nemotron_model_path()
         .filter(|_| crate::diar_install::nemotron_installed())
         .context("Nemotron model unavailable")?;
+    if !crate::diar_install::nemotron_model_digest_ok(&model)? {
+        bail!("Nemotron model digest mismatch; reinstall the model");
+    }
     let exe = std::env::current_exe()
         .context("resolve application executable")?
         .with_file_name("nemo-speech.exe");
@@ -55,6 +58,7 @@ pub fn diarize(wav: &Path, duration_ms: i64) -> Result<(Vec<DiarSegment>, i64, S
     let child = crate::download::no_window(&mut cmd)
         .spawn()
         .context("start Nemotron")?;
+    crate::local_ai::assign_to_lifetime_job(&child);
     // Ownership is scoped to this method: a dropped worker cannot leave the CLI
     // behind, and failure never writes to the session's persisted row.
     struct ChildGuard(std::process::Child);
