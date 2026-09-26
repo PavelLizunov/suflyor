@@ -272,7 +272,8 @@ fn run_nemotron(
         on_progress(Progress::Step(
             "Определение говорящих: Nemotron…".to_string(),
         ));
-        let (segments, speakers, model_id) = crate::nemotron_diar::diarize(&wav, duration_ms, cancel)?;
+        let (segments, speakers, model_id) =
+            crate::nemotron_diar::diarize(&wav, duration_ms, cancel)?;
         // Preserve the native speaker activity and overlap. In contrast to the
         // legacy path, a voice without a matching GigaAM line is not a phantom.
         let _ = utts;
