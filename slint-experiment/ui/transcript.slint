@@ -196,6 +196,7 @@ export component TranscriptWindow inherits Window {
     // speaker (display id, new name — blank clears). Rust rebuilds `lines` + `speakers`.
     callback toggle-by-voice(bool);
     callback run-diarization();
+    callback cancel-diarization();
     // V-1 — download the diarization models (shown only when the session is
     // diarizable but the models are absent).
     callback install-diar-models();
@@ -566,6 +567,21 @@ export component TranscriptWindow inherits Window {
                             vertical-alignment: center;
                         }
                         Rectangle { horizontal-stretch: 1; }
+                        if root.use-nemotron && root.diarizing : Rectangle {
+                            width: 84px;
+                            height: 28px;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.border;
+                            TouchArea { clicked => { root.cancel-diarization(); } }
+                            Text {
+                                text: @tr("Cancel");
+                                font-size: Metrics.font-label;
+                                color: Theme.text-primary;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
                         Rectangle {
                             width: 176px;
                             height: 28px;

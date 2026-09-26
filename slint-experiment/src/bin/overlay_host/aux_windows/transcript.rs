@@ -476,6 +476,7 @@ struct DiarJobHandles {
     slot: Arc<Mutex<Option<Result<Diarization, DiarFailure>>>>,
     /// The latest sidecar step message (taken once by the poll → status line).
     progress: Arc<Mutex<Option<String>>>,
+    cancel: Arc<AtomicBool>,
     /// The session the job runs for — a re-attached poll paints ONLY when the
     /// window still shows this session (it may have been repurposed mid-run).
     session_id: String,
@@ -633,6 +634,7 @@ fn start_diar_poll(
     let poll = slint::Timer::default();
     let slot = handles.slot;
     let progress = handles.progress;
+    let _cancel = handles.cancel; // keep cancellation token alive while polling
     let job_sid = handles.session_id;
     poll.start(
         slint::TimerMode::Repeated,
@@ -1028,6 +1030,23 @@ fn wire_transcript_diarization(
         });
     }
 
+    // Cancellation is scoped to an in-flight Nemotron run. The worker checks
+    // the token between bounded waits and never commits a canceled result.
+    {
+        let weak = win.as_weak();
+        let sid = session_id.to_string();
+        win.on_cancel_diarization(move || {
+            let Some(w) = weak.upgrade() else { return; };
+            if !w.get_use_nemotron() || !w.get_diarizing() { return; }
+            DIAR_JOB.with(|job| {
+                if let Some(job) = job.borrow().as_ref().filter(|job| job.session_id == sid) {
+                    job.cancel.store(true, Ordering::Release);
+                    w.set_diar_status(SharedString::from("Остановка определения говорящих…"));
+                }
+            });
+        });
+    }
+
     // Toggle role ↔ voice.
     {
         let weak = win.as_weak();
@@ -1145,12 +1164,14 @@ fn wire_transcript_diarization(
             let handles = DiarJobHandles {
                 slot: Arc::new(Mutex::new(None)),
                 progress: Arc::new(Mutex::new(None)),
+                cancel: Arc::new(AtomicBool::new(false)),
                 session_id: sid.clone(),
             };
             DIAR_JOB.with(|j| *j.borrow_mut() = Some(handles.clone()));
             {
                 let slot_w = handles.slot.clone();
                 let progress_w = handles.progress.clone();
+                let cancel_w = handles.cancel.clone();
                 let sid_w = sid.clone();
                 let utts_owned: Vec<Utterance> = utts_c.as_ref().clone();
                 rt.spawn_blocking(move || {
@@ -1163,12 +1184,16 @@ fn wire_transcript_diarization(
                         count,
                         engine,
                         &utts_owned,
+                        &cancel_w,
                         &|overlay_backend::diarize::Progress::Step(message)| {
                             if let Ok(mut value) = progress_w.lock() {
                                 *value = Some(message);
                             }
                         },
                     ) {
+                        Ok(_d) if cancel_w.load(Ordering::Acquire) => {
+                            Err(DiarFailure::Run("Nemotron canceled".to_string()))
+                        }
                         Ok(d) => {
                             // Persist HERE, off the window: a worker-owned catalog
                             // handle (the archive window does the same). The poll's

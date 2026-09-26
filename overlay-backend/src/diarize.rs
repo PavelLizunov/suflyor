@@ -124,6 +124,8 @@ pub fn friendly_error(raw: &str) -> String {
         "Запись длиннее 3 часов — определение говорящих недоступно.".to_string()
     } else if raw.contains("no speakers detected") {
         "Речь не распознана — говорящие не найдены.".to_string()
+    } else if raw.contains("Nemotron canceled") {
+        "Определение говорящих остановлено.".to_string()
     } else {
         "Не удалось определить говорящих.".to_string()
     }
@@ -148,6 +150,7 @@ pub fn run_diarization(
         num_speakers,
         DiarEngine::Legacy,
         utts,
+        &std::sync::atomic::AtomicBool::new(false),
         on_progress,
     )
 }
@@ -161,10 +164,11 @@ pub fn run_diarization_with_engine(
     num_speakers: i32,
     engine: DiarEngine,
     utts: &[Utterance],
+    cancel: &std::sync::atomic::AtomicBool,
     on_progress: &impl Fn(Progress),
 ) -> Result<Diarization> {
     if engine == DiarEngine::Nemotron3 {
-        return run_nemotron(session_id, utts, on_progress);
+        return run_nemotron(session_id, utts, cancel, on_progress);
     }
     let started = Instant::now();
     let seg = crate::diar_install::seg_model_path()
@@ -242,11 +246,12 @@ pub fn run_diarization_with_engine(
 fn run_nemotron(
     session_id: &str,
     utts: &[Utterance],
+    cancel: &std::sync::atomic::AtomicBool,
     on_progress: &impl Fn(Progress),
 ) -> Result<Diarization> {
     #[cfg(not(windows))]
     {
-        let _ = (session_id, utts, on_progress);
+        let _ = (session_id, utts, cancel, on_progress);
         bail!("Nemotron is Windows-only in this RC");
     }
     #[cfg(windows)]
@@ -267,7 +272,7 @@ fn run_nemotron(
         on_progress(Progress::Step(
             "Определение говорящих: Nemotron…".to_string(),
         ));
-        let (segments, speakers, model_id) = crate::nemotron_diar::diarize(&wav, duration_ms)?;
+        let (segments, speakers, model_id) = crate::nemotron_diar::diarize(&wav, duration_ms, cancel)?;
         // Preserve the native speaker activity and overlap. In contrast to the
         // legacy path, a voice without a matching GigaAM line is not a phantom.
         let _ = utts;

@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
@@ -20,7 +21,11 @@ const MAX_RUN_TIME: Duration = Duration::from_secs(3 * 60 * 60);
 ///
 /// # Errors
 /// Returns an error on missing assets, failure, timeout or malformed model output.
-pub fn diarize(wav: &Path, duration_ms: i64) -> Result<(Vec<DiarSegment>, i64, String)> {
+pub fn diarize(
+    wav: &Path,
+    duration_ms: i64,
+    cancel: &AtomicBool,
+) -> Result<(Vec<DiarSegment>, i64, String)> {
     let model = crate::diar_install::nemotron_model_path()
         .filter(|_| crate::diar_install::nemotron_installed())
         .context("Nemotron model unavailable")?;
@@ -71,6 +76,9 @@ pub fn diarize(wav: &Path, duration_ms: i64) -> Result<(Vec<DiarSegment>, i64, S
     let mut guard = ChildGuard(child);
     let started = Instant::now();
     loop {
+        if cancel.load(Ordering::Acquire) {
+            bail!("Nemotron canceled");
+        }
         if let Some(status) = guard.0.try_wait().context("wait for Nemotron")? {
             if !status.success() {
                 bail!("Nemotron exited unsuccessfully");
