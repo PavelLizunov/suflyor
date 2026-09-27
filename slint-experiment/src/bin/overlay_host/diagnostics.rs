@@ -142,24 +142,48 @@ pub(crate) fn redact_urls(s: &str) -> String {
 
 /// Redact sensitive credential patterns (`Bearer <token>`, `gsk_<token>`, `sk-<token>`)
 /// from diagnostic outputs and log exports so exported files and reports never leak API keys
-/// or authorization tokens.
+/// or authorization tokens. ASCII case-insensitive search prevents scheme/token variants
+/// (e.g. `bearer `, `BEARER:`, `GSK_`, `SK-`) from bypassing security redaction.
 pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while !rest.is_empty() {
-        if rest.starts_with("Bearer ") {
-            out.push_str("Bearer <redacted>");
-            rest = &rest[7..];
-            let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
-            rest = &rest[tok_len..];
-        } else if rest.starts_with("gsk_") {
+        if rest.len() >= 6
+            && rest[..6].eq_ignore_ascii_case("bearer")
+            && !out
+                .chars()
+                .last()
+                .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            let sub = &rest[6..];
+            if let Some(ch) = sub.chars().next() {
+                if ch.is_whitespace() || ch == ':' || ch == '=' {
+                    out.push_str("Bearer <redacted>");
+                    let skip = sub
+                        .find(|c: char| !(c.is_whitespace() || c == ':' || c == '='))
+                        .unwrap_or(sub.len());
+                    rest = &sub[skip..];
+                    let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
+                    rest = &rest[tok_len..];
+                    continue;
+                }
+            }
+        }
+        if rest.len() >= 4
+            && rest[..4].eq_ignore_ascii_case("gsk_")
+            && !out
+                .chars()
+                .last()
+                .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
             out.push_str("gsk_<redacted>");
             rest = &rest[4..];
             let tok_len = rest
                 .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
                 .unwrap_or(rest.len());
             rest = &rest[tok_len..];
-        } else if rest.starts_with("sk-")
+        } else if rest.len() >= 3
+            && rest[..3].eq_ignore_ascii_case("sk-")
             && !out
                 .chars()
                 .last()
@@ -940,6 +964,25 @@ mod tests {
         assert!(redacted.contains("gsk_<redacted>"));
         assert!(redacted.contains("sk-<redacted>"));
         assert!(redacted.contains("desk-1 task-2"));
+    }
+
+    #[test]
+    fn redact_secrets_masks_case_insensitive_and_delimited_tokens() {
+        let sample = "auth: bearer secret_token_123\n\
+                      Header: BEARER secret_token_456\n\
+                      HeaderCol: Bearer: secret_token_789\n\
+                      EnvVar: BEARER=secret_token_abc\n\
+                      GroqCap: GSK_secret_key_def\n\
+                      OpenAICap: SK-proj-secret_key_ghi\n\
+                      NonSecret: overbearer desk-1 task-2\n";
+        let redacted = redact_secrets(sample);
+        assert!(!redacted.contains("secret_token_123"), "leaked lowercase bearer token: {redacted}");
+        assert!(!redacted.contains("secret_token_456"), "leaked uppercase bearer token: {redacted}");
+        assert!(!redacted.contains("secret_token_789"), "leaked colon bearer token: {redacted}");
+        assert!(!redacted.contains("secret_token_abc"), "leaked equals bearer token: {redacted}");
+        assert!(!redacted.contains("secret_key_def"), "leaked GSK_ key: {redacted}");
+        assert!(!redacted.contains("secret_key_ghi"), "leaked SK- key: {redacted}");
+        assert!(redacted.contains("NonSecret: overbearer desk-1 task-2"));
     }
 
     #[test]
