@@ -1909,3 +1909,35 @@ fn config_save_sets_unix_mode_0600() {
         "config.json should be saved with 0600 mode permissions"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn config_save_bak_sets_unix_mode_0600() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().expect("create temp directory");
+    let path = temp.path().join("config.json");
+    let mut cfg = Config::defaults();
+    cfg.meeting_context = "v1".into();
+
+    save_to_path(&path, &cfg).expect("first save_to_path should succeed");
+
+    cfg.meeting_context = "v2".into();
+    save_to_path(&path, &cfg).expect("second save_to_path should succeed");
+
+    let bak_path = path.with_extension("json.bak");
+    assert!(
+        bak_path.exists(),
+        "config.json.bak must exist after second save"
+    );
+
+    let mode = std::fs::metadata(&bak_path)
+        .expect("read config.json.bak metadata")
+        .permissions()
+        .mode();
+    assert_eq!(
+        mode & 0o777,
+        0o600,
+        "config.json.bak should be saved with 0600 mode permissions"
+    );
+}
