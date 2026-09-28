@@ -1608,6 +1608,29 @@ pub(crate) fn save_to_path(path: &std::path::Path, cfg: &Config) -> Result<()> {
             .and_then(|old| serde_json::to_vec_pretty(&secret_redacted(&old)).ok())
         {
             Some(redacted) => {
+                // SECURITY: Enforce restricted 0o600 mode permissions on Unix/POSIX for config.json.bak
+                // so private meeting context, candidate profiles, and LAN endpoints are protected.
+                #[cfg(unix)]
+                {
+                    use std::io::Write;
+                    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+                    let res = (|| -> Result<()> {
+                        let mut file = std::fs::OpenOptions::new()
+                            .write(true)
+                            .create(true)
+                            .truncate(true)
+                            .mode(0o600)
+                            .open(&bak)?;
+                        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+                        file.write_all(&redacted)?;
+                        Ok(())
+                    })();
+                    if let Err(e) = res {
+                        log::debug!("config .bak snapshot skipped ({e})");
+                    }
+                }
+                #[cfg(not(unix))]
                 if let Err(e) = std::fs::write(&bak, redacted) {
                     log::debug!("config .bak snapshot skipped ({e})");
                 }
