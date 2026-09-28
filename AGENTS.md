@@ -48,8 +48,9 @@ remain higher priority. Within repository instructions, more specific
    names, not as a universal description of `master`.
 4. Keep scope narrow. Do not overwrite, stage, revert, or clean unrelated work.
 5. For a capability, dependency, integration, reusable utility, or architecture,
-   use the global `search-first` discipline. For non-trivial implementation,
-   use the global `sdd` workflow and wait for approval of its Micro-Spec.
+   use the global `search-first` discipline. Follow global `sdd` for all changes:
+   keep a proportional durable task record and reuse clear approval for unchanged
+   scope. Ask again only when ambiguity, expanded scope or risk requires it.
 6. Use `gemini-swarm` for substantial independent mechanical assignments; the
    lead agent owns decomposition, integration, architectural decisions, and
    final acceptance.

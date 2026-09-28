@@ -1,5 +1,10 @@
 # Project memory — overlay-mvp
 
+For DSH work, `AGENTS.md` and the applicable nested contracts are authoritative.
+This file retains legacy Claude Code context, not a DSH tool, model, or stopping
+protocol. Resolve operational facts against current contracts and source before
+using older examples below.
+
 ## Autonomous mode protocol
 
 This project ships with hook-enforced autonomous rules. When the file
@@ -40,19 +45,13 @@ on the owner's workstation as though it were the test VM.
   the whole point).
 - `.claude/_progress_counter` — internal, managed by hooks. Don't touch.
 
-## OpenCode Go worker
+## Current worker routing
 
-For small, bounded tasks, the project may use OpenCode Go with
-`opencode-go/deepseek-v4-flash`:
-
-```pwsh
-opencode run -m opencode-go/deepseek-v4-flash "<exact scoped prompt>"
-```
-
-Keep it read-only in a shared checkout; `--auto` is allowed only in a dedicated
-task worktree. It must not read secrets or perform Git/GitHub remote actions.
-The primary agent validates its output. Non-trivial work still follows the
-project's Qwen/Claude worker rules.
+Follow `AGENTS.md` and global swarm routing: explicit, authorized Gemini/Opus
+routes only; do small tasks directly. Do not substitute a legacy external CLI
+or inherited model when an approved route is unavailable. Assigned workers do
+not delegate. Keep shared-checkout reviews read-only, exclude secrets and remote
+Git actions, and have the coordinator validate the results.
 
 ## Stack (the source of truth)
 
@@ -139,7 +138,7 @@ by the selected gate and the changed surface; do not skip a required layer.
 | 1 | clippy | `cargo clippy --manifest-path overlay-backend\Cargo.toml --all-targets` and `... slint-experiment\Cargo.toml --bin overlay-host` | API misuse, dead code, `unwrap`/`expect`/`panic` outside `#[cfg(test)]` (both crates `deny` these via `[lints.clippy]`) |
 | 2 | cargo test | `cargo test --manifest-path overlay-backend\Cargo.toml` (bulk of unit tests live here) + `... slint-experiment\Cargo.toml` | Rust unit + integration |
 | 3 | fmt | `cargo fmt --manifest-path <crate>\Cargo.toml` (run, NOT `--check`, then commit any change) | rustfmt drift — the most common gate killer |
-| 4 | review-agent | `Agent(subagent_type: general-purpose, prompt = docs/REVIEW_AGENT_PROMPT.md)` BEFORE commit | Logic bugs, security, library misuse, codebase duplicates |
+| 4 | review-agent | Authorized explicit Gemini/Opus reviewer using `docs/REVIEW_AGENT_PROMPT.md`, BEFORE commit | Logic bugs, security, library misuse, codebase duplicates |
 | 5 | Live install + smoke | run the freshly-built `overlay-host.exe`, read the startup log + visually confirm | Runtime crashes, transparency/paint glitches, the bar landing on the wrong monitor, anything static checks can't see |
 
 Logic-only changes use the affected crate's targeted static checks plus an
