@@ -11,7 +11,25 @@ use tokio::sync::mpsc;
 
 pub fn sessions_dir() -> Result<PathBuf> {
     let root = crate::paths::data_root().context("no config dir")?;
-    Ok(root.join("sessions"))
+    let dir = root.join("sessions");
+    ensure_dir_permissions(&dir)?;
+    Ok(dir)
+}
+
+pub(crate) fn ensure_dir_permissions(dir: &Path) -> Result<()> {
+    std::fs::create_dir_all(dir)?;
+    // SECURITY: Enforce restricted 0o700 permissions on the sessions directory
+    // on POSIX/Unix so other local system users cannot list or read transcript files.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(dir)?.permissions();
+        if perms.mode() & 0o777 != 0o700 {
+            perms.set_mode(0o700);
+            std::fs::set_permissions(dir, perms)?;
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Default)]
@@ -69,16 +87,21 @@ impl Journal {
 
     pub fn open_new_session_with_limits(keep_sessions: usize, max_bytes: u64) -> Result<Self> {
         let dir = sessions_dir()?;
-        std::fs::create_dir_all(&dir).context("create sessions dir")?;
         let stamp = chrono_like_stamp();
         let rand: u32 = (now_unix_ms() & 0xFFFFFF) as u32;
         let path = dir.join(format!("{stamp}_{rand:06x}.jsonl"));
 
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .context("open journal file")?;
+        let mut options = OpenOptions::new();
+        options.create(true).append(true);
+        // SECURITY: Enforce restricted 0o600 permissions on session journal files on POSIX/Unix
+        // so meeting transcripts, prompts, and AI turns are not readable by other system users.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+
+        let file = options.open(&path).context("open journal file")?;
         log::info!("journal opened: {}", path.display());
 
         let keep = if keep_sessions == 0 {

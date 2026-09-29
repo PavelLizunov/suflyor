@@ -76,6 +76,42 @@ fn default_journal_write_is_noop() {
     assert!(j.current_path().is_none());
 }
 
+#[cfg(unix)]
+#[test]
+fn posix_journal_files_and_dir_permissions() {
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+    let temp = tempfile::tempdir().expect("create temp directory");
+    let sessions_dir = temp.path().join("sessions");
+    ensure_dir_permissions(&sessions_dir).expect("ensure sessions dir permissions");
+
+    assert_eq!(
+        std::fs::metadata(&sessions_dir)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700,
+        "sessions directory must have 0o700 permissions"
+    );
+
+    let mut options = OpenOptions::new();
+    options.create(true).append(true);
+    options.mode(0o600);
+    let journal_path = sessions_dir.join("test_session.jsonl");
+    let _file = options.open(&journal_path).expect("open journal file");
+
+    assert_eq!(
+        std::fs::metadata(&journal_path)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o600,
+        "journal file must have 0o600 permissions"
+    );
+}
+
 // ── C3: per-journal shutdown contract ──
 // Exercise the real writer thread against a temp file (via the
 // `spawn_writer` seam) so we never touch the user's `%APPDATA%` journals.
