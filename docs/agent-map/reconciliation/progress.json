@@ -100,9 +100,9 @@
     "wave4_worker3_cicd-C12"
   ],
   "feature_contracts_source_inspected": 15,
-  "continuation_round": 4,
+  "continuation_round": 5,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 62,
+  "total_research_tests_passed": 71,
   "source_feature_references": 410,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
@@ -112,18 +112,31 @@
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
   "round3_spotcheck": "workflow-5 result null; no independent acceptance",
-  "syntax_parsed_files": 224,
-  "syntax_declaration_nodes": 13961,
+  "syntax_parsed_files": 290,
+  "syntax_declaration_nodes": 16243,
   "syntax_status_counts": {
     "non_selected_data_or_document": 520,
     "excluded_protected_or_vendor": 22,
-    "unsupported_language": 74,
-    "syntax_parsed": 224
+    "syntax_parsed": 290,
+    "parse_error": 7,
+    "unsupported_language": 1
   },
   "syntax_parser_versions": {
     "tree-sitter": "0.25.2",
-    "tree-sitter-rust": "0.24.2"
+    "tree-sitter-rust": "0.24.2",
+    "tree-sitter-slint": "f0c59d1507a4221b521a772296f7b3adf87b44ed",
+    "tree-sitter-bash": "0.25.1",
+    "tree-sitter-swift": "0.7.3",
+    "tree-sitter-objc": "3.0.2",
+    "tree-sitter-c": "0.24.1",
+    "tree-sitter-powershell": "0.26.4"
   },
-  "syntax_fixtures_passed": 14,
-  "context_handoff_prompt": "docs/agent-map/reconciliation/CONTINUE-PROMPT.md"
+  "syntax_fixtures_passed": 23,
+  "context_handoff_prompt": "docs/agent-map/reconciliation/CONTINUE-PROMPT.md",
+  "round5_local_verification": "PASS 71 tests without skips; saved syntax and frozen checkpoint validation; exact covering commit pending",
+  "round5_independent_acceptance": false,
+  "round5_remaining_syntax": [
+    "NSIS unsupported",
+    "seven PowerShell grammar-error files; native parser not run"
+  ]
 }

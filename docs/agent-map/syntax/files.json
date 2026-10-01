@@ -3,7 +3,13 @@
   "source_commit": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
   "parser_versions": {
     "tree-sitter": "0.25.2",
-    "tree-sitter-rust": "0.24.2"
+    "tree-sitter-rust": "0.24.2",
+    "tree-sitter-slint": "f0c59d1507a4221b521a772296f7b3adf87b44ed",
+    "tree-sitter-bash": "0.25.1",
+    "tree-sitter-swift": "0.7.3",
+    "tree-sitter-objc": "3.0.2",
+    "tree-sitter-c": "0.24.1",
+    "tree-sitter-powershell": "0.26.4"
   },
   "python_ast": "3.12",
   "files": [
@@ -204,8 +210,11 @@
       "bytes": 2176,
       "lines": 55,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": ".github/scripts/test-docs-only-detection.sh",
@@ -216,8 +225,11 @@
       "bytes": 3896,
       "lines": 117,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 1,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": ".github/scripts/test-gate-logic.sh",
@@ -228,8 +240,11 @@
       "bytes": 2224,
       "lines": 54,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 3,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": ".github/workflows/ci.yml",
@@ -4923,8 +4938,11 @@
       "bytes": 702,
       "lines": 23,
       "source_role": "experiment",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "experiments/macos-gate0a/src/appkit.m",
@@ -4935,8 +4953,11 @@
       "bytes": 4983,
       "lines": 151,
       "source_role": "experiment",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 32,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "experiments/macos-gate0a/src/main.rs",
@@ -4962,8 +4983,11 @@
       "bytes": 7308,
       "lines": 257,
       "source_role": "experiment",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 41,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "experiments/macos-gate0b/Cargo.lock",
@@ -5049,8 +5073,11 @@
       "bytes": 781,
       "lines": 24,
       "source_role": "experiment",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "experiments/macos-gate0b/scripts/check.sh",
@@ -5061,8 +5088,11 @@
       "bytes": 388,
       "lines": 11,
       "source_role": "experiment",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "experiments/macos-gate0b/src/capture.m",
@@ -5073,8 +5103,11 @@
       "bytes": 20425,
       "lines": 548,
       "source_role": "experiment",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 95,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "experiments/macos-gate0b/src/main.rs",
@@ -5100,8 +5133,11 @@
       "bytes": 5995,
       "lines": 197,
       "source_role": "experiment",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 59,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "integrations/hermes-plugin/README.md",
@@ -5424,8 +5460,11 @@
       "bytes": 11945,
       "lines": 355,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 69,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "overlay-backend/native/macos/process_memory.c",
@@ -5436,8 +5475,11 @@
       "bytes": 455,
       "lines": 17,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 3,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "overlay-backend/native/macos/system_capture.m",
@@ -5448,8 +5490,11 @@
       "bytes": 16353,
       "lines": 463,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 77,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "overlay-backend/src/ai/completion.rs",
@@ -6843,8 +6888,20 @@
       "bytes": 8843,
       "lines": 174,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "parse_error",
+      "declaration_count": 0,
+      "parse_errors": [
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 6754,
+          "end_byte": 6756,
+          "start_line": 134,
+          "end_line": 134
+        }
+      ],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/capture-reference-shots.ps1",
@@ -6855,8 +6912,11 @@
       "bytes": 16685,
       "lines": 335,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 5,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/ci.ps1",
@@ -6867,8 +6927,156 @@
       "bytes": 7227,
       "lines": 159,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "parse_error",
+      "declaration_count": 1,
+      "parse_errors": [
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 0,
+          "end_byte": 7227,
+          "start_line": 1,
+          "end_line": 160
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 2786,
+          "end_byte": 2799,
+          "start_line": 63,
+          "end_line": 65
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 2800,
+          "end_byte": 2818,
+          "start_line": 65,
+          "end_line": 65
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 2820,
+          "end_byte": 2831,
+          "start_line": 65,
+          "end_line": 65
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 2920,
+          "end_byte": 3251,
+          "start_line": 66,
+          "end_line": 72
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 3252,
+          "end_byte": 3289,
+          "start_line": 72,
+          "end_line": 72
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 4581,
+          "end_byte": 4628,
+          "start_line": 97,
+          "end_line": 99
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 4716,
+          "end_byte": 4734,
+          "start_line": 100,
+          "end_line": 102
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 4735,
+          "end_byte": 4774,
+          "start_line": 102,
+          "end_line": 102
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 5621,
+          "end_byte": 5666,
+          "start_line": 120,
+          "end_line": 122
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 5752,
+          "end_byte": 5770,
+          "start_line": 123,
+          "end_line": 125
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 5771,
+          "end_byte": 5788,
+          "start_line": 125,
+          "end_line": 125
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 6270,
+          "end_byte": 6313,
+          "start_line": 134,
+          "end_line": 136
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 6397,
+          "end_byte": 6415,
+          "start_line": 137,
+          "end_line": 139
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 6416,
+          "end_byte": 6431,
+          "start_line": 139,
+          "end_line": 139
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 6822,
+          "end_byte": 6869,
+          "start_line": 147,
+          "end_line": 149
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 6957,
+          "end_byte": 6975,
+          "start_line": 150,
+          "end_line": 152
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 6976,
+          "end_byte": 6995,
+          "start_line": 152,
+          "end_line": 152
+        }
+      ],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/find_overlay_windows.ps1",
@@ -6879,8 +7087,44 @@
       "bytes": 1946,
       "lines": 48,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "parse_error",
+      "declaration_count": 0,
+      "parse_errors": [
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 904,
+          "end_byte": 1944,
+          "start_line": 18,
+          "end_line": 48
+        },
+        {
+          "kind": "missing",
+          "node_type": ";",
+          "start_byte": 964,
+          "end_byte": 964,
+          "start_line": 18,
+          "end_line": 18
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 972,
+          "end_byte": 973,
+          "start_line": 18,
+          "end_line": 18
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 1078,
+          "end_byte": 1087,
+          "start_line": 23,
+          "end_line": 23
+        }
+      ],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/gen_icon.ps1",
@@ -6891,8 +7135,11 @@
       "bytes": 4102,
       "lines": 107,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 2,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/get_hwnd_rect.ps1",
@@ -6903,8 +7150,11 @@
       "bytes": 1704,
       "lines": 35,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/get_tile_rect.ps1",
@@ -6915,8 +7165,20 @@
       "bytes": 1598,
       "lines": 35,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "parse_error",
+      "declaration_count": 0,
+      "parse_errors": [
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 960,
+          "end_byte": 976,
+          "start_line": 19,
+          "end_line": 19
+        }
+      ],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/git-gate-macos.sh",
@@ -6927,8 +7189,11 @@
       "bytes": 4020,
       "lines": 103,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/git-gate-native.ps1",
@@ -6939,8 +7204,52 @@
       "bytes": 6087,
       "lines": 184,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "parse_error",
+      "declaration_count": 3,
+      "parse_errors": [
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 0,
+          "end_byte": 6087,
+          "start_line": 1,
+          "end_line": 185
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 4008,
+          "end_byte": 4059,
+          "start_line": 125,
+          "end_line": 128
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 4071,
+          "end_byte": 4112,
+          "start_line": 128,
+          "end_line": 129
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 4679,
+          "end_byte": 4691,
+          "start_line": 148,
+          "end_line": 149
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 5886,
+          "end_byte": 5922,
+          "start_line": 175,
+          "end_line": 177
+        }
+      ],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/list_overlay_windows.ps1",
@@ -6951,8 +7260,11 @@
       "bytes": 1598,
       "lines": 31,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/macos-mcp-interactive-qa.py",
@@ -6978,8 +7290,180 @@
       "bytes": 10232,
       "lines": 241,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "parse_error",
+      "declaration_count": 5,
+      "parse_errors": [
+        {
+          "kind": "missing",
+          "node_type": " ",
+          "start_byte": 4009,
+          "end_byte": 4009,
+          "start_line": 93,
+          "end_line": 93
+        },
+        {
+          "kind": "missing",
+          "node_type": " ",
+          "start_byte": 4017,
+          "end_byte": 4017,
+          "start_line": 93,
+          "end_line": 93
+        },
+        {
+          "kind": "missing",
+          "node_type": " ",
+          "start_byte": 4028,
+          "end_byte": 4028,
+          "start_line": 93,
+          "end_line": 93
+        },
+        {
+          "kind": "missing",
+          "node_type": " ",
+          "start_byte": 4576,
+          "end_byte": 4576,
+          "start_line": 104,
+          "end_line": 104
+        },
+        {
+          "kind": "missing",
+          "node_type": " ",
+          "start_byte": 4586,
+          "end_byte": 4586,
+          "start_line": 104,
+          "end_line": 104
+        },
+        {
+          "kind": "missing",
+          "node_type": " ",
+          "start_byte": 4603,
+          "end_byte": 4603,
+          "start_line": 104,
+          "end_line": 104
+        },
+        {
+          "kind": "missing",
+          "node_type": " ",
+          "start_byte": 4614,
+          "end_byte": 4614,
+          "start_line": 104,
+          "end_line": 104
+        },
+        {
+          "kind": "missing",
+          "node_type": " ",
+          "start_byte": 5679,
+          "end_byte": 5679,
+          "start_line": 127,
+          "end_line": 127
+        },
+        {
+          "kind": "missing",
+          "node_type": " ",
+          "start_byte": 5692,
+          "end_byte": 5692,
+          "start_line": 127,
+          "end_line": 127
+        },
+        {
+          "kind": "missing",
+          "node_type": " ",
+          "start_byte": 5700,
+          "end_byte": 5700,
+          "start_line": 127,
+          "end_line": 127
+        },
+        {
+          "kind": "missing",
+          "node_type": " ",
+          "start_byte": 6300,
+          "end_byte": 6300,
+          "start_line": 140,
+          "end_line": 140
+        },
+        {
+          "kind": "missing",
+          "node_type": " ",
+          "start_byte": 6306,
+          "end_byte": 6306,
+          "start_line": 140,
+          "end_line": 140
+        },
+        {
+          "kind": "missing",
+          "node_type": " ",
+          "start_byte": 6315,
+          "end_byte": 6315,
+          "start_line": 140,
+          "end_line": 140
+        },
+        {
+          "kind": "missing",
+          "node_type": " ",
+          "start_byte": 6327,
+          "end_byte": 6327,
+          "start_line": 140,
+          "end_line": 140
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 6780,
+          "end_byte": 6859,
+          "start_line": 150,
+          "end_line": 150
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 6811,
+          "end_byte": 6814,
+          "start_line": 150,
+          "end_line": 150
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 7475,
+          "end_byte": 7529,
+          "start_line": 168,
+          "end_line": 168
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 8027,
+          "end_byte": 8443,
+          "start_line": 181,
+          "end_line": 190
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 8376,
+          "end_byte": 8438,
+          "start_line": 190,
+          "end_line": 190
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 9512,
+          "end_byte": 9590,
+          "start_line": 222,
+          "end_line": 222
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 9543,
+          "end_byte": 9546,
+          "start_line": 222,
+          "end_line": 222
+        }
+      ],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/probe_bar.ps1",
@@ -6990,8 +7474,11 @@
       "bytes": 1900,
       "lines": 38,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/qwen-parallel-audit.ps1",
@@ -7002,8 +7489,11 @@
       "bytes": 12875,
       "lines": 284,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/screenshot_region.ps1",
@@ -7014,8 +7504,11 @@
       "bytes": 534,
       "lines": 10,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/set_opacity.ps1",
@@ -7026,8 +7519,11 @@
       "bytes": 433,
       "lines": 8,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/setup-local-ai.ps1",
@@ -7038,8 +7534,44 @@
       "bytes": 13627,
       "lines": 254,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "parse_error",
+      "declaration_count": 8,
+      "parse_errors": [
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 2982,
+          "end_byte": 2983,
+          "start_line": 68,
+          "end_line": 68
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 5355,
+          "end_byte": 5382,
+          "start_line": 113,
+          "end_line": 114
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 6899,
+          "end_byte": 6933,
+          "start_line": 136,
+          "end_line": 137
+        },
+        {
+          "kind": "ERROR",
+          "node_type": "ERROR",
+          "start_byte": 11607,
+          "end_byte": 11654,
+          "start_line": 221,
+          "end_line": 221
+        }
+      ],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/sim_click.ps1",
@@ -7050,8 +7582,11 @@
       "bytes": 1180,
       "lines": 34,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/slint-installer.nsi",
@@ -7074,8 +7609,11 @@
       "bytes": 1341,
       "lines": 47,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 1,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/sync-release-docs.ps1",
@@ -7086,8 +7624,11 @@
       "bytes": 1114,
       "lines": 32,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/AGENTS.md",
@@ -7893,8 +8434,11 @@
       "bytes": 9348,
       "lines": 239,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 1,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/scripts/build-macos-dmg.sh",
@@ -7905,8 +8449,11 @@
       "bytes": 4232,
       "lines": 127,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 1,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/scripts/capture_primary.ps1",
@@ -7917,8 +8464,11 @@
       "bytes": 988,
       "lines": 24,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/scripts/capture_window.ps1",
@@ -7929,8 +8479,11 @@
       "bytes": 2262,
       "lines": 49,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/scripts/click_at.ps1",
@@ -7941,8 +8494,11 @@
       "bytes": 1065,
       "lines": 25,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/scripts/hold_at.ps1",
@@ -7953,8 +8509,11 @@
       "bytes": 940,
       "lines": 22,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/scripts/send_key.ps1",
@@ -7965,8 +8524,11 @@
       "bytes": 724,
       "lines": 18,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/scripts/type_text.ps1",
@@ -7977,8 +8539,11 @@
       "bytes": 223,
       "lines": 5,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/src/app_state.rs",
@@ -8793,8 +9358,11 @@
       "bytes": 2367,
       "lines": 70,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 13,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/src/native/macos/clipboard.rs",
@@ -8835,8 +9403,11 @@
       "bytes": 11159,
       "lines": 344,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 58,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/src/native/macos/screen.rs",
@@ -8862,8 +9433,11 @@
       "bytes": 3927,
       "lines": 117,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 26,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/src/native/macos/status.rs",
@@ -8889,8 +9463,11 @@
       "bytes": 2839,
       "lines": 80,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 14,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/src/native/macos/window.rs",
@@ -9564,8 +10141,11 @@
       "bytes": 38384,
       "lines": 724,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 68,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/capture_overlay.slint",
@@ -9576,8 +10156,11 @@
       "bytes": 8274,
       "lines": 235,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 20,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/controls.slint",
@@ -9588,8 +10171,11 @@
       "bytes": 7413,
       "lines": 175,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 24,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/help.slint",
@@ -9600,8 +10186,11 @@
       "bytes": 17343,
       "lines": 370,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 28,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/index.slint",
@@ -9612,8 +10201,11 @@
       "bytes": 2437,
       "lines": 53,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 20,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/lock_mode_menu.slint",
@@ -9624,8 +10216,11 @@
       "bytes": 2029,
       "lines": 58,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 12,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/macos_ai_setup.slint",
@@ -9636,8 +10231,11 @@
       "bytes": 5759,
       "lines": 148,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 17,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/markdown_spike.slint",
@@ -9648,8 +10246,11 @@
       "bytes": 5388,
       "lines": 148,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 5,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/metrics.slint",
@@ -9660,8 +10261,11 @@
       "bytes": 7267,
       "lines": 93,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 28,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/overlay_bar.slint",
@@ -9672,8 +10276,11 @@
       "bytes": 70865,
       "lines": 1504,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 200,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/overlay_spike.slint",
@@ -9684,8 +10291,11 @@
       "bytes": 1896,
       "lines": 56,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 1,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/palette.slint",
@@ -9696,8 +10306,11 @@
       "bytes": 12690,
       "lines": 268,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 26,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/platform.slint",
@@ -9708,8 +10321,11 @@
       "bytes": 71,
       "lines": 3,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 2,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/recover_offer.slint",
@@ -9720,8 +10336,11 @@
       "bytes": 7467,
       "lines": 183,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 19,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/replay.slint",
@@ -9732,8 +10351,11 @@
       "bytes": 7922,
       "lines": 225,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 20,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/settings_controls.slint",
@@ -9744,8 +10366,11 @@
       "bytes": 5581,
       "lines": 185,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 32,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/settings_panel.slint",
@@ -9756,8 +10381,11 @@
       "bytes": 243084,
       "lines": 4170,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 569,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/text_ask.slint",
@@ -9768,8 +10396,11 @@
       "bytes": 7330,
       "lines": 173,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 23,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/theme.slint",
@@ -9780,8 +10411,11 @@
       "bytes": 4813,
       "lines": 69,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 23,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/tile.slint",
@@ -9792,8 +10426,11 @@
       "bytes": 57952,
       "lines": 1116,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 126,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/transcript.slint",
@@ -9804,8 +10441,11 @@
       "bytes": 58965,
       "lines": 1099,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 113,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/tray_menu.slint",
@@ -9816,8 +10456,11 @@
       "bytes": 3605,
       "lines": 105,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 22,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "slint-experiment/ui/wizard.slint",
@@ -9828,8 +10471,11 @@
       "bytes": 22926,
       "lines": 453,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 65,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "suflyor-mlx/.gitignore",
@@ -9864,8 +10510,11 @@
       "bytes": 1260,
       "lines": 31,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 1,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "suflyor-mlx/README.md",
@@ -9888,8 +10537,11 @@
       "bytes": 3172,
       "lines": 102,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 0,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "suflyor-mlx/Sources/SuflyorMLX/main.swift",
@@ -9900,8 +10552,11 @@
       "bytes": 1383,
       "lines": 41,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 9,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "suflyor-mlx/Sources/SuflyorMLXCore/Protocol.swift",
@@ -9912,8 +10567,11 @@
       "bytes": 8702,
       "lines": 247,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 93,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "suflyor-mlx/Sources/SuflyorMLXCore/Server.swift",
@@ -9924,8 +10582,11 @@
       "bytes": 19909,
       "lines": 516,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 153,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "suflyor-mlx/Tests/SuflyorMLXCoreTests/ProtocolTests.swift",
@@ -9936,8 +10597,11 @@
       "bytes": 10829,
       "lines": 249,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 45,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "suflyor-teratts/AGENTS.md",
@@ -10675,12 +11339,14 @@
   "status_counts": {
     "non_selected_data_or_document": 520,
     "excluded_protected_or_vendor": 22,
-    "unsupported_language": 74,
-    "syntax_parsed": 224
+    "syntax_parsed": 290,
+    "parse_error": 7,
+    "unsupported_language": 1
   },
-  "declaration_count": 13961,
+  "declaration_count": 16243,
   "scope_limits": [
-    "Rust/Python explicit syntax only",
+    "Rust/Python/Slint/Swift/Objective-C/C/PowerShell/Bash explicit syntax only",
+    "local/member declarations included; syntax errors retain partial navigation, not success",
     "macros not expanded; cfg not evaluated; types/call edges not resolved",
     "unsupported languages not interpreted as zero-symbol proof",
     "protected legacy/vendor are excluded, not reviewed",

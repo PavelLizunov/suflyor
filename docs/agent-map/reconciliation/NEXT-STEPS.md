@@ -7,7 +7,8 @@
 - Original 119 Grok candidates source-triaged with stable ID/title/claim identity: 39 confirmed source mechanisms, 75 hypotheses, 5 rejected.
 - Exact model distinctions: GigaAM/Whisper text recognition, macOS CoreML/CPU history and optional unreleased Windows Nemotron V3 diarization.
 - Privacy-redacted Grok backup linked to original hashes; raw untracked files not modified or published.
-- Current research suite: 48 tests (22 recovery/provenance, seven SQL fixtures, 19 source seams) plus three existing mocked Hermes tests passed. Prior exact-SHA `8cd96a8b` receipt remains a 34-test snapshot; latest covering-SHA repeat pending before accepting new portability evidence.
+- Current research suite: 71 tests (48 recovery/SQL/source seams plus 23 syntax/index fixtures) pass locally with all pinned parsers. Three existing mocked Hermes tests remain separate. Prior exact-SHA receipts remain historical; round-5 covering-SHA tracked-only repeat is required before accepting its portable evidence.
+- Round-5 syntax extension: 290 successful file parses, seven explicit PowerShell parse errors, one unsupported NSIS file, 22 protected/vendor exclusions and 520 nonselected paths. 16,243 navigation nodes are not a function count. See [parser research](parser-polyglot-research.md) and [syntax scope](../syntax/README.md); no semantic/full/native/independent acceptance.
 - WIP GitHub checkpoint on the dedicated task branch; task-owned files only.
 
 ## Not complete
@@ -17,7 +18,7 @@ This stage does not deliver whole-project semantic line/symbol coverage, native 
 ## Ordered continuation
 
 1. **Complete reviewed feature contracts** beyond the 15 principal chains (now including KB/archive/retranscription/summary/coaching, update/release and MLX/Hermes): every startup/wizard/health/error callback, platform-native adapter, translation/asset/config schema and remaining all-caller edges. For each feature connect entrypoint/UI/config/runtime/storage/platform errors/tests with exact source lines. Do not rely on old regex tables as completeness proof.
-2. **Reliable symbol coverage**: account for Rust multiline/nested/macros/cfg, Slint properties/callback wiring, PowerShell/shell/Python/Swift/Objective-C/NSIS. Exclude generated/vendor artifacts explicitly while retaining provenance. Reuse a suitable existing parser if available; research before adding dependencies. Regex count is a baseline candidate list only.
+2. **Remaining syntax and semantic coverage**: resolve seven PowerShell grammar-error files with trusted native parsing or verified better grammar; finish NSIS. Slint/Swift/Objective-C/C/Bash syntax is now pinned, not semantic/caller acceptance. Continue Rust macros/cfg expansion limits, callbacks/type/FFI edges. Exclude generated/vendor artifacts explicitly; preserve provenance. No SDK/compiler installation or installer execution, and no regex completeness claims.
 3. **Resolve 75 hypotheses proportionately**: separate source test fixtures from Windows/macOS live/driver/exploit behavior. Source-only claims remain hypotheses when preconditions cannot be proven. Use [remediation queue](REMEDIATION.md) for ordering.
 4. **Native exact-SHA evidence**: first load homelab and platform procedures; verify worker ownership/resources and immutable candidate commit. Do not run Cargo on DSH control plane. No release, install, restart or destructive fault scenario without required authority and safety setup.
 5. **Historical report reconciliation**: replace each O1–O8 factual claim only after exact source checks; keep original provenance in Git. Do not erase failed attempts or fabricate an independent review verdict.

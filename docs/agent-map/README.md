@@ -2,6 +2,10 @@
 
 This directory contains a historical heuristic index and architectural notes, not an accepted exhaustive code audit. Use current source, manifests and tests to verify behavior. The original `100%` figures counted input lines, not reviewed semantics or complete symbols.
 
+## Round-5 syntax checkpoint
+
+[Language-aware syntax navigation](syntax/README.md) now covers 290 successful file parses plus seven explicitly partial PowerShell files: 16,243 nodes, not functions or semantic review. Slint/Swift/Objective-C/C/Bash grammars and wheel/library provenance are pinned; binding remains 0.25.2. NSIS remains unsupported. See [grammar research and unresolved limits](reconciliation/parser-polyglot-research.md). No additional feature contracts, hypothesis resolutions or independent/native acceptance are claimed by this parser checkpoint.
+
 ## Where to start
 
 - [Reconciliation task](../goal-agent-map-reconciliation.md): approved scope, constraints and remaining work.

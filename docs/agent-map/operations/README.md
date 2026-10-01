@@ -1,5 +1,9 @@
 # Research operations and recovery
 
+## Syntax extension
+
+See [current syntax scope/reproduction](../syntax/README.md) and [pinned polyglot parser decision](../reconciliation/parser-polyglot-research.md). Binding 0.25.2 remains unchanged. Added grammars do not install SDKs, execute application scripts, resolve caller semantics or establish native acceptance. NSIS and seven PowerShell grammar-error files remain open.
+
 ## Purpose and limits
 
 This procedure preserves a verifiable research checkpoint. It does not dispatch models, monitor DSH independently, restart a session, install a daemon or resume jobs after host failure. DSH goals support continuation while the host/session permits it; they are not proof of a crash-recovery watchdog.

@@ -1,5 +1,17 @@
 # Reconciliation verification evidence
 
+## Round 5 — polyglot parser checkpoint (local, covering SHA pending)
+
+- Entry checkout `7909617a`; unchanged handoff 62 research tests passed with pinned original parsers and saved 13,961-node validation.
+- Task-owned changes only: frozen syntax index/parser helper/fixtures/hash pins/provenance and living research docs. No production source/dependency/UI/script behavior changes.
+- Extended index: 840 paths; 290 syntax successes, seven PowerShell parse-error files with partial nodes, one unsupported NSIS, 22 exclusions, 520 nonselected; 16,243 navigation nodes. Rust/Python 13,961-node subtotal preserved. Source-range/hash/count/parent validation returned zero errors; frozen 119-claim checkpoint validator issues empty, original 39/75/5 counts unchanged.
+- Current local test suite: **71 passed, zero skips**, all supplied grammars pinned. 23 syntax/index fixtures plus previous 48 recovery/SQL/source tests. Offline hash-locked install of five added wheels exercised in a new ignored target. Slint shared-library archive and library SHA256 verified before loading; ABI 15/binding 0.25.2 smoke/fixtures/full-source parse passed.
+- Missing anonymous CST delimiter tokens now explicitly traversed in Rust/polyglot parsers; tests revealed and corrected node-kind/name assumptions before accepted generation. PowerShell ERROR spans not suppressed or mislabeled as source bugs.
+- [Parser decision/provenance/limits](parser-polyglot-research.md), [wheel/library metadata](parser-polyglot-provenance.json), [current syntax scope](../syntax/README.md).
+- Native PowerShell parser, Cargo/Swift builds, live UI/model/audio/installer behavior, full semantic/caller coverage and independent review **not run/not accepted**. Permitted tools currently cannot select explicit Gemini/Opus except workflow, which the owner has not explicitly requested in this session; no inherited-model substitution. Configured web-search HTTP 402 did not block direct upstream/registry inspection.
+- Exact committed-SHA archive repeat is pending; local checks are not yet a portable covering-SHA receipt. This is an incomplete research checkpoint, never goal completion.
+
+
 ## Reviewed source and changed scope
 
 - Source baseline: `a10c356af05a5832a14ea06a5d0cb6c49694e3f1`.

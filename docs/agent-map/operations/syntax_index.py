@@ -103,8 +103,9 @@ def rust_index(data, path, parser=None):
             if node.type in {"impl_item", "mod_item", "struct_item", "enum_item", "trait_item", "function_item", "foreign_mod_item", "enum_variant"}:
                 next_scopes = scopes + [(identifier, name or node.type)]
         if node.type not in NO_DESCEND:
-            for child in node.named_children:
-                walk(child, next_scopes, effective)
+            for child in node.children:
+                if child.is_named or child.is_missing:
+                    walk(child, next_scopes, effective)
 
     walk(tree.root_node, [], [])
     return {"declarations": declarations, "parse_errors": errors, "has_parse_error": tree.root_node.has_error}
@@ -144,10 +145,10 @@ def python_index(data, path):
     return {"declarations": declarations, "parse_errors": [], "has_parse_error": False}
 
 
-def isolated_rust_index(source, path):
+def isolated_rust_index(source, path, mode="--rust-worker"):
     # Native bindings can fail outside Python exceptions. Preserve failure per file.
     try:
-        result = subprocess.run([sys.executable, "-B", str(Path(__file__).resolve()), "--rust-worker", str(source.resolve()), "--source-label", path], capture_output=True, text=True, timeout=30)
+        result = subprocess.run([sys.executable, "-B", str(Path(__file__).resolve()), mode, str(source.resolve()), "--source-label", path], capture_output=True, text=True, timeout=30)
     except subprocess.TimeoutExpired:
         return {"declarations": [], "parse_errors": [{"kind": "parser_timeout", "seconds": 30}], "has_parse_error": True, "native_parser_failure": True}
     if result.returncode:
@@ -159,6 +160,7 @@ def isolated_rust_index(source, path):
 
 
 def build(root, snapshot, parser=None, isolate=False):
+    from polyglot_syntax import GRAMMARS, parse
     root = root.resolve()
     frozen = json.loads(snapshot.read_text(encoding="utf-8"))
     if frozen["source_commit"] != BASELINE:
@@ -185,6 +187,12 @@ def build(root, snapshot, parser=None, isolate=False):
             result = isolated_rust_index(source, path) if isolate else rust_index(data, path, parser)
         elif extension == ".py":
             result = python_index(data, path)
+        elif extension in GRAMMARS:
+            if isolate:
+                result = isolated_rust_index(source, path, "--polyglot-worker")
+            else:
+                declarations, errors = parse(data, path, actual, GRAMMARS[extension][0])
+                result = {"declarations": declarations, "parse_errors": errors, "has_parse_error": bool(errors)}
         else:
             row.update(status="unsupported_language" if extension in UNSUPPORTED else "non_selected_data_or_document", declaration_count=0)
             files.append(row)
@@ -196,7 +204,7 @@ def build(root, snapshot, parser=None, isolate=False):
             symbols.append(declaration)
         files.append(row)
     from collections import Counter
-    return {"schema_version": 1, "source_commit": BASELINE, "parser_versions": RUST_VERSIONS, "python_ast": f"{sys.version_info.major}.{sys.version_info.minor}", "files": files, "status_counts": dict(Counter(f["status"] for f in files)), "declaration_count": len(symbols), "scope_limits": ["Rust/Python explicit syntax only", "macros not expanded; cfg not evaluated; types/call edges not resolved", "unsupported languages not interpreted as zero-symbol proof", "protected legacy/vendor are excluded, not reviewed", "no semantic line coverage or independent/native acceptance"], "complete_project_coverage": False}, symbols
+    return {"schema_version": 1, "source_commit": BASELINE, "parser_versions": {**RUST_VERSIONS, **{"tree-sitter-" + language: version for language, version in GRAMMARS.values()}}, "python_ast": f"{sys.version_info.major}.{sys.version_info.minor}", "files": files, "status_counts": dict(Counter(f["status"] for f in files)), "declaration_count": len(symbols), "scope_limits": ["Rust/Python/Slint/Swift/Objective-C/C/PowerShell/Bash explicit syntax only", "local/member declarations included; syntax errors retain partial navigation, not success", "macros not expanded; cfg not evaluated; types/call edges not resolved", "unsupported languages not interpreted as zero-symbol proof", "protected legacy/vendor are excluded, not reviewed", "no semantic line coverage or independent/native acceptance"], "complete_project_coverage": False}, symbols
 
 
 def validate_artifacts(root, report, declarations):
@@ -247,10 +255,18 @@ def main():
     parser.add_argument("--output", type=Path)
     parser.add_argument("--validate", action="store_true", help="Validate saved syntax ranges/source hashes without native parser dependencies")
     parser.add_argument("--rust-worker", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--polyglot-worker", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--source-label", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.rust_worker:
         print(json.dumps(rust_index(args.rust_worker.read_bytes(), args.source_label or "source.rs"), ensure_ascii=False))
+        return
+    if args.polyglot_worker:
+        from polyglot_syntax import GRAMMARS, parse
+        data = args.polyglot_worker.read_bytes()
+        label = args.source_label or args.polyglot_worker.name
+        declarations, errors = parse(data, label, sha(data), GRAMMARS[Path(label).suffix][0])
+        print(json.dumps({"declarations": declarations, "parse_errors": errors, "has_parse_error": bool(errors)}, ensure_ascii=False))
         return
     root = args.root.resolve()
     output = args.output or root / "docs/agent-map/syntax"

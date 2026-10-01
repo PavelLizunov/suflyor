@@ -90,3 +90,11 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - Accepted pinned binding 0.25.2 + Rust grammar0.24.2, isolated native parser workers. Prior 0.26.0 crashes saved, not accepted. Frozen Rust/Python224 files parsed with13961 nodes/declarations, zero current parser errors;74 unsupported/22 excluded/520 nonselected explicit.
 - 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
 - User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.
+
+## Continuation round 5 scope
+
+- Entry checkout verified at `7909617a` on the task branch; only foreign untracked raw reports present. No inherited goal in this session; a new persisted goal preserves the full original scope and acceptance limits.
+- Extend frozen syntax navigation with researched, hash-pinned prebuilt language grammars for Bash, Swift, Objective-C/C and PowerShell; investigate Slint/NSIS availability without compiling/installing SDKs or claiming unsupported grammar coverage. Keep binding 0.25.2; never replay 0.26.0.
+- Reuse the existing declaration schema and isolated per-file workers; test multiline/name/scope/comment/string/UTF8/error cases, preserve grammar errors rather than accepting partial trees as successful files. Dependencies stay in ignored task-local research targets; no global/runtime/production dependency changes.
+- Required verification: parser fixtures, source hash/range/count checks, existing recovery tests and exact-commit tracked-only repeat. Keep previous accepted Rust/Python artifacts/provenance intact until reviewed output is accepted; no semantic coverage inferred from syntax success.
+- Continue startup/wizard/health/diagnostics, config/translation/assets/native-caller semantics after coherent parser checkpoints. Independent Gemini/Opus acceptance is not currently available through a model-selectable permitted tool; do not inherit an unapproved route or call a workflow without separate explicit authorization. This is an acceptance limit, not permission to stop source research.
