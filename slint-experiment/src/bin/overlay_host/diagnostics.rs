@@ -147,13 +147,27 @@ pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while !rest.is_empty() {
-        if rest.starts_with("Bearer ") {
+        if rest.get(..7).is_some_and(|p| p.eq_ignore_ascii_case("Bearer ")) {
             out.push_str("Bearer <redacted>");
             rest = &rest[7..];
             let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
             rest = &rest[tok_len..];
         } else if rest.starts_with("gsk_") {
             out.push_str("gsk_<redacted>");
+            rest = &rest[4..];
+            let tok_len = rest
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+                .unwrap_or(rest.len());
+            rest = &rest[tok_len..];
+        } else if rest.starts_with("nvapi-") {
+            out.push_str("nvapi-<redacted>");
+            rest = &rest[6..];
+            let tok_len = rest
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+                .unwrap_or(rest.len());
+            rest = &rest[tok_len..];
+        } else if rest.starts_with("xai-") {
+            out.push_str("xai-<redacted>");
             rest = &rest[4..];
             let tok_len = rest
                 .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
@@ -940,6 +954,21 @@ mod tests {
         assert!(redacted.contains("gsk_<redacted>"));
         assert!(redacted.contains("sk-<redacted>"));
         assert!(redacted.contains("desk-1 task-2"));
+    }
+
+    #[test]
+    fn redact_secrets_masks_case_insensitive_bearer_and_provider_tokens() {
+        let sample = "Auth1: bearer secret_token_lower\n\
+                      Auth2: BEARER secret_token_upper\n\
+                      Nvidia: nvapi-secret_key_nv123\n\
+                      xAI: xai-secret_key_xai456\n";
+        let redacted = redact_secrets(sample);
+        assert!(!redacted.contains("secret_token_lower"), "leaked lower bearer: {redacted}");
+        assert!(!redacted.contains("secret_token_upper"), "leaked upper bearer: {redacted}");
+        assert!(!redacted.contains("secret_key_nv123"), "leaked nvapi key: {redacted}");
+        assert!(!redacted.contains("secret_key_xai456"), "leaked xai key: {redacted}");
+        assert!(redacted.contains("nvapi-<redacted>"));
+        assert!(redacted.contains("xai-<redacted>"));
     }
 
     #[test]

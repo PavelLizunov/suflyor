@@ -1,3 +1,8 @@
+## 2026-10-15 - Case-Sensitivity Bypass for Bearer Token Redaction
+**Vulnerability:** `redact_secrets` in `diagnostics.rs` checked for `"Bearer "` using case-sensitive `rest.starts_with("Bearer ")`. Log entries or headers using lowercase (`bearer <token>`) or uppercase (`BEARER <token>`) bypassed token redaction, leaving authorization tokens unmasked in exported diagnostic logs and clipboard reports.
+**Learning:** Token prefix matching in log/diagnostic redaction filters must be case-insensitive because HTTP headers and log messages frequently use varying letter casing.
+**Prevention:** Use case-insensitive ASCII comparison (`p.eq_ignore_ascii_case("Bearer ")`) when scanning for token prefixes to redact.
+
 ## 2026-09-08 - Plaintext URL / Credential Leak in reqwest Error Log Formatting
 **Vulnerability:** Logging raw `reqwest::Error` instances via `{e:#}` in STT error handlers printed the full request URL into `overlay-host.log`. For HTTP endpoints with embedded credentials (`http://user:secret@host/v1`) or private LAN hostnames, transport failures leaked secrets into the shareable log file.
 **Learning:** `reqwest::Error`'s `Display` / `Debug` representation (`{e:#}`) embeds the target URL. Formatting `reqwest::Error` directly in log calls bypasses URL/credential redaction rules.
