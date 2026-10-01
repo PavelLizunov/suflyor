@@ -2164,6 +2164,227 @@
       "scope": "principal chain/source tests, not all lines/symbols or native behavior",
       "native_verification": "not_run",
       "independent_acceptance": false
+    },
+    {
+      "id": "startup-wizard-health-and-diagnostics",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/startup-wizard-health-and-diagnostics.md",
+      "review_state": "coordinator principal source/caller inspection; independent/native acceptance pending",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 474,
+          "end_line": 503
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/app_bootstrap.rs",
+          "start_line": 13,
+          "end_line": 70
+        },
+        {
+          "path": "overlay-backend/src/paths.rs",
+          "start_line": 24,
+          "end_line": 119
+        },
+        {
+          "path": "slint-experiment/src/native/windows/lifecycle.rs",
+          "start_line": 7,
+          "end_line": 56
+        },
+        {
+          "path": "slint-experiment/src/native/macos/lifecycle.rs",
+          "start_line": 13,
+          "end_line": 51
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 4609,
+          "end_line": 4644
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 4647,
+          "end_line": 4670
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 456,
+          "end_line": 469
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 4676,
+          "end_line": 4708
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/wizard.rs",
+          "start_line": 77,
+          "end_line": 147
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/wizard.rs",
+          "start_line": 438,
+          "end_line": 488
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/wizard.rs",
+          "start_line": 118,
+          "end_line": 147
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/wizard.rs",
+          "start_line": 422,
+          "end_line": 488
+        },
+        {
+          "path": "slint-experiment/ui/wizard.slint",
+          "start_line": 119,
+          "end_line": 152
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/wizard.rs",
+          "start_line": 150,
+          "end_line": 226
+        },
+        {
+          "path": "overlay-backend/src/ai/inspect.rs",
+          "start_line": 20,
+          "end_line": 129
+        },
+        {
+          "path": "overlay-backend/src/stt.rs",
+          "start_line": 126,
+          "end_line": 217
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/wizard.rs",
+          "start_line": 229,
+          "end_line": 277
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/wizard.rs",
+          "start_line": 279,
+          "end_line": 313
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/wizard.rs",
+          "start_line": 316,
+          "end_line": 378
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/wizard.rs",
+          "start_line": 381,
+          "end_line": 419
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/wizard.rs",
+          "start_line": 35,
+          "end_line": 57
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 957,
+          "end_line": 1068
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/diagnostics.rs",
+          "start_line": 33,
+          "end_line": 62
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 105,
+          "end_line": 166
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/diagnostics.rs",
+          "start_line": 511,
+          "end_line": 683
+        },
+        {
+          "path": "overlay-backend/src/vision.rs",
+          "start_line": 242,
+          "end_line": 247
+        },
+        {
+          "path": "overlay-backend/src/health.rs",
+          "start_line": 60,
+          "end_line": 136
+        },
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 310,
+          "end_line": 333
+        },
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 604,
+          "end_line": 642
+        },
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 521,
+          "end_line": 574
+        },
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 1411,
+          "end_line": 1446
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
+          "start_line": 858,
+          "end_line": 921
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/diagnostics.rs",
+          "start_line": 307,
+          "end_line": 381
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/diagnostics.rs",
+          "start_line": 247,
+          "end_line": 302
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/diagnostics.rs",
+          "start_line": 393,
+          "end_line": 405
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/diagnostics.rs",
+          "start_line": 110,
+          "end_line": 140
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/diagnostics.rs",
+          "start_line": 65,
+          "end_line": 108
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/diagnostics.rs",
+          "start_line": 143,
+          "end_line": 181
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/diagnostics.rs",
+          "start_line": 724,
+          "end_line": 755
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/diagnostics.rs",
+          "start_line": 685,
+          "end_line": 722
+        }
+      ],
+      "limits": [
+        "Windows-only wizard; first-run by pre-load file absence",
+        "config readiness is not live engine or transcription proof",
+        "raw probe/detail privacy and stale asynchronous completions not natively accepted",
+        "not all startup timers/callers/config schemas"
+      ],
+      "native_verification": "not_run",
+      "independent_acceptance": false
     }
   ],
   "complete_project_coverage": false

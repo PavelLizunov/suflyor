@@ -99,16 +99,16 @@
     "wave4_worker3_cicd-C10",
     "wave4_worker3_cicd-C12"
   ],
-  "feature_contracts_source_inspected": 15,
+  "feature_contracts_source_inspected": 16,
   "continuation_round": 5,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 71,
-  "source_feature_references": 410,
+  "total_research_tests_passed": 79,
+  "source_feature_references": 451,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
   "portable_recovery_tested_commit": "a8c752534ccba081aecc99040e4f03f54c65f47e",
   "portable_recovery_result": "PASS 71+3 zero skips; exact Git archive; byte-identical full syntax regeneration; parsers supplied separately",
-  "source_seam_tests_passed": 19,
+  "source_seam_tests_passed": 27,
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
   "round3_spotcheck": "workflow-5 result null; no independent acceptance",
@@ -138,5 +138,7 @@
   "round5_remaining_syntax": [
     "NSIS unsupported",
     "seven PowerShell grammar-error files; native parser not run"
-  ]
+  ],
+  "startup_health_source_assertions_passed": 8,
+  "startup_health_portable_verification": "pending covering commit"
 }

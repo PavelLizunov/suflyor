@@ -1,6 +1,6 @@
 # Source-linked feature contracts
 
-These contracts map selected production chains at frozen research baseline `a10c356a`. They are manually inspected navigation/dataflow evidence, not compiler-derived call graphs, every-line/symbol coverage or native acceptance. Fifteen bounded contracts now cover principal runtime and platform integration chains; structured index records exact reference counts. Counts are navigation scope, not completeness proof.
+These contracts map selected production chains at frozen research baseline `a10c356a`. They are manually inspected navigation/dataflow evidence, not compiler-derived call graphs, every-line/symbol coverage or native acceptance. Sixteen bounded contracts now cover principal runtime and platform integration chains; structured index records exact reference counts. Counts are navigation scope, not completeness proof.
 
 | Feature | Contract | Key boundary |
 | --- | --- | --- |
@@ -19,7 +19,8 @@ These contracts map selected production chains at frozen research baseline `a10c
 | Updates/build/release | [Stable updater/digest/gates/installer/cleanup acceptance](updates-build-and-release.md) | Initial URL check not final redirect policy; source RC version is not publication |
 | MLX | [Pinned snapshots/owned child/Swift protocol/gate/runtime](mlx-sidecar-and-model-install.md) | Start uses fast snapshot, one active model does not bound waiters |
 | Hermes | [Bridge/tool client/install/config/profile-prep API](hermes-bridge-and-plugin.md) | Configured nonloopback allowed; summary stores differ; save failure still can acknowledge |
+| Startup/wizard/health/diagnostics | [Preflight/first-run/checks/ticker/report/logs](startup-wizard-health-and-diagnostics.md) | Config absence, not completion flag; config readiness ≠ live proof; UI detail and exported redaction differ |
 
 [Structured index](contracts.json) records IDs, baseline, source references and limits. [Original Grok register](../reconciliation/candidates.json) preserves counterevidence; [verification](../reconciliation/VERIFICATION.md) distinguishes executed local checks from unexecuted native behavior.
 
-Still missing complete per-module/all-caller coverage: all platform-native adapters, translation/assets/config-key schemas, startup/wizard/health/error wiring, every process/model edge and experiments/vendor boundaries. Reliable language-aware symbol/line coverage and independent exact-SHA native acceptance remain open. Empty historical regex tables do not prove absence of routines.
+Still missing complete per-module/all-caller coverage: all platform-native adapters, translation/assets/config-key schemas, remaining startup timers/health error callers, every process/model edge and experiments/vendor boundaries. Reliable language-aware symbol/line coverage and independent exact-SHA native acceptance remain open. Empty historical regex tables do not prove absence of routines.
