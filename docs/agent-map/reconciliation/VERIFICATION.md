@@ -1,5 +1,14 @@
 # Reconciliation verification evidence
 
+## Round 7 — native FFI census/ownership (local, covering SHA pending)
+
+- Seven production macOS C/Objective-C bridges/175 Rust input sources frozen-hashed: 37 nonstatic C ABI exports, 37 matching Rust foreign declarations, 57 direct CST calls; all paired by name, no ABI/cfg/linker/type/reachability proof. [Inventory](../native/README.md), [ownership/caller contract](../features/native-macos-ffi-and-ownership.md).
+- Eight new parser fixtures and six source ownership assertions; **103 research tests passed locally, zero skips** with unchanged pinned parser/PO environment. Native source-hash/range/name/acceptance validator errors empty; contract registry 18/510 ranges; original 39/75/5 classifications unchanged.
+- Draft assumptions corrected by source/fixtures before seal: Rust validates screenshot size before slice/copy; OCR null success returns empty; system tap exclusions empty (not self-excluding); native safe-release failures deliberately retain state; mic-start recv has no timeout, unlike asynchronous system startup.
+- Source-only concerns: screenshot late callback retains image after 5s timeout without inspected cancellation, synchronous host screenshot may block UI, system Pending detach/native state retention; none natively reproduced or elevated to original-Grok bugs. Platform build/permissions/clipboard/audio/HAL/capture/ABI/model tests **not run**, independent review unavailable/not accepted.
+- Covering exact-SHA archive/reproduction pending; local count/source checks not whole-objective acceptance.
+
+
 ## Round 6 — config/UI/translation/assets inventory (exact covering SHA tested)
 
 - Frozen baseline unchanged; task-owned docs/parser inventory only, no production/UI/catalog/asset modification. [Schema inventory/reproduction/limits](../schema/README.md), [seventeenth bounded contract](../features/config-ui-translation-and-assets.md), [PO-reader provenance](schema-parser-provenance.json).

@@ -1,0 +1,2860 @@
+{
+  "schema_version": 1,
+  "source_commit": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+  "inputs": {
+    "overlay-backend/native/macos/mic_capture.m": {
+      "sha256": "2559e3f49140b76bc80d6714d0d32d44b9d7210ddbce8f1b5ee1c463f5485d49",
+      "bytes": 11945
+    },
+    "overlay-backend/native/macos/process_memory.c": {
+      "sha256": "6b470e396a5f4094674e7a76722b9b50687473f6bdbd5a608cc5a83def177ac8",
+      "bytes": 455
+    },
+    "overlay-backend/native/macos/system_capture.m": {
+      "sha256": "c07b43302198256ab879d418f82e8693e7eeed75249c5ad664d951542c6e41a0",
+      "bytes": 16353
+    },
+    "slint-experiment/src/native/macos/clipboard.m": {
+      "sha256": "9188517cc39bb67484baee5131dd7666ed2726891440f596119f32de51d653e0",
+      "bytes": 2367
+    },
+    "slint-experiment/src/native/macos/screen.m": {
+      "sha256": "afbb694cab8bcb6b821e6b03ab601aac51054979d4b239ebd2532a9405a1a939",
+      "bytes": 11159
+    },
+    "slint-experiment/src/native/macos/status.m": {
+      "sha256": "b5c9498350553470f409c2eeda4bcca678216dfd8b34f0bfbeec82ee163e8de6",
+      "bytes": 3927
+    },
+    "slint-experiment/src/native/macos/window.m": {
+      "sha256": "e7b33d369b516e43c112ccf8521644c9d34310a546a8970c4fa82eac12778f97",
+      "bytes": 2839
+    },
+    "overlay-backend/src/ai/completion.rs": {
+      "sha256": "9f11565fced4b5d136a82db9516f56649d13c4f07723672e5eb898a975c3fa57",
+      "bytes": 9279
+    },
+    "overlay-backend/src/ai/control.rs": {
+      "sha256": "165302a8c09adc12ba5adb5a49e34b8c6c41fa060d55c7f49e0ab114766b58ed",
+      "bytes": 4072
+    },
+    "overlay-backend/src/ai/inspect.rs": {
+      "sha256": "1b8ab03ebef8a1299f87e54a46493e1673d80900ed66c388b73a4eee817550a1",
+      "bytes": 6869
+    },
+    "overlay-backend/src/ai/mod.rs": {
+      "sha256": "cdc546da37da702241ea6c2ea00b3caf3d96a0cd2e2f1538b92a01578fc290bf",
+      "bytes": 683
+    },
+    "overlay-backend/src/ai/pricing.rs": {
+      "sha256": "88696cfb2d339096197191837dc24d8b842a0f27db469a4429653242be6ee23f",
+      "bytes": 2847
+    },
+    "overlay-backend/src/ai/prompt.rs": {
+      "sha256": "f9b573d67ea7a0b3f56bbc470eca67fb63761ada719bde860ba7db8f87246425",
+      "bytes": 7211
+    },
+    "overlay-backend/src/ai/provider.rs": {
+      "sha256": "412cbe5c471ae25cc4a596aa84fddb99a440ee0d8bf4c6461869c64cdddd35ac",
+      "bytes": 18126
+    },
+    "overlay-backend/src/ai/stream.rs": {
+      "sha256": "c44e3fcc43e6cb9643f60cde2c9d7047f05a1c2e02ab89fee9a6efe0545d7bc4",
+      "bytes": 12360
+    },
+    "overlay-backend/src/ai/tests.rs": {
+      "sha256": "62b6651d92f461ee8b0e0801139cdd1b4a07241575122f5aea4eb58b983634b5",
+      "bytes": 26321
+    },
+    "overlay-backend/src/ai/tps.rs": {
+      "sha256": "6a1f4061a4e7c7531cb91b3273007b1fef16a83db2a0caf3f8cc871cd817d260",
+      "bytes": 9097
+    },
+    "overlay-backend/src/ai/types.rs": {
+      "sha256": "ada2697adf16919c5df45fd4601d7e88ec03d69f6874dd538da27b6d653376ba",
+      "bytes": 3643
+    },
+    "overlay-backend/src/audio.rs": {
+      "sha256": "15ae183f2083d18d6ce7463df1b41cbcda9aff18243c5d4821e50886e13d5dd3",
+      "bytes": 36595
+    },
+    "overlay-backend/src/audio_macos.rs": {
+      "sha256": "09b8b73f4ef504678b1cde4b89cd3a9d36084df998c499f7127127eeaa356015",
+      "bytes": 51015
+    },
+    "overlay-backend/src/audio_metrics.rs": {
+      "sha256": "4f77e37692bfef724e1ad77a85ec69193d1cd334596695f01c266844cb582c0a",
+      "bytes": 6861
+    },
+    "overlay-backend/src/audio_route.rs": {
+      "sha256": "d9cc37bafef62f6dca925578aaa817fdf5f85c811e78b15af94e4d18dabf27f4",
+      "bytes": 13374
+    },
+    "overlay-backend/src/audio_unavailable.rs": {
+      "sha256": "9530de34b0ec11b859d679be6911e72eaf639bab2a823eb99a2c517842d66fac",
+      "bytes": 5115
+    },
+    "overlay-backend/src/bridge.rs": {
+      "sha256": "a99d8cb160694223dfd5e161d6a7664d90c8e00592d9cd176b4fc7e18174c68b",
+      "bytes": 28352
+    },
+    "overlay-backend/src/capabilities.rs": {
+      "sha256": "d42af648967c38bf82768c54cb9d0c4d1bdbd99a09495467fbe5bbf458f9dc60",
+      "bytes": 4814
+    },
+    "overlay-backend/src/codex_subscription.rs": {
+      "sha256": "9058eeb6a7bb5af3a50ab863b8fc32d9b477de842e9c5e16508a2dcc26fb3f64",
+      "bytes": 71684
+    },
+    "overlay-backend/src/components.rs": {
+      "sha256": "000672c64f7a8892c0f8e8c9bc4b9a2932211a3c44251b4f83737c4d6c419fe2",
+      "bytes": 6338
+    },
+    "overlay-backend/src/config.rs": {
+      "sha256": "34ad3f6744956a8288c93f01d5df158a6d3a2a183371f3e8cf363f8a78f405f5",
+      "bytes": 95292
+    },
+    "overlay-backend/src/config/repair.rs": {
+      "sha256": "e5240dc0990c8641a2310b2fa538ede9e62721beca5e836d0970c02c91e445a2",
+      "bytes": 6435
+    },
+    "overlay-backend/src/config/snippets.rs": {
+      "sha256": "f01f01c84ad5ed89ae6cb4d9dbcf26aa3efb94a7d569fd7038d4647e93ff5a2f",
+      "bytes": 102175
+    },
+    "overlay-backend/src/config/tests.rs": {
+      "sha256": "ef3acd5d0afe3902c3e6a58d4d7b64a8f01cbcc63b873aeb3121e4b40dbf05aa",
+      "bytes": 74597
+    },
+    "overlay-backend/src/conspect.rs": {
+      "sha256": "b3bf8c9631a02f2293a7042336874cd1a6b57e3fc37cead282eb1d1df88995cd",
+      "bytes": 30237
+    },
+    "overlay-backend/src/credentials.rs": {
+      "sha256": "ca55678cf2413befb067551ccee562d09821cd1f5419769fa161172a6b1340d2",
+      "bytes": 9300
+    },
+    "overlay-backend/src/deep_lock.rs": {
+      "sha256": "a560f80678ade3a4ccbbd47272d18b13cca237e61fd6d8e076cc7c3e016d48a1",
+      "bytes": 16955
+    },
+    "overlay-backend/src/diar_install.rs": {
+      "sha256": "fc33ea52152b292f8b40d667b73fbe54ca6fb2eeb13784c55170edc4bf4873de",
+      "bytes": 33911
+    },
+    "overlay-backend/src/diarize.rs": {
+      "sha256": "b4a45e803aed6f61f2ae1bf73d3ee1fe2f648500f8583c776f3a203431e55e6e",
+      "bytes": 29024
+    },
+    "overlay-backend/src/download.rs": {
+      "sha256": "912208601356da967192a54ca96a504bf181065b82a7509f71fa1757ec30ed08",
+      "bytes": 5665
+    },
+    "overlay-backend/src/events.rs": {
+      "sha256": "1159dd7dcaf3220a91690c33c362fea3a49d9a72b8c1b36b52f412b9c01ce81c",
+      "bytes": 15102
+    },
+    "overlay-backend/src/health.rs": {
+      "sha256": "c3159b8bcf222426bbf5d18f8db24846ed18f2001c14df26912d5f9a651adf1a",
+      "bytes": 10707
+    },
+    "overlay-backend/src/hermes_install.rs": {
+      "sha256": "4c40f58fce9f48039a101edecb61a498f5ca3e2eacc01db42d45432b0f9efdcd",
+      "bytes": 32254
+    },
+    "overlay-backend/src/http_log.rs": {
+      "sha256": "24332ecc983ef4e9a4b1ac4d6b154e1be3ff4c13a693ffc6ff67a265b6546ec0",
+      "bytes": 2028
+    },
+    "overlay-backend/src/journal/legacy.rs": {
+      "sha256": "19fff59f62d876f30bf6b56dc21ee7429c89664bc549cf56e55cb89a058c9bfa",
+      "bytes": 1058
+    },
+    "overlay-backend/src/journal/mod.rs": {
+      "sha256": "f959a4819eae002af17c531fe18872b11624cc89aeeb0260b9a55ac10b59e16a",
+      "bytes": 338
+    },
+    "overlay-backend/src/journal/recovery.rs": {
+      "sha256": "8074495ca00ce9bf62704ed9342b3b105ca59c56d8a175249a6cc59734977bb7",
+      "bytes": 5653
+    },
+    "overlay-backend/src/journal/retention.rs": {
+      "sha256": "f3881102edd23e3e0c96806eab0e7696ae113a162f2cc256e38eeb4a93e5ca12",
+      "bytes": 2003
+    },
+    "overlay-backend/src/journal/tests.rs": {
+      "sha256": "b6c2a3147ecf12021a4c2430d2f0bd8e14bd59bcd7311623befb957779ab7487",
+      "bytes": 36374
+    },
+    "overlay-backend/src/journal/time.rs": {
+      "sha256": "afe2235c748030c708c23b47623264a84aa133c360fcc4b5adba3b6332e9dd33",
+      "bytes": 3375
+    },
+    "overlay-backend/src/journal/types.rs": {
+      "sha256": "2099b41152f8cf9f4b8e3fc4255ee7e1471c188be89d89b2ab61640af447d6f3",
+      "bytes": 2584
+    },
+    "overlay-backend/src/journal/writer.rs": {
+      "sha256": "105e0dfef0d8c27c0a6135bc93db715047df1f1c147c8580ecf95d3f8222d271",
+      "bytes": 12856
+    },
+    "overlay-backend/src/kb.rs": {
+      "sha256": "7ef2885d4691c727d40a021cfb33642c9671a7dcea32ae76e4b73de089e3102a",
+      "bytes": 19547
+    },
+    "overlay-backend/src/lib.rs": {
+      "sha256": "c3142e2fab3b42e47f44b6c52501369ae7ea8fbd11801380b5141a8b9a03268a",
+      "bytes": 1874
+    },
+    "overlay-backend/src/local_ai.rs": {
+      "sha256": "657dfcc77d055e5cf03ddb1b9a873635f9b13607fb902266d574305d60d962ba",
+      "bytes": 126832
+    },
+    "overlay-backend/src/local_ai/hardware_profile.rs": {
+      "sha256": "0d8c31d5d687e18f7ce370a51f13f2ea6a40daa1f47de98f5cf02614ad27aba4",
+      "bytes": 11243
+    },
+    "overlay-backend/src/local_ai/model_choice.rs": {
+      "sha256": "dc2b409c9071c68c0891423e75994e49b2802226380bfb84675ca9d7d6931777",
+      "bytes": 11010
+    },
+    "overlay-backend/src/local_ai/model_state.rs": {
+      "sha256": "81c43c0af615ddb457eca885c2827915e2d5a9a727b5339e28693c5a460fcfc8",
+      "bytes": 21367
+    },
+    "overlay-backend/src/local_ai/tests.rs": {
+      "sha256": "40ffd125ab1a661a1b96edafbf0d197b16a13616df867067e9901dffd8903428",
+      "bytes": 71352
+    },
+    "overlay-backend/src/memory/candidates.rs": {
+      "sha256": "e1dcd8052ad1af9bb1dfbf964124206c2b6e7502665eb29e9fb049bfe43f5294",
+      "bytes": 11807
+    },
+    "overlay-backend/src/memory/context_builder.rs": {
+      "sha256": "7afd37b1378cfad5b350d7deddfaa8f7c94a6242d30d0fee41d5a495e4d02276",
+      "bytes": 14517
+    },
+    "overlay-backend/src/memory/mod.rs": {
+      "sha256": "6b88ef1efe6a1ff4dd758434cbc545103142a0ce20d376165509c3d13e650729",
+      "bytes": 1301
+    },
+    "overlay-backend/src/memory/normalize.rs": {
+      "sha256": "c82b861df03a2b10a22c756ede3aafb8819cabfbb80af08b10ef82269b7e9e2a",
+      "bytes": 46152
+    },
+    "overlay-backend/src/memory/summary_ref.rs": {
+      "sha256": "15c3539f89f9ec6bf2f97fdd8e36d86d98634d1c16a1ac3bf7beb27e531f8cf4",
+      "bytes": 12424
+    },
+    "overlay-backend/src/mlx_install.rs": {
+      "sha256": "4dc5c8804cd2a4edb0c35247aadff47f9f985af9db0be909510f52336ef502d4",
+      "bytes": 33902
+    },
+    "overlay-backend/src/mlx_runtime.rs": {
+      "sha256": "81d8e32970318b46ffb03948e76314dcdb46c8362d0b0796e5a298141269bc0d",
+      "bytes": 23652
+    },
+    "overlay-backend/src/nemotron_diar.rs": {
+      "sha256": "2b39834f1994663e0cf7adff898468bf32f8393201cb54e3f908f25c85151d9a",
+      "bytes": 6548
+    },
+    "overlay-backend/src/ocr.rs": {
+      "sha256": "39f134620c4658702ac410c92f02a2804c997335a52482733cf023ee4605ded2",
+      "bytes": 11468
+    },
+    "overlay-backend/src/ocr_install.rs": {
+      "sha256": "da34445eda8f83e81111607ae94350f0ddc457445c9e10e6ceb22e56d0d96cb0",
+      "bytes": 5443
+    },
+    "overlay-backend/src/paths.rs": {
+      "sha256": "cb11101c416581912582306f8abc0fd48da41d7cc9741709e3700ce3d612e58d",
+      "bytes": 6452
+    },
+    "overlay-backend/src/persistence/indexer.rs": {
+      "sha256": "d6728820a4474c66f21f6e169a251f1353c4c5baa48ff71b4b43a07088ab58bf",
+      "bytes": 17838
+    },
+    "overlay-backend/src/persistence/maintenance.rs": {
+      "sha256": "adc67b518ef594ab40c73be06038d00ca07e1a0c26be9899aa70413f22882fe5",
+      "bytes": 30260
+    },
+    "overlay-backend/src/persistence/migrations.rs": {
+      "sha256": "f1d77cbf80e16d596d8674b5209d8b2529ca7e21615c8bfb29bf8c42e7e6fa3b",
+      "bytes": 2402
+    },
+    "overlay-backend/src/persistence/mod.rs": {
+      "sha256": "1e8063ff9682cfac09720ac4fb760ee3860ac13cb08245961746ff54975de959",
+      "bytes": 4022
+    },
+    "overlay-backend/src/persistence/models.rs": {
+      "sha256": "fd122ce51e65d077a153045faae4aa9dd698003317f7bd7d3eec654c0e91ecbf",
+      "bytes": 6970
+    },
+    "overlay-backend/src/persistence/sqlite_store.rs": {
+      "sha256": "a846917c7e77a12f3216ee309b0f4ea7a3711f37c2a87c78cb5508ac2313a5b5",
+      "bytes": 56219
+    },
+    "overlay-backend/src/re_transcribe.rs": {
+      "sha256": "9d4cb3dab21d74189f27a5189954e630ac1db059a212812be8f81eeda4d072da",
+      "bytes": 18013
+    },
+    "overlay-backend/src/recorder.rs": {
+      "sha256": "67022f06bcde538fc2a46026ad65ba1dfef9c26fd2106049ae95ffc10152139d",
+      "bytes": 56988
+    },
+    "overlay-backend/src/runtime.rs": {
+      "sha256": "fb64b6e6639e9fcd06c2e2bc54fa5f40dfc675090b3c72eda4541c24602ad3d5",
+      "bytes": 74083
+    },
+    "overlay-backend/src/runtime/summary_plan.rs": {
+      "sha256": "3dbf85d212392a6d30b009ef0982f195dc909c044080b3766bdc3fca36473fb7",
+      "bytes": 24217
+    },
+    "overlay-backend/src/runtime/tests.rs": {
+      "sha256": "20e8ab10a99265c4963858d8c3750006b58dbdfb8b115b83939a2205f2d5b864",
+      "bytes": 42522
+    },
+    "overlay-backend/src/runtime/trigger_detect.rs": {
+      "sha256": "df808f4401fa8576a4753af9dc5b47c95da357b45b14bb1d3b3b5abceda17f61",
+      "bytes": 28825
+    },
+    "overlay-backend/src/session_admin.rs": {
+      "sha256": "b106022b166e16de97775fa74720b5392737fac6b093ed290bb84cec63865d0b",
+      "bytes": 6030
+    },
+    "overlay-backend/src/session_audio.rs": {
+      "sha256": "01c7ee20efd371f03b19d50bd6e245147d8c35da9edde0c0c9f1fd0e6b09604c",
+      "bytes": 15473
+    },
+    "overlay-backend/src/session_names.rs": {
+      "sha256": "0a6f1e8b37cbd7415f5a4f4e3c707b1cae24da0fb6e1c152276a668a2cf565a9",
+      "bytes": 5751
+    },
+    "overlay-backend/src/stt.rs": {
+      "sha256": "80f2f04e38f1e8e8f50872967a29d6ad8b2a6ba3f7580f4810fe3b4ed498472f",
+      "bytes": 67844
+    },
+    "overlay-backend/src/summary_source.rs": {
+      "sha256": "d0cc62f27e9752670ca39e966391336af62bf03d3738eb7809d2111bfb20e562",
+      "bytes": 6690
+    },
+    "overlay-backend/src/teratts_install.rs": {
+      "sha256": "213a78cda14ad86cee05c2d7688727ddc260db470e681c20c411b477621f78fb",
+      "bytes": 36188
+    },
+    "overlay-backend/src/tests.rs": {
+      "sha256": "27ae7713e3896514ed8206d05a7189daf733799e478267cc72968b6d5cca6a0a",
+      "bytes": 69340
+    },
+    "overlay-backend/src/text.rs": {
+      "sha256": "52cd5973ac43b78968b4d2960c80a01f6ec64d832c2c3a777ff3e0e9e542510b",
+      "bytes": 734
+    },
+    "overlay-backend/src/tts.rs": {
+      "sha256": "c19ed3da7447118b3736a84d7c08afba25f20545f2233c8c7bc3c05b19cf63b5",
+      "bytes": 81826
+    },
+    "overlay-backend/src/tts_install.rs": {
+      "sha256": "af7d577c73caf3dd9439005d353d88ff4b92bdf0c25ef13bd8ff2121556985ac",
+      "bytes": 9420
+    },
+    "overlay-backend/src/tts_normalize.rs": {
+      "sha256": "a623d3d443ff1601ccf7f83ecdaab1246474822a552daaab3a33a5060dc9e4fa",
+      "bytes": 11730
+    },
+    "overlay-backend/src/update.rs": {
+      "sha256": "b5fb00beb755db92a0342be44b40f9a644a677448d17a275fb9ff56dec1e7be5",
+      "bytes": 14786
+    },
+    "overlay-backend/src/vision.rs": {
+      "sha256": "d1ecacf1d3ab208c926ee5da5f8805d1132e264faa6557b79fb8029f82738d32",
+      "bytes": 24596
+    },
+    "slint-experiment/src/app_state.rs": {
+      "sha256": "e9b0d7a91d05e70dffcdc36ba8efa06ae1a67c22c1e0ee785b5e7a9d38a35021",
+      "bytes": 21936
+    },
+    "slint-experiment/src/bin/markdown_spike.rs": {
+      "sha256": "2ed1ad9d409da94d11a1b5f30795568bf429af1ac49d7409a03c4cf62a0d1f8a",
+      "bytes": 8402
+    },
+    "slint-experiment/src/bin/overlay_host.rs": {
+      "sha256": "5df21296ef37109b6731b91e441831081bb7df153549cb9d1464dd45a59f8894",
+      "bytes": 602
+    },
+    "slint-experiment/src/bin/overlay_host/app_bootstrap.rs": {
+      "sha256": "e1b8842c8c5bbbbb9193948a93afd0de15a99c6efe66027744e927e242be4ebe",
+      "bytes": 2386
+    },
+    "slint-experiment/src/bin/overlay_host/aux_windows.rs": {
+      "sha256": "30cc101fbd7bd2b2f6ee8e5e7171bbfad686bb6beefbfc9b856aa43f55689974",
+      "bytes": 3947
+    },
+    "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs": {
+      "sha256": "650c082c48537907cc808a2edede7d2ee6e9fc7a8475dd579fa40f9d54d85419",
+      "bytes": 60353
+    },
+    "slint-experiment/src/bin/overlay_host/aux_windows/help_palette.rs": {
+      "sha256": "9423f146feb96cb3096504ce4900f94762fdba931552d2914e393ab71850c421",
+      "bytes": 9004
+    },
+    "slint-experiment/src/bin/overlay_host/aux_windows/text_ask.rs": {
+      "sha256": "1a3273f718745baf459a5182d42ce1471585b91f07bfe482daf7a3edee1148b1",
+      "bytes": 7449
+    },
+    "slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs": {
+      "sha256": "3d0ecbb85cb47079b82e0972f7e1e50e6acf3d7abf9406d317697de77d64ee5d",
+      "bytes": 68801
+    },
+    "slint-experiment/src/bin/overlay_host/bar_tray.rs": {
+      "sha256": "a1783d6fe7f87d0159ecb1eb852e5849d19e4ee9bc90a3c3317cfcde838e5ec3",
+      "bytes": 21840
+    },
+    "slint-experiment/src/bin/overlay_host/capture_watchdog.rs": {
+      "sha256": "b209835dde350ba332177100105225db2cda36143b4a93f6119249426518cfff",
+      "bytes": 4775
+    },
+    "slint-experiment/src/bin/overlay_host/diagnostics.rs": {
+      "sha256": "bd6a3ccb032156a299c3eaa48827e142ef133dbe67421fcff93f09940ab002bb",
+      "bytes": 45193
+    },
+    "slint-experiment/src/bin/overlay_host/hotkeys.rs": {
+      "sha256": "b2006b11e37d5024b8d3c8103d6b3c216e0856136ba3ff022634757bbb739f7f",
+      "bytes": 11046
+    },
+    "slint-experiment/src/bin/overlay_host/kbd_shortcuts.rs": {
+      "sha256": "cd73732276270572f2b4686aead8fa2afcd8a0e63d2247436663736372ea03ea",
+      "bytes": 5145
+    },
+    "slint-experiment/src/bin/overlay_host/local_watchdog.rs": {
+      "sha256": "dcff5b7d90b44c95bef873b1aa0e1fdf4b389fcdb09e447f44135577c20d6e1c",
+      "bytes": 4773
+    },
+    "slint-experiment/src/bin/overlay_host/mlx_lifecycle.rs": {
+      "sha256": "d57f8c879a8e105b04c2ed914ccec899fcb95daccba0bbe0f6793c8d95b783d2",
+      "bytes": 8882
+    },
+    "slint-experiment/src/bin/overlay_host/read_aloud.rs": {
+      "sha256": "e966ac760521c054dad26bab867c5333562b0c8551a5b2e7f02517ae96b222b1",
+      "bytes": 10115
+    },
+    "slint-experiment/src/bin/overlay_host/recovery.rs": {
+      "sha256": "15e33e018edcd01ed590dbb8cb87560067c032d51140ffbeb38405ecdefafeb4",
+      "bytes": 20979
+    },
+    "slint-experiment/src/bin/overlay_host/settings_ai.rs": {
+      "sha256": "8de546dc1f5a2e438eb73a141c3e32c36d3a0c9fe2d0ea3dce1be36aa7751fc5",
+      "bytes": 65899
+    },
+    "slint-experiment/src/bin/overlay_host/settings_audio.rs": {
+      "sha256": "7acf9b8af33663d0d7df3436541e1987659d037be8a1aae5a603c9d5bbddd21c",
+      "bytes": 18016
+    },
+    "slint-experiment/src/bin/overlay_host/settings_controller.rs": {
+      "sha256": "e892387fc7d27f657a0828fd5016f69d3c9641b40d00f19895c50c57ace54143",
+      "bytes": 93327
+    },
+    "slint-experiment/src/bin/overlay_host/settings_hermes.rs": {
+      "sha256": "b501469e0c6f2abe993826029f49f0d27cc42db86b2be87397b787a197d58f4b",
+      "bytes": 19607
+    },
+    "slint-experiment/src/bin/overlay_host/settings_import_export.rs": {
+      "sha256": "7e2c6085fe927c60d7541b91a5763a0618215ddf9515a0dbe367ef3a7bb05057",
+      "bytes": 12519
+    },
+    "slint-experiment/src/bin/overlay_host/settings_local_ai.rs": {
+      "sha256": "612496fa6da4fd08ec6941aeb6132b71bfaee3dbf34244d36e29fdd4cfb9b7b4",
+      "bytes": 81071
+    },
+    "slint-experiment/src/bin/overlay_host/settings_memory.rs": {
+      "sha256": "251731b673fc5de138f010ab1aeba4e81c35d109a9ca393d1cba4e369ba56bb5",
+      "bytes": 17594
+    },
+    "slint-experiment/src/bin/overlay_host/settings_mlx.rs": {
+      "sha256": "1b4807016c748c583b846f75790e151e7ad21d49a3904c80d25e9d2701ebb051",
+      "bytes": 12688
+    },
+    "slint-experiment/src/bin/overlay_host/settings_stt.rs": {
+      "sha256": "a874f074e27ef66a77ad80dc3a4cb85677d5d6b476bc65e5fce09a7228c5204b",
+      "bytes": 16719
+    },
+    "slint-experiment/src/bin/overlay_host/settings_updates.rs": {
+      "sha256": "6e0fb5cf5ad5dd0db60d204411086c75bd3f83519e50d3f2b2c4579106ea7b0d",
+      "bytes": 7915
+    },
+    "slint-experiment/src/bin/overlay_host/settings_vision.rs": {
+      "sha256": "0600b3ea6db781f8667c5198b3dfbc843e6e3f5311c47eb01cf382b3036499ab",
+      "bytes": 17260
+    },
+    "slint-experiment/src/bin/overlay_host/settings_voice.rs": {
+      "sha256": "059075ecf3b4b1c5d527249eef76d4c3e964deb10dd9c512b8e18f3708e45ab7",
+      "bytes": 21411
+    },
+    "slint-experiment/src/bin/overlay_host/status_copy.rs": {
+      "sha256": "dabc5bfdf332c58bc019b5273ada8d2a310ed82d2b9b9e7f99a19f38e77c89e3",
+      "bytes": 13885
+    },
+    "slint-experiment/src/bin/overlay_host/tile_ask.rs": {
+      "sha256": "823064c0975cd110ac67f74aeedf3ff483977c2027ce6167cf1f67016c810753",
+      "bytes": 29021
+    },
+    "slint-experiment/src/bin/overlay_host/tile_controller.rs": {
+      "sha256": "7a1fac60bd910ccb4d13c8e9296cdcf9836e8832f04dfee3f8160d95407792fa",
+      "bytes": 49096
+    },
+    "slint-experiment/src/bin/overlay_host/tile_copy.rs": {
+      "sha256": "990a68c720bd40c6d87ee0fadfbda0ad9a4e9a06786dfc4abe45d4a4fdca5eab",
+      "bytes": 54982
+    },
+    "slint-experiment/src/bin/overlay_host/tile_cost.rs": {
+      "sha256": "a6d5bf17fb7a5e9c8fe56f21cf7eafec5848ba3feb57a4826693df7f2f929012",
+      "bytes": 3033
+    },
+    "slint-experiment/src/bin/overlay_host/tile_followup.rs": {
+      "sha256": "4f2d12b820678d8a86223c4012aa91d7fe03a788b10667fe46439cca7c52a63e",
+      "bytes": 44577
+    },
+    "slint-experiment/src/bin/overlay_host/tile_ptt.rs": {
+      "sha256": "012709580bb6190c40511f852ede4f2517885fd38288566bed9e290d868fe4b2",
+      "bytes": 20466
+    },
+    "slint-experiment/src/bin/overlay_host/tile_routes.rs": {
+      "sha256": "69c46b58e325e23c64b88bec291f2e8ddf358aa57d341f29563f76c619d8e632",
+      "bytes": 6298
+    },
+    "slint-experiment/src/bin/overlay_host/tile_window.rs": {
+      "sha256": "c254a31f89c412d96305225c3ca5250ec4e9d0fabbccb30906a694f88098d17a",
+      "bytes": 22528
+    },
+    "slint-experiment/src/bin/overlay_host/transcript_player.rs": {
+      "sha256": "ff4134a0ec1516ae02770fe7f6a7dbec855193e3442d0bedb08a3ca3c2ec8f81",
+      "bytes": 22894
+    },
+    "slint-experiment/src/bin/overlay_host/vision_capture.rs": {
+      "sha256": "38375490cd21636d373380bc43844cdd635e4116fef475f7202cb3889ef4247d",
+      "bytes": 39147
+    },
+    "slint-experiment/src/bin/overlay_host/window_lifecycle.rs": {
+      "sha256": "de9e2372cc826724ac566ff8db2672b4a4b28a6869006d2e6a6a7515a9cb605b",
+      "bytes": 34348
+    },
+    "slint-experiment/src/bin/overlay_host/wizard.rs": {
+      "sha256": "0a8ffa80c12a7a9ede745bef843e0796a4ad509017d5be8475c6ddcc4011040d",
+      "bytes": 21171
+    },
+    "slint-experiment/src/bin/overlay_host_windows.rs": {
+      "sha256": "fba170e1a3fa4fc797f4b4550f99c91e8a4c390683657d8919267280c4521341",
+      "bytes": 247480
+    },
+    "slint-experiment/src/bin/overlay_spike.rs": {
+      "sha256": "35d8ffc1b9a7160ab8823980d75cfebc1d6ba95b129054b97b353ab3df06f802",
+      "bytes": 8422
+    },
+    "slint-experiment/src/capture.rs": {
+      "sha256": "664d11334f5a92995ba7ed2405979e213e0f65fbd99833ad33c529254bba9e1a",
+      "bytes": 8113
+    },
+    "slint-experiment/src/lib.rs": {
+      "sha256": "5f53dd23dc7f0c8f0046469cedeec0a809a25fd36e66b4df8c00cbd335df805e",
+      "bytes": 740
+    },
+    "slint-experiment/src/lock_menu.rs": {
+      "sha256": "077d661963e4cd7cc8fb6e2623e1f771baf1fe2627a2d8e2efb0fb1830b8fa31",
+      "bytes": 5166
+    },
+    "slint-experiment/src/logging.rs": {
+      "sha256": "59adb2fffa6bcd8edc891e2b0d717806228cc5f03f0f4bbb5656e2373cae30c3",
+      "bytes": 7103
+    },
+    "slint-experiment/src/main.rs": {
+      "sha256": "7e11c707a4d233a0fbbd3b4d28e3b113ec03de04b151c922db3edb3e987ee13f",
+      "bytes": 17961
+    },
+    "slint-experiment/src/markdown.rs": {
+      "sha256": "2235e279b0009751efe9e4d6293c06561ef3e939fa43b2305009a18518e92e6e",
+      "bytes": 35230
+    },
+    "slint-experiment/src/math_display.rs": {
+      "sha256": "c52905ff1e708a155d8b21971c96921bc0788e39169f50d0c3fe19de6c572d88",
+      "bytes": 21156
+    },
+    "slint-experiment/src/native/macos/clipboard.rs": {
+      "sha256": "2bd952cca85d6b92475b2c7bd0f4fca32f7c48b59939146a13279265acbece7f",
+      "bytes": 1936
+    },
+    "slint-experiment/src/native/macos/lifecycle.rs": {
+      "sha256": "19491c7053504b685ce3702c2d738eb5ef69e6ae99742da7ff57a76f8930a64c",
+      "bytes": 2266
+    },
+    "slint-experiment/src/native/macos/screen.rs": {
+      "sha256": "803120db025daff34a1aeef86f009621b3eea0e4663c3ee87a20792b34669efb",
+      "bytes": 8069
+    },
+    "slint-experiment/src/native/macos/status.rs": {
+      "sha256": "c1a258d36b6f93b56395e0f5e8ea61c354fb2f030a899cf8db1751a4bab3591e",
+      "bytes": 1648
+    },
+    "slint-experiment/src/native/macos/window.rs": {
+      "sha256": "df4ac3c15c25aa405b2febf3f5a174a8c7f41f99cb21b62083a093024788f585",
+      "bytes": 3582
+    },
+    "slint-experiment/src/native/mod.rs": {
+      "sha256": "5ce8ecdbb0cbd306bb62c6b6d2d80ce17177f2397a048b58fd998da32a59b691",
+      "bytes": 3350
+    },
+    "slint-experiment/src/native/windows/clipboard.rs": {
+      "sha256": "e4566e0c54c5641b825a32c1b233c6df11fd7b307b9e8fe1ba05f4d59a1e28a3",
+      "bytes": 721
+    },
+    "slint-experiment/src/native/windows/lifecycle.rs": {
+      "sha256": "cf3af28540aadec179db9d6969750aa29e355773d8808f697cddc0e56dda9abe",
+      "bytes": 2536
+    },
+    "slint-experiment/src/native/windows/screen.rs": {
+      "sha256": "e6300be2792f3d2f8e0cb69f50e04bd573ccadb470d822c5640fa9ab301f71c4",
+      "bytes": 3392
+    },
+    "slint-experiment/src/replay_backend.rs": {
+      "sha256": "adddd504e1c370046ca75ba4c788738d1568d30742a01b93d289957e9875d4a1",
+      "bytes": 14028
+    },
+    "slint-experiment/src/runtime_state.rs": {
+      "sha256": "be744ec6e63e1c90a8e26984dbf41d761b6ad772b39a06c3b91dca1420b9030f",
+      "bytes": 14972
+    },
+    "slint-experiment/src/session_namer.rs": {
+      "sha256": "3a639484835e1d9678b811afff060d6bdaf3886aebba4d3175c94ad76048d55f",
+      "bytes": 13995
+    },
+    "slint-experiment/src/slint_events.rs": {
+      "sha256": "a4f4f7d4d6fd6c255c82d14d990c5b10420e3b04cc403fe50accbdbd4776f361",
+      "bytes": 9310
+    },
+    "slint-experiment/src/slint_session.rs": {
+      "sha256": "1b90d6b66e6cc56c3712e9a37e4b5736d8fb10c4cac11d252fa1d44a0e985fcd",
+      "bytes": 86673
+    },
+    "slint-experiment/src/tray.rs": {
+      "sha256": "54d0627df41d77468bf98e6755573ffb19b8c5d191cd7ba8854dc6caba4585f2",
+      "bytes": 23649
+    },
+    "slint-experiment/src/win32.rs": {
+      "sha256": "9401ad0a0df9228c6ecb77ae47225bbe72c97bbd63ee3c4bf13c928555832362",
+      "bytes": 55879
+    },
+    "suflyor-teratts/src/chunk.rs": {
+      "sha256": "2a85349ad4cfa116f4c369cefb0cb49446fca66126d43b3c0bd7b17aa8fde9a3",
+      "bytes": 3026
+    },
+    "suflyor-teratts/src/indexer.rs": {
+      "sha256": "959bdb6c544f497c2bfb92a612d2c95ce396f12a97df316bf70c12f6bfe2f122",
+      "bytes": 3923
+    },
+    "suflyor-teratts/src/main.rs": {
+      "sha256": "ea893faf41741cc45b21a30fd1fbeeb19386e85bbe9ee51a648929fd028d5fff",
+      "bytes": 38519
+    },
+    "suflyor-teratts/src/manifest.rs": {
+      "sha256": "2e2e5d809cc51e7a74db8ec781da2b5830f746b065e279101e8ac3e1c6737834",
+      "bytes": 8712
+    },
+    "suflyor-teratts/src/npy.rs": {
+      "sha256": "0abecd0dd66841513b2cf75289af6c6fac5fef06aa09ecddacbd86291477782f",
+      "bytes": 7176
+    },
+    "suflyor-teratts/src/num2words.rs": {
+      "sha256": "106c51b4c3faff3655bd017581c0dd12149dfbb8937f16e5f54e2143c1d30dcd",
+      "bytes": 12749
+    },
+    "suflyor-teratts/src/playback.rs": {
+      "sha256": "793777a18c3dabac70a412ddca6a214cd811dac38b3c3c3a8033febc09a52100",
+      "bytes": 14906
+    },
+    "suflyor-teratts/src/playback_macos.rs": {
+      "sha256": "e5b238741f988e469c769c7c817fc603ef7540e06e455627e06e397ae0bcb96a",
+      "bytes": 15935
+    },
+    "suflyor-teratts/src/protocol.rs": {
+      "sha256": "0535d3876c6f96b0552fed195b5d57f451423a5e7c4deb58fdb31e8aa8e34d9e",
+      "bytes": 10996
+    },
+    "suflyor-teratts/src/rng.rs": {
+      "sha256": "673444022636b19df9216a0ba8b121c24fd49903d1b8a6a503dfccce1eddee00",
+      "bytes": 2826
+    },
+    "suflyor-teratts/src/tera.rs": {
+      "sha256": "7828f7fc0a185a0c66dbcec6217e2a02f145c0e05ad950d38eca00a8c173662c",
+      "bytes": 22875
+    },
+    "suflyor-teratts/src/textnorm.rs": {
+      "sha256": "3dd42fb7a605fc9c682f1c186ccd7b383b822cad926fb16d8527cb0d142cc47f",
+      "bytes": 17246
+    },
+    "suflyor-tts/src/diar.rs": {
+      "sha256": "0f1e1f712a64051a9baca5137a03a1f5412390017a19c712c90398dc18cba8da",
+      "bytes": 12485
+    },
+    "suflyor-tts/src/engine.rs": {
+      "sha256": "c777e5e73b06b834f8c1d0e5809f15705f6da690989a0aef8367141dd9c1011c",
+      "bytes": 9854
+    },
+    "suflyor-tts/src/main.rs": {
+      "sha256": "52b73be9ae04ef95b016e2548ce47931d915fe671fdeebc40b72d8b5c9c59480",
+      "bytes": 14685
+    },
+    "suflyor-tts/src/playback.rs": {
+      "sha256": "f3ebe790dcdcb0ae03d6ce4bf5fca020338e814e1ae7f1b6ed3ff403b247c5d4",
+      "bytes": 15002
+    },
+    "suflyor-tts/src/playback_macos.rs": {
+      "sha256": "eeb268a293d6143902c6a44361e6792a947b777b699e5381cebe0a1053bde124",
+      "bytes": 14493
+    },
+    "suflyor-tts/src/playback_unavailable.rs": {
+      "sha256": "f8982721ae4cbe8fa5ae6411ccd0d6ba55dd5c573c5d2b1b33ded56564fd6b58",
+      "bytes": 1297
+    },
+    "suflyor-wsola/src/error.rs": {
+      "sha256": "be04634703f1cfa65df7245f9c7bb273ff6e9ba983ababacecdfbb412385d926",
+      "bytes": 1220
+    },
+    "suflyor-wsola/src/lib.rs": {
+      "sha256": "273e8ef7fefd732e847f329cab91bacf5f9d5a0f0ec2236925c0803b83c7c159",
+      "bytes": 402
+    },
+    "suflyor-wsola/src/stream.rs": {
+      "sha256": "11f440a929388bbda2417b5cc53f5a679bbc7f784efdcf92f4442083350c0098",
+      "bytes": 4086
+    },
+    "suflyor-wsola/src/wsola.rs": {
+      "sha256": "38ca2f723395fc7ff42e0b471be1c366e0293b896048b55846e022458a464176",
+      "bytes": 37071
+    }
+  },
+  "symbols": [
+    {
+      "name": "mic_capture_copy_default_input_name",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/mic_capture.m",
+          "name": "mic_capture_copy_default_input_name",
+          "signature_source": "char *mic_capture_copy_default_input_name(void)",
+          "start_byte": 11613,
+          "end_byte": 11741,
+          "start_line": 343,
+          "end_line": 345
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_copy_default_input_name",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn mic_capture_copy_default_input_name() -> *mut c_char;",
+          "start_byte": 5657,
+          "end_byte": 5713,
+          "start_line": 132,
+          "end_line": 132
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_copy_default_input_name",
+          "callee_source": "mic_capture_copy_default_input_name",
+          "containing_function": {
+            "name": "list_devices",
+            "start_byte": 11605,
+            "end_byte": 12107,
+            "start_line": 288,
+            "end_line": 303
+          },
+          "inside_closure": false,
+          "start_byte": 11745,
+          "end_byte": 11782,
+          "start_line": 292,
+          "end_line": 292
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "mic_capture_copy_default_output_name",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/mic_capture.m",
+          "name": "mic_capture_copy_default_output_name",
+          "signature_source": "char *mic_capture_copy_default_output_name(void)",
+          "start_byte": 11743,
+          "end_byte": 11873,
+          "start_line": 347,
+          "end_line": 349
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_copy_default_output_name",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn mic_capture_copy_default_output_name() -> *mut c_char;",
+          "start_byte": 5718,
+          "end_byte": 5775,
+          "start_line": 133,
+          "end_line": 133
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_copy_default_output_name",
+          "callee_source": "mic_capture_copy_default_output_name",
+          "containing_function": {
+            "name": "list_devices",
+            "start_byte": 11605,
+            "end_byte": 12107,
+            "start_line": 288,
+            "end_line": 303
+          },
+          "inside_closure": false,
+          "start_byte": 11918,
+          "end_byte": 11956,
+          "start_line": 297,
+          "end_line": 297
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "mic_capture_free_string",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/mic_capture.m",
+          "name": "mic_capture_free_string",
+          "signature_source": "void mic_capture_free_string(char *s)",
+          "start_byte": 11875,
+          "end_byte": 11944,
+          "start_line": 351,
+          "end_line": 355
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_free_string",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn mic_capture_free_string(ptr: *mut c_char);",
+          "start_byte": 5780,
+          "end_byte": 5825,
+          "start_line": 134,
+          "end_line": 134
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_free_string",
+          "callee_source": "mic_capture_free_string",
+          "containing_function": {
+            "name": "free_and_convert_c_string",
+            "start_byte": 6032,
+            "end_byte": 6349,
+            "start_line": 140,
+            "end_line": 148
+          },
+          "inside_closure": false,
+          "start_byte": 6275,
+          "end_byte": 6303,
+          "start_line": 146,
+          "end_line": 146
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "mic_capture_permission_status",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/mic_capture.m",
+          "name": "mic_capture_permission_status",
+          "signature_source": "uint32_t mic_capture_permission_status(void)",
+          "start_byte": 2179,
+          "end_byte": 2709,
+          "start_line": 68,
+          "end_line": 82
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_permission_status",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn mic_capture_permission_status() -> u32;",
+          "start_byte": 4959,
+          "end_byte": 5001,
+          "start_line": 117,
+          "end_line": 117
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_permission_status",
+          "callee_source": "mic_capture_permission_status",
+          "containing_function": {
+            "name": "microphone_permission",
+            "start_byte": 8331,
+            "end_byte": 8537,
+            "start_line": 212,
+            "end_line": 215
+          },
+          "inside_closure": false,
+          "start_byte": 8501,
+          "end_byte": 8532,
+          "start_line": 214,
+          "end_line": 214
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "mic_capture_read",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/mic_capture.m",
+          "name": "mic_capture_read",
+          "signature_source": "uint32_t mic_capture_read(MicController *c, float *dst, uint32_t max_frames)",
+          "start_byte": 8629,
+          "end_byte": 9216,
+          "start_line": 249,
+          "end_line": 263
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_read",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn mic_capture_read(controller: *mut MicController, dst: *mut f32, max_frames: u32) -> u32;",
+          "start_byte": 5355,
+          "end_byte": 5446,
+          "start_line": 128,
+          "end_line": 128
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_read",
+          "callee_source": "mic_capture_read",
+          "containing_function": {
+            "name": "record_source_until_stop",
+            "start_byte": 20688,
+            "end_byte": 22989,
+            "start_line": 516,
+            "end_line": 589
+          },
+          "inside_closure": false,
+          "start_byte": 22278,
+          "end_byte": 22344,
+          "start_line": 564,
+          "end_line": 564
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_read",
+          "callee_source": "mic_capture_read",
+          "containing_function": {
+            "name": "capture_worker",
+            "start_byte": 26834,
+            "end_byte": 32316,
+            "start_line": 711,
+            "end_line": 837
+          },
+          "inside_closure": false,
+          "start_byte": 29748,
+          "end_byte": 29820,
+          "start_line": 780,
+          "end_line": 780
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "mic_capture_request_permission",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/mic_capture.m",
+          "name": "mic_capture_request_permission",
+          "signature_source": "void mic_capture_request_permission(MicPermissionCallback callback,\n                                    void *context)",
+          "start_byte": 2711,
+          "end_byte": 3807,
+          "start_line": 84,
+          "end_line": 111
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_request_permission",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn mic_capture_request_permission(\n        callback: extern \"C\" fn(u32, *mut c_void),\n        context: *mut c_void,\n    );",
+          "start_byte": 5006,
+          "end_byte": 5128,
+          "start_line": 118,
+          "end_line": 121
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_request_permission",
+          "callee_source": "mic_capture_request_permission",
+          "containing_function": {
+            "name": "request_microphone_permission",
+            "start_byte": 8993,
+            "end_byte": 9338,
+            "start_line": 226,
+            "end_line": 233
+          },
+          "inside_closure": false,
+          "start_byte": 9268,
+          "end_byte": 9333,
+          "start_line": 232,
+          "end_line": 232
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "mic_capture_ring_capacity",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/mic_capture.m",
+          "name": "mic_capture_ring_capacity",
+          "signature_source": "uint32_t mic_capture_ring_capacity(const MicController *c)",
+          "start_byte": 8421,
+          "end_byte": 8513,
+          "start_line": 243,
+          "end_line": 245
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_ring_capacity",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn mic_capture_ring_capacity(controller: *const MicController) -> u32;",
+          "start_byte": 5280,
+          "end_byte": 5350,
+          "start_line": 127,
+          "end_line": 127
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_ring_capacity",
+          "callee_source": "mic_capture_ring_capacity",
+          "containing_function": {
+            "name": "record_source_until_stop",
+            "start_byte": 20688,
+            "end_byte": 22989,
+            "start_line": 516,
+            "end_line": 589
+          },
+          "inside_closure": false,
+          "start_byte": 21813,
+          "end_byte": 21844,
+          "start_line": 551,
+          "end_line": 551
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_ring_capacity",
+          "callee_source": "mic_capture_ring_capacity",
+          "containing_function": {
+            "name": "capture_worker",
+            "start_byte": 26834,
+            "end_byte": 32316,
+            "start_line": 711,
+            "end_line": 837
+          },
+          "inside_closure": false,
+          "start_byte": 28126,
+          "end_byte": 28163,
+          "start_line": 748,
+          "end_line": 748
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_ring_capacity",
+          "callee_source": "mic_capture_ring_capacity",
+          "containing_function": {
+            "name": "capture_worker",
+            "start_byte": 26834,
+            "end_byte": 32316,
+            "start_line": 711,
+            "end_line": 837
+          },
+          "inside_closure": false,
+          "start_byte": 29335,
+          "end_byte": 29372,
+          "start_line": 771,
+          "end_line": 771
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "mic_capture_start",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/mic_capture.m",
+          "name": "mic_capture_start",
+          "signature_source": "MicController *mic_capture_start(uint32_t buffer_frames,\n                                 double *out_sample_rate,\n                                 int32_t *out_error)",
+          "start_byte": 3809,
+          "end_byte": 8419,
+          "start_line": 113,
+          "end_line": 241
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_start",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn mic_capture_start(\n        buffer_frames: u32,\n        out_sample_rate: *mut f64,\n        out_error: *mut i32,\n    ) -> *mut MicController;",
+          "start_byte": 5133,
+          "end_byte": 5275,
+          "start_line": 122,
+          "end_line": 126
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_start",
+          "callee_source": "mic_capture_start",
+          "containing_function": {
+            "name": "record_source_until_stop",
+            "start_byte": 20688,
+            "end_byte": 22989,
+            "start_line": 516,
+            "end_line": 589
+          },
+          "inside_closure": false,
+          "start_byte": 21056,
+          "end_byte": 21130,
+          "start_line": 527,
+          "end_line": 527
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_start",
+          "callee_source": "mic_capture_start",
+          "containing_function": {
+            "name": "reopen_mic",
+            "start_byte": 25321,
+            "end_byte": 26203,
+            "start_line": 670,
+            "end_line": 692
+          },
+          "inside_closure": true,
+          "start_byte": 25879,
+          "end_byte": 25953,
+          "start_line": 683,
+          "end_line": 683
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_start",
+          "callee_source": "mic_capture_start",
+          "containing_function": {
+            "name": "capture_worker",
+            "start_byte": 26834,
+            "end_byte": 32316,
+            "start_line": 711,
+            "end_line": 837
+          },
+          "inside_closure": false,
+          "start_byte": 27157,
+          "end_byte": 27231,
+          "start_line": 721,
+          "end_line": 721
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "mic_capture_stop",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/mic_capture.m",
+          "name": "mic_capture_stop",
+          "signature_source": "void mic_capture_stop(MicController *c)",
+          "start_byte": 9918,
+          "end_byte": 10357,
+          "start_line": 286,
+          "end_line": 305
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_stop",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn mic_capture_stop(controller: *mut MicController);",
+          "start_byte": 5600,
+          "end_byte": 5652,
+          "start_line": 131,
+          "end_line": 131
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_stop",
+          "callee_source": "mic_capture_stop",
+          "containing_function": {
+            "name": "record_source_until_stop",
+            "start_byte": 20688,
+            "end_byte": 22989,
+            "start_line": 516,
+            "end_line": 589
+          },
+          "inside_closure": false,
+          "start_byte": 22705,
+          "end_byte": 22727,
+          "start_line": 577,
+          "end_line": 577
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_stop",
+          "callee_source": "mic_capture_stop",
+          "containing_function": {
+            "name": "capture_worker",
+            "start_byte": 26834,
+            "end_byte": 32316,
+            "start_line": 711,
+            "end_line": 837
+          },
+          "inside_closure": false,
+          "start_byte": 27997,
+          "end_byte": 28025,
+          "start_line": 743,
+          "end_line": 743
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_stop",
+          "callee_source": "mic_capture_stop",
+          "containing_function": {
+            "name": "capture_worker",
+            "start_byte": 26834,
+            "end_byte": 32316,
+            "start_line": 711,
+            "end_line": 837
+          },
+          "inside_closure": false,
+          "start_byte": 28795,
+          "end_byte": 28823,
+          "start_line": 760,
+          "end_line": 760
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_stop",
+          "callee_source": "mic_capture_stop",
+          "containing_function": {
+            "name": "capture_worker",
+            "start_byte": 26834,
+            "end_byte": 32316,
+            "start_line": 711,
+            "end_line": 837
+          },
+          "inside_closure": false,
+          "start_byte": 32232,
+          "end_byte": 32260,
+          "start_line": 835,
+          "end_line": 835
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "mic_capture_take_dropped",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/mic_capture.m",
+          "name": "mic_capture_take_dropped",
+          "signature_source": "uint64_t mic_capture_take_dropped(MicController *c)",
+          "start_byte": 9292,
+          "end_byte": 9450,
+          "start_line": 266,
+          "end_line": 271
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_take_dropped",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn mic_capture_take_dropped(controller: *mut MicController) -> u64;",
+          "start_byte": 5451,
+          "end_byte": 5518,
+          "start_line": 129,
+          "end_line": 129
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_take_dropped",
+          "callee_source": "mic_capture_take_dropped",
+          "containing_function": {
+            "name": "capture_worker",
+            "start_byte": 26834,
+            "end_byte": 32316,
+            "start_line": 711,
+            "end_line": 837
+          },
+          "inside_closure": false,
+          "start_byte": 29881,
+          "end_byte": 29917,
+          "start_line": 782,
+          "end_line": 782
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "mic_capture_take_route_change",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/mic_capture.m",
+          "name": "mic_capture_take_route_change",
+          "signature_source": "uint32_t mic_capture_take_route_change(MicController *c)",
+          "start_byte": 9452,
+          "end_byte": 9717,
+          "start_line": 273,
+          "end_line": 281
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_take_route_change",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn mic_capture_take_route_change(controller: *mut MicController) -> u32;",
+          "start_byte": 5523,
+          "end_byte": 5595,
+          "start_line": 130,
+          "end_line": 130
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "mic_capture_take_route_change",
+          "callee_source": "mic_capture_take_route_change",
+          "containing_function": {
+            "name": "capture_worker",
+            "start_byte": 26834,
+            "end_byte": 32316,
+            "start_line": 711,
+            "end_line": 837
+          },
+          "inside_closure": false,
+          "start_byte": 28636,
+          "end_byte": 28677,
+          "start_line": 758,
+          "end_line": 758
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_begin_window_drag",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/window.m",
+          "name": "suflyor_macos_begin_window_drag",
+          "signature_source": "int32_t suflyor_macos_begin_window_drag(void *raw_view)",
+          "start_byte": 1307,
+          "end_byte": 1633,
+          "start_line": 38,
+          "end_line": 46
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/window.rs",
+          "name": "suflyor_macos_begin_window_drag",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_begin_window_drag(view: *mut c_void) -> c_int;",
+          "start_byte": 241,
+          "end_byte": 304,
+          "start_line": 8,
+          "end_line": 8
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/window.rs",
+          "name": "suflyor_macos_begin_window_drag",
+          "callee_source": "suflyor_macos_begin_window_drag",
+          "containing_function": {
+            "name": "begin_drag",
+            "start_byte": 2025,
+            "end_byte": 2322,
+            "start_line": 57,
+            "end_line": 64
+          },
+          "inside_closure": false,
+          "start_byte": 2138,
+          "end_byte": 2191,
+          "start_line": 58,
+          "end_line": 58
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_capture_display_bgra",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.m",
+          "name": "suflyor_macos_capture_display_bgra",
+          "signature_source": "int32_t suflyor_macos_capture_display_bgra(\n    uint32_t *out_width,\n    uint32_t *out_height,\n    SuflyorDisplayRect *out_display,\n    uint8_t **out_bytes,\n    size_t *out_len\n)",
+          "start_byte": 2790,
+          "end_byte": 7854,
+          "start_line": 91,
+          "end_line": 230
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_capture_display_bgra",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_capture_display_bgra(\n        out_width: *mut u32,\n        out_height: *mut u32,\n        out_display: *mut MacDisplayRect,\n        out_bytes: *mut *mut u8,\n        out_len: *mut usize,\n    ) -> i32;",
+          "start_byte": 403,
+          "end_byte": 618,
+          "start_line": 12,
+          "end_line": 18
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_capture_display_bgra",
+          "callee_source": "suflyor_macos_capture_display_bgra",
+          "containing_function": {
+            "name": "capture_display_bgra_with_dimensions",
+            "start_byte": 4636,
+            "end_byte": 5894,
+            "start_line": 151,
+            "end_line": 190
+          },
+          "inside_closure": false,
+          "start_byte": 4953,
+          "end_byte": 5123,
+          "start_line": 160,
+          "end_line": 166
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_clipboard_clear",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.m",
+          "name": "suflyor_macos_clipboard_clear",
+          "signature_source": "void suflyor_macos_clipboard_clear(void)",
+          "start_byte": 1256,
+          "end_byte": 1352,
+          "start_line": 35,
+          "end_line": 37
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.rs",
+          "name": "suflyor_macos_clipboard_clear",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_clipboard_clear();",
+          "start_byte": 267,
+          "end_byte": 302,
+          "start_line": 8,
+          "end_line": 8
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.rs",
+          "name": "suflyor_macos_clipboard_clear",
+          "callee_source": "suflyor_macos_clipboard_clear",
+          "containing_function": {
+            "name": "clear",
+            "start_byte": 1571,
+            "end_byte": 1637,
+            "start_line": 45,
+            "end_line": 47
+          },
+          "inside_closure": false,
+          "start_byte": 1601,
+          "end_byte": 1632,
+          "start_line": 46,
+          "end_line": 46
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_clipboard_read_text",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.m",
+          "name": "suflyor_macos_clipboard_read_text",
+          "signature_source": "size_t suflyor_macos_clipboard_read_text(void *bytes, size_t capacity)",
+          "start_byte": 823,
+          "end_byte": 1254,
+          "start_line": 23,
+          "end_line": 33
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.rs",
+          "name": "suflyor_macos_clipboard_read_text",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_clipboard_read_text(bytes: *mut u8, capacity: usize) -> usize;",
+          "start_byte": 183,
+          "end_byte": 262,
+          "start_line": 7,
+          "end_line": 7
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.rs",
+          "name": "suflyor_macos_clipboard_read_text",
+          "callee_source": "suflyor_macos_clipboard_read_text",
+          "containing_function": {
+            "name": "read_text",
+            "start_byte": 964,
+            "end_byte": 1368,
+            "start_line": 26,
+            "end_line": 37
+          },
+          "inside_closure": false,
+          "start_byte": 1029,
+          "end_byte": 1087,
+          "start_line": 27,
+          "end_line": 27
+        },
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.rs",
+          "name": "suflyor_macos_clipboard_read_text",
+          "callee_source": "suflyor_macos_clipboard_read_text",
+          "containing_function": {
+            "name": "read_text",
+            "start_byte": 964,
+            "end_byte": 1368,
+            "start_line": 26,
+            "end_line": 37
+          },
+          "inside_closure": false,
+          "start_byte": 1205,
+          "end_byte": 1271,
+          "start_line": 32,
+          "end_line": 32
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_clipboard_set_text",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.m",
+          "name": "suflyor_macos_clipboard_set_text",
+          "signature_source": "int32_t suflyor_macos_clipboard_set_text(const void *bytes, size_t length)",
+          "start_byte": 119,
+          "end_byte": 821,
+          "start_line": 6,
+          "end_line": 21
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.rs",
+          "name": "suflyor_macos_clipboard_set_text",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_clipboard_set_text(bytes: *const u8, length: usize) -> c_int;",
+          "start_byte": 100,
+          "end_byte": 178,
+          "start_line": 6,
+          "end_line": 6
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.rs",
+          "name": "suflyor_macos_clipboard_set_text",
+          "callee_source": "suflyor_macos_clipboard_set_text",
+          "containing_function": {
+            "name": "set_text",
+            "start_byte": 564,
+            "end_byte": 896,
+            "start_line": 15,
+            "end_line": 23
+          },
+          "inside_closure": false,
+          "start_byte": 643,
+          "end_byte": 702,
+          "start_line": 16,
+          "end_line": 16
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_configure_floating_window",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/window.m",
+          "name": "suflyor_macos_configure_floating_window",
+          "signature_source": "int32_t suflyor_macos_configure_floating_window(void *raw_view)",
+          "start_byte": 219,
+          "end_byte": 1305,
+          "start_line": 10,
+          "end_line": 36
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/window.rs",
+          "name": "suflyor_macos_configure_floating_window",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_configure_floating_window(view: *mut c_void) -> c_int;",
+          "start_byte": 165,
+          "end_byte": 236,
+          "start_line": 7,
+          "end_line": 7
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/window.rs",
+          "name": "suflyor_macos_configure_floating_window",
+          "callee_source": "suflyor_macos_configure_floating_window",
+          "containing_function": {
+            "name": "configure_floating_by_id",
+            "start_byte": 1653,
+            "end_byte": 1950,
+            "start_line": 47,
+            "end_line": 54
+          },
+          "inside_closure": false,
+          "start_byte": 1775,
+          "end_byte": 1838,
+          "start_line": 48,
+          "end_line": 48
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_copy_active_displays",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.m",
+          "name": "suflyor_macos_copy_active_displays",
+          "signature_source": "size_t suflyor_macos_copy_active_displays(SuflyorDisplayRect *out_displays, size_t capacity)",
+          "start_byte": 777,
+          "end_byte": 1556,
+          "start_line": 28,
+          "end_line": 49
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_copy_active_displays",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_copy_active_displays(\n        out_displays: *mut MacDisplayRect,\n        capacity: usize,\n    ) -> usize;",
+          "start_byte": 86,
+          "end_byte": 208,
+          "start_line": 4,
+          "end_line": 7
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_copy_active_displays",
+          "callee_source": "suflyor_macos_copy_active_displays",
+          "containing_function": {
+            "name": "active_displays",
+            "start_byte": 2056,
+            "end_byte": 2577,
+            "start_line": 77,
+            "end_line": 89
+          },
+          "inside_closure": false,
+          "start_byte": 2135,
+          "end_byte": 2194,
+          "start_line": 78,
+          "end_line": 78
+        },
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_copy_active_displays",
+          "callee_source": "suflyor_macos_copy_active_displays",
+          "containing_function": {
+            "name": "active_displays",
+            "start_byte": 2056,
+            "end_byte": 2577,
+            "start_line": 77,
+            "end_line": 89
+          },
+          "inside_closure": false,
+          "start_byte": 2318,
+          "end_byte": 2381,
+          "start_line": 81,
+          "end_line": 81
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_copy_modifiers_released",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.m",
+          "name": "suflyor_macos_copy_modifiers_released",
+          "signature_source": "int32_t suflyor_macos_copy_modifiers_released(void)",
+          "start_byte": 1354,
+          "end_byte": 1706,
+          "start_line": 39,
+          "end_line": 44
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.rs",
+          "name": "suflyor_macos_copy_modifiers_released",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_copy_modifiers_released() -> c_int;",
+          "start_byte": 307,
+          "end_byte": 359,
+          "start_line": 9,
+          "end_line": 9
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.rs",
+          "name": "suflyor_macos_copy_modifiers_released",
+          "callee_source": "suflyor_macos_copy_modifiers_released",
+          "containing_function": {
+            "name": "copy_modifiers_released",
+            "start_byte": 1651,
+            "end_byte": 1755,
+            "start_line": 50,
+            "end_line": 52
+          },
+          "inside_closure": false,
+          "start_byte": 1707,
+          "end_byte": 1746,
+          "start_line": 51,
+          "end_line": 51
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_cursor_position",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.m",
+          "name": "suflyor_macos_cursor_position",
+          "signature_source": "int32_t suflyor_macos_cursor_position(int32_t *out_x, int32_t *out_y)",
+          "start_byte": 1558,
+          "end_byte": 1935,
+          "start_line": 51,
+          "end_line": 64
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_cursor_position",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_cursor_position(out_x: *mut i32, out_y: *mut i32) -> i32;",
+          "start_byte": 213,
+          "end_byte": 287,
+          "start_line": 8,
+          "end_line": 8
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_cursor_position",
+          "callee_source": "suflyor_macos_cursor_position",
+          "containing_function": {
+            "name": "cursor_position",
+            "start_byte": 2662,
+            "end_byte": 2836,
+            "start_line": 93,
+            "end_line": 97
+          },
+          "inside_closure": false,
+          "start_byte": 2763,
+          "end_byte": 2808,
+          "start_line": 96,
+          "end_line": 96
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_free_screenshot_buffer",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.m",
+          "name": "suflyor_macos_free_screenshot_buffer",
+          "signature_source": "void suflyor_macos_free_screenshot_buffer(uint8_t *ptr)",
+          "start_byte": 7856,
+          "end_byte": 7955,
+          "start_line": 232,
+          "end_line": 236
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_free_screenshot_buffer",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_free_screenshot_buffer(ptr: *mut u8);",
+          "start_byte": 624,
+          "end_byte": 678,
+          "start_line": 20,
+          "end_line": 20
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_free_screenshot_buffer",
+          "callee_source": "suflyor_macos_free_screenshot_buffer",
+          "containing_function": {
+            "name": "capture_display_bgra_with_dimensions",
+            "start_byte": 4636,
+            "end_byte": 5894,
+            "start_line": 151,
+            "end_line": 190
+          },
+          "inside_closure": false,
+          "start_byte": 5543,
+          "end_byte": 5590,
+          "start_line": 181,
+          "end_line": 181
+        },
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_free_screenshot_buffer",
+          "callee_source": "suflyor_macos_free_screenshot_buffer",
+          "containing_function": {
+            "name": "capture_display_bgra_with_dimensions",
+            "start_byte": 4636,
+            "end_byte": 5894,
+            "start_line": 151,
+            "end_line": 190
+          },
+          "inside_closure": false,
+          "start_byte": 5796,
+          "end_byte": 5843,
+          "start_line": 187,
+          "end_line": 187
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_free_string",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.m",
+          "name": "suflyor_macos_free_string",
+          "signature_source": "void suflyor_macos_free_string(char *ptr)",
+          "start_byte": 11073,
+          "end_byte": 11158,
+          "start_line": 340,
+          "end_line": 344
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_free_string",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_free_string(ptr: *mut std::ffi::c_char);",
+          "start_byte": 842,
+          "end_byte": 899,
+          "start_line": 29,
+          "end_line": 29
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_free_string",
+          "callee_source": "suflyor_macos_free_string",
+          "containing_function": {
+            "name": "recognize_text_from_bgra",
+            "start_byte": 6035,
+            "end_byte": 7005,
+            "start_line": 196,
+            "end_line": 225
+          },
+          "inside_closure": false,
+          "start_byte": 6945,
+          "end_byte": 6984,
+          "start_line": 222,
+          "end_line": 222
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_get_window_rect",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/window.m",
+          "name": "suflyor_macos_get_window_rect",
+          "signature_source": "int32_t suflyor_macos_get_window_rect(\n    void *raw_view,\n    int32_t *out_x,\n    int32_t *out_y,\n    int32_t *out_width,\n    int32_t *out_height\n)",
+          "start_byte": 2165,
+          "end_byte": 2838,
+          "start_line": 62,
+          "end_line": 80
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/window.rs",
+          "name": "suflyor_macos_get_window_rect",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_get_window_rect(\n        view: *mut c_void,\n        out_x: *mut i32,\n        out_y: *mut i32,\n        out_width: *mut i32,\n        out_height: *mut i32,\n    ) -> c_int;",
+          "start_byte": 382,
+          "end_byte": 567,
+          "start_line": 10,
+          "end_line": 16
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/window.rs",
+          "name": "suflyor_macos_get_window_rect",
+          "callee_source": "suflyor_macos_get_window_rect",
+          "containing_function": {
+            "name": "window_rect_by_id",
+            "start_byte": 3022,
+            "end_byte": 3581,
+            "start_line": 83,
+            "end_line": 104
+          },
+          "inside_closure": false,
+          "start_byte": 3249,
+          "end_byte": 3414,
+          "start_line": 91,
+          "end_line": 97
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_ocr_bgra",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.m",
+          "name": "suflyor_macos_ocr_bgra",
+          "signature_source": "int32_t suflyor_macos_ocr_bgra(\n    const uint8_t *bgra,\n    uint32_t width,\n    uint32_t height,\n    char **out_text\n)",
+          "start_byte": 7957,
+          "end_byte": 11071,
+          "start_line": 238,
+          "end_line": 338
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_ocr_bgra",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_ocr_bgra(\n        bgra: *const u8,\n        width: u32,\n        height: u32,\n        out_text: *mut *mut std::ffi::c_char,\n    ) -> i32;",
+          "start_byte": 684,
+          "end_byte": 836,
+          "start_line": 22,
+          "end_line": 27
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_ocr_bgra",
+          "callee_source": "suflyor_macos_ocr_bgra",
+          "containing_function": {
+            "name": "recognize_text_from_bgra",
+            "start_byte": 6035,
+            "end_byte": 7005,
+            "start_line": 196,
+            "end_line": 225
+          },
+          "inside_closure": false,
+          "start_byte": 6551,
+          "end_byte": 6622,
+          "start_line": 210,
+          "end_line": 210
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_raise_window_key_front",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/window.m",
+          "name": "suflyor_macos_raise_window_key_front",
+          "signature_source": "int32_t suflyor_macos_raise_window_key_front(void *raw_view)",
+          "start_byte": 1635,
+          "end_byte": 2163,
+          "start_line": 48,
+          "end_line": 60
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/window.rs",
+          "name": "suflyor_macos_raise_window_key_front",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_raise_window_key_front(view: *mut c_void) -> c_int;",
+          "start_byte": 309,
+          "end_byte": 377,
+          "start_line": 9,
+          "end_line": 9
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/window.rs",
+          "name": "suflyor_macos_raise_window_key_front",
+          "callee_source": "suflyor_macos_raise_window_key_front",
+          "containing_function": {
+            "name": "raise_key_front_by_id",
+            "start_byte": 2662,
+            "end_byte": 2945,
+            "start_line": 73,
+            "end_line": 80
+          },
+          "inside_closure": false,
+          "start_byte": 2777,
+          "end_byte": 2837,
+          "start_line": 74,
+          "end_line": 74
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_screen_capture_preflight",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.m",
+          "name": "suflyor_macos_screen_capture_preflight",
+          "signature_source": "int32_t suflyor_macos_screen_capture_preflight(void)",
+          "start_byte": 2572,
+          "end_byte": 2681,
+          "start_line": 83,
+          "end_line": 85
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_screen_capture_preflight",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_screen_capture_preflight() -> i32;",
+          "start_byte": 292,
+          "end_byte": 343,
+          "start_line": 9,
+          "end_line": 9
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_screen_capture_preflight",
+          "callee_source": "suflyor_macos_screen_capture_preflight",
+          "containing_function": {
+            "name": "request_screen_capture_access",
+            "start_byte": 3041,
+            "end_byte": 3380,
+            "start_line": 103,
+            "end_line": 111
+          },
+          "inside_closure": false,
+          "start_byte": 3121,
+          "end_byte": 3161,
+          "start_line": 104,
+          "end_line": 104
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_screen_capture_request",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.m",
+          "name": "suflyor_macos_screen_capture_request",
+          "signature_source": "int32_t suflyor_macos_screen_capture_request(void)",
+          "start_byte": 2683,
+          "end_byte": 2788,
+          "start_line": 87,
+          "end_line": 89
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_screen_capture_request",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_screen_capture_request() -> i32;",
+          "start_byte": 348,
+          "end_byte": 397,
+          "start_line": 10,
+          "end_line": 10
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "name": "suflyor_macos_screen_capture_request",
+          "callee_source": "suflyor_macos_screen_capture_request",
+          "containing_function": {
+            "name": "request_screen_capture_access",
+            "start_byte": 3041,
+            "end_byte": 3380,
+            "start_line": 103,
+            "end_line": 111
+          },
+          "inside_closure": false,
+          "start_byte": 3231,
+          "end_byte": 3269,
+          "start_line": 106,
+          "end_line": 106
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_send_command_c",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.m",
+          "name": "suflyor_macos_send_command_c",
+          "signature_source": "int32_t suflyor_macos_send_command_c(void)",
+          "start_byte": 1708,
+          "end_byte": 2366,
+          "start_line": 46,
+          "end_line": 70
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.rs",
+          "name": "suflyor_macos_send_command_c",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_send_command_c() -> c_int;",
+          "start_byte": 364,
+          "end_byte": 407,
+          "start_line": 10,
+          "end_line": 10
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.rs",
+          "name": "suflyor_macos_send_command_c",
+          "callee_source": "suflyor_macos_send_command_c",
+          "containing_function": {
+            "name": "send_command_c",
+            "start_byte": 1849,
+            "end_byte": 1935,
+            "start_line": 56,
+            "end_line": 58
+          },
+          "inside_closure": false,
+          "start_byte": 1896,
+          "end_byte": 1926,
+          "start_line": 57,
+          "end_line": 57
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_status_install",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/status.m",
+          "name": "suflyor_macos_status_install",
+          "signature_source": "int32_t suflyor_macos_status_install(void *raw_view,\n                                     SuflyorStatusQuitCallback on_quit,\n                                     SuflyorStatusVisibilityCallback on_visibility)",
+          "start_byte": 1708,
+          "end_byte": 3418,
+          "start_line": 58,
+          "end_line": 101
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/status.rs",
+          "name": "suflyor_macos_status_install",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_status_install(\n        view: *mut c_void,\n        on_quit: extern \"C\" fn(),\n        on_visibility: extern \"C\" fn(bool),\n    ) -> c_int;",
+          "start_byte": 219,
+          "end_byte": 372,
+          "start_line": 9,
+          "end_line": 13
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/status.rs",
+          "name": "suflyor_macos_status_install",
+          "callee_source": "suflyor_macos_status_install",
+          "containing_function": {
+            "name": "install",
+            "start_byte": 1196,
+            "end_byte": 1647,
+            "start_line": 42,
+            "end_line": 56
+          },
+          "inside_closure": false,
+          "start_byte": 1373,
+          "end_byte": 1463,
+          "start_line": 47,
+          "end_line": 47
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_macos_status_remove",
+      "native_export_ranges": [
+        {
+          "path": "slint-experiment/src/native/macos/status.m",
+          "name": "suflyor_macos_status_remove",
+          "signature_source": "void suflyor_macos_status_remove(void)",
+          "start_byte": 3420,
+          "end_byte": 3926,
+          "start_line": 103,
+          "end_line": 117
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "slint-experiment/src/native/macos/status.rs",
+          "name": "suflyor_macos_status_remove",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_macos_status_remove();",
+          "start_byte": 377,
+          "end_byte": 410,
+          "start_line": 14,
+          "end_line": 14
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "slint-experiment/src/native/macos/status.rs",
+          "name": "suflyor_macos_status_remove",
+          "callee_source": "suflyor_macos_status_remove",
+          "containing_function": {
+            "name": "drop",
+            "start_byte": 1035,
+            "end_byte": 1111,
+            "start_line": 36,
+            "end_line": 38
+          },
+          "inside_closure": false,
+          "start_byte": 1073,
+          "end_byte": 1102,
+          "start_line": 37,
+          "end_line": 37
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "suflyor_process_footprint",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/process_memory.c",
+          "name": "suflyor_process_footprint",
+          "signature_source": "int suflyor_process_footprint(uint32_t pid, uint64_t *bytes)",
+          "start_byte": 68,
+          "end_byte": 454,
+          "start_line": 5,
+          "end_line": 17
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/mlx_runtime.rs",
+          "name": "suflyor_process_footprint",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn suflyor_process_footprint(pid: u32, bytes: *mut u64) -> i32;",
+          "start_byte": 1011,
+          "end_byte": 1074,
+          "start_line": 41,
+          "end_line": 41
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/mlx_runtime.rs",
+          "name": "suflyor_process_footprint",
+          "callee_source": "suflyor_process_footprint",
+          "containing_function": {
+            "name": "process_footprint",
+            "start_byte": 1106,
+            "end_byte": 1295,
+            "start_line": 45,
+            "end_line": 49
+          },
+          "inside_closure": false,
+          "start_byte": 1203,
+          "end_byte": 1245,
+          "start_line": 47,
+          "end_line": 47
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "system_capture_read",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/system_capture.m",
+          "name": "system_capture_read",
+          "signature_source": "uint32_t system_capture_read(SystemCaptureController *c, float *dst,\n                             uint32_t max_frames)",
+          "start_byte": 14514,
+          "end_byte": 15282,
+          "start_line": 414,
+          "end_line": 431
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_read",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn system_capture_read(\n        controller: *mut SystemCaptureController,\n        dst: *mut f32,\n        max_frames: u32,\n    ) -> u32;",
+          "start_byte": 7006,
+          "end_byte": 7141,
+          "start_line": 169,
+          "end_line": 173
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_read",
+          "callee_source": "system_capture_read",
+          "containing_function": {
+            "name": "record_source_until_stop",
+            "start_byte": 20688,
+            "end_byte": 22989,
+            "start_line": 516,
+            "end_line": 589
+          },
+          "inside_closure": false,
+          "start_byte": 22425,
+          "end_byte": 22494,
+          "start_line": 566,
+          "end_line": 566
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_read",
+          "callee_source": "system_capture_read",
+          "containing_function": {
+            "name": "system_capture_worker",
+            "start_byte": 32636,
+            "end_byte": 38853,
+            "start_line": 844,
+            "end_line": 980
+          },
+          "inside_closure": false,
+          "start_byte": 36281,
+          "end_byte": 36356,
+          "start_line": 923,
+          "end_line": 923
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "system_capture_ring_capacity",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/system_capture.m",
+          "name": "system_capture_ring_capacity",
+          "signature_source": "uint32_t system_capture_ring_capacity(const SystemCaptureController *c)",
+          "start_byte": 14148,
+          "end_byte": 14398,
+          "start_line": 403,
+          "end_line": 410
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_ring_capacity",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn system_capture_ring_capacity(controller: *const SystemCaptureController) -> u32;",
+          "start_byte": 6918,
+          "end_byte": 7001,
+          "start_line": 168,
+          "end_line": 168
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_ring_capacity",
+          "callee_source": "system_capture_ring_capacity",
+          "containing_function": {
+            "name": "record_source_until_stop",
+            "start_byte": 20688,
+            "end_byte": 22989,
+            "start_line": 516,
+            "end_line": 589
+          },
+          "inside_closure": false,
+          "start_byte": 21917,
+          "end_byte": 21951,
+          "start_line": 553,
+          "end_line": 553
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_ring_capacity",
+          "callee_source": "system_capture_ring_capacity",
+          "containing_function": {
+            "name": "system_capture_worker",
+            "start_byte": 32636,
+            "end_byte": 38853,
+            "start_line": 844,
+            "end_line": 980
+          },
+          "inside_closure": false,
+          "start_byte": 34210,
+          "end_byte": 34250,
+          "start_line": 882,
+          "end_line": 882
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_ring_capacity",
+          "callee_source": "system_capture_ring_capacity",
+          "containing_function": {
+            "name": "system_capture_worker",
+            "start_byte": 32636,
+            "end_byte": 38853,
+            "start_line": 844,
+            "end_line": 980
+          },
+          "inside_closure": false,
+          "start_byte": 35786,
+          "end_byte": 35826,
+          "start_line": 912,
+          "end_line": 912
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "system_capture_start",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/system_capture.m",
+          "name": "system_capture_start",
+          "signature_source": "SystemCaptureController *system_capture_start(uint32_t buffer_frames,\n                                              double *out_sample_rate,\n                                              int32_t *out_error)",
+          "start_byte": 5514,
+          "end_byte": 14146,
+          "start_line": 158,
+          "end_line": 401
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_start",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn system_capture_start(\n        buffer_frames: u32,\n        out_sample_rate: *mut f64,\n        out_error: *mut i32,\n    ) -> *mut SystemCaptureController;",
+          "start_byte": 6758,
+          "end_byte": 6913,
+          "start_line": 163,
+          "end_line": 167
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_start",
+          "callee_source": "system_capture_start",
+          "containing_function": {
+            "name": "record_source_until_stop",
+            "start_byte": 20688,
+            "end_byte": 22989,
+            "start_line": 516,
+            "end_line": 589
+          },
+          "inside_closure": false,
+          "start_byte": 21375,
+          "end_byte": 21452,
+          "start_line": 536,
+          "end_line": 536
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_start",
+          "callee_source": "system_capture_start",
+          "containing_function": {
+            "name": "reopen_system",
+            "start_byte": 26205,
+            "end_byte": 26832,
+            "start_line": 694,
+            "end_line": 709
+          },
+          "inside_closure": true,
+          "start_byte": 26582,
+          "end_byte": 26659,
+          "start_line": 701,
+          "end_line": 701
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_start",
+          "callee_source": "system_capture_start",
+          "containing_function": {
+            "name": "system_capture_worker",
+            "start_byte": 32636,
+            "end_byte": 38853,
+            "start_line": 844,
+            "end_line": 980
+          },
+          "inside_closure": false,
+          "start_byte": 32924,
+          "end_byte": 33001,
+          "start_line": 854,
+          "end_line": 854
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "system_capture_stop",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/system_capture.m",
+          "name": "system_capture_stop",
+          "signature_source": "void system_capture_stop(SystemCaptureController *c)",
+          "start_byte": 16238,
+          "end_byte": 16352,
+          "start_line": 458,
+          "end_line": 463
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_stop",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn system_capture_stop(controller: *mut SystemCaptureController);",
+          "start_byte": 7321,
+          "end_byte": 7386,
+          "start_line": 176,
+          "end_line": 176
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_stop",
+          "callee_source": "system_capture_stop",
+          "containing_function": {
+            "name": "record_source_until_stop",
+            "start_byte": 20688,
+            "end_byte": 22989,
+            "start_line": 516,
+            "end_line": 589
+          },
+          "inside_closure": false,
+          "start_byte": 22789,
+          "end_byte": 22814,
+          "start_line": 580,
+          "end_line": 580
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_stop",
+          "callee_source": "system_capture_stop",
+          "containing_function": {
+            "name": "system_capture_worker",
+            "start_byte": 32636,
+            "end_byte": 38853,
+            "start_line": 844,
+            "end_line": 980
+          },
+          "inside_closure": false,
+          "start_byte": 33839,
+          "end_byte": 33870,
+          "start_line": 872,
+          "end_line": 872
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_stop",
+          "callee_source": "system_capture_stop",
+          "containing_function": {
+            "name": "system_capture_worker",
+            "start_byte": 32636,
+            "end_byte": 38853,
+            "start_line": 844,
+            "end_line": 980
+          },
+          "inside_closure": false,
+          "start_byte": 34950,
+          "end_byte": 34981,
+          "start_line": 895,
+          "end_line": 895
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_stop",
+          "callee_source": "system_capture_stop",
+          "containing_function": {
+            "name": "system_capture_worker",
+            "start_byte": 32636,
+            "end_byte": 38853,
+            "start_line": 844,
+            "end_line": 980
+          },
+          "inside_closure": false,
+          "start_byte": 35475,
+          "end_byte": 35511,
+          "start_line": 905,
+          "end_line": 905
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_stop",
+          "callee_source": "system_capture_stop",
+          "containing_function": {
+            "name": "system_capture_worker",
+            "start_byte": 32636,
+            "end_byte": 38853,
+            "start_line": 844,
+            "end_line": 980
+          },
+          "inside_closure": false,
+          "start_byte": 38706,
+          "end_byte": 38737,
+          "start_line": 977,
+          "end_line": 977
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "system_capture_take_dropped",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/system_capture.m",
+          "name": "system_capture_take_dropped",
+          "signature_source": "uint64_t system_capture_take_dropped(SystemCaptureController *c)",
+          "start_byte": 15361,
+          "end_byte": 15655,
+          "start_line": 434,
+          "end_line": 441
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_take_dropped",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn system_capture_take_dropped(controller: *mut SystemCaptureController) -> u64;",
+          "start_byte": 7146,
+          "end_byte": 7226,
+          "start_line": 174,
+          "end_line": 174
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_take_dropped",
+          "callee_source": "system_capture_take_dropped",
+          "containing_function": {
+            "name": "system_capture_worker",
+            "start_byte": 32636,
+            "end_byte": 38853,
+            "start_line": 844,
+            "end_line": 980
+          },
+          "inside_closure": false,
+          "start_byte": 36421,
+          "end_byte": 36460,
+          "start_line": 925,
+          "end_line": 925
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    },
+    {
+      "name": "system_capture_take_route_change",
+      "native_export_ranges": [
+        {
+          "path": "overlay-backend/native/macos/system_capture.m",
+          "name": "system_capture_take_route_change",
+          "signature_source": "uint32_t system_capture_take_route_change(SystemCaptureController *c)",
+          "start_byte": 15657,
+          "end_byte": 16034,
+          "start_line": 443,
+          "end_line": 453
+        }
+      ],
+      "rust_foreign_declarations": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_take_route_change",
+          "foreign_abi_source": "extern \"C\"",
+          "signature_source": "fn system_capture_take_route_change(controller: *mut SystemCaptureController) -> u32;",
+          "start_byte": 7231,
+          "end_byte": 7316,
+          "start_line": 175,
+          "end_line": 175
+        }
+      ],
+      "rust_direct_calls": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "name": "system_capture_take_route_change",
+          "callee_source": "system_capture_take_route_change",
+          "containing_function": {
+            "name": "system_capture_worker",
+            "start_byte": 32636,
+            "end_byte": 38853,
+            "start_line": 844,
+            "end_line": 980
+          },
+          "inside_closure": false,
+          "start_byte": 34723,
+          "end_byte": 34767,
+          "start_line": 892,
+          "end_line": 892
+        }
+      ],
+      "rust_argument_references": [],
+      "abi_accepted": false,
+      "semantic_acceptance": false
+    }
+  ],
+  "semantic_acceptance": false,
+  "complete_project_coverage": false,
+  "limits": [
+    "symbol-name matching only; no linker cfg/type/ABI/struct layout proof",
+    "production macOS C/Objective-C bridges only; experiments and Windows SDK graph excluded",
+    "macro token trees not expanded; aliases/dynamic dispatch/function pointers unresolved",
+    "calls inside cfg(test) syntax included, not evaluated or executed"
+  ]
+}

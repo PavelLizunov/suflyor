@@ -1,6 +1,6 @@
 # Source-linked feature contracts
 
-These contracts map selected production chains at frozen research baseline `a10c356a`. They are manually inspected navigation/dataflow evidence, not compiler-derived call graphs, every-line/symbol coverage or native acceptance. Seventeen bounded contracts now cover principal runtime and platform integration chains; structured index records exact reference counts. Counts are navigation scope, not completeness proof.
+These contracts map selected production chains at frozen research baseline `a10c356a`. They are manually inspected navigation/dataflow evidence, not compiler-derived call graphs, every-line/symbol coverage or native acceptance. Eighteen bounded contracts now cover principal runtime and platform integration chains; structured index records exact reference counts. Counts are navigation scope, not completeness proof.
 
 | Feature | Contract | Key boundary |
 | --- | --- | --- |
@@ -21,6 +21,7 @@ These contracts map selected production chains at frozen research baseline `a10c
 | Hermes | [Bridge/tool client/install/config/profile-prep API](hermes-bridge-and-plugin.md) | Configured nonloopback allowed; summary stores differ; save failure still can acknowledge |
 | Startup/wizard/health/diagnostics | [Preflight/first-run/checks/ticker/report/logs](startup-wizard-health-and-diagnostics.md) | Config absence, not completion flag; config readiness ≠ live proof; UI detail and exported redaction differ |
 | Config/UI/translation/assets | [Schema/default mechanisms/import graph/catalog/resources](config-ui-translation-and-assets.md) | Unevaluated defaults; duplicate catalog entries retained; static resource existence not native embedding |
+| Native macOS FFI/ownership | [Export/foreign/call census plus permissions/thread/free lifecycle](native-macos-ffi-and-ownership.md) | Name matching not ABI; mic wait unbounded, Pending detach/state retention/late screenshot cleanup unaccepted |
 
 [Structured index](contracts.json) records IDs, baseline, source references and limits. [Original Grok register](../reconciliation/candidates.json) preserves counterevidence; [verification](../reconciliation/VERIFICATION.md) distinguishes executed local checks from unexecuted native behavior.
 

@@ -91,6 +91,13 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
 - User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.
 
+## Continuation round 7: native FFI declaration/caller evidence
+
+- Intended result: frozen C/Objective-C bridge exports mapped to Rust foreign declarations/direct CST call sites, with manually inspected memory/thread/permission/error ownership contract. Not compiler/linker reachability, ABI/native acceptance or exhaustive Windows SDK-call graph.
+- Scope: seven production Objective-C/C bridge files (host AppKit and backend audio/process memory), pinned Rust/Objective-C/C grammar navigation; experimental bridges separately labelled/excluded from production census. No SDK, build, app/audio/capture, permission prompt or worker action. No source mutation outside task-owned docs/tooling.
+- Preserve source signatures and precise declaration/call/container ranges; do not copy private paths/endpoints/comments. Dynamic callback dispatch/macros/alias/external C functions stay unresolved. Same symbol-name pairing is navigation, not proof of type/calling-convention/struct-layout safety.
+- Verification: source hash/CST error/range/name/unique identity checks, fixtures for foreign prototypes versus calls/comments/strings, qualified/direct/closure/macro calls, exact archive regeneration and prior suites. Manual ownership/cleanup/caller facts need read source evidence; native behavior/late callbacks/permission races remain open.
+
 ## Continuation round 6: config/UI/translation/assets inventory
 
 - Intended result: reproducible frozen-source declaration schema and static resource/translation edges, plus a manually inspected bounded contract. Keep syntax navigation separate from serialized-default/runtime/i18n/visual behavior acceptance.

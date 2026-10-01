@@ -1,0 +1,59 @@
+# Native macOS FFI and ownership: bounded source contract
+
+**Evidence:** frozen `a10c356af05a5832a14ea06a5d0cb6c49694e3f1`, seven production C/Objective-C bridges and selected Rust/host callers. [Direct FFI census](<../native/README.md>) maps names/ranges, not compiler/linker/ABI verification. No native build, app/capture/audio/device/permission operation, live clipboard/log or model execution.
+
+## Build and platform selection
+
+[Host build](<../../../slint-experiment/build.rs#L34-L53>) compiles four AppKit `.m` files with ARC/blocks and links AppKit/ApplicationServices/ScreenCaptureKit/CoreGraphics/Vision. [Backend build](<../../../overlay-backend/build.rs#L6-L43>) compiles mic with **blocks but no ARC** (manual release), system capture with ARC/blocks, process memory as C. SDK/target linkage is untested here. [Platform module](<../../../slint-experiment/src/native/mod.rs#L6-L42>) selects macOS adapters, distinct Windows adapters and unsupported-platform fallback; no Linux product target inferred.
+
+Census: 37 unique nonstatic C ABI definitions, each has one matching Rust foreign declaration; 57 direct CST calls (including parsed cfg/test syntax). All seven bridge files inspected; 175 production Rust files scanned. Name pairing proves navigation, not calling convention/type/width/struct alignment/cfg linkage or callback correctness. Static helpers, Objective-C selectors, dynamic pointers/macros and experiments are excluded from this export count.
+
+## Clipboard bytes, native modifiers and Accessibility
+
+[Native pasteboard](<../../../slint-experiment/src/native/macos/clipboard.m#L6-L41>) accepts pointer/length, constructs UTF8 NSString, clears and writes. Query-length/read API returns 0 on nil/empty or insufficient capacity; no C-string truncation for embedded NUL. [Rust](<../../../slint-experiment/src/native/macos/clipboard.rs#L13-L46>) first asks length, allocates then reads; mismatched size/invalid UTF8 returns None. A clipboard value changing to a different same-byte-length string between calls is not detected by this API; timing untested.
+
+[Command+C](<../../../slint-experiment/src/native/macos/clipboard.m#L43-L70>) checks current modifiers and `AXIsProcessTrusted()` without prompting, creates/posts down/up key events and releases both even when one creation fails. [Rust boolean wrapper](<../../../slint-experiment/src/native/macos/clipboard.rs#L49-L58>) exposes permission/result; host selection-copy lifecycle/privacy is separately scoped in the read-aloud contract, not proven by these wrappers. APIs have no native main-thread assertion here; caller-thread/cocoa behavior acceptance pending.
+
+## Screenshot geometry, ownership and timeout
+
+[Display/cursor](<../../../slint-experiment/src/native/macos/screen.m#L9-L89>) enumerates up to 32 active displays, reports CoreGraphics global origin/primary, cursor from event location, explicit preflight/request permission. [Rust repr(C) geometry](<../../../slint-experiment/src/native/macos/screen.rs#L3-L109>) computes display union, maps request to Allowed/RestartRequired/Denied. [F8 caller](<../../../slint-experiment/src/bin/overlay_host/vision_capture.rs#L190-L222>) requests permission on UI dispatch and captures synchronously via `capture_virtual_desktop()` (hides/restores own windows). The native screenshot's 5s wait is therefore not universally off-UI-thread; OCR is a separate off-thread path.
+
+[ScreenCaptureKit capture](<../../../slint-experiment/src/native/macos/screen.m#L90-L235>) initializes all outputs, asynchronously obtains shareable content/display under cursor, excludes own app or windows, refuses capture when neither exclusion available, configures logical-point dimensions/BGRA/no cursor and retains captured image. Waits up to 5s, then allocates pixel buffer and converts/releases image/context/colorspace on ordinary exits. Success returns malloc buffer, Rust [checked-size/copy/free path](<../../../slint-experiment/src/native/macos/screen.rs#L151-L189>) checks width×height×4 against length **before slice/copy**, frees on mismatch and after successful copy.
+
+Timeout ownership is **not accepted**: returning -2 does not cancel asynchronous callbacks; a later callback still executes `CGImageRetain`, and no inspected timeout-flag/late-release path pairs that retain after caller return. This is source-only cleanup concern, not a measured leak/UAF repro. C multiplication/allocation relies on system-provided geometry; Rust checked multiplication happens after native allocation/conversion but before Rust slice/copy. No malformed native-output/late callback fault injection.
+
+[Shared capture facade](<../../../slint-experiment/src/capture.rs#L48-L59>) uses this bridge; [macOS region capture](<../../../slint-experiment/src/capture.rs#L131-L148>) intentionally freezes only the display under cursor, not all-monitor virtual desktop. Mixed-DPI/macOS coordinates/rotation/native image colors untested.
+
+## OCR allocated text and worker boundary
+
+[Apple Vision OCR](<../../../slint-experiment/src/native/macos/screen.m#L238-L344>) creates BGRA CGImage, accurate corrected RU/EN VNRecognizeTextRequest, joins recognized lines, `strdup`s UTF8 output, frees image/provider/colorspace on ordinary branches. Zero/null dimensions fail, empty recognized output returns success+empty strdup. [Rust wrapper](<../../../slint-experiment/src/native/macos/screen.rs#L192-L225>) checked-sizes buffer, converts CStr and calls matching free function; status failure returns numeric category error; null success output becomes empty string.
+
+[Host worker](<../../../slint-experiment/src/bin/overlay_host/vision_capture.rs#L665-L681>) runs local OCR via `spawn_blocking`; raw error is local log only, tile generic. This does not imply synchronous screenshot capture is off UI thread. Text authenticity/segmentation/cleanup under native allocation failure untested.
+
+## Window/status lifetimes
+
+[AppKit window adapter](<../../../slint-experiment/src/native/macos/window.m#L5-L80>) gets NSWindow from raw NSView, sets accessory activation/topmost-space/transparency/presentation, dispatches drag from current mouse event, raises key front and converts frame using primary screen maxY. Only raise-key-front explicitly checks main thread; configure/drag/rect caller safety remains context-sensitive. [Rust window wrappers](<../../../slint-experiment/src/native/macos/window.rs#L6-L104>) extract AppKit raw handle or category error; raw numeric ids are borrowed lifetime handles, not owned windows. [Stealth-aware presentation callers](<../../../slint-experiment/src/bin/overlay_host/window_lifecycle.rs#L299-L356>) configure/raise through Slint UI timers; not proof all calls are main-thread or valid realized views.
+
+[Status install](<../../../slint-experiment/src/native/macos/status.m#L6-L117>) requires main thread/view, stores weak NSView and callbacks/global item/controller; toggle configures/shows/hides and dispatches visibility, Quit invokes callback; remove nils item/view/controller/callbacks. [Rust guard](<../../../slint-experiment/src/native/macos/status.rs#L8-L56>) uses PhantomData<Rc<()>> to stay non-Send, removes on Drop, quit via event loop; visibility callback supplied by host. [Startup/drop](<../../../slint-experiment/src/bin/overlay_host_windows.rs#L4815-L4857>) installs after 200ms timer, keeps guard, clears after event-loop quit. Native remove lacks its own main-thread assertion; guard/caller-context evidence only. No live menu/visibility/bundle/main-thread acceptance.
+
+## Mic permission and controller ownership
+
+[Permission native](<../../../overlay-backend/native/macos/mic_capture.m#L68-L114>) maps TCC status, callback synchronous for known terminal states, async authorization otherwise; missing bundle identifier/purpose string answers Restricted. It does not prompt from capture start. [Rust closure ownership](<../../../overlay-backend/src/audio_macos.rs#L188-L233>) boxes Send FnOnce, passes void pointer, exactly-once callback reclaims Box and catches panic. Exactly-once is native/API contract, not fuzzed arbitrary callback safety.
+
+[Mic start](<../../../overlay-backend/native/macos/mic_capture.m#L116-L240>) requires Authorized, allocates power-of-two mono ring/controller, installs AVAudioEngine tap, rejects bad formats/input, handles route observation. Tap mean-downmixes channels, ring/drop atomics, bounded writes; it does not call Tokio/UI/file I/O. [Read/stop](<../../../overlay-backend/native/macos/mic_capture.m#L243-L355>) consumer drains/acquire-release indices, exposes drop/route reset, removes observer/stops/removes tap/releases engine/flag/frees ring/controller; copied device-name strdup pairs with `mic_capture_free_string` [Rust helper](<../../../overlay-backend/src/audio_macos.rs#L137-L148>).
+
+[Rust handle/start](<../../../overlay-backend/src/audio_macos.rs#L305-L511>) owns stop flag/mic thread/system thread+state, ignores saved device names (default capture only). Mic start worker result is synchronously awaited via `started_rx.recv()` with **no timeout**; if native mic start stalls, caller can remain blocked. Permission failure terminal, missing route retryable. System spawn asynchronous—not a guarantee usable audio exists. Session start can return a handle with system pending/mic unavailable; startup success is not proof either stream has delivered audio. Drop sets stop, joins mic; joins system only outside Pending.
+
+## System-audio callback-retained ring and unavoidable pending start
+
+[System state](<../../../overlay-backend/native/macos/system_capture.m#L35-L98>) ARC object owns ring, callback-retained state separate from malloc controller. [Start/cleanup](<../../../overlay-backend/native/macos/system_capture.m#L104-L280>) creates private unmuted global stereo process tap with **empty excluded-process array** (no self exclusion shown), validates float PCM, private aggregate, ring/controller; teardown removes listeners, stops device/destroys IOProc/aggregate/tap. `safe_release` combines listener-removal/IOProc-destroy success: it CFReleases retained state only when safe, otherwise deliberately keeps state/ring to avoid late-callback UAF, and frees controller. No unconditional state-free claim or native late-callback proof.
+
+[Real-time IOProc](<../../../overlay-backend/native/macos/system_capture.m#L281-L400>) downmixes interleaved/planar buffers into bounded ring+atomics/drop counter, attaches route listeners and starts aggregate. [Read/stop API](<../../../overlay-backend/native/macos/system_capture.m#L403-L463>) exposes pull/drop/route and same teardown. Native input counts/rate/channel/format assumptions not ABI-tested here.
+
+[Worker](<../../../overlay-backend/src/audio_macos.rs#L828-L979>) performs native start off UI, takes state Pending→Running/Finished, immediately cleans up if stop already set, retries route changes, quantizes/sends 16kHz chunks with shared timestamp. [Drop pending limit](<../../../overlay-backend/src/audio_macos.rs#L277-L373>) detaches thread rather than waiting inside TCC/start. If native start never returns, native partial resources/thread remain until OS process cleanup: handle Drop **does not prove all resources gone**. Both layers document this; no claim of unconditional cleanup.
+
+## Memory footprint and acceptance
+
+[Process-memory bridge](<../../../overlay-backend/native/macos/process_memory.c#L1-L17>) queries libproc physical footprint/resident fallback for pid, no allocation; [Rust](<../../../overlay-backend/src/mlx_runtime.rs#L39-L51>) maps success/nonzero bytes to Option. Not an inference/model memory benchmark.
+
+Open: ABI layout/target linkage, all Rust/Objective-C indirect callers/selectors/closures, native permission timing/bundle identity, screenshot timeout late-image cleanup, audio HAL teardown faults/route behavior and UI thread stalls; no changes or original-Grok status promotion from this source contract.

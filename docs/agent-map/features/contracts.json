@@ -2510,6 +2510,206 @@
       ],
       "native_verification": "not_run",
       "independent_acceptance": false
+    },
+    {
+      "id": "native-macos-ffi-and-ownership",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/native-macos-ffi-and-ownership.md",
+      "review_state": "coordinator selected ownership/thread/permission source plus direct name census; independent/native acceptance pending",
+      "source_references": [
+        {
+          "path": "slint-experiment/build.rs",
+          "start_line": 34,
+          "end_line": 53
+        },
+        {
+          "path": "overlay-backend/build.rs",
+          "start_line": 6,
+          "end_line": 43
+        },
+        {
+          "path": "slint-experiment/src/native/mod.rs",
+          "start_line": 6,
+          "end_line": 42
+        },
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.m",
+          "start_line": 6,
+          "end_line": 41
+        },
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.rs",
+          "start_line": 13,
+          "end_line": 46
+        },
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.m",
+          "start_line": 43,
+          "end_line": 70
+        },
+        {
+          "path": "slint-experiment/src/native/macos/clipboard.rs",
+          "start_line": 49,
+          "end_line": 58
+        },
+        {
+          "path": "slint-experiment/src/native/macos/screen.m",
+          "start_line": 9,
+          "end_line": 89
+        },
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "start_line": 3,
+          "end_line": 109
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/vision_capture.rs",
+          "start_line": 190,
+          "end_line": 222
+        },
+        {
+          "path": "slint-experiment/src/native/macos/screen.m",
+          "start_line": 90,
+          "end_line": 235
+        },
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "start_line": 151,
+          "end_line": 189
+        },
+        {
+          "path": "slint-experiment/src/capture.rs",
+          "start_line": 48,
+          "end_line": 59
+        },
+        {
+          "path": "slint-experiment/src/capture.rs",
+          "start_line": 131,
+          "end_line": 148
+        },
+        {
+          "path": "slint-experiment/src/native/macos/screen.m",
+          "start_line": 238,
+          "end_line": 344
+        },
+        {
+          "path": "slint-experiment/src/native/macos/screen.rs",
+          "start_line": 192,
+          "end_line": 225
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/vision_capture.rs",
+          "start_line": 665,
+          "end_line": 681
+        },
+        {
+          "path": "slint-experiment/src/native/macos/window.m",
+          "start_line": 5,
+          "end_line": 80
+        },
+        {
+          "path": "slint-experiment/src/native/macos/window.rs",
+          "start_line": 6,
+          "end_line": 104
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 299,
+          "end_line": 356
+        },
+        {
+          "path": "slint-experiment/src/native/macos/status.m",
+          "start_line": 6,
+          "end_line": 117
+        },
+        {
+          "path": "slint-experiment/src/native/macos/status.rs",
+          "start_line": 8,
+          "end_line": 56
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 4815,
+          "end_line": 4857
+        },
+        {
+          "path": "overlay-backend/native/macos/mic_capture.m",
+          "start_line": 68,
+          "end_line": 114
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "start_line": 188,
+          "end_line": 233
+        },
+        {
+          "path": "overlay-backend/native/macos/mic_capture.m",
+          "start_line": 116,
+          "end_line": 240
+        },
+        {
+          "path": "overlay-backend/native/macos/mic_capture.m",
+          "start_line": 243,
+          "end_line": 355
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "start_line": 137,
+          "end_line": 148
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "start_line": 305,
+          "end_line": 511
+        },
+        {
+          "path": "overlay-backend/native/macos/system_capture.m",
+          "start_line": 35,
+          "end_line": 98
+        },
+        {
+          "path": "overlay-backend/native/macos/system_capture.m",
+          "start_line": 104,
+          "end_line": 280
+        },
+        {
+          "path": "overlay-backend/native/macos/system_capture.m",
+          "start_line": 281,
+          "end_line": 400
+        },
+        {
+          "path": "overlay-backend/native/macos/system_capture.m",
+          "start_line": 403,
+          "end_line": 463
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "start_line": 828,
+          "end_line": 979
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "start_line": 277,
+          "end_line": 373
+        },
+        {
+          "path": "overlay-backend/native/macos/process_memory.c",
+          "start_line": 1,
+          "end_line": 17
+        },
+        {
+          "path": "overlay-backend/src/mlx_runtime.rs",
+          "start_line": 39,
+          "end_line": 51
+        }
+      ],
+      "limits": [
+        "name census not ABI cfg linker type layout proof",
+        "macro aliases/dynamic callbacks/windows SDK/experiments excluded",
+        "native timeout/permission/HAL routes and caller thread stalls not exercised"
+      ],
+      "native_verification": "not_run",
+      "independent_acceptance": false
     }
   ],
   "complete_project_coverage": false
