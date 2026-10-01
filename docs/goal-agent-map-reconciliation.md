@@ -91,6 +91,12 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
 - User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.
 
+## Continuation round 8: NSIS syntax via prebuilt WASM
+
+- Search-first found npm tree-sitter-nsis 0.4.1 prebuilt WASM, unlike missing PyPI package. Reuse existing Node v22.23.2 and hash/integrity-verified web-tree-sitter 0.25.10 WASM runtime in ignored research cache; never Python binding 0.26.0, SDK/compiler/npm scripts/global app dependencies or makensis execution.
+- Intended result: add frozen NSIS declarations/sections/macros/labels/variables/preprocessor navigation to existing syntax schema with explicit errors/byte-line-scopes. Preserve original sources, Rust/Python nodes and all previous receipts. No macro/include expansion, installer execution, ABI/native acceptance or regex completeness.
+- Persist dependency exact registry/tarball integrity/file hashes/licences, runtime Node identity. Verify UTF16→UTF8 ranges, strings/comments/non-declarations, multiline/nested/conditional syntax, missing-token/error/version/hash failures and exact source/portable archive regeneration. Grammar parse errors remain failures; no preprocessing/sanitization to inflate syntax success.
+
 ## Continuation round 7: native FFI declaration/caller evidence
 
 - Intended result: frozen C/Objective-C bridge exports mapped to Rust foreign declarations/direct CST call sites, with manually inspected memory/thread/permission/error ownership contract. Not compiler/linker reachability, ABI/native acceptance or exhaustive Windows SDK-call graph.

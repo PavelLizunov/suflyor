@@ -4,7 +4,7 @@ This directory contains a historical heuristic index and architectural notes, no
 
 ## Round-5 syntax checkpoint
 
-[Language-aware syntax navigation](syntax/README.md) now covers 290 successful file parses plus seven explicitly partial PowerShell files: 16,243 nodes, not functions or semantic review. Slint/Swift/Objective-C/C/Bash grammars and wheel/library provenance are pinned; binding remains 0.25.2. NSIS remains unsupported. See [grammar research and unresolved limits](reconciliation/parser-polyglot-research.md). No additional feature contracts, hypothesis resolutions or independent/native acceptance are claimed by this parser checkpoint.
+[Language-aware syntax navigation](syntax/README.md) now covers 291 successful file parses plus seven explicitly partial PowerShell files: 16,255 nodes, not functions or semantic review. Slint/Swift/Objective-C/C/Bash grammars and wheel/library provenance are pinned; binding remains 0.25.2. NSIS now uses hash-pinned prebuilt WASM; macros/includes/installer behavior not evaluated. See [grammar research and unresolved limits](reconciliation/parser-polyglot-research.md). No additional feature contracts, hypothesis resolutions or independent/native acceptance are claimed by this parser checkpoint.
 
 ## Where to start
 

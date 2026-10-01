@@ -112,9 +112,9 @@ class PythonSyntaxFixtures(unittest.TestCase):
     def test_protected_vendor_and_unsupported_language_are_not_zero_symbol_proof(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
-            (root / "one.nsi").write_text("func one() {}\n")
+            (root / "one.cmd").write_text("func one() {}\n")
             snapshot = root / "snapshot.json"
-            snapshot.write_text(json.dumps({"source_commit": syntax_index.BASELINE, "source_files": [{"path": "one.nsi", "sha256": hashlib.sha256((root / "one.nsi").read_bytes()).hexdigest()}, {"path": ".claude/private.py", "sha256": "not_read"}]}))
+            snapshot.write_text(json.dumps({"source_commit": syntax_index.BASELINE, "source_files": [{"path": "one.cmd", "sha256": hashlib.sha256((root / "one.cmd").read_bytes()).hexdigest()}, {"path": ".claude/private.py", "sha256": "not_read"}]}))
             report, symbols = syntax_index.build(root, snapshot)
             self.assertEqual([x["status"] for x in report["files"]], ["unsupported_language", "excluded_protected_or_vendor"])
             self.assertFalse(report["complete_project_coverage"])

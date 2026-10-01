@@ -9,7 +9,10 @@
     "tree-sitter-swift": "0.7.3",
     "tree-sitter-objc": "3.0.2",
     "tree-sitter-c": "0.24.1",
-    "tree-sitter-powershell": "0.26.4"
+    "tree-sitter-powershell": "0.26.4",
+    "tree-sitter-nsis": "0.4.1",
+    "web-tree-sitter": "0.25.10",
+    "Node": "22.23.2"
   },
   "python_ast": "3.12",
   "files": [
@@ -7597,8 +7600,11 @@
       "bytes": 8595,
       "lines": 160,
       "source_role": "source_or_support",
-      "status": "unsupported_language",
-      "declaration_count": 0
+      "status": "syntax_parsed",
+      "declaration_count": 12,
+      "parse_errors": [],
+      "cfg_evaluated": false,
+      "macros_expanded": false
     },
     {
       "path": "scripts/stop-installed-suflyor.ps1",
@@ -11339,13 +11345,12 @@
   "status_counts": {
     "non_selected_data_or_document": 520,
     "excluded_protected_or_vendor": 22,
-    "syntax_parsed": 290,
-    "parse_error": 7,
-    "unsupported_language": 1
+    "syntax_parsed": 291,
+    "parse_error": 7
   },
-  "declaration_count": 16243,
+  "declaration_count": 16255,
   "scope_limits": [
-    "Rust/Python/Slint/Swift/Objective-C/C/PowerShell/Bash explicit syntax only",
+    "Rust/Python/Slint/Swift/Objective-C/C/PowerShell/Bash/NSIS explicit syntax only",
     "local/member declarations included; syntax errors retain partial navigation, not success",
     "macros not expanded; cfg not evaluated; types/call edges not resolved",
     "unsupported languages not interpreted as zero-symbol proof",

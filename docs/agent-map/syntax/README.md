@@ -6,10 +6,10 @@ This reproducible declaration/navigation index is **not semantic line review, ma
 
 - Frozen baseline: `a10c356af05a5832a14ea06a5d0cb6c49694e3f1`.
 - [File policies/results](files.json): 840 baseline tracked non-map paths.
-- 290 files syntax-parsed without reported errors: 220 Rust, four Python, 25 Slint, five Swift, eight Objective-C, one C, ten Bash and 17 PowerShell.
+- 291 files syntax-parsed without reported errors: 220 Rust, four Python, 25 Slint, five Swift, eight Objective-C, one C, ten Bash, 17 PowerShell and one NSIS.
 - Seven additional PowerShell files have explicit `parse_error` receipts and partial nodes; **not** counted as syntax success. Native PowerShell parser was not run, so this is not a verdict on script validity.
-- One unsupported NSIS file; 22 protected legacy/vendor paths excluded; 520 nonselected data/doc paths. Exclusions retain source hashes, not review credit.
-- [Declaration/node records](declarations.jsonl): **16,243 total, not a function count**. Unchanged Rust/Python subtotal 13,961 includes 7,692 unexpanded macro invocations. Added 2,282 navigation records: 1,563 Slint (including properties/callback events/imports), 301 Swift, 384 Objective-C, three C, 25 PowerShell, six Bash. C/Objective-C local/member declarations are included; partial PowerShell files retain `file_has_parse_error: true`.
+- No unsupported selected snapshot languages after NSIS addition; seven PowerShell parse errors still prevent complete syntax success. 22 protected legacy/vendor paths excluded; 520 nonselected data/doc paths. Exclusions retain source hashes, not review credit.
+- [Declaration/node records](declarations.jsonl): **16,255 total, not a function count**. Unchanged Rust/Python subtotal 13,961 includes 7,692 unexpanded macro invocations. Added 2,294 navigation records: 1,563 Slint (including properties/callback events/imports), 301 Swift, 384 Objective-C, three C, 25 PowerShell, six Bash and 12 NSIS (six preprocessor definitions/two sections/four labels). C/Objective-C local/member declarations are included; partial PowerShell files retain `file_has_parse_error: true`.
 - Exact byte/line ranges, signature text, parent IDs/scopes and applicable attributes retained. Caller reachability, overload/selector dispatch, native ABI correctness, extension/type resolution and macro-generated functions are unresolved.
 
 ## Parser provenance
@@ -17,6 +17,8 @@ This reproducible declaration/navigation index is **not semantic line review, ma
 [Original package provenance](../reconciliation/parser-install-provenance.json) pins Tree-sitter **binding 0.25.2** and Rust grammar 0.24.2. [Failed attempt](../reconciliation/parser-failed-attempt.json) preserves rejected binding 0.26.0 crashes; never replay it.
 
 [Additional grammar provenance](../reconciliation/parser-polyglot-provenance.json) records wheel hashes/platform/licenses and exact Slint Linux shared-library digest. [Search/decision/limits](../reconciliation/parser-polyglot-research.md) distinguishes grammar versions from binding versions, source catalog provenance from native build attestation, and grammar errors from source errors. Python AST remains running 3.12 stdlib. All binaries/dependencies remain in ignored research targets, not app manifests or global/DSH runtime.
+
+[NSIS WASM provenance](../reconciliation/nsis-parser-provenance.json) and [research/reproduction](../reconciliation/nsis-parser-research.md) pin prebuilt npm grammar 0.4.1, web-tree-sitter 0.25.10 and existing Node 22.23.2. No npm install/scripts, NSIS compiler or Python binding upgrade. Set `SUFLYOR_RESEARCH_NSIS_WASM` to the hash-verified ignored package directory before regeneration; absence/hash/runtime mismatch becomes explicit parser failure.
 
 ## Reproduce
 
@@ -44,6 +46,6 @@ Setup needs network unless artifacts are cached. Read generated files before rep
 
 ## Checks and remaining work
 
-71 current research tests pass with all pinned grammars supplied: prior 48 recovery/SQL/source checks plus 23 syntax/index fixtures (15 Rust/Python/index and eight polyglot). Fixtures without grammars may skip: **not parser PASS**. Missing anonymous delimiter tokens are now traversed in Rust and all added CSTs. Saved index validation checks source hashes/ranges/signature prefixes/parent IDs/counts.
+109 current research tests pass with all pinned grammars/NSIS WASM/PO reader supplied: 103 previous source/recovery/schema/native/syntax checks plus six NSIS fixtures. Syntax/index fixture subtotal 29 (15 Rust/Python/index, eight polyglot, six NSIS). Fixtures without grammars may skip: **not parser PASS**. Missing anonymous delimiter tokens are now traversed in Rust and all added CSTs. Saved index validation checks source hashes/ranges/signature prefixes/parent IDs/counts.
 
-Remaining: NSIS parsing; resolving seven PowerShell grammar errors with trusted native parsing or a verified better grammar; startup/wizard/health/diagnostics/config/translation/assets/all-caller feature coverage; macro/cfg awareness and manually reviewed semantics. Successful parse or input byte coverage never establishes a 100% review.
+Remaining: resolving seven PowerShell grammar errors with trusted native parsing or a verified better grammar; startup/wizard/health/diagnostics/config/translation/assets/all-caller feature coverage; macro/cfg awareness and manually reviewed semantics. Successful parse or input byte coverage never establishes a 100% review.

@@ -1,0 +1,66 @@
+{
+  "runtime": "Node v22.23.2 existing installation",
+  "packages": [
+    {
+      "name": "tree-sitter-nsis",
+      "version": "0.4.1",
+      "license": "MIT",
+      "registry": "https://registry.npmjs.org/tree-sitter-nsis/0.4.1",
+      "tarball": "https://registry.npmjs.org/tree-sitter-nsis/-/tree-sitter-nsis-0.4.1.tgz",
+      "integrity": "sha512-VJFlN3SnAEUqaadWtC9Muib08LwHnkR8wunt683C8lhKmr7ry/SHOLe7MAL/wLAgwNJiPYQUBzooIO0sKQbyfA==",
+      "sha256": "82ff4f09ae1600260b2e429b360efc76973dfe2cc9c6a3593cfabe8c7ec20193",
+      "loaded_files": [
+        {
+          "path": "package/tree-sitter-nsis.wasm",
+          "sha256": "f7f589e299f08017ad19ec388ac1dae8467f0dff65c7405c53eb072f7810c9f5",
+          "bytes": 78420
+        }
+      ],
+      "license_files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "554d74b00b3ff8434723eb53b11c31231f1672d419b37f0321770e4f4b24d678",
+          "bytes": 1078
+        }
+      ]
+    },
+    {
+      "name": "web-tree-sitter",
+      "version": "0.25.10",
+      "license": "MIT",
+      "registry": "https://registry.npmjs.org/web-tree-sitter/0.25.10",
+      "tarball": "https://registry.npmjs.org/web-tree-sitter/-/web-tree-sitter-0.25.10.tgz",
+      "integrity": "sha512-Y09sF44/13XvgVKgO2cNDw5rGk6s26MgoZPXLESvMXeefBf7i6/73eFurre0IsTW6E14Y0ArIzhUMmjoc7xyzA==",
+      "sha256": "6636457aca5e6945fb73671362ae19c9c4e513bb516a53d58c4a2b4d12533e0f",
+      "loaded_files": [
+        {
+          "path": "package/tree-sitter.cjs",
+          "sha256": "aceb870a1ad6d6ff23acf6bbb2e45d5bd01e4a7adf46bcfe94d9c1dcf4d5074f",
+          "bytes": 159917
+        },
+        {
+          "path": "package/tree-sitter.wasm",
+          "sha256": "f38dcc4b43b818f9a0785bc1c6d5611a75ac4cdd428ff3f02757c34ca4e46d7f",
+          "bytes": 205488
+        }
+      ],
+      "license_files": [
+        {
+          "path": "package/LICENSE",
+          "sha256": "5f9cf9fb6acb1972b35ae29119ce563bb60ec097656bc4b69b9bac2d04c7a147",
+          "bytes": 1085
+        }
+      ]
+    }
+  ],
+  "grammar_abi": 15,
+  "isolation": "Node subprocess per file, 30s timeout, hashes checked before require/WASM load",
+  "setup": "registry tarballs SHA512 integrity and SHA256 verified; safe member extraction into ignored research cache; no npm install/scripts/build or compiler",
+  "Python_binding": "unchanged tree-sitter 0.25.2; web-tree-sitter version is separate runtime",
+  "limits": [
+    "preprocessor/macros/includes not expanded",
+    "NSIS command/installer semantics not tested",
+    "UTF16 indexes converted to UTF8 source ranges"
+  ],
+  "not_committed": "tarballs/native/generated grammar/WASM runtime remain ignored"
+}
