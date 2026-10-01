@@ -1,6 +1,6 @@
 # Source-linked feature contracts
 
-These contracts map selected production chains at frozen research baseline `a10c356a`. They are manually inspected navigation/dataflow evidence, not compiler-derived call graphs, every-line/symbol coverage or native acceptance. Eighteen bounded contracts now cover principal runtime and platform integration chains; structured index records exact reference counts. Counts are navigation scope, not completeness proof.
+These contracts map selected production chains at frozen research baseline `a10c356a`. They are manually inspected navigation/dataflow evidence, not compiler-derived call graphs, every-line/symbol coverage or native acceptance. Nineteen bounded contracts now cover principal runtime and platform integration chains; structured index records exact reference counts. Counts are navigation scope, not completeness proof.
 
 | Feature | Contract | Key boundary |
 | --- | --- | --- |
@@ -23,6 +23,8 @@ These contracts map selected production chains at frozen research baseline `a10c
 | Config/UI/translation/assets | [Schema/default mechanisms/import graph/catalog/resources](config-ui-translation-and-assets.md) | Unevaluated defaults; duplicate catalog entries retained; static resource existence not native embedding |
 | Native macOS FFI/ownership | [Export/foreign/call census plus permissions/thread/free lifecycle](native-macos-ffi-and-ownership.md) | Name matching not ABI; mic wait unbounded, Pending detach/state retention/late screenshot cleanup unaccepted |
 
+| Selected UI setting consumers | [Language/scheme/opacity/monitor save/runtime chains](ui-setting-consumers-and-save-boundaries.md) | Name census unresolved; failure branches differ and memory/global/disk can diverge |
+
 [Structured index](contracts.json) records IDs, baseline, source references and limits. [Original Grok register](../reconciliation/candidates.json) preserves counterevidence; [verification](../reconciliation/VERIFICATION.md) distinguishes executed local checks from unexecuted native behavior.
 
-Still missing complete per-module/all-caller coverage: all platform-native adapters, translation/assets/config-key schemas, remaining startup timers/health error callers, every process/model edge and experiments/vendor boundaries. Reliable language-aware symbol/line coverage and independent exact-SHA native acceptance remain open. Empty historical regex tables do not prove absence of routines.
+Still missing complete per-module/all-caller coverage: remaining Windows/indirect native adapters, resolved all Config/UI key consumers and dynamic translation/asset packaging, remaining startup timers/health error callers, every process/model edge and experiments/vendor boundaries. Reliable language-aware symbol/line coverage and independent exact-SHA native acceptance remain open. Empty historical regex tables do not prove absence of routines.

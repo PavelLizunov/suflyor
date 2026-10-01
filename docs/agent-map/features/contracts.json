@@ -2710,6 +2710,146 @@
       ],
       "native_verification": "not_run",
       "independent_acceptance": false
+    },
+    {
+      "id": "ui-setting-consumers-and-save-boundaries",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/ui-setting-consumers-and-save-boundaries.md",
+      "review_state": "four principal source-chain inspection plus unresolved name census, no native/type/independent acceptance",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 334,
+          "end_line": 345
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 690,
+          "end_line": 701
+        },
+        {
+          "path": "slint-experiment/ui/settings_panel.slint",
+          "start_line": 593,
+          "end_line": 604
+        },
+        {
+          "path": "slint-experiment/ui/settings_panel.slint",
+          "start_line": 1180,
+          "end_line": 1198
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 1908,
+          "end_line": 1914
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 764,
+          "end_line": 778
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 556,
+          "end_line": 610
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 521,
+          "end_line": 529
+        },
+        {
+          "path": "overlay-backend/src/ai/prompt.rs",
+          "start_line": 1,
+          "end_line": 32
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 469,
+          "end_line": 475
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 725,
+          "end_line": 738
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 213,
+          "end_line": 241
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 616,
+          "end_line": 644
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_window.rs",
+          "start_line": 205,
+          "end_line": 220
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 458,
+          "end_line": 490
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 484,
+          "end_line": 498
+        },
+        {
+          "path": "slint-experiment/ui/settings_panel.slint",
+          "start_line": 356,
+          "end_line": 369
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 1695,
+          "end_line": 1697
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 595,
+          "end_line": 599
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 496,
+          "end_line": 518
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 35,
+          "end_line": 53
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_window.rs",
+          "start_line": 279,
+          "end_line": 286
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 521,
+          "end_line": 546
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 600,
+          "end_line": 608
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 175,
+          "end_line": 211
+        }
+      ],
+      "limits": [
+        "other Config keys and Slint type/alias receivers unresolved",
+        "disk save failures not executed; source order only",
+        "zero match not universal dead state; macros/cfg/generated/external excluded"
+      ],
+      "native_verification": "not_run",
+      "independent_acceptance": false
     }
   ],
   "complete_project_coverage": false

@@ -91,6 +91,13 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
 - User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.
 
+## Continuation round 11: Config/UI Rust name-edge census
+
+- Intended result: reproducible frozen Rust member-expression candidates per 84 Config field names and Slint on_/set_/get_ generated-name candidate calls, with precise caller/container ranges and explicit unresolved type/alias/closure/cfg provenance. NOT a resolved complete Config/UI consumer graph. Preserve zero match/ambiguous counts rather than declare dead state.
+- Reuse pinned Rust parser, schema inventory and saved syntax; no type/compiler/SDK/production/UI/script execution. Skip macro token trees/strings/comments; include cfg(test) syntax explicitly without test credit. Don't output full expression text/private default endpoints or arbitrary user data.
+- Manually inspect four UI settings chains (language/color scheme/tile opacity/monitor) and mutation→save→global/live apply/error boundaries; source order checks only, no disk fault/native visual proof. Tie runtime and source schema keys to the same frozen baseline.
+- Verification: simple/nested member shape, self/nonConfig ambiguous collision, method function-field discrimination, write LHS/reference/method context, Unicode/closure/range, macro/string exclusions and all input hashes; exact committed archive fixture/regeneration. Remaining consumers/Windows SDK/indirect native/semantics/independent acceptance open.
+
 ## Continuation round 10: proportional CI hypothesis fixtures
 
 - Intended result: bounded portable evidence for original wave4_worker3_cicd-C04/C05 (missing push base/quoted Git paths), counterevidence from existing GitHub NUL-safe classifier and selected CI gate/security wiring. Keep original claim identity/status intact; separate reproduced portable mechanism from Windows native gate/exploit/branch-protection impact.

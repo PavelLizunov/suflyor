@@ -99,11 +99,11 @@
     "wave4_worker3_cicd-C10",
     "wave4_worker3_cicd-C12"
   ],
-  "feature_contracts_source_inspected": 18,
-  "continuation_round": 10,
+  "feature_contracts_source_inspected": 19,
+  "continuation_round": 11,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 124,
-  "source_feature_references": 510,
+  "total_research_tests_passed": 131,
+  "source_feature_references": 535,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
   "portable_recovery_tested_commit": "6cbeaf060b6256941e201c1bb383c4b326518401",
@@ -181,5 +181,14 @@
     "wave4_worker3_cicd-C06",
     "wave4_worker3_cicd-C12"
   ],
-  "ci_hypothesis_portable_verification": "PASS exact 6cbeaf060b6256941e201c1bb383c4b326518401; actual Git/Bash and labelled source-model; not Windows native/Actions/branch policy"
+  "ci_hypothesis_portable_verification": "PASS exact 6cbeaf060b6256941e201c1bb383c4b326518401; actual Git/Bash and labelled source-model; not Windows native/Actions/branch policy",
+  "config_ui_edge_fixtures_passed": 7,
+  "config_ui_name_candidates": {
+    "all": 2951,
+    "Config_fields": 1232,
+    "Slint_methods": 1719,
+    "ambiguous_UI_candidates": 176,
+    "resolved_type": false
+  },
+  "config_ui_edges_portable_verification": "pending exact covering commit"
 }
