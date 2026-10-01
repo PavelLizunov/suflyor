@@ -7,7 +7,7 @@
 - Original 119 Grok candidates source-triaged with stable ID/title/claim identity: 39 confirmed source mechanisms, 75 hypotheses, 5 rejected.
 - Exact model distinctions: GigaAM/Whisper text recognition, macOS CoreML/CPU history and optional unreleased Windows Nemotron V3 diarization.
 - Privacy-redacted Grok backup linked to original hashes; raw untracked files not modified or published.
-- Current research suite: 71 tests (48 recovery/SQL/source seams plus 23 syntax/index fixtures) pass locally with all pinned parsers. Three existing mocked Hermes tests remain separate. Prior exact-SHA receipts remain historical; round-5 covering-SHA tracked-only repeat is required before accepting its portable evidence.
+- Current research suite: 71 tests (48 recovery/SQL/source seams plus 23 syntax/index fixtures) pass locally with all pinned parsers. Three existing mocked Hermes tests remain separate. Round-5 exact `a8c75253` tracked-only archive passed 71+3 tests, zero skips and byte-identical full syntax regeneration; see [portable receipt](portable-recovery-round5.json). Prior exact-SHA receipts remain historical.
 - Round-5 syntax extension: 290 successful file parses, seven explicit PowerShell parse errors, one unsupported NSIS file, 22 protected/vendor exclusions and 520 nonselected paths. 16,243 navigation nodes are not a function count. See [parser research](parser-polyglot-research.md) and [syntax scope](../syntax/README.md); no semantic/full/native/independent acceptance.
 - WIP GitHub checkpoint on the dedicated task branch; task-owned files only.
 

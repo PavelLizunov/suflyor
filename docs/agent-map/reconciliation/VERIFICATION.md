@@ -1,6 +1,6 @@
 # Reconciliation verification evidence
 
-## Round 5 — polyglot parser checkpoint (local, covering SHA pending)
+## Round 5 — polyglot parser checkpoint (exact covering SHA tested)
 
 - Entry checkout `7909617a`; unchanged handoff 62 research tests passed with pinned original parsers and saved 13,961-node validation.
 - Task-owned changes only: frozen syntax index/parser helper/fixtures/hash pins/provenance and living research docs. No production source/dependency/UI/script behavior changes.
@@ -9,7 +9,7 @@
 - Missing anonymous CST delimiter tokens now explicitly traversed in Rust/polyglot parsers; tests revealed and corrected node-kind/name assumptions before accepted generation. PowerShell ERROR spans not suppressed or mislabeled as source bugs.
 - [Parser decision/provenance/limits](parser-polyglot-research.md), [wheel/library metadata](parser-polyglot-provenance.json), [current syntax scope](../syntax/README.md).
 - Native PowerShell parser, Cargo/Swift builds, live UI/model/audio/installer behavior, full semantic/caller coverage and independent review **not run/not accepted**. Permitted tools currently cannot select explicit Gemini/Opus except workflow, which the owner has not explicitly requested in this session; no inherited-model substitution. Configured web-search HTTP 402 did not block direct upstream/registry inspection.
-- Exact committed-SHA archive repeat is pending; local checks are not yet a portable covering-SHA receipt. This is an incomplete research checkpoint, never goal completion.
+- Exact commit **`a8c752534ccba081aecc99040e4f03f54c65f47e`** tested from a tracked-only Git archive: **71 research +3 mocked Hermes tests passed, zero skips**, syntax validator errors empty and frozen checkpoint issues empty. Full parser generation from that archive reproduced both committed syntax artifacts **byte-identically** (16,243 nodes; hashes in [round-5 portable receipt](portable-recovery-round5.json)). Original 13,961 Rust/Python records compare unchanged to `7909617a`. Parsers supplied separately from ignored hash-pinned targets, not in archive. This is bounded portable research evidence, not semantic/native/independent acceptance or goal completion.
 
 
 ## Reviewed source and changed scope
