@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "tested_commit": "ce14c313570225ba5d93d69df37f4832f9646355",
+  "method": "exact Git archive; pinned Python grammar/PO targets and prebuilt Node NSIS WASM supplied separately; no raw reports/prior state",
+  "research_tests": 109,
+  "research_skips": 0,
+  "existing_mocked_hermes_tests": 3,
+  "source_feature_contracts": 18,
+  "source_feature_references": 510,
+  "syntax_nodes_validated": 16255,
+  "syntax_success_files": 291,
+  "parse_error_files": 7,
+  "unsupported_selected_files": 0,
+  "previous_nodes_unchanged": 16243,
+  "nsis_nodes_added": 12,
+  "syntax_regenerated_byte_identical": true,
+  "artifact_sha256": {
+    "files.json": "bdb5e7429f41280eb92da3a7766b38b5fff199c93e11fc379e599998a6262373",
+    "declarations.jsonl": "72a7ef625c8955b880b8e481ad6325754c2f90694d36d571588be76a1bfcb346"
+  },
+  "schema_and_native_validator_errors": [],
+  "checkpoint_issues": [],
+  "result": "PASS bounded syntax/source portability; research incomplete",
+  "installer_macro_include_semantics_accepted": false,
+  "native_application_acceptance": false,
+  "independent_acceptance": false,
+  "full_project_coverage": false
+}

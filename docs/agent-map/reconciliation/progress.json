@@ -106,8 +106,8 @@
   "source_feature_references": 510,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
-  "portable_recovery_tested_commit": "acbc312a06b79062ec270b4f4f676198e6117a5e",
-  "portable_recovery_result": "PASS 103+3 zero skips exact archive; 18 contracts/510 ranges; syntax/schema/native valid; native byte-identical; parsers separate",
+  "portable_recovery_tested_commit": "ce14c313570225ba5d93d69df37f4832f9646355",
+  "portable_recovery_result": "PASS 109+3 zero skips exact archive; 18 contracts/510 ranges; validators valid; full syntax byte-identical; parser/WASM separate",
   "source_seam_tests_passed": 33,
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
@@ -164,7 +164,7 @@
   },
   "native_portable_verification": "PASS exact acbc312a06b79062ec270b4f4f676198e6117a5e; native census byte-identical; no ABI/native/independent acceptance",
   "nsis_syntax_fixtures_passed": 6,
-  "nsis_portable_verification": "pending exact covering commit",
+  "nsis_portable_verification": "PASS exact ce14c313570225ba5d93d69df37f4832f9646355; 12 NSIS nodes; previous 16243 unchanged; byte-identical syntax; no installer semantics acceptance",
   "current_remaining_syntax": [
     "seven PowerShell grammar-error files; native parser not run"
   ]

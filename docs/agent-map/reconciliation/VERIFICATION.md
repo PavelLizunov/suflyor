@@ -1,11 +1,11 @@
 # Reconciliation verification evidence
 
-## Round 8 — prebuilt NSIS WASM navigation (local, covering SHA pending)
+## Round 8 — prebuilt NSIS WASM navigation (exact covering SHA tested)
 
 - npm search supplied ready `tree-sitter-nsis 0.4.1` WASM and `web-tree-sitter 0.25.10` CJS/WASM; exact registry integrity/file hashes/licences recorded in [NSIS provenance](nsis-parser-provenance.json)/[decision](nsis-parser-research.md). Existing Node 22.23.2, Python binding remains 0.25.2. No npm install/scripts/build/SDK/NSIS compiler/installer run.
 - Native WASM isolated per-file, hash checks before require/load, grammar ABI15; installer parsed without errors. 12 nodes (six definitions/two sections/four labels), previous 16,243 nodes unchanged. Current syntax: 291 successes/seven PowerShell parse errors/no unsupported selected languages, 16,255 nodes; cfg/macros/includes/installer behavior unresolved.
 - Six fixtures added: Unicode UTF16→UTF8 spans, nested scopes/non-declaration comments/strings, macro/section/preprocessor/variable syntax, missing-end error, runtime absence/hash mismatch fail-closed. **109 local research tests passed, zero skips**, saved syntax validator errors empty. No semantic/native/independent acceptance or original-Grok status changes.
-- Exact archive regeneration pending; local parser success never exhaustive review.
+- Exact **`ce14c313570225ba5d93d69df37f4832f9646355`** Git archive: **109 research +3 mocked Hermes tests passed, zero skips**; syntax/schema/native validators errors empty, checkpoint issues empty. Full syntax regeneration reproduced both committed artifacts **byte-identically** (16,255 nodes). [Portable NSIS receipt](portable-recovery-nsis.json) preserves hashes; parsers/WASM supplied separately. No installer/macro/include/native/independent/full-objective acceptance.
 
 
 ## Round 7 — native FFI census/ownership (exact covering SHA tested)
