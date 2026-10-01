@@ -5,10 +5,10 @@ Reviewed baseline: `a10c356af05a5832a14ea06a5d0cb6c49694e3f1`. The original repo
 ## What completed
 
 - All 119 original candidate texts were inspected against source and relevant counterevidence.
-- Status counts: `confirmed` 40, `hypothesis` 74, `rejected` 5.
-- Confirmed is a source mechanism/gap, not proof of native exploit or user-visible failure. All 74 hypotheses retain explicit reproduction/precondition limits.
+- Status counts: `confirmed` 39, `hypothesis` 75, `rejected` 5.
+- Confirmed is a source mechanism/gap, not proof of native exploit or user-visible failure. All 75 hypotheses retain explicit reproduction/precondition limits.
 - Five claims rejected; actual FTS deletion/FK schema locally checked with Python SQLite 3.45.1.
-- Nine checkpoint/recovery mechanics tests pass; no standalone automatic DSH watchdog implemented.
+- 24 recovery/provenance/SQL research tests pass; no standalone automatic DSH watchdog implemented.
 - Four first Opus lanes returned null with partial topic substitutions; eight follow-up lanes returned null with no files. Not labeled successful independent review.
 - One short Gemini model inventory was corrected by coordinator: Nemotron diarization vs Whisper/GigaAM transcription, pins, CoreML history, licenses, duration guard and release status.
 
@@ -29,6 +29,7 @@ Reviewed baseline: `a10c356af05a5832a14ea06a5d0cb6c49694e3f1`. The original repo
 - Nemotron validates WAV duration and bounds/cancels its process; legacy path differs.
 - Local model profile/vision availability are populated through refresh_local_context_controls; initial missing-setter claim was incomplete.
 - macOS GigaAM selects CoreMl when enabled with CPU fallback; migration defaults to CPU after memory concern.
+- Normal Start/Stop and recovery dispatch helpers on runtime workers; synchronous helper comments do not prove inevitable UI blocking.
 
 ## What did not complete
 
@@ -112,7 +113,7 @@ Read [remediation queue](REMEDIATION.md), [speech history](speech-models.md), [e
 | `wave3_worker1_bridge-C04` | hypothesis | medium | coordinator source inspection; native not run |
 | `wave3_worker1_bridge-C05` | hypothesis | low | coordinator source inspection; native not run |
 | `wave3_worker1_bridge-C06` | hypothesis | medium | coordinator source inspection; native not run |
-| `wave3_worker1_bridge-C07` | confirmed | medium | coordinator source inspection; native not run |
+| `wave3_worker1_bridge-C07` | hypothesis | medium | coordinator source inspection; native not run |
 | `wave3_worker1_bridge-C08` | hypothesis | medium | coordinator source inspection; native not run |
 | `wave3_worker2_window-C01` | confirmed | high | coordinator source inspection; native not run |
 | `wave3_worker2_window-C02` | hypothesis | high | coordinator source inspection; native not run |

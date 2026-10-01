@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "workflow": "feature-contract-spotcheck",
+  "job_id": "workflow-3",
+  "route": "ninitux/gemini-flash-high-latest",
+  "status": "completed",
+  "reviewed_source_commit": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+  "worker_verdict": "issues_found",
+  "worker_checked_topics": ["normal Start/Stop/recovery dispatch", "STT thresholds/backends/defaults/queues", "diarization duration/cancellation/persistence", "journal shutdown control"],
+  "worker_claims": [
+    {"document":"docs/agent-map/features/live-transcription.md:44","claim":"Maximum utterance length is bounded to 5 s system / 10 s mic","source":"overlay-backend/src/stt.rs:230-242","reason":"SYSTEM_MAX_UTTERANCE_SEC and DEFAULT_MAX_UTTERANCE_SEC are both 10.","coordinator_disposition":"misquoted_document; current contract already says both 10 seconds; source fact verified, no document correction needed"},
+    {"document":"docs/agent-map/features/live-transcription.md:16","claim":"managed downloaded local weights are ggml-medium.bin","source":"overlay-backend/src/local_ai.rs:92-98","reason":"WHISPER_FILE is ggml-large-v3-turbo-q8_0.bin and WHISPER_MODEL_ID is whisper-large-v3-turbo.","coordinator_disposition":"accepted_and_corrected; feature and speech registry now name actual Turbo Q8 file and historical introduction"},
+    {"document":"docs/agent-map/features/session-lifecycle-and-storage.md:9,25","claim":"Meeting-ending stop request dispatches worker stop","source":"slint-experiment/src/bin/overlay_host_windows.rs:1741-1855; slint-experiment/src/bin/overlay_host/tile_controller.rs:923-935","reason":"The cited stop handler is the macOS capture watchdog, while meeting:ending only changes status pill.","coordinator_disposition":"accepted_and_corrected; state diagram and event distinction updated"},
+    {"document":"docs/agent-map/features/speaker-diarization.md:55","claim":"Background worker L680-L737 calls save_diarization","source":"slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs:1175-1221; overlay-backend/src/persistence/sqlite_store.rs:283-305","reason":"Cited lines are polling helpers; actual worker calls Store::put_diarization.","coordinator_disposition":"accepted_and_corrected; function name and source range updated"},
+    {"document":"docs/agent-map/features/speaker-diarization.md:55-57","claim":"Rerunning diarization preserves renamed speakers","source":"slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs:1193-1200; overlay-backend/src/persistence/sqlite_store.rs:283-305","reason":"Successful run has empty speaker_names; INSERT OR REPLACE overwrites prior names.","coordinator_disposition":"document_claim_absent; useful source concern verified and explicitly added as caveat, not accepted as a quoted preexisting guarantee"},
+    {"document":"docs/agent-map/features/speaker-diarization.md:9","claim":"Run callback is at L987-L1043","source":"slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs:1135-1232","reason":"Earlier range handles state/engine selection; actual on_run_diarization owns busy guard and worker spawn.","coordinator_disposition":"accepted_and_corrected; source range updated"}
+  ],
+  "limits": ["Read-only static spotcheck; no native builds/UI/audio/inference", "No complete feature/project acceptance", "Worker returned JSON data; phrasing checked against actual contract by coordinator"],
+  "independent_acceptance": false,
+  "whole_project_coverage": false
+}

@@ -52,7 +52,7 @@
     },
     {
       "id": "whisper-local",
-      "name": "whisper.cpp Large-v3-Turbo (Q8_0)",
+      "name": "Whisper large-v3-turbo Q8 local/server",
       "category": "speech_to_text",
       "role": "transcription",
       "execution_nature": "child_process_service",
@@ -60,7 +60,8 @@
       "config_route": {
         "provider_value": "whisper",
         "backend_variant": "SttBackendCfg::Whisper { base_url, bearer, model }",
-        "source": "overlay-backend/src/config.rs:1079-1083,1098-1104"
+        "source": "overlay-backend/src/config.rs:1079-1083,1098-1104",
+        "default_model": "whisper-large-v3-turbo"
       },
       "ui_route": {
         "controls": "Settings -> STT -> Provider: Local Whisper (index 2), URL, model name",
@@ -79,7 +80,8 @@
         "download_url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin",
         "file_name": "ggml-large-v3-turbo-q8_0.bin",
         "size_bytes": 874188075,
-        "sha256": "317eb69c11673c9de1e1f0d459b253999804ec71ac4c23c17ecf5fbe24e259a1"
+        "sha256": "317eb69c11673c9de1e1f0d459b253999804ec71ac4c23c17ecf5fbe24e259a1",
+        "filename": "ggml-large-v3-turbo-q8_0.bin"
       },
       "test_route": [
         "overlay-backend/src/config/tests.rs:1210-1225",
@@ -95,7 +97,8 @@
         "origin": "ggerganov/whisper.cpp and OpenAI",
         "packaging_restriction": "Downloaded on demand; not bundled in installer",
         "verification": "Not independently verified against upstream weights license; do not infer model licensing from runtime code licensing."
-      }
+      },
+      "coordinator_correction": "Initial worker named medium weights incorrectly; exact local_ai.rs constants identify Turbo Q8."
     },
     {
       "id": "whisper-cloud",
@@ -506,6 +509,12 @@
         "slint-experiment/src/slint_session.rs"
       ],
       "category": "GigaAM macOS STT support and memory policy; distinct from Nemotron diarization"
+    },
+    {
+      "commit": "3ec368e1f383350e7cbe4291e5b85dfc081e9d8d",
+      "date": "2026-05-29T18:35:32+03:00",
+      "subject": "feat(local-ai): one-click in-app installer in Settings",
+      "category": "Managed local Whisper large-v3-turbo Q8 introduction; no medium asset in this source path"
     }
   ],
   "observed_checks": {
@@ -600,6 +609,12 @@
       "status": "rejected",
       "source": "overlay-backend/src/stt.rs:36-65; overlay-backend/src/config.rs:1532-1555",
       "reason": "CoreMl selected when enabled with CPU fallback; defaults migrate to CPU after memory concern, not ignored setting."
+    },
+    {
+      "claim": "Managed Whisper is medium weights",
+      "status": "rejected",
+      "source": "overlay-backend/src/local_ai.rs:92-98",
+      "reason": "Actual file/model constants specify large-v3-turbo Q8 since one-click installer introduction 3ec368e1."
     }
   ],
   "coordinator_review": "corrected bounded source inventory; not native or license acceptance"

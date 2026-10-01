@@ -264,8 +264,8 @@
         "end_line": 71
       }
     ],
-    "rationale": "Individual index_journal_file/replace_session do not backfill effective model; default reindex does run backfill immediately afterward. Some interim/direct paths can retain session-start model, but blanket permanent inaccuracy is overstated.",
-    "counterevidence": "reindex_default explicitly invokes backfill_session_models.",
+    "rationale": "Individual index_journal_file/replace_session do not backfill effective model; default reindex calls backfill on existing rows BEFORE index_all. Newly indexed rows can still retain session-start model until a later sweep, so permanent mismatch is not established but first-sweep mismatch remains.",
+    "counterevidence": "reindex_default explicitly invokes backfill_session_models before index_all; later sweeps can correct already indexed rows. It does not prove immediate backfill of newly added rows.",
     "remaining_check": "Trace every direct index caller and demonstrate persistent model mismatch before fixing.",
     "coordinator_review": "original_claim_inspected"
   },
@@ -2143,7 +2143,7 @@
     "id": "wave3_worker1_bridge-C07",
     "report": "docs/audit-grok/wave3_worker1_bridge.md",
     "line": 32,
-    "status": "confirmed",
+    "status": "hypothesis",
     "verification": "source_inspection_only; native_reproduction_not_run",
     "title": "7. UI-thread blocking (priority inversion, not a mutex cycle)",
     "original_claim_redacted": "`start_session_inner` on the Slint thread does sync `stt::validate_gigaam_dir` (~0.5s), `audio::start_capture`, journal open, and the long first `lock(&rt)`. `stop_session` (if called from the bar) runs `j.shutdown(Duration::from_secs(3))` and may `std::thread::spawn` indexing but the shutdown itself is inline. Invariant “UI callbacks must NEVER block on async futures” is kept only by blocking **sync** instead; `tokio::spawn` from that thread still requires a runtime context — `Handle::block_on(start_session)` plus any worker `blocking_invoke_from_event_loop` is a hard deadlock.",
@@ -2156,17 +2156,42 @@
       {
         "path": "slint-experiment/src/slint_session.rs",
         "start_line": 374,
-        "end_line": 401
+        "end_line": 396
       },
       {
         "path": "slint-experiment/src/slint_session.rs",
         "start_line": 1453,
         "end_line": 1504
+      },
+      {
+        "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+        "start_line": 1663,
+        "end_line": 1675
+      },
+      {
+        "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+        "start_line": 1711,
+        "end_line": 1733
+      },
+      {
+        "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+        "start_line": 1841,
+        "end_line": 1851
+      },
+      {
+        "path": "slint-experiment/src/bin/overlay_host/recovery.rs",
+        "start_line": 307,
+        "end_line": 317
+      },
+      {
+        "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+        "start_line": 4847,
+        "end_line": 4861
       }
     ],
-    "rationale": "Start validates GigaAM and opens capture/journal synchronously; Stop invokes journal shutdown with 3s wait after dropping runtime lock. UI callsite delay remains a real synchronous work boundary.",
-    "counterevidence": "Runtime mutex is released before stop shutdown; no hard deadlock measured.",
-    "remaining_check": "Native reproduction not run; test claimed consequence against exact-SHA platform build before any production fix.",
+    "rationale": "Synchronous start/stop helpers can block their caller, but normal timer start/stop and recovery dispatch them on Tokio worker runtime. The blanket UI-thread-blocking claim is not established for normal controls. A synchronous stop exists after event-loop exit and capture Drop still joins native workers.",
+    "counterevidence": "Normal start at overlay_host_windows.rs:1663-1671 uses runtime_handle.spawn; normal stop at 1711-1732 and stop-request hook 1841-1850 also spawn. Recovery uses rt_handle.spawn at recovery.rs:307-315. Post-event-loop stop at 4860 is shutdown, not active UI callback.",
+    "remaining_check": "Measure actual start/stop UI responsiveness and shared-runtime mutex/native driver joins on exact binary; do not assume helper docs define current thread.",
     "coordinator_review": "original_claim_inspected"
   },
   {

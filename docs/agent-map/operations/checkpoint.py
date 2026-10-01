@@ -6,6 +6,7 @@ This utility never dispatches agents, restarts DSH, or modifies application sour
 import argparse
 import hashlib
 import json
+import re
 import sqlite3
 from pathlib import Path
 
@@ -29,6 +30,10 @@ def load(path):
 def inspect(root, map_root):
     snapshot = load(map_root / "reconciliation/snapshot.json")
     issues = []
+    portability_path = map_root / "reconciliation/source-portability.json"
+    portability = load(portability_path) if portability_path.is_file() else {"entries": []}
+    text_forms = {row["path"]: row for row in portability.get("entries", [])}
+    accepted_git_text_forms = []
     for entry in snapshot["source_files"] + snapshot["grok_reports"]:
         path = root / entry["path"]
         if not path.is_file() and entry in snapshot["grok_reports"]:
@@ -44,8 +49,41 @@ def inspect(root, map_root):
         elif not path.is_file():
             issues.append({"kind": "missing_input", "path": entry["path"]})
         elif digest(path) != entry["sha256"]:
-            issues.append({"kind": "input_drift", "path": entry["path"]})
+            form = text_forms.get(entry["path"], {})
+            if (form.get("source_commit") == snapshot["source_commit"]
+                    and form.get("frozen_worktree_sha256") == entry["sha256"]
+                    and digest(path) == form.get("git_blob_sha256")):
+                accepted_git_text_forms.append(entry["path"])
+            else:
+                issues.append({"kind": "input_drift", "path": entry["path"]})
     register = load(map_root / "reconciliation/candidates.json")
+    # Re-bind canonical IDs to preserved source claims on every verification.
+    # The local raw report or its provenance-verified redacted copy is authoritative.
+    original_claims = {}
+    redaction_path = map_root / "reconciliation/grok-redaction-provenance.json"
+    redaction_rows = load(redaction_path) if redaction_path.is_file() else []
+    for report in snapshot["grok_reports"]:
+        raw = root / report["path"]
+        redacted = map_root / "reconciliation/grok-redacted" / Path(report["path"]).name
+        source = redacted if redacted.is_file() else raw
+        if redacted.is_file():
+            proof = next((row for row in redaction_rows if row["original_path"] == report["path"] and row["original_sha256"] == report["sha256"]), None)
+            if not proof or root / proof["redacted_path"] != redacted or digest(redacted) != proof["redacted_sha256"]:
+                issues.append({"kind": "redacted_report_drift", "path": report["path"]})
+        if not source.is_file():
+            continue
+        text = source.read_text(encoding="utf-8")
+        headings = list(re.finditer(r"^###\s+(.*)$", text, re.MULTILINE))
+        matches = list(re.finditer(r"^- \*\*Finding / Hypothesis:\*\*\s*(.*)$", text, re.MULTILINE))
+        for index, match in enumerate(matches, 1):
+            title = next((h.group(1) for h in reversed(headings) if h.start() < match.start()), Path(report["path"]).stem)
+            original_claims[Path(report["path"]).stem + f"-C{index:02d}"] = (title, match.group(1))
+    if original_claims:
+        for row in register:
+            original = original_claims.get(row["id"])
+            canonical_text = (str(row.get("title", "")).rstrip(), str(row.get("original_claim_redacted", "")).rstrip())
+            if original is None or (original[0].rstrip(), original[1].rstrip()) != canonical_text:
+                issues.append({"kind": "canonical_original_claim_mismatch", "id": row["id"]})
     ids = [row["id"] for row in register]
     if len(ids) != len(set(ids)):
         issues.append({"kind": "duplicate_register_ids"})
@@ -54,6 +92,59 @@ def inspect(root, map_root):
     artifacts = []
     observed = set()
     by_id = {row["id"]: row for row in register}
+    # Canonical coordinator records are distinct from failed worker proposals.
+    reviewed_rows = [row for row in register if row.get("coordinator_review") == "original_claim_inspected"]
+    coordinator_counts = {}
+    for row in reviewed_rows:
+        status = row.get("status")
+        if status not in STATUSES:
+            issues.append({"kind": "coordinator_invalid_status", "id": row["id"]})
+        else:
+            coordinator_counts[status] = coordinator_counts.get(status, 0) + 1
+        if not row.get("verification") or not row.get("remaining_check") or not row.get("counterevidence"):
+            issues.append({"kind": "coordinator_missing_boundary", "id": row["id"]})
+        refs = row.get("source_references", [])
+        if not refs:
+            issues.append({"kind": "coordinator_missing_reference", "id": row["id"]})
+        for ref in refs:
+            rel = Path(ref["path"])
+            if rel.is_absolute() or ".." in rel.parts or not (root / rel).is_file():
+                issues.append({"kind": "coordinator_invalid_reference", "id": row["id"]})
+                continue
+            size = len((root / rel).read_text(encoding="utf-8", errors="replace").splitlines())
+            start, end = ref["start_line"], ref["end_line"]
+            if not isinstance(start, int) or not isinstance(end, int) or not 1 <= start <= end <= size:
+                issues.append({"kind": "coordinator_reference_range", "id": row["id"]})
+    coordinator_path = map_root / "reconciliation/coordinator-checks.json"
+    if reviewed_rows and not coordinator_path.is_file():
+        issues.append({"kind": "coordinator_missing_receipt"})
+    if coordinator_path.is_file():
+        coordinator = load(coordinator_path)
+        checked_ids = coordinator.get("checked_original_candidate_ids", [])
+        if coordinator.get("baseline") != snapshot["source_commit"] or len(checked_ids) != len(set(checked_ids)) or set(checked_ids) != {row["id"] for row in reviewed_rows}:
+            issues.append({"kind": "coordinator_receipt_mismatch"})
+        if coordinator.get("counts") != {status: sum(row.get("status") == status for row in register) for status in {row.get("status") for row in register}}:
+            issues.append({"kind": "coordinator_count_mismatch"})
+    feature_path = map_root / "features/contracts.json"
+    features = load(feature_path).get("features", []) if feature_path.is_file() else []
+    feature_ids = [row["id"] for row in features]
+    if len(feature_ids) != len(set(feature_ids)):
+        issues.append({"kind": "duplicate_feature_ids"})
+    for feature in features:
+        if feature.get("baseline") != snapshot["source_commit"] or feature.get("native_verification") != "not_run" or feature.get("independent_acceptance") is not False:
+            issues.append({"kind": "feature_acceptance_boundary", "id": feature["id"]})
+        contract_rel = Path(feature["contract"])
+        if contract_rel.is_absolute() or ".." in contract_rel.parts or not (root / contract_rel).is_file():
+            issues.append({"kind": "missing_feature_contract", "id": feature["id"]})
+        for ref in feature.get("source_references", []):
+            rel = Path(ref["path"])
+            if rel.is_absolute() or ".." in rel.parts or not (root / rel).is_file():
+                issues.append({"kind": "feature_invalid_reference", "id": feature["id"]})
+                continue
+            if "start_line" in ref:
+                size = len((root / rel).read_text(encoding="utf-8", errors="replace").splitlines())
+                if not 1 <= ref["start_line"] <= ref["end_line"] <= size:
+                    issues.append({"kind": "feature_reference_range", "id": feature["id"]})
     for lane, prefixes in LANES.items():
         path = map_root / "reconciliation" / (lane + ".json")
         expected = {row["id"] for row in register if any(Path(row["report"]).name.startswith(p) for p in prefixes)}
@@ -107,7 +198,7 @@ def inspect(root, map_root):
         except (ValueError, KeyError, TypeError) as exc:
             artifacts.append({"lane": lane, "state": "invalid", "error": str(exc)})
             issues.append({"kind": "report_parse", "lane": lane})
-    return {"source_commit": snapshot["source_commit"], "candidate_count": len(register), "reported_candidates": len(observed), "artifacts": artifacts, "issues": issues, "semantic_acceptance": "not_established_by_this_utility"}
+    return {"source_commit": snapshot["source_commit"], "candidate_count": len(register), "accepted_git_text_forms": accepted_git_text_forms, "reported_candidates": len(observed), "coordinator_inspected_candidates": len(reviewed_rows), "coordinator_status_counts": coordinator_counts, "coordinator_register_sha256": digest(map_root / "reconciliation/candidates.json"), "source_feature_contracts": len(features), "feature_contracts_complete": False, "artifacts": artifacts, "issues": issues, "semantic_acceptance": "not_established_by_this_utility", "independent_acceptance": False}
 
 
 def checkpoint(db_path, report):
@@ -167,12 +258,15 @@ def main():
     database = args.database or root / ".campaign-state/reconciliation.sqlite"
     if args.action == "recover":
         result = recover(database)
+        result["current_validation"] = inspect(root, root / "docs/agent-map")
+        result["issues"] = result["current_validation"]["issues"]
     else:
         result = inspect(root, root / "docs/agent-map")
         if args.action == "checkpoint":
             checkpoint(database, result)
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    if result.get("issues"):
+    last_checkpoint = result.get("last_checkpoint") or {}
+    if result.get("issues") or (args.action == "recover" and last_checkpoint.get("evidence", {}).get("issues")):
         raise SystemExit(1)
 
 

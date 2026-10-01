@@ -6,7 +6,8 @@ This directory contains a historical heuristic index and architectural notes, no
 
 - [Reconciliation task](../goal-agent-map-reconciliation.md): approved scope, constraints and remaining work.
 - [Frozen evidence snapshot](reconciliation/snapshot.json): exact source baseline and SHA-256 hashes of the existing Grok reports.
-- [Grok summary](reconciliation/SUMMARY.md) and [candidate register](reconciliation/candidates.json): all 119 original claims source-triaged; 40 source mechanisms confirmed, 74 hypotheses and 5 rejected. No native reproduction or independent acceptance is implied.
+- [Grok summary](reconciliation/SUMMARY.md) and [candidate register](reconciliation/candidates.json): all 119 original claims source-triaged; 39 source mechanisms confirmed, 75 hypotheses and 5 rejected. Caller-level follow-up corrected an earlier UI-thread assumption. No native reproduction or independent acceptance is implied.
+- [Source-linked features](features/README.md): live transcription, speaker diarization and session lifecycle/storage contracts with exact source references and verification limits.
 - [Model registry](reconciliation/speech-models.md): distinguishes transcription, speaker diarization, CoreML history and source-versus-release status.
 - [Continuation queue](reconciliation/NEXT-STEPS.md): exact remaining full-map and native evidence work.
 - [Artifact manifest](manifest.json): measured record counts, hashes and explicit completeness limits.
@@ -51,7 +52,7 @@ for line in Path('docs/agent-map/records/symbols.jsonl').read_text().splitlines(
 
 ## Outstanding work
 
-- Resolve native/runtime preconditions of the 74 Grok hypotheses; source triage of all original candidates is complete with counterevidence and reproduction limits retained.
+- Resolve native/runtime preconditions of the 75 Grok hypotheses; source triage of all original candidates is complete with counterevidence and reproduction limits retained.
 - Reconcile old Opus claims and create source-linked feature and model contracts.
 - Add reliable language-aware extraction and line/symbol semantics before claiming exhaustive coverage.
 - Test durable resumption and leave unknown attempts unresolved rather than silently repeating work.

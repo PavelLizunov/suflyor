@@ -4,10 +4,10 @@
 
 - Frozen reviewed source baseline and all raw report hashes.
 - Corrected historical map completeness, error enum, model pins/history/licensing statements and process topology.
-- Original 119 Grok candidates source-triaged with stable ID/title/claim identity: 40 confirmed source mechanisms, 74 hypotheses, 5 rejected.
+- Original 119 Grok candidates source-triaged with stable ID/title/claim identity: 39 confirmed source mechanisms, 75 hypotheses, 5 rejected.
 - Exact model distinctions: GigaAM/Whisper text recognition, macOS CoreML/CPU history and optional unreleased Windows Nemotron V3 diarization.
 - Privacy-redacted Grok backup linked to original hashes; raw untracked files not modified or published.
-- Nine dependency-free checkpoint/recovery tests, including rejecting null proposals and topic substitutions.
+- 24 dependency-free recovery/provenance/SQL research tests, including rejecting null proposals and topic substitutions.
 - WIP GitHub checkpoint on the dedicated task branch; task-owned files only.
 
 ## Not complete
@@ -16,9 +16,9 @@ This stage does not deliver whole-project semantic line/symbol coverage, native 
 
 ## Ordered continuation
 
-1. **Complete reviewed feature contracts**, starting with high-risk STT/capture, session generation/lifetime, persistence and config. For each feature connect entrypoint/UI/config/runtime/storage/platform errors/tests with exact source lines. Do not rely on old regex tables as completeness proof.
+1. **Complete reviewed feature contracts** beyond the newly mapped live transcription, speaker diarization and session lifecycle/storage chains, then add remaining config/AI/window/memory/TTS/update contracts. For each feature connect entrypoint/UI/config/runtime/storage/platform errors/tests with exact source lines. Do not rely on old regex tables as completeness proof.
 2. **Reliable symbol coverage**: account for Rust multiline/nested/macros/cfg, Slint properties/callback wiring, PowerShell/shell/Python/Swift/Objective-C/NSIS. Exclude generated/vendor artifacts explicitly while retaining provenance. Reuse a suitable existing parser if available; research before adding dependencies. Regex count is a baseline candidate list only.
-3. **Resolve 74 hypotheses proportionately**: separate source test fixtures from Windows/macOS live/driver/exploit behavior. Source-only claims remain hypotheses when preconditions cannot be proven. Use [remediation queue](REMEDIATION.md) for ordering.
+3. **Resolve 75 hypotheses proportionately**: separate source test fixtures from Windows/macOS live/driver/exploit behavior. Source-only claims remain hypotheses when preconditions cannot be proven. Use [remediation queue](REMEDIATION.md) for ordering.
 4. **Native exact-SHA evidence**: first load homelab and platform procedures; verify worker ownership/resources and immutable candidate commit. Do not run Cargo on DSH control plane. No release, install, restart or destructive fault scenario without required authority and safety setup.
 5. **Historical report reconciliation**: replace each O1–O8 factual claim only after exact source checks; keep original provenance in Git. Do not erase failed attempts or fabricate an independent review verdict.
 6. **Independent acceptance**: only after a working authorized Gemini/Opus route can complete a bounded original-claim review. Coordinator self-inspection is not independent acceptance.

@@ -16,7 +16,7 @@ Reviewed source: `a10c356af05a5832a14ea06a5d0cb6c49694e3f1`. This is a bounded s
 | Role | Model/engine | Execution and boundary |
 | --- | --- | --- |
 | Transcription | GigaAM-v3 CTC int8 ONNX | In-process through `transcribe-rs`/`ort`; model path and GPU choice in STT config; native platform checks remain to verify |
-| Transcription | Local Whisper `ggml-medium.bin` / configured server | `whisper-server` HTTP route; installed asset is medium, whereas legacy default server model text is `whisper-large-v3-turbo` |
+| Transcription | Local Whisper `ggml-large-v3-turbo-q8_0.bin` / configured server | `whisper-server` HTTP route; managed asset and default model are large-v3-turbo (Q8 weights); cloud model default is separate |
 | Transcription | Cloud Whisper | Groq HTTP API with configured model; availability depends on credentials/network |
 | Speaker diarization | Legacy pyannote segmentation + WeSpeaker embedding | Isolated `suflyor-tts diarize` process; not the STT text path |
 | Speaker diarization | Nemotron-3-Diarization V3 Q8 GGUF | Isolated Windows `nemo-speech.exe`; optional selection in transcript window, automatic speaker count, cancellation |
@@ -27,13 +27,13 @@ Do not infer model weight licenses from Rust or runtime-library licenses. Source
 
 Git history also contains a real STT platform change: `a78978ec` enabled GigaAM through Core ML on macOS; `ad03df2b` migrated retired/unknown STT providers to GigaAM; `3bff600c` later bounded macOS GigaAM memory use. These are not Nemotron changes. [Accelerator selection](../../../overlay-backend/src/stt.rs#L36-L65) still chooses CoreMl when enabled and falls back to CPU on provider-load failure. [Defaults and migration](../../../overlay-backend/src/config.rs#L1532-L1555) now prefer CPU for affected older configs. The GPU toggle is not ignored on macOS.
 
-The remembered “new audio model” could refer to this older GigaAM STT work rather than the recent Nemotron diarizer. Both histories are now recorded explicitly instead of guessing the intended one.
+The remembered “new audio model” could refer to this older GigaAM STT work rather than the recent Nemotron diarizer. Both histories are now recorded explicitly instead of guessing the intended one. Managed local Whisper Turbo Q8 also dates to the one-click installer introduction `3ec368e1`; the earlier medium-model label was a report error, not the current asset.
 
 ## Nemotron integration chain
 
 1. [Optional transcript toggle and run controls](../../../slint-experiment/ui/transcript.slint#L464-L606) select the per-run engine; this is not a persistent `stt_provider` entry.
 2. [Transcript controller](../../../slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs#L499-L770) installs the selected asset and calls cancellation-aware diarization, applying results only on success.
-3. [Nemotron installer](../../../overlay-backend/src/diar_install.rs#L386-L483) pins `Nemotron-3-Diarization.q8_0.gguf`, revision, 107,270,112 bytes and SHA-256. The model is downloaded on demand, not bundled.
+3. [Nemotron installer](../../../overlay-backend/src/diar_install.rs#L386-L483) pins `Nemotron-3-Diarization.q8_0.gguf`, revision, 107,012,128 bytes and SHA-256. The model is downloaded on demand, not bundled.
 4. [Windows run path](../../../overlay-backend/src/diarize.rs#L246-L278) checks models, recorded WAV existence and `guard_wav_len` before spawning the runner. Non-Windows explicitly rejects this engine.
 5. [Runner](../../../overlay-backend/src/nemotron_diar.rs#L15-L125) uses hidden process spawning, a shared lifetime JobObject, cancellation, bounded log lines, an elapsed-process cap and validated RTTM parsing.
 6. [Build script](../../../scripts/build-slint-release.ps1#L75-L109) verifies vendored native binary hashes before staging. [NSIS](../../../scripts/slint-installer.nsi#L68-L83) packages executable/DLLs and notices.

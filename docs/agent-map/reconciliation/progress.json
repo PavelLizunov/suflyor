@@ -3,8 +3,8 @@
   "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
   "state": "source_triage_complete_native_acceptance_pending",
   "counts": {
-    "confirmed": 40,
-    "hypothesis": 74,
+    "confirmed": 39,
+    "hypothesis": 75,
     "rejected": 5
   },
   "coordinator_inspected": 119,
@@ -12,13 +12,14 @@
   "unresolved_ids": [],
   "transport_jobs_settled": [
     "workflow-1",
-    "workflow-2"
+    "workflow-2",
+    "workflow-3"
   ],
   "semantic_acceptance": false,
   "independent_watchdog": false,
-  "checkpoint_tests_passed": 9,
+  "checkpoint_tests_passed": 20,
   "native_tests_run": false,
-  "next_step": "Prioritize exact-SHA native reproductions/remediation and complete language-aware feature/symbol map; do not claim independent acceptance or autonomous session restart.",
+  "next_step": "Commit feature/recovery candidate, run tracked-only exact-SHA recovery, publish evidence; continue remaining feature contracts and language-aware semantic coverage.",
   "remaining_hypothesis_ids": [
     "wave1_worker1_persistence-C02",
     "wave1_worker1_persistence-C05",
@@ -65,6 +66,7 @@
     "wave3_worker1_bridge-C04",
     "wave3_worker1_bridge-C05",
     "wave3_worker1_bridge-C06",
+    "wave3_worker1_bridge-C07",
     "wave3_worker1_bridge-C08",
     "wave3_worker2_window-C02",
     "wave3_worker2_window-C04",
@@ -94,5 +96,12 @@
     "wave4_worker3_cicd-C08",
     "wave4_worker3_cicd-C10",
     "wave4_worker3_cicd-C12"
-  ]
+  ],
+  "feature_contracts_source_inspected": 3,
+  "continuation_round": 1,
+  "sql_contract_tests_passed": 4,
+  "total_research_tests_passed": 24,
+  "source_feature_references": 83,
+  "historical_review_assertions_corrected": 11,
+  "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance"
 }

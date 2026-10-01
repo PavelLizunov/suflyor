@@ -128,8 +128,14 @@
   ],
   "scope_limit": "All original candidate texts triaged against source with explicit counterevidence; hypotheses/unresolved limits remain, no full native reproduction or entire-repository line/symbol acceptance.",
   "counts": {
-    "confirmed": 40,
-    "hypothesis": 74,
+    "confirmed": 39,
+    "hypothesis": 75,
     "rejected": 5
-  }
+  },
+  "followup_corrections": [
+    {
+      "id": "wave3_worker1_bridge-C07",
+      "reason": "Caller-level threading check downgrades blanket UI-blocking claim from confirmed to hypothesis."
+    }
+  ]
 }
