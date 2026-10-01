@@ -7,7 +7,7 @@
 - Original 119 Grok candidates source-triaged with stable ID/title/claim identity: 39 confirmed source mechanisms, 75 hypotheses, 5 rejected.
 - Exact model distinctions: GigaAM/Whisper text recognition, macOS CoreML/CPU history and optional unreleased Windows Nemotron V3 diarization.
 - Privacy-redacted Grok backup linked to original hashes; raw untracked files not modified or published.
-- 34 current dependency-free research tests (20 recovery/provenance, seven SQL fixtures, seven source seams); exact-SHA `8cd96a8b` portable archive reran all 34 and recovery; earlier 24-test snapshot remains preserved separately.
+- Current research suite: 48 tests (22 recovery/provenance, seven SQL fixtures, 19 source seams) plus three existing mocked Hermes tests passed. Prior exact-SHA `8cd96a8b` receipt remains a 34-test snapshot; latest covering-SHA repeat pending before accepting new portability evidence.
 - WIP GitHub checkpoint on the dedicated task branch; task-owned files only.
 
 ## Not complete
@@ -16,7 +16,7 @@ This stage does not deliver whole-project semantic line/symbol coverage, native 
 
 ## Ordered continuation
 
-1. **Complete reviewed feature contracts** beyond the nine mapped speech/session/storage/AI/vision/local/TTS/OCR/memory/settings/hotkey/capture chains: KB/archive/retranscription/summary/coaching, update/release, full MLX/Hermes and platform adapters. For each feature connect entrypoint/UI/config/runtime/storage/platform errors/tests with exact source lines. Do not rely on old regex tables as completeness proof.
+1. **Complete reviewed feature contracts** beyond the 15 principal chains (now including KB/archive/retranscription/summary/coaching, update/release and MLX/Hermes): every startup/wizard/health/error callback, platform-native adapter, translation/asset/config schema and remaining all-caller edges. For each feature connect entrypoint/UI/config/runtime/storage/platform errors/tests with exact source lines. Do not rely on old regex tables as completeness proof.
 2. **Reliable symbol coverage**: account for Rust multiline/nested/macros/cfg, Slint properties/callback wiring, PowerShell/shell/Python/Swift/Objective-C/NSIS. Exclude generated/vendor artifacts explicitly while retaining provenance. Reuse a suitable existing parser if available; research before adding dependencies. Regex count is a baseline candidate list only.
 3. **Resolve 75 hypotheses proportionately**: separate source test fixtures from Windows/macOS live/driver/exploit behavior. Source-only claims remain hypotheses when preconditions cannot be proven. Use [remediation queue](REMEDIATION.md) for ordering.
 4. **Native exact-SHA evidence**: first load homelab and platform procedures; verify worker ownership/resources and immutable candidate commit. Do not run Cargo on DSH control plane. No release, install, restart or destructive fault scenario without required authority and safety setup.
@@ -26,4 +26,4 @@ This stage does not deliver whole-project semantic line/symbol coverage, native 
 
 ## Recovery
 
-Use [operations](../operations/README.md), [progress](progress.json), [task charter](../../goal-agent-map-reconciliation.md), actual Git status and native job status. Recorded workflows 1–3 have settled; null results are known failures/partial outcomes, not running agents. Round-2 Gemini counterevidence workflow-4 also settled and was collected; receipt/counterevidence preserved, no whole-project acceptance. A new session can recover portable redacted report evidence from GitHub without raw private local reports.
+Use [operations](../operations/README.md), [progress](progress.json), [task charter](../../goal-agent-map-reconciliation.md), actual Git status and native job status. Recorded workflows 1–3 have settled; null results are known failures/partial outcomes, not running agents. Round-2 Gemini workflow-4 settled and was collected. Round-3 bounded Gemini workflow-5 returned null and is not accepted as review; its receipt preserved without diagnosis/redispatch. No whole-project acceptance. A new session can recover portable redacted report evidence from GitHub without raw private local reports.

@@ -232,6 +232,30 @@ class CheckpointTests(unittest.TestCase):
         redacted.write_text("tampered copy")
         self.assertTrue(any(row["kind"] == "redacted_report_drift" for row in checkpoint.inspect(self.root, self.map)["issues"]))
 
+    def test_explicit_source_directory_reference_is_navigation_not_line_coverage(self):
+        path, record = self.seed_feature_contract()
+        directory = self.root / "native-tests"
+        directory.mkdir()
+        record["source_references"] = [{"path": "native-tests", "reference_kind": "source_directory"}]
+        path.write_text(json.dumps({"features": [record]}))
+        result = checkpoint.inspect(self.root, self.map)
+        self.assertEqual(result["issues"], [])
+        self.assertFalse(result["feature_contracts_complete"])
+        record["source_references"][0]["start_line"] = 1
+        record["source_references"][0]["end_line"] = 2
+        path.write_text(json.dumps({"features": [record]}))
+        self.assertTrue(any(row["kind"] == "feature_invalid_reference" for row in checkpoint.inspect(self.root, self.map)["issues"]))
+
+    def test_untyped_directory_and_missing_source_directory_are_rejected(self):
+        path, record = self.seed_feature_contract()
+        (self.root / "native-tests").mkdir()
+        record["source_references"] = [{"path": "native-tests"}]
+        path.write_text(json.dumps({"features": [record]}))
+        self.assertTrue(any(row["kind"] == "feature_invalid_reference" for row in checkpoint.inspect(self.root, self.map)["issues"]))
+        record["source_references"] = [{"path": "missing-dir", "reference_kind": "source_directory"}]
+        path.write_text(json.dumps({"features": [record]}))
+        self.assertTrue(any(row["kind"] == "feature_invalid_reference" for row in checkpoint.inspect(self.root, self.map)["issues"]))
+
 
 if __name__ == "__main__":
     unittest.main()

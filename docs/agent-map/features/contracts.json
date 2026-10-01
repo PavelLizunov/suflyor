@@ -5,7 +5,7 @@
       "id": "ai-and-vision-routing",
       "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
       "contract": "docs/agent-map/features/ai-and-vision-routing.md",
-      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
+      "review_state": "manual principal source/caller inspection; bounded model counterevidence where recorded",
       "source_references": [
         {
           "path": "overlay-backend/src/config.rs",
@@ -191,7 +191,253 @@
           "end_line": 146
         }
       ],
-      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
+      "scope": "principal chain/source tests, not all lines/symbols or native behavior",
+      "native_verification": "not_run",
+      "independent_acceptance": false
+    },
+    {
+      "id": "archive-playback-and-retranscription",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/archive-playback-and-retranscription.md",
+      "review_state": "manual principal source/caller inspection; bounded model counterevidence where recorded",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 32,
+          "end_line": 162
+        },
+        {
+          "path": "overlay-backend/src/persistence/sqlite_store.rs",
+          "start_line": 180,
+          "end_line": 202
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 165,
+          "end_line": 210
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 929,
+          "end_line": 947
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 213,
+          "end_line": 244
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 247,
+          "end_line": 289
+        },
+        {
+          "path": "overlay-backend/src/session_names.rs",
+          "start_line": 35,
+          "end_line": 107
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 744,
+          "end_line": 807
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs",
+          "start_line": 337,
+          "end_line": 467
+        },
+        {
+          "path": "overlay-backend/src/session_audio.rs",
+          "start_line": 19,
+          "end_line": 110
+        },
+        {
+          "path": "overlay-backend/src/session_audio.rs",
+          "start_line": 179,
+          "end_line": 209
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/transcript_player.rs",
+          "start_line": 22,
+          "end_line": 181
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 475,
+          "end_line": 607
+        },
+        {
+          "path": "overlay-backend/src/summary_source.rs",
+          "start_line": 29,
+          "end_line": 46
+        },
+        {
+          "path": "overlay-backend/src/summary_source.rs",
+          "start_line": 49,
+          "end_line": 95
+        },
+        {
+          "path": "overlay-backend/src/re_transcribe.rs",
+          "start_line": 170,
+          "end_line": 223
+        },
+        {
+          "path": "overlay-backend/src/re_transcribe.rs",
+          "start_line": 224,
+          "end_line": 281
+        },
+        {
+          "path": "overlay-backend/src/re_transcribe.rs",
+          "start_line": 148,
+          "end_line": 168
+        },
+        {
+          "path": "overlay-backend/src/re_transcribe.rs",
+          "start_line": 284,
+          "end_line": 305
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 351,
+          "end_line": 474
+        },
+        {
+          "path": "overlay-backend/src/session_admin.rs",
+          "start_line": 33,
+          "end_line": 99
+        },
+        {
+          "path": "overlay-backend/src/persistence/sqlite_store.rs",
+          "start_line": 155,
+          "end_line": 177
+        },
+        {
+          "path": "overlay-backend/src/re_transcribe.rs",
+          "start_line": 308,
+          "end_line": 428
+        },
+        {
+          "path": "overlay-backend/src/session_audio.rs",
+          "start_line": 212,
+          "end_line": 375
+        },
+        {
+          "path": "overlay-backend/src/session_admin.rs",
+          "start_line": 102,
+          "end_line": 146
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 1184,
+          "end_line": 1455
+        }
+      ],
+      "scope": "principal chain/source tests, not all lines/symbols or native behavior",
+      "native_verification": "not_run",
+      "independent_acceptance": false
+    },
+    {
+      "id": "hermes-bridge-and-plugin",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/hermes-bridge-and-plugin.md",
+      "review_state": "manual principal source/caller inspection; bounded model counterevidence where recorded",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_hermes.rs",
+          "start_line": 1,
+          "end_line": 117
+        },
+        {
+          "path": "overlay-backend/src/bridge.rs",
+          "start_line": 79,
+          "end_line": 168
+        },
+        {
+          "path": "integrations/hermes-plugin/README.md",
+          "start_line": 38,
+          "end_line": 53
+        },
+        {
+          "path": "overlay-backend/src/bridge.rs",
+          "start_line": 97,
+          "end_line": 111
+        },
+        {
+          "path": "overlay-backend/src/bridge.rs",
+          "start_line": 33,
+          "end_line": 54
+        },
+        {
+          "path": "overlay-backend/src/bridge.rs",
+          "start_line": 171,
+          "end_line": 224
+        },
+        {
+          "path": "overlay-backend/src/bridge.rs",
+          "start_line": 293,
+          "end_line": 535
+        },
+        {
+          "path": "overlay-backend/src/bridge.rs",
+          "start_line": 210,
+          "end_line": 224
+        },
+        {
+          "path": "integrations/hermes-plugin/suflyor/__init__.py",
+          "start_line": 24,
+          "end_line": 65
+        },
+        {
+          "path": "integrations/hermes-plugin/suflyor/__init__.py",
+          "start_line": 72,
+          "end_line": 80
+        },
+        {
+          "path": "integrations/hermes-plugin/suflyor/__init__.py",
+          "start_line": 86,
+          "end_line": 195
+        },
+        {
+          "path": "integrations/hermes-plugin/suflyor/plugin.yaml"
+        },
+        {
+          "path": "integrations/hermes-plugin/tests/test_limits.py"
+        },
+        {
+          "path": "overlay-backend/src/hermes_install.rs",
+          "start_line": 22,
+          "end_line": 89
+        },
+        {
+          "path": "overlay-backend/src/hermes_install.rs",
+          "start_line": 91,
+          "end_line": 165
+        },
+        {
+          "path": "overlay-backend/src/hermes_install.rs",
+          "start_line": 419,
+          "end_line": 449
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_hermes.rs",
+          "start_line": 280,
+          "end_line": 417
+        },
+        {
+          "path": "overlay-backend/src/bridge.rs",
+          "start_line": 546,
+          "end_line": 750
+        },
+        {
+          "path": "overlay-backend/src/hermes_install.rs",
+          "start_line": 622,
+          "end_line": 873
+        },
+        {
+          "path": "overlay-backend/tests/hermes_plugin_smoke.rs"
+        }
+      ],
+      "scope": "principal chain/source tests, not all lines/symbols or native behavior",
       "native_verification": "not_run",
       "independent_acceptance": false
     },
@@ -199,7 +445,7 @@
       "id": "hotkeys-windows-and-capture",
       "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
       "contract": "docs/agent-map/features/hotkeys-windows-and-capture.md",
-      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
+      "review_state": "manual principal source/caller inspection; bounded model counterevidence where recorded",
       "source_references": [
         {
           "path": "slint-experiment/src/bin/overlay_host/hotkeys.rs",
@@ -320,7 +566,91 @@
           "end_line": 182
         }
       ],
-      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
+      "scope": "principal chain/source tests, not all lines/symbols or native behavior",
+      "native_verification": "not_run",
+      "independent_acceptance": false
+    },
+    {
+      "id": "kb-and-reference-search",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/kb-and-reference-search.md",
+      "review_state": "manual principal source/caller inspection; bounded model counterevidence where recorded",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/kb.rs",
+          "start_line": 19,
+          "end_line": 64
+        },
+        {
+          "path": "overlay-backend/src/kb.rs",
+          "start_line": 74,
+          "end_line": 150
+        },
+        {
+          "path": "overlay-backend/knowledge/AGENTS.md"
+        },
+        {
+          "path": "overlay-backend/src/kb.rs",
+          "start_line": 164,
+          "end_line": 225
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/help_palette.rs",
+          "start_line": 82,
+          "end_line": 128
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/help_palette.rs",
+          "start_line": 111,
+          "end_line": 119
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/help_palette.rs",
+          "start_line": 158,
+          "end_line": 185
+        },
+        {
+          "path": "overlay-backend/src/kb.rs",
+          "start_line": 227,
+          "end_line": 232
+        },
+        {
+          "path": "overlay-backend/src/kb.rs",
+          "start_line": 234,
+          "end_line": 286
+        },
+        {
+          "path": "overlay-backend/src/ai/prompt.rs",
+          "start_line": 34,
+          "end_line": 60
+        },
+        {
+          "path": "overlay-backend/src/runtime/trigger_detect.rs",
+          "start_line": 126,
+          "end_line": 193
+        },
+        {
+          "path": "overlay-backend/src/config/snippets.rs",
+          "start_line": 1,
+          "end_line": 25
+        },
+        {
+          "path": "overlay-backend/src/persistence/sqlite_store.rs",
+          "start_line": 395,
+          "end_line": 436
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 929,
+          "end_line": 947
+        },
+        {
+          "path": "overlay-backend/src/kb.rs",
+          "start_line": 288,
+          "end_line": 503
+        }
+      ],
+      "scope": "principal chain/source tests, not all lines/symbols or native behavior",
       "native_verification": "not_run",
       "independent_acceptance": false
     },
@@ -328,7 +658,7 @@
       "id": "live-transcription",
       "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
       "contract": "docs/agent-map/features/live-transcription.md",
-      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
+      "review_state": "manual principal source/caller inspection; bounded model counterevidence where recorded",
       "source_references": [
         {
           "path": "slint-experiment/ui/settings_panel.slint",
@@ -471,7 +801,7 @@
           "end_line": 1990
         }
       ],
-      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
+      "scope": "principal chain/source tests, not all lines/symbols or native behavior",
       "native_verification": "not_run",
       "independent_acceptance": false
     },
@@ -479,7 +809,7 @@
       "id": "managed-local-ai",
       "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
       "contract": "docs/agent-map/features/managed-local-ai.md",
-      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
+      "review_state": "manual principal source/caller inspection; bounded model counterevidence where recorded",
       "source_references": [
         {
           "path": "overlay-backend/src/local_ai/model_choice.rs",
@@ -635,7 +965,128 @@
           "end_line": 417
         }
       ],
-      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
+      "scope": "principal chain/source tests, not all lines/symbols or native behavior",
+      "native_verification": "not_run",
+      "independent_acceptance": false
+    },
+    {
+      "id": "mlx-sidecar-and-model-install",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/mlx-sidecar-and-model-install.md",
+      "review_state": "manual principal source/caller inspection; bounded model counterevidence where recorded",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/mlx_install.rs",
+          "start_line": 24,
+          "end_line": 219
+        },
+        {
+          "path": "overlay-backend/src/mlx_install.rs",
+          "start_line": 221,
+          "end_line": 285
+        },
+        {
+          "path": "overlay-backend/src/mlx_runtime.rs",
+          "start_line": 417,
+          "end_line": 421
+        },
+        {
+          "path": "overlay-backend/src/mlx_install.rs",
+          "start_line": 287,
+          "end_line": 418
+        },
+        {
+          "path": "overlay-backend/src/mlx_runtime.rs",
+          "start_line": 15,
+          "end_line": 112
+        },
+        {
+          "path": "overlay-backend/src/mlx_runtime.rs",
+          "start_line": 149,
+          "end_line": 183
+        },
+        {
+          "path": "overlay-backend/src/mlx_runtime.rs",
+          "start_line": 209,
+          "end_line": 250
+        },
+        {
+          "path": "overlay-backend/src/mlx_runtime.rs",
+          "start_line": 398,
+          "end_line": 539
+        },
+        {
+          "path": "overlay-backend/src/mlx_runtime.rs",
+          "start_line": 286,
+          "end_line": 308
+        },
+        {
+          "path": "overlay-backend/src/mlx_runtime.rs",
+          "start_line": 542,
+          "end_line": 588
+        },
+        {
+          "path": "suflyor-mlx/Package.swift"
+        },
+        {
+          "path": "suflyor-mlx/Sources/SuflyorMLX/main.swift"
+        },
+        {
+          "path": "suflyor-mlx/Sources/SuflyorMLXCore/Protocol.swift",
+          "start_line": 15,
+          "end_line": 76
+        },
+        {
+          "path": "suflyor-mlx/Sources/SuflyorMLXCore/Protocol.swift",
+          "start_line": 78,
+          "end_line": 118
+        },
+        {
+          "path": "suflyor-mlx/Sources/SuflyorMLXCore/Protocol.swift",
+          "start_line": 159,
+          "end_line": 192
+        },
+        {
+          "path": "suflyor-mlx/Sources/SuflyorMLXCore/Server.swift",
+          "start_line": 204,
+          "end_line": 247
+        },
+        {
+          "path": "suflyor-mlx/Sources/SuflyorMLXCore/Server.swift",
+          "start_line": 254,
+          "end_line": 394
+        },
+        {
+          "path": "suflyor-mlx/Sources/SuflyorMLXCore/Server.swift",
+          "start_line": 401,
+          "end_line": 516
+        },
+        {
+          "path": "overlay-backend/src/ai/control.rs",
+          "start_line": 100,
+          "end_line": 128
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 746,
+          "end_line": 759
+        },
+        {
+          "path": "overlay-backend/src/deep_lock.rs",
+          "start_line": 34,
+          "end_line": 66
+        },
+        {
+          "path": "scripts/git-gate-macos.sh",
+          "start_line": 6,
+          "end_line": 103
+        },
+        {
+          "path": "suflyor-mlx/Tests/SuflyorMLXCoreTests",
+          "reference_kind": "source_directory"
+        }
+      ],
+      "scope": "principal chain/source tests, not all lines/symbols or native behavior",
       "native_verification": "not_run",
       "independent_acceptance": false
     },
@@ -643,7 +1094,7 @@
       "id": "personal-memory",
       "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
       "contract": "docs/agent-map/features/personal-memory.md",
-      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
+      "review_state": "manual principal source/caller inspection; bounded model counterevidence where recorded",
       "source_references": [
         {
           "path": "overlay-backend/migrations/0003_memory.sql"
@@ -807,7 +1258,7 @@
           "end_line": 1343
         }
       ],
-      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
+      "scope": "principal chain/source tests, not all lines/symbols or native behavior",
       "native_verification": "not_run",
       "independent_acceptance": false
     },
@@ -815,7 +1266,7 @@
       "id": "read-aloud-and-ocr",
       "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
       "contract": "docs/agent-map/features/read-aloud-and-ocr.md",
-      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
+      "review_state": "manual principal source/caller inspection; bounded model counterevidence where recorded",
       "source_references": [
         {
           "path": "slint-experiment/src/bin/overlay_host_windows.rs",
@@ -1001,7 +1452,7 @@
           "path": "suflyor-teratts/NOTICE.md"
         }
       ],
-      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
+      "scope": "principal chain/source tests, not all lines/symbols or native behavior",
       "native_verification": "not_run",
       "independent_acceptance": false
     },
@@ -1009,7 +1460,7 @@
       "id": "session-lifecycle-and-storage",
       "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
       "contract": "docs/agent-map/features/session-lifecycle-and-storage.md",
-      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
+      "review_state": "manual principal source/caller inspection; bounded model counterevidence where recorded",
       "source_references": [
         {
           "path": "slint-experiment/src/bin/overlay_host_windows.rs",
@@ -1154,7 +1605,7 @@
           "end_line": 1403
         }
       ],
-      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
+      "scope": "principal chain/source tests, not all lines/symbols or native behavior",
       "native_verification": "not_run",
       "independent_acceptance": false
     },
@@ -1162,7 +1613,7 @@
       "id": "settings-and-portable-config",
       "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
       "contract": "docs/agent-map/features/settings-and-portable-config.md",
-      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
+      "review_state": "manual principal source/caller inspection; bounded model counterevidence where recorded",
       "source_references": [
         {
           "path": "overlay-backend/src/config.rs",
@@ -1311,7 +1762,7 @@
           "path": "slint-experiment/tests/settings_reset_guard.rs"
         }
       ],
-      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
+      "scope": "principal chain/source tests, not all lines/symbols or native behavior",
       "native_verification": "not_run",
       "independent_acceptance": false
     },
@@ -1319,7 +1770,7 @@
       "id": "speaker-diarization",
       "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
       "contract": "docs/agent-map/features/speaker-diarization.md",
-      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
+      "review_state": "manual principal source/caller inspection; bounded model counterevidence where recorded",
       "source_references": [
         {
           "path": "slint-experiment/ui/transcript.slint",
@@ -1445,7 +1896,272 @@
           "end_line": 522
         }
       ],
-      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
+      "scope": "principal chain/source tests, not all lines/symbols or native behavior",
+      "native_verification": "not_run",
+      "independent_acceptance": false
+    },
+    {
+      "id": "summary-conspect-and-coaching",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/summary-conspect-and-coaching.md",
+      "review_state": "manual principal source/caller inspection; bounded model counterevidence where recorded",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 3580,
+          "end_line": 3677
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 245,
+          "end_line": 376
+        },
+        {
+          "path": "overlay-backend/src/runtime/summary_plan.rs",
+          "start_line": 182,
+          "end_line": 257
+        },
+        {
+          "path": "overlay-backend/src/runtime/summary_plan.rs",
+          "start_line": 4,
+          "end_line": 128
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 553,
+          "end_line": 572
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 325,
+          "end_line": 376
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 617,
+          "end_line": 677
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 883,
+          "end_line": 980
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 679,
+          "end_line": 807
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 988,
+          "end_line": 1074
+        },
+        {
+          "path": "overlay-backend/src/conspect.rs",
+          "start_line": 43,
+          "end_line": 142
+        },
+        {
+          "path": "overlay-backend/src/conspect.rs",
+          "start_line": 158,
+          "end_line": 225
+        },
+        {
+          "path": "overlay-backend/src/conspect.rs",
+          "start_line": 450,
+          "end_line": 498
+        },
+        {
+          "path": "overlay-backend/src/conspect.rs",
+          "start_line": 291,
+          "end_line": 346
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 377,
+          "end_line": 437
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 2281,
+          "end_line": 2337
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 2094,
+          "end_line": 2166
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 439,
+          "end_line": 513
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 813,
+          "end_line": 850
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 574,
+          "end_line": 599
+        },
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 1550,
+          "end_line": 1654
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 75,
+          "end_line": 161
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 136,
+          "end_line": 152
+        },
+        {
+          "path": "overlay-backend/src/conspect.rs",
+          "start_line": 356,
+          "end_line": 411
+        },
+        {
+          "path": "overlay-backend/src/runtime/trigger_detect.rs",
+          "start_line": 25,
+          "end_line": 62
+        },
+        {
+          "path": "overlay-backend/src/runtime/tests.rs"
+        },
+        {
+          "path": "overlay-backend/src/conspect.rs",
+          "start_line": 500,
+          "end_line": 761
+        }
+      ],
+      "scope": "principal chain/source tests, not all lines/symbols or native behavior",
+      "native_verification": "not_run",
+      "independent_acceptance": false
+    },
+    {
+      "id": "updates-build-and-release",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/updates-build-and-release.md",
+      "review_state": "manual principal source/caller inspection; bounded model counterevidence where recorded",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/update.rs",
+          "start_line": 94,
+          "end_line": 127
+        },
+        {
+          "path": "overlay-backend/src/update.rs",
+          "start_line": 56,
+          "end_line": 78
+        },
+        {
+          "path": "overlay-backend/src/update.rs",
+          "start_line": 129,
+          "end_line": 157
+        },
+        {
+          "path": "overlay-backend/src/update.rs",
+          "start_line": 170,
+          "end_line": 197
+        },
+        {
+          "path": "overlay-backend/src/update.rs",
+          "start_line": 194,
+          "end_line": 260
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_updates.rs",
+          "start_line": 35,
+          "end_line": 151
+        },
+        {
+          "path": "overlay-backend/src/update.rs",
+          "start_line": 264,
+          "end_line": 283
+        },
+        {
+          "path": "AGENTS.md",
+          "start_line": 85,
+          "end_line": 98
+        },
+        {
+          "path": "scripts/git-gate-native.ps1",
+          "start_line": 37,
+          "end_line": 84
+        },
+        {
+          "path": "scripts/git-gate-native.ps1",
+          "start_line": 100,
+          "end_line": 184
+        },
+        {
+          "path": ".github/scripts/is-docs-only.sh",
+          "start_line": 20,
+          "end_line": 55
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "start_line": 62,
+          "end_line": 110
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "start_line": 142,
+          "end_line": 178
+        },
+        {
+          "path": "scripts/git-gate-macos.sh",
+          "start_line": 6,
+          "end_line": 47
+        },
+        {
+          "path": "scripts/build-slint-release.ps1",
+          "start_line": 16,
+          "end_line": 109
+        },
+        {
+          "path": "scripts/build-slint-release.ps1",
+          "start_line": 110,
+          "end_line": 174
+        },
+        {
+          "path": "scripts/slint-installer.nsi",
+          "start_line": 33,
+          "end_line": 96
+        },
+        {
+          "path": "scripts/slint-installer.nsi",
+          "start_line": 125,
+          "end_line": 160
+        },
+        {
+          "path": "slint-experiment/tests/version_guard.rs",
+          "start_line": 17,
+          "end_line": 78
+        },
+        {
+          "path": "scripts/post-release-cleanup.ps1",
+          "start_line": 1,
+          "end_line": 16
+        },
+        {
+          "path": "scripts/post-release-cleanup.ps1",
+          "start_line": 59,
+          "end_line": 124
+        },
+        {
+          "path": "scripts/post-release-cleanup.ps1",
+          "start_line": 147,
+          "end_line": 240
+        }
+      ],
+      "scope": "principal chain/source tests, not all lines/symbols or native behavior",
       "native_verification": "not_run",
       "independent_acceptance": false
     }

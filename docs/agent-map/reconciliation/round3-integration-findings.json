@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+  "scope": "Integration contract follow-up, separate from original 119 Grok claim IDs",
+  "findings": [
+    {"id":"HERMES-BIND-SCOPE-01","status":"source_contract_correction","source_references":[{"path":"overlay-backend/src/bridge.rs","start_line":79,"end_line":90},{"path":"overlay-backend/src/bridge.rs","start_line":126,"end_line":147},{"path":"slint-experiment/src/bin/overlay_host/settings_hermes.rs","start_line":203,"end_line":220}],"rationale":"Bridge allows configured nonloopback host contrary to strict-loopback module header. Source warning/token gate exists, not transport TLS.","verification":"source seam test passed; actual bind/network not_run"},
+    {"id":"HERMES-SUMMARY-STORE-01","status":"source_contract_correction","source_references":[{"path":"overlay-backend/src/bridge.rs","start_line":343,"end_line":367},{"path":"slint-experiment/src/bin/overlay_host/aux_windows/archive.rs","start_line":647,"end_line":690}],"rationale":"Bridge summary reads latest catalog AI summary turn, archive saved summary reads conspect; APIs can disagree or be stale without a shared writer.","verification":"source inspected; live private artifacts not_read"},
+    {"id":"HERMES-SAVE-ACK-01","status":"source_mechanism_confirmed","source_references":[{"path":"overlay-backend/src/bridge.rs","start_line":210,"end_line":224},{"path":"overlay-backend/src/bridge.rs","start_line":519,"end_line":541},{"path":"slint-experiment/src/bin/overlay_host/settings_hermes.rs","start_line":375,"end_line":395}],"rationale":"Profile upsert mutates config; persistence failure is logged/ignored before normal success response or ready label.","verification":"source seam test passed; disk-permission fault not_run"},
+    {"id":"MLX-START-INTEGRITY-01","status":"source_boundary","source_references":[{"path":"overlay-backend/src/mlx_install.rs","start_line":257,"end_line":285},{"path":"overlay-backend/src/mlx_runtime.rs","start_line":398,"end_line":423}],"rationale":"Installer full-hash verification exists, but runtime selects fast marker/presence snapshot path on each start rather than rehashing every byte. Same-user tampering assumptions require policy.","verification":"source seam test passed; snapshot mutation/native load not_run"},
+    {"id":"MLX-QUEUE-BOUNDARY-01","status":"hypothesis","source_references":[{"path":"suflyor-mlx/Sources/SuflyorMLXCore/Server.swift","start_line":204,"end_line":247},{"path":"suflyor-mlx/Sources/SuflyorMLXCore/Server.swift","start_line":327,"end_line":353}],"rationale":"GenerationGate serializes one active model request but waiters/stream buffers have no local count bound shown. Request body/model token limits and cancellation are distinct from queued memory.","verification":"source inspected; Swift/native stress not_run"}
+  ],
+  "executed_existing_tests": {
+    "command": "python3 -B -m unittest discover -s integrations/hermes-plugin/tests -p test_*.py -v",
+    "count": 3,
+    "result": "OK",
+    "network": "mocked; no service/production data used"
+  },
+  "independent_acceptance": false,
+  "native_application_acceptance": false
+}

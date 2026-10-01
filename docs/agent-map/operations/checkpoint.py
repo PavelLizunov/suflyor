@@ -138,7 +138,10 @@ def inspect(root, map_root):
             issues.append({"kind": "missing_feature_contract", "id": feature["id"]})
         for ref in feature.get("source_references", []):
             rel = Path(ref["path"])
-            if rel.is_absolute() or ".." in rel.parts or not (root / rel).is_file():
+            target = root / rel
+            is_directory = ref.get("reference_kind") == "source_directory"
+            exists = target.is_dir() if is_directory else target.is_file()
+            if rel.is_absolute() or ".." in rel.parts or not exists or (is_directory and "start_line" in ref):
                 issues.append({"kind": "feature_invalid_reference", "id": feature["id"]})
                 continue
             if "start_line" in ref:

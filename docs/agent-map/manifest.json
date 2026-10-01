@@ -3,7 +3,7 @@
   "status": "PARTIAL_MAP_SOURCE_TRIAGE_COMPLETE_NATIVE_ACCEPTANCE_PENDING",
   "campaign_id": "suflyor-map-reconciliation",
   "reviewed_source_commit": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
-  "generated_at": "2026-10-01T17:38:41.267798+00:00",
+  "generated_at": "2026-10-01T18:24:20.989916+00:00",
   "historical_publication_commit": "e14ff1936349cd6790be749d68f5c7b5737af926",
   "historical_claimed_source_commit": "a4c998740de4d25c3939d1bcf63a7c07af820682",
   "historical_source_coherence": "not_established; inventory drift recorded",
@@ -71,8 +71,8 @@
     "semantic_line_coverage": null,
     "complete_symbol_coverage": false,
     "native_checks_executed_by_map_generator": false,
-    "manually_inspected_feature_contracts": 9,
-    "source_feature_references": 277
+    "manually_inspected_feature_contracts": 15,
+    "source_feature_references": 410
   },
   "review": {
     "historical_final_verdict": "changes_required",
@@ -91,31 +91,34 @@
       "rejected": 5
     },
     "bounded_feature_counterevidence": "workflow-3 returned issues; source verified and corrected; no full project acceptance",
-    "round2_feature_counterevidence": "workflow-4 issues reviewed and bounded caller counterevidence retained; no independent full acceptance"
+    "round2_feature_counterevidence": "workflow-4 issues reviewed and bounded caller counterevidence retained; no independent full acceptance",
+    "round3_spotcheck": "workflow-5 completed/null; coordinator source inspection only, no independent acceptance"
   },
   "automation": {
     "background_job": null,
     "independent_watchdog": false,
-    "checkpoint_mechanics_tests": 20,
+    "checkpoint_mechanics_tests": 22,
     "semantic_acceptance_from_checkpoint": false,
     "settled_jobs": [
       "workflow-1",
       "workflow-2",
       "workflow-3",
-      "workflow-4"
+      "workflow-4",
+      "workflow-5"
     ],
     "model_worker_completion": "four first-pass Opus null/partial files; eight exact-claim Opus null/no files; one Gemini summary returned and corrected",
     "sql_contract_tests": 7,
     "portable_recovery_tested_commit": "8cd96a8bcbf3a68c9af8bde43bfa842fd34457a6",
     "portable_recovery_result": "PASS 34 archived tests and exact nine-contract/119-record recovery with no overlays/raw/prior DB",
-    "source_seam_tests": 7,
-    "current_total_research_tests": 34
+    "source_seam_tests": 19,
+    "current_total_research_tests": 48,
+    "existing_mocked_hermes_tests": 3
   },
   "artifacts": [
     {
       "path": "README.md",
-      "sha256": "e7f328d9f69b510a4bda6af7d22e75631912cc93a303960e503fb1ff4ff69a4c",
-      "bytes": 5367
+      "sha256": "8a9c8fa9169c6f5555385e8691a5e0e9445ef77f38c819b763a8bfbd053b6a9a",
+      "bytes": 5430
     },
     {
       "path": "architecture/process_topology.md",
@@ -129,8 +132,8 @@
     },
     {
       "path": "features/README.md",
-      "sha256": "f625084745a572c76306c728db7afeffcf0234f7f66d01863973a494140ec6f9",
-      "bytes": 2897
+      "sha256": "53dbfc67f3647f2921644521e0500ab0662602e99fef32b5b1fffd36c7132b12",
+      "bytes": 4121
     },
     {
       "path": "features/ai-and-vision-routing.md",
@@ -138,14 +141,29 @@
       "bytes": 10321
     },
     {
+      "path": "features/archive-playback-and-retranscription.md",
+      "sha256": "ab1e4a111478fbf772f5c1b65bfd7de3ab4aa0e3d11e71c536f25bd80a081745",
+      "bytes": 7622
+    },
+    {
       "path": "features/contracts.json",
-      "sha256": "e260ab29c507f339f60fa2095978a292dbbd0109123d6ce2d8ec25a2ed9abc4f",
-      "bytes": 41572
+      "sha256": "4b6bf1b57e9de63323d599b8ea61b8a575680780f87eefa20084e63792ecbefc",
+      "bytes": 62341
+    },
+    {
+      "path": "features/hermes-bridge-and-plugin.md",
+      "sha256": "91d80568c2788eb9961b53c1d6b067ff63a4b1754f51b7da7eacf96e6fe94504",
+      "bytes": 6435
     },
     {
       "path": "features/hotkeys-windows-and-capture.md",
       "sha256": "5b4dbb404f14b3f50a0358a70258e897ae819424865ce9c000a6bc443342eb67",
       "bytes": 7146
+    },
+    {
+      "path": "features/kb-and-reference-search.md",
+      "sha256": "30f2112f7091b36ca2a049b3a6dec77caec51b670d0079f5f19a8fab49404ca1",
+      "bytes": 4656
     },
     {
       "path": "features/live-transcription.md",
@@ -156,6 +174,11 @@
       "path": "features/managed-local-ai.md",
       "sha256": "e9cfacd1fb321e59f4068e3dab2e74bd8137c022f419294eaa2779e17fd4cf22",
       "bytes": 7367
+    },
+    {
+      "path": "features/mlx-sidecar-and-model-install.md",
+      "sha256": "116fed2470d0d27e9b79e6c5cc9352968d2c493fe4381a38dbb2ebfd8c99f52c",
+      "bytes": 6303
     },
     {
       "path": "features/personal-memory.md",
@@ -181,6 +204,16 @@
       "path": "features/speaker-diarization.md",
       "sha256": "6a21ce65ff4ab5163ef9678050bac83d1c7db9b9eede0a124848aff7d6475f95",
       "bytes": 7431
+    },
+    {
+      "path": "features/summary-conspect-and-coaching.md",
+      "sha256": "d235ddad99d22de68e339919a1224ea369e9a63b2df6f6fcd2fa527a947c7126",
+      "bytes": 7567
+    },
+    {
+      "path": "features/updates-build-and-release.md",
+      "sha256": "7a50689cf6dee8ab22d167c52a9a379cbc216df007ffb9c6522ee1204822730f",
+      "bytes": 6772
     },
     {
       "path": "files/.claude__hooks__banned-phrases.ps1.md",
@@ -1709,13 +1742,13 @@
     },
     {
       "path": "operations/README.md",
-      "sha256": "f4b652ff1800376e9d6096eb72bb3f3b70af571e5ca1faf67217307b3f2c0160",
-      "bytes": 5214
+      "sha256": "2c5840a3a2366851cf5bc9d604665554084f6dc6d0e301c4e5d5668e21a8a3e7",
+      "bytes": 5275
     },
     {
       "path": "operations/checkpoint.py",
-      "sha256": "524914a4e3ace998c6e88c2a44afb8156dedf6bc5940483f9bd7c8afb3c19922",
-      "bytes": 16403
+      "sha256": "52fd9a6d453d68eb55b2695038a213d33a24555734d48a960bdc6aa7cc657039",
+      "bytes": 16611
     },
     {
       "path": "operations/test_catalog_contract.py",
@@ -1724,8 +1757,13 @@
     },
     {
       "path": "operations/test_checkpoint.py",
-      "sha256": "ca748dccf572eca717bdd2bee04460ad99c25688bb15143afe63d063cae20cc0",
-      "bytes": 14811
+      "sha256": "3cba27762d1ee97cad88f472ad12ff5b705f0ee706d10292ea35c9a91a56de43",
+      "bytes": 16394
+    },
+    {
+      "path": "operations/test_integration_seams.py",
+      "sha256": "82564ee9e66d2aba38aec6dd22b056290b5dd5d6b243c164fe89104597013abb",
+      "bytes": 2609
     },
     {
       "path": "operations/test_source_contract.py",
@@ -1733,9 +1771,14 @@
       "bytes": 4099
     },
     {
+      "path": "operations/test_source_retrospective.py",
+      "sha256": "b593e2d33d14edb5ccdc9e5fcdb4f7750d4398202340348b8227a52ce4612edb",
+      "bytes": 4251
+    },
+    {
       "path": "reconciliation/NEXT-STEPS.md",
-      "sha256": "bcd12abe0794c93ee7e2a8d3bed5b74e86c062aa3097f2de18c51cf581f833c1",
-      "bytes": 3897
+      "sha256": "f664166563f874f27cdb71bf03e729389bd5ef20e83889df68cca7ee4445d66a",
+      "bytes": 4075
     },
     {
       "path": "reconciliation/README.md",
@@ -1754,8 +1797,8 @@
     },
     {
       "path": "reconciliation/VERIFICATION.md",
-      "sha256": "8638fa0841c5ffac4da8310a4cb20e0378cd487737421d484a921ef786fa6dbd",
-      "bytes": 8792
+      "sha256": "a1e48d40ffa31c2f9b000c907084a84fe4dfc1f656d972b3c954adb257e71f09",
+      "bytes": 10670
     },
     {
       "path": "reconciliation/additional-source-findings.json",
@@ -1899,13 +1942,33 @@
     },
     {
       "path": "reconciliation/progress.json",
-      "sha256": "18f310f29be0be3e673c11f6f825de40aa9435e1d0a39ef5a17ea840a807f7d9",
-      "bytes": 3940
+      "sha256": "8b905339d5ed9380f62a18089094572900b03c9d9736a163a7308299a913bd12",
+      "bytes": 4082
+    },
+    {
+      "path": "reconciliation/research-boundaries.json",
+      "sha256": "b7a23962c649df8ce69a3ada369b778aab05d61189a746a54f47b8fc566e874d",
+      "bytes": 1558
     },
     {
       "path": "reconciliation/round2-feature-spotcheck.json",
       "sha256": "1a239abca00b3edb824e38be02d3faea65e12e2cd249ebb93174a8cd108e7d99",
       "bytes": 3301
+    },
+    {
+      "path": "reconciliation/round3-integration-findings.json",
+      "sha256": "d327ab8507e67db000de2bc37859ad389cf6b58eacf4441f92c828b18f44bd0d",
+      "bytes": 3164
+    },
+    {
+      "path": "reconciliation/round3-source-findings.json",
+      "sha256": "378e4079c606247674a9fce09df2792f7117c5dc02e43343e3aa16bf1b9777d3",
+      "bytes": 4027
+    },
+    {
+      "path": "reconciliation/round3-spotcheck-receipt.json",
+      "sha256": "6776fbd51469e7f8f5b8df92605061c9ef7d3d2db95162b91ec4da7bd01efa3a",
+      "bytes": 643
     },
     {
       "path": "reconciliation/security-build.json",

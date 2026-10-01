@@ -14,13 +14,14 @@
     "workflow-1",
     "workflow-2",
     "workflow-3",
-    "workflow-4"
+    "workflow-4",
+    "workflow-5"
   ],
   "semantic_acceptance": false,
   "independent_watchdog": false,
-  "checkpoint_tests_passed": 20,
+  "checkpoint_tests_passed": 22,
   "native_tests_run": false,
-  "next_step": "Complete remaining KB/archive/summary/coaching/update/release/MLX/Hermes/native chains; scoped pinned parser setup and native hypothesis acceptance remain pending.",
+  "next_step": "Covering-SHA portable repeat/push for 15-contract/48-test checkpoint; remaining startup/health/platform/config/AST completeness and native acceptance explicitly open.",
   "remaining_hypothesis_ids": [
     "wave1_worker1_persistence-C02",
     "wave1_worker1_persistence-C05",
@@ -98,15 +99,17 @@
     "wave4_worker3_cicd-C10",
     "wave4_worker3_cicd-C12"
   ],
-  "feature_contracts_source_inspected": 9,
-  "continuation_round": 2,
+  "feature_contracts_source_inspected": 15,
+  "continuation_round": 3,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 34,
-  "source_feature_references": 277,
+  "total_research_tests_passed": 48,
+  "source_feature_references": 410,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
   "portable_recovery_tested_commit": "8cd96a8bcbf3a68c9af8bde43bfa842fd34457a6",
   "portable_recovery_result": "PASS 34 tests plus verify/checkpoint/recover in exact tracked-only archive; nine contracts and no accepted failed proposals",
-  "source_seam_tests_passed": 7,
-  "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded"
+  "source_seam_tests_passed": 19,
+  "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
+  "existing_mocked_hermes_tests_passed": 3,
+  "round3_spotcheck": "workflow-5 result null; no independent acceptance"
 }

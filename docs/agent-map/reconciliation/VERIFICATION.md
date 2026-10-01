@@ -17,7 +17,7 @@
 | JSON/JSONL decode | Every published research JSON/JSONL decoded | Record semantics/symbol completeness not compiler-verified |
 | Python syntax | Checkpoint/test files parsed successfully | Not native Suflyor application compilation |
 | Navigation | Main corrected README/model/recovery/topology links resolve | Historical generated review links not all audited |
-| Recovery/SQL tests | `python3 -B -m unittest discover -s docs/agent-map/operations -p 'test_*.py' -v`: 34 tests, OK (20 provenance/recovery + 7 SQLite fixtures + 7 source-seam checks) | Helper and Python SQLite mechanics only; no native application or independent host-crash restart |
+| Recovery/SQL tests | `python3 -B -m unittest discover -s docs/agent-map/operations -p 'test_*.py' -v`: 48 tests, OK (22 provenance/recovery + 7 SQLite fixtures + 19 source-seam checks); existing mocked Hermes suite: 3 tests OK | Helper and Python SQLite mechanics only; no native application or independent host-crash restart |
 | Checkpoint/recover commands | Completed; null/misaligned lane files labeled `unaccepted_proposal` | No automatic redispatch or independent acceptance |
 | Actual SQL migrations | Python SQLite 3.45.1 in-memory: migrations loaded; triggered FTS row deleted by session_id; no session FK on memory/diarization | Not native bundled rusqlite/Cargo tests or full DB durability |
 | Git whitespace | `git diff --check`, staged check and first checkpoint `git show --check`: clean | Docs gate, not behavioral/native gate |
@@ -44,6 +44,16 @@ The initial SQL fixture used a nonexistent `utterances.seq` column and failed be
 - Bounded Gemini workflow-4 completed with issues. Receipt records accepted queue/provenance/fallback caveats and rejected stale/misquoted rows; hypothetical Codex HTTP summary consequence is not established because its exclusive flag requires local managed prep.
 - [Parser research](parser-research.md) records installed-tool absence and live upstream alternatives. Verdict Compose (stdlib AST/TOML + pinned syntax grammars); no parser package/toolchain installed and no accurate AST index claimed.
 - [Exact round-2 covering-SHA receipt](portable-recovery-round2.json) at `8cd96a8bcbf3a68c9af8bde43bfa842fd34457a6` passed all 34 archived tests and verify/checkpoint/recover: nine contracts, 119 canonical records, zero rejected-proposal promotions, no raw reports/prior DB/dependency install or overlays.
+
+## Continuation round 3 evidence
+
+- Six additional principal contracts map KB/reference, archive/playback/re-STT, summary/conspect/coaching, updater/build/release, MLX owned sidecar/install and Hermes bridge/plugin/profile-prep. Fifteen bounded contracts are now indexed; not every source/caller/native branch is accepted.
+- Source checks corrected empty-query KB palette, UTF8-byte reference budget, synchronous archive delete/partial cleanup, force=false audio summary wrapper, transcript-only recap cache and best-effort conspect save. Numeric live WPM/filler pill is not established by current coaching style source/UI search.
+- Updater draft erroneously claimed final redirect validation. Actual code allowlists original URL, follows default redirects and hashes bytes before write, with no `.url()`/redirect policy. Contract corrected; hypothetical arbitrary executable remains unproven because digest check exists.
+- MLX contract distinguishes fast marker runtime load vs full file hash at install, exact owned-child readiness and serialized inference vs unbounded waiters. Hermes contract distinguishes configured nonloopback bind from stale loopback-only header, catalog summary vs conspect and save failure vs response success.
+- Source-seam fixtures initially failed on guessed identifiers/substring shapes, then reread actual implementation and reran; all 48 research tests passed (22 recovery/provenance +7 SQL +19 source seams). Three existing plugin limit tests ran with requests mocked, no network/user data.
+- workflow-5 bounded Gemini retrospective spotcheck settled with null result and no file output; receipt retains no reason/acceptance. Coordinator source review is not independent model acceptance.
+- Latest covering-SHA portable repeat remains required for this round before publication evidence is complete.
 
 ## Model dispatch outcome
 

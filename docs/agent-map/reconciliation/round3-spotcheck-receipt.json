@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "workflow": "round3-retrospective-spotcheck",
+  "job_id": "workflow-5",
+  "route": "ninitux/gemini-flash-high-latest",
+  "status": "completed_without_result",
+  "result": null,
+  "files_written_by_worker": false,
+  "cause": "No technical failure reason supplied; quota/authorization/exhaustion not inferred",
+  "scope": ["KB empty search/byte cap", "archive force/source/delete chains", "conspect/cache/retry/coaching", "updater redirect/digest/version"],
+  "acceptance": "not_reviewed_by_completed_worker; coordinator source inspection only",
+  "automatic_retry": false,
+  "astra_calls": 0,
+  "new_grok_calls": 0
+}
