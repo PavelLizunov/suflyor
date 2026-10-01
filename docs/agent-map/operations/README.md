@@ -34,7 +34,7 @@ The default local database is `.campaign-state/reconciliation.sqlite`; it is not
 
 ## Test evidence
 
-The latest test execution passed 24 dependency-free tests: 20 recovery/provenance safeguards and four real-migration SQLite fixtures. They cover canonical original-report identity, coordinator counts/references, feature evidence limits, exact Git text-form portability, current drift at recovery, failed proposals and curated/FTS/diarization replacement behavior. A tracked-only Git snapshot also restored 119 canonical records without raw Grok files or prior database; no worker proposal was promoted to acceptance. This tests helper/SQL mechanics, not native application behavior or host-failure session restart.
+The latest test execution passed 24 dependency-free tests: 20 recovery/provenance safeguards and four real-migration SQLite fixtures. They cover canonical original-report identity, coordinator counts/references, feature evidence limits, exact Git text-form portability, current drift at recovery, failed proposals and curated/FTS/diarization replacement behavior. [An exact covering-SHA tracked-only test](../reconciliation/portable-recovery-evidence.json) at `059a04b1` also restored 119 canonical records without raw Grok files or prior database; all 24 archived tests passed and no worker proposal was promoted to acceptance. This tests helper/SQL mechanics, not native application behavior or host-failure session restart.
 
 ## Publication discipline
 

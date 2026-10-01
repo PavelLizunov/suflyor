@@ -19,7 +19,7 @@
   "independent_watchdog": false,
   "checkpoint_tests_passed": 20,
   "native_tests_run": false,
-  "next_step": "Commit feature/recovery candidate, run tracked-only exact-SHA recovery, publish evidence; continue remaining feature contracts and language-aware semantic coverage.",
+  "next_step": "Complete remaining feature contracts and all-language coverage, continue source/caller reconciliation before native hypothesis testing; full project and independent native acceptance remain pending.",
   "remaining_hypothesis_ids": [
     "wave1_worker1_persistence-C02",
     "wave1_worker1_persistence-C05",
@@ -103,5 +103,7 @@
   "total_research_tests_passed": 24,
   "source_feature_references": 83,
   "historical_review_assertions_corrected": 11,
-  "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance"
+  "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
+  "portable_recovery_tested_commit": "059a04b1b90017fab032c25fc93d68b2be1f39eb",
+  "portable_recovery_result": "PASS exact tracked-only candidate: 24 tests and verify/checkpoint/recover"
 }

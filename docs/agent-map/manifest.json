@@ -3,7 +3,7 @@
   "status": "PARTIAL_MAP_SOURCE_TRIAGE_COMPLETE_NATIVE_ACCEPTANCE_PENDING",
   "campaign_id": "suflyor-map-reconciliation",
   "reviewed_source_commit": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
-  "generated_at": "2026-10-01T16:43:57.162100+00:00",
+  "generated_at": "2026-10-01T16:46:12.292200+00:00",
   "historical_publication_commit": "e14ff1936349cd6790be749d68f5c7b5737af926",
   "historical_claimed_source_commit": "a4c998740de4d25c3939d1bcf63a7c07af820682",
   "historical_source_coherence": "not_established; inventory drift recorded",
@@ -103,7 +103,9 @@
       "workflow-3"
     ],
     "model_worker_completion": "four first-pass Opus null/partial files; eight exact-claim Opus null/no files; one Gemini summary returned and corrected",
-    "sql_contract_tests": 4
+    "sql_contract_tests": 4,
+    "portable_recovery_tested_commit": "059a04b1b90017fab032c25fc93d68b2be1f39eb",
+    "portable_recovery_result": "PASS 24 tests plus verify/checkpoint/recover in exact Git archive, no overlays or raw reports/prior DB"
   },
   "artifacts": [
     {
@@ -1673,8 +1675,8 @@
     },
     {
       "path": "operations/README.md",
-      "sha256": "af51869dffb242aeaad2e04ff6f24630c5b3c24403d8b5e9736591e8a4a89306",
-      "bytes": 4831
+      "sha256": "f8cccf92e1e1a007f6b0788b53a215264063c228c4649de71573df9ab3b03ec0",
+      "bytes": 4943
     },
     {
       "path": "operations/checkpoint.py",
@@ -1713,8 +1715,8 @@
     },
     {
       "path": "reconciliation/VERIFICATION.md",
-      "sha256": "6120bd368c71b60de62903d87fa6a6efd1c521bf3e56280b1d5f02f6c2f78ff2",
-      "bytes": 6493
+      "sha256": "6d4c26de4d0e86e7128650a20a88540c0e709d1507f0e1c340cd554853c48cfb",
+      "bytes": 6708
     },
     {
       "path": "reconciliation/additional-source-findings.json",
@@ -1842,9 +1844,14 @@
       "bytes": 6447
     },
     {
+      "path": "reconciliation/portable-recovery-evidence.json",
+      "sha256": "c731b4a6e2700587bb673c8af68564cf293e78f8a5fcd4c61f0c02e621a98840",
+      "bytes": 1086
+    },
+    {
       "path": "reconciliation/progress.json",
-      "sha256": "9cc07209577119a0f3d98492b59e54e880dd6efa677d5c4c8d8a8d9d6c1c7f53",
-      "bytes": 3538
+      "sha256": "8866f309d27c155a2c3773ed4b668112124e4329b3a7c5d9d496b2313ab4d278",
+      "bytes": 3760
     },
     {
       "path": "reconciliation/security-build.json",

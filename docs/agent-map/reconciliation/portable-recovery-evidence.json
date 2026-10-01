@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "tested_commit": "059a04b1b90017fab032c25fc93d68b2be1f39eb",
+  "method": "git archive exact candidate SHA into temporary isolated tracked-only directory; no file overlays",
+  "research_tests": {
+    "count": 24,
+    "result": "OK",
+    "command": "python3 -B -m unittest discover -s docs/agent-map/operations -p test_*.py -v"
+  },
+  "sqlite_version": "3.45.1",
+  "raw_grok_present_before_check": false,
+  "prior_campaign_state_present": false,
+  "canonical_candidates": 119,
+  "canonical_status_counts": {
+    "confirmed": 39,
+    "hypothesis": 75,
+    "rejected": 5
+  },
+  "source_feature_contracts": 3,
+  "accepted_git_text_forms": [
+    "vendor/nemotron-win-x64/GGML_LICENSE",
+    "vendor/nemotron-win-x64/LICENSE",
+    "vendor/nemotron-win-x64/NOTICE",
+    "vendor/nemotron-win-x64/THIRD_PARTY_NOTICES.md"
+  ],
+  "current_source_issues": [],
+  "worker_proposals_accepted": 0,
+  "automatic_dispatch": false,
+  "independent_acceptance": false,
+  "native_application_acceptance": false,
+  "result": "PASS exact covering-SHA tracked-only evidence recovery"
+}
