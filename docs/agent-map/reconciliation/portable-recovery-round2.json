@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "tested_commit": "8cd96a8bcbf3a68c9af8bde43bfa842fd34457a6",
+  "method": "exact Git archive candidate into tracked-only directory; no overlays, raw reports, prior database or dependency install",
+  "research_tests": {
+    "count": 34,
+    "result": "OK",
+    "breakdown": {
+      "checkpoint_provenance": 20,
+      "sqlite_schema": 7,
+      "source_seam": 7
+    }
+  },
+  "sqlite_version": "3.45.1",
+  "canonical_candidates": 119,
+  "canonical_status_counts": {
+    "confirmed": 39,
+    "hypothesis": 75,
+    "rejected": 5
+  },
+  "source_feature_contracts": 9,
+  "accepted_git_text_forms": [
+    "vendor/nemotron-win-x64/GGML_LICENSE",
+    "vendor/nemotron-win-x64/LICENSE",
+    "vendor/nemotron-win-x64/NOTICE",
+    "vendor/nemotron-win-x64/THIRD_PARTY_NOTICES.md"
+  ],
+  "issues": [],
+  "worker_proposals_accepted": 0,
+  "automatic_dispatch": false,
+  "native_application_acceptance": false,
+  "independent_acceptance": false,
+  "result": "PASS exact covering-SHA portable recovery"
+}

@@ -43,7 +43,7 @@ The initial SQL fixture used a nonexistent `utterances.seq` column and failed be
 - First source-seam run failed on two incorrect delimiter substrings (permit select form and end-of-spawn helper marker); tests were rebased onto inspected actual source and rerun. These are fixture failures, not application fixes.
 - Bounded Gemini workflow-4 completed with issues. Receipt records accepted queue/provenance/fallback caveats and rejected stale/misquoted rows; hypothetical Codex HTTP summary consequence is not established because its exclusive flag requires local managed prep.
 - [Parser research](parser-research.md) records installed-tool absence and live upstream alternatives. Verdict Compose (stdlib AST/TOML + pinned syntax grammars); no parser package/toolchain installed and no accurate AST index claimed.
-- Latest 34-test suite passed in working tree; exact covering-SHA tracked-only repeat remains required before claiming portability of round-2 additions.
+- [Exact round-2 covering-SHA receipt](portable-recovery-round2.json) at `8cd96a8bcbf3a68c9af8bde43bfa842fd34457a6` passed all 34 archived tests and verify/checkpoint/recover: nine contracts, 119 canonical records, zero rejected-proposal promotions, no raw reports/prior DB/dependency install or overlays.
 
 ## Model dispatch outcome
 

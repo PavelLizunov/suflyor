@@ -3,7 +3,7 @@
   "status": "PARTIAL_MAP_SOURCE_TRIAGE_COMPLETE_NATIVE_ACCEPTANCE_PENDING",
   "campaign_id": "suflyor-map-reconciliation",
   "reviewed_source_commit": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
-  "generated_at": "2026-10-01T17:35:33.415732+00:00",
+  "generated_at": "2026-10-01T17:38:41.267798+00:00",
   "historical_publication_commit": "e14ff1936349cd6790be749d68f5c7b5737af926",
   "historical_claimed_source_commit": "a4c998740de4d25c3939d1bcf63a7c07af820682",
   "historical_source_coherence": "not_established; inventory drift recorded",
@@ -106,8 +106,8 @@
     ],
     "model_worker_completion": "four first-pass Opus null/partial files; eight exact-claim Opus null/no files; one Gemini summary returned and corrected",
     "sql_contract_tests": 7,
-    "portable_recovery_tested_commit": "059a04b1b90017fab032c25fc93d68b2be1f39eb",
-    "portable_recovery_result": "PASS 24 tests plus verify/checkpoint/recover in exact Git archive, no overlays or raw reports/prior DB",
+    "portable_recovery_tested_commit": "8cd96a8bcbf3a68c9af8bde43bfa842fd34457a6",
+    "portable_recovery_result": "PASS 34 archived tests and exact nine-contract/119-record recovery with no overlays/raw/prior DB",
     "source_seam_tests": 7,
     "current_total_research_tests": 34
   },
@@ -1709,8 +1709,8 @@
     },
     {
       "path": "operations/README.md",
-      "sha256": "c88e5277c7e0dae02876e1d6f59a422631a54e4da6f0f5fb929a1f09a894a677",
-      "bytes": 5132
+      "sha256": "f4b652ff1800376e9d6096eb72bb3f3b70af571e5ca1faf67217307b3f2c0160",
+      "bytes": 5214
     },
     {
       "path": "operations/checkpoint.py",
@@ -1734,8 +1734,8 @@
     },
     {
       "path": "reconciliation/NEXT-STEPS.md",
-      "sha256": "9add9f06636503a79a88b9dc6ff1b772459fd76859672be3620f89cd322d0902",
-      "bytes": 3893
+      "sha256": "bcd12abe0794c93ee7e2a8d3bed5b74e86c062aa3097f2de18c51cf581f833c1",
+      "bytes": 3897
     },
     {
       "path": "reconciliation/README.md",
@@ -1754,8 +1754,8 @@
     },
     {
       "path": "reconciliation/VERIFICATION.md",
-      "sha256": "e39f9f6ac19a0a94f1b76c37fc359ab6209228ccc05c500e09f0738c999845c2",
-      "bytes": 8639
+      "sha256": "8638fa0841c5ffac4da8310a4cb20e0378cd487737421d484a921ef786fa6dbd",
+      "bytes": 8792
     },
     {
       "path": "reconciliation/additional-source-findings.json",
@@ -1893,9 +1893,14 @@
       "bytes": 1086
     },
     {
+      "path": "reconciliation/portable-recovery-round2.json",
+      "sha256": "7f987b0718bcf7e37aaf8d53d4ce68dc3fd86fcb8781ccd9bc5f0f7c2dafa57d",
+      "bytes": 1013
+    },
+    {
       "path": "reconciliation/progress.json",
-      "sha256": "def104ed128402a684c448c4d13e8605ffa0f24efebc4efcc75829bffecc199e",
-      "bytes": 3949
+      "sha256": "18f310f29be0be3e673c11f6f825de40aa9435e1d0a39ef5a17ea840a807f7d9",
+      "bytes": 3940
     },
     {
       "path": "reconciliation/round2-feature-spotcheck.json",

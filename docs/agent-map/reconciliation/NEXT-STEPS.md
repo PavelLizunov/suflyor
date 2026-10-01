@@ -7,7 +7,7 @@
 - Original 119 Grok candidates source-triaged with stable ID/title/claim identity: 39 confirmed source mechanisms, 75 hypotheses, 5 rejected.
 - Exact model distinctions: GigaAM/Whisper text recognition, macOS CoreML/CPU history and optional unreleased Windows Nemotron V3 diarization.
 - Privacy-redacted Grok backup linked to original hashes; raw untracked files not modified or published.
-- 34 current dependency-free research tests (20 recovery/provenance, seven SQL fixtures, seven source seams); earlier exact-SHA portable receipt records its own 24-test snapshot. Covering-SHA repeat needed for latest changes.
+- 34 current dependency-free research tests (20 recovery/provenance, seven SQL fixtures, seven source seams); exact-SHA `8cd96a8b` portable archive reran all 34 and recovery; earlier 24-test snapshot remains preserved separately.
 - WIP GitHub checkpoint on the dedicated task branch; task-owned files only.
 
 ## Not complete
