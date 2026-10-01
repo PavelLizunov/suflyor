@@ -1,5 +1,14 @@
 # Reconciliation verification evidence
 
+## Round 9 — canonical PowerShell parser-only route (local, covering SHA pending)
+
+- Official portable Linux-x64 PowerShell 7.4.13 asset SHA256 matched GitHub digest; MIT/third-party licences inspected, complete 623-file manifest hash-checked before runtime. Task-owned ParseInput helper only, NoProfile/NonInteractive/telemetry+update opt-out; no SDK/global install/Add-Type/dot-source/repo script/gate execution. [Provenance](powershell-parser-provenance.json)/[research](powershell-parser-research.md).
+- All 24 PS frozen files parsed without canonical errors. Prior [seven Tree-sitter ERROR receipts](powershell-tree-sitter-errors.json) preserved as grammar limitations, not source findings. Initial BOM helper mismatch caught via ParseFile countercheck and fixed in helper/raw-offset mapping, source untouched; BOM fixture protects parity.
+- 25 PS names/lines retained, canonical AST schema replaces prior PS CST; **16,230 non-PS nodes unchanged**, total remains 16,255. All-language syntax status now 298 successes, zero parse/process/unsupported selected files; exclusions still 22+520. Not all-project review/Windows compatibility/native acceptance.
+- **116 local research tests passed, zero skips**, seven new canonical fixtures (1MB/native args, nested/class/enum, never-executed input/here-strings, UTF16/UTF8/CRLF/BOM, errors/runtime-hash absence). Saved ranges/hash validators pending covering-SHA seal; original 39/75/5 counts unchanged.
+- Exact archive/full regeneration pending; no semantic/native/independent objective acceptance.
+
+
 ## Round 8 — prebuilt NSIS WASM navigation (exact covering SHA tested)
 
 - npm search supplied ready `tree-sitter-nsis 0.4.1` WASM and `web-tree-sitter 0.25.10` CJS/WASM; exact registry integrity/file hashes/licences recorded in [NSIS provenance](nsis-parser-provenance.json)/[decision](nsis-parser-research.md). Existing Node 22.23.2, Python binding remains 0.25.2. No npm install/scripts/build/SDK/NSIS compiler/installer run.

@@ -192,6 +192,9 @@ def build(root, snapshot, parser=None, isolate=False):
             result = isolated_rust_index(source, path) if isolate else rust_index(data, path, parser)
         elif extension == ".py":
             result = python_index(data, path)
+        elif extension in {".ps1", ".psm1"}:
+            from powershell_parser import parse
+            result = parse(source, path)
         elif extension == ".nsi":
             result = isolated_rust_index(source, path, "--nsis-worker")
         elif extension in GRAMMARS:
@@ -211,7 +214,7 @@ def build(root, snapshot, parser=None, isolate=False):
             symbols.append(declaration)
         files.append(row)
     from collections import Counter
-    return {"schema_version": 1, "source_commit": BASELINE, "parser_versions": {**RUST_VERSIONS, **{"tree-sitter-" + language: version for language, version in GRAMMARS.values()}, "tree-sitter-nsis": "0.4.1", "web-tree-sitter": "0.25.10", "Node": "22.23.2"}, "python_ast": f"{sys.version_info.major}.{sys.version_info.minor}", "files": files, "status_counts": dict(Counter(f["status"] for f in files)), "declaration_count": len(symbols), "scope_limits": ["Rust/Python/Slint/Swift/Objective-C/C/PowerShell/Bash/NSIS explicit syntax only", "local/member declarations included; syntax errors retain partial navigation, not success", "macros not expanded; cfg not evaluated; types/call edges not resolved", "unsupported languages not interpreted as zero-symbol proof", "protected legacy/vendor are excluded, not reviewed", "no semantic line coverage or independent/native acceptance"], "complete_project_coverage": False}, symbols
+    return {"schema_version": 1, "source_commit": BASELINE, "parser_versions": {**RUST_VERSIONS, **{"tree-sitter-" + language: version for language, version in GRAMMARS.values()}, "tree-sitter-nsis": "0.4.1", "web-tree-sitter": "0.25.10", "Node": "22.23.2", "System.Management.Automation.Language.Parser": "7.4.13"}, "python_ast": f"{sys.version_info.major}.{sys.version_info.minor}", "files": files, "status_counts": dict(Counter(f["status"] for f in files)), "declaration_count": len(symbols), "scope_limits": ["Rust/Python/Slint/Swift/Objective-C/C/PowerShell/Bash/NSIS explicit syntax only", "local/member declarations included; syntax errors retain partial navigation, not success", "macros not expanded; cfg not evaluated; types/call edges not resolved", "unsupported languages not interpreted as zero-symbol proof", "protected legacy/vendor are excluded, not reviewed", "no semantic line coverage or independent/native acceptance"], "complete_project_coverage": False}, symbols
 
 
 def validate_artifacts(root, report, declarations):

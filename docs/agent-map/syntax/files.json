@@ -12,7 +12,8 @@
     "tree-sitter-powershell": "0.26.4",
     "tree-sitter-nsis": "0.4.1",
     "web-tree-sitter": "0.25.10",
-    "Node": "22.23.2"
+    "Node": "22.23.2",
+    "System.Management.Automation.Language.Parser": "7.4.13"
   },
   "python_ast": "3.12",
   "files": [
@@ -6891,18 +6892,9 @@
       "bytes": 8843,
       "lines": 174,
       "source_role": "source_or_support",
-      "status": "parse_error",
+      "status": "syntax_parsed",
       "declaration_count": 0,
-      "parse_errors": [
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 6754,
-          "end_byte": 6756,
-          "start_line": 134,
-          "end_line": 134
-        }
-      ],
+      "parse_errors": [],
       "cfg_evaluated": false,
       "macros_expanded": false
     },
@@ -6930,154 +6922,9 @@
       "bytes": 7227,
       "lines": 159,
       "source_role": "source_or_support",
-      "status": "parse_error",
+      "status": "syntax_parsed",
       "declaration_count": 1,
-      "parse_errors": [
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 0,
-          "end_byte": 7227,
-          "start_line": 1,
-          "end_line": 160
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 2786,
-          "end_byte": 2799,
-          "start_line": 63,
-          "end_line": 65
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 2800,
-          "end_byte": 2818,
-          "start_line": 65,
-          "end_line": 65
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 2820,
-          "end_byte": 2831,
-          "start_line": 65,
-          "end_line": 65
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 2920,
-          "end_byte": 3251,
-          "start_line": 66,
-          "end_line": 72
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 3252,
-          "end_byte": 3289,
-          "start_line": 72,
-          "end_line": 72
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 4581,
-          "end_byte": 4628,
-          "start_line": 97,
-          "end_line": 99
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 4716,
-          "end_byte": 4734,
-          "start_line": 100,
-          "end_line": 102
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 4735,
-          "end_byte": 4774,
-          "start_line": 102,
-          "end_line": 102
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 5621,
-          "end_byte": 5666,
-          "start_line": 120,
-          "end_line": 122
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 5752,
-          "end_byte": 5770,
-          "start_line": 123,
-          "end_line": 125
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 5771,
-          "end_byte": 5788,
-          "start_line": 125,
-          "end_line": 125
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 6270,
-          "end_byte": 6313,
-          "start_line": 134,
-          "end_line": 136
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 6397,
-          "end_byte": 6415,
-          "start_line": 137,
-          "end_line": 139
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 6416,
-          "end_byte": 6431,
-          "start_line": 139,
-          "end_line": 139
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 6822,
-          "end_byte": 6869,
-          "start_line": 147,
-          "end_line": 149
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 6957,
-          "end_byte": 6975,
-          "start_line": 150,
-          "end_line": 152
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 6976,
-          "end_byte": 6995,
-          "start_line": 152,
-          "end_line": 152
-        }
-      ],
+      "parse_errors": [],
       "cfg_evaluated": false,
       "macros_expanded": false
     },
@@ -7090,42 +6937,9 @@
       "bytes": 1946,
       "lines": 48,
       "source_role": "source_or_support",
-      "status": "parse_error",
+      "status": "syntax_parsed",
       "declaration_count": 0,
-      "parse_errors": [
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 904,
-          "end_byte": 1944,
-          "start_line": 18,
-          "end_line": 48
-        },
-        {
-          "kind": "missing",
-          "node_type": ";",
-          "start_byte": 964,
-          "end_byte": 964,
-          "start_line": 18,
-          "end_line": 18
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 972,
-          "end_byte": 973,
-          "start_line": 18,
-          "end_line": 18
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 1078,
-          "end_byte": 1087,
-          "start_line": 23,
-          "end_line": 23
-        }
-      ],
+      "parse_errors": [],
       "cfg_evaluated": false,
       "macros_expanded": false
     },
@@ -7168,18 +6982,9 @@
       "bytes": 1598,
       "lines": 35,
       "source_role": "source_or_support",
-      "status": "parse_error",
+      "status": "syntax_parsed",
       "declaration_count": 0,
-      "parse_errors": [
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 960,
-          "end_byte": 976,
-          "start_line": 19,
-          "end_line": 19
-        }
-      ],
+      "parse_errors": [],
       "cfg_evaluated": false,
       "macros_expanded": false
     },
@@ -7207,50 +7012,9 @@
       "bytes": 6087,
       "lines": 184,
       "source_role": "source_or_support",
-      "status": "parse_error",
+      "status": "syntax_parsed",
       "declaration_count": 3,
-      "parse_errors": [
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 0,
-          "end_byte": 6087,
-          "start_line": 1,
-          "end_line": 185
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 4008,
-          "end_byte": 4059,
-          "start_line": 125,
-          "end_line": 128
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 4071,
-          "end_byte": 4112,
-          "start_line": 128,
-          "end_line": 129
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 4679,
-          "end_byte": 4691,
-          "start_line": 148,
-          "end_line": 149
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 5886,
-          "end_byte": 5922,
-          "start_line": 175,
-          "end_line": 177
-        }
-      ],
+      "parse_errors": [],
       "cfg_evaluated": false,
       "macros_expanded": false
     },
@@ -7293,178 +7057,9 @@
       "bytes": 10232,
       "lines": 241,
       "source_role": "source_or_support",
-      "status": "parse_error",
+      "status": "syntax_parsed",
       "declaration_count": 5,
-      "parse_errors": [
-        {
-          "kind": "missing",
-          "node_type": " ",
-          "start_byte": 4009,
-          "end_byte": 4009,
-          "start_line": 93,
-          "end_line": 93
-        },
-        {
-          "kind": "missing",
-          "node_type": " ",
-          "start_byte": 4017,
-          "end_byte": 4017,
-          "start_line": 93,
-          "end_line": 93
-        },
-        {
-          "kind": "missing",
-          "node_type": " ",
-          "start_byte": 4028,
-          "end_byte": 4028,
-          "start_line": 93,
-          "end_line": 93
-        },
-        {
-          "kind": "missing",
-          "node_type": " ",
-          "start_byte": 4576,
-          "end_byte": 4576,
-          "start_line": 104,
-          "end_line": 104
-        },
-        {
-          "kind": "missing",
-          "node_type": " ",
-          "start_byte": 4586,
-          "end_byte": 4586,
-          "start_line": 104,
-          "end_line": 104
-        },
-        {
-          "kind": "missing",
-          "node_type": " ",
-          "start_byte": 4603,
-          "end_byte": 4603,
-          "start_line": 104,
-          "end_line": 104
-        },
-        {
-          "kind": "missing",
-          "node_type": " ",
-          "start_byte": 4614,
-          "end_byte": 4614,
-          "start_line": 104,
-          "end_line": 104
-        },
-        {
-          "kind": "missing",
-          "node_type": " ",
-          "start_byte": 5679,
-          "end_byte": 5679,
-          "start_line": 127,
-          "end_line": 127
-        },
-        {
-          "kind": "missing",
-          "node_type": " ",
-          "start_byte": 5692,
-          "end_byte": 5692,
-          "start_line": 127,
-          "end_line": 127
-        },
-        {
-          "kind": "missing",
-          "node_type": " ",
-          "start_byte": 5700,
-          "end_byte": 5700,
-          "start_line": 127,
-          "end_line": 127
-        },
-        {
-          "kind": "missing",
-          "node_type": " ",
-          "start_byte": 6300,
-          "end_byte": 6300,
-          "start_line": 140,
-          "end_line": 140
-        },
-        {
-          "kind": "missing",
-          "node_type": " ",
-          "start_byte": 6306,
-          "end_byte": 6306,
-          "start_line": 140,
-          "end_line": 140
-        },
-        {
-          "kind": "missing",
-          "node_type": " ",
-          "start_byte": 6315,
-          "end_byte": 6315,
-          "start_line": 140,
-          "end_line": 140
-        },
-        {
-          "kind": "missing",
-          "node_type": " ",
-          "start_byte": 6327,
-          "end_byte": 6327,
-          "start_line": 140,
-          "end_line": 140
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 6780,
-          "end_byte": 6859,
-          "start_line": 150,
-          "end_line": 150
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 6811,
-          "end_byte": 6814,
-          "start_line": 150,
-          "end_line": 150
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 7475,
-          "end_byte": 7529,
-          "start_line": 168,
-          "end_line": 168
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 8027,
-          "end_byte": 8443,
-          "start_line": 181,
-          "end_line": 190
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 8376,
-          "end_byte": 8438,
-          "start_line": 190,
-          "end_line": 190
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 9512,
-          "end_byte": 9590,
-          "start_line": 222,
-          "end_line": 222
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 9543,
-          "end_byte": 9546,
-          "start_line": 222,
-          "end_line": 222
-        }
-      ],
+      "parse_errors": [],
       "cfg_evaluated": false,
       "macros_expanded": false
     },
@@ -7537,42 +7132,9 @@
       "bytes": 13627,
       "lines": 254,
       "source_role": "source_or_support",
-      "status": "parse_error",
+      "status": "syntax_parsed",
       "declaration_count": 8,
-      "parse_errors": [
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 2982,
-          "end_byte": 2983,
-          "start_line": 68,
-          "end_line": 68
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 5355,
-          "end_byte": 5382,
-          "start_line": 113,
-          "end_line": 114
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 6899,
-          "end_byte": 6933,
-          "start_line": 136,
-          "end_line": 137
-        },
-        {
-          "kind": "ERROR",
-          "node_type": "ERROR",
-          "start_byte": 11607,
-          "end_byte": 11654,
-          "start_line": 221,
-          "end_line": 221
-        }
-      ],
+      "parse_errors": [],
       "cfg_evaluated": false,
       "macros_expanded": false
     },
@@ -11345,8 +10907,7 @@
   "status_counts": {
     "non_selected_data_or_document": 520,
     "excluded_protected_or_vendor": 22,
-    "syntax_parsed": 291,
-    "parse_error": 7
+    "syntax_parsed": 298
   },
   "declaration_count": 16255,
   "scope_limits": [

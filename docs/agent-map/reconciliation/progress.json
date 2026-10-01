@@ -100,9 +100,9 @@
     "wave4_worker3_cicd-C12"
   ],
   "feature_contracts_source_inspected": 18,
-  "continuation_round": 8,
+  "continuation_round": 9,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 109,
+  "total_research_tests_passed": 116,
   "source_feature_references": 510,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
@@ -112,13 +112,12 @@
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
   "round3_spotcheck": "workflow-5 result null; no independent acceptance",
-  "syntax_parsed_files": 291,
+  "syntax_parsed_files": 298,
   "syntax_declaration_nodes": 16255,
   "syntax_status_counts": {
     "non_selected_data_or_document": 520,
     "excluded_protected_or_vendor": 22,
-    "syntax_parsed": 291,
-    "parse_error": 7
+    "syntax_parsed": 298
   },
   "syntax_parser_versions": {
     "tree-sitter": "0.25.2",
@@ -131,9 +130,10 @@
     "tree-sitter-powershell": "0.26.4",
     "tree-sitter-nsis": "0.4.1",
     "web-tree-sitter": "0.25.10",
-    "Node": "22.23.2"
+    "Node": "22.23.2",
+    "System.Management.Automation.Language.Parser": "7.4.13"
   },
-  "syntax_fixtures_passed": 29,
+  "syntax_fixtures_passed": 36,
   "context_handoff_prompt": "docs/agent-map/reconciliation/CONTINUE-PROMPT.md",
   "round5_local_verification": "PASS local and exact a8c75253 archive; 71+3 tests; syntax/frozen validation; original Rust/Python nodes unchanged",
   "round5_independent_acceptance": false,
@@ -165,7 +165,11 @@
   "native_portable_verification": "PASS exact acbc312a06b79062ec270b4f4f676198e6117a5e; native census byte-identical; no ABI/native/independent acceptance",
   "nsis_syntax_fixtures_passed": 6,
   "nsis_portable_verification": "PASS exact ce14c313570225ba5d93d69df37f4832f9646355; 12 NSIS nodes; previous 16243 unchanged; byte-identical syntax; no installer semantics acceptance",
-  "current_remaining_syntax": [
-    "seven PowerShell grammar-error files; native parser not run"
+  "current_remaining_syntax": [],
+  "powershell_canonical_fixtures_passed": 7,
+  "powershell_portable_verification": "pending covering exact commit",
+  "current_semantic_limits": [
+    "all selected sources parser-covered is not semantic/caller/native compatibility acceptance",
+    "macro cfg include type indirect callers remain unresolved"
   ]
 }

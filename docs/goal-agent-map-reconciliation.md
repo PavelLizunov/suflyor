@@ -91,6 +91,13 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
 - User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.
 
+## Continuation round 9: canonical PowerShell parser-only corroboration
+
+- Intent: resolve seven grammar-error files with official System.Management.Automation.Language.Parser AST/tokens, not source rewriting/sanitization/error suppression. Reuse canonical .NET runtime distributed inside an official hash-verified portable PowerShell 7.4.13 Linux x64 release; ignored task-local files only, no global installation, SDK/dotnet/Cargo/Swift/worker/app/gate execution.
+- Inspect licence/release hash provenance before runtime load; invoke only task-owned ParseInput/ParseFile helper with NoProfile/NonInteractive, disable telemetry/update, never dot-source/Invoke-Expression/Add-Type repository scripts. Runtime compatibility or error remains explicit; parser success is not Windows compatibility/native/action acceptance.
+- Preserve existing Tree-sitter ERROR spans separately as corroborated history; change main syntax route only after fixtures/source UTF16→UTF8/span/scopes/errors and exact-SHA portable regeneration prove canonical extraction. All current sources must remain frozen-hashed.
+- Verification: comments/here-strings/embedded C# not functions; nested/advanced functions/class methods/enum/property/script blocks; valid 1MB and member operators/native arguments grammar gaps; malformed input and isolated timeout/version/hash failures; previous all-language nodes unchanged except intended PS route. Native SDK/Rust guards/scripts not executed.
+
 ## Continuation round 8: NSIS syntax via prebuilt WASM
 
 - Search-first found npm tree-sitter-nsis 0.4.1 prebuilt WASM, unlike missing PyPI package. Reuse existing Node v22.23.2 and hash/integrity-verified web-tree-sitter 0.25.10 WASM runtime in ignored research cache; never Python binding 0.26.0, SDK/compiler/npm scripts/global app dependencies or makensis execution.
