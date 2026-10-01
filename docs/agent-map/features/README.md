@@ -1,6 +1,6 @@
 # Source-linked feature contracts
 
-These contracts map selected production chains at frozen research baseline `a10c356a`. They are manually inspected navigation/dataflow evidence, not compiler-derived call graphs, every-line/symbol coverage or native acceptance. Nineteen bounded contracts now cover principal runtime and platform integration chains; structured index records exact reference counts. Counts are navigation scope, not completeness proof.
+These contracts map selected production chains at frozen research baseline `a10c356a`. They are manually inspected navigation/dataflow evidence, not compiler-derived call graphs, every-line/symbol coverage or native acceptance. Twenty bounded contracts now cover principal runtime and platform integration chains; structured index records exact reference counts. Counts are navigation scope, not completeness proof.
 
 | Feature | Contract | Key boundary |
 | --- | --- | --- |
@@ -24,6 +24,8 @@ These contracts map selected production chains at frozen research baseline `a10c
 | Native macOS FFI/ownership | [Export/foreign/call census plus permissions/thread/free lifecycle](native-macos-ffi-and-ownership.md) | Name matching not ABI; mic wait unbounded, Pending detach/state retention/late screenshot cleanup unaccepted |
 
 | Selected UI setting consumers | [Language/scheme/opacity/monitor save/runtime chains](ui-setting-consumers-and-save-boundaries.md) | Name census unresolved; failure branches differ and memory/global/disk can diverge |
+
+| Windows SDK/ownership | [GDI/WDA/window/tray/mutex/input cleanup chains](windows-capture-tray-and-sdk-ownership.md) | Name census not SDK graph; partial image/unchecked allocation/panic/restore/thread faults unaccepted |
 
 [Structured index](contracts.json) records IDs, baseline, source references and limits. [Original Grok register](../reconciliation/candidates.json) preserves counterevidence; [verification](../reconciliation/VERIFICATION.md) distinguishes executed local checks from unexecuted native behavior.
 

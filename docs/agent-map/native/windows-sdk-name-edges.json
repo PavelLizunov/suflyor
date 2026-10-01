@@ -1,0 +1,4555 @@
+{
+  "schema_version": 1,
+  "source_commit": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+  "inputs": {
+    "slint-experiment/src/native/windows/screen.rs": {
+      "sha256": "e6300be2792f3d2f8e0cb69f50e04bd573ccadb470d822c5640fa9ab301f71c4",
+      "bytes": 3392
+    },
+    "slint-experiment/src/native/windows/lifecycle.rs": {
+      "sha256": "cf3af28540aadec179db9d6969750aa29e355773d8808f697cddc0e56dda9abe",
+      "bytes": 2536
+    },
+    "slint-experiment/src/win32.rs": {
+      "sha256": "9401ad0a0df9228c6ecb77ae47225bbe72c97bbd63ee3c4bf13c928555832362",
+      "bytes": 55879
+    },
+    "slint-experiment/src/tray.rs": {
+      "sha256": "54d0627df41d77468bf98e6755573ffb19b8c5d191cd7ba8854dc6caba4585f2",
+      "bytes": 23649
+    }
+  },
+  "imports": [
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::BitBlt",
+      "local_name": "BitBlt",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 574,
+      "end_byte": 580,
+      "start_line": 15,
+      "end_line": 15
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::CreateCompatibleBitmap",
+      "local_name": "CreateCompatibleBitmap",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 582,
+      "end_byte": 604,
+      "start_line": 15,
+      "end_line": 15
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::CreateCompatibleDC",
+      "local_name": "CreateCompatibleDC",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 606,
+      "end_byte": 624,
+      "start_line": 15,
+      "end_line": 15
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::DeleteDC",
+      "local_name": "DeleteDC",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 626,
+      "end_byte": 634,
+      "start_line": 15,
+      "end_line": 15
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::DeleteObject",
+      "local_name": "DeleteObject",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 636,
+      "end_byte": 648,
+      "start_line": 15,
+      "end_line": 15
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::GetDC",
+      "local_name": "GetDC",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 650,
+      "end_byte": 655,
+      "start_line": 15,
+      "end_line": 15
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::GetDIBits",
+      "local_name": "GetDIBits",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 665,
+      "end_byte": 674,
+      "start_line": 16,
+      "end_line": 16
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::ReleaseDC",
+      "local_name": "ReleaseDC",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 676,
+      "end_byte": 685,
+      "start_line": 16,
+      "end_line": 16
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::SelectObject",
+      "local_name": "SelectObject",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 687,
+      "end_byte": 699,
+      "start_line": 16,
+      "end_line": 16
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::BITMAPINFO",
+      "local_name": "BITMAPINFO",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 701,
+      "end_byte": 711,
+      "start_line": 16,
+      "end_line": 16
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::BITMAPINFOHEADER",
+      "local_name": "BITMAPINFOHEADER",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 713,
+      "end_byte": 729,
+      "start_line": 16,
+      "end_line": 16
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::BI_RGB",
+      "local_name": "BI_RGB",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 731,
+      "end_byte": 737,
+      "start_line": 16,
+      "end_line": 16
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::DIB_RGB_COLORS",
+      "local_name": "DIB_RGB_COLORS",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 739,
+      "end_byte": 753,
+      "start_line": 16,
+      "end_line": 16
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::HGDIOBJ",
+      "local_name": "HGDIOBJ",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 763,
+      "end_byte": 770,
+      "start_line": 17,
+      "end_line": 17
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::SRCCOPY",
+      "local_name": "SRCCOPY",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 772,
+      "end_byte": 779,
+      "start_line": 17,
+      "end_line": 17
+    },
+    {
+      "path": "slint-experiment/src/native/windows/lifecycle.rs",
+      "import_path": "windows::Win32::Foundation::CloseHandle",
+      "local_name": "CloseHandle",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 603,
+      "end_byte": 642,
+      "start_line": 16,
+      "end_line": 16
+    },
+    {
+      "path": "slint-experiment/src/native/windows/lifecycle.rs",
+      "import_path": "windows::Win32::System::Threading::ReleaseMutex",
+      "local_name": "ReleaseMutex",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 656,
+      "end_byte": 703,
+      "start_line": 17,
+      "end_line": 17
+    },
+    {
+      "path": "slint-experiment/src/native/windows/lifecycle.rs",
+      "import_path": "windows::Win32::Foundation::WAIT_ABANDONED",
+      "local_name": "WAIT_ABANDONED",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1470,
+      "end_byte": 1484,
+      "start_line": 35,
+      "end_line": 35
+    },
+    {
+      "path": "slint-experiment/src/native/windows/lifecycle.rs",
+      "import_path": "windows::Win32::Foundation::WAIT_OBJECT_0",
+      "local_name": "WAIT_OBJECT_0",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1486,
+      "end_byte": 1499,
+      "start_line": 35,
+      "end_line": 35
+    },
+    {
+      "path": "slint-experiment/src/native/windows/lifecycle.rs",
+      "import_path": "windows::Win32::System::Threading::CreateMutexW",
+      "local_name": "CreateMutexW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1546,
+      "end_byte": 1558,
+      "start_line": 36,
+      "end_line": 36
+    },
+    {
+      "path": "slint-experiment/src/native/windows/lifecycle.rs",
+      "import_path": "windows::Win32::System::Threading::WaitForSingleObject",
+      "local_name": "WaitForSingleObject",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1560,
+      "end_byte": 1579,
+      "start_line": 36,
+      "end_line": 36
+    },
+    {
+      "path": "slint-experiment/src/native/windows/lifecycle.rs",
+      "import_path": "windows::Win32::Foundation::CloseHandle",
+      "local_name": "CloseHandle",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2359,
+      "end_byte": 2398,
+      "start_line": 51,
+      "end_line": 51
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Foundation::HWND",
+      "local_name": "HWND",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1264,
+      "end_byte": 1296,
+      "start_line": 27,
+      "end_line": 27
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Foundation::LPARAM",
+      "local_name": "LPARAM",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1335,
+      "end_byte": 1341,
+      "start_line": 28,
+      "end_line": 28
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Foundation::LRESULT",
+      "local_name": "LRESULT",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1343,
+      "end_byte": 1350,
+      "start_line": 28,
+      "end_line": 28
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Foundation::POINT",
+      "local_name": "POINT",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1352,
+      "end_byte": 1357,
+      "start_line": 28,
+      "end_line": 28
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Foundation::RECT",
+      "local_name": "RECT",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1359,
+      "end_byte": 1363,
+      "start_line": 28,
+      "end_line": 28
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Foundation::WPARAM",
+      "local_name": "WPARAM",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1365,
+      "end_byte": 1371,
+      "start_line": 28,
+      "end_line": 28
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Dwm::DwmEnableBlurBehindWindow",
+      "local_name": "DwmEnableBlurBehindWindow",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1423,
+      "end_byte": 1448,
+      "start_line": 30,
+      "end_line": 30
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Dwm::DwmExtendFrameIntoClientArea",
+      "local_name": "DwmExtendFrameIntoClientArea",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1450,
+      "end_byte": 1478,
+      "start_line": 30,
+      "end_line": 30
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Dwm::DwmIsCompositionEnabled",
+      "local_name": "DwmIsCompositionEnabled",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1480,
+      "end_byte": 1503,
+      "start_line": 30,
+      "end_line": 30
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Dwm::DWM_BB_BLURREGION",
+      "local_name": "DWM_BB_BLURREGION",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1513,
+      "end_byte": 1530,
+      "start_line": 31,
+      "end_line": 31
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Dwm::DWM_BB_ENABLE",
+      "local_name": "DWM_BB_ENABLE",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1532,
+      "end_byte": 1545,
+      "start_line": 31,
+      "end_line": 31
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Dwm::DWM_BLURBEHIND",
+      "local_name": "DWM_BLURBEHIND",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1547,
+      "end_byte": 1561,
+      "start_line": 31,
+      "end_line": 31
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::CreateRectRgn",
+      "local_name": "CreateRectRgn",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1610,
+      "end_byte": 1623,
+      "start_line": 33,
+      "end_line": 33
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::DeleteObject",
+      "local_name": "DeleteObject",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1625,
+      "end_byte": 1637,
+      "start_line": 33,
+      "end_line": 33
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Controls::MARGINS",
+      "local_name": "MARGINS",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1648,
+      "end_byte": 1685,
+      "start_line": 34,
+      "end_line": 34
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Shell::DefSubclassProc",
+      "local_name": "DefSubclassProc",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1723,
+      "end_byte": 1738,
+      "start_line": 35,
+      "end_line": 35
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Shell::SetWindowSubclass",
+      "local_name": "SetWindowSubclass",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1740,
+      "end_byte": 1757,
+      "start_line": 35,
+      "end_line": 35
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::GetWindowDisplayAffinity",
+      "local_name": "GetWindowDisplayAffinity",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1819,
+      "end_byte": 1843,
+      "start_line": 37,
+      "end_line": 37
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW",
+      "local_name": "GetWindowLongPtrW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1845,
+      "end_byte": 1862,
+      "start_line": 37,
+      "end_line": 37
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::KillTimer",
+      "local_name": "KillTimer",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1864,
+      "end_byte": 1873,
+      "start_line": 37,
+      "end_line": 37
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::LoadCursorW",
+      "local_name": "LoadCursorW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1875,
+      "end_byte": 1886,
+      "start_line": 37,
+      "end_line": 37
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SetCursor",
+      "local_name": "SetCursor",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1888,
+      "end_byte": 1897,
+      "start_line": 37,
+      "end_line": 37
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SetTimer",
+      "local_name": "SetTimer",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1899,
+      "end_byte": 1907,
+      "start_line": 37,
+      "end_line": 37
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SetWindowDisplayAffinity",
+      "local_name": "SetWindowDisplayAffinity",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1917,
+      "end_byte": 1941,
+      "start_line": 38,
+      "end_line": 38
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SetWindowLongPtrW",
+      "local_name": "SetWindowLongPtrW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1943,
+      "end_byte": 1960,
+      "start_line": 38,
+      "end_line": 38
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SetWindowPos",
+      "local_name": "SetWindowPos",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1962,
+      "end_byte": 1974,
+      "start_line": 38,
+      "end_line": 38
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::ShowWindow",
+      "local_name": "ShowWindow",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1976,
+      "end_byte": 1986,
+      "start_line": 38,
+      "end_line": 38
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::GWLP_HWNDPARENT",
+      "local_name": "GWLP_HWNDPARENT",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1988,
+      "end_byte": 2003,
+      "start_line": 38,
+      "end_line": 38
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::GWL_EXSTYLE",
+      "local_name": "GWL_EXSTYLE",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2013,
+      "end_byte": 2024,
+      "start_line": 39,
+      "end_line": 39
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::GWL_STYLE",
+      "local_name": "GWL_STYLE",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2026,
+      "end_byte": 2035,
+      "start_line": 39,
+      "end_line": 39
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::HWND_NOTOPMOST",
+      "local_name": "HWND_NOTOPMOST",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2037,
+      "end_byte": 2051,
+      "start_line": 39,
+      "end_line": 39
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::HWND_TOPMOST",
+      "local_name": "HWND_TOPMOST",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2053,
+      "end_byte": 2065,
+      "start_line": 39,
+      "end_line": 39
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::IDC_ARROW",
+      "local_name": "IDC_ARROW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2067,
+      "end_byte": 2076,
+      "start_line": 39,
+      "end_line": 39
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SWP_FRAMECHANGED",
+      "local_name": "SWP_FRAMECHANGED",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2078,
+      "end_byte": 2094,
+      "start_line": 39,
+      "end_line": 39
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE",
+      "local_name": "SWP_NOACTIVATE",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2104,
+      "end_byte": 2118,
+      "start_line": 40,
+      "end_line": 40
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SWP_NOMOVE",
+      "local_name": "SWP_NOMOVE",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2120,
+      "end_byte": 2130,
+      "start_line": 40,
+      "end_line": 40
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SWP_NOSIZE",
+      "local_name": "SWP_NOSIZE",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2132,
+      "end_byte": 2142,
+      "start_line": 40,
+      "end_line": 40
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER",
+      "local_name": "SWP_NOZORDER",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2144,
+      "end_byte": 2156,
+      "start_line": 40,
+      "end_line": 40
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SW_HIDE",
+      "local_name": "SW_HIDE",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2158,
+      "end_byte": 2165,
+      "start_line": 40,
+      "end_line": 40
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SW_SHOWNOACTIVATE",
+      "local_name": "SW_SHOWNOACTIVATE",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2167,
+      "end_byte": 2184,
+      "start_line": 40,
+      "end_line": 40
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WDA_EXCLUDEFROMCAPTURE",
+      "local_name": "WDA_EXCLUDEFROMCAPTURE",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2194,
+      "end_byte": 2216,
+      "start_line": 41,
+      "end_line": 41
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WDA_NONE",
+      "local_name": "WDA_NONE",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2218,
+      "end_byte": 2226,
+      "start_line": 41,
+      "end_line": 41
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WM_MOUSEMOVE",
+      "local_name": "WM_MOUSEMOVE",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2228,
+      "end_byte": 2240,
+      "start_line": 41,
+      "end_line": 41
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WM_SETCURSOR",
+      "local_name": "WM_SETCURSOR",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2242,
+      "end_byte": 2254,
+      "start_line": 41,
+      "end_line": 41
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WM_TIMER",
+      "local_name": "WM_TIMER",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2256,
+      "end_byte": 2264,
+      "start_line": 41,
+      "end_line": 41
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_EX_APPWINDOW",
+      "local_name": "WS_EX_APPWINDOW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2266,
+      "end_byte": 2281,
+      "start_line": 41,
+      "end_line": 41
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_EX_TOOLWINDOW",
+      "local_name": "WS_EX_TOOLWINDOW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2291,
+      "end_byte": 2307,
+      "start_line": 42,
+      "end_line": 42
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_EX_TRANSPARENT",
+      "local_name": "WS_EX_TRANSPARENT",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2309,
+      "end_byte": 2326,
+      "start_line": 42,
+      "end_line": 42
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_MAXIMIZEBOX",
+      "local_name": "WS_MAXIMIZEBOX",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2328,
+      "end_byte": 2342,
+      "start_line": 42,
+      "end_line": 42
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_MINIMIZEBOX",
+      "local_name": "WS_MINIMIZEBOX",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2344,
+      "end_byte": 2358,
+      "start_line": 42,
+      "end_line": 42
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_SYSMENU",
+      "local_name": "WS_SYSMENU",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 2360,
+      "end_byte": 2370,
+      "start_line": 42,
+      "end_line": 42
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::core::BOOL",
+      "local_name": "BOOL",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 20670,
+      "end_byte": 20689,
+      "start_line": 470,
+      "end_line": 470
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Foundation::LPARAM",
+      "local_name": "LPARAM",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 20703,
+      "end_byte": 20737,
+      "start_line": 471,
+      "end_line": 471
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::EnumDisplayMonitors",
+      "local_name": "EnumDisplayMonitors",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 20796,
+      "end_byte": 20815,
+      "start_line": 473,
+      "end_line": 473
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::GetMonitorInfoW",
+      "local_name": "GetMonitorInfoW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 20817,
+      "end_byte": 20832,
+      "start_line": 473,
+      "end_line": 473
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::HDC",
+      "local_name": "HDC",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 20834,
+      "end_byte": 20837,
+      "start_line": 473,
+      "end_line": 473
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::HMONITOR",
+      "local_name": "HMONITOR",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 20839,
+      "end_byte": 20847,
+      "start_line": 473,
+      "end_line": 473
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::MONITORINFO",
+      "local_name": "MONITORINFO",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 20849,
+      "end_byte": 20860,
+      "start_line": 473,
+      "end_line": 473
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics",
+      "local_name": "GetSystemMetrics",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 22651,
+      "end_byte": 22667,
+      "start_line": 520,
+      "end_line": 520
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SM_CXVIRTUALSCREEN",
+      "local_name": "SM_CXVIRTUALSCREEN",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 22669,
+      "end_byte": 22687,
+      "start_line": 520,
+      "end_line": 520
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SM_CYVIRTUALSCREEN",
+      "local_name": "SM_CYVIRTUALSCREEN",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 22689,
+      "end_byte": 22707,
+      "start_line": 520,
+      "end_line": 520
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SM_XVIRTUALSCREEN",
+      "local_name": "SM_XVIRTUALSCREEN",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 22709,
+      "end_byte": 22726,
+      "start_line": 520,
+      "end_line": 520
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SM_YVIRTUALSCREEN",
+      "local_name": "SM_YVIRTUALSCREEN",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 22740,
+      "end_byte": 22757,
+      "start_line": 521,
+      "end_line": 521
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Foundation::POINT",
+      "local_name": "POINT",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 23192,
+      "end_byte": 23225,
+      "start_line": 536,
+      "end_line": 536
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::GetCursorPos",
+      "local_name": "GetCursorPos",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 23239,
+      "end_byte": 23292,
+      "start_line": 537,
+      "end_line": 537
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::core::BOOL",
+      "local_name": "BOOL",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 23891,
+      "end_byte": 23910,
+      "start_line": 553,
+      "end_line": 553
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Foundation::LPARAM",
+      "local_name": "LPARAM",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 23924,
+      "end_byte": 23958,
+      "start_line": 554,
+      "end_line": 554
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::EnumWindows",
+      "local_name": "EnumWindows",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 24027,
+      "end_byte": 24038,
+      "start_line": 556,
+      "end_line": 556
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId",
+      "local_name": "GetWindowThreadProcessId",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 24040,
+      "end_byte": 24064,
+      "start_line": 556,
+      "end_line": 556
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::IsWindowVisible",
+      "local_name": "IsWindowVisible",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 24066,
+      "end_byte": 24081,
+      "start_line": 556,
+      "end_line": 556
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_EX_TOPMOST",
+      "local_name": "WS_EX_TOPMOST",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 24083,
+      "end_byte": 24096,
+      "start_line": 556,
+      "end_line": 556
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Dwm::DwmFlush",
+      "local_name": "DwmFlush",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 25504,
+      "end_byte": 25543,
+      "start_line": 584,
+      "end_line": 584
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow",
+      "local_name": "SetForegroundWindow",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 26932,
+      "end_byte": 26992,
+      "start_line": 619,
+      "end_line": 619
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow",
+      "local_name": "GetForegroundWindow",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 27207,
+      "end_byte": 27267,
+      "start_line": 627,
+      "end_line": 627
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow",
+      "local_name": "SetForegroundWindow",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 28061,
+      "end_byte": 28080,
+      "start_line": 640,
+      "end_line": 640
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::ShowWindow",
+      "local_name": "ShowWindow",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 28082,
+      "end_byte": 28092,
+      "start_line": 640,
+      "end_line": 640
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SW_SHOW",
+      "local_name": "SW_SHOW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 28094,
+      "end_byte": 28101,
+      "start_line": 640,
+      "end_line": 640
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SWP_NOSIZE",
+      "local_name": "SWP_NOSIZE",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 29503,
+      "end_byte": 29513,
+      "start_line": 682,
+      "end_line": 682
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER",
+      "local_name": "SWP_NOZORDER",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 29515,
+      "end_byte": 29527,
+      "start_line": 682,
+      "end_line": 682
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::GetWindowRect",
+      "local_name": "GetWindowRect",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 30098,
+      "end_byte": 30152,
+      "start_line": 695,
+      "end_line": 695
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::GetMonitorInfoW",
+      "local_name": "GetMonitorInfoW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 30845,
+      "end_byte": 30860,
+      "start_line": 711,
+      "end_line": 711
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::MonitorFromWindow",
+      "local_name": "MonitorFromWindow",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 30862,
+      "end_byte": 30879,
+      "start_line": 711,
+      "end_line": 711
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::MONITORINFO",
+      "local_name": "MONITORINFO",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 30881,
+      "end_byte": 30892,
+      "start_line": 711,
+      "end_line": 711
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::MONITOR_DEFAULTTONEAREST",
+      "local_name": "MONITOR_DEFAULTTONEAREST",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 30894,
+      "end_byte": 30918,
+      "start_line": 711,
+      "end_line": 711
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::GetMonitorInfoW",
+      "local_name": "GetMonitorInfoW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 31945,
+      "end_byte": 31960,
+      "start_line": 739,
+      "end_line": 739
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::MonitorFromPoint",
+      "local_name": "MonitorFromPoint",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 31962,
+      "end_byte": 31978,
+      "start_line": 739,
+      "end_line": 739
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::MONITORINFO",
+      "local_name": "MONITORINFO",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 31980,
+      "end_byte": 31991,
+      "start_line": 739,
+      "end_line": 739
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Gdi::MONITOR_DEFAULTTONEAREST",
+      "local_name": "MONITOR_DEFAULTTONEAREST",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 31993,
+      "end_byte": 32017,
+      "start_line": 739,
+      "end_line": 739
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Foundation::POINT",
+      "local_name": "POINT",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 34418,
+      "end_byte": 34451,
+      "start_line": 792,
+      "end_line": 792
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::GetCursorPos",
+      "local_name": "GetCursorPos",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 34507,
+      "end_byte": 34519,
+      "start_line": 793,
+      "end_line": 793
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::GetWindowRect",
+      "local_name": "GetWindowRect",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 34521,
+      "end_byte": 34534,
+      "start_line": 793,
+      "end_line": 793
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Foundation::POINT",
+      "local_name": "POINT",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 35261,
+      "end_byte": 35294,
+      "start_line": 812,
+      "end_line": 812
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::GetCursorPos",
+      "local_name": "GetCursorPos",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 35350,
+      "end_byte": 35362,
+      "start_line": 813,
+      "end_line": 813
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SWP_NOSIZE",
+      "local_name": "SWP_NOSIZE",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 35364,
+      "end_byte": 35374,
+      "start_line": 813,
+      "end_line": 813
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::SWP_NOZORDER",
+      "local_name": "SWP_NOZORDER",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 35376,
+      "end_byte": 35388,
+      "start_line": 813,
+      "end_line": 813
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Dwm::DwmSetWindowAttribute",
+      "local_name": "DwmSetWindowAttribute",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 36717,
+      "end_byte": 36738,
+      "start_line": 843,
+      "end_line": 843
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::Graphics::Dwm::DWMWA_WINDOW_CORNER_PREFERENCE",
+      "local_name": "DWMWA_WINDOW_CORNER_PREFERENCE",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 36740,
+      "end_byte": 36770,
+      "start_line": 843,
+      "end_line": 843
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Input::KeyboardAndMouse::MapVirtualKeyW",
+      "local_name": "MapVirtualKeyW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 39211,
+      "end_byte": 39225,
+      "start_line": 897,
+      "end_line": 897
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Input::KeyboardAndMouse::SendInput",
+      "local_name": "SendInput",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 39227,
+      "end_byte": 39236,
+      "start_line": 897,
+      "end_line": 897
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Input::KeyboardAndMouse::INPUT",
+      "local_name": "INPUT",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 39238,
+      "end_byte": 39243,
+      "start_line": 897,
+      "end_line": 897
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0",
+      "local_name": "INPUT_0",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 39245,
+      "end_byte": 39252,
+      "start_line": 897,
+      "end_line": 897
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Input::KeyboardAndMouse::INPUT_KEYBOARD",
+      "local_name": "INPUT_KEYBOARD",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 39254,
+      "end_byte": 39268,
+      "start_line": 897,
+      "end_line": 897
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Input::KeyboardAndMouse::KEYBDINPUT",
+      "local_name": "KEYBDINPUT",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 39270,
+      "end_byte": 39280,
+      "start_line": 897,
+      "end_line": 897
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Input::KeyboardAndMouse::KEYBD_EVENT_FLAGS",
+      "local_name": "KEYBD_EVENT_FLAGS",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 39294,
+      "end_byte": 39311,
+      "start_line": 898,
+      "end_line": 898
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Input::KeyboardAndMouse::KEYEVENTF_KEYUP",
+      "local_name": "KEYEVENTF_KEYUP",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 39313,
+      "end_byte": 39328,
+      "start_line": 898,
+      "end_line": 898
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Input::KeyboardAndMouse::MAPVK_VK_TO_VSC",
+      "local_name": "MAPVK_VK_TO_VSC",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 39330,
+      "end_byte": 39345,
+      "start_line": 898,
+      "end_line": 898
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY",
+      "local_name": "VIRTUAL_KEY",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 39347,
+      "end_byte": 39358,
+      "start_line": 898,
+      "end_line": 898
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Input::KeyboardAndMouse::VK_CONTROL",
+      "local_name": "VK_CONTROL",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 39360,
+      "end_byte": 39370,
+      "start_line": 898,
+      "end_line": 898
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState",
+      "local_name": "GetAsyncKeyState",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 40723,
+      "end_byte": 40739,
+      "start_line": 936,
+      "end_line": 936
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY",
+      "local_name": "VIRTUAL_KEY",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 40741,
+      "end_byte": 40752,
+      "start_line": 936,
+      "end_line": 936
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Input::KeyboardAndMouse::VK_CONTROL",
+      "local_name": "VK_CONTROL",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 40754,
+      "end_byte": 40764,
+      "start_line": 936,
+      "end_line": 936
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Input::KeyboardAndMouse::VK_MENU",
+      "local_name": "VK_MENU",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 40766,
+      "end_byte": 40773,
+      "start_line": 936,
+      "end_line": 936
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::Input::KeyboardAndMouse::VK_SHIFT",
+      "local_name": "VK_SHIFT",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 40775,
+      "end_byte": 40783,
+      "start_line": 936,
+      "end_line": 936
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_EX_APPWINDOW",
+      "local_name": "WS_EX_APPWINDOW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 42464,
+      "end_byte": 42479,
+      "start_line": 975,
+      "end_line": 975
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_EX_LAYERED",
+      "local_name": "WS_EX_LAYERED",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 42481,
+      "end_byte": 42494,
+      "start_line": 975,
+      "end_line": 975
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_EX_TOOLWINDOW",
+      "local_name": "WS_EX_TOOLWINDOW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 42496,
+      "end_byte": 42512,
+      "start_line": 975,
+      "end_line": 975
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_EX_TOPMOST",
+      "local_name": "WS_EX_TOPMOST",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 42514,
+      "end_byte": 42527,
+      "start_line": 975,
+      "end_line": 975
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_EX_TRANSPARENT",
+      "local_name": "WS_EX_TRANSPARENT",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 42529,
+      "end_byte": 42546,
+      "start_line": 975,
+      "end_line": 975
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_EX_APPWINDOW",
+      "local_name": "WS_EX_APPWINDOW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 44117,
+      "end_byte": 44132,
+      "start_line": 1010,
+      "end_line": 1010
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_EX_LAYERED",
+      "local_name": "WS_EX_LAYERED",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 44134,
+      "end_byte": 44147,
+      "start_line": 1010,
+      "end_line": 1010
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_EX_TOOLWINDOW",
+      "local_name": "WS_EX_TOOLWINDOW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 44149,
+      "end_byte": 44165,
+      "start_line": 1010,
+      "end_line": 1010
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_EX_TOPMOST",
+      "local_name": "WS_EX_TOPMOST",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 44167,
+      "end_byte": 44180,
+      "start_line": 1010,
+      "end_line": 1010
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WS_EX_TRANSPARENT",
+      "local_name": "WS_EX_TRANSPARENT",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 44182,
+      "end_byte": 44199,
+      "start_line": 1010,
+      "end_line": 1010
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::core::PCWSTR",
+      "local_name": "PCWSTR",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1156,
+      "end_byte": 1177,
+      "start_line": 22,
+      "end_line": 22
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::Foundation::GetLastError",
+      "local_name": "GetLastError",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1217,
+      "end_byte": 1229,
+      "start_line": 24,
+      "end_line": 24
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::Foundation::ERROR_CLASS_ALREADY_EXISTS",
+      "local_name": "ERROR_CLASS_ALREADY_EXISTS",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1231,
+      "end_byte": 1257,
+      "start_line": 24,
+      "end_line": 24
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::Foundation::HWND",
+      "local_name": "HWND",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1259,
+      "end_byte": 1263,
+      "start_line": 24,
+      "end_line": 24
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::Foundation::LPARAM",
+      "local_name": "LPARAM",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1265,
+      "end_byte": 1271,
+      "start_line": 24,
+      "end_line": 24
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::Foundation::LRESULT",
+      "local_name": "LRESULT",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1273,
+      "end_byte": 1280,
+      "start_line": 24,
+      "end_line": 24
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::Foundation::POINT",
+      "local_name": "POINT",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1282,
+      "end_byte": 1287,
+      "start_line": 24,
+      "end_line": 24
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::Foundation::WPARAM",
+      "local_name": "WPARAM",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1289,
+      "end_byte": 1295,
+      "start_line": 24,
+      "end_line": 24
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::System::LibraryLoader::GetModuleHandleW",
+      "local_name": "GetModuleHandleW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1304,
+      "end_byte": 1359,
+      "start_line": 26,
+      "end_line": 26
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::Shell::Shell_NotifyIconW",
+      "local_name": "Shell_NotifyIconW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1398,
+      "end_byte": 1415,
+      "start_line": 28,
+      "end_line": 28
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::Shell::NIF_ICON",
+      "local_name": "NIF_ICON",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1417,
+      "end_byte": 1425,
+      "start_line": 28,
+      "end_line": 28
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::Shell::NIF_MESSAGE",
+      "local_name": "NIF_MESSAGE",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1427,
+      "end_byte": 1438,
+      "start_line": 28,
+      "end_line": 28
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::Shell::NIF_SHOWTIP",
+      "local_name": "NIF_SHOWTIP",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1440,
+      "end_byte": 1451,
+      "start_line": 28,
+      "end_line": 28
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::Shell::NIF_TIP",
+      "local_name": "NIF_TIP",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1453,
+      "end_byte": 1460,
+      "start_line": 28,
+      "end_line": 28
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::Shell::NIM_ADD",
+      "local_name": "NIM_ADD",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1462,
+      "end_byte": 1469,
+      "start_line": 28,
+      "end_line": 28
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::Shell::NIM_DELETE",
+      "local_name": "NIM_DELETE",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1471,
+      "end_byte": 1481,
+      "start_line": 28,
+      "end_line": 28
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::Shell::NIM_SETFOCUS",
+      "local_name": "NIM_SETFOCUS",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1487,
+      "end_byte": 1499,
+      "start_line": 29,
+      "end_line": 29
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::Shell::NIM_SETVERSION",
+      "local_name": "NIM_SETVERSION",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1501,
+      "end_byte": 1515,
+      "start_line": 29,
+      "end_line": 29
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::Shell::NIN_SELECT",
+      "local_name": "NIN_SELECT",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1517,
+      "end_byte": 1527,
+      "start_line": 29,
+      "end_line": 29
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::Shell::NOTIFYICONDATAW",
+      "local_name": "NOTIFYICONDATAW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1529,
+      "end_byte": 1544,
+      "start_line": 29,
+      "end_line": 29
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::Shell::NOTIFYICON_VERSION_4",
+      "local_name": "NOTIFYICON_VERSION_4",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1546,
+      "end_byte": 1566,
+      "start_line": 29,
+      "end_line": 29
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::CreateWindowExW",
+      "local_name": "CreateWindowExW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1622,
+      "end_byte": 1637,
+      "start_line": 32,
+      "end_line": 32
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::DefWindowProcW",
+      "local_name": "DefWindowProcW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1639,
+      "end_byte": 1653,
+      "start_line": 32,
+      "end_line": 32
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::DestroyWindow",
+      "local_name": "DestroyWindow",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1655,
+      "end_byte": 1668,
+      "start_line": 32,
+      "end_line": 32
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::GetCursorPos",
+      "local_name": "GetCursorPos",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1670,
+      "end_byte": 1682,
+      "start_line": 32,
+      "end_line": 32
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::LoadIconW",
+      "local_name": "LoadIconW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1684,
+      "end_byte": 1693,
+      "start_line": 32,
+      "end_line": 32
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::RegisterClassExW",
+      "local_name": "RegisterClassExW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1695,
+      "end_byte": 1711,
+      "start_line": 32,
+      "end_line": 32
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::RegisterWindowMessageW",
+      "local_name": "RegisterWindowMessageW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1717,
+      "end_byte": 1739,
+      "start_line": 33,
+      "end_line": 33
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::HICON",
+      "local_name": "HICON",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1741,
+      "end_byte": 1746,
+      "start_line": 33,
+      "end_line": 33
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::IDI_APPLICATION",
+      "local_name": "IDI_APPLICATION",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1748,
+      "end_byte": 1763,
+      "start_line": 33,
+      "end_line": 33
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WM_APP",
+      "local_name": "WM_APP",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1765,
+      "end_byte": 1771,
+      "start_line": 33,
+      "end_line": 33
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WM_CONTEXTMENU",
+      "local_name": "WM_CONTEXTMENU",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1773,
+      "end_byte": 1787,
+      "start_line": 33,
+      "end_line": 33
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WM_DESTROY",
+      "local_name": "WM_DESTROY",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1789,
+      "end_byte": 1799,
+      "start_line": 33,
+      "end_line": 33
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WM_RBUTTONUP",
+      "local_name": "WM_RBUTTONUP",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1805,
+      "end_byte": 1817,
+      "start_line": 34,
+      "end_line": 34
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "import_path": "windows::Win32::UI::WindowsAndMessaging::WNDCLASSEXW",
+      "local_name": "WNDCLASSEXW",
+      "kind": "SDK_import_name",
+      "resolved_symbol": false,
+      "start_byte": 1819,
+      "end_byte": 1830,
+      "start_line": 34,
+      "end_line": 34
+    }
+  ],
+  "calls": [
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "callee_name": "GetDC",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::GetDC"
+      ],
+      "containing_function": {
+        "name": "capture_rect_bgra",
+        "start_byte": 374,
+        "end_byte": 3391,
+        "start_line": 7,
+        "end_line": 87
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 1068,
+      "end_byte": 1079,
+      "start_line": 27,
+      "end_line": 27
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "callee_name": "CreateCompatibleDC",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::CreateCompatibleDC"
+      ],
+      "containing_function": {
+        "name": "capture_rect_bgra",
+        "start_byte": 374,
+        "end_byte": 3391,
+        "start_line": 7,
+        "end_line": 87
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 1197,
+      "end_byte": 1229,
+      "start_line": 31,
+      "end_line": 31
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "callee_name": "ReleaseDC",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::ReleaseDC"
+      ],
+      "containing_function": {
+        "name": "capture_rect_bgra",
+        "start_byte": 374,
+        "end_byte": 3391,
+        "start_line": 7,
+        "end_line": 87
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 1281,
+      "end_byte": 1304,
+      "start_line": 33,
+      "end_line": 33
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "callee_name": "CreateCompatibleBitmap",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::CreateCompatibleBitmap"
+      ],
+      "containing_function": {
+        "name": "capture_rect_bgra",
+        "start_byte": 374,
+        "end_byte": 3391,
+        "start_line": 7,
+        "end_line": 87
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 1394,
+      "end_byte": 1430,
+      "start_line": 36,
+      "end_line": 36
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "callee_name": "DeleteDC",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::DeleteDC"
+      ],
+      "containing_function": {
+        "name": "capture_rect_bgra",
+        "start_byte": 374,
+        "end_byte": 3391,
+        "start_line": 7,
+        "end_line": 87
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 1482,
+      "end_byte": 1495,
+      "start_line": 38,
+      "end_line": 38
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "callee_name": "ReleaseDC",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::ReleaseDC"
+      ],
+      "containing_function": {
+        "name": "capture_rect_bgra",
+        "start_byte": 374,
+        "end_byte": 3391,
+        "start_line": 7,
+        "end_line": 87
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 1517,
+      "end_byte": 1540,
+      "start_line": 39,
+      "end_line": 39
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "callee_name": "SelectObject",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::SelectObject"
+      ],
+      "containing_function": {
+        "name": "capture_rect_bgra",
+        "start_byte": 374,
+        "end_byte": 3391,
+        "start_line": 7,
+        "end_line": 87
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 1634,
+      "end_byte": 1667,
+      "start_line": 42,
+      "end_line": 42
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "callee_name": "HGDIOBJ",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::HGDIOBJ"
+      ],
+      "containing_function": {
+        "name": "capture_rect_bgra",
+        "start_byte": 374,
+        "end_byte": 3391,
+        "start_line": 7,
+        "end_line": 87
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 1652,
+      "end_byte": 1666,
+      "start_line": 42,
+      "end_line": 42
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "callee_name": "BitBlt",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::BitBlt"
+      ],
+      "containing_function": {
+        "name": "capture_rect_bgra",
+        "start_byte": 374,
+        "end_byte": 3391,
+        "start_line": 7,
+        "end_line": 87
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 1687,
+      "end_byte": 1739,
+      "start_line": 43,
+      "end_line": 43
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "callee_name": "SelectObject",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::SelectObject"
+      ],
+      "containing_function": {
+        "name": "capture_rect_bgra",
+        "start_byte": 374,
+        "end_byte": 3391,
+        "start_line": 7,
+        "end_line": 87
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 1909,
+      "end_byte": 1931,
+      "start_line": 46,
+      "end_line": 46
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "callee_name": "GetDIBits",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::GetDIBits"
+      ],
+      "containing_function": {
+        "name": "capture_rect_bgra",
+        "start_byte": 374,
+        "end_byte": 3391,
+        "start_line": 7,
+        "end_line": 87
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 2809,
+      "end_byte": 3034,
+      "start_line": 66,
+      "end_line": 74
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "callee_name": "DeleteObject",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::DeleteObject"
+      ],
+      "containing_function": {
+        "name": "capture_rect_bgra",
+        "start_byte": 374,
+        "end_byte": 3391,
+        "start_line": 7,
+        "end_line": 87
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 3267,
+      "end_byte": 3295,
+      "start_line": 82,
+      "end_line": 82
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "callee_name": "HGDIOBJ",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::HGDIOBJ"
+      ],
+      "containing_function": {
+        "name": "capture_rect_bgra",
+        "start_byte": 374,
+        "end_byte": 3391,
+        "start_line": 7,
+        "end_line": 87
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 3280,
+      "end_byte": 3294,
+      "start_line": 82,
+      "end_line": 82
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "callee_name": "DeleteDC",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::DeleteDC"
+      ],
+      "containing_function": {
+        "name": "capture_rect_bgra",
+        "start_byte": 374,
+        "end_byte": 3391,
+        "start_line": 7,
+        "end_line": 87
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 3313,
+      "end_byte": 3326,
+      "start_line": 83,
+      "end_line": 83
+    },
+    {
+      "path": "slint-experiment/src/native/windows/screen.rs",
+      "callee_name": "ReleaseDC",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::ReleaseDC"
+      ],
+      "containing_function": {
+        "name": "capture_rect_bgra",
+        "start_byte": 374,
+        "end_byte": 3391,
+        "start_line": 7,
+        "end_line": 87
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 3344,
+      "end_byte": 3367,
+      "start_line": 84,
+      "end_line": 84
+    },
+    {
+      "path": "slint-experiment/src/native/windows/lifecycle.rs",
+      "callee_name": "ReleaseMutex",
+      "import_path_candidates": [
+        "windows::Win32::System::Threading::ReleaseMutex"
+      ],
+      "containing_function": {
+        "name": "drop",
+        "start_byte": 570,
+        "end_byte": 830,
+        "start_line": 15,
+        "end_line": 22
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 742,
+      "end_byte": 767,
+      "start_line": 19,
+      "end_line": 19
+    },
+    {
+      "path": "slint-experiment/src/native/windows/lifecycle.rs",
+      "callee_name": "CloseHandle",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::CloseHandle"
+      ],
+      "containing_function": {
+        "name": "drop",
+        "start_byte": 570,
+        "end_byte": 830,
+        "start_line": 15,
+        "end_line": 22
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 789,
+      "end_byte": 813,
+      "start_line": 20,
+      "end_line": 20
+    },
+    {
+      "path": "slint-experiment/src/native/windows/lifecycle.rs",
+      "callee_name": "CreateMutexW",
+      "import_path_candidates": [
+        "windows::Win32::System::Threading::CreateMutexW"
+      ],
+      "containing_function": {
+        "name": "acquire_singleton",
+        "start_byte": 1338,
+        "end_byte": 2535,
+        "start_line": 34,
+        "end_line": 56
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 1770,
+      "end_byte": 1817,
+      "start_line": 40,
+      "end_line": 40
+    },
+    {
+      "path": "slint-experiment/src/native/windows/lifecycle.rs",
+      "callee_name": "WaitForSingleObject",
+      "import_path_candidates": [
+        "windows::Win32::System::Threading::WaitForSingleObject"
+      ],
+      "containing_function": {
+        "name": "acquire_singleton",
+        "start_byte": 1338,
+        "end_byte": 2535,
+        "start_line": 34,
+        "end_line": 56
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 1953,
+      "end_byte": 1989,
+      "start_line": 44,
+      "end_line": 44
+    },
+    {
+      "path": "slint-experiment/src/native/windows/lifecycle.rs",
+      "callee_name": "CloseHandle",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::CloseHandle"
+      ],
+      "containing_function": {
+        "name": "acquire_singleton",
+        "start_byte": 1338,
+        "end_byte": 2535,
+        "start_line": 34,
+        "end_line": 56
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 2420,
+      "end_byte": 2439,
+      "start_line": 52,
+      "end_line": 52
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "LoadCursorW",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::LoadCursorW"
+      ],
+      "containing_function": {
+        "name": "force_arrow_if_stealthed",
+        "start_byte": 2598,
+        "end_byte": 3033,
+        "start_line": 52,
+        "end_line": 66
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 2875,
+      "end_byte": 2903,
+      "start_line": 59,
+      "end_line": 59
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetCursor",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::SetCursor"
+      ],
+      "containing_function": {
+        "name": "force_arrow_if_stealthed",
+        "start_byte": 2598,
+        "end_byte": 3033,
+        "start_line": 52,
+        "end_line": 66
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 2980,
+      "end_byte": 3003,
+      "start_line": 63,
+      "end_line": 63
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "LRESULT",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::LRESULT"
+      ],
+      "containing_function": {
+        "name": "stealth_cursor_subclass_proc",
+        "start_byte": 3205,
+        "end_byte": 4278,
+        "start_line": 70,
+        "end_line": 96
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 3526,
+      "end_byte": 3536,
+      "start_line": 79,
+      "end_line": 79
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "KillTimer",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::KillTimer"
+      ],
+      "containing_function": {
+        "name": "stealth_cursor_subclass_proc",
+        "start_byte": 3205,
+        "end_byte": 4278,
+        "start_line": 70,
+        "end_line": 96
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 3649,
+      "end_byte": 3695,
+      "start_line": 82,
+      "end_line": 82
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "LRESULT",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::LRESULT"
+      ],
+      "containing_function": {
+        "name": "stealth_cursor_subclass_proc",
+        "start_byte": 3205,
+        "end_byte": 4278,
+        "start_line": 70,
+        "end_line": 96
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 3781,
+      "end_byte": 3791,
+      "start_line": 84,
+      "end_line": 84
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "DefSubclassProc",
+      "import_path_candidates": [
+        "windows::Win32::UI::Shell::DefSubclassProc"
+      ],
+      "containing_function": {
+        "name": "stealth_cursor_subclass_proc",
+        "start_byte": 3205,
+        "end_byte": 4278,
+        "start_line": 70,
+        "end_line": 96
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 3834,
+      "end_byte": 3880,
+      "start_line": 87,
+      "end_line": 87
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetTimer",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::SetTimer"
+      ],
+      "containing_function": {
+        "name": "stealth_cursor_subclass_proc",
+        "start_byte": 3205,
+        "end_byte": 4278,
+        "start_line": 70,
+        "end_line": 96
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 4178,
+      "end_byte": 4232,
+      "start_line": 92,
+      "end_line": 92
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetWindowSubclass",
+      "import_path_candidates": [
+        "windows::Win32::UI::Shell::SetWindowSubclass"
+      ],
+      "containing_function": {
+        "name": "install_stealth_cursor_guard",
+        "start_byte": 4284,
+        "end_byte": 4742,
+        "start_line": 98,
+        "end_line": 112
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 4417,
+      "end_byte": 4586,
+      "start_line": 100,
+      "end_line": 105
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "windows::core::Error::from_thread",
+      "import_path_candidates": [
+        "windows::core::Error::from_thread"
+      ],
+      "containing_function": {
+        "name": "install_stealth_cursor_guard",
+        "start_byte": 4284,
+        "end_byte": 4742,
+        "start_line": 98,
+        "end_line": 112
+      },
+      "kind": "SDK_qualified_call_syntax",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 4683,
+      "end_byte": 4718,
+      "start_line": 110,
+      "end_line": 110
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "HWND",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::HWND"
+      ],
+      "containing_function": {
+        "name": "grab_hwnd",
+        "start_byte": 5482,
+        "end_byte": 5874,
+        "start_line": 127,
+        "end_line": 134
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 5744,
+      "end_byte": 5774,
+      "start_line": 131,
+      "end_line": 131
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "ShowWindow",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::ShowWindow"
+      ],
+      "containing_function": {
+        "name": "force_hide",
+        "start_byte": 6425,
+        "end_byte": 6770,
+        "start_line": 143,
+        "end_line": 151
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 6714,
+      "end_byte": 6739,
+      "start_line": 148,
+      "end_line": 148
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "DwmIsCompositionEnabled",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Dwm::DwmIsCompositionEnabled"
+      ],
+      "containing_function": {
+        "name": "composition_enabled",
+        "start_byte": 8833,
+        "end_byte": 9014,
+        "start_line": 188,
+        "end_line": 194
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 8901,
+      "end_byte": 8926,
+      "start_line": 190,
+      "end_line": 190
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetWindowLongPtrW",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW"
+      ],
+      "containing_function": {
+        "name": "apply_transparency",
+        "start_byte": 9020,
+        "end_byte": 13104,
+        "start_line": 196,
+        "end_line": 283
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 9472,
+      "end_byte": 9508,
+      "start_line": 204,
+      "end_line": 204
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetWindowLongPtrW",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::SetWindowLongPtrW"
+      ],
+      "containing_function": {
+        "name": "apply_transparency",
+        "start_byte": 9020,
+        "end_byte": 13104,
+        "start_line": 196,
+        "end_line": 283
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 9607,
+      "end_byte": 9651,
+      "start_line": 207,
+      "end_line": 207
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetWindowLongPtrW",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW"
+      ],
+      "containing_function": {
+        "name": "apply_transparency",
+        "start_byte": 9020,
+        "end_byte": 13104,
+        "start_line": 196,
+        "end_line": 283
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 9979,
+      "end_byte": 10015,
+      "start_line": 213,
+      "end_line": 213
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetWindowLongPtrW",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW"
+      ],
+      "containing_function": {
+        "name": "apply_transparency",
+        "start_byte": 9020,
+        "end_byte": 13104,
+        "start_line": 196,
+        "end_line": 283
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 11664,
+      "end_byte": 11698,
+      "start_line": 242,
+      "end_line": 242
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetWindowLongPtrW",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::SetWindowLongPtrW"
+      ],
+      "containing_function": {
+        "name": "apply_transparency",
+        "start_byte": 9020,
+        "end_byte": 13104,
+        "start_line": 196,
+        "end_line": 283
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 11888,
+      "end_byte": 11934,
+      "start_line": 246,
+      "end_line": 246
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetWindowPos",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::SetWindowPos"
+      ],
+      "containing_function": {
+        "name": "apply_transparency",
+        "start_byte": 9020,
+        "end_byte": 13104,
+        "start_line": 196,
+        "end_line": 283
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 12122,
+      "end_byte": 12393,
+      "start_line": 249,
+      "end_line": 257
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "DwmExtendFrameIntoClientArea",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Dwm::DwmExtendFrameIntoClientArea"
+      ],
+      "containing_function": {
+        "name": "apply_transparency",
+        "start_byte": 9020,
+        "end_byte": 13104,
+        "start_line": 196,
+        "end_line": 283
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 12600,
+      "end_byte": 12644,
+      "start_line": 267,
+      "end_line": 267
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "CreateRectRgn",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::CreateRectRgn"
+      ],
+      "containing_function": {
+        "name": "apply_transparency",
+        "start_byte": 9020,
+        "end_byte": 13104,
+        "start_line": 196,
+        "end_line": 283
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 12679,
+      "end_byte": 12706,
+      "start_line": 269,
+      "end_line": 269
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "DwmEnableBlurBehindWindow",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Dwm::DwmEnableBlurBehindWindow"
+      ],
+      "containing_function": {
+        "name": "apply_transparency",
+        "start_byte": 9020,
+        "end_byte": 13104,
+        "start_line": 196,
+        "end_line": 283
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 12966,
+      "end_byte": 13002,
+      "start_line": 277,
+      "end_line": 277
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "DeleteObject",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::DeleteObject"
+      ],
+      "containing_function": {
+        "name": "apply_transparency",
+        "start_byte": 9020,
+        "end_byte": 13104,
+        "start_line": 196,
+        "end_line": 283
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 13024,
+      "end_byte": 13050,
+      "start_line": 278,
+      "end_line": 278
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetWindowPos",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::SetWindowPos"
+      ],
+      "containing_function": {
+        "name": "set_always_on_top",
+        "start_byte": 13740,
+        "end_byte": 14170,
+        "start_line": 301,
+        "end_line": 315
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 13935,
+      "end_byte": 14137,
+      "start_line": 304,
+      "end_line": 312
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetWindowDisplayAffinity",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::SetWindowDisplayAffinity"
+      ],
+      "containing_function": {
+        "name": "set_stealth",
+        "start_byte": 14928,
+        "end_byte": 15761,
+        "start_line": 333,
+        "end_line": 352
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 15117,
+      "end_byte": 15157,
+      "start_line": 336,
+      "end_line": 336
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetWindowDisplayAffinity",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetWindowDisplayAffinity"
+      ],
+      "containing_function": {
+        "name": "read_display_affinity",
+        "start_byte": 15970,
+        "end_byte": 16202,
+        "start_line": 357,
+        "end_line": 363
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 16118,
+      "end_byte": 16163,
+      "start_line": 360,
+      "end_line": 360
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetWindowLongPtrW",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW"
+      ],
+      "containing_function": {
+        "name": "set_skip_taskbar",
+        "start_byte": 17531,
+        "end_byte": 18349,
+        "start_line": 389,
+        "end_line": 411
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 17665,
+      "end_byte": 17701,
+      "start_line": 391,
+      "end_line": 391
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "ShowWindow",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::ShowWindow"
+      ],
+      "containing_function": {
+        "name": "set_skip_taskbar",
+        "start_byte": 17531,
+        "end_byte": 18349,
+        "start_line": 389,
+        "end_line": 411
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 17861,
+      "end_byte": 17886,
+      "start_line": 396,
+      "end_line": 396
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetWindowLongPtrW",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::SetWindowLongPtrW"
+      ],
+      "containing_function": {
+        "name": "set_skip_taskbar",
+        "start_byte": 17531,
+        "end_byte": 18349,
+        "start_line": 389,
+        "end_line": 411
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 17900,
+      "end_byte": 17943,
+      "start_line": 397,
+      "end_line": 397
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "ShowWindow",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::ShowWindow"
+      ],
+      "containing_function": {
+        "name": "set_skip_taskbar",
+        "start_byte": 17531,
+        "end_byte": 18349,
+        "start_line": 389,
+        "end_line": 411
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 17965,
+      "end_byte": 18000,
+      "start_line": 398,
+      "end_line": 398
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetWindowPos",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::SetWindowPos"
+      ],
+      "containing_function": {
+        "name": "set_skip_taskbar",
+        "start_byte": 17531,
+        "end_byte": 18349,
+        "start_line": 389,
+        "end_line": 411
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 18097,
+      "end_byte": 18316,
+      "start_line": 400,
+      "end_line": 408
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetWindowLongPtrW",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::SetWindowLongPtrW"
+      ],
+      "containing_function": {
+        "name": "set_window_owner",
+        "start_byte": 18585,
+        "end_byte": 18750,
+        "start_line": 416,
+        "end_line": 420
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 18674,
+      "end_byte": 18733,
+      "start_line": 418,
+      "end_line": 418
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetMonitorInfoW",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::GetMonitorInfoW"
+      ],
+      "containing_function": {
+        "name": "callback",
+        "start_byte": 21222,
+        "end_byte": 22064,
+        "start_line": 484,
+        "end_line": 505
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 21578,
+      "end_byte": 21614,
+      "start_line": 494,
+      "end_line": 494
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "EnumDisplayMonitors",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::EnumDisplayMonitors"
+      ],
+      "containing_function": {
+        "name": "enum_monitors",
+        "start_byte": 20581,
+        "end_byte": 22275,
+        "start_line": 468,
+        "end_line": 512
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 22154,
+      "end_byte": 22212,
+      "start_line": 509,
+      "end_line": 509
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "LPARAM",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::LPARAM"
+      ],
+      "containing_function": {
+        "name": "enum_monitors",
+        "start_byte": 20581,
+        "end_byte": 22275,
+        "start_line": 468,
+        "end_line": 512
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 22202,
+      "end_byte": 22211,
+      "start_line": 509,
+      "end_line": 509
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetSystemMetrics",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics"
+      ],
+      "containing_function": {
+        "name": "virtual_screen_bounds",
+        "start_byte": 22527,
+        "end_byte": 23044,
+        "start_line": 518,
+        "end_line": 531
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 22817,
+      "end_byte": 22852,
+      "start_line": 525,
+      "end_line": 525
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetSystemMetrics",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics"
+      ],
+      "containing_function": {
+        "name": "virtual_screen_bounds",
+        "start_byte": 22527,
+        "end_byte": 23044,
+        "start_line": 518,
+        "end_line": 531
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 22870,
+      "end_byte": 22905,
+      "start_line": 526,
+      "end_line": 526
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetSystemMetrics",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics"
+      ],
+      "containing_function": {
+        "name": "virtual_screen_bounds",
+        "start_byte": 22527,
+        "end_byte": 23044,
+        "start_line": 518,
+        "end_line": 531
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 22923,
+      "end_byte": 22959,
+      "start_line": 527,
+      "end_line": 527
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetSystemMetrics",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetSystemMetrics"
+      ],
+      "containing_function": {
+        "name": "virtual_screen_bounds",
+        "start_byte": 22527,
+        "end_byte": 23044,
+        "start_line": 518,
+        "end_line": 531
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 22977,
+      "end_byte": 23013,
+      "start_line": 528,
+      "end_line": 528
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetCursorPos",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetCursorPos"
+      ],
+      "containing_function": {
+        "name": "cursor_pos",
+        "start_byte": 23144,
+        "end_byte": 23425,
+        "start_line": 535,
+        "end_line": 543
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 23369,
+      "end_byte": 23389,
+      "start_line": 540,
+      "end_line": 540
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetWindowThreadProcessId",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId"
+      ],
+      "containing_function": {
+        "name": "cb",
+        "start_byte": 24244,
+        "end_byte": 24874,
+        "start_line": 561,
+        "end_line": 572
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 24405,
+      "end_byte": 24452,
+      "start_line": 564,
+      "end_line": 564
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "IsWindowVisible",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::IsWindowVisible"
+      ],
+      "containing_function": {
+        "name": "cb",
+        "start_byte": 24244,
+        "end_byte": 24874,
+        "start_line": 561,
+        "end_line": 572
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 24495,
+      "end_byte": 24516,
+      "start_line": 565,
+      "end_line": 565
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetWindowLongPtrW",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetWindowLongPtrW"
+      ],
+      "containing_function": {
+        "name": "cb",
+        "start_byte": 24244,
+        "end_byte": 24874,
+        "start_line": 561,
+        "end_line": 572
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 24565,
+      "end_byte": 24601,
+      "start_line": 566,
+      "end_line": 566
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "ShowWindow",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::ShowWindow"
+      ],
+      "containing_function": {
+        "name": "cb",
+        "start_byte": 24244,
+        "end_byte": 24874,
+        "start_line": 561,
+        "end_line": 572
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 24712,
+      "end_byte": 24737,
+      "start_line": 568,
+      "end_line": 568
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "EnumWindows",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::EnumWindows"
+      ],
+      "containing_function": {
+        "name": "hide_own_windows",
+        "start_byte": 23797,
+        "end_byte": 25647,
+        "start_line": 551,
+        "end_line": 588
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 24961,
+      "end_byte": 24993,
+      "start_line": 575,
+      "end_line": 575
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "LPARAM",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::LPARAM"
+      ],
+      "containing_function": {
+        "name": "hide_own_windows",
+        "start_byte": 23797,
+        "end_byte": 25647,
+        "start_line": 551,
+        "end_line": 588
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 24983,
+      "end_byte": 24992,
+      "start_line": 575,
+      "end_line": 575
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "DwmFlush",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Dwm::DwmFlush"
+      ],
+      "containing_function": {
+        "name": "hide_own_windows",
+        "start_byte": 23797,
+        "end_byte": 25647,
+        "start_line": 551,
+        "end_line": 588
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 25574,
+      "end_byte": 25584,
+      "start_line": 585,
+      "end_line": 585
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "HWND",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::HWND"
+      ],
+      "containing_function": {
+        "name": "show_windows",
+        "start_byte": 25969,
+        "end_byte": 26589,
+        "start_line": 594,
+        "end_line": 612
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 26080,
+      "end_byte": 26112,
+      "start_line": 596,
+      "end_line": 596
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "ShowWindow",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::ShowWindow"
+      ],
+      "containing_function": {
+        "name": "show_windows",
+        "start_byte": 25969,
+        "end_byte": 26589,
+        "start_line": 594,
+        "end_line": 612
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 26159,
+      "end_byte": 26194,
+      "start_line": 598,
+      "end_line": 598
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetWindowPos",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::SetWindowPos"
+      ],
+      "containing_function": {
+        "name": "show_windows",
+        "start_byte": 25969,
+        "end_byte": 26589,
+        "start_line": 594,
+        "end_line": 612
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 26257,
+      "end_byte": 26540,
+      "start_line": 600,
+      "end_line": 608
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetForegroundWindow",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow"
+      ],
+      "containing_function": {
+        "name": "focus_window",
+        "start_byte": 26886,
+        "end_byte": 27073,
+        "start_line": 618,
+        "end_line": 623
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 27031,
+      "end_byte": 27056,
+      "start_line": 621,
+      "end_line": 621
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetForegroundWindow",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow"
+      ],
+      "containing_function": {
+        "name": "is_foreground_window",
+        "start_byte": 27145,
+        "end_byte": 27323,
+        "start_line": 626,
+        "end_line": 629
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 27286,
+      "end_byte": 27307,
+      "start_line": 628,
+      "end_line": 628
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "ShowWindow",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::ShowWindow"
+      ],
+      "containing_function": {
+        "name": "reveal_window",
+        "start_byte": 27972,
+        "end_byte": 28230,
+        "start_line": 639,
+        "end_line": 645
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 28141,
+      "end_byte": 28166,
+      "start_line": 642,
+      "end_line": 642
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetForegroundWindow",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow"
+      ],
+      "containing_function": {
+        "name": "reveal_window",
+        "start_byte": 27972,
+        "end_byte": 28230,
+        "start_line": 639,
+        "end_line": 645
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 28188,
+      "end_byte": 28213,
+      "start_line": 643,
+      "end_line": 643
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetWindowPos",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::SetWindowPos"
+      ],
+      "containing_function": {
+        "name": "move_window",
+        "start_byte": 28449,
+        "end_byte": 28883,
+        "start_line": 650,
+        "end_line": 669
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 28632,
+      "end_byte": 28850,
+      "start_line": 658,
+      "end_line": 666
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetWindowPos",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::SetWindowPos"
+      ],
+      "containing_function": {
+        "name": "move_window_pos_only",
+        "start_byte": 29318,
+        "end_byte": 29655,
+        "start_line": 677,
+        "end_line": 687
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 29559,
+      "end_byte": 29622,
+      "start_line": 684,
+      "end_line": 684
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetWindowRect",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetWindowRect"
+      ],
+      "containing_function": {
+        "name": "get_window_rect",
+        "start_byte": 29989,
+        "end_byte": 30329,
+        "start_line": 694,
+        "end_line": 701
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 30220,
+      "end_byte": 30247,
+      "start_line": 698,
+      "end_line": 698
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "MonitorFromWindow",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::MonitorFromWindow"
+      ],
+      "containing_function": {
+        "name": "work_area_for_window",
+        "start_byte": 30723,
+        "end_byte": 31586,
+        "start_line": 709,
+        "end_line": 731
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 30971,
+      "end_byte": 31020,
+      "start_line": 714,
+      "end_line": 714
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetMonitorInfoW",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::GetMonitorInfoW"
+      ],
+      "containing_function": {
+        "name": "work_area_for_window",
+        "start_byte": 30723,
+        "end_byte": 31586,
+        "start_line": 709,
+        "end_line": 731
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 31197,
+      "end_byte": 31229,
+      "start_line": 719,
+      "end_line": 719
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "MonitorFromPoint",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::MonitorFromPoint"
+      ],
+      "containing_function": {
+        "name": "work_area_for_point",
+        "start_byte": 31820,
+        "end_byte": 32694,
+        "start_line": 737,
+        "end_line": 759
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 32070,
+      "end_byte": 32128,
+      "start_line": 742,
+      "end_line": 742
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetMonitorInfoW",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Gdi::GetMonitorInfoW"
+      ],
+      "containing_function": {
+        "name": "work_area_for_point",
+        "start_byte": 31820,
+        "end_byte": 32694,
+        "start_line": 737,
+        "end_line": 759
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 32305,
+      "end_byte": 32337,
+      "start_line": 747,
+      "end_line": 747
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetCursorPos",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetCursorPos"
+      ],
+      "containing_function": {
+        "name": "drag_begin",
+        "start_byte": 34374,
+        "end_byte": 34923,
+        "start_line": 791,
+        "end_line": 805
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 34652,
+      "end_byte": 34677,
+      "start_line": 797,
+      "end_line": 797
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetWindowRect",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetWindowRect"
+      ],
+      "containing_function": {
+        "name": "drag_begin",
+        "start_byte": 34374,
+        "end_byte": 34923,
+        "start_line": 791,
+        "end_line": 805
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 34742,
+      "end_byte": 34772,
+      "start_line": 800,
+      "end_line": 800
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetCursorPos",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetCursorPos"
+      ],
+      "containing_function": {
+        "name": "drag_update",
+        "start_byte": 35216,
+        "end_byte": 35840,
+        "start_line": 811,
+        "end_line": 826
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 35573,
+      "end_byte": 35598,
+      "start_line": 819,
+      "end_line": 819
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SetWindowPos",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::SetWindowPos"
+      ],
+      "containing_function": {
+        "name": "drag_update",
+        "start_byte": 35216,
+        "end_byte": 35840,
+        "start_line": 811,
+        "end_line": 826
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 35758,
+      "end_byte": 35823,
+      "start_line": 824,
+      "end_line": 824
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "DwmSetWindowAttribute",
+      "import_path_candidates": [
+        "windows::Win32::Graphics::Dwm::DwmSetWindowAttribute"
+      ],
+      "containing_function": {
+        "name": "set_round_corners",
+        "start_byte": 36621,
+        "end_byte": 37185,
+        "start_line": 841,
+        "end_line": 856
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 36962,
+      "end_byte": 37168,
+      "start_line": 849,
+      "end_line": 854
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "VIRTUAL_KEY",
+      "import_path_candidates": [
+        "windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY"
+      ],
+      "containing_function": {
+        "name": "send_ctrl_c",
+        "start_byte": 39109,
+        "end_byte": 40350,
+        "start_line": 895,
+        "end_line": 928
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 39402,
+      "end_byte": 39419,
+      "start_line": 900,
+      "end_line": 900
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "MapVirtualKeyW",
+      "import_path_candidates": [
+        "windows::Win32::UI::Input::KeyboardAndMouse::MapVirtualKeyW"
+      ],
+      "containing_function": {
+        "name": "send_ctrl_c",
+        "start_byte": 39109,
+        "end_byte": 40350,
+        "start_line": 895,
+        "end_line": 928
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 39507,
+      "end_byte": 39555,
+      "start_line": 902,
+      "end_line": 902
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "KEYBD_EVENT_FLAGS",
+      "import_path_candidates": [
+        "windows::Win32::UI::Input::KeyboardAndMouse::KEYBD_EVENT_FLAGS"
+      ],
+      "containing_function": {
+        "name": "send_ctrl_c",
+        "start_byte": 39109,
+        "end_byte": 40350,
+        "start_line": 895,
+        "end_line": 928
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 39667,
+      "end_byte": 39687,
+      "start_line": 906,
+      "end_line": 906
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "SendInput",
+      "import_path_candidates": [
+        "windows::Win32::UI::Input::KeyboardAndMouse::SendInput"
+      ],
+      "containing_function": {
+        "name": "send_ctrl_c",
+        "start_byte": 39109,
+        "end_byte": 40350,
+        "start_line": 895,
+        "end_line": 928
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 40264,
+      "end_byte": 40319,
+      "start_line": 927,
+      "end_line": 927
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "GetAsyncKeyState",
+      "import_path_candidates": [
+        "windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState"
+      ],
+      "containing_function": {
+        "name": "read_aloud_hotkey_modifiers_released",
+        "start_byte": 40596,
+        "end_byte": 40953,
+        "start_line": 934,
+        "end_line": 940
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 40843,
+      "end_byte": 40877,
+      "start_line": 938,
+      "end_line": 938
+    },
+    {
+      "path": "slint-experiment/src/win32.rs",
+      "callee_name": "HWND",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::HWND"
+      ],
+      "containing_function": {
+        "name": "grab_hwnd",
+        "start_byte": 45547,
+        "end_byte": 45869,
+        "start_line": 1060,
+        "end_line": 1070
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 45845,
+      "end_byte": 45852,
+      "start_line": 1068,
+      "end_line": 1068
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "Shell_NotifyIconW",
+      "import_path_candidates": [
+        "windows::Win32::UI::Shell::Shell_NotifyIconW"
+      ],
+      "containing_function": {
+        "name": "drop",
+        "start_byte": 7515,
+        "end_byte": 8244,
+        "start_line": 207,
+        "end_line": 224
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 7937,
+      "end_byte": 7973,
+      "start_line": 217,
+      "end_line": 217
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "DestroyWindow",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::DestroyWindow"
+      ],
+      "containing_function": {
+        "name": "drop",
+        "start_byte": 7515,
+        "end_byte": 8244,
+        "start_line": 207,
+        "end_line": 224
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 7995,
+      "end_byte": 8019,
+      "start_line": 218,
+      "end_line": 218
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "GetModuleHandleW",
+      "import_path_candidates": [
+        "windows::Win32::System::LibraryLoader::GetModuleHandleW"
+      ],
+      "containing_function": {
+        "name": "install_win32",
+        "start_byte": 9176,
+        "end_byte": 11229,
+        "start_line": 256,
+        "end_line": 306
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 9628,
+      "end_byte": 9650,
+      "start_line": 263,
+      "end_line": 263
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "RegisterClassExW",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::RegisterClassExW"
+      ],
+      "containing_function": {
+        "name": "install_win32",
+        "start_byte": 9176,
+        "end_byte": 11229,
+        "start_line": 256,
+        "end_line": 306
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 9973,
+      "end_byte": 9997,
+      "start_line": 271,
+      "end_line": 271
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "GetLastError",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::GetLastError"
+      ],
+      "containing_function": {
+        "name": "install_win32",
+        "start_byte": 9176,
+        "end_byte": 11229,
+        "start_line": 256,
+        "end_line": 306
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 10027,
+      "end_byte": 10041,
+      "start_line": 272,
+      "end_line": 272
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "CreateWindowExW",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::CreateWindowExW"
+      ],
+      "containing_function": {
+        "name": "install_win32",
+        "start_byte": 9176,
+        "end_byte": 11229,
+        "start_line": 256,
+        "end_line": 306
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 10363,
+      "end_byte": 10650,
+      "start_line": 279,
+      "end_line": 292
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "RegisterWindowMessageW",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::RegisterWindowMessageW"
+      ],
+      "containing_function": {
+        "name": "install_win32",
+        "start_byte": 9176,
+        "end_byte": 11229,
+        "start_line": 256,
+        "end_line": 306
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 10737,
+      "end_byte": 10796,
+      "start_line": 294,
+      "end_line": 294
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "GetLastError",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::GetLastError"
+      ],
+      "containing_function": {
+        "name": "install_win32",
+        "start_byte": 9176,
+        "end_byte": 11229,
+        "start_line": 256,
+        "end_line": 306
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 10854,
+      "end_byte": 10868,
+      "start_line": 296,
+      "end_line": 296
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "DestroyWindow",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::DestroyWindow"
+      ],
+      "containing_function": {
+        "name": "install_win32",
+        "start_byte": 9176,
+        "end_byte": 11229,
+        "start_line": 256,
+        "end_line": 306
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 10890,
+      "end_byte": 10909,
+      "start_line": 297,
+      "end_line": 297
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "HWND",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::HWND"
+      ],
+      "containing_function": {
+        "name": "show_icon",
+        "start_byte": 11376,
+        "end_byte": 12218,
+        "start_line": 310,
+        "end_line": 333
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 11655,
+      "end_byte": 11689,
+      "start_line": 318,
+      "end_line": 318
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "GetModuleHandleW",
+      "import_path_candidates": [
+        "windows::Win32::System::LibraryLoader::GetModuleHandleW"
+      ],
+      "containing_function": {
+        "name": "show_icon",
+        "start_byte": 11376,
+        "end_byte": 12218,
+        "start_line": 310,
+        "end_line": 333
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 11845,
+      "end_byte": 11867,
+      "start_line": 321,
+      "end_line": 321
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "HWND",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::HWND"
+      ],
+      "containing_function": {
+        "name": "hide_icon",
+        "start_byte": 12374,
+        "end_byte": 12978,
+        "start_line": 337,
+        "end_line": 356
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 12736,
+      "end_byte": 12770,
+      "start_line": 348,
+      "end_line": 348
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "Shell_NotifyIconW",
+      "import_path_candidates": [
+        "windows::Win32::UI::Shell::Shell_NotifyIconW"
+      ],
+      "containing_function": {
+        "name": "hide_icon",
+        "start_byte": 12374,
+        "end_byte": 12978,
+        "start_line": 337,
+        "end_line": 356
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 12933,
+      "end_byte": 12969,
+      "start_line": 354,
+      "end_line": 354
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "HWND",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::HWND"
+      ],
+      "containing_function": {
+        "name": "return_focus",
+        "start_byte": 13202,
+        "end_byte": 13875,
+        "start_line": 361,
+        "end_line": 381
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 13560,
+      "end_byte": 13594,
+      "start_line": 372,
+      "end_line": 372
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "Shell_NotifyIconW",
+      "import_path_candidates": [
+        "windows::Win32::UI::Shell::Shell_NotifyIconW"
+      ],
+      "containing_function": {
+        "name": "return_focus",
+        "start_byte": 13202,
+        "end_byte": 13875,
+        "start_line": 361,
+        "end_line": 381
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 13828,
+      "end_byte": 13866,
+      "start_line": 379,
+      "end_line": 379
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "Shell_NotifyIconW",
+      "import_path_candidates": [
+        "windows::Win32::UI::Shell::Shell_NotifyIconW"
+      ],
+      "containing_function": {
+        "name": "add_notify_icon",
+        "start_byte": 14107,
+        "end_byte": 15139,
+        "start_line": 386,
+        "end_line": 412
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 14631,
+      "end_byte": 14664,
+      "start_line": 401,
+      "end_line": 401
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "GetLastError",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::GetLastError"
+      ],
+      "containing_function": {
+        "name": "add_notify_icon",
+        "start_byte": 14107,
+        "end_byte": 15139,
+        "start_line": 386,
+        "end_line": 412
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 14706,
+      "end_byte": 14720,
+      "start_line": 402,
+      "end_line": 402
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "Shell_NotifyIconW",
+      "import_path_candidates": [
+        "windows::Win32::UI::Shell::Shell_NotifyIconW"
+      ],
+      "containing_function": {
+        "name": "add_notify_icon",
+        "start_byte": 14107,
+        "end_byte": 15139,
+        "start_line": 386,
+        "end_line": 412
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 14874,
+      "end_byte": 14914,
+      "start_line": 406,
+      "end_line": 406
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "GetLastError",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::GetLastError"
+      ],
+      "containing_function": {
+        "name": "add_notify_icon",
+        "start_byte": 14107,
+        "end_byte": 15139,
+        "start_line": 386,
+        "end_line": 412
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 14956,
+      "end_byte": 14970,
+      "start_line": 407,
+      "end_line": 407
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "Shell_NotifyIconW",
+      "import_path_candidates": [
+        "windows::Win32::UI::Shell::Shell_NotifyIconW"
+      ],
+      "containing_function": {
+        "name": "add_notify_icon",
+        "start_byte": 14107,
+        "end_byte": 15139,
+        "start_line": 386,
+        "end_line": 412
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 14999,
+      "end_byte": 15035,
+      "start_line": 408,
+      "end_line": 408
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "LoadIconW",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::LoadIconW"
+      ],
+      "containing_function": {
+        "name": "load_tray_icon",
+        "start_byte": 15537,
+        "end_byte": 15820,
+        "start_line": 421,
+        "end_line": 428
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 15622,
+      "end_byte": 15723,
+      "start_line": 422,
+      "end_line": 425
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "PCWSTR",
+      "import_path_candidates": [
+        "windows::core::PCWSTR"
+      ],
+      "containing_function": {
+        "name": "load_tray_icon",
+        "start_byte": 15537,
+        "end_byte": 15820,
+        "start_line": 421,
+        "end_line": 428
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 15670,
+      "end_byte": 15716,
+      "start_line": 424,
+      "end_line": 424
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "LoadIconW",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::LoadIconW"
+      ],
+      "containing_function": {
+        "name": "load_tray_icon",
+        "start_byte": 15537,
+        "end_byte": 15820,
+        "start_line": 421,
+        "end_line": 428
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 15741,
+      "end_byte": 15773,
+      "start_line": 426,
+      "end_line": 426
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "HICON",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::HICON"
+      ],
+      "containing_function": {
+        "name": "load_tray_icon",
+        "start_byte": 15537,
+        "end_byte": 15820,
+        "start_line": 421,
+        "end_line": 428
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 15790,
+      "end_byte": 15817,
+      "start_line": 427,
+      "end_line": 427
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "GetModuleHandleW",
+      "import_path_candidates": [
+        "windows::Win32::System::LibraryLoader::GetModuleHandleW"
+      ],
+      "containing_function": {
+        "name": "tray_wndproc",
+        "start_byte": 16016,
+        "end_byte": 18272,
+        "start_line": 437,
+        "end_line": 488
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 16541,
+      "end_byte": 16563,
+      "start_line": 449,
+      "end_line": 449
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "LRESULT",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::LRESULT"
+      ],
+      "containing_function": {
+        "name": "tray_wndproc",
+        "start_byte": 16016,
+        "end_byte": 18272,
+        "start_line": 437,
+        "end_line": 488
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 17245,
+      "end_byte": 17255,
+      "start_line": 466,
+      "end_line": 466
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "LRESULT",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::LRESULT"
+      ],
+      "containing_function": {
+        "name": "tray_wndproc",
+        "start_byte": 16016,
+        "end_byte": 18272,
+        "start_line": 437,
+        "end_line": 488
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 18063,
+      "end_byte": 18073,
+      "start_line": 481,
+      "end_line": 481
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "LRESULT",
+      "import_path_candidates": [
+        "windows::Win32::Foundation::LRESULT"
+      ],
+      "containing_function": {
+        "name": "tray_wndproc",
+        "start_byte": 16016,
+        "end_byte": 18272,
+        "start_line": 437,
+        "end_line": 488
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 18123,
+      "end_byte": 18133,
+      "start_line": 484,
+      "end_line": 484
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "DefWindowProcW",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::DefWindowProcW"
+      ],
+      "containing_function": {
+        "name": "tray_wndproc",
+        "start_byte": 16016,
+        "end_byte": 18272,
+        "start_line": 437,
+        "end_line": 488
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 18227,
+      "end_byte": 18268,
+      "start_line": 487,
+      "end_line": 487
+    },
+    {
+      "path": "slint-experiment/src/tray.rs",
+      "callee_name": "GetCursorPos",
+      "import_path_candidates": [
+        "windows::Win32::UI::WindowsAndMessaging::GetCursorPos"
+      ],
+      "containing_function": {
+        "name": "request_tray_menu",
+        "start_byte": 18741,
+        "end_byte": 19118,
+        "start_line": 510,
+        "end_line": 523
+      },
+      "kind": "SDK_direct_call_name_candidate",
+      "resolved_symbol": false,
+      "semantic_acceptance": false,
+      "start_byte": 18897,
+      "end_byte": 18921,
+      "start_line": 515,
+      "end_line": 515
+    }
+  ],
+  "semantic_acceptance": false,
+  "complete_project_coverage": false,
+  "limits": [
+    "selected four adapter files only, not all Windows or backend SDK graph",
+    "file-level name candidates, import lexical shadowing/cfg/module scope not resolved",
+    "type/constant constructors count as call syntax too",
+    "macro token trees not expanded, callbacks/function pointers/aliases/cfg(test)/POSIX stubs not evaluated"
+  ]
+}

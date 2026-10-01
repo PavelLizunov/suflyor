@@ -91,6 +91,12 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
 - User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.
 
+## Continuation round 12: Windows adapter ownership and SDK name-call candidates
+
+- Intended result: selected Windows screen/lifecycle/tray/win32 SDK import/call navigation plus manual capture/WDA/window/tray ownership chain, not whole Windows product/SDK resolved graph. Preserve qualified imports/call/container source ranges; mark name matching/cfg/alias ambiguity rather than compiler proof.
+- Scope: task-owned tools/docs only, pinned Rust CST, four production adapter files; no Win32 execution, live clipboard/window/capture, PowerShell gate, Cargo/SDK/remote worker. Existing POSIX seams in win32 file can be syntax present, explicitly not Windows reachability.
+- Verification: nested use lists/import namespaces/renames, direct SDK calls versus local member/macro/string matches, comments/cfg/function ranges; source order cleanup/partial scanline behavior/WDA readback/tray no-Send lifetime constraints reviewed from code, not speculative docs. Exact archive fixtures/regeneration, no original claim promotion/native independent acceptance.
+
 ## Continuation round 11: Config/UI Rust name-edge census
 
 - Intended result: reproducible frozen Rust member-expression candidates per 84 Config field names and Slint on_/set_/get_ generated-name candidate calls, with precise caller/container ranges and explicit unresolved type/alias/closure/cfg provenance. NOT a resolved complete Config/UI consumer graph. Preserve zero match/ambiguous counts rather than declare dead state.
