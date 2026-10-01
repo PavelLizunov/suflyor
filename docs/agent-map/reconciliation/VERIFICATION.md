@@ -1,11 +1,11 @@
 # Reconciliation verification evidence
 
-## Round 12 — selected Windows adapter ownership/SDK candidates (covering SHA pending)
+## Round 12 — selected Windows adapter ownership/SDK candidates (exact covering SHA tested)
 
 - Four frozen adapter files yield 180 SDK import records/121 direct/qualified call syntax candidates, every symbol unresolved; not all SDK/backend/cfg/indirect graph. [Census](../native/windows-sdk-name-edges.md)/[ownership contract](../features/windows-capture-tray-and-sdk-ownership.md); 20 contracts/553 source ranges.
 - Seven new fixtures plus previous suites: local research total 138; no Win32/API/input/clipboard/window/capture/Cargo/SDK/gate execution. Source checks verify GDI deselect/ordinary cleanup, partial scanline acceptance, hide/restore before error, WDA readback, tray TLS/lifetime/install failures. Native fault/UI/cfg/type/independent acceptance open.
 - Coordinator corrected draft thread-marker assumption: Windows TrayHandle has HWND/TLS UI-thread contract, no macOS-style Rc PhantomData marker. GDI zero/nonzero lines check is not full-height guarantee; Result cleanup doesn't protect allocation panic paths. No original status promotion.
-- Exact archive/regeneration pending; original claims remain 39/75/5.
+- Exact **`48dbd31238b0c7c4ca123ffbc8e6e30c4f1091f0`** archive passed **138 research +3 mocked Hermes, zero skips**, frozen checkpoint issues empty (20 contracts/553 references), SDK-name validator errors empty; inventory regenerated **byte-identically**, SHA256 `e869041507a34d705a44f189ad8f6d7f1889891ca63e83a237811cc1e06a0e06`. [Portable receipt](portable-recovery-windows-sdk.json); original claims 39/75/5, no native/independent/type graph acceptance.
 
 
 ## Round 11 — Config/UI name edges and selected save chains (exact covering SHA tested)
