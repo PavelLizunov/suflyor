@@ -1,3 +1,5 @@
+> **Historical candidate evidence — not accepted review.** Reconstructed or edited by the prior coordinator; not an original independent Opus report. Source claims require reconciliation; the final historical verdict was `changes_required`.
+
 # O7: Distribution, Packaging, Model Manifests & Gate Integrity (Reconciled)
 
 ## 1. Release Gating Architecture (`scripts/git-gate-native.ps1`)

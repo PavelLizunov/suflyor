@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/config.rs"
 batch_id: "B09"
 total_lines: 2074
 symbols_count: 72
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "34ad3f6744956a8288c93f01d5df158a6d3a2a183371f3e8cf363f8a78f405f5"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/config.rs`
 
 - **Batch:** B09
 - **Physical Lines:** 2074
-- **Coverage:** 2074/2074 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (9)
 
@@ -106,7 +109,7 @@ review_state: validated
 | function | `shared` | L2062 | `fn shared() -> SharedConfig` |
 | function | `shared_from` | L2069 | `fn shared_from(cfg: Config) -> SharedConfig` |
 
-## Configuration Access
+## Heuristic configuration access matches
 
 - Configuration read at L1371: `// config.json interleaves live secrets (ai_bearer / groq_api_key /`
 - Configuration read at L1519: `let replacement = match cfg.ai_provider.as_str() {`

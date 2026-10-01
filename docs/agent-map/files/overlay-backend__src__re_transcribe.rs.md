@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/re_transcribe.rs"
 batch_id: "B07"
 total_lines: 428
 symbols_count: 15
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "9d4cb3dab21d74189f27a5189954e630ac1db059a212812be8f81eeda4d072da"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/re_transcribe.rs`
 
 - **Batch:** B07
 - **Physical Lines:** 428
-- **Coverage:** 428/428 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

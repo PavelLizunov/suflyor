@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/math_display.rs"
 batch_id: "B01"
 total_lines: 652
 symbols_count: 27
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "c52905ff1e708a155d8b21971c96921bc0788e39169f50d0c3fe19de6c572d88"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/math_display.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 652
-- **Coverage:** 652/652 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (27)
 

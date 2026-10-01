@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_host/settings_hermes.rs"
 batch_id: "B02"
 total_lines: 448
 symbols_count: 6
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "b501469e0c6f2abe993826029f49f0d27cc42db86b2be87397b787a197d58f4b"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/settings_hermes.rs`
 
 - **Batch:** B02
 - **Physical Lines:** 448
-- **Coverage:** 448/448 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (6)
 
@@ -30,7 +33,7 @@ review_state: validated
 | function | `profile_name_from_seed` | L420 | `fn profile_name_from_seed(seed: &str) -> String` |
 | function | `profile_name_derivation` | L435 | `fn profile_name_derivation() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L188
 - Spawns asynchronous thread/task at L251

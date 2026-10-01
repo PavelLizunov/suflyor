@@ -6,18 +6,21 @@ source_path: "overlay-backend/src/session_audio.rs"
 batch_id: "B07"
 total_lines: 375
 symbols_count: 20
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "01c7ee20efd371f03b19d50bd6e245147d8c35da9edde0c0c9f1fd0e6b09604c"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/session_audio.rs`
 
 - **Batch:** B07
 - **Physical Lines:** 375
-- **Coverage:** 375/375 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (20)
 

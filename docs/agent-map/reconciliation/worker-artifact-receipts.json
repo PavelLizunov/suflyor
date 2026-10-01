@@ -1,0 +1,37 @@
+[
+  {
+    "lane": "data",
+    "preintegration_sha256": "09d8b42cc9438beabf54e04e644154ec4efd460977e1e8509266706e4e819b60",
+    "original_lane": "wave1_persistence_memory_config",
+    "transport_final_result": null,
+    "semantic_acceptance": false
+  },
+  {
+    "lane": "audio",
+    "preintegration_sha256": "37ab0f9c36118d1496ee25179540ba0e4f3ab353dca3bb8c55ae4379a752d23f",
+    "original_lane": "audio",
+    "transport_final_result": null,
+    "semantic_acceptance": false
+  },
+  {
+    "lane": "ui",
+    "preintegration_sha256": "afbb755df37391557082ab77a0a7c5598f1e6ae1558531eb03351f5081d14d35",
+    "original_lane": "wave3_verification",
+    "transport_final_result": null,
+    "semantic_acceptance": false
+  },
+  {
+    "lane": "security-build",
+    "preintegration_sha256": "f35f90c0f8a88bd9c33626dbac61961b3f8edf21a1e7b765564881637994b53a",
+    "original_lane": "security-build",
+    "transport_final_result": null,
+    "semantic_acceptance": false
+  },
+  {
+    "lane": "speech-models",
+    "preintegration_sha256": "507d0108ec3c00dbcbc1c9be3ecbd91afa19dc9d9e4e30b8d77f86448d6128d1",
+    "original_lane": "speech-models",
+    "transport_final_result": "returned_summary",
+    "semantic_acceptance": false
+  }
+]

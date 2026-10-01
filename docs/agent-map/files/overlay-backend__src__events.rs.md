@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/events.rs"
 batch_id: "B06"
 total_lines: 384
 symbols_count: 15
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "1159dd7dcaf3220a91690c33c362fea3a49d9a72b8c1b36b52f412b9c01ce81c"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/events.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 384
-- **Coverage:** 384/384 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (9)
 

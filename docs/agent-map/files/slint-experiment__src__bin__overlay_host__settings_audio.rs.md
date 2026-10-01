@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/bin/overlay_host/settings_audio.rs"
 batch_id: "B02"
 total_lines: 494
 symbols_count: 16
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "7acf9b8af33663d0d7df3436541e1987659d037be8a1aae5a603c9d5bbddd21c"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/settings_audio.rs`
 
 - **Batch:** B02
 - **Physical Lines:** 494
-- **Coverage:** 494/494 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 
@@ -42,11 +45,11 @@ review_state: validated
 | function | `live_audio_fixture` | L402 | `fn live_audio_fixture() -> ()` |
 | function | `save_failure_keeps_config_and_unrelated_fields` | L469 | `fn save_failure_keeps_config_and_unrelated_fields() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L140
 
-## Configuration Access
+## Heuristic configuration access matches
 
 - Configuration read at L326: `cfg.write().system_audio_device = Some("Old headset".into());`
 - Configuration read at L337: `cfg.read().system_audio_device.as_deref(),`

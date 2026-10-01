@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/diarize.rs"
 batch_id: "B07"
 total_lines: 744
 symbols_count: 31
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "c2fe9967e592f5ee269aae3f46ca6bd4e2da8a16af0f916946fd17741367b426"
+source_matches_reconciliation_baseline: false
 ---
 
 # File Map: `overlay-backend/src/diarize.rs`
 
 - **Batch:** B07
 - **Physical Lines:** 744
-- **Coverage:** 744/744 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (4)
 

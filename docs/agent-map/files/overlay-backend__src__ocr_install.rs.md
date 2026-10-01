@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/ocr_install.rs"
 batch_id: "B10"
 total_lines: 127
 symbols_count: 4
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "da34445eda8f83e81111607ae94350f0ddc457445c9e10e6ceb22e56d0d96cb0"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/ocr_install.rs`
 
 - **Batch:** B10
 - **Physical Lines:** 127
-- **Coverage:** 127/127 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

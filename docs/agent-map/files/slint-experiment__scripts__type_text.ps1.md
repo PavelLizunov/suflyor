@@ -6,19 +6,22 @@ source_path: "slint-experiment/scripts/type_text.ps1"
 batch_id: "B14"
 total_lines: 5
 symbols_count: 0
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: unsupported_by_final_generator
+source_sha256_at_historical_inventory: "ba56c13a1825c06ddb17de66ebd77077b2ca417e3b3ffdf8187c957b2a52fc1b"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/scripts/type_text.ps1`
 
 - **Batch:** B14
 - **Physical Lines:** 5
-- **Coverage:** 5/5 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (0)
 
-*No function/method symbols extracted.*
+*No routine candidates extracted; absence of routines is not established.*

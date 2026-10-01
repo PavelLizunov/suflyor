@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/audio.rs"
 batch_id: "B07"
 total_lines: 962
 symbols_count: 24
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "15ae183f2083d18d6ce7463df1b41cbcda9aff18243c5d4821e50886e13d5dd3"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/audio.rs`
 
 - **Batch:** B07
 - **Physical Lines:** 962
-- **Coverage:** 962/962 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (6)
 
@@ -55,7 +58,7 @@ review_state: validated
 | function | `decimator_oversaturation_clamped` | L938 | `fn decimator_oversaturation_clamped() -> ()` |
 | function | `decimator_preserves_average_amplitude` | L948 | `fn decimator_preserves_average_amplitude() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Instantiates IPC channel at L158
 - Spawns asynchronous thread/task at L499

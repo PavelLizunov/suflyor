@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/app_state.rs"
 batch_id: "B01"
 total_lines: 504
 symbols_count: 14
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "e9b0d7a91d05e70dffcdc36ba8efa06ae1a67c22c1e0ee785b5e7a9d38a35021"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/app_state.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 504
-- **Coverage:** 504/504 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (5)
 

@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/audio_metrics.rs"
 batch_id: "B07"
 total_lines: 191
 symbols_count: 11
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "4f77e37692bfef724e1ad77a85ec69193d1cd334596695f01c266844cb582c0a"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/audio_metrics.rs`
 
 - **Batch:** B07
 - **Physical Lines:** 191
-- **Coverage:** 191/191 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (5)
 

@@ -6,18 +6,21 @@ source_path: "overlay-backend/src/persistence/mod.rs"
 batch_id: "B08"
 total_lines: 78
 symbols_count: 3
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "1e8063ff9682cfac09720ac4fb760ee3860ac13cb08245961746ff54975de959"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/persistence/mod.rs`
 
 - **Batch:** B08
 - **Physical Lines:** 78
-- **Coverage:** 78/78 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (3)
 

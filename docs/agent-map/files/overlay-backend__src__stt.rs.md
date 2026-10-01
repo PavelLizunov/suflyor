@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/stt.rs"
 batch_id: "B07"
 total_lines: 1643
 symbols_count: 62
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "80f2f04e38f1e8e8f50872967a29d6ad8b2a6ba3f7580f4810fe3b4ed498472f"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/stt.rs`
 
 - **Batch:** B07
 - **Physical Lines:** 1643
-- **Coverage:** 1643/1643 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (6)
 
@@ -93,7 +96,7 @@ review_state: validated
 | function | `validate_gigaam_dir_unsupported_off_windows` | L1632 | `fn validate_gigaam_dir_unsupported_off_windows() -> ()` |
 | function | `configure_gigaam_accelerator_honest_noop_off_windows` | L1638 | `fn configure_gigaam_accelerator_honest_noop_off_windows() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Instantiates IPC channel at L296
 - Spawns asynchronous thread/task at L310

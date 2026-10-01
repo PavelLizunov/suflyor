@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/journal/tests.rs"
 batch_id: "B08"
 total_lines: 1076
 symbols_count: 55
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "b6c2a3147ecf12021a4c2430d2f0bd8e14bd59bcd7311623befb957779ab7487"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/journal/tests.rs`
 
 - **Batch:** B08
 - **Physical Lines:** 1076
-- **Coverage:** 1076/1076 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 
@@ -81,6 +84,6 @@ review_state: validated
 | function | `last_lines_capped_at_recovery_limit` | L1028 | `fn last_lines_capped_at_recovery_limit() -> ()` |
 | function | `append_bookmark_creates_file_with_header_then_appends_entries` | L1043 | `fn append_bookmark_creates_file_with_header_then_appends_entries() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Instantiates IPC channel at L90

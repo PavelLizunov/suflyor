@@ -6,18 +6,21 @@ source_path: "overlay-backend/src/download.rs"
 batch_id: "B09"
 total_lines: 167
 symbols_count: 12
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "912208601356da967192a54ca96a504bf181065b82a7509f71fa1757ec30ed08"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/download.rs`
 
 - **Batch:** B09
 - **Physical Lines:** 167
-- **Coverage:** 167/167 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (12)
 

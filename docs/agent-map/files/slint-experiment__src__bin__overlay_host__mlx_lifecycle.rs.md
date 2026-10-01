@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_host/mlx_lifecycle.rs"
 batch_id: "B01"
 total_lines: 240
 symbols_count: 11
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "d57f8c879a8e105b04c2ed914ccec899fcb95daccba0bbe0f6793c8d95b783d2"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/mlx_lifecycle.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 240
-- **Coverage:** 240/240 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (11)
 
@@ -35,11 +38,11 @@ review_state: validated
 | function | `spawn_mlx_runtime_error` | L166 | `fn spawn_mlx_runtime_error(events: &Arc<dyn RuntimeEvents>, config: &overlay_backend::config::SharedConfig,) -> ()` |
 | function | `selection_covers_text_vision_same_and_cloud_without_fallback` | L213 | `fn selection_covers_text_vision_same_and_cloud_without_fallback() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Acquires synchronization mutex at L9
 
-## Configuration Access
+## Heuristic configuration access matches
 
 - Configuration read at L16: `AskRoute::Text if config.ai_provider == "mlx" => Some(config.ai_mlx_model.clone(`
 - Configuration read at L22: `&& config.ai_provider == "mlx"`

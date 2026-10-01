@@ -6,18 +6,21 @@ source_path: "overlay-backend/build.rs"
 batch_id: "B14"
 total_lines: 64
 symbols_count: 7
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "5c0b0d8ea3c8f5a996f22f8630a8b9f83f2346ce02c1cf8c6fc7bfb238a56dca"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/build.rs`
 
 - **Batch:** B14
 - **Physical Lines:** 64
-- **Coverage:** 64/64 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (7)
 

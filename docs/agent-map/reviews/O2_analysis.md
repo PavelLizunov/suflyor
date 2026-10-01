@@ -1,3 +1,5 @@
+> **Historical candidate evidence — not accepted review.** Recovered from prior tool output; completeness and original response fidelity are unverified. Source claims require reconciliation; the final historical verdict was `changes_required`.
+
 > **TL;DR:** Suflyor's persistence layer is a well-engineered two-tier architecture: append-only JSONL journals (source of truth) backed by a rebuildable SQLite catalog (`catalog.sqlite`) with WAL mode, 2s busy_timeout, FK cascades, FTS5 full-text search, curated personal memory tables, and diarization side-data. Transaction boundaries, crash recovery, migration safety, and backup guarantees are all solid. The main residual risks are (1) a subtle retention-vs-catalog data lifecycle asymmetry that's acknowledged by design, (2) the 2s busy_timeout being tight for a VACUUM-concurrent scenario, and (3) the absence of vector embeddings (Phase M4 is design-only).
 
 ---

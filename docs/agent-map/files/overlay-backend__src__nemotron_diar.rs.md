@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/nemotron_diar.rs"
 batch_id: "B07"
 total_lines: 182
 symbols_count: 5
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "fae83161179e703db6d32e14aee1b6622e8b16f38f683abb5255952fdafd26df"
+source_matches_reconciliation_baseline: false
 ---
 
 # File Map: `overlay-backend/src/nemotron_diar.rs`
 
 - **Batch:** B07
 - **Physical Lines:** 182
-- **Coverage:** 182/182 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/diar_install.rs"
 batch_id: "B07"
 total_lines: 820
 symbols_count: 39
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "fc33ea52152b292f8b40d667b73fbe54ca6fb2eeb13784c55170edc4bf4873de"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/diar_install.rs`
 
 - **Batch:** B07
 - **Physical Lines:** 820
-- **Coverage:** 820/820 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (5)
 

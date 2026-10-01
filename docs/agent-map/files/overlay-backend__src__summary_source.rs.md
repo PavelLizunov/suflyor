@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/summary_source.rs"
 batch_id: "B08"
 total_lines: 171
 symbols_count: 7
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "d0cc62f27e9752670ca39e966391336af62bf03d3738eb7809d2111bfb20e562"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/summary_source.rs`
 
 - **Batch:** B08
 - **Physical Lines:** 171
-- **Coverage:** 171/171 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

@@ -6,18 +6,21 @@ source_path: "overlay-backend/src/memory/summary_ref.rs"
 batch_id: "B08"
 total_lines: 284
 symbols_count: 13
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "15c3539f89f9ec6bf2f97fdd8e36d86d98634d1c16a1ac3bf7beb27e531f8cf4"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/memory/summary_ref.rs`
 
 - **Batch:** B08
 - **Physical Lines:** 284
-- **Coverage:** 284/284 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (13)
 

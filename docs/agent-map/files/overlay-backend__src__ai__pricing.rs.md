@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/ai/pricing.rs"
 batch_id: "B06"
 total_lines: 60
 symbols_count: 3
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "88696cfb2d339096197191837dc24d8b842a0f27db469a4429653242be6ee23f"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/ai/pricing.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 60
-- **Coverage:** 60/60 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

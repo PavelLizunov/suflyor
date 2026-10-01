@@ -1,0 +1,18 @@
+{
+  "workflow": "exact-grok-source-reconciliation",
+  "job_id": "workflow-2",
+  "reviewed_source_commit": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+  "state": "completed_without_worker_results",
+  "results": [{"slice":"persistence","result":null},{"slice":"memory-config","result":null},{"slice":"audio-stt-tts","result":null},{"slice":"local-ai","result":null},{"slice":"bridge-window","result":null},{"slice":"tile-settings","result":null},{"slice":"privacy-install","result":null},{"slice":"ci-release","result":null}],
+  "output_files_present": false,
+  "failure_cause": "Not provided by workflow receipt; no quota/authorization diagnosis inferred.",
+  "further_retry": "none; continue bounded coordinator source checks and preserve unresolved items",
+  "route": "ninitux/claude-opus-latest",
+  "slices": ["persistence","memory-config","audio-stt-tts","local-ai","bridge-window","tile-settings","privacy-install","ci-release"],
+  "identity_contract": "Preserve each register ID, original title and original redacted claim exactly; compare them before integration.",
+  "source_policy": "Read-only source/raw reports; workers own only their exact-<slice>.json; no builds/services/Git mutation/delegation.",
+  "previous_lane_status": "workflow-1 final_result_null for four Opus lanes; topic substitutions rejected; files retained as unaccepted proposals.",
+  "automatic_redispatch": false,
+  "astra_calls": 0,
+  "new_grok_calls": 0
+}

@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/journal/writer.rs"
 batch_id: "B08"
 total_lines: 363
 symbols_count: 17
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "105e0dfef0d8c27c0a6135bc93db715047df1f1c147c8580ecf95d3f8222d271"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/journal/writer.rs`
 
 - **Batch:** B08
 - **Physical Lines:** 363
-- **Coverage:** 363/363 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (4)
 
@@ -46,7 +49,7 @@ review_state: validated
 | function | `spawn_writer` | L277 | `fn spawn_writer(mut rx: mpsc::UnboundedReceiver<WriterCmd>, file: std::fs::File,) -> std::io::Result<std::thread::JoinHandle<()>>` |
 | function | `bump_counters` | L325 | `fn bump_counters(c: &mut SessionCounters, event: &JournalEvent<'_>) -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Instantiates IPC channel at L53
 - Instantiates IPC channel at L95

@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/tts_install.rs"
 batch_id: "B10"
 total_lines: 248
 symbols_count: 7
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "af7d577c73caf3dd9439005d353d88ff4b92bdf0c25ef13bd8ff2121556985ac"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/tts_install.rs`
 
 - **Batch:** B10
 - **Physical Lines:** 248
-- **Coverage:** 248/248 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 

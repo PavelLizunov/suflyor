@@ -6,18 +6,21 @@ source_path: "slint-experiment/tests/tile_player_layout_guard.rs"
 batch_id: "B05"
 total_lines: 69
 symbols_count: 3
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "c1f2001452e2baaa96a8264a217b8f58fd16322d9c642d2d43b78a483a276895"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/tests/tile_player_layout_guard.rs`
 
 - **Batch:** B05
 - **Physical Lines:** 69
-- **Coverage:** 69/69 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (3)
 

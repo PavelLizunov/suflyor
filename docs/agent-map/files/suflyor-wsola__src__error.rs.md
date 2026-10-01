@@ -6,14 +6,17 @@ source_path: "suflyor-wsola/src/error.rs"
 batch_id: "B13"
 total_lines: 43
 symbols_count: 1
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "be04634703f1cfa65df7245f9c7bb273ff6e9ba983ababacecdfbb412385d926"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-wsola/src/error.rs`
 
 - **Batch:** B13
 - **Physical Lines:** 43
-- **Coverage:** 43/43 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

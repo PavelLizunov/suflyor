@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/persistence/sqlite_store.rs"
 batch_id: "B08"
 total_lines: 1403
 symbols_count: 65
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "a846917c7e77a12f3216ee309b0f4ea7a3711f37c2a87c78cb5508ac2313a5b5"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/persistence/sqlite_store.rs`
 
 - **Batch:** B08
 - **Physical Lines:** 1403
-- **Coverage:** 1403/1403 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

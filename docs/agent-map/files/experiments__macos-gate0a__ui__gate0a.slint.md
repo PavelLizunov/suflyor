@@ -6,14 +6,17 @@ source_path: "experiments/macos-gate0a/ui/gate0a.slint"
 batch_id: "B15"
 total_lines: 257
 symbols_count: 31
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "73c965f284ebfc64c3b356aecad065630e1777c04a5f3a44dda25908240ec7fd"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `experiments/macos-gate0a/ui/gate0a.slint`
 
 - **Batch:** B15
 - **Physical Lines:** 257
-- **Coverage:** 257/257 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (4)
 
@@ -60,7 +63,7 @@ review_state: validated
 | slint_callback | `hide-tile` | L140 | `-` |
 | slint_callback | `hide-settings` | L219 | `-` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - UI Callback `clicked` declared at L6
 - UI Callback `drag-start-requested` declared at L39

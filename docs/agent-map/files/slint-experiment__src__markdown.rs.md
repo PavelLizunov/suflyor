@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/markdown.rs"
 batch_id: "B01"
 total_lines: 938
 symbols_count: 30
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "2235e279b0009751efe9e4d6293c06561ef3e939fa43b2305009a18518e92e6e"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/markdown.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 938
-- **Coverage:** 938/938 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (3)
 

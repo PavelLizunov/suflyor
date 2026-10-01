@@ -6,19 +6,22 @@ source_path: "suflyor-mlx/Sources/SuflyorMLX/main.swift"
 batch_id: "B15"
 total_lines: 41
 symbols_count: 0
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: unsupported_by_final_generator
+source_sha256_at_historical_inventory: "99a75eaedee2c53de4f3aa00d4d5f3142a78165ffdf67ef9500745939dfc9744"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-mlx/Sources/SuflyorMLX/main.swift`
 
 - **Batch:** B15
 - **Physical Lines:** 41
-- **Coverage:** 41/41 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (0)
 
-*No function/method symbols extracted.*
+*No routine candidates extracted; absence of routines is not established.*

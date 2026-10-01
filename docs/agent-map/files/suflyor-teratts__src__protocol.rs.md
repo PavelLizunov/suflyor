@@ -6,14 +6,17 @@ source_path: "suflyor-teratts/src/protocol.rs"
 batch_id: "B12"
 total_lines: 332
 symbols_count: 14
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "0535d3876c6f96b0552fed195b5d57f451423a5e7c4deb58fdb31e8aa8e34d9e"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-teratts/src/protocol.rs`
 
 - **Batch:** B12
 - **Physical Lines:** 332
-- **Coverage:** 332/332 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (3)
 

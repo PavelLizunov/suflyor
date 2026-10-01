@@ -1,29 +1,24 @@
-# Error Architecture & Failure Recovery Catalog
+# Error records: source-verified correction and remaining gaps
 
-## 1. Error Philosophy & Clippy Enforcements
-Suflyor strictly denies panics and unwrap calls in production code via crate-level lints:
-- `clippy::unwrap_used = "deny"`
-- `clippy::expect_used = "deny"`
-- `clippy::panic = "deny"`
+## WSOLA error enum
 
-Every error path is handled explicitly via:
-1. `anyhow::Result<T>` with rich context attachments (`.context("...")`) for high-level domain modules.
-2. Direct `std::result::Result<T, WsolaError>` for core audio mathematical routines in `suflyor-wsola`.
-3. Process-level sidecar isolation for third-party ONNX models (`sherpa-onnx` and `ort`).
+At reviewed commit `a10c356af05a5832a14ea06a5d0cb6c49694e3f1`, [the declaration](../../../suflyor-wsola/src/error.rs#L5-L18) contains exactly four variants:
 
-## 2. Dedicated Error Enums
+| Variant | Payload |
+| --- | --- |
+| `InvalidRatio` | `String` |
+| `InputTooShort` | `provided: usize`, `minimum: usize` |
+| `BufferOverflow` | `buffer: &'static str`, `requested: usize`, `available: usize` |
+| `InvalidState` | `&'static str` |
 
-### `WsolaError` (`suflyor-wsola/src/error.rs`)
-The time-stretching engine declares a structured enum:
-- `InvalidSampleRate`: Raised when sample rate is zero or out of bounds.
-- `InvalidSegmentSize`: Raised when window size is non-positive or exceeds maximum.
-- `InvalidOverlap`: Overlap window exceeds segment duration.
-- `InvalidSpeed`: Time-stretch factor <= 0.0 or exceeds practical bounds [0.1 .. 10.0].
-- `BufferTooSmall`: Destination scratch buffer cannot accommodate window crossfade.
-- `BufferOverflow`: Streaming buffer capacity exceeded.
+[The JSONL entry](errors.jsonl) now matches that declaration. The old parser incorrectly treated a struct-variant field as an enum variant and stopped at a nested closing brace. The earlier prose also invented variants absent from the implementation. Both are corrected; call-site behavior still requires separate checks.
 
-## 3. Dynamic Error Patterns & Bailout Sites (461 Mapped Sites)
-The repository uses structured `anyhow::bail!` and `.context()` markers:
-- **Audio Capture Failure**: Recovers via automatic polling of the Windows multimedia notification client (`IMMNotificationClient`) or CoreAudio route change listeners.
-- **AI Stream Transport Failures**: Maps HTTP connection drops to generic, screen-safe status messages ("AI connection error"), protecting internal LAN IPs from leaking into visible UI tiles.
-- **SQLite Database Corruption**: Trapped at open time; triggers non-destructive VACUUM into pre-flight backups with zero data dropping.
+## Historical error-site candidates
+
+[The 461 error-site matches](error_sites.jsonl) were generated from regex patterns for bailout and context operations. They are navigation candidates, not 461 independently audited recovery paths. The patterns miss other error construction/propagation forms and can truncate expressions.
+
+No blanket claim is made that every failure recovers, that SQLite corruption causes a lossless `VACUUM`, or that every visible error redacts secrets. Those consequences require source and caller verification. See the [Grok reconciliation](../reconciliation/candidates.json) for per-candidate status.
+
+## Verification boundary
+
+This correction checked the enum declaration and display match against source. No native Cargo build, unit-test execution, application launch or malformed-input reproduction was performed here. Production lint declarations are policy checks, not evidence that runtime paths cannot panic or abort.

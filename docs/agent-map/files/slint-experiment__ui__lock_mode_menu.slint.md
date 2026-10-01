@@ -6,14 +6,17 @@ source_path: "slint-experiment/ui/lock_mode_menu.slint"
 batch_id: "B05"
 total_lines: 58
 symbols_count: 5
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "4c7865b5a76fe83839f96eda3681087256c12b530884472ea46ddcc569a71ea3"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/ui/lock_mode_menu.slint`
 
 - **Batch:** B05
 - **Physical Lines:** 58
-- **Coverage:** 58/58 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 
@@ -31,7 +34,7 @@ review_state: validated
 | slint_callback | `mode-selected` | L16 | `-` |
 | slint_callback | `dismissed` | L17 | `-` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - UI Callback `mode-selected` declared at L16
 - UI Callback `dismissed` declared at L17

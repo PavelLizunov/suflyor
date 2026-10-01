@@ -6,14 +6,17 @@ source_path: "suflyor-teratts/src/manifest.rs"
 batch_id: "B12"
 total_lines: 243
 symbols_count: 12
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "2e2e5d809cc51e7a74db8ec781da2b5830f746b065e279101e8ac3e1c6737834"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-teratts/src/manifest.rs`
 
 - **Batch:** B12
 - **Physical Lines:** 243
-- **Coverage:** 243/243 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 

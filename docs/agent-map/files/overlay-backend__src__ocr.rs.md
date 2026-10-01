@@ -6,18 +6,21 @@ source_path: "overlay-backend/src/ocr.rs"
 batch_id: "B10"
 total_lines: 270
 symbols_count: 12
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "39f134620c4658702ac410c92f02a2804c997335a52482733cf023ee4605ded2"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/ocr.rs`
 
 - **Batch:** B10
 - **Physical Lines:** 270
-- **Coverage:** 270/270 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (12)
 
@@ -36,6 +39,6 @@ review_state: validated
 | function | `run_ocr_rejects_empty_or_short_buffer` | L260 | `fn run_ocr_rejects_empty_or_short_buffer() -> ()` |
 | function | `default_lang_is_rus_plus_eng` | L267 | `fn default_lang_is_rus_plus_eng() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L125

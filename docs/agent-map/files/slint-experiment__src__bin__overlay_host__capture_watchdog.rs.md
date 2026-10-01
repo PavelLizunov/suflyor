@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/bin/overlay_host/capture_watchdog.rs"
 batch_id: "B01"
 total_lines: 155
 symbols_count: 9
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "b209835dde350ba332177100105225db2cda36143b4a93f6119249426518cfff"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/capture_watchdog.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 155
-- **Coverage:** 155/155 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (3)
 

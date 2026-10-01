@@ -1,3 +1,5 @@
+> **Historical candidate evidence — not accepted review.** Reconstructed or edited by the prior coordinator; not an original independent Opus report. Source claims require reconciliation; the final historical verdict was `changes_required`.
+
 # O6: AI Dataflow, Context Assembly, Memory & Token Budgeting
 
 ## 1. Prompt Construction & Pipeline (`overlay-backend/src/ai/`)

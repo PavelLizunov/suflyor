@@ -6,14 +6,17 @@ source_path: "slint-experiment/ui/palette.slint"
 batch_id: "B05"
 total_lines: 268
 symbols_count: 12
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "bc29207e78e04a8ebc7cc7c4d6d1c15ecfb5814c84a949b90dfd8c473c475c69"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/ui/palette.slint`
 
 - **Batch:** B05
 - **Physical Lines:** 268
-- **Coverage:** 268/268 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 
@@ -38,7 +41,7 @@ review_state: validated
 | slint_callback | `drag-start-requested` | L56 | `-` |
 | slint_callback | `drag-moved` | L57 | `-` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - UI Callback `query-changed` declared at L51
 - UI Callback `chip-clicked` declared at L53

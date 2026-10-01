@@ -6,14 +6,17 @@ source_path: "suflyor-tts/src/playback_macos.rs"
 batch_id: "B11"
 total_lines: 474
 symbols_count: 25
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "eeb268a293d6143902c6a44361e6792a947b777b699e5381cebe0a1053bde124"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-tts/src/playback_macos.rs`
 
 - **Batch:** B11
 - **Physical Lines:** 474
-- **Coverage:** 474/474 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (6)
 
@@ -56,7 +59,7 @@ review_state: validated
 | function | `end_of_stream_drains_without_refilling_silence` | L457 | `fn end_of_stream_drains_without_refilling_silence() -> ()` |
 | function | `exit_notifier_runs_when_its_scope_ends` | L464 | `fn exit_notifier_runs_when_its_scope_ends() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Instantiates IPC channel at L118
 - Instantiates IPC channel at L119

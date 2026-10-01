@@ -6,14 +6,17 @@ source_path: "slint-experiment/ui/settings_controls.slint"
 batch_id: "B05"
 total_lines: 185
 symbols_count: 26
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "d665ac5cd85474fd39a73ddb722129178b101b1bc90790ef687b89c3fc9a5717"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/ui/settings_controls.slint`
 
 - **Batch:** B05
 - **Physical Lines:** 185
-- **Coverage:** 185/185 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (9)
 
@@ -60,7 +63,7 @@ review_state: validated
 | slint_callback | `toggled` | L50 | `-` |
 | slint_callback | `chosen` | L149 | `-` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - UI Callback `toggled` declared at L50
 - UI Callback `chosen` declared at L149

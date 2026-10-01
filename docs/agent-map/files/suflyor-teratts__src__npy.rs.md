@@ -6,14 +6,17 @@ source_path: "suflyor-teratts/src/npy.rs"
 batch_id: "B12"
 total_lines: 211
 symbols_count: 10
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "0abecd0dd66841513b2cf75289af6c6fac5fef06aa09ecddacbd86291477782f"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-teratts/src/npy.rs`
 
 - **Batch:** B12
 - **Physical Lines:** 211
-- **Coverage:** 211/211 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

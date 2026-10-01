@@ -6,14 +6,17 @@ source_path: "slint-experiment/ui/capture_overlay.slint"
 batch_id: "B05"
 total_lines: 235
 symbols_count: 16
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "eeab61406fc40b727ce99c69b41448213a3b91c8c9dd1cd4499c04431cb15819"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/ui/capture_overlay.slint`
 
 - **Batch:** B05
 - **Physical Lines:** 235
-- **Coverage:** 235/235 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 
@@ -42,7 +45,7 @@ review_state: validated
 | slint_callback | `region-selected` | L48 | `-` |
 | slint_callback | `cancelled` | L49 | `-` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - UI Callback `region-selected` declared at L48
 - UI Callback `cancelled` declared at L49

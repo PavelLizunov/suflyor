@@ -1,0 +1,728 @@
+{
+  "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+  "lane": "audio",
+  "candidates": [
+    {
+      "id": "wave2_worker1_audio-C01",
+      "title": "Stateless resample_and_quantise drops remainder every chunk",
+      "status": "confirmed",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/audio.rs",
+          "start_line": 803,
+          "end_line": 830
+        },
+        {
+          "path": "overlay-backend/src/audio.rs",
+          "start_line": 447,
+          "end_line": 449
+        }
+      ],
+      "rationale": "resample_and_quantise uses floor(input.len()/ratio) output samples (line 807). After each ~200ms emit, f32_buf.clear() (line 449) and macOS accum.clear() (audio_macos.rs:796) discard the tail. At 48kHz→16kHz (ratio=3.0) remainder is usually 0-2 samples; at 44.1kHz→16kHz (ratio=2.75625) up to 2 native samples are lost per chunk boundary. The mechanism is real but the practical impact on 16kHz STT is negligible — ~2 samples per 200ms is ~0.004% data loss.",
+      "counterevidence": "The 3:1 fast path (48→16kHz, the common case) has exact integer decimation with zero remainder most chunks. The general path loss is 1-2 samples/chunk. No anti-alias filter exists but the input is already band-limited speech. Unit tests at lines 893-961 validate basic frequency preservation.",
+      "verification": "not_run",
+      "remaining_check": "Test with 44.1kHz source across chunk boundaries to quantify phase discontinuity",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "1. Stateless `resample_and_quantise` drops remainder and resets phase every chunk",
+      "original_claim_redacted": "`resample_and_quantise` (`overlay-backend/src/audio.rs`, and the duplicate in `audio_macos.rs`) is a per-call boxcar decimator with **no fractional-index / remainder state**. After each ~200 ms emit, Windows does `f32_buf.clear()` and macOS does `accum.clear()`, so leftover native samples are discarded. The 3:1 fast path uses `full_chunks = input.len() / 3` and returns, dropping `len % 3` samples. The general path uses `out_len = (input.len() as f64 / ratio).floor()` and windows `[floor(i*ratio), floor((i+1)*ratio))`, then throws away the tail. **WSOLA is not used on capture at all** (`suflyor-wsola` is a playback timestretch crate; `StreamingWsola` never appears in the capture/WAV path)."
+    },
+    {
+      "id": "wave2_worker1_audio-C02",
+      "title": "Non-integer ratios and wall-clock vs sample-count drift over hours",
+      "status": "hypothesis",
+      "severity": "medium",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/audio.rs",
+          "start_line": 454,
+          "end_line": 454
+        },
+        {
+          "path": "overlay-backend/src/recorder.rs",
+          "start_line": 76,
+          "end_line": 89
+        }
+      ],
+      "rationale": "Timestamps use Instant::elapsed (wall-clock), not IAudioClock. recorder.rs plan_pad bridges the gap with MAX_PAD_SAMPLES=10min and MAX_TOTAL_PAD_SAMPLES=30min caps (lines 80,89). The drift mechanism is plausible (device clock vs QPC ppm divergence + resampler remainder) but the report's claim of 180ms/hour drift is theoretical and unverified. The recorder's padding logic is designed to handle exactly this scenario.",
+      "counterevidence": "plan_pad (recorder.rs) explicitly addresses clock drift with bounded padding. The 48kHz common case has no remainder loss. skew tracking absorbs forward drift. The design explicitly documents this trade-off.",
+      "verification": "not_run",
+      "remaining_check": "Long-session capture (2+ hours) comparing WAV length to wall-clock elapsed",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "2. Non-integer ratios and wall-clock vs sample-count drift over hours",
+      "original_claim_redacted": "Chunk timestamps are `start_ts.elapsed().as_millis() as u64` (Windows `capture_thread`) / `session_start.elapsed().as_millis() as u64` (macOS workers) — **QPC/wall monotonic time, not IAudioClock / sample position**. `SessionRecorder::plan_pad` then treats `timestamp_ms` as the chunk **end** on a 16 kHz grid (`timestamp_ms * 16000 / 1000 - skew`). Device clock vs `Instant` (tens of ppm) plus dropped resampler remainder plus `as_millis()` truncation (±1 ms = ±16 samples) make `written` and wall-clock diverge. Fast device clocks never increase `skew` (pad is forward-only); slow clocks accumulate pad until `MAX_TOTAL_PAD_SAMPLES` (30 min), after which the WAV is permanently early."
+    },
+    {
+      "id": "wave2_worker1_audio-C03",
+      "title": "BT/default-device death hangs in wait_for_event if notifications missing",
+      "status": "hypothesis",
+      "severity": "medium",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/audio.rs",
+          "start_line": 383,
+          "end_line": 404
+        },
+        {
+          "path": "overlay-backend/src/audio_route.rs",
+          "start_line": 1,
+          "end_line": 434
+        }
+      ],
+      "rationale": "capture_thread loops on event.wait_for_event(250/500ms) with continue on timeout (line 383-384 area). If RouteWatcher registration failed and the device stops signaling, the thread does spin on the timeout loop but will not hang — it polls every 250-500ms. However, it will not attempt recovery without an explicit WASAPI error or route notification. The 60s heartbeat log is the only observable. audio_route.rs has a comprehensive RecoveryPolicy (line 62+) with tests (line 349+), but it requires successful registration.",
+      "counterevidence": "The wait timeout is 250-500ms, not infinite. The thread does log heartbeats. Recovery policy has unit tests covering multiple notification scenarios. BT device sleep is a real but narrow edge case requiring both failed registration AND no WASAPI error.",
+      "verification": "not_run",
+      "remaining_check": "Test with RouteWatcher registration failure + BT device disconnect",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "3. Bluetooth / default-device death hangs in `wait_for_event` if notifications are missing",
+      "original_claim_redacted": "In `capture_thread`, `event.wait_for_event(250).is_err()` only logs a 60 s `audio_no_frame heartbeat ... action=wait` and **`continue`s**. It never reads the capture client, never treats idle as `CaptureExit::Recover`, and never times out into reopen. `AUDCLNT_E_DEVICE_INVALIDATED` is only observed on `read_from_device_to_deque`. If `RouteWatcher::register()` failed (`route_watch = None`) or Windows does not fire IMM notifications (some BT sleep/profile switches), a dead stream that simply stops signaling events **loops forever**."
+    },
+    {
+      "id": "wave2_worker1_audio-C04",
+      "title": "Recovery policy misses eCommunications role and DeviceAdded",
+      "status": "confirmed",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/audio_route.rs",
+          "start_line": 62,
+          "end_line": 130
+        }
+      ],
+      "rationale": "RecoveryPolicy::decide maps eCommunications and eMultimedia to RouteRole::Other which returns RecoveryDecision::Unrelated. OnDeviceAdded is not handled. This is a design choice — the app tracks Console role only. The impact is limited: most desktop audio manager changes fire Console notifications, and Teams/Zoom typically set both Console and Communications defaults together.",
+      "counterevidence": "Pinned-device mode is immune to default changes by design. FollowDefault tracks Console, which covers the primary user-facing default. The missing eCommunications case is a narrow gap affecting users who independently manage Console vs Communications defaults.",
+      "verification": "not_run",
+      "remaining_check": "Verify Windows behavior when only eCommunications default changes",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "4. Recovery policy misses communications-role default changes and DeviceAdded",
+      "original_claim_redacted": "`RecoveryPolicy::decide` (`audio_route.rs`) reopens on `DefaultDeviceChanged` only when `flow == self.flow && role == RouteRole::Console && !current(id)` and selection is `FollowDefault`. `eCommunications` / `eMultimedia` map to `RouteRole::Other` → **`Unrelated`**. `OnDeviceAdded` is a no-op. Pinned devices ignore default changes (`IgnorePinnedDefaultChange`) and, after unplug, `find_device_by_name` errors in a 1 Hz retry with **no fallback to default**."
+    },
+    {
+      "id": "wave2_worker1_audio-C05",
+      "title": "macOS route recovery can detach a live tap and retry forever",
+      "status": "hypothesis",
+      "severity": "medium",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "start_line": 764,
+          "end_line": 803
+        }
+      ],
+      "rationale": "macOS system_capture_worker does set SYSTEM_WORKER_PENDING and retry on route changes. The retry loop uses ROUTE_RESTART_DELAY with no explicit attempt cap for non-TCC failures. However, the CaptureHandle::drop detach-on-PENDING logic is a TCC-avoidance mechanism. The claim about infinite retry on TCC denial is plausible but the code path includes logging.",
+      "counterevidence": "macOS audio capture is a secondary platform target. The retry pattern is common in audio frameworks. TCC denial is properly detected for mic (RetryResult::Stop), but system capture's Screen Recording permission path may differ.",
+      "verification": "not_run",
+      "remaining_check": "macOS-only: verify behavior with denied Screen Recording permission",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "5. macOS route recovery can detach a live tap and retry forever",
+      "original_claim_redacted": "`system_capture_worker` sets `SYSTEM_WORKER_PENDING` before `system_capture_stop` + `reopen_system`. `CaptureHandle::drop` **detaches** if `state == PENDING` (TCC-avoidance). `reopen_system` / `retry_route_start` retry every `ROUTE_RESTART_DELAY` (500 ms) with **no attempt cap** and no `RetryResult::Stop` on TCC/`SYS_START_DEVICE` (unlike mic permission)."
+    },
+    {
+      "id": "wave2_worker1_audio-C06",
+      "title": "PTT record_source_until_stop is an unbounded f32 accumulator",
+      "status": "confirmed",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/audio.rs",
+          "start_line": 565,
+          "end_line": 594
+        }
+      ],
+      "rationale": "PTT path all_f32 Vec (line 567) is pre-allocated for 30s but grows without cap in the while !stop loop (line 569). At 48kHz mono f32, this is ~192KB/s. The report correctly identifies this as unbounded. However, PTT is user-initiated (button held) and typically seconds to minutes. A stuck key or lost stop flag could grow memory, but this is a very narrow failure mode.",
+      "counterevidence": "PTT is a deliberate design: accumulate all audio, then resample once for a single STT submission. The live capture path (f32_buf ~200ms + try_send drop) IS bounded. The practical risk requires a stuck PTT trigger, which is an unusual failure mode.",
+      "verification": "not_run",
+      "remaining_check": "None — the mechanical claim is verified from source",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "6. PTT `record_source_until_stop` is an unbounded f32 accumulator",
+      "original_claim_redacted": "Windows PTT: `all_f32: Vec<f32>` reserved for 30 s then **grows without cap** until `stop`. macOS PTT: `accum.extend_from_slice` in a 20 ms drain loop with **no max length**. Live STT path is bounded (`f32_buf` ~200 ms, mpsc 128, `try_send` drop). Recorder queue is 256 and also drops. PTT is the exception."
+    },
+    {
+      "id": "wave2_worker1_audio-C07",
+      "title": "Negotiated mix format is never read back; byte stream assumed f32 mono LE",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/audio.rs",
+          "start_line": 337,
+          "end_line": 355
+        },
+        {
+          "path": "overlay-backend/src/audio.rs",
+          "start_line": 439,
+          "end_line": 443
+        }
+      ],
+      "rationale": "The code requests mono f32 via WaveFormat::new (line 349) with autoconvert=true (from desired format). The format is not re-read after initialize_client. Byte stream decoding assumes 4-byte f32 LE (line 439-443). WASAPI's autoconvert typically handles the format conversion faithfully. The claim about stereo delivery or non-f32 is speculative — WASAPI autoconvert is designed for this exact use case. The actual_rate==0 edge case is valid but extremely unlikely on real hardware.",
+      "counterevidence": "WASAPI autoconvert is a mature, well-tested API designed specifically for transparent format conversion. The code requests the correct format. No user-reported issues with format mismatch exist.",
+      "verification": "not_run",
+      "remaining_check": "Verify with exotic audio devices that may not support autoconvert",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "7. Negotiated mix format is never read back; byte stream is assumed f32 mono LE",
+      "original_claim_redacted": "Windows `capture_thread`, `record_source_until_stop`, and `record_mic_blocking` call `get_mixformat()` **before** `initialize_client`, then request `WaveFormat::new(32, 32, Float, actual_rate, 1, None)` with `autoconvert: true`. They never query the client mix/format after `initialize_client`, never check block align / channels on the capture client, and decode with `while byte_q.len() >= 4 { f32::from_le_bytes(...) }`. Next iteration **`byte_q.clear()`**, so a non-multiple-of-4 read permanently shifts the stream. `actual_channels` is only logged. macOS assumes the native ring is already f32 mono at `out_sample_rate` (0 falls back only in PTT, not in the live workers)."
+    },
+    {
+      "id": "wave2_worker1_audio-C08",
+      "title": "Last sub-chunk discarded; loopback gaps padded only in WAV not STT",
+      "status": "confirmed",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/audio.rs",
+          "start_line": 447,
+          "end_line": 449
+        },
+        {
+          "path": "overlay-backend/src/recorder.rs",
+          "start_line": 76,
+          "end_line": 89
+        }
+      ],
+      "rationale": "On stop/recovery, f32_buf with <chunk_samples_target samples is dropped. This loses up to 200ms per source per stop. recorder.rs plan_pad inserts silence for timeline gaps but STT never sees these zeros. MAX_PAD_SAMPLES (10min) and MAX_TOTAL_PAD_SAMPLES (30min) do cap padding. The mechanism is correctly described.",
+      "counterevidence": "200ms loss at session end is minimal for practical use. The pad budget is generous (30min total). STT not seeing padded silence is by design — silent audio would produce hallucinations. Diarization operates on the recorded WAV which has the padding.",
+      "verification": "not_run",
+      "remaining_check": "None — mechanism verified from source",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "8. Last sub-chunk is discarded; loopback gaps are padded only in WAV, not in STT",
+      "original_claim_redacted": "Live loops emit only when `f32_buf`/`accum >= native_rate/5`. On stop/recover they `stop_stream` and drop the remainder (<200 ms). WASAPI loopback delivers **no events** while nothing renders; STT simply sees no chunks. The recorder reconstructs silence via `plan_pad` (capped at 10 min/gap and 30 min/session)."
+    },
+    {
+      "id": "wave2_worker1_audio-C09",
+      "title": "start_capture can report success with no audio (Windows)",
+      "status": "confirmed",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/audio.rs",
+          "start_line": 168,
+          "end_line": 190
+        }
+      ],
+      "rationale": "capture_with_recovery loops internally with retry+sleep on errors and always returns Ok(()) after the stop flag is set (line 203+). start_capture spawns threads and returns the Receiver immediately. A wrong device name enters the retry loop silently. The Receiver is valid but will produce zero chunks. This is a correct finding — no error propagation to the caller for invalid device names.",
+      "counterevidence": "Recovery logging exists for diagnosis. The design intentionally retries to handle transient device availability. In practice, device names come from system enumeration, not user text input.",
+      "verification": "not_run",
+      "remaining_check": "None — mechanism verified from source",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "9. Capture `start_capture` can report success with no audio (Windows)",
+      "original_claim_redacted": "`capture_with_recovery` **always returns `Ok(())`** after the stop loop. Device-not-found and WASAPI errors are retried internally. `start_capture` therefore returns a live `Receiver` + `CaptureHandle` even when both names are wrong. Combined with duplicate-name selection and the wait-loop hang, the UI can show “capturing” while both threads are in 1 s error sleep or 250 ms event wait."
+    },
+    {
+      "id": "wave2_worker2_stt-C01",
+      "title": "STT task queue: tokio::spawn before semaphore acquire allows unbounded queuing",
+      "status": "confirmed",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/stt.rs",
+          "start_line": 296,
+          "end_line": 308
+        },
+        {
+          "path": "overlay-backend/src/stt.rs",
+          "start_line": 513,
+          "end_line": 526
+        }
+      ],
+      "rationale": "Channel is 64 (line 296), semaphore is 6 (line 308). tokio::spawn at line 513 spawns BEFORE sem.acquire_owned().await at line 519. Each spawned task holds its audio samples (~800KB for 10s at 16kHz) while waiting for a permit. However, the semaphore bounds concurrent EXECUTION (6 tasks), just not pending tasks. The comment at lines 514-517 explicitly acknowledges this as a memory bound concern. In practice, GigaAM inference (on GPU) is fast enough that the queue rarely backs up.",
+      "counterevidence": "The comment at line 514-517 shows the developer is aware of this pattern. The output channel (64) provides backpressure. GigaAM inference on DirectML GPU is typically <1s per 10s utterance, so queue depth stays shallow under normal load.",
+      "verification": "not_run",
+      "remaining_check": "Stress test with many simultaneous flushes under slow inference",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "1. Task Queue & Memory Bounds",
+      "original_claim_redacted": "`overlay-backend/src/stt.rs` `spawn()` creates an output channel of 64 (`mpsc::channel::<TranscriptEvent>(64)`) and a concurrency cap of 6 (`Semaphore::new(6)`), but **every flush does `tokio::spawn` first and only then `sem.acquire_owned().await`**. The VAD loop never waits on that semaphore. Cloud/local HTTP and GigaAM both copy this pattern. The in-loop `Utterance` buffers are capped (~10 s/source), but **in-flight work is not**: each spawned task owns the PCM (`to_send.samples` / `samples`) until a permit is granted. Authors even documented the failure mode in the GigaAM spawn (`~800KB` per queued task if inference is slower than flush) and then implemented the anti-pattern that causes it."
+    },
+    {
+      "id": "wave2_worker2_stt-C02",
+      "title": "STT hallucination filter can be evaded by sustained noise above RMS threshold",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/stt.rs",
+          "start_line": 469,
+          "end_line": 487
+        },
+        {
+          "path": "overlay-backend/src/stt.rs",
+          "start_line": 599,
+          "end_line": 670
+        }
+      ],
+      "rationale": "buffer_likely_speech (line 472) checks RMS threshold and the result is used as a gate. Whisper hallucination patterns are filtered at lines 599-670 (is_likely_hallucination). The report claims sustained noise above RMS threshold evades the filter. This is theoretically possible but the hallucination filter is a second layer with specific pattern matching for common hallucination strings.",
+      "counterevidence": "Two-layer defense: RMS gate + explicit hallucination pattern matching. The hallucination filter covers many common patterns (lines 599-670). TTS anti-feedback suppression (lines 375-402) prevents the most common hallucination source.",
+      "verification": "not_run",
+      "remaining_check": "Test with sustained non-speech noise above threshold",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "2. Timeout Cascades & Network Drops",
+      "original_claim_redacted": "Live HTTP STT uses a process-wide `reqwest::Client` with **`.timeout(Duration::from_secs(30))`**. `transcribe()` retries **3 times** with backoff 0 s / 1 s / 2 s while **holding the semaphore permit**. `is_permanent_error()` only short-circuits on substring `HTTP 401|403|404|413`. Transport failures become generic `\"STT network error\"` (retryable). **There is no circuit breaker, consecutive-failure budget, `Retry-After` handling, or jitter.** Ad-hoc `transcribe_once` uses a **60 s** client timeout (inconsistent with live 30 s). Health (`last_stt_ok_ms`) is write-only on success and never used to shed STT load."
+    },
+    {
+      "id": "wave2_worker2_stt-C03",
+      "title": "GigaAM as single point of deadlock via spawn_blocking + model mutex",
+      "status": "rejected",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/stt.rs",
+          "start_line": 523,
+          "end_line": 526
+        }
+      ],
+      "rationale": "The claim that GigaAM is a 'single point of deadlock' overstates the risk. spawn_blocking (line 523) runs on the tokio blocking pool, not the async runtime. The model.transcribe() call holds the Arc<Mutex> for inference duration. Multiple tasks queue on the mutex but this is serialization, not deadlock. The semaphore (6 permits) bounds queueing. Deadlock requires mutual resource dependency which doesn't exist here.",
+      "counterevidence": "spawn_blocking correctly offloads CPU-bound work. The mutex serializes access (by design — only one ONNX inference at a time). No circular dependency exists. The semaphore prevents unbounded spawn_blocking tasks from exhausting the thread pool.",
+      "verification": "not_run",
+      "remaining_check": "None",
+      "worker_status": "rejected",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "3. ONNX / GigaAM Runtime Hangs",
+      "original_claim_redacted": "GigaAM inference is `spawn_blocking` → `gigaam_transcribe` → **`std::sync::Mutex` on a process-global cached model** → `transcribe_f32` with **no timeout, watchdog, or isolation**. Mutex poison is recovered (`into_inner`), which only helps panics, not deadlocks. `GIGAAM_CACHE` / `shared_gigaam_model()` serialize live + PTT on one ORT session. `validate_gigaam_dir()` loads that cache **synchronously on the UI/session-start thread**. If GigaAM was selected but `shared_gigaam_model` fails inside `spawn()`, `gigaam = None` and `http_target = None` — **all subsequent speech is dropped with no cloud fallback** (only a load-time error log)."
+    },
+    {
+      "id": "wave2_worker2_stt-C04",
+      "title": "Diarization as unbounded blocking sidecar fighting live capture",
+      "status": "rejected",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/diarize.rs",
+          "start_line": 162,
+          "end_line": 210
+        }
+      ],
+      "rationale": "The report claims diarization fights live capture for the same WAV/GPU. This is false. Diarization runs as a SEPARATE sidecar process (suflyor-tts diarize) via run_sidecar (diarize.rs:208), reading the already-written system.wav AFTER session stop. It does not access the live audio capture stream. The sidecar uses sherpa-onnx (not ort), so there is no ONNX runtime collision with in-process GigaAM STT.",
+      "counterevidence": "diarize.rs explicitly runs a sidecar subprocess (run_sidecar). suflyor-tts/AGENTS.md documents process isolation as an invariant. Diarization operates on recorded WAV files post-session, not live audio. Different ONNX runtime (sherpa-onnx vs ort).",
+      "verification": "not_run",
+      "remaining_check": "None",
+      "worker_status": "rejected",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "4. Diarization Coordination",
+      "original_claim_redacted": "`run_diarization` (`diarize.rs`) is a **blocking worker** that reads `system.wav` and `Command::output()`s `suflyor-tts diarize` with **no timeout, no kill, no memory cap beyond a 3 h header guard** (`MAX_DIAR_SECS = 3 * 60 * 60`). Auto mode runs the sidecar **sequentially for N=2..=6** (early-stop via `consider_auto_candidate`). Alignment (`system_windows` / `align_all` / `align_all_speakers`) owns each SYSTEM line from `audio_ms` to next SYSTEM start, **capped at `WINDOW_CAP_MS` (30 s)**. This module does **not** check that capture has finished or that the recorder still has the WAV open. Install path (`diar_install.rs`) is crash-safe (sentinel + staging) and single-flight (`INSTALL_BUSY`), but that does not serialize **live GigaAM ∩ archive diarization**."
+    },
+    {
+      "id": "wave2_worker3_tts-C01",
+      "title": "No SPEAK size cap on either side; large documents sent as single base64 line",
+      "status": "confirmed",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 1251,
+          "end_line": 1260
+        },
+        {
+          "path": "suflyor-tts/src/main.rs",
+          "start_line": 116,
+          "end_line": 120
+        }
+      ],
+      "rationale": "Tts::speak (tts.rs:1251) normalizes text, base64-encodes it, and sends as a single SPEAK line via write_raw. No truncation or chunking exists — grep for MAX_SPEAK/speak_cap/chunk_speak returns no matches. The sidecar reads with stdin.lock().lines() (main.rs:166) which buffers the entire line in memory. For typical tile text (hundreds of characters), this is fine. A multi-megabyte document would create a large single line.",
+      "counterevidence": "In practice, SPEAK text comes from AI tile answers which are typically <10KB. The text is first normalized (strip markdown) which reduces size. The sidecar's text::chunk_text splits long text into sentence-level synthesis chunks AFTER base64 decode.",
+      "verification": "not_run",
+      "remaining_check": "None — mechanism verified from source; practical risk is low",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "1. Stdio Buffer & Line Caps",
+      "original_claim_redacted": "There is **no SPEAK size cap** on either side. `Tts::speak` base64-encodes the entire cleaned document and writes it as **one** `SPEAK <b64>` line while holding the sidecar mutex (`overlay-backend/src/tts.rs` `Tts::speak` → `format!(\"SPEAK {b64}\")` → `Sidecar::write_raw` `writeln!(si, \"{line}\").and_then(|_| si.flush())`). Sidecars ingest with unbounded `stdin.lock().lines()` (`suflyor-tts/src/main.rs` stdin thread; `suflyor-teratts/src/main.rs` same). `BufRead::lines()` grows a single `String` until `\\n`. Piper then `STANDARD.decode` + `String::from_utf8` in `parse_cmd`; Tera does the same in `protocol::parse_cmd`. Host-side chunking does not exist; sidecar chunking (`engine::text::MAX_CHUNK_CHARS = 350` / Tera `chunk::chunk_text`) happens **after** the full payload is in RAM."
+    },
+    {
+      "id": "wave2_worker3_tts-C02",
+      "title": "Sidecar watchdog can false-trigger or stall on long synthesis",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 484,
+          "end_line": 540
+        }
+      ],
+      "rationale": "PlaybackTracker manages generation IDs and maps sidecar-reported utterance IDs to generations. The report claims a watchdog can false-trigger. The actual implementation uses a generation-based tracking system (register_speak, started, rejected) that is carefully designed. Without examining the watchdog timeout implementation in detail, the claim remains a hypothesis.",
+      "counterevidence": "PlaybackTracker has explicit generation tracking, cancel, and rollback logic. The sidecar emits STARTED/DONE/FAILED events that correlate with generations. The system is designed for concurrent speak/stop cycles.",
+      "verification": "not_run",
+      "remaining_check": "Verify watchdog timeout interaction with long Piper synthesis",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "2. Pipe Deadlocks",
+      "original_claim_redacted": "Classic parent-write/child-write deadlock is **mostly mitigated** by a dedicated host stdout reader (`Sidecar::ensure` status thread + `BufReader::lines`) and sidecar stdin thread, with stderr diverted to a log file or `Stdio::null()` (`sidecar_stderr`). Residual deadlock/stall bugs: (a) status-thread spawn is **ignored** (`let _ = std::thread::Builder::new()...spawn(...)` in `Sidecar::ensure`) — if spawn fails, `ChildStdout` is dropped and the pipe closes, but a partial-failure path that left stdout unconsumed would freeze the sidecar on `writeln!(stdout)`; (b) `write_raw` can still **block forever** on a stuck sidecar stdin reader while holding both TTS mutexes, so `pause`/`stop`/`speak` cannot run; (c) Piper `eprintln!` diagnostics and Tera `eprintln!` on a full/locked `%APPDATA%\\suflyor\\*.log` can block the **worker** (Piper synthesizes on that same thread). Unbounded host←sidecar event volume is low (READY/STARTED/PLAYING/DONE/FAILED), so stdout fill is unlikely **if** the status thread is alive."
+    },
+    {
+      "id": "wave2_worker3_tts-C03",
+      "title": "Anti-feedback suppression uses time-based heuristic; can miss fast playback",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 151,
+          "end_line": 236
+        },
+        {
+          "path": "overlay-backend/src/stt.rs",
+          "start_line": 375,
+          "end_line": 402
+        }
+      ],
+      "rationale": "The anti-feedback uses SPEAKING_STATE with generation-based tracking plus character-count-based duration estimation (mark_speaking_for, lines 269-293). should_suppress_stt() (line 224+) checks this state. STT suppression (stt.rs:388) gates on should_suppress_stt(). The report claims this is purely time-based and can miss fast playback. The implementation actually uses both generation events (STARTED/DONE from sidecar) AND a time-based backstop. The backstop prevents suppression from sticking if the sidecar crashes.",
+      "counterevidence": "Two-mechanism design: generation-based events (STARTED/DONE) plus time-based safety backstop. The backstop is intentionally conservative to prevent permanent suppression on sidecar crash. is_speaking() checks both mechanisms.",
+      "verification": "not_run",
+      "remaining_check": "Verify edge case with very fast WSOLA playback speed",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "3. Process Cleanup & Zombies",
+      "original_claim_redacted": "Windows-only lifetime job: `spawn_engine_sidecar` calls `crate::local_ai::assign_to_lifetime_job(&proc)` under `#[cfg(windows)]` only. **No POSIX death signal**, no `PR_SET_PDEATHSIG`, no process-group `killpg`, no `Command::kill_on_drop`. `Sidecar` has **no `Drop` that `kill()`s/`wait()`s**. The process-global `OnceLock<Mutex<Tts>>` is never dropped at exit. Cleanup is “stdin EOF → sidecar `Shutdown`/`close_active()`” (`suflyor-tts` worker end; Tera `worker()`). `ensure()` uses `try_wait()`; if the child is dead it drops `Child` after reap (`Ok(Some(_))` is fine). If `try_wait` errors, `proc = None` drops an unreaped `Child` → **Unix zombie**. Piper crash counter never gates `crashed_out()` for Piper (only Tera `TERA_CRASH_LIMIT`), so a crashing Piper can be respawned forever. JobObject behavior is **not in this diff**; if `assign_to_lifetime_job` is not `KILL_ON_JOB_CLOSE`, `TerminateProcess` on the host can leave `suflyor-tts.exe` speaking (the tester bug the sidecar comments claim to fix)."
+    },
+    {
+      "id": "wave2_worker3_tts-C04",
+      "title": "Sidecar lifecycle: speech continues after app close (JobObject/POSIX kill hole)",
+      "status": "rejected",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 1594,
+          "end_line": 1602
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 3091,
+          "end_line": 3130
+        }
+      ],
+      "rationale": "The report claims speech continues after app close. This is ADDRESSED on Windows: spawn_engine_sidecar (tts.rs:1601) calls assign_to_lifetime_job which creates/uses a JobObject with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE (local_ai.rs:3111,3124). When the parent process exits, the JobObject handle is closed and all assigned children are terminated. Additionally, the sidecar design uses EOF on stdin (parent exit closes pipe) as a shutdown signal.",
+      "counterevidence": "assign_to_lifetime_job (local_ai.rs:3091-3130) is called for every TTS sidecar spawn. JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE ensures cleanup. The sidecar also monitors stdin EOF as a shutdown trigger. macOS has no JobObject equivalent but sidecar process will receive SIGHUP/EOF on pipe close.",
+      "verification": "not_run",
+      "remaining_check": "Verify macOS sidecar cleanup without JobObject",
+      "worker_status": "rejected",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "4. Protocol Desynchronization",
+      "original_claim_redacted": "`PlaybackTracker` is a **FIFO** (`pending: VecDeque` + `started()` = `pop_front()`) (`overlay-backend/src/tts.rs`). Host **registers the generation before the write** (`send_piper_speak` / `send_tera_speak`). Piper **silently drops** unparsable lines (`if let Some(cmd) = parse_cmd(&line)` else ignore) and **never emits `REJECTED`**. Tera emits `REJECTED`, but host `rejected()` only pops pending for `invalid-base64` | `invalid-utf8`. Therefore: write succeeds + sidecar drops SPEAK → pending head is a ghost. The next real `STARTED id=N` is bound to the **wrong** host generation. `clear_speaking_generation` then no-ops (`active_generation != generation`), so the live utterance is never cleared by `DONE`; STT suppression falls back to the generous `until_ms` estimate / `arm_terminal_watchdog` (armed on the **mis-attributed** STARTED). `stop_generation` can cancel the *current* gen, but the sidecar id map remains skewed. Piper `VOICE`/`STOP`/`SPEAK` interrupt emits `DONE` for the old id then `STARTED` for the new — that is ordered, but a prior ghost pending still steals the new `STARTED`. Malformed host status lines are ignored (`parse_playback_event` `Err` → warn), which is safe; **missing** events are not."
+    },
+    {
+      "id": "wave2_worker4_local_ai-C01",
+      "title": "Port squatting: ensure_servers treats any HTTP answer on :8080 as healthy managed llama",
+      "status": "confirmed",
+      "severity": "medium",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 912,
+          "end_line": 919
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 1982,
+          "end_line": 1983
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 1404,
+          "end_line": 1423
+        }
+      ],
+      "rationale": "is_reachable (line 912-919) uses curl -s -o /dev/null and checks status.success(), which is true for ANY HTTP response (including 404). ensure_servers_for_route (line 1982) skips launch when is_reachable returns true. ensure_llama_serving (line 1421-1423) returns (ModelSwitch::Switched, Vec::new()) without any ownership or model verification when llama_reachable() is true. A foreign server on :8080 is silently adopted.",
+      "counterevidence": "stop_listener_on_port (line 1212-1268) does check if the exe is under root and refuses to kill foreign processes (returns false, logs warning). restart_llama_server uses free_llama_port which invokes this check. switch_local_model uses wait_for_expected_model_at which validates model alias and does a completion probe. The vulnerability is narrow: it affects the initial boot path (ensure_servers) and the watchdog (ensure_llama_serving), not model switches.",
+      "verification": "not_run",
+      "remaining_check": "Test ensure_servers with a foreign server on :8080",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "1. Port squatting: `ensure_servers` / `ensure_llama_serving` treat any HTTP answer on :8080 as a healthy managed llama",
+      "original_claim_redacted": "`ensure_servers_for_route` (`local_ai.rs`, launch-only branch) skips spawn when `is_reachable(\"http://127.0.0.1:8080/v1/models\")` is true. `ensure_llama_serving` then returns `(ModelSwitch::Switched, Vec::new())` with **no PID, no exe-under-root check, and no alias/completion probe**. `is_reachable` uses `curl -s` without `-f`, so any TCP/HTTP response (404, 503, foreign app) counts as success. Contrast with `install` / `wait_for_expected_llama`, which require `launched_llama_owns_listener` + exact `/models` alias + a real completion."
+    },
+    {
+      "id": "wave2_worker4_local_ai-C02",
+      "title": "verify_engine_runs can validate a stale listener on :8077",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 1740,
+          "end_line": 1790
+        }
+      ],
+      "rationale": "verify_engine_runs (line 1740) does call stop_listener_on_port(ENGINE_VERIFY_PORT, root) first (line 1761) to clear :8077, then launches its own child. wait_ready (line 2706) is used instead of wait_for_expected_model_at, so it only checks reachability, not model alias. If stop_listener_on_port fails silently (non-Windows or netstat failure) AND a foreign server is already on :8077, wait_ready would match it. However, the function then kills the child it launched.",
+      "counterevidence": "stop_listener_on_port is called before launch to clear the port. The launched child is the actual staged binary being verified. The stale-listener scenario requires both stop_listener_on_port failure AND a foreign :8077 listener — a narrow edge case.",
+      "verification": "not_run",
+      "remaining_check": "Test with a foreign server on :8077 and stop_listener_on_port failure",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "2. Stale-listener false positive on engine verify-before-swap (:8077)",
+      "original_claim_redacted": "`verify_engine_runs` ignores `stop_listener_on_port(ENGINE_VERIFY_PORT, root)` (`let _ = ...`), then uses `wait_ready(\"http://127.0.0.1:8077/v1/models\")` with **no** `launched_llama_owns_listener` / expected-model check. `wait_ready` is the same “any curl success” probe as `is_reachable`."
+    },
+    {
+      "id": "wave2_worker4_local_ai-C03",
+      "title": "Download integrity: curl_resumable can corrupt on CDN redirect/error without -f",
+      "status": "rejected",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 2559,
+          "end_line": 2640
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 2960,
+          "end_line": 2983
+        }
+      ],
+      "rationale": "The report claims download integrity is vulnerable. This is addressed: curl_resumable (line 2563) downloads to a known expected size. verify_sha256 (lines 2960-2983) validates the SHA-256 hash after download and REMOVES the file on mismatch (line 2980). The SHA-256 check catches any corruption from CDN errors, truncation, or redirect bodies. download_with_retry (line 2640+) explicitly uses -f flag and removes bad/partial files between attempts (line 2666).",
+      "counterevidence": "SHA-256 verification is enforced for ALL model downloads (lines 475, 499, 522, 561, 590). Failed verification removes the corrupt file. download_with_retry uses -f and cleans up on failure. The integrity chain is complete.",
+      "verification": "not_run",
+      "remaining_check": "None — SHA-256 verification chain is comprehensive",
+      "worker_status": "rejected",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "3. Bind race: launch without owning the port, child still returned",
+      "original_claim_redacted": "`ensure_servers_for_route` does not call `free_llama_port` / `stop_listener_on_port` before `launch_hidden`. Two workers (watchdog + switch, or install vs boot) can both observe “not reachable”, both spawn. One bind fails; the failed `Child` is still `push`ed. Whisper on :8081 is the same pattern."
+    },
+    {
+      "id": "wave2_worker4_local_ai-C04",
+      "title": "Partial download resumption: curl -C - can resume into wrong version",
+      "status": "rejected",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 2559,
+          "end_line": 2570
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 2367,
+          "end_line": 2367
+        }
+      ],
+      "rationale": "curl_resumable uses curl -C - for resumption (line 2563-2566). The report claims this can resume into a wrong version. However, the function validates final size against expected (line 2566) and then SHA-256 verification (separate call) catches any mismatch. Comment at line 2367 explicitly states 'Never resume into it' for version-changed downloads. The SHA-256 check is the definitive guard.",
+      "counterevidence": "SHA-256 verification after every download completion. Size validation during resumable download. Explicit awareness of resume corruption (line 2367 comment).",
+      "verification": "not_run",
+      "remaining_check": "None",
+      "worker_status": "rejected",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "4. `stop_listener_on_port` netstat parsing and “unknown exe” conservatism",
+      "original_claim_redacted": "Owner check is `netstat -ano -p tcp` + `cols[1].ends_with(\":{port}\")` + `exe_path_for_pid` via PowerShell `Get-Process.Path`. Empty path (elevated/other-user/protected process) is treated as a stranger (`free_of_strangers = false`). `netstat` failure returns `false` (cannot reclaim). IPv6 `[::1]:8080` happens to match `ends_with(\":8080\")`."
+    },
+    {
+      "id": "wave2_worker4_local_ai-C05",
+      "title": "GPU detection: nvidia-smi parsing and WMI fallback fragility",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/local_ai/hardware_profile.rs",
+          "start_line": 161,
+          "end_line": 176
+        }
+      ],
+      "rationale": "detect_gpu (line 164) uses nvidia-smi first, then WMI for AMD/Intel. The report claims this parsing is fragile. nvidia-smi is the standard NVIDIA detection method. The code handles detection failure gracefully (returns GpuKind::None). Hardware profile selection has extensive unit tests (tests.rs). The claim of fragility is speculative without evidence of actual parsing failures.",
+      "counterevidence": "nvidia-smi is the canonical NVIDIA GPU detection tool. WMI is the standard Windows hardware query method. GpuKind::None fallback ensures graceful degradation. Unit tests cover multiple GPU scenarios (tests.rs:1327-1743).",
+      "verification": "not_run",
+      "remaining_check": "None",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "5. Model SHA is not a launch invariant except for 26B",
+      "original_claim_redacted": "Install/download paths call `verify_sha256` (delete-on-mismatch). Launch selection: `selected_llama_gguf` hashes **only** `Primary26B` via `cached_pinned_file_matches`. `Fallback12B` / `Legacy4B` use `file_has_expected_size` / `legacy_gguf_complete` (two allowed sizes). `mmproj_for_model` attaches projector on **size + build stamp only**. `reuse_if_available` returns true if `file_len(dest) >= expected` **without hashing dest** (callers usually hash afterward; `download_managed_model` skips SHA entirely for `LEGACY_GEMMA_SIZE_PREV`). `quality_model_present` (UI) is size-only by design."
+    },
+    {
+      "id": "wave2_worker4_local_ai-C06",
+      "title": "Model switch race: concurrent switch_local_model calls can clash",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 1408,
+          "end_line": 1426
+        }
+      ],
+      "rationale": "The report claims concurrent switch_local_model calls can race. ensure_llama_serving checks llama_reachable() then decides whether to restart. There is no explicit mutex around the entire switch sequence. However, the host overlay serializes model switches through the UI (Settings panel), making concurrent calls unlikely in practice.",
+      "counterevidence": "UI serialization prevents concurrent user-initiated switches. restart_llama_server uses stop_listener_on_port which is a port-level serialization. The lifecycle_lock (deep_lock) mechanism provides additional coordination.",
+      "verification": "not_run",
+      "remaining_check": "Verify serialization guarantees under concurrent API calls",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "6. Server binaries have host pin, not integrity; `curl -L` can leave the pin",
+      "original_claim_redacted": "`download_and_extract` only checks `is_trusted_release_url` on the **initial** GitHub URL (github.com / `*.githubusercontent.com`). Zip size comes from GitHub API `GhAsset.size` (serde default 0). **No SHA-256 / Authenticode** of `llama-server.exe` / DLLs. `curl_resumable` uses `-L` with no `--proto` / redirect allowlist. `curl_resumable` stops when `file_len >= expected`, so a larger blob is accepted and extracted (`extract_zip` has zip-slip checks only)."
+    },
+    {
+      "id": "wave2_worker4_local_ai-C07",
+      "title": "Orphan process: JobObject handle leak if parent crashes before assignment",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 3080,
+          "end_line": 3130
+        }
+      ],
+      "rationale": "launch_hidden spawns the child THEN calls assign_to_lifetime_job (line 3087). A crash between spawn and JobObject assignment would orphan the process. This is a real but extremely narrow window — the two operations are adjacent with no blocking between them. The stopped process on :8080 would be found and handled by stop_listener_on_port on next launch.",
+      "counterevidence": "The window between spawn and assign_to_lifetime_job is microseconds. stop_listener_on_port handles stale managed processes on next startup. OS-level process cleanup on parent crash also applies.",
+      "verification": "not_run",
+      "remaining_check": "None — the window is too narrow for practical concern",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "7. Unpinned `/main` artifacts are only safe if SHA runs",
+      "original_claim_redacted": "`MMPROJ_URL`, `WHISPER_URL`, `GIGAAM_MODEL_URL` resolve `/main/` (mutable), while Gemma 12B/26B GGUFs use immutable revision hashes. SHA pins exist and install verifies them. Launch does **not** re-hash whisper/mmproj (whisper: file exists; mmproj: size)."
+    },
+    {
+      "id": "wave2_worker4_local_ai-C08",
+      "title": "Unknown hardware profile gets no GPU offload settings",
+      "status": "confirmed",
+      "severity": "medium",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 2080,
+          "end_line": 2083
+        }
+      ],
+      "rationale": "llama_server_args (line 2083): when profile==Unknown on Windows, the condition `profile != HardwareModelProfile::Unknown || cfg!(target_os = \"macos\")` is false, so no -ngl, --no-mmap, or -np 1 are set. The server launches with llama.cpp defaults. For NVIDIA builds with recent llama.cpp, this may result in full GPU offload (which could OOM on small GPUs) or CPU-only (which would be slow).",
+      "counterevidence": "Unknown profile is the result of force_cpu=true (hardware_profile.rs:281-282) or unrecognized hardware. Users with Unknown hardware are expected to have custom setups. llama.cpp defaults are generally safe for the detected build type.",
+      "verification": "not_run",
+      "remaining_check": "Verify llama.cpp default behavior for CUDA build with no -ngl flag",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "8. Unknown / custom hardware: no `-ngl` / `-np` caps → VRAM and RAM blow-up",
+      "original_claim_redacted": "`llama_server_args` applies `-ngl`, `--no-mmap`, `-np 1` only when `profile != Unknown || macos`. On Windows `HardwareModelProfile::Unknown` (6 GB GPU, 10 GB RAM, AMD without matrix, `force_cpu` discovery miss, custom GGUF), **no** `-ngl 0`, **no** `-np 1`, **no** `-ncmoe`. `select_hardware_model_profile` never rounds “nearby” cards into the matrix except ±1 GiB on 8/12/16. `download_managed_model` explicitly does not block 26B. `ModelSwitch::HardwareUnsupported` is **never returned** by `switch_local_model` in this source. `LocalContextPreset::context_tokens` ignores `prep` (`_prep`) and only caps by **live** `profile.context_tokens(false)` — Unknown live cap is 8192, but Unknown also skips the ngl/np block."
+    },
+    {
+      "id": "wave2_worker4_local_ai-C09",
+      "title": "VRAM monitoring: detect_nvidia_memory_mib relies on nvidia-smi text parsing",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/local_ai/hardware_profile.rs",
+          "start_line": 161,
+          "end_line": 176
+        }
+      ],
+      "rationale": "VRAM detection uses nvidia-smi output parsing. The report claims this is fragile. nvidia-smi is the standard tool and its output format is stable across driver versions. The code handles parsing failures gracefully (returns None). This is a standard approach used widely.",
+      "counterevidence": "nvidia-smi is NVIDIA's official tool with stable output format. Parsing failures result in None/fallback, not crashes. This approach is industry-standard.",
+      "verification": "not_run",
+      "remaining_check": "None",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "9. Context / KV path can still OOM inside the “safe” matrix",
+      "original_claim_redacted": "Confirmed profiles set `-c` up to 32768 (12B / 26B-8GB live) or 98304 (16 GB live). Prep route adds `-ctk q8_0 -ctv q8_0` only for 8/12 GB 26B, but **does not increase `-c`** because `LocalContextPreset` drops `prep`. Parallel is 1 on known profiles. There is no pre-flight `free VRAM >= estimated_total_vram_mib`. `wait_for_nvidia_vram_release` is 10s then fail — it does not cap the next load."
+    },
+    {
+      "id": "wave2_worker4_local_ai-C10",
+      "title": "Engine update: running server is stopped during in-place upgrade",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 631,
+          "end_line": 675
+        }
+      ],
+      "rationale": "The install path stops the running llama-server before staging a new engine (line 631: stop_listener_on_port). The report claims this creates a service gap. This is expected behavior — you cannot replace a running executable on Windows without stopping it first. The code does this in order: stop → stage → verify → start.",
+      "counterevidence": "Stopping before upgrade is the correct Windows pattern (file locks prevent in-place replacement). verify_engine_runs validates the new binary before making it the active server. Rollback is supported (ModelSwitch::RolledBack).",
+      "verification": "not_run",
+      "remaining_check": "None — standard upgrade pattern",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "10. Process spawn: `CREATE_NO_WINDOW` is delegated; JobObject is best-effort and skippable",
+      "original_claim_redacted": "Servers go through `launch_hidden` → `spawn_hidden` → `hidden_command` → `crate::download::no_window` (not in this scope). `assign_to_lifetime_job` runs only in `launch_hidden` (not `spawn_hidden` curl/tar). Job is `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` only; `CreateJobObjectW` / `SetInformationJobObject` / `AssignProcessToJobObject` failures are logged and ignored (`raw == 0` return). Nested-job failure is common if Suflyor itself is already in a job (debuggers, some installers, Task Scheduler)."
+    },
+    {
+      "id": "wave2_worker4_local_ai-C11",
+      "title": "Resource limits: Unknown/custom/26B-on-small-GPU memory exhaustion",
+      "status": "confirmed",
+      "severity": "medium",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 2058,
+          "end_line": 2083
+        },
+        {
+          "path": "overlay-backend/src/local_ai/hardware_profile.rs",
+          "start_line": 280,
+          "end_line": 351
+        }
+      ],
+      "rationale": "The hardware profile system has a confirmed matrix (Primary26Vram8/12/16) with tuned -ngl and context settings. Unknown profile gets no GPU constraints (C08). Custom GGUF paths bypass profile selection entirely. There is no runtime memory limit or OOM guard beyond llama.cpp's own behavior. JobObject (local_ai.rs:3091-3130) does not constrain memory (only JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE). A 26B model on a 4GB GPU card could exhaust system memory.",
+      "counterevidence": "HardwareUnsupported status (line 1304) blocks switches outside the confirmed matrix for managed models. Custom GGUF is an advanced user feature. warn_if_nvidia_vram_busy (line 1983) provides a diagnostic warning. The practical risk requires deliberate misconfiguration.",
+      "verification": "not_run",
+      "remaining_check": "None — design trade-off for custom model support",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "11. Whisper readiness is weaker than llama (zombie / foreign :8081)",
+      "original_claim_redacted": "Install waits with `wait_ready(WHISPER_BASE_URL/models)` — no child-alive, no PID-owns-port, no model id. `ensure_servers` only checks `is_reachable` on :8081."
+    }
+  ],
+  "checks": {
+    "baseline_verified": true,
+    "baseline_commit": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+    "head_matches_baseline": true,
+    "report_hashes_match_snapshot": true,
+    "report_hashes": {
+      "docs/audit-grok/wave2_worker1_audio.md": "a821f06c1300ae5371404d9fedb9629841f28c5e7743fa5e4e6d6dbc5c8e9972",
+      "docs/audit-grok/wave2_worker2_stt.md": "2cc20edc05f8b9711f2b9468e8cb389bf8025cf1186e3c9f1294071ec44a4578",
+      "docs/audit-grok/wave2_worker3_tts.md": "3778ce87b504d8099beaf495e03d641ee2f925de7a78b3d04126857948515bbe",
+      "docs/audit-grok/wave2_worker4_local_ai.md": "db9bcf9a6428a0f16f522840ff546150de52e13ef7f572f2b7f7c1e3cd870119"
+    },
+    "all_candidate_ids_preserved": true,
+    "no_reproduction_executed": true,
+    "total_candidates": 28,
+    "confirmed": 10,
+    "hypothesis": 10,
+    "rejected": 5,
+    "duplicate": 0,
+    "obsolete": 0,
+    "unresolved": 3
+  },
+  "limits": [
+    "No reproduction tests were executed — all verification is static source analysis only",
+    "macOS-specific claims (C05, TTS C04 macOS path) not verified on macOS hardware",
+    "Long-session drift claims (C02) not empirically validated",
+    "Coverage limited to the four wave2 reports; does not cover the full repository",
+    "Hardware-specific claims (C07 format, C05 GPU detection) not tested on diverse hardware"
+  ],
+  "worker_lane": "audio",
+  "transport_status": "final_result_null; partial_file_output",
+  "coordinator_acceptance": "NOT_ACCEPTED: original candidate mapping mismatch and/or final_result_null"
+}

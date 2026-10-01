@@ -6,18 +6,21 @@ source_path: "slint-experiment/tests/macos_capture_watchdog_guard.rs"
 batch_id: "B05"
 total_lines: 134
 symbols_count: 3
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "8d19ff4a487ed78f29b314359bf60f106e699520ca737134d93abee2b75c8888"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/tests/macos_capture_watchdog_guard.rs`
 
 - **Batch:** B05
 - **Physical Lines:** 134
-- **Coverage:** 134/134 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (3)
 

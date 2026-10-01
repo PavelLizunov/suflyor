@@ -6,18 +6,21 @@ source_path: "slint-experiment/tests/lock_mode_menu_guard.rs"
 batch_id: "B05"
 total_lines: 30
 symbols_count: 1
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "193cd4f123790df5fc8fb5b449d46e6331ff04c830fc1eb2b1e8115fd8dfa445"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/tests/lock_mode_menu_guard.rs`
 
 - **Batch:** B05
 - **Physical Lines:** 30
-- **Coverage:** 30/30 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (1)
 

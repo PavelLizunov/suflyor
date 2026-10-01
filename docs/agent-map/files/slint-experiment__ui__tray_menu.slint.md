@@ -6,14 +6,17 @@ source_path: "slint-experiment/ui/tray_menu.slint"
 batch_id: "B05"
 total_lines: 105
 symbols_count: 13
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "f8e554e1bffd3124a157ef551544c49b4927593d471da1a5326dd6ad1f0e5eff"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/ui/tray_menu.slint`
 
 - **Batch:** B05
 - **Physical Lines:** 105
-- **Coverage:** 105/105 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 
@@ -40,7 +43,7 @@ review_state: validated
 | slint_callback | `action-selected` | L60 | `-` |
 | slint_callback | `dismissed` | L61 | `-` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - UI Callback `selected` declared at L8
 - UI Callback `action-selected` declared at L60

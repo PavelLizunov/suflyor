@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/bridge.rs"
 batch_id: "B06"
 total_lines: 750
 symbols_count: 21
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "a99d8cb160694223dfd5e161d6a7664d90c8e00592d9cd176b4fc7e18174c68b"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/bridge.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 750
-- **Coverage:** 750/750 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

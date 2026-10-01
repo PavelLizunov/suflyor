@@ -6,18 +6,21 @@ source_path: "overlay-backend/tests/ai_eval.rs"
 batch_id: "B09"
 total_lines: 114
 symbols_count: 7
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "cfdb3a71d9d9833777d328e3f8a3ce51bb72a5fbc34af0f8d0038a030d1378fe"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/tests/ai_eval.rs`
 
 - **Batch:** B09
 - **Physical Lines:** 114
-- **Coverage:** 114/114 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (7)
 

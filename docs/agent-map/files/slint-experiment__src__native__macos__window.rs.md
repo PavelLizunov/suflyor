@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/native/macos/window.rs"
 batch_id: "B04"
 total_lines: 104
 symbols_count: 13
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "df4ac3c15c25aa405b2febf3f5a174a8c7f41f99cb21b62083a093024788f585"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/native/macos/window.rs`
 
 - **Batch:** B04
 - **Physical Lines:** 104
-- **Coverage:** 104/104 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (13)
 

@@ -1,3 +1,5 @@
+> **Historical candidate evidence — not accepted review.** Reconstructed or edited by the prior coordinator; not an original independent Opus report. Source claims require reconciliation; the final historical verdict was `changes_required`.
+
 # O8: Whole-Map Adversarial Review & Contradiction Audit
 
 ## 1. Documentation vs. Real Implementation Contradictions

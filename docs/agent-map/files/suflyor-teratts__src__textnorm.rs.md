@@ -6,14 +6,17 @@ source_path: "suflyor-teratts/src/textnorm.rs"
 batch_id: "B12"
 total_lines: 480
 symbols_count: 23
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "3dd42fb7a605fc9c682f1c186ccd7b383b822cad926fb16d8527cb0d142cc47f"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-teratts/src/textnorm.rs`
 
 - **Batch:** B12
 - **Physical Lines:** 480
-- **Coverage:** 480/480 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 

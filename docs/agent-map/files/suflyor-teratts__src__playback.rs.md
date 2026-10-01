@@ -6,14 +6,17 @@ source_path: "suflyor-teratts/src/playback.rs"
 batch_id: "B12"
 total_lines: 470
 symbols_count: 25
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "793777a18c3dabac70a412ddca6a214cd811dac38b3c3c3a8033febc09a52100"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-teratts/src/playback.rs`
 
 - **Batch:** B12
 - **Physical Lines:** 470
-- **Coverage:** 470/470 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (4)
 
@@ -54,7 +57,7 @@ review_state: validated
 | function | `seek_clamps_to_retained_history_and_buffered_horizon` | L442 | `fn seek_clamps_to_retained_history_and_buffered_horizon() -> ()` |
 | function | `played_history_is_bounded_but_future_pcm_is_kept` | L458 | `fn played_history_is_bounded_but_future_pcm_is_kept() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Instantiates IPC channel at L133
 - Instantiates IPC channel at L134

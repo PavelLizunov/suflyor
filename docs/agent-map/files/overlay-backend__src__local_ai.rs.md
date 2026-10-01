@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/local_ai.rs"
 batch_id: "B06"
 total_lines: 3165
 symbols_count: 93
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "657dfcc77d055e5cf03ddb1b9a873635f9b13607fb902266d574305d60d962ba"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/local_ai.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 3165
-- **Coverage:** 3165/3165 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (11)
 
@@ -129,7 +132,7 @@ review_state: validated
 | function | `launch_hidden_wait` | L3149 | `fn launch_hidden_wait(exe: &str, args: &[&str]) -> Result<std::process::ExitStatus>` |
 | function | `run_capture` | L3157 | `fn run_capture(exe: &str, args: &[&str]) -> Result<std::process::Output>` |
 
-## Configuration Access
+## Heuristic configuration access matches
 
 - Configuration read at L339: `cfg.ai_provider = "local".to_string();`
 - Configuration read at L340: `cfg.ai_local_base_url = LLAMA_BASE_URL.to_string();`

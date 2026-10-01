@@ -6,14 +6,17 @@ source_path: "slint-experiment/ui/replay.slint"
 batch_id: "B05"
 total_lines: 225
 symbols_count: 13
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "5fcd088c7ffd1018d1b272fd7b0902735de7aad9df3d8e8a98022eebdcd484a2"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/ui/replay.slint`
 
 - **Batch:** B05
 - **Physical Lines:** 225
-- **Coverage:** 225/225 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 
@@ -39,7 +42,7 @@ review_state: validated
 | slint_callback | `reset-filter` | L64 | `-` |
 | slint_callback | `back-clicked` | L65 | `-` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - UI Callback `session-changed` declared at L62
 - UI Callback `chip-clicked` declared at L63

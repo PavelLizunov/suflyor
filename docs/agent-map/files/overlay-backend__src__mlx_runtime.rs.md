@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/mlx_runtime.rs"
 batch_id: "B06"
 total_lines: 749
 symbols_count: 41
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "81d8e32970318b46ffb03948e76314dcdb46c8362d0b0796e5a298141269bc0d"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/mlx_runtime.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 749
-- **Coverage:** 749/749 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (6)
 
@@ -72,7 +75,7 @@ review_state: validated
 | function | `mlx_stderr_privacy_drain_rejects_malformed_path_and_unbounded_tokens` | L711 | `fn mlx_stderr_privacy_drain_rejects_malformed_path_and_unbounded_tokens() -> ()` |
 | function | `non_macos_runtime_fails_closed` | L744 | `fn non_macos_runtime_fails_closed() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Instantiates IPC channel at L480
 - Spawns asynchronous thread/task at L481

@@ -6,18 +6,21 @@ source_path: "overlay-backend/src/local_ai/model_state.rs"
 batch_id: "B06"
 total_lines: 526
 symbols_count: 39
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "81c43c0af615ddb457eca885c2827915e2d5a9a727b5339e28693c5a460fcfc8"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/local_ai/model_state.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 526
-- **Coverage:** 526/526 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (39)
 
@@ -63,7 +66,7 @@ review_state: validated
 | function | `managed_model_vision_capable` | L501 | `fn managed_model_vision_capable(root: &Path, model: ManagedModel) -> bool` |
 | function | `vision_routes_to_managed_llama` | L513 | `fn vision_routes_to_managed_llama(cfg: &crate::config::Config) -> bool` |
 
-## Configuration Access
+## Heuristic configuration access matches
 
 - Configuration read at L17: `let provider_changed = cfg.ai_provider != "local";`
 - Configuration read at L18: `cfg.ai_provider = "local".to_string();`

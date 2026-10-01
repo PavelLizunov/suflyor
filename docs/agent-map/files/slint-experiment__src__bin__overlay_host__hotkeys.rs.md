@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/bin/overlay_host/hotkeys.rs"
 batch_id: "B04"
 total_lines: 231
 symbols_count: 2
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "b2006b11e37d5024b8d3c8103d6b3c216e0856136ba3ff022634757bbb739f7f"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/hotkeys.rs`
 
 - **Batch:** B04
 - **Physical Lines:** 231
-- **Coverage:** 231/231 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 
@@ -29,7 +32,7 @@ review_state: validated
 | function | `hotkey_diag_row` | L51 | `fn hotkey_diag_row() -> (i32, String, String)` |
 | function | `register_hotkeys` | L104 | `fn register_hotkeys() -> RegisteredHotkeys` |
 
-## Hotkey Mappings
+## Heuristic hotkey matches
 
 - Hotkey binding/dispatch at L5: `//! This module owns the one-time global-hotkey REGISTRATION ([`register_hotkeys`
 - Hotkey binding/dispatch at L6: `//! — it builds the process-wide `GlobalHotKeyManager`, registers every F-key`

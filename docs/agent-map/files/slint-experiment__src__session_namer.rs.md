@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/session_namer.rs"
 batch_id: "B01"
 total_lines: 358
 symbols_count: 16
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "3a639484835e1d9678b811afff060d6bdaf3886aebba4d3175c94ad76048d55f"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/session_namer.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 358
-- **Coverage:** 358/358 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 
@@ -43,10 +46,10 @@ review_state: validated
 | function | `decide_inflight_blocks_everything` | L324 | `fn decide_inflight_blocks_everything() -> ()` |
 | function | `decide_regen_needs_name_interval_growth_and_lull` | L331 | `fn decide_regen_needs_name_interval_growth_and_lull() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L142
 
-## Configuration Access
+## Heuristic configuration access matches
 
 - Configuration read at L132: `let ep = cfg.read().ai_endpoint(true);`

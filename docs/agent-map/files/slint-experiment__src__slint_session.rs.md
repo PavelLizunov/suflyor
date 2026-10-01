@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/slint_session.rs"
 batch_id: "B01"
 total_lines: 2117
 symbols_count: 48
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "1b90d6b66e6cc56c3712e9a37e4b5736d8fb10c4cac11d252fa1d44a0e985fcd"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/slint_session.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 2117
-- **Coverage:** 2117/2117 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (3)
 
@@ -76,7 +79,7 @@ review_state: validated
 | function | `stop_session_on_empty_rt_returns_empty_snapshot` | L2078 | `fn stop_session_on_empty_rt_returns_empty_snapshot() -> ()` |
 | function | `stop_session_keeps_full_transcript_for_summary` | L2090 | `fn stop_session_keeps_full_transcript_for_summary() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L241
 - Spawns asynchronous thread/task at L526

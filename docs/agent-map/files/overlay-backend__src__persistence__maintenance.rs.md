@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/persistence/maintenance.rs"
 batch_id: "B08"
 total_lines: 757
 symbols_count: 33
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "adc67b518ef594ab40c73be06038d00ca07e1a0c26be9899aa70413f22882fe5"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/persistence/maintenance.rs`
 
 - **Batch:** B08
 - **Physical Lines:** 757
-- **Coverage:** 757/757 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 

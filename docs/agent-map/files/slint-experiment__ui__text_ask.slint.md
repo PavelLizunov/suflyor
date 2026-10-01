@@ -6,14 +6,17 @@ source_path: "slint-experiment/ui/text_ask.slint"
 batch_id: "B05"
 total_lines: 173
 symbols_count: 12
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "2d1c78db31bad14aab93469ed0fd51ae5821cc6eb0628a9e1bd0683ba4976fe8"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/ui/text_ask.slint`
 
 - **Batch:** B05
 - **Physical Lines:** 173
-- **Coverage:** 173/173 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 
@@ -39,7 +42,7 @@ review_state: validated
 | slint_callback | `drag-start-requested` | L59 | `-` |
 | slint_callback | `drag-moved` | L60 | `-` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - UI Callback `submitted` declared at L54
 - UI Callback `cancelled` declared at L56

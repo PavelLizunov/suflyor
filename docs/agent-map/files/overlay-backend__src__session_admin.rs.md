@@ -6,18 +6,21 @@ source_path: "overlay-backend/src/session_admin.rs"
 batch_id: "B08"
 total_lines: 146
 symbols_count: 6
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "b106022b166e16de97775fa74720b5392737fac6b093ed290bb84cec63865d0b"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/session_admin.rs`
 
 - **Batch:** B08
 - **Physical Lines:** 146
-- **Coverage:** 146/146 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (6)
 

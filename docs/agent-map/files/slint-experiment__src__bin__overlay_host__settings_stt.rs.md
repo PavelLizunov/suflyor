@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_host/settings_stt.rs"
 batch_id: "B02"
 total_lines: 404
 symbols_count: 13
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "a874f074e27ef66a77ad80dc3a4cb85677d5d6b476bc65e5fce09a7228c5204b"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/settings_stt.rs`
 
 - **Batch:** B02
 - **Physical Lines:** 404
-- **Coverage:** 404/404 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (13)
 
@@ -37,7 +40,7 @@ review_state: validated
 | function | `gigaam_progress_matches_the_windows_megabyte_display` | L387 | `fn gigaam_progress_matches_the_windows_megabyte_display() -> ()` |
 | function | `failed_cloud_model_save_rolls_back` | L393 | `fn failed_cloud_model_save_rolls_back() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L129
 - Spawns asynchronous thread/task at L214

@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/teratts_install.rs"
 batch_id: "B10"
 total_lines: 934
 symbols_count: 40
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "213a78cda14ad86cee05c2d7688727ddc260db470e681c20c411b477621f78fb"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/teratts_install.rs`
 
 - **Batch:** B10
 - **Physical Lines:** 934
-- **Coverage:** 934/934 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (4)
 

@@ -6,18 +6,21 @@ source_path: "slint-experiment/tests/macos_app_packaging_guard.rs"
 batch_id: "B05"
 total_lines: 343
 symbols_count: 10
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "ed540d9e6093270dc340dd9685006fd5cd1bc1c98190b8faea6cb688750cf252"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/tests/macos_app_packaging_guard.rs`
 
 - **Batch:** B05
 - **Physical Lines:** 343
-- **Coverage:** 343/343 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (10)
 

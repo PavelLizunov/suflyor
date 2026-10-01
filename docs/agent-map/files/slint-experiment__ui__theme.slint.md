@@ -6,18 +6,21 @@ source_path: "slint-experiment/ui/theme.slint"
 batch_id: "B05"
 total_lines: 69
 symbols_count: 22
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "0ba507c9f83bc0b9b8a258110f686180cb7af0d62d2c239994fe42fcf9ffe4a8"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/ui/theme.slint`
 
 - **Batch:** B05
 - **Physical Lines:** 69
-- **Coverage:** 69/69 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (22)
 

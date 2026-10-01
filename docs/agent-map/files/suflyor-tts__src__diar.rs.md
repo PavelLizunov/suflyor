@@ -6,14 +6,17 @@ source_path: "suflyor-tts/src/diar.rs"
 batch_id: "B11"
 total_lines: 364
 symbols_count: 17
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "0f1e1f712a64051a9baca5137a03a1f5412390017a19c712c90398dc18cba8da"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-tts/src/diar.rs`
 
 - **Batch:** B11
 - **Physical Lines:** 364
-- **Coverage:** 364/364 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 

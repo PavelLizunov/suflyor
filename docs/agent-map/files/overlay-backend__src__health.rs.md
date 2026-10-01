@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/health.rs"
 batch_id: "B06"
 total_lines: 246
 symbols_count: 10
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "c3159b8bcf222426bbf5d18f8db24846ed18f2001c14df26912d5f9a651adf1a"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/health.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 246
-- **Coverage:** 246/246 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 

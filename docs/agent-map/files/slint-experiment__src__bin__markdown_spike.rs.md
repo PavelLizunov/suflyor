@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/markdown_spike.rs"
 batch_id: "B01"
 total_lines: 247
 symbols_count: 4
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "2ed1ad9d409da94d11a1b5f30795568bf429af1ac49d7409a03c4cf62a0d1f8a"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/markdown_spike.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 247
-- **Coverage:** 247/247 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (4)
 

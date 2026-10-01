@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/tray.rs"
 batch_id: "B01"
 total_lines: 656
 symbols_count: 23
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "54d0627df41d77468bf98e6755573ffb19b8c5d191cd7ba8854dc6caba4585f2"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/tray.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 656
-- **Coverage:** 656/656 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (5)
 

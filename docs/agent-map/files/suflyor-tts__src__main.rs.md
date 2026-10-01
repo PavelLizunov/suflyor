@@ -6,14 +6,17 @@ source_path: "suflyor-tts/src/main.rs"
 batch_id: "B11"
 total_lines: 404
 symbols_count: 12
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "52b73be9ae04ef95b016e2548ce47931d915fe671fdeebc40b72d8b5c9c59480"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-tts/src/main.rs`
 
 - **Batch:** B11
 - **Physical Lines:** 404
-- **Coverage:** 404/404 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (3)
 
@@ -40,7 +43,7 @@ review_state: validated
 | function | `playback_done_is_consumed_once_and_stale_ids_are_ignored` | L387 | `fn playback_done_is_consumed_once_and_stale_ids_are_ignored() -> ()` |
 | function | `parses_voice_cmd_rejects_path_traversal` | L395 | `fn parses_voice_cmd_rejects_path_traversal() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Instantiates IPC channel at L138
 - Spawns asynchronous thread/task at L140

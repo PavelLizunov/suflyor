@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/config/tests.rs"
 batch_id: "B09"
 total_lines: 1911
 symbols_count: 82
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "ef3acd5d0afe3902c3e6a58d4d7b64a8f01cbcc63b873aeb3121e4b40dbf05aa"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/config/tests.rs`
 
 - **Batch:** B09
 - **Physical Lines:** 1911
-- **Coverage:** 1911/1911 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 
@@ -108,7 +111,7 @@ review_state: validated
 | function | `legacy_config_loads_and_startup_stays_visible` | L1874 | `fn legacy_config_loads_and_startup_stays_visible() -> ()` |
 | function | `config_save_sets_unix_mode_0600` | L1893 | `fn config_save_sets_unix_mode_0600() -> ()` |
 
-## Configuration Access
+## Heuristic configuration access matches
 
 - Configuration read at L179: `cfg.system_audio_device = Some("My Loopback".into());`
 - Configuration read at L476: `assert_eq!(cfg.ai_model, "claude-old");`

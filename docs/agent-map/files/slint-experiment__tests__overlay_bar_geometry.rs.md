@@ -6,18 +6,21 @@ source_path: "slint-experiment/tests/overlay_bar_geometry.rs"
 batch_id: "B05"
 total_lines: 235
 symbols_count: 7
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "718bf242807cfb290ecacd6c3d96654c2615a8d64da07b0395f9cd942c267a6e"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/tests/overlay_bar_geometry.rs`
 
 - **Batch:** B05
 - **Physical Lines:** 235
-- **Coverage:** 235/235 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (7)
 

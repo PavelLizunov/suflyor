@@ -6,19 +6,22 @@ source_path: "scripts/set_opacity.ps1"
 batch_id: "B14"
 total_lines: 8
 symbols_count: 0
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: unsupported_by_final_generator
+source_sha256_at_historical_inventory: "c0f05282ade1ce9cc0de92d2e1ad9bce0169b2cfacea90e1350d186e18b4c2ec"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `scripts/set_opacity.ps1`
 
 - **Batch:** B14
 - **Physical Lines:** 8
-- **Coverage:** 8/8 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (0)
 
-*No function/method symbols extracted.*
+*No routine candidates extracted; absence of routines is not established.*

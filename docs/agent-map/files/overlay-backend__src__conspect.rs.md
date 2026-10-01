@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/conspect.rs"
 batch_id: "B08"
 total_lines: 761
 symbols_count: 49
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "b3bf8c9631a02f2293a7042336874cd1a6b57e3fc37cead282eb1d1df88995cd"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/conspect.rs`
 
 - **Batch:** B08
 - **Physical Lines:** 761
-- **Coverage:** 761/761 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 

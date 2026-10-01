@@ -6,14 +6,17 @@ source_path: "slint-experiment/ui/transcript.slint"
 batch_id: "B05"
 total_lines: 1083
 symbols_count: 67
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "227d004374009394087a0fdb6124219f13db76ad0b95127a873b54fb57cf85b1"
+source_matches_reconciliation_baseline: false
 ---
 
 # File Map: `slint-experiment/ui/transcript.slint`
 
 - **Batch:** B05
 - **Physical Lines:** 1083
-- **Coverage:** 1083/1083 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 
@@ -94,7 +97,7 @@ review_state: validated
 | slint_callback | `search-edited` | L206 | `-` |
 | slint_callback | `search-jump` | L207 | `-` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - UI Callback `clicked` declared at L40
 - UI Callback `toggle-play` declared at L166

@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/deep_lock.rs"
 batch_id: "B06"
 total_lines: 417
 symbols_count: 23
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "a560f80678ade3a4ccbbd47272d18b13cca237e61fd6d8e076cc7c3e016d48a1"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/deep_lock.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 417
-- **Coverage:** 417/417 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (3)
 
@@ -51,7 +54,7 @@ review_state: validated
 | function | `blocked_error_marker_matches_its_chains` | L376 | `fn blocked_error_marker_matches_its_chains() -> ()` |
 | function | `copy_is_localized_and_state_distinct` | L386 | `fn copy_is_localized_and_state_distinct() -> ()` |
 
-## Configuration Access
+## Heuristic configuration access matches
 
 - Configuration read at L68: `(cfg.ai_provider == "local"`
 - Configuration read at L69: `&& crate::local_ai::is_managed_llama_endpoint(&cfg.ai_local_base_url))`

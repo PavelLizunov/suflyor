@@ -6,18 +6,21 @@ source_path: "overlay-backend/src/tts_normalize.rs"
 batch_id: "B10"
 total_lines: 395
 symbols_count: 27
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "a623d3d443ff1601ccf7f83ecdaab1246474822a552daaab3a33a5060dc9e4fa"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/tts_normalize.rs`
 
 - **Batch:** B10
 - **Physical Lines:** 395
-- **Coverage:** 395/395 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (27)
 

@@ -6,18 +6,21 @@ source_path: "suflyor-wsola/tests/speech_contract.rs"
 batch_id: "B13"
 total_lines: 47
 symbols_count: 3
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "7cc15e0be35a34c696218662f5e15b178cba0215fdc3a8b186e95ddb0da55fc5"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-wsola/tests/speech_contract.rs`
 
 - **Batch:** B13
 - **Physical Lines:** 47
-- **Coverage:** 47/47 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (3)
 

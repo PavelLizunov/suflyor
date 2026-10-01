@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/codex_subscription.rs"
 batch_id: "B06"
 total_lines: 2065
 symbols_count: 82
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "9058eeb6a7bb5af3a50ab863b8fc32d9b477de842e9c5e16508a2dcc26fb3f64"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/codex_subscription.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 2065
-- **Coverage:** 2065/2065 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (11)
 
@@ -118,7 +121,7 @@ review_state: validated
 | function | `nonempty_workspace_fails_closed` | L2043 | `fn nonempty_workspace_fails_closed() -> ()` |
 | function | `rate_limit_and_failures_never_echo_server_secrets` | L2054 | `fn rate_limit_and_failures_never_echo_server_secrets() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L171
 - Spawns asynchronous thread/task at L182

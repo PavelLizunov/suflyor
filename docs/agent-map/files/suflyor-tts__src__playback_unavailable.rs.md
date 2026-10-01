@@ -6,14 +6,17 @@ source_path: "suflyor-tts/src/playback_unavailable.rs"
 batch_id: "B11"
 total_lines: 52
 symbols_count: 8
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "f8982721ae4cbe8fa5ae6411ccd0d6ba55dd5c573c5d2b1b33ded56564fd6b58"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-tts/src/playback_unavailable.rs`
 
 - **Batch:** B11
 - **Physical Lines:** 52
-- **Coverage:** 52/52 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

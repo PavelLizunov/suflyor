@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/bin/overlay_host/transcript_player.rs"
 batch_id: "B03"
 total_lines: 585
 symbols_count: 39
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "ff4134a0ec1516ae02770fe7f6a7dbec855193e3442d0bedb08a3ca3c2ec8f81"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/transcript_player.rs`
 
 - **Batch:** B03
 - **Physical Lines:** 585
-- **Coverage:** 585/585 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (3)
 

@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_host/tile_followup.rs"
 batch_id: "B03"
 total_lines: 988
 symbols_count: 15
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "4f2d12b820678d8a86223c4012aa91d7fe03a788b10667fe46439cca7c52a63e"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/tile_followup.rs`
 
 - **Batch:** B03
 - **Physical Lines:** 988
-- **Coverage:** 988/988 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (15)
 
@@ -39,7 +42,7 @@ review_state: validated
 | function | `followup_system_prompt_carries_language_context_and_prior` | L963 | `fn followup_system_prompt_carries_language_context_and_prior() -> ()` |
 | function | `followup_system_prompt_carries_role_style_semantics` | L974 | `fn followup_system_prompt_carries_role_style_semantics() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L287
 - Spawns asynchronous thread/task at L524

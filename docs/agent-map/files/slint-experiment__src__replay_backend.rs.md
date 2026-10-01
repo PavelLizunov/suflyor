@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/replay_backend.rs"
 batch_id: "B01"
 total_lines: 372
 symbols_count: 11
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "adddd504e1c370046ca75ba4c788738d1568d30742a01b93d289957e9875d4a1"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/replay_backend.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 372
-- **Coverage:** 372/372 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

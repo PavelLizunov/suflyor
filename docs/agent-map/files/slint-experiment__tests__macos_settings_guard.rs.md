@@ -6,18 +6,21 @@ source_path: "slint-experiment/tests/macos_settings_guard.rs"
 batch_id: "B05"
 total_lines: 227
 symbols_count: 8
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "13aa3da31fd8e4f390668f18db5a115a68b644bd4809b96b51a3176681de4f4a"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/tests/macos_settings_guard.rs`
 
 - **Batch:** B05
 - **Physical Lines:** 227
-- **Coverage:** 227/227 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (8)
 
@@ -32,6 +35,6 @@ review_state: validated
 | function | `macos_gigaam_is_coreml_backed_and_primary_on_fresh_config` | L175 | `fn macos_gigaam_is_coreml_backed_and_primary_on_fresh_config() -> ()` |
 | function | `macos_mlx_models_are_opt_in_downloads_with_honest_state` | L200 | `fn macos_mlx_models_are_opt_in_downloads_with_honest_state() -> ()` |
 
-## Configuration Access
+## Heuristic configuration access matches
 
 - Configuration read at L183: `assert!(config.contains("if cfg!(target_os = \"macos\") {\n        \"gigaam\".in`

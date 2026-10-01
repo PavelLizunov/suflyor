@@ -6,14 +6,17 @@ source_path: "slint-experiment/ui/wizard.slint"
 batch_id: "B05"
 total_lines: 453
 symbols_count: 36
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "4bdc8c00f341acb813eaf0c8a4da4f34e7d4988801936b06eae2fc01af3324cc"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/ui/wizard.slint`
 
 - **Batch:** B05
 - **Physical Lines:** 453
-- **Coverage:** 453/453 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (3)
 
@@ -64,7 +67,7 @@ review_state: validated
 | slint_callback | `drag-start-requested` | L154 | `-` |
 | slint_callback | `drag-moved` | L155 | `-` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - UI Callback `chosen` declared at L91
 - UI Callback `mode-selected` declared at L139

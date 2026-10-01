@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/bin/overlay_host_windows.rs"
 batch_id: "B01"
 total_lines: 4962
 symbols_count: 8
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "fba170e1a3fa4fc797f4b4550f99c91e8a4c390683657d8919267280c4521341"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host_windows.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 4962
-- **Coverage:** 4962/4962 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 
@@ -35,7 +38,7 @@ review_state: validated
 | function | `stop_session_and_maybe_debrief` | L4895 | `fn stop_session_and_maybe_debrief(runtime: SharedSlintRuntime, events: Arc<dyn RuntimeEvents>, cfg: config::SharedConfig, session_id: String, session_secs: u64, runtime_handle: &tokio::runtime::Handle,) -> ()` |
 | function | `mic_guard_is_a_single_latch` | L4934 | `fn mic_guard_is_a_single_latch() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L539
 - Instantiates IPC channel at L745
@@ -48,13 +51,13 @@ review_state: validated
 - Spawns asynchronous thread/task at L4151
 - Spawns asynchronous thread/task at L4225
 
-## Configuration Access
+## Heuristic configuration access matches
 
 - Configuration read at L610: `ai::set_prompt_cache(cfg.read().ai_prompt_cache);`
 - Configuration read at L4229: `config.ai_provider == "mlx"`
 - Configuration read at L4240: `config.suppress_tiles = target_listening;`
 
-## Hotkey Mappings
+## Heuristic hotkey matches
 
 - Hotkey binding/dispatch at L75: `// glob), and the extracted `register_hotkeys` / `RegisteredHotkeys` so the inli`
 - Hotkey binding/dispatch at L78: `// ids `register_hotkeys` hands back.`

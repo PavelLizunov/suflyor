@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/ai/tps.rs"
 batch_id: "B06"
 total_lines: 282
 symbols_count: 17
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "6a1f4061a4e7c7531cb91b3273007b1fef16a83db2a0caf3f8cc871cd817d260"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/ai/tps.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 282
-- **Coverage:** 282/282 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (3)
 

@@ -6,18 +6,21 @@ source_path: "slint-experiment/tests/native_lifecycle_guard.rs"
 batch_id: "B05"
 total_lines: 55
 symbols_count: 3
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "fd50c710789112d2f92f22e9b2688a402624876b8f93f808deedf1a1c6d14286"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/tests/native_lifecycle_guard.rs`
 
 - **Batch:** B05
 - **Physical Lines:** 55
-- **Coverage:** 55/55 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (3)
 

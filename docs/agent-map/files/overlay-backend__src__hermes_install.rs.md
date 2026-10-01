@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/hermes_install.rs"
 batch_id: "B09"
 total_lines: 873
 symbols_count: 35
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "4c40f58fce9f48039a101edecb61a498f5ca3e2eacc01db42d45432b0f9efdcd"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/hermes_install.rs`
 
 - **Batch:** B09
 - **Physical Lines:** 873
-- **Coverage:** 873/873 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 

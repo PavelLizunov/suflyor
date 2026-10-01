@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/bin/overlay_host/local_watchdog.rs"
 batch_id: "B01"
 total_lines: 125
 symbols_count: 7
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "dcff5b7d90b44c95bef873b1aa0e1fdf4b389fcdb09e447f44135577c20d6e1c"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/local_watchdog.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 125
-- **Coverage:** 125/125 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

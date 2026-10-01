@@ -6,14 +6,17 @@ source_path: "slint-experiment/tests/native_macos_status_guard.rs"
 batch_id: "B05"
 total_lines: 95
 symbols_count: 6
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "c1b1bd878122f3a71d764eea18731e6a01acaa2df7a992722e4928759b516d2e"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/tests/native_macos_status_guard.rs`
 
 - **Batch:** B05
 - **Physical Lines:** 95
-- **Coverage:** 95/95 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

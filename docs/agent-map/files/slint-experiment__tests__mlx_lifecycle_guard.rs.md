@@ -6,14 +6,17 @@ source_path: "slint-experiment/tests/mlx_lifecycle_guard.rs"
 batch_id: "B05"
 total_lines: 91
 symbols_count: 6
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "8bbc6d5fec148ae4aae9ff98042c0db0bc5518adad3723a2db323e9ad6256edc"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/tests/mlx_lifecycle_guard.rs`
 
 - **Batch:** B05
 - **Physical Lines:** 91
-- **Coverage:** 91/91 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

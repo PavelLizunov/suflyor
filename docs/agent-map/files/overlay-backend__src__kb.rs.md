@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/kb.rs"
 batch_id: "B08"
 total_lines: 503
 symbols_count: 19
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "7ef2885d4691c727d40a021cfb33642c9671a7dcea32ae76e4b73de089e3102a"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/kb.rs`
 
 - **Batch:** B08
 - **Physical Lines:** 503
-- **Coverage:** 503/503 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

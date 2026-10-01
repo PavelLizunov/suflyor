@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_host/settings_memory.rs"
 batch_id: "B02"
 total_lines: 391
 symbols_count: 10
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "251731b673fc5de138f010ab1aeba4e81c35d109a9ca393d1cba4e369ba56bb5"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/settings_memory.rs`
 
 - **Batch:** B02
 - **Physical Lines:** 391
-- **Coverage:** 391/391 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (10)
 
@@ -34,7 +37,7 @@ review_state: validated
 | function | `item_row` | L370 | `fn item_row(m: &MemoryItem) -> MemoryRow` |
 | function | `kind_glyph` | L382 | `fn kind_glyph(kind: &str) -> &'static str` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L140
 - Spawns asynchronous thread/task at L167

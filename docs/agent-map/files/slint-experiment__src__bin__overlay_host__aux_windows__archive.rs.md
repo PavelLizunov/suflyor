@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs"
 batch_id: "B03"
 total_lines: 1455
 symbols_count: 26
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "650c082c48537907cc808a2edede7d2ee6e9fc7a8475dd579fa40f9d54d85419"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/aux_windows/archive.rs`
 
 - **Batch:** B03
 - **Physical Lines:** 1455
-- **Coverage:** 1455/1455 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (26)
 
@@ -50,6 +53,6 @@ review_state: validated
 | function | `session_markdown_transcript_has_timecodes_and_ru_labels` | L1424 | `fn session_markdown_transcript_has_timecodes_and_ru_labels() -> ()` |
 | function | `session_markdown_empty_shows_not_saved_notice` | L1451 | `fn session_markdown_empty_shows_not_saved_notice() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L115

@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/bin/overlay_host/aux_windows/help_palette.rs"
 batch_id: "B03"
 total_lines: 248
 symbols_count: 6
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "9423f146feb96cb3096504ce4900f94762fdba931552d2914e393ab71850c421"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/aux_windows/help_palette.rs`
 
 - **Batch:** B03
 - **Physical Lines:** 248
-- **Coverage:** 248/248 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 

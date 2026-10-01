@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_host/settings_controller.rs"
 batch_id: "B02"
 total_lines: 1979
 symbols_count: 11
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "e892387fc7d27f657a0828fd5016f69d3c9641b40d00f19895c50c57ace54143"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/settings_controller.rs`
 
 - **Batch:** B02
 - **Physical Lines:** 1979
-- **Coverage:** 1979/1979 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (11)
 
@@ -35,7 +38,7 @@ review_state: validated
 | function | `component_row_copy_follows_ui_language` | L1938 | `fn component_row_copy_follows_ui_language() -> ()` |
 | function | `codex_has_no_fake_cloud_selection_on_macos` | L1973 | `fn codex_has_no_fake_cloud_selection_on_macos() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L224
 - Spawns asynchronous thread/task at L317

@@ -6,18 +6,21 @@ source_path: "overlay-backend/src/journal/retention.rs"
 batch_id: "B08"
 total_lines: 55
 symbols_count: 2
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "f3881102edd23e3e0c96806eab0e7696ae113a162f2cc256e38eeb4a93e5ca12"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/journal/retention.rs`
 
 - **Batch:** B08
 - **Physical Lines:** 55
-- **Coverage:** 55/55 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (2)
 

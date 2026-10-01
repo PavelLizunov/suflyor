@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/bin/overlay_host/tile_routes.rs"
 batch_id: "B03"
 total_lines: 146
 symbols_count: 7
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "69c46b58e325e23c64b88bec291f2e8ddf358aa57d341f29563f76c619d8e632"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/tile_routes.rs`
 
 - **Batch:** B03
 - **Physical Lines:** 146
-- **Coverage:** 146/146 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 
@@ -33,7 +36,7 @@ review_state: validated
 | function | `remote_routes_require_bearer_and_local_does_not` | L95 | `fn remote_routes_require_bearer_and_local_does_not() -> ()` |
 | function | `missing_vision_route_never_falls_back_to_the_text_model` | L136 | `fn missing_vision_route_never_falls_back_to_the_text_model() -> ()` |
 
-## Configuration Access
+## Heuristic configuration access matches
 
 - Configuration read at L104: `config.ai_bearer = "token".into();`
 - Configuration read at L108: `config.ai_provider = "local".into();`

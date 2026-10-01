@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/native/macos/lifecycle.rs"
 batch_id: "B04"
 total_lines: 67
 symbols_count: 3
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "19491c7053504b685ce3702c2d738eb5ef69e6ae99742da7ff57a76f8930a64c"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/native/macos/lifecycle.rs`
 
 - **Batch:** B04
 - **Physical Lines:** 67
-- **Coverage:** 67/67 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

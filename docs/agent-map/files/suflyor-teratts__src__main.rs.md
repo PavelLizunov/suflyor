@@ -6,14 +6,17 @@ source_path: "suflyor-teratts/src/main.rs"
 batch_id: "B12"
 total_lines: 1113
 symbols_count: 62
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "ea893faf41741cc45b21a30fd1fbeeb19386e85bbe9ee51a648929fd028d5fff"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-teratts/src/main.rs`
 
 - **Batch:** B12
 - **Physical Lines:** 1113
-- **Coverage:** 1113/1113 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (13)
 
@@ -100,7 +103,7 @@ review_state: validated
 | function | `lang_and_rate_flow_into_jobs` | L1084 | `fn lang_and_rate_flow_into_jobs() -> ()` |
 | function | `reason_tokens_are_protocol_safe` | L1098 | `fn reason_tokens_are_protocol_safe() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Instantiates IPC channel at L594
 - Instantiates IPC channel at L595

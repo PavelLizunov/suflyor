@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_host/diagnostics.rs"
 batch_id: "B01"
 total_lines: 955
 symbols_count: 23
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "bd6a3ccb032156a299c3eaa48827e142ef133dbe67421fcff93f09940ab002bb"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/diagnostics.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 955
-- **Coverage:** 955/955 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (23)
 
@@ -47,7 +50,7 @@ review_state: validated
 | function | `redact_secrets_masks_bearer_gsk_and_sk_tokens` | L930 | `fn redact_secrets_masks_bearer_gsk_and_sk_tokens() -> ()` |
 | function | `is_ipv4_accepts_valid_rejects_ports_and_versions` | L946 | `fn is_ipv4_accepts_valid_rejects_ports_and_versions() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L264
 - Spawns asynchronous thread/task at L421

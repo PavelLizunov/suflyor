@@ -6,18 +6,21 @@ source_path: "overlay-backend/src/ai/completion.rs"
 batch_id: "B06"
 total_lines: 307
 symbols_count: 9
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "9f11565fced4b5d136a82db9516f56649d13c4f07723672e5eb898a975c3fa57"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/ai/completion.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 307
-- **Coverage:** 307/307 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (9)
 

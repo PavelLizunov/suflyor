@@ -6,14 +6,17 @@ source_path: "slint-experiment/ui/overlay_bar.slint"
 batch_id: "B05"
 total_lines: 1504
 symbols_count: 134
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "e8a463f37a58c11f03e67dfa527390e41b5b1a8c04cd30a3462febc5b5bc92a7"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/ui/overlay_bar.slint`
 
 - **Batch:** B05
 - **Physical Lines:** 1504
-- **Coverage:** 1504/1504 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (9)
 
@@ -168,7 +171,7 @@ review_state: validated
 | slint_callback | `compact-toggle-clicked` | L691 | `-` |
 | slint_callback | `hide-to-tray-clicked` | L694 | `-` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - UI Callback `clicked` declared at L79
 - UI Callback `clicked` declared at L140

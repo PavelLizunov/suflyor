@@ -6,18 +6,21 @@ source_path: "suflyor-teratts/src/chunk.rs"
 batch_id: "B12"
 total_lines: 107
 symbols_count: 9
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "2a85349ad4cfa116f4c369cefb0cb49446fca66126d43b3c0bd7b17aa8fde9a3"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-teratts/src/chunk.rs`
 
 - **Batch:** B12
 - **Physical Lines:** 107
-- **Coverage:** 107/107 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (9)
 

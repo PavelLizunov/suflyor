@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/persistence/indexer.rs"
 batch_id: "B08"
 total_lines: 449
 symbols_count: 13
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "d6728820a4474c66f21f6e169a251f1353c4c5baa48ff71b4b43a07088ab58bf"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/persistence/indexer.rs`
 
 - **Batch:** B08
 - **Physical Lines:** 449
-- **Coverage:** 449/449 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

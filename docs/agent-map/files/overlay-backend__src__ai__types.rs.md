@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/ai/types.rs"
 batch_id: "B06"
 total_lines: 124
 symbols_count: 8
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "ada2697adf16919c5df45fd4601d7e88ec03d69f6874dd538da27b6d653376ba"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/ai/types.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 124
-- **Coverage:** 124/124 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (7)
 

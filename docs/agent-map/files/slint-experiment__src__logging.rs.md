@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/logging.rs"
 batch_id: "B01"
 total_lines: 169
 symbols_count: 9
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "59adb2fffa6bcd8edc891e2b0d717806228cc5f03f0f4bbb5656e2373cae30c3"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/logging.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 169
-- **Coverage:** 169/169 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

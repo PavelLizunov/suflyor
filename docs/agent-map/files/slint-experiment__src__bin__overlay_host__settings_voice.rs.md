@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_host/settings_voice.rs"
 batch_id: "B02"
 total_lines: 475
 symbols_count: 12
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "059075ecf3b4b1c5d527249eef76d4c3e964deb10dd9c512b8e18f3708e45ab7"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/settings_voice.rs`
 
 - **Batch:** B02
 - **Physical Lines:** 475
-- **Coverage:** 475/475 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (12)
 
@@ -36,7 +39,7 @@ review_state: validated
 | function | `tera_labels_are_localized_and_ascii_safe` | L437 | `fn tera_labels_are_localized_and_ascii_safe() -> ()` |
 | function | `unavailable_status_is_localized_and_screen_share_safe` | L461 | `fn unavailable_status_is_localized_and_screen_share_safe() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L222
 - Spawns asynchronous thread/task at L334

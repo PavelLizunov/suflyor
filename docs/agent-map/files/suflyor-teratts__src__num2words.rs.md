@@ -6,14 +6,17 @@ source_path: "suflyor-teratts/src/num2words.rs"
 batch_id: "B12"
 total_lines: 424
 symbols_count: 16
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "106c51b4c3faff3655bd017581c0dd12149dfbb8937f16e5f54e2143c1d30dcd"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-teratts/src/num2words.rs`
 
 - **Batch:** B12
 - **Physical Lines:** 424
-- **Coverage:** 424/424 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

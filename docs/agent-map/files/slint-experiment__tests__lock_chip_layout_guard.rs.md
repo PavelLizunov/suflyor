@@ -6,18 +6,21 @@ source_path: "slint-experiment/tests/lock_chip_layout_guard.rs"
 batch_id: "B05"
 total_lines: 22
 symbols_count: 1
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "d6aa6bec9ff229a75155c77af4ab0919f70710616469af0217111d234bf5ce0d"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/tests/lock_chip_layout_guard.rs`
 
 - **Batch:** B05
 - **Physical Lines:** 22
-- **Coverage:** 22/22 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (1)
 

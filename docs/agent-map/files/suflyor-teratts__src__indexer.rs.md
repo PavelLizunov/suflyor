@@ -6,14 +6,17 @@ source_path: "suflyor-teratts/src/indexer.rs"
 batch_id: "B12"
 total_lines: 125
 symbols_count: 10
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "959bdb6c544f497c2bfb92a612d2c95ce396f12a97df316bf70c12f6bfe2f122"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-teratts/src/indexer.rs`
 
 - **Batch:** B12
 - **Physical Lines:** 125
-- **Coverage:** 125/125 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

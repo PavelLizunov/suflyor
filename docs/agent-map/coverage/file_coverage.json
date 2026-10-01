@@ -5,7 +5,11 @@
     "batch_id": "B15",
     "total_lines": 101,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": ".claude/hooks/block-asks.ps1",
@@ -13,7 +17,11 @@
     "batch_id": "B15",
     "total_lines": 50,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": ".claude/hooks/git-gate.ps1",
@@ -21,7 +29,11 @@
     "batch_id": "B15",
     "total_lines": 241,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": ".claude/hooks/plan-progress-check.ps1",
@@ -29,7 +41,11 @@
     "batch_id": "B15",
     "total_lines": 63,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": ".claude/hooks/stop-guard.ps1",
@@ -37,7 +53,11 @@
     "batch_id": "B15",
     "total_lines": 130,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": ".github/scripts/is-docs-only.sh",
@@ -45,7 +65,11 @@
     "batch_id": "B14",
     "total_lines": 55,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": ".github/scripts/test-docs-only-detection.sh",
@@ -53,7 +77,11 @@
     "batch_id": "B14",
     "total_lines": 117,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": ".github/scripts/test-gate-logic.sh",
@@ -61,7 +89,11 @@
     "batch_id": "B14",
     "total_lines": 54,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "experiments/macos-gate0a/build.rs",
@@ -69,7 +101,11 @@
     "batch_id": "B15",
     "total_lines": 18,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "experiments/macos-gate0a/scripts/build-app.sh",
@@ -77,7 +113,11 @@
     "batch_id": "B15",
     "total_lines": 23,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "experiments/macos-gate0a/src/appkit.m",
@@ -85,7 +125,11 @@
     "batch_id": "B15",
     "total_lines": 151,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "experiments/macos-gate0a/src/main.rs",
@@ -93,7 +137,11 @@
     "batch_id": "B15",
     "total_lines": 222,
     "symbols_count": 15,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "experiments/macos-gate0a/ui/gate0a.slint",
@@ -101,7 +149,11 @@
     "batch_id": "B15",
     "total_lines": 257,
     "symbols_count": 31,
-    "types_count": 4
+    "types_count": 4,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "experiments/macos-gate0b/build.rs",
@@ -109,7 +161,11 @@
     "batch_id": "B15",
     "total_lines": 30,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "experiments/macos-gate0b/scripts/build-app.sh",
@@ -117,7 +173,11 @@
     "batch_id": "B15",
     "total_lines": 24,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "experiments/macos-gate0b/scripts/check.sh",
@@ -125,7 +185,11 @@
     "batch_id": "B15",
     "total_lines": 11,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "experiments/macos-gate0b/src/capture.m",
@@ -133,7 +197,11 @@
     "batch_id": "B15",
     "total_lines": 548,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "experiments/macos-gate0b/src/main.rs",
@@ -141,7 +209,11 @@
     "batch_id": "B15",
     "total_lines": 281,
     "symbols_count": 20,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "experiments/macos-gate0b/ui/gate0b.slint",
@@ -149,7 +221,11 @@
     "batch_id": "B15",
     "total_lines": 197,
     "symbols_count": 45,
-    "types_count": 3
+    "types_count": 3,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "integrations/hermes-plugin/suflyor/__init__.py",
@@ -157,7 +233,11 @@
     "batch_id": "B15",
     "total_lines": 272,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "integrations/hermes-plugin/tests/test_limits.py",
@@ -165,7 +245,11 @@
     "batch_id": "B15",
     "total_lines": 61,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "overlay-backend/build.rs",
@@ -173,7 +257,11 @@
     "batch_id": "B14",
     "total_lines": 64,
     "symbols_count": 7,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/examples/ai_probe.rs",
@@ -181,7 +269,11 @@
     "batch_id": "B09",
     "total_lines": 58,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/examples/audio_capture_probe.rs",
@@ -189,7 +281,11 @@
     "batch_id": "B09",
     "total_lines": 259,
     "symbols_count": 9,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/examples/stt_double.rs",
@@ -197,7 +293,11 @@
     "batch_id": "B09",
     "total_lines": 40,
     "symbols_count": 3,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/examples/stt_macos_lifecycle_probe.rs",
@@ -205,7 +305,11 @@
     "batch_id": "B09",
     "total_lines": 206,
     "symbols_count": 8,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/examples/stt_macos_probe.rs",
@@ -213,7 +317,11 @@
     "batch_id": "B09",
     "total_lines": 118,
     "symbols_count": 4,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/native/macos/mic_capture.m",
@@ -221,7 +329,11 @@
     "batch_id": "B09",
     "total_lines": 355,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "overlay-backend/native/macos/process_memory.c",
@@ -229,7 +341,11 @@
     "batch_id": "B09",
     "total_lines": 17,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "overlay-backend/native/macos/system_capture.m",
@@ -237,7 +353,11 @@
     "batch_id": "B09",
     "total_lines": 463,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "overlay-backend/src/ai/completion.rs",
@@ -245,7 +365,11 @@
     "batch_id": "B06",
     "total_lines": 307,
     "symbols_count": 9,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/ai/control.rs",
@@ -253,7 +377,11 @@
     "batch_id": "B06",
     "total_lines": 129,
     "symbols_count": 10,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/ai/inspect.rs",
@@ -261,7 +389,11 @@
     "batch_id": "B06",
     "total_lines": 195,
     "symbols_count": 5,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/ai/mod.rs",
@@ -269,7 +401,11 @@
     "batch_id": "B06",
     "total_lines": 24,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/ai/pricing.rs",
@@ -277,7 +413,11 @@
     "batch_id": "B06",
     "total_lines": 60,
     "symbols_count": 3,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/ai/prompt.rs",
@@ -285,7 +425,11 @@
     "batch_id": "B06",
     "total_lines": 126,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/ai/provider.rs",
@@ -293,7 +437,11 @@
     "batch_id": "B06",
     "total_lines": 518,
     "symbols_count": 14,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/ai/stream.rs",
@@ -301,7 +449,11 @@
     "batch_id": "B06",
     "total_lines": 366,
     "symbols_count": 5,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/ai/tests.rs",
@@ -309,7 +461,11 @@
     "batch_id": "B06",
     "total_lines": 707,
     "symbols_count": 38,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/ai/tps.rs",
@@ -317,7 +473,11 @@
     "batch_id": "B06",
     "total_lines": 282,
     "symbols_count": 17,
-    "types_count": 3
+    "types_count": 3,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/ai/types.rs",
@@ -325,7 +485,11 @@
     "batch_id": "B06",
     "total_lines": 124,
     "symbols_count": 8,
-    "types_count": 7
+    "types_count": 7,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/audio.rs",
@@ -333,7 +497,11 @@
     "batch_id": "B07",
     "total_lines": 962,
     "symbols_count": 24,
-    "types_count": 6
+    "types_count": 6,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/audio_macos.rs",
@@ -341,7 +509,11 @@
     "batch_id": "B07",
     "total_lines": 1302,
     "symbols_count": 57,
-    "types_count": 11
+    "types_count": 11,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/audio_metrics.rs",
@@ -349,7 +521,11 @@
     "batch_id": "B07",
     "total_lines": 191,
     "symbols_count": 11,
-    "types_count": 5
+    "types_count": 5,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/audio_route.rs",
@@ -357,7 +533,11 @@
     "batch_id": "B07",
     "total_lines": 434,
     "symbols_count": 24,
-    "types_count": 9
+    "types_count": 9,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/audio_unavailable.rs",
@@ -365,7 +545,11 @@
     "batch_id": "B07",
     "total_lines": 160,
     "symbols_count": 10,
-    "types_count": 5
+    "types_count": 5,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/bridge.rs",
@@ -373,7 +557,11 @@
     "batch_id": "B06",
     "total_lines": 750,
     "symbols_count": 21,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/capabilities.rs",
@@ -381,7 +569,11 @@
     "batch_id": "B09",
     "total_lines": 154,
     "symbols_count": 5,
-    "types_count": 4
+    "types_count": 4,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/codex_subscription.rs",
@@ -389,7 +581,11 @@
     "batch_id": "B06",
     "total_lines": 2065,
     "symbols_count": 82,
-    "types_count": 11
+    "types_count": 11,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/components.rs",
@@ -397,7 +593,11 @@
     "batch_id": "B09",
     "total_lines": 177,
     "symbols_count": 6,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/config.rs",
@@ -405,7 +605,11 @@
     "batch_id": "B09",
     "total_lines": 2074,
     "symbols_count": 72,
-    "types_count": 9
+    "types_count": 9,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/config/repair.rs",
@@ -413,7 +617,11 @@
     "batch_id": "B09",
     "total_lines": 183,
     "symbols_count": 10,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/config/snippets.rs",
@@ -421,7 +629,11 @@
     "batch_id": "B09",
     "total_lines": 1067,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/config/tests.rs",
@@ -429,7 +641,11 @@
     "batch_id": "B09",
     "total_lines": 1911,
     "symbols_count": 82,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/conspect.rs",
@@ -437,7 +653,11 @@
     "batch_id": "B08",
     "total_lines": 761,
     "symbols_count": 49,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/credentials.rs",
@@ -445,7 +665,11 @@
     "batch_id": "B09",
     "total_lines": 282,
     "symbols_count": 16,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/deep_lock.rs",
@@ -453,7 +677,11 @@
     "batch_id": "B06",
     "total_lines": 417,
     "symbols_count": 23,
-    "types_count": 3
+    "types_count": 3,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/diar_install.rs",
@@ -461,7 +689,11 @@
     "batch_id": "B07",
     "total_lines": 820,
     "symbols_count": 39,
-    "types_count": 5
+    "types_count": 5,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/diarize.rs",
@@ -469,7 +701,11 @@
     "batch_id": "B07",
     "total_lines": 744,
     "symbols_count": 31,
-    "types_count": 4
+    "types_count": 4,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/download.rs",
@@ -477,7 +713,11 @@
     "batch_id": "B09",
     "total_lines": 167,
     "symbols_count": 12,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/events.rs",
@@ -485,7 +725,11 @@
     "batch_id": "B06",
     "total_lines": 384,
     "symbols_count": 15,
-    "types_count": 9
+    "types_count": 9,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/health.rs",
@@ -493,7 +737,11 @@
     "batch_id": "B06",
     "total_lines": 246,
     "symbols_count": 10,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/hermes_install.rs",
@@ -501,7 +749,11 @@
     "batch_id": "B09",
     "total_lines": 873,
     "symbols_count": 35,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/http_log.rs",
@@ -509,7 +761,11 @@
     "batch_id": "B09",
     "total_lines": 47,
     "symbols_count": 3,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/journal/legacy.rs",
@@ -517,7 +773,11 @@
     "batch_id": "B08",
     "total_lines": 34,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/journal/mod.rs",
@@ -525,7 +785,11 @@
     "batch_id": "B08",
     "total_lines": 18,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/journal/recovery.rs",
@@ -533,7 +797,11 @@
     "batch_id": "B08",
     "total_lines": 176,
     "symbols_count": 5,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/journal/retention.rs",
@@ -541,7 +809,11 @@
     "batch_id": "B08",
     "total_lines": 55,
     "symbols_count": 2,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/journal/tests.rs",
@@ -549,7 +821,11 @@
     "batch_id": "B08",
     "total_lines": 1076,
     "symbols_count": 55,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/journal/time.rs",
@@ -557,7 +833,11 @@
     "batch_id": "B08",
     "total_lines": 92,
     "symbols_count": 6,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/journal/types.rs",
@@ -565,7 +845,11 @@
     "batch_id": "B08",
     "total_lines": 98,
     "symbols_count": 0,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/journal/writer.rs",
@@ -573,7 +857,11 @@
     "batch_id": "B08",
     "total_lines": 363,
     "symbols_count": 17,
-    "types_count": 4
+    "types_count": 4,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/kb.rs",
@@ -581,7 +869,11 @@
     "batch_id": "B08",
     "total_lines": 503,
     "symbols_count": 19,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/lib.rs",
@@ -589,7 +881,11 @@
     "batch_id": "B09",
     "total_lines": 67,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/local_ai.rs",
@@ -597,7 +893,11 @@
     "batch_id": "B06",
     "total_lines": 3165,
     "symbols_count": 93,
-    "types_count": 11
+    "types_count": 11,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/local_ai/hardware_profile.rs",
@@ -605,7 +905,11 @@
     "batch_id": "B06",
     "total_lines": 351,
     "symbols_count": 24,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/local_ai/model_choice.rs",
@@ -613,7 +917,11 @@
     "batch_id": "B06",
     "total_lines": 370,
     "symbols_count": 27,
-    "types_count": 4
+    "types_count": 4,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/local_ai/model_state.rs",
@@ -621,7 +929,11 @@
     "batch_id": "B06",
     "total_lines": 526,
     "symbols_count": 39,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/local_ai/tests.rs",
@@ -629,7 +941,11 @@
     "batch_id": "B06",
     "total_lines": 1969,
     "symbols_count": 84,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/memory/candidates.rs",
@@ -637,7 +953,11 @@
     "batch_id": "B08",
     "total_lines": 301,
     "symbols_count": 16,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/memory/context_builder.rs",
@@ -645,7 +965,11 @@
     "batch_id": "B08",
     "total_lines": 344,
     "symbols_count": 23,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/memory/mod.rs",
@@ -653,7 +977,11 @@
     "batch_id": "B08",
     "total_lines": 26,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/memory/normalize.rs",
@@ -661,7 +989,11 @@
     "batch_id": "B08",
     "total_lines": 956,
     "symbols_count": 38,
-    "types_count": 4
+    "types_count": 4,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/memory/summary_ref.rs",
@@ -669,7 +1001,11 @@
     "batch_id": "B08",
     "total_lines": 284,
     "symbols_count": 13,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/mlx_install.rs",
@@ -677,7 +1013,11 @@
     "batch_id": "B06",
     "total_lines": 997,
     "symbols_count": 32,
-    "types_count": 3
+    "types_count": 3,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/mlx_runtime.rs",
@@ -685,7 +1025,11 @@
     "batch_id": "B06",
     "total_lines": 749,
     "symbols_count": 41,
-    "types_count": 6
+    "types_count": 6,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/nemotron_diar.rs",
@@ -693,7 +1037,11 @@
     "batch_id": "B07",
     "total_lines": 182,
     "symbols_count": 5,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/ocr.rs",
@@ -701,7 +1049,11 @@
     "batch_id": "B10",
     "total_lines": 270,
     "symbols_count": 12,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/ocr_install.rs",
@@ -709,7 +1061,11 @@
     "batch_id": "B10",
     "total_lines": 127,
     "symbols_count": 4,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/paths.rs",
@@ -717,7 +1073,11 @@
     "batch_id": "B09",
     "total_lines": 151,
     "symbols_count": 8,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/persistence/indexer.rs",
@@ -725,7 +1085,11 @@
     "batch_id": "B08",
     "total_lines": 449,
     "symbols_count": 13,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/persistence/maintenance.rs",
@@ -733,7 +1097,11 @@
     "batch_id": "B08",
     "total_lines": 757,
     "symbols_count": 33,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/persistence/migrations.rs",
@@ -741,7 +1109,11 @@
     "batch_id": "B08",
     "total_lines": 53,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/persistence/mod.rs",
@@ -749,7 +1121,11 @@
     "batch_id": "B08",
     "total_lines": 78,
     "symbols_count": 3,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/persistence/models.rs",
@@ -757,7 +1133,11 @@
     "batch_id": "B08",
     "total_lines": 173,
     "symbols_count": 0,
-    "types_count": 10
+    "types_count": 10,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/persistence/sqlite_store.rs",
@@ -765,7 +1145,11 @@
     "batch_id": "B08",
     "total_lines": 1403,
     "symbols_count": 65,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/re_transcribe.rs",
@@ -773,7 +1157,11 @@
     "batch_id": "B07",
     "total_lines": 428,
     "symbols_count": 15,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/recorder.rs",
@@ -781,7 +1169,11 @@
     "batch_id": "B07",
     "total_lines": 1353,
     "symbols_count": 48,
-    "types_count": 5
+    "types_count": 5,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/runtime.rs",
@@ -789,7 +1181,11 @@
     "batch_id": "B06",
     "total_lines": 1908,
     "symbols_count": 21,
-    "types_count": 7
+    "types_count": 7,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/runtime/summary_plan.rs",
@@ -797,7 +1193,11 @@
     "batch_id": "B06",
     "total_lines": 468,
     "symbols_count": 14,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/runtime/tests.rs",
@@ -805,7 +1205,11 @@
     "batch_id": "B06",
     "total_lines": 1165,
     "symbols_count": 48,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/runtime/trigger_detect.rs",
@@ -813,7 +1217,11 @@
     "batch_id": "B06",
     "total_lines": 657,
     "symbols_count": 16,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/session_admin.rs",
@@ -821,7 +1229,11 @@
     "batch_id": "B08",
     "total_lines": 146,
     "symbols_count": 6,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/session_audio.rs",
@@ -829,7 +1241,11 @@
     "batch_id": "B07",
     "total_lines": 375,
     "symbols_count": 20,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/session_names.rs",
@@ -837,7 +1253,11 @@
     "batch_id": "B08",
     "total_lines": 165,
     "symbols_count": 12,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/stt.rs",
@@ -845,7 +1265,11 @@
     "batch_id": "B07",
     "total_lines": 1643,
     "symbols_count": 62,
-    "types_count": 6
+    "types_count": 6,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/summary_source.rs",
@@ -853,7 +1277,11 @@
     "batch_id": "B08",
     "total_lines": 171,
     "symbols_count": 7,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/teratts_install.rs",
@@ -861,7 +1289,11 @@
     "batch_id": "B10",
     "total_lines": 934,
     "symbols_count": 40,
-    "types_count": 4
+    "types_count": 4,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/tests.rs",
@@ -869,7 +1301,11 @@
     "batch_id": "B09",
     "total_lines": 1904,
     "symbols_count": 82,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/text.rs",
@@ -877,7 +1313,11 @@
     "batch_id": "B09",
     "total_lines": 23,
     "symbols_count": 2,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/tts.rs",
@@ -885,7 +1325,11 @@
     "batch_id": "B10",
     "total_lines": 2221,
     "symbols_count": 133,
-    "types_count": 10
+    "types_count": 10,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/tts_install.rs",
@@ -893,7 +1337,11 @@
     "batch_id": "B10",
     "total_lines": 248,
     "symbols_count": 7,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/tts_normalize.rs",
@@ -901,7 +1349,11 @@
     "batch_id": "B10",
     "total_lines": 395,
     "symbols_count": 27,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/update.rs",
@@ -909,7 +1361,11 @@
     "batch_id": "B09",
     "total_lines": 374,
     "symbols_count": 11,
-    "types_count": 3
+    "types_count": 3,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/src/vision.rs",
@@ -917,7 +1373,11 @@
     "batch_id": "B10",
     "total_lines": 459,
     "symbols_count": 16,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/tests/ai_eval.rs",
@@ -925,7 +1385,11 @@
     "batch_id": "B09",
     "total_lines": 114,
     "symbols_count": 7,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/tests/archive_cycle.rs",
@@ -933,7 +1397,11 @@
     "batch_id": "B09",
     "total_lines": 181,
     "symbols_count": 5,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/tests/hermes_plugin_smoke.rs",
@@ -941,7 +1409,11 @@
     "batch_id": "B09",
     "total_lines": 57,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "overlay-backend/tests/no_window_guard.rs",
@@ -949,7 +1421,11 @@
     "batch_id": "B09",
     "total_lines": 72,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "scripts/build-slint-release.ps1",
@@ -957,7 +1433,11 @@
     "batch_id": "B14",
     "total_lines": 174,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/capture-reference-shots.ps1",
@@ -965,7 +1445,11 @@
     "batch_id": "B14",
     "total_lines": 335,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/ci.ps1",
@@ -973,7 +1457,11 @@
     "batch_id": "B14",
     "total_lines": 159,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/find_overlay_windows.ps1",
@@ -981,7 +1469,11 @@
     "batch_id": "B14",
     "total_lines": 48,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/gen_icon.ps1",
@@ -989,7 +1481,11 @@
     "batch_id": "B14",
     "total_lines": 107,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/get_hwnd_rect.ps1",
@@ -997,7 +1493,11 @@
     "batch_id": "B14",
     "total_lines": 35,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/get_tile_rect.ps1",
@@ -1005,7 +1505,11 @@
     "batch_id": "B14",
     "total_lines": 35,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/git-gate-macos.sh",
@@ -1013,7 +1517,11 @@
     "batch_id": "B14",
     "total_lines": 103,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/git-gate-native.ps1",
@@ -1021,7 +1529,11 @@
     "batch_id": "B14",
     "total_lines": 184,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/list_overlay_windows.ps1",
@@ -1029,7 +1541,11 @@
     "batch_id": "B14",
     "total_lines": 31,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/macos-mcp-interactive-qa.py",
@@ -1037,7 +1553,11 @@
     "batch_id": "B14",
     "total_lines": 176,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/post-release-cleanup.ps1",
@@ -1045,7 +1565,11 @@
     "batch_id": "B14",
     "total_lines": 241,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/probe_bar.ps1",
@@ -1053,7 +1577,11 @@
     "batch_id": "B14",
     "total_lines": 38,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/qwen-parallel-audit.ps1",
@@ -1061,7 +1589,11 @@
     "batch_id": "B14",
     "total_lines": 284,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/screenshot_region.ps1",
@@ -1069,7 +1601,11 @@
     "batch_id": "B14",
     "total_lines": 10,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/set_opacity.ps1",
@@ -1077,7 +1613,11 @@
     "batch_id": "B14",
     "total_lines": 8,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/setup-local-ai.ps1",
@@ -1085,7 +1625,11 @@
     "batch_id": "B14",
     "total_lines": 254,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/sim_click.ps1",
@@ -1093,7 +1637,11 @@
     "batch_id": "B14",
     "total_lines": 34,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/slint-installer.nsi",
@@ -1101,7 +1649,11 @@
     "batch_id": "B14",
     "total_lines": 160,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/stop-installed-suflyor.ps1",
@@ -1109,7 +1661,11 @@
     "batch_id": "B14",
     "total_lines": 47,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "scripts/sync-release-docs.ps1",
@@ -1117,7 +1673,11 @@
     "batch_id": "B14",
     "total_lines": 32,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "slint-experiment/build.rs",
@@ -1125,7 +1685,11 @@
     "batch_id": "B14",
     "total_lines": 72,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/scripts/build-macos-app.sh",
@@ -1133,7 +1697,11 @@
     "batch_id": "B14",
     "total_lines": 239,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "slint-experiment/scripts/build-macos-dmg.sh",
@@ -1141,7 +1709,11 @@
     "batch_id": "B14",
     "total_lines": 127,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "slint-experiment/scripts/capture_primary.ps1",
@@ -1149,7 +1721,11 @@
     "batch_id": "B14",
     "total_lines": 24,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "slint-experiment/scripts/capture_window.ps1",
@@ -1157,7 +1733,11 @@
     "batch_id": "B14",
     "total_lines": 49,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "slint-experiment/scripts/click_at.ps1",
@@ -1165,7 +1745,11 @@
     "batch_id": "B14",
     "total_lines": 25,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "slint-experiment/scripts/hold_at.ps1",
@@ -1173,7 +1757,11 @@
     "batch_id": "B14",
     "total_lines": 22,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "slint-experiment/scripts/send_key.ps1",
@@ -1181,7 +1769,11 @@
     "batch_id": "B14",
     "total_lines": 18,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "slint-experiment/scripts/type_text.ps1",
@@ -1189,7 +1781,11 @@
     "batch_id": "B14",
     "total_lines": 5,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "slint-experiment/src/app_state.rs",
@@ -1197,7 +1793,11 @@
     "batch_id": "B01",
     "total_lines": 504,
     "symbols_count": 14,
-    "types_count": 5
+    "types_count": 5,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/markdown_spike.rs",
@@ -1205,7 +1805,11 @@
     "batch_id": "B01",
     "total_lines": 247,
     "symbols_count": 4,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host.rs",
@@ -1213,7 +1817,11 @@
     "batch_id": "B01",
     "total_lines": 24,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/app_bootstrap.rs",
@@ -1221,7 +1829,11 @@
     "batch_id": "B01",
     "total_lines": 71,
     "symbols_count": 1,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/aux_windows.rs",
@@ -1229,7 +1841,11 @@
     "batch_id": "B03",
     "total_lines": 83,
     "symbols_count": 3,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
@@ -1237,7 +1853,11 @@
     "batch_id": "B03",
     "total_lines": 1455,
     "symbols_count": 26,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/aux_windows/help_palette.rs",
@@ -1245,7 +1865,11 @@
     "batch_id": "B03",
     "total_lines": 248,
     "symbols_count": 6,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/aux_windows/text_ask.rs",
@@ -1253,7 +1877,11 @@
     "batch_id": "B03",
     "total_lines": 197,
     "symbols_count": 5,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs",
@@ -1261,7 +1889,11 @@
     "batch_id": "B03",
     "total_lines": 1534,
     "symbols_count": 25,
-    "types_count": 3
+    "types_count": 3,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/bar_tray.rs",
@@ -1269,7 +1901,11 @@
     "batch_id": "B01",
     "total_lines": 480,
     "symbols_count": 15,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/capture_watchdog.rs",
@@ -1277,7 +1913,11 @@
     "batch_id": "B01",
     "total_lines": 155,
     "symbols_count": 9,
-    "types_count": 3
+    "types_count": 3,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/diagnostics.rs",
@@ -1285,7 +1925,11 @@
     "batch_id": "B01",
     "total_lines": 955,
     "symbols_count": 23,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/hotkeys.rs",
@@ -1293,7 +1937,11 @@
     "batch_id": "B04",
     "total_lines": 231,
     "symbols_count": 2,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/kbd_shortcuts.rs",
@@ -1301,7 +1949,11 @@
     "batch_id": "B04",
     "total_lines": 111,
     "symbols_count": 5,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/local_watchdog.rs",
@@ -1309,7 +1961,11 @@
     "batch_id": "B01",
     "total_lines": 125,
     "symbols_count": 7,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/mlx_lifecycle.rs",
@@ -1317,7 +1973,11 @@
     "batch_id": "B01",
     "total_lines": 240,
     "symbols_count": 11,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/read_aloud.rs",
@@ -1325,7 +1985,11 @@
     "batch_id": "B03",
     "total_lines": 263,
     "symbols_count": 4,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/recovery.rs",
@@ -1333,7 +1997,11 @@
     "batch_id": "B01",
     "total_lines": 465,
     "symbols_count": 15,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/settings_ai.rs",
@@ -1341,7 +2009,11 @@
     "batch_id": "B02",
     "total_lines": 1547,
     "symbols_count": 25,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/settings_audio.rs",
@@ -1349,7 +2021,11 @@
     "batch_id": "B02",
     "total_lines": 494,
     "symbols_count": 16,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
@@ -1357,7 +2033,11 @@
     "batch_id": "B02",
     "total_lines": 1979,
     "symbols_count": 11,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/settings_hermes.rs",
@@ -1365,7 +2045,11 @@
     "batch_id": "B02",
     "total_lines": 448,
     "symbols_count": 6,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/settings_import_export.rs",
@@ -1373,7 +2057,11 @@
     "batch_id": "B02",
     "total_lines": 253,
     "symbols_count": 3,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/settings_local_ai.rs",
@@ -1381,7 +2069,11 @@
     "batch_id": "B02",
     "total_lines": 1524,
     "symbols_count": 3,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/settings_memory.rs",
@@ -1389,7 +2081,11 @@
     "batch_id": "B02",
     "total_lines": 391,
     "symbols_count": 10,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/settings_mlx.rs",
@@ -1397,7 +2093,11 @@
     "batch_id": "B02",
     "total_lines": 334,
     "symbols_count": 13,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/settings_stt.rs",
@@ -1405,7 +2105,11 @@
     "batch_id": "B02",
     "total_lines": 404,
     "symbols_count": 13,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/settings_updates.rs",
@@ -1413,7 +2117,11 @@
     "batch_id": "B02",
     "total_lines": 151,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/settings_vision.rs",
@@ -1421,7 +2129,11 @@
     "batch_id": "B02",
     "total_lines": 395,
     "symbols_count": 3,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/settings_voice.rs",
@@ -1429,7 +2141,11 @@
     "batch_id": "B02",
     "total_lines": 475,
     "symbols_count": 12,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/status_copy.rs",
@@ -1437,7 +2153,11 @@
     "batch_id": "B01",
     "total_lines": 357,
     "symbols_count": 20,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/tile_ask.rs",
@@ -1445,7 +2165,11 @@
     "batch_id": "B03",
     "total_lines": 688,
     "symbols_count": 4,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
@@ -1453,7 +2177,11 @@
     "batch_id": "B03",
     "total_lines": 1013,
     "symbols_count": 20,
-    "types_count": 8
+    "types_count": 8,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/tile_copy.rs",
@@ -1461,7 +2189,11 @@
     "batch_id": "B03",
     "total_lines": 1311,
     "symbols_count": 58,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/tile_cost.rs",
@@ -1469,7 +2201,11 @@
     "batch_id": "B03",
     "total_lines": 69,
     "symbols_count": 2,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/tile_followup.rs",
@@ -1477,7 +2213,11 @@
     "batch_id": "B03",
     "total_lines": 988,
     "symbols_count": 15,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/tile_ptt.rs",
@@ -1485,7 +2225,11 @@
     "batch_id": "B03",
     "total_lines": 510,
     "symbols_count": 4,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/tile_routes.rs",
@@ -1493,7 +2237,11 @@
     "batch_id": "B03",
     "total_lines": 146,
     "symbols_count": 7,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/tile_window.rs",
@@ -1501,7 +2249,11 @@
     "batch_id": "B03",
     "total_lines": 450,
     "symbols_count": 10,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/transcript_player.rs",
@@ -1509,7 +2261,11 @@
     "batch_id": "B03",
     "total_lines": 585,
     "symbols_count": 39,
-    "types_count": 3
+    "types_count": 3,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/vision_capture.rs",
@@ -1517,7 +2273,11 @@
     "batch_id": "B01",
     "total_lines": 917,
     "symbols_count": 8,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
@@ -1525,7 +2285,11 @@
     "batch_id": "B04",
     "total_lines": 705,
     "symbols_count": 34,
-    "types_count": 3
+    "types_count": 3,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host/wizard.rs",
@@ -1533,7 +2297,11 @@
     "batch_id": "B01",
     "total_lines": 488,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_host_windows.rs",
@@ -1541,7 +2309,11 @@
     "batch_id": "B01",
     "total_lines": 4962,
     "symbols_count": 8,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/bin/overlay_spike.rs",
@@ -1549,7 +2321,11 @@
     "batch_id": "B01",
     "total_lines": 213,
     "symbols_count": 4,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/capture.rs",
@@ -1557,7 +2333,11 @@
     "batch_id": "B04",
     "total_lines": 225,
     "symbols_count": 10,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/lib.rs",
@@ -1565,7 +2345,11 @@
     "batch_id": "B01",
     "total_lines": 23,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/lock_menu.rs",
@@ -1573,7 +2357,11 @@
     "batch_id": "B01",
     "total_lines": 166,
     "symbols_count": 15,
-    "types_count": 3
+    "types_count": 3,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/logging.rs",
@@ -1581,7 +2369,11 @@
     "batch_id": "B01",
     "total_lines": 169,
     "symbols_count": 9,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/main.rs",
@@ -1589,7 +2381,11 @@
     "batch_id": "B01",
     "total_lines": 469,
     "symbols_count": 12,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/markdown.rs",
@@ -1597,7 +2393,11 @@
     "batch_id": "B01",
     "total_lines": 938,
     "symbols_count": 30,
-    "types_count": 3
+    "types_count": 3,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/math_display.rs",
@@ -1605,7 +2405,11 @@
     "batch_id": "B01",
     "total_lines": 652,
     "symbols_count": 27,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/native/macos/clipboard.m",
@@ -1613,7 +2417,11 @@
     "batch_id": "B04",
     "total_lines": 70,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "slint-experiment/src/native/macos/clipboard.rs",
@@ -1621,7 +2429,11 @@
     "batch_id": "B04",
     "total_lines": 58,
     "symbols_count": 11,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/native/macos/lifecycle.rs",
@@ -1629,7 +2441,11 @@
     "batch_id": "B04",
     "total_lines": 67,
     "symbols_count": 3,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/native/macos/screen.m",
@@ -1637,7 +2453,11 @@
     "batch_id": "B04",
     "total_lines": 344,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "slint-experiment/src/native/macos/screen.rs",
@@ -1645,7 +2465,11 @@
     "batch_id": "B04",
     "total_lines": 267,
     "symbols_count": 18,
-    "types_count": 3
+    "types_count": 3,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/native/macos/status.m",
@@ -1653,7 +2477,11 @@
     "batch_id": "B04",
     "total_lines": 117,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "slint-experiment/src/native/macos/status.rs",
@@ -1661,7 +2489,11 @@
     "batch_id": "B04",
     "total_lines": 56,
     "symbols_count": 4,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/native/macos/window.m",
@@ -1669,7 +2501,11 @@
     "batch_id": "B04",
     "total_lines": 80,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "slint-experiment/src/native/macos/window.rs",
@@ -1677,7 +2513,11 @@
     "batch_id": "B04",
     "total_lines": 104,
     "symbols_count": 13,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/native/mod.rs",
@@ -1685,7 +2525,11 @@
     "batch_id": "B04",
     "total_lines": 109,
     "symbols_count": 2,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/native/windows/clipboard.rs",
@@ -1693,7 +2537,11 @@
     "batch_id": "B04",
     "total_lines": 23,
     "symbols_count": 4,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/native/windows/lifecycle.rs",
@@ -1701,7 +2549,11 @@
     "batch_id": "B04",
     "total_lines": 56,
     "symbols_count": 2,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/native/windows/screen.rs",
@@ -1709,7 +2561,11 @@
     "batch_id": "B04",
     "total_lines": 87,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/replay_backend.rs",
@@ -1717,7 +2573,11 @@
     "batch_id": "B01",
     "total_lines": 372,
     "symbols_count": 11,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/runtime_state.rs",
@@ -1725,7 +2585,11 @@
     "batch_id": "B01",
     "total_lines": 340,
     "symbols_count": 8,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/session_namer.rs",
@@ -1733,7 +2597,11 @@
     "batch_id": "B01",
     "total_lines": 358,
     "symbols_count": 16,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/slint_events.rs",
@@ -1741,7 +2609,11 @@
     "batch_id": "B01",
     "total_lines": 254,
     "symbols_count": 12,
-    "types_count": 8
+    "types_count": 8,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/slint_session.rs",
@@ -1749,7 +2621,11 @@
     "batch_id": "B01",
     "total_lines": 2117,
     "symbols_count": 48,
-    "types_count": 3
+    "types_count": 3,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/tray.rs",
@@ -1757,7 +2633,11 @@
     "batch_id": "B01",
     "total_lines": 656,
     "symbols_count": 23,
-    "types_count": 5
+    "types_count": 5,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/src/win32.rs",
@@ -1765,7 +2645,11 @@
     "batch_id": "B04",
     "total_lines": 1430,
     "symbols_count": 86,
-    "types_count": 4
+    "types_count": 4,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/audio_settings_guard.rs",
@@ -1773,7 +2657,11 @@
     "batch_id": "B05",
     "total_lines": 45,
     "symbols_count": 2,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/codex_copy_guard.rs",
@@ -1781,7 +2669,11 @@
     "batch_id": "B05",
     "total_lines": 208,
     "symbols_count": 9,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/i18n_guard.rs",
@@ -1789,7 +2681,11 @@
     "batch_id": "B05",
     "total_lines": 396,
     "symbols_count": 9,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/icon_guard.rs",
@@ -1797,7 +2693,11 @@
     "batch_id": "B05",
     "total_lines": 197,
     "symbols_count": 5,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/lock_chip_geometry_guard.rs",
@@ -1805,7 +2705,11 @@
     "batch_id": "B05",
     "total_lines": 29,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/lock_chip_layout_guard.rs",
@@ -1813,7 +2717,11 @@
     "batch_id": "B05",
     "total_lines": 22,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/lock_mode_menu_guard.rs",
@@ -1821,7 +2729,11 @@
     "batch_id": "B05",
     "total_lines": 30,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/lock_mode_menu_interaction.rs",
@@ -1829,7 +2741,11 @@
     "batch_id": "B05",
     "total_lines": 56,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/macos_app_packaging_guard.rs",
@@ -1837,7 +2753,11 @@
     "batch_id": "B05",
     "total_lines": 343,
     "symbols_count": 10,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/macos_capture_watchdog_guard.rs",
@@ -1845,7 +2765,11 @@
     "batch_id": "B05",
     "total_lines": 134,
     "symbols_count": 3,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/macos_global_hotkeys_guard.rs",
@@ -1853,7 +2777,11 @@
     "batch_id": "B05",
     "total_lines": 41,
     "symbols_count": 2,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/macos_popups_guard.rs",
@@ -1861,7 +2789,11 @@
     "batch_id": "B05",
     "total_lines": 42,
     "symbols_count": 2,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/macos_settings_guard.rs",
@@ -1869,7 +2801,11 @@
     "batch_id": "B05",
     "total_lines": 227,
     "symbols_count": 8,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/macos_text_ask_guard.rs",
@@ -1877,7 +2813,11 @@
     "batch_id": "B05",
     "total_lines": 72,
     "symbols_count": 4,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/macos_tile_manager_guard.rs",
@@ -1885,7 +2825,11 @@
     "batch_id": "B05",
     "total_lines": 22,
     "symbols_count": 2,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/macos_ui_callbacks_guard.rs",
@@ -1893,7 +2837,11 @@
     "batch_id": "B05",
     "total_lines": 32,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/mlx_lifecycle_guard.rs",
@@ -1901,7 +2849,11 @@
     "batch_id": "B05",
     "total_lines": 91,
     "symbols_count": 6,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/native_lifecycle_guard.rs",
@@ -1909,7 +2861,11 @@
     "batch_id": "B05",
     "total_lines": 55,
     "symbols_count": 3,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/native_macos_status_guard.rs",
@@ -1917,7 +2873,11 @@
     "batch_id": "B05",
     "total_lines": 95,
     "symbols_count": 6,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/native_macos_window_guard.rs",
@@ -1925,7 +2885,11 @@
     "batch_id": "B05",
     "total_lines": 96,
     "symbols_count": 2,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/native_screen_guard.rs",
@@ -1933,7 +2897,11 @@
     "batch_id": "B05",
     "total_lines": 115,
     "symbols_count": 5,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/overlay_bar_geometry.rs",
@@ -1941,7 +2909,11 @@
     "batch_id": "B05",
     "total_lines": 235,
     "symbols_count": 7,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/rc3_regression_guard.rs",
@@ -1949,7 +2921,11 @@
     "batch_id": "B05",
     "total_lines": 45,
     "symbols_count": 2,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/settings_reset_guard.rs",
@@ -1957,7 +2933,11 @@
     "batch_id": "B05",
     "total_lines": 158,
     "symbols_count": 5,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/tera_tts_layout_guard.rs",
@@ -1965,7 +2945,11 @@
     "batch_id": "B05",
     "total_lines": 53,
     "symbols_count": 2,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/tile_player_layout_guard.rs",
@@ -1973,7 +2957,11 @@
     "batch_id": "B05",
     "total_lines": 69,
     "symbols_count": 3,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/tray_guard.rs",
@@ -1981,7 +2969,11 @@
     "batch_id": "B05",
     "total_lines": 313,
     "symbols_count": 9,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/tts_speech_policy_guard.rs",
@@ -1989,7 +2981,11 @@
     "batch_id": "B05",
     "total_lines": 85,
     "symbols_count": 4,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/tests/version_guard.rs",
@@ -1997,7 +2993,11 @@
     "batch_id": "B05",
     "total_lines": 78,
     "symbols_count": 3,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/archive.slint",
@@ -2005,7 +3005,11 @@
     "batch_id": "B05",
     "total_lines": 724,
     "symbols_count": 38,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/capture_overlay.slint",
@@ -2013,7 +3017,11 @@
     "batch_id": "B05",
     "total_lines": 235,
     "symbols_count": 16,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/controls.slint",
@@ -2021,7 +3029,11 @@
     "batch_id": "B05",
     "total_lines": 175,
     "symbols_count": 19,
-    "types_count": 4
+    "types_count": 4,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/help.slint",
@@ -2029,7 +3041,11 @@
     "batch_id": "B05",
     "total_lines": 370,
     "symbols_count": 19,
-    "types_count": 4
+    "types_count": 4,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/index.slint",
@@ -2037,7 +3053,11 @@
     "batch_id": "B05",
     "total_lines": 53,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/lock_mode_menu.slint",
@@ -2045,7 +3065,11 @@
     "batch_id": "B05",
     "total_lines": 58,
     "symbols_count": 5,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/macos_ai_setup.slint",
@@ -2053,7 +3077,11 @@
     "batch_id": "B05",
     "total_lines": 148,
     "symbols_count": 8,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/markdown_spike.slint",
@@ -2061,7 +3089,11 @@
     "batch_id": "B05",
     "total_lines": 148,
     "symbols_count": 3,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/metrics.slint",
@@ -2069,7 +3101,11 @@
     "batch_id": "B05",
     "total_lines": 93,
     "symbols_count": 27,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/overlay_bar.slint",
@@ -2077,7 +3113,11 @@
     "batch_id": "B05",
     "total_lines": 1504,
     "symbols_count": 134,
-    "types_count": 9
+    "types_count": 9,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/overlay_spike.slint",
@@ -2085,7 +3125,11 @@
     "batch_id": "B05",
     "total_lines": 56,
     "symbols_count": 1,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/palette.slint",
@@ -2093,7 +3137,11 @@
     "batch_id": "B05",
     "total_lines": 268,
     "symbols_count": 12,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/platform.slint",
@@ -2101,7 +3149,11 @@
     "batch_id": "B05",
     "total_lines": 3,
     "symbols_count": 1,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/recover_offer.slint",
@@ -2109,7 +3161,11 @@
     "batch_id": "B05",
     "total_lines": 183,
     "symbols_count": 9,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/replay.slint",
@@ -2117,7 +3173,11 @@
     "batch_id": "B05",
     "total_lines": 225,
     "symbols_count": 13,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/settings_controls.slint",
@@ -2125,7 +3185,11 @@
     "batch_id": "B05",
     "total_lines": 185,
     "symbols_count": 26,
-    "types_count": 9
+    "types_count": 9,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/settings_panel.slint",
@@ -2133,7 +3197,11 @@
     "batch_id": "B05",
     "total_lines": 4170,
     "symbols_count": 378,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/text_ask.slint",
@@ -2141,7 +3209,11 @@
     "batch_id": "B05",
     "total_lines": 173,
     "symbols_count": 12,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/theme.slint",
@@ -2149,7 +3221,11 @@
     "batch_id": "B05",
     "total_lines": 69,
     "symbols_count": 22,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/tile.slint",
@@ -2157,7 +3233,11 @@
     "batch_id": "B05",
     "total_lines": 1116,
     "symbols_count": 79,
-    "types_count": 4
+    "types_count": 4,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/transcript.slint",
@@ -2165,7 +3245,11 @@
     "batch_id": "B05",
     "total_lines": 1083,
     "symbols_count": 67,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/tray_menu.slint",
@@ -2173,7 +3257,11 @@
     "batch_id": "B05",
     "total_lines": 105,
     "symbols_count": 13,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "slint-experiment/ui/wizard.slint",
@@ -2181,7 +3269,11 @@
     "batch_id": "B05",
     "total_lines": 453,
     "symbols_count": 36,
-    "types_count": 3
+    "types_count": 3,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-mlx/Package.swift",
@@ -2189,7 +3281,11 @@
     "batch_id": "B15",
     "total_lines": 31,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "suflyor-mlx/Scripts/build-metallib.sh",
@@ -2197,7 +3293,11 @@
     "batch_id": "B15",
     "total_lines": 102,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "suflyor-mlx/Sources/SuflyorMLX/main.swift",
@@ -2205,7 +3305,11 @@
     "batch_id": "B15",
     "total_lines": 41,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "suflyor-mlx/Sources/SuflyorMLXCore/Protocol.swift",
@@ -2213,7 +3317,11 @@
     "batch_id": "B15",
     "total_lines": 247,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "suflyor-mlx/Sources/SuflyorMLXCore/Server.swift",
@@ -2221,7 +3329,11 @@
     "batch_id": "B15",
     "total_lines": 516,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "suflyor-mlx/Tests/SuflyorMLXCoreTests/ProtocolTests.swift",
@@ -2229,7 +3341,11 @@
     "batch_id": "B15",
     "total_lines": 249,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   },
   {
     "path": "suflyor-teratts/src/chunk.rs",
@@ -2237,7 +3353,11 @@
     "batch_id": "B12",
     "total_lines": 107,
     "symbols_count": 9,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-teratts/src/indexer.rs",
@@ -2245,7 +3365,11 @@
     "batch_id": "B12",
     "total_lines": 125,
     "symbols_count": 10,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-teratts/src/main.rs",
@@ -2253,7 +3377,11 @@
     "batch_id": "B12",
     "total_lines": 1113,
     "symbols_count": 62,
-    "types_count": 13
+    "types_count": 13,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-teratts/src/manifest.rs",
@@ -2261,7 +3389,11 @@
     "batch_id": "B12",
     "total_lines": 243,
     "symbols_count": 12,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-teratts/src/npy.rs",
@@ -2269,7 +3401,11 @@
     "batch_id": "B12",
     "total_lines": 211,
     "symbols_count": 10,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-teratts/src/num2words.rs",
@@ -2277,7 +3413,11 @@
     "batch_id": "B12",
     "total_lines": 424,
     "symbols_count": 16,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-teratts/src/playback.rs",
@@ -2285,7 +3425,11 @@
     "batch_id": "B12",
     "total_lines": 470,
     "symbols_count": 25,
-    "types_count": 4
+    "types_count": 4,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-teratts/src/playback_macos.rs",
@@ -2293,7 +3437,11 @@
     "batch_id": "B12",
     "total_lines": 513,
     "symbols_count": 27,
-    "types_count": 6
+    "types_count": 6,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-teratts/src/protocol.rs",
@@ -2301,7 +3449,11 @@
     "batch_id": "B12",
     "total_lines": 332,
     "symbols_count": 14,
-    "types_count": 3
+    "types_count": 3,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-teratts/src/rng.rs",
@@ -2309,7 +3461,11 @@
     "batch_id": "B12",
     "total_lines": 94,
     "symbols_count": 8,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-teratts/src/tera.rs",
@@ -2317,7 +3473,11 @@
     "batch_id": "B12",
     "total_lines": 546,
     "symbols_count": 19,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-teratts/src/textnorm.rs",
@@ -2325,7 +3485,11 @@
     "batch_id": "B12",
     "total_lines": 480,
     "symbols_count": 23,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-tts/src/diar.rs",
@@ -2333,7 +3497,11 @@
     "batch_id": "B11",
     "total_lines": 364,
     "symbols_count": 17,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-tts/src/engine.rs",
@@ -2341,7 +3509,11 @@
     "batch_id": "B11",
     "total_lines": 305,
     "symbols_count": 18,
-    "types_count": 2
+    "types_count": 2,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-tts/src/main.rs",
@@ -2349,7 +3521,11 @@
     "batch_id": "B11",
     "total_lines": 404,
     "symbols_count": 12,
-    "types_count": 3
+    "types_count": 3,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-tts/src/playback.rs",
@@ -2357,7 +3533,11 @@
     "batch_id": "B11",
     "total_lines": 472,
     "symbols_count": 27,
-    "types_count": 5
+    "types_count": 5,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-tts/src/playback_macos.rs",
@@ -2365,7 +3545,11 @@
     "batch_id": "B11",
     "total_lines": 474,
     "symbols_count": 25,
-    "types_count": 6
+    "types_count": 6,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-tts/src/playback_unavailable.rs",
@@ -2373,7 +3557,11 @@
     "batch_id": "B11",
     "total_lines": 52,
     "symbols_count": 8,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-wsola/src/error.rs",
@@ -2381,7 +3569,11 @@
     "batch_id": "B13",
     "total_lines": 43,
     "symbols_count": 1,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-wsola/src/lib.rs",
@@ -2389,7 +3581,11 @@
     "batch_id": "B13",
     "total_lines": 14,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-wsola/src/stream.rs",
@@ -2397,7 +3593,11 @@
     "batch_id": "B13",
     "total_lines": 105,
     "symbols_count": 6,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-wsola/src/wsola.rs",
@@ -2405,7 +3605,11 @@
     "batch_id": "B13",
     "total_lines": 1018,
     "symbols_count": 27,
-    "types_count": 1
+    "types_count": 1,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "suflyor-wsola/tests/speech_contract.rs",
@@ -2413,7 +3617,11 @@
     "batch_id": "B13",
     "total_lines": 47,
     "symbols_count": 3,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "regex_rust_or_slint"
   },
   {
     "path": "tests/live-corpus/tools/fetch-transcripts.py",
@@ -2421,6 +3629,10 @@
     "batch_id": "B15",
     "total_lines": 278,
     "symbols_count": 0,
-    "types_count": 0
+    "types_count": 0,
+    "metric_kind": "historical_input_metadata",
+    "semantic_coverage": null,
+    "review_state": "unverified_heuristic_index",
+    "extraction_method": "unsupported_by_final_generator"
   }
 ]

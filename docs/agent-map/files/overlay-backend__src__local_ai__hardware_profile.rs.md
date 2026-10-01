@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/local_ai/hardware_profile.rs"
 batch_id: "B06"
 total_lines: 351
 symbols_count: 24
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "0d8c31d5d687e18f7ce370a51f13f2ea6a40daa1f47de98f5cf02614ad27aba4"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/local_ai/hardware_profile.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 351
-- **Coverage:** 351/351 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 

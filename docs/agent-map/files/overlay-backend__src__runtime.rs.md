@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/runtime.rs"
 batch_id: "B06"
 total_lines: 1908
 symbols_count: 21
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "fb64b6e6639e9fcd06c2e2bc54fa5f40dfc675090b3c72eda4541c24602ad3d5"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/runtime.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 1908
-- **Coverage:** 1908/1908 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (7)
 
@@ -53,7 +56,7 @@ review_state: validated
 | function | `manual_spawn_tile` | L1483 | `fn manual_spawn_tile(events: Arc<dyn RuntimeEvents>, cfg: SharedConfig, inputs: ManualSpawnInputs,) -> Option<ManualSpawnOutcome>` |
 | function | `ask_stream_loop` | L1810 | `fn ask_stream_loop(events: Arc<dyn RuntimeEvents>, mut ai_rx: tokio::sync::mpsc::Receiver<ai::AiEvent>, model: String, purpose: &'static str, is_local: bool, sys_full: String, usr_full: String, journal: Option<Journal>, health: Arc<HealthSignals>, t0: std::time::Instant, cost_apply: CostApplyFn,) -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L1759
 - Spawns asynchronous thread/task at L1773

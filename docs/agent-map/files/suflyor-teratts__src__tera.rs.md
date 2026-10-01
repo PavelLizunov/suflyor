@@ -6,14 +6,17 @@ source_path: "suflyor-teratts/src/tera.rs"
 batch_id: "B12"
 total_lines: 546
 symbols_count: 19
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "7828f7fc0a185a0c66dbcec6217e2a02f145c0e05ad950d38eca00a8c173662c"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-teratts/src/tera.rs`
 
 - **Batch:** B12
 - **Physical Lines:** 546
-- **Coverage:** 546/546 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 

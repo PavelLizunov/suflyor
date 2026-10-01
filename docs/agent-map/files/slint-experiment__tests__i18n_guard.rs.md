@@ -6,14 +6,17 @@ source_path: "slint-experiment/tests/i18n_guard.rs"
 batch_id: "B05"
 total_lines: 396
 symbols_count: 9
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "31e7ba8ca88556ce0472e12ada8daa2ca7e9193ab4fb3e190e72a101bc5a4a27"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/tests/i18n_guard.rs`
 
 - **Batch:** B05
 - **Physical Lines:** 396
-- **Coverage:** 396/396 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

@@ -1,3 +1,5 @@
+> **Historical candidate evidence — not accepted review.** Recovered from prior tool output; completeness and original response fidelity are unverified. Source claims require reconciliation; the final historical verdict was `changes_required`.
+
 > **TL;DR:** Suflyor enforces strict process isolation across three OS processes — `overlay-host` (in-process `ort`/GigaAM STT), `suflyor-tts` (sherpa-onnx Piper TTS + diarization), and `suflyor-teratts` (ort TeraTTSv2) — because two statically-linked ONNX Runtime builds in one binary crash natively on the second model load. IPC uses a line-oriented stdin/stdout protocol with base64-encoded text payloads, generation-based cancellation, and a crash-counted auto-respawn with Piper fallback.
 
 ---

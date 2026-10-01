@@ -6,14 +6,17 @@ source_path: "suflyor-tts/src/playback.rs"
 batch_id: "B11"
 total_lines: 472
 symbols_count: 27
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "f3ebe790dcdcb0ae03d6ce4bf5fca020338e814e1ae7f1b6ed3ff403b247c5d4"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-tts/src/playback.rs`
 
 - **Batch:** B11
 - **Physical Lines:** 472
-- **Coverage:** 472/472 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (5)
 
@@ -57,7 +60,7 @@ review_state: validated
 | function | `seek_clamps_to_retained_history_and_buffered_horizon` | L451 | `fn seek_clamps_to_retained_history_and_buffered_horizon() -> ()` |
 | function | `played_history_is_bounded_without_discarding_future_audio` | L464 | `fn played_history_is_bounded_without_discarding_future_audio() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Instantiates IPC channel at L132
 - Instantiates IPC channel at L133

@@ -6,18 +6,21 @@ source_path: "overlay-backend/examples/stt_macos_lifecycle_probe.rs"
 batch_id: "B09"
 total_lines: 206
 symbols_count: 8
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "fae9e1b2c6715850050ce930f511831c35893a319a743a02c64bcc16494f6aa5"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/examples/stt_macos_lifecycle_probe.rs`
 
 - **Batch:** B09
 - **Physical Lines:** 206
-- **Coverage:** 206/206 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (8)
 
@@ -32,6 +35,6 @@ review_state: validated
 | function | `main` | L151 | `fn main() -> Result<()>` |
 | function | `main` | L203 | `fn main() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L152

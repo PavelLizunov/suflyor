@@ -1,3 +1,5 @@
+> **Historical candidate evidence — not accepted review.** Reconstructed or edited by the prior coordinator; not an original independent Opus report. Source claims require reconciliation; the final historical verdict was `changes_required`.
+
 # O5: Native Windows HWND, Stealth & Multi-Monitor Geometry
 
 ## 1. Windows HWND Manipulation (`slint-experiment/src/win32.rs` & `src/native/`)

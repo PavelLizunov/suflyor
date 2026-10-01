@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/win32.rs"
 batch_id: "B04"
 total_lines: 1430
 symbols_count: 86
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "9401ad0a0df9228c6ecb77ae47225bbe72c97bbd63ee3c4bf13c928555832362"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/win32.rs`
 
 - **Batch:** B04
 - **Physical Lines:** 1430
-- **Coverage:** 1430/1430 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (4)
 

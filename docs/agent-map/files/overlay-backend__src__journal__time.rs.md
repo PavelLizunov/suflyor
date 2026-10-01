@@ -6,18 +6,21 @@ source_path: "overlay-backend/src/journal/time.rs"
 batch_id: "B08"
 total_lines: 92
 symbols_count: 6
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "afe2235c748030c708c23b47623264a84aa133c360fcc4b5adba3b6332e9dd33"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/journal/time.rs`
 
 - **Batch:** B08
 - **Physical Lines:** 92
-- **Coverage:** 92/92 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (6)
 

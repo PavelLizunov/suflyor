@@ -6,18 +6,21 @@ source_path: "experiments/macos-gate0b/build.rs"
 batch_id: "B15"
 total_lines: 30
 symbols_count: 1
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "40e7d3377d7fa3f5bbbd00d1ab4f4e50c03040ea87c13c008e6407c7e231cc33"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `experiments/macos-gate0b/build.rs`
 
 - **Batch:** B15
 - **Physical Lines:** 30
-- **Coverage:** 30/30 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (1)
 

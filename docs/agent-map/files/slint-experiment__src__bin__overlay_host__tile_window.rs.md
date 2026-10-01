@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/bin/overlay_host/tile_window.rs"
 batch_id: "B03"
 total_lines: 450
 symbols_count: 10
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "c254a31f89c412d96305225c3ca5250ec4e9d0fabbccb30906a694f88098d17a"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/tile_window.rs`
 
 - **Batch:** B03
 - **Physical Lines:** 450
-- **Coverage:** 450/450 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/vision.rs"
 batch_id: "B10"
 total_lines: 459
 symbols_count: 16
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "d1ecacf1d3ab208c926ee5da5f8805d1132e264faa6557b79fb8029f82738d32"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/vision.rs`
 
 - **Batch:** B10
 - **Physical Lines:** 459
-- **Coverage:** 459/459 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

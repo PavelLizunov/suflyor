@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_spike.rs"
 batch_id: "B01"
 total_lines: 213
 symbols_count: 4
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "35d8ffc1b9a7160ab8823980d75cfebc1d6ba95b129054b97b353ab3df06f802"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_spike.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 213
-- **Coverage:** 213/213 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (4)
 

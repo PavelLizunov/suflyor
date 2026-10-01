@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_host/status_copy.rs"
 batch_id: "B01"
 total_lines: 357
 symbols_count: 20
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "dabc5bfdf332c58bc019b5273ada8d2a310ed82d2b9b9e7f99a19f38e77c89e3"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/status_copy.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 357
-- **Coverage:** 357/357 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (20)
 
@@ -44,7 +47,7 @@ review_state: validated
 | function | `performance_and_memory_labels_are_honest_and_localized` | L322 | `fn performance_and_memory_labels_are_honest_and_localized() -> ()` |
 | function | `capture_stopped_copy_is_generic_localized_and_requests_manual_start` | L342 | `fn capture_stopped_copy_is_generic_localized_and_requests_manual_start() -> ()` |
 
-## Configuration Access
+## Heuristic configuration access matches
 
 - Configuration read at L259: `cfg.ai_model = "claude-haiku-4-5".into();`
 - Configuration read at L260: `cfg.ai_provider = "codex".into();`

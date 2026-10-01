@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/memory/normalize.rs"
 batch_id: "B08"
 total_lines: 956
 symbols_count: 38
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "c82b861df03a2b10a22c756ede3aafb8819cabfbb80af08b10ef82269b7e9e2a"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/memory/normalize.rs`
 
 - **Batch:** B08
 - **Physical Lines:** 956
-- **Coverage:** 956/956 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (4)
 

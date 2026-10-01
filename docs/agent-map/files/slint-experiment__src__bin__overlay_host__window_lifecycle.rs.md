@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/bin/overlay_host/window_lifecycle.rs"
 batch_id: "B04"
 total_lines: 705
 symbols_count: 34
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "de9e2372cc826724ac566ff8db2672b4a4b28a6869006d2e6a6a7515a9cb605b"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/window_lifecycle.rs`
 
 - **Batch:** B04
 - **Physical Lines:** 705
-- **Coverage:** 705/705 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (3)
 

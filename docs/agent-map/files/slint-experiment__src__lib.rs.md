@@ -6,19 +6,22 @@ source_path: "slint-experiment/src/lib.rs"
 batch_id: "B01"
 total_lines: 23
 symbols_count: 0
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "5f53dd23dc7f0c8f0046469cedeec0a809a25fd36e66b4df8c00cbd335df805e"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/lib.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 23
-- **Coverage:** 23/23 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (0)
 
-*No function/method symbols extracted.*
+*No routine candidates extracted; absence of routines is not established.*

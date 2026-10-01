@@ -6,18 +6,21 @@ source_path: "slint-experiment/tests/native_macos_window_guard.rs"
 batch_id: "B05"
 total_lines: 96
 symbols_count: 2
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "66dcb353c615a4f24e5f4c9156efc2a42b035f6c22628f76df09808f4e0709ca"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/tests/native_macos_window_guard.rs`
 
 - **Batch:** B05
 - **Physical Lines:** 96
-- **Coverage:** 96/96 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (2)
 

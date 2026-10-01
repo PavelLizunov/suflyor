@@ -6,18 +6,21 @@ source_path: "overlay-backend/examples/stt_macos_probe.rs"
 batch_id: "B09"
 total_lines: 118
 symbols_count: 4
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "f86735865fa66995e87882912ca523af9e1bce1e056f3620d9b4b27ee73e8c75"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/examples/stt_macos_probe.rs`
 
 - **Batch:** B09
 - **Physical Lines:** 118
-- **Coverage:** 118/118 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (4)
 

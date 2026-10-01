@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/audio_unavailable.rs"
 batch_id: "B07"
 total_lines: 160
 symbols_count: 10
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "9530de34b0ec11b859d679be6911e72eaf639bab2a823eb99a2c517842d66fac"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/audio_unavailable.rs`
 
 - **Batch:** B07
 - **Physical Lines:** 160
-- **Coverage:** 160/160 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (5)
 

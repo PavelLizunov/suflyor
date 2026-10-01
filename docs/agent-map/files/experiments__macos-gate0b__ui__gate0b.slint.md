@@ -6,14 +6,17 @@ source_path: "experiments/macos-gate0b/ui/gate0b.slint"
 batch_id: "B15"
 total_lines: 197
 symbols_count: 45
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "ce933a2b2f8c2449f6b575d82eec3a0280afbe5c8a7e6cb1ead0c4ce6ba4ec95"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `experiments/macos-gate0b/ui/gate0b.slint`
 
 - **Batch:** B15
 - **Physical Lines:** 197
-- **Coverage:** 197/197 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (3)
 
@@ -73,7 +76,7 @@ review_state: validated
 | slint_callback | `open-screen-settings` | L116 | `-` |
 | slint_callback | `refresh` | L117 | `-` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - UI Callback `clicked` declared at L3
 - UI Callback `primary` declared at L35

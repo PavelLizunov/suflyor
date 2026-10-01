@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/ai/tests.rs"
 batch_id: "B06"
 total_lines: 707
 symbols_count: 38
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "62b6651d92f461ee8b0e0801139cdd1b4a07241575122f5aea4eb58b983634b5"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/ai/tests.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 707
-- **Coverage:** 707/707 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 
@@ -64,7 +67,7 @@ review_state: validated
 | function | `complete_with_usage_defaults_finish_reason_to_stop_when_absent` | L638 | `fn complete_with_usage_defaults_finish_reason_to_stop_when_absent() -> ()` |
 | function | `deep_lock_guard_refuses_every_managed_sender` | L654 | `fn deep_lock_guard_refuses_every_managed_sender() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L409
 - Spawns asynchronous thread/task at L437

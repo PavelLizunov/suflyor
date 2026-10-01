@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_host/aux_windows/text_ask.rs"
 batch_id: "B03"
 total_lines: 197
 symbols_count: 5
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "1a3273f718745baf459a5182d42ce1471585b91f07bfe482daf7a3edee1148b1"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/aux_windows/text_ask.rs`
 
 - **Batch:** B03
 - **Physical Lines:** 197
-- **Coverage:** 197/197 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (5)
 

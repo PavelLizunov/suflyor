@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/native/macos/clipboard.rs"
 batch_id: "B04"
 total_lines: 58
 symbols_count: 11
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "2bd952cca85d6b92475b2c7bd0f4fca32f7c48b59939146a13279265acbece7f"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/native/macos/clipboard.rs`
 
 - **Batch:** B04
 - **Physical Lines:** 58
-- **Coverage:** 58/58 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (11)
 

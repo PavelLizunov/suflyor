@@ -1,0 +1,871 @@
+{
+  "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+  "lane": "ui",
+  "candidates": [
+    {
+      "id": "wave3_worker1_bridge-C01",
+      "title": "Slint ↔ Tokio deadlock: blocking UI hop while Mutex<SlintRuntime> held",
+      "status": "hypothesis",
+      "severity": "high",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 212,
+          "end_line": 212
+        },
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 281,
+          "end_line": 312
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 900,
+          "end_line": 900
+        }
+      ],
+      "rationale": "The codebase uses slint::invoke_from_event_loop (non-blocking, confirmed at overlay_host_windows.rs:900 and 20+ other call sites) — NOT slint::blocking_invoke_from_event_loop. No occurrence of blocking_invoke exists in the repo. The report itself acknowledges this: 'No path currently holds lock(&rt) across events.emit'. The ABBA deadlock requires a blocking_invoke path that does not exist. The hypothesis is conditional on a future code change.",
+      "counterevidence": "Zero uses of slint::blocking_invoke_from_event_loop in the entire codebase. All UI dispatches use the non-blocking variant. Report's own text admits the current code avoids the deadlock.",
+      "verification": "not_run",
+      "remaining_check": "Confirmed non-blocking; no reproduction needed for current code. Only relevant if blocking_invoke is ever introduced.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "1. Slint ↔ Tokio deadlock: `blocking` UI hop while `Mutex<SlintRuntime>` is held",
+      "original_claim_redacted": "No path in `slint_session.rs` currently holds `lock(&rt)` across `events.emit` / `spawn_tile_full` (meeting-ending explicitly `drop(s)` before emit at `transcript_forwarder` ~meeting-ending block; rate-limit `drop(s)` before `\"tile:rate-limited\"`). Deadlock still exists **if** `SlintUiBridge` uses `slint::blocking_invoke_from_event_loop` **and** the UI closure re-enters `runtime_state::lock` (`runtime_state.rs` `lock()` → `Mutex::lock`). `start_session` is documented as UI-thread (`slint_session.rs` module docs) and itself calls `events.emit(\"cost:update\")` / `\"session:started\"`; `blocking_invoke_from_event_loop` from the Slint thread deadlocks the event loop with itself."
+    },
+    {
+      "id": "wave3_worker1_bridge-C02",
+      "title": "Hot-path contention: audio forwarder vs session start/stop on std::sync::Mutex",
+      "status": "confirmed",
+      "severity": "medium",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 281,
+          "end_line": 332
+        },
+        {
+          "path": "slint-experiment/src/runtime_state.rs",
+          "start_line": 27,
+          "end_line": 27
+        },
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 450,
+          "end_line": 465
+        }
+      ],
+      "rationale": "Single std::sync::Mutex<SlintRuntime> (runtime_state.rs lock()) is shared across all paths: audio forwarder (every AudioChunk), start_session_inner (long critical section lines 281-332 clearing transcript, aborting tasks, bumping session_gen), stop_session, qa_cache eviction, and UI-thread bar callbacks. start_session_inner holds the lock while doing multiple field resets including validate_gigaam_dir (~0.5s). Contention on the UI thread is mechanically established.",
+      "counterevidence": "The mutex is a standard pattern; contention severity depends on audio chunk rate and session start/stop frequency. No observed user-reported freeze attributable to this specific contention.",
+      "verification": "not_run",
+      "remaining_check": "Profiler measurement of actual lock hold times under concurrent audio capture.",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "2. Hot-path contention: audio forwarder vs session start/stop vs QA eviction on one `std::sync::Mutex`",
+      "original_claim_redacted": "`forward_audio_chunks` (`slint_session.rs`) takes `lock(&rt)` on **every** `AudioChunk` (health stores, `collect_system_audio` which can `extend` up to `TARGET_SAMPLE_RATE * 30` i16s), then **again** after `stt_tx.reserve().await`. That mutex is the same one `start_session_inner` holds while `full_transcript.clear()` (cap 20_000), `qa_cache.clear()`, `journal.take()`+`drop(j)` **under the guard**, and the same one `maybe_spawn_auto_tile` holds for TTL `retain`, prefix `retain`, and half-eviction (`QA_CACHE_MAX_ENTRIES = 256` clone-all-keys + `sort_by_key` + remove) after the AI call."
+    },
+    {
+      "id": "wave3_worker1_bridge-C03",
+      "title": "Generation fence TOCTOU: post-AI session_gen check does not cover mutations",
+      "status": "confirmed",
+      "severity": "medium",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 761,
+          "end_line": 761
+        },
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 948,
+          "end_line": 948
+        },
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 1210,
+          "end_line": 1210
+        }
+      ],
+      "rationale": "maybe_spawn_auto_tile captures gen_for_tile at line 761, mutates recent_tile_triggers/qa_cache before the AI call, then checks session_gen only after AI completion (line 1210). Window between capture and check allows Stop/Start to bump gen while pre-AI mutations already applied. Post-check mutations (qa_cache.insert, cost, journal, spawn) are also unfenced between the check and actual execution.",
+      "counterevidence": "In practice, rapid Stop/Start during an AI call is rare. Pre-AI mutations (retain/prefix) are lightweight and transient. Post-check writes to a stopped session are benign if no new session starts.",
+      "verification": "not_run",
+      "remaining_check": "Inject delay between gen check and qa_cache.insert to confirm cross-session write.",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "3. Generation fence TOCTOU: post-AI `session_gen` check does not cover mutations",
+      "original_claim_redacted": "`maybe_spawn_auto_tile` captures `gen_for_tile = lock(&rt).session_gen` in `transcript_forwarder`, then only re-reads gen **after** `ai::complete_with_usage_endpoint` (`if lock(&rt).session_gen != session_gen { return; }`). There is **no** check at function entry. Before the AI await it already mutates `recent_tile_triggers`, `recent_question_prefixes`, and `qa_cache.retain`. After a successful check it **releases the lock** and then writes `qa_cache.insert`, `session_cost_microcents`, `last_question`/`last_answer`, journal, `cost:update`, `spawn_tile_full`."
+    },
+    {
+      "id": "wave3_worker1_bridge-C04",
+      "title": "Generation fence bypass: forwarder stamps work with post-stop gen",
+      "status": "confirmed",
+      "severity": "medium",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 303,
+          "end_line": 306
+        },
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 761,
+          "end_line": 761
+        },
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 1413,
+          "end_line": 1413
+        }
+      ],
+      "rationale": "stop_session bumps session_gen (line 1413) and calls transcript_task.abort() in the same guard. JoinHandle::abort is cooperative — only unwinds at next .await. Between the abort signal and the next await point, the forwarder reads the ALREADY-BUMPED gen at line 761 and spawns maybe_spawn_auto_tile with the post-stop gen. The later gen check (line 1210) then PASSES because the gen matches, allowing a tile/cost write to a stopped session.",
+      "counterevidence": "The window is narrow (between abort signal and next .await). In practice the forwarder's next .await is stt_rx.recv(), which may happen quickly. The effect is a stale auto-tile appearing after session stop.",
+      "verification": "not_run",
+      "remaining_check": "Debug sleep between abort and next await to confirm stale tile spawn.",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "4. Generation fence bypass: forwarder stamps work with the **post-stop** gen",
+      "original_claim_redacted": "`stop_session` bumps `session_gen` and `transcript_task.abort()` under the **same** guard. `JoinHandle::abort` only unwinds at `.await`. `transcript_forwarder` between `stt_rx.recv().await` and the next await still runs: `let gen_for_tile = lock(&rt).session_gen` now reads the **already bumped** gen, then `tokio::spawn(maybe_spawn_auto_tile(..., gen_for_tile))`. After Stop (no restart) the later `session_gen != session_gen` check **succeeds** and a tile/cost/cache write is applied to a stopped session. `health_task` has the same “one extra iteration after abort” behavior (`tick.tick().await` then `lock` + `spawn_tile_full` mic-down + `\"health:update\"`)."
+    },
+    {
+      "id": "wave3_worker1_bridge-C05",
+      "title": "AUTO_TILE_SINGLE_FLIGHT_STATE wrapping_shl overflow",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 99,
+          "end_line": 99
+        },
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 118,
+          "end_line": 123
+        }
+      ],
+      "rationale": "session_gen is u64, packed as gen.wrapping_shl(1)|1 into AtomicU64 (line 119). After ~2^63 sessions, wrapping causes current_gen > session_gen check (line 123) to permanently reject all acquires. Mechanically valid but practically unreachable: 2^63 sessions at 1/second = 292 billion years.",
+      "counterevidence": "Wrap requires 2^63 session starts. Not reachable in any human lifetime. The report acknowledges this is 'academic'.",
+      "verification": "not_run",
+      "remaining_check": "None needed; purely theoretical.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "5. `AUTO_TILE_SINGLE_FLIGHT_STATE` does not stop in-flight work and can latch shut on wrap",
+      "original_claim_redacted": "`try_acquire_auto_tile` (`slint_session.rs`) packs `session_gen.wrapping_shl(1) | 1` into a process-wide `AtomicU64`. A **newer** gen is allowed to acquire while the old permit is still live (test `auto_tile_permit_is_single_flight_per_session` asserts supersede). Old `Drop` CAS fails harmlessly, so two AI calls run. `session_gen` is a full `u64` but the atomic only stores 63 bits; after `wrapping_add` rolls gen below `current >> 1`, `current_gen > session_gen` makes every acquire return `None` (MLX / `every_line` auto-tiles die for the process)."
+    },
+    {
+      "id": "wave3_worker1_bridge-C06",
+      "title": "Task cleanup: aborted handles not joined; untracked spawns",
+      "status": "confirmed",
+      "severity": "medium",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 304,
+          "end_line": 312
+        },
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 761,
+          "end_line": 761
+        }
+      ],
+      "rationale": "start_session_inner takes transcript_task/ai_task/health_task via take()+abort() (lines 304-312) but never awaits the handles. forward_audio_chunks spawns a tokio task whose JoinHandle is discarded. Per-line maybe_spawn_auto_tile spawns are untracked (only gen-bail). Journal clones survive across session boundaries because the journal Arc is captured by multiple spawned tasks. Confirmed: abort() without join means zombie tasks can hold SlintRuntime mutex and Journal clones past session stop.",
+      "counterevidence": "abort() is cooperative and eventual; tasks typically unwind at their next .await within milliseconds. Journal shutdown(3s) handles the common case. But overlapping forwarders on rapid restart are mechanically possible.",
+      "verification": "not_run",
+      "remaining_check": "tokio-console task dump after rapid Start/Stop cycles.",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "6. Task cleanup: aborted handles are not joined; several tasks are never tracked",
+      "original_claim_redacted": "`transcript_task` / `ai_task` / `health_task` are `take()` + `abort()` on start/stop; handles are **not** awaited. Untracked spawns: (1) `forward_audio_chunks`’s `tokio::spawn` — JoinHandle discarded; (2) per-line `tokio::spawn(maybe_spawn_auto_tile)` — up to ~9 min with retries, only gen-bail; (3) `tokio::task::spawn_blocking` for `drop(recorder)`; (4) `std::thread::spawn` archive indexer in `stop_session`; (5) `maybe_run_debrief` → `rt_handle.spawn(run_post_meeting_debrief)` with no handle and no gen; (6) `stt::spawn` pipeline never aborted/joined — `stt::reset_gigaam_cache()` runs while the old STT task may still be alive (`start_session_inner` after `drop(prior_capture)`)."
+    },
+    {
+      "id": "wave3_worker1_bridge-C07",
+      "title": "UI-thread blocking (priority inversion)",
+      "status": "confirmed",
+      "severity": "medium",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 273,
+          "end_line": 278
+        },
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 376,
+          "end_line": 376
+        }
+      ],
+      "rationale": "start_session_inner runs on the Slint UI thread and performs synchronous stt::validate_gigaam_dir (~0.5s, line 376), audio::start_capture, journal open, and a long lock(&rt) critical section (lines 281-332). These block the event loop, stalling all queued invoke_from_event_loop dispatches from transcript/health/AI workers. stop_session's j.shutdown(Duration::from_secs(3)) is also inline on the UI thread.",
+      "counterevidence": "validate_gigaam_dir is a one-shot ~0.5s check. The UI stall is brief and occurs only at session start/stop, which is infrequent. Users may not perceive sub-second freezes.",
+      "verification": "not_run",
+      "remaining_check": "Measure actual UI stall duration during session start with slow GigaAM validation.",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "7. UI-thread blocking (priority inversion, not a mutex cycle)",
+      "original_claim_redacted": "`start_session_inner` on the Slint thread does sync `stt::validate_gigaam_dir` (~0.5s), `audio::start_capture`, journal open, and the long first `lock(&rt)`. `stop_session` (if called from the bar) runs `j.shutdown(Duration::from_secs(3))` and may `std::thread::spawn` indexing but the shutdown itself is inline. Invariant “UI callbacks must NEVER block on async futures” is kept only by blocking **sync** instead; `tokio::spawn` from that thread still requires a runtime context — `Handle::block_on(start_session)` plus any worker `blocking_invoke_from_event_loop` is a hard deadlock."
+    },
+    {
+      "id": "wave3_worker1_bridge-C08",
+      "title": "Stream/debrief/namer vs session identity",
+      "status": "confirmed",
+      "severity": "medium",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 303,
+          "end_line": 303
+        },
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 1283,
+          "end_line": 1283
+        }
+      ],
+      "rationale": "session_gen was added for auto-tiles (E9) but is NOT applied to F9/PTT ask streams, debrief, or session namer. ask_stream_loop in overlay-backend has zero session_gen checks. run_post_meeting_debrief spawns tiles with no gen fence. maybe_spawn_namer has no gen stamp. Rapid stop/restart can cause: stale AI events painting the new session's tile, debrief tile binding to wrong session, bar title from old namer overwriting new session name.",
+      "counterevidence": "Rapid stop/restart with active AI streams is an uncommon user pattern. The stream abort typically cancels quickly enough that few stale events arrive.",
+      "verification": "not_run",
+      "remaining_check": "F9 stream during Stop/Start to confirm stale ai:event reaches new tile.",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "8. Stream / debrief / namer vs session identity",
+      "original_claim_redacted": "`ask_stream_loop` emits every `ai:event` then always `cost_apply` + `\"cost:update\"` if the task is **not** aborted at `ai_rx.recv().await`. `ai_task.abort()` on stop skips the tail (unwind), but deltas already forwarded through `SlintEvents` are unfenced. `run_post_meeting_debrief` / `run_meeting_summary` take a transcript snapshot (good) but spawn tiles with no `session_gen`; a debrief started from Stop can appear after the next Start. `crate::session_namer::maybe_spawn_namer` is invoked from the forwarder with only `&rt` (no gen stamp in this file)."
+    },
+    {
+      "id": "wave3_worker2_window-C01",
+      "title": "Stealth leakage — WDA not a gate on first on-screen frame",
+      "status": "confirmed",
+      "severity": "high",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 291,
+          "end_line": 395
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 176,
+          "end_line": 176
+        }
+      ],
+      "rationale": "present_window_stealth_aware_at (line 291) parks window off-screen, shows, grabs HWND, calls decorate(hwnd) which includes apply_stealth_one, then UNCONDITIONALLY calls move_window_pos_only to reveal. apply_stealth_one (line 176) only logs set_stealth failures without inhibiting reveal. If SetWindowDisplayAffinity fails (unsupported GPU driver, Windows 10 1909), the window is revealed without stealth protection, leaking content to screen capture. Contrast: open_tray_menu (bar_tray.rs:256) correctly gates reveal on set_stealth success.",
+      "counterevidence": "Off-screen parking means the window is not visible during the stealth-application attempt. The leak occurs only if WDA API fails AND the window is then moved on-screen. On supported Windows 10 2004+ with capable GPU, WDA rarely fails.",
+      "verification": "not_run",
+      "remaining_check": "Test on Windows 10 1909 VM or with WDA-incompatible GPU driver.",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "1. Stealth Leakage — WDA is not a gate on first on-screen frame",
+      "original_claim_redacted": "`present_window_stealth_aware_at` (`window_lifecycle.rs`, `do_reveal` closure) always parks, `show()`s, then on HWND grab runs `decorate(hwnd)` → optional `apply_stealth_one` → **unconditional** `move_window_pos_only`. `apply_stealth_one` only logs `set_stealth` failure and does not inhibit reveal. Contrast `open_tray_menu` in `bar_tray.rs`, which treats `set_stealth` `Err` as `return false` and whose fallback **hides** the menu."
+    },
+    {
+      "id": "wave3_worker2_window-C02",
+      "title": "HWND_GRAB_DELAY race — missed HWND leads to un-decorated window",
+      "status": "hypothesis",
+      "severity": "medium",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 395,
+          "end_line": 450
+        }
+      ],
+      "rationale": "realize_with_retries (line 395) attempts HWND grab with retries and fallback. If all retries fail, the fallback path reveals the window without HWND decorations. However, the fallback explicitly checks global_stealth() and does NOT reveal under stealth if HWND never realized. The report's concern about un-decorated reveal is valid for the non-stealth case (missing DWM frame, topmost, skip-taskbar) but the stealth-leak aspect is handled.",
+      "counterevidence": "realize_with_retries has retry logic specifically to handle the HWND creation race. The fallback path has explicit stealth guard. Complete HWND failure is extremely rare on supported platforms.",
+      "verification": "not_run",
+      "remaining_check": "None critical; the retry mechanism adequately handles the timing race.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "2. Stealth Leakage — `show()` + HWND realization vs parking race",
+      "original_claim_redacted": "Parking is `set_platform_window_position(..., -32000, -32000)` then `win.show()` (`present_window_stealth_aware_at`), with WDA deferred until `realize_with_retries` (`HWND_REVEAL_FAST_MS` → 80ms → `HWND_GRAB_DELAY_MS * 2`). `grab_hwnd` docs in `win32.rs` state the native HWND does not exist until after an event-loop tick; winit commonly **maps at default monitor placement first**, then applies the pending Slint position."
+    },
+    {
+      "id": "wave3_worker2_window-C03",
+      "title": "Tile geometry: pick_monitor vs DPI ladder favours landscape",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/win32.rs",
+          "start_line": 326,
+          "end_line": 429
+        }
+      ],
+      "rationale": "pick_monitor selects the primary monitor unless a non-primary is landscape AND >= primary width. The report claims portrait secondary monitors are never chosen. This is by design per AGENTS.md: the user has 1 portrait secondary + 1 landscape primary, and tiles pin to primary. The behavior is intentional, not a bug.",
+      "counterevidence": "The monitor selection logic matches the documented user setup. Portrait tile placement is deliberately avoided. global_tile_monitor_pin allows manual override.",
+      "verification": "not_run",
+      "remaining_check": "None; design intent matches implementation.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "3. Stealth Leakage — bar fallback deliberately un-stealths the control surface",
+      "original_claim_redacted": "`apply_overlay_hwnd` fallback (`bar_tray.rs`) calls `set_global_stealth_effective(false)` then `set_platform_window_position` onto the primary **even when `global_stealth()` is true**, because “the bar is the whole control surface”. Aux fallback (`present_window_stealth_aware_at`) at least keeps the window parked under stealth."
+    },
+    {
+      "id": "wave3_worker2_window-C04",
+      "title": "Tray menu missing from WindowRegistry stealth walk",
+      "status": "confirmed",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 550,
+          "end_line": 616
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/bar_tray.rs",
+          "start_line": 249,
+          "end_line": 267
+        }
+      ],
+      "rationale": "WindowRegistry.apply_stealth (lines 550-616) walks tiles, settings, palette, text_ask, wizard, help, recover_offer, transcript, archive, lock_menu — but NOT TrayMenuWindow. If stealth is toggled while the tray menu is open, its WDA is not updated. However, the tray menu independently checks stealth at open time (bar_tray.rs:256) and is ephemeral (dismissed on any action or focus loss).",
+      "counterevidence": "TrayMenuWindow is transient — it's shown briefly and dismissed immediately. The window for stealth toggle requires opening the tray menu BEFORE toggling stealth AND keeping it open during the toggle. Extremely narrow window. Tray menu content is navigation labels, not sensitive meeting content.",
+      "verification": "not_run",
+      "remaining_check": "Low priority; tray menu content is non-sensitive navigation items.",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "4. Stealth Leakage — live toggle does not cover all HWNDs; tray menu is a ghost",
+      "original_claim_redacted": "`WindowRegistry::apply_stealth` walks tiles, settings, palette, text_ask, wizard, help, recover_offer, transcript, archive, lock_menu. It does **not** include `TrayMenuWindow`. `open_tray_menu` applies WDA only at realize. Bar is a separate `apply_bar_stealth` call the caller must remember. Capture overlay is explicitly excluded."
+    },
+    {
+      "id": "wave3_worker2_window-C05",
+      "title": "Transparent overlay: stale WS_EX_TRANSPARENT after click-through toggle",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/win32.rs",
+          "start_line": 9,
+          "end_line": 42
+        }
+      ],
+      "rationale": "The report claims WS_EX_TRANSPARENT can become stale after click-through toggle. However, set_click_through (win32.rs) atomically sets/clears the extended style bit via SetWindowLongPtrW. The implementation is standard Win32. Report provides no specific code path where the toggle fails.",
+      "counterevidence": "Standard Win32 SetWindowLongPtrW style toggle. No evidence of staleness in the implementation.",
+      "verification": "not_run",
+      "remaining_check": "None needed; standard Win32 pattern.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "5. Stealth Leakage — `set_skip_taskbar` can unhide a tray-hidden bar and flash style bits",
+      "original_claim_redacted": "`set_skip_taskbar` (`win32.rs`) does `ShowWindow(SW_HIDE)` → restyle → `ShowWindow(SW_SHOWNOACTIVATE)` + `HWND_TOPMOST` whenever TOOLWINDOW/APPWINDOW bits change. `apply_bar_stealth` always calls it. `hide_bar_to_tray` only `hide()` + `force_hide` and sets `BAR_TRAY_HIDDEN`; it does not stop stealth applies."
+    },
+    {
+      "id": "wave3_worker2_window-C06",
+      "title": "STEALTH_ON vs STEALTH_EFFECTIVE: UI can overclaim stealth status",
+      "status": "rejected",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 80,
+          "end_line": 92
+        }
+      ],
+      "rationale": "The report claims the UI may overclaim stealth. However, the code explicitly separates STEALTH_ON (config intent) from STEALTH_EFFECTIVE (verified state). Lines 80-92 document this distinction carefully: 'this flag is the honest source for every visible success indicator — the bar chip, the Settings Stealth-tab status line, and the Diagnostics row. Starts false: until the bar's HWND is realized and the exclusion is read back, stealth cannot be claimed.' The presentable_stealth function (win32.rs:1118) reads back the actual WDA state. The concern about overclaiming is addressed by design.",
+      "counterevidence": "STEALTH_EFFECTIVE is only set after successful WDA application and readback verification. The code was specifically designed to prevent this exact overclaim scenario, with explicit comments documenting the limitation.",
+      "verification": "not_run",
+      "remaining_check": "None; the two-flag design explicitly prevents overclaiming.",
+      "worker_status": "rejected",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "6. Multi-Monitor Geometry — first pin uses possibly unset size (1×1 / half-off primary)",
+      "original_claim_redacted": "`apply_overlay_hwnd` pins with `get_window_rect(hwnd).map(|(_,_,_,w)| w).unwrap_or(0)` as soon as `grab_hwnd` succeeds. `present_window_stealth_aware_at` uses `get_window_rect(...).unwrap_or((0,0,460,360))` — **error** fallback only; a real `0×0` or `1×1` rect is trusted. `recenter_when_sized` exists for compact resize and waits for width, but the initial realize path does not share that wait."
+    },
+    {
+      "id": "wave3_worker2_window-C07",
+      "title": "Off-screen parking coordinates: -32000 can wrap on multi-DPI",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 242,
+          "end_line": 242
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/bar_tray.rs",
+          "start_line": 242,
+          "end_line": 242
+        }
+      ],
+      "rationale": "Windows' documented virtual desktop range is -32768 to +32767 for 16-bit compatibility. -32000 is well within range. The report speculates about wrapping on multi-DPI setups, but Windows DWM uses i32 coordinates internally. No evidence of actual wrapping at -32000.",
+      "counterevidence": "-32000 is a widely used off-screen parking coordinate in Win32 applications. Windows desktop composition handles this coordinate correctly regardless of DPI scaling. The report provides no specific scenario where this wraps.",
+      "verification": "not_run",
+      "remaining_check": "None; standard Win32 off-screen parking pattern.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "7. Multi-Monitor Geometry — `pick_monitor` and pin packing fail closed into wrong/empty space",
+      "original_claim_redacted": "`pick_monitor` (`win32.rs`) is `monitors.iter().find(|m| m.is_primary).copied()?` — **no primary ⇒ `None`**. Callers then use `(100,100)` or `(60,24)`, which need not lie on any `rcMonitor` (negative-origin virtual desktop; owner layout has portrait at `x=-1200`). `TILE_MONITOR_PIN` packs `(left << 32) | (top as u32)` with sentinel `i64::MIN`; `left == i32::MIN && top == 0` collides with AUTO. Pin match is top-left of `rcMonitor` only; a driver that reports a 1px origin shift after sleep looks like “unplugged” and silently falls back."
+    },
+    {
+      "id": "wave3_worker2_window-C08",
+      "title": "Force-hide vs Slint hide: ShowWindow(SW_HIDE) can orphan event loop",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/win32.rs",
+          "start_line": 136,
+          "end_line": 143
+        }
+      ],
+      "rationale": "force_hide (win32.rs:143) uses ShowWindow(SW_HIDE) because Slint's Window::hide() doesn't reliably clear overlay windows on non-primary monitors. The report speculates this can orphan the Slint event loop. However, force_hide is used specifically for the bar hide-to-tray path and tile dismissal, where the window lifecycle is explicitly managed. The window object remains alive; only the HWND visibility changes.",
+      "counterevidence": "force_hide is a targeted workaround for a documented Slint limitation on non-primary monitors (lines 136-138). The window object and event loop remain intact. ShowWindow(SW_HIDE) is a standard reversible operation.",
+      "verification": "not_run",
+      "remaining_check": "None; documented workaround for known Slint limitation.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "8. DWM Transparency & Paint Races — hide/restyle/show and blur-behind are not ordered with first paint",
+      "original_claim_redacted": "`apply_transparency` (`win32.rs`) calls `set_skip_taskbar` (hide/show), then `SetWindowLongPtr(GWL_EXSTYLE)`, then `DwmExtendFrameIntoClientArea(margins=-1)`, then `DwmEnableBlurBehindWindow` with `CreateRectRgn(0,0,-1,-1)`. Bar uses `make_transparent_overlay` (sets `WS_EX_TRANSPARENT`). Tiles use `make_transparent_tile` (clears it). No `WS_EX_LAYERED` / `SetLayeredWindowAttributes` is applied here; per-pixel alpha is entirely DWM composition (`composition_enabled()`)."
+    },
+    {
+      "id": "wave3_worker2_window-C09",
+      "title": "Tile drag: DRAG_ANCHOR is not saved, tiles reset position on re-creation",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_window.rs",
+          "start_line": 45,
+          "end_line": 51
+        }
+      ],
+      "rationale": "The report notes tile drag positions aren't persisted. This is expected behavior — tiles are ephemeral AI response windows, not persistent UI panels. Their position is determined by pick_monitor + TILE_SLOT_COUNTER grid placement. The user can pin tiles to a specific monitor via Settings. Non-issue by design.",
+      "counterevidence": "Tile windows are ephemeral. Per-tile position persistence would add complexity for a transient UI element. Monitor pin (global_tile_monitor_pin) handles the primary use case.",
+      "verification": "not_run",
+      "remaining_check": "None; design intent matches.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "9. DWM Transparency — click-through and topmost are not re-asserted coherently",
+      "original_claim_redacted": "`set_skip_taskbar` re-asserts `HWND_TOPMOST` but does not re-run `apply_transparency`. `show_windows` restores topmost only if the hide snapshot said so. `make_transparent_overlay` is one-shot in `apply_overlay_hwnd`. Slint `no-frame` still leaves caption bits that they strip once via `GWL_STYLE`; a later winit style refresh can bring back ghost caption buttons **and** `WS_EX_APPWINDOW`."
+    },
+    {
+      "id": "wave3_worker2_window-C10",
+      "title": "DWM blur-behind region: region leak on repeated make_transparent_overlay",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/win32.rs",
+          "start_line": 230,
+          "end_line": 270
+        }
+      ],
+      "rationale": "make_transparent_overlay applies DWM frame extension and blur-behind with a region. The report speculates about GDI region leaks on repeated calls. However, make_transparent_overlay is called once per HWND at window creation time. It is not repeatedly called on the same HWND. The DWM_BLURBEHIND region is managed by the DWM compositor, not by the application.",
+      "counterevidence": "make_transparent_overlay is a one-shot decoration applied at HWND creation. No code path calls it repeatedly on the same HWND. DWM manages the blur region lifecycle.",
+      "verification": "not_run",
+      "remaining_check": "None; one-shot application pattern.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "10. Window Destruction — registry unhook is convention-only; native subclass is never removed",
+      "original_claim_redacted": "`WindowRegistry` is `Clone` of `Rc<RefCell<Option<…>>>` slots plus `TileWindows`. This module has `apply_stealth` / `apply_scheme` / `refresh_open_tiles` (`tiles.retain` is only mentioned in comments) and **no** close/Drop path. `install_stealth_cursor_guard` (`win32.rs`) `SetWindowSubclass`s forever; `set_stealth` ignores reinstall failure. `DRAG_ANCHOR` is a process thread-local not tied to HWND lifetime."
+    },
+    {
+      "id": "wave3_worker2_window-C11",
+      "title": "Settings window positioning: no saved position on reuse path",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 106,
+          "end_line": 137
+        }
+      ],
+      "rationale": "The reuse path (line 106) shows the existing window at its last position. The report suggests the position should be saved to config. The window already retains its position across opens because the window object stays alive (only hidden). This is working as intended.",
+      "counterevidence": "The SettingsWindow singleton retains its position between show/hide cycles. The window is not destroyed and recreated; it's hidden and re-shown.",
+      "verification": "not_run",
+      "remaining_check": "None; window position naturally persists via the live singleton.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "11. Cross-cutting — “effective stealth” is an unreliable invariant",
+      "original_claim_redacted": "`set_global_stealth` stores intent ∧ `stealth_supported()` (`true` **const** on Windows, `false` on macOS). `set_global_stealth_effective` stores bar apply+readback only. `apply_stealth_one` does not update any aggregate. `stealth_supported()` does not check build 2004 / `SetWindowDisplayAffinity` capability."
+    },
+    {
+      "id": "wave3_worker3_tile-C01",
+      "title": "Tile/Ask generation mismatches — GenGatedEvents TOCTOU",
+      "status": "confirmed",
+      "severity": "medium",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
+          "start_line": 156,
+          "end_line": 182
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
+          "start_line": 119,
+          "end_line": 150
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
+          "start_line": 537,
+          "end_line": 537
+        }
+      ],
+      "rationale": "GenGatedEvents::emit (line 164) loads stream_gen atomically, then calls inner.emit which dispatches to handle_ai_event (line 537). handle_ai_event locks current_streaming mutex separately (line 548). install_streaming_tile (line 119) bumps stream_gen and swaps the slot under the same mutex but independently of the atomic gen check. Window between atomic gen check and mutex lock allows: stale stream passes gen check → UI thread bumps gen + swaps slot → stale handle_ai_event accesses the NEW tile's slot. This is a real TOCTOU race.",
+      "counterevidence": "The race window is narrow (between atomic load at line 164 and mutex lock at line 548). The practical impact is a stale AI chunk rendering on the wrong tile. The user would see a brief text flicker during rapid re-ask. Not a data corruption issue.",
+      "verification": "not_run",
+      "remaining_check": "Inject delay between gen check and mutex lock to confirm cross-tile write.",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "1. Tile / Ask Generation Mismatches",
+      "original_claim_redacted": "`GenGatedEvents::emit` in `tile_controller.rs` is a check-then-act race, not a generation lock. It loads `stream_gen` **outside** `current_streaming`, then calls `inner.emit` → `OverlayBarBridge::handle_ai_event`, which mutates/takes the **current** slot. `install_streaming_tile` bumps `stream_gen` and swaps the slot under a **different** critical section. A cancelled F9/follow-up/regenerate chunk (especially `Done`/`Error`) can still land on the newer tile. PTT is a second writer: `PttStreamSink` is intentionally **not** generation-gated and **not** stored in `ai_task`, so F9 abort / `session:stopped` cannot stop it. Rapid F9 always `TileWindow::new()`s another window; the old one is only labelled `\"ai · superseded\"` (and only if `old.convo_id != new_convo`)."
+    },
+    {
+      "id": "wave3_worker3_tile-C02",
+      "title": "Markdown streaming re-parse: unbounded O(n²) on long AI answers",
+      "status": "confirmed",
+      "severity": "medium",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/markdown.rs",
+          "start_line": 71,
+          "end_line": 75
+        },
+        {
+          "path": "slint-experiment/src/markdown.rs",
+          "start_line": 218,
+          "end_line": 232
+        }
+      ],
+      "rationale": "parse_streaming (line 71) calls parse(stable_streaming_prefix(source)), which invokes parse_single_pass on the entire accumulated AI answer every time a new token arrives. For an N-token answer, this is O(N) per token × N tokens = O(N²) total. Internal Vec<Block> (line 219), table_rows Vec<Vec<String>> (line 232), and list_depth (line 225) are all unbounded — no caps on any of them. A long AI response (thousands of tokens) causes quadratic re-parsing overhead.",
+      "counterevidence": "Typical AI answers are <2000 tokens; the O(N²) overhead is negligible for normal responses. The 200ms render throttle (tile_controller.rs) limits how often parse_streaming is called. But adversarial/long responses could cause noticeable lag.",
+      "verification": "not_run",
+      "remaining_check": "Profile parse_streaming with a >5000-token response to measure actual latency.",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "2. Incremental Markdown Parsing",
+      "original_claim_redacted": "`markdown.rs` is **not** incremental. `to_md_blocks_streaming` → `parse_streaming` → `parse` → full `pulldown-cmark` `parse_single_pass` on the entire prefix every ~50ms (`last_tile_render` / PTT `last_render`). There is **no** AST node cap, **no** `list_depth` cap, **no** block-count cap. Nested lists do `\"  \".repeat(list_depth - 1)` on `Start(Item)`. Tables grow `table_rows` unbounded (only cell width is capped at 28). `stable_streaming_prefix` only hides an unfinished TeX tail; it does not bound work."
+    },
+    {
+      "id": "wave3_worker3_tile-C03",
+      "title": "ptt_tile_error does not clear followup_busy flag",
+      "status": "confirmed",
+      "severity": "medium",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_ptt.rs",
+          "start_line": 54,
+          "end_line": 72
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
+          "start_line": 140,
+          "end_line": 140
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
+          "start_line": 323,
+          "end_line": 323
+        }
+      ],
+      "rationale": "ptt_tile_error (tile_ptt.rs:54-72) sets source_label and blocks on the tile but does NOT call set_followup_busy(false). By contrast, install_streaming_tile (tile_controller.rs:140) and every Done/Error path in handle_ai_event (lines 323, 328, 353) explicitly clear followup_busy. If a PTT ask fails at the STT stage (before entering the AI stream path), the tile's follow-up input remains permanently disabled ('busy' state never cleared).",
+      "counterevidence": "The user can close the tile and start a new ask. The stuck busy state only affects the follow-up input on that specific tile instance. PTT STT errors are uncommon.",
+      "verification": "not_run",
+      "remaining_check": "Trigger a PTT STT error and verify follow-up input remains disabled.",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "3. Unhandled Stream Termination",
+      "original_claim_redacted": "Terminal UI recovery is **event-dependent**. `followup_busy=false` and `\"ai · done|error|прервано\"` only run on `AiEvent::Done` / `Error` (`handle_ai_event`, `PttStreamSink`) or `session:stopped` **for the shared slot**. A mid-stream socket drop that yields neither event leaves the tile in `\"ai · asking…\"` / `followup_busy=true`. Several paths already drop without those events: `show_mlx_runtime_error` + `return` in `fire_f9_ask` / `fire_followup_ask` / `fire_regenerate` **after** `install_streaming_tile`; PTT MLX/STT failures; PTT is not on `ai_task` and is ignored by `session:stopped`. `ptt_tile_error` never clears `followup_busy`."
+    },
+    {
+      "id": "wave3_worker3_tile-C04",
+      "title": "System prompt leaks into clipboard copy",
+      "status": "rejected",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_copy.rs",
+          "start_line": 179,
+          "end_line": 197
+        }
+      ],
+      "rationale": "The report claims system prompts, memory facts, and AI directives leak into clipboard copy. This is FALSE. convo_copy_text (tile_copy.rs:179) calls format_convo_copy which explicitly filters messages with .filter(|m| m.role != \"system\"). System role messages are excluded from the clipboard output. The wire_copy path and wire_block_capture both operate on rendered display content, not raw conversation messages.",
+      "counterevidence": "Explicit role==\"system\" filter at the copy path. The report's claim is directly contradicted by the source code.",
+      "verification": "not_run",
+      "remaining_check": "None; filter confirmed in source.",
+      "worker_status": "rejected",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "4. Clipboard & Copy Safety",
+      "original_claim_redacted": "Visible tile copy (`wire_code_copy` / block `text`) is raw markdown of **rendered** body, not HTML — low XSS risk in Slint. The leak surface is `wire_copy(&tile, convo_id, bridge)` plus `ConvoState.messages`. On `Done`, both `handle_ai_event` and `PttStreamSink` store the **full send array** (`request_messages` + assistant), which for F9/PTT starts with `ai::build_request`’s **system** turn (`meeting_context`, approved memory from `context_for_meeting`, language/format directives, transcript scaffold). `reframe_for_send` is send-time only; stored history is original. `user_turn_markdown` only wraps the user question in a `~user` fence. `strip_followup_directives` implies copy once walked messages that contained internal markers. Code-block copy uses `Block.text` (raw), not `display_text`."
+    },
+    {
+      "id": "wave3_worker4_settings-C01",
+      "title": "Reused-window path does not reseed persistent controls",
+      "status": "confirmed",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 106,
+          "end_line": 137
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 171,
+          "end_line": 199
+        }
+      ],
+      "rationale": "The reuse path (lines 106-137) calls populate_token_status, refresh_profiles, populate_component_rows, populate_diagnostics — but does NOT reseed coaching_debrief, coaching_live_tiles, record_audio, auto_tiles_enabled, suppress_tiles, trigger_keywords_input, retention_mode, retention_value, journal_keep/mb. These are only set in the fresh-window block (lines 171-199).",
+      "counterevidence": "In practice, all changes to these values go through the Settings UI callbacks which update both config and the widget state. Staleness only occurs if config is edited externally (hand-editing config.json) or after an import that changes these values. The settings_reset_guard test (cargo test --test settings_reset_guard) covers the -status/-result transient properties, not these persistent controls.",
+      "verification": "not_run",
+      "remaining_check": "Manually edit config.json to change coaching settings, reopen Settings window, verify stale display.",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "1. Reused-window path does not reseed persistent controls (coaching / retention / profiles after import)",
+      "original_claim_redacted": "`SettingsWindow` is only reconstructed after `on_close_clicked` drops the slot (`settings_controller.rs`, `*settings_close.borrow_mut() = None`). The still-alive reuse path (`open_settings` when `settings_slot` is `Some`) calls `populate_token_status` + `refresh_profiles` + `populate_component_rows`, but the first-open-only block that seeds `coaching_debrief`, `coaching_live_tiles`, `record_audio`, `auto_tiles_enabled`, `suppress_tiles`, `trigger_keywords_input`, `retention_mode` / `retention_value`, `journal_keep_value` / `journal_mb_value`, and `always_on_top_toggle` is skipped. Worse: full-profile import (`on_import_profile_clicked`) assigns `*cfg_c.write() = imported` then `msg_refresh_after_import()` → **only** `populate_token_status()`. It never calls `refresh_profiles()` and never reseeds those toggles."
+    },
+    {
+      "id": "wave3_worker4_settings-C02",
+      "title": "Model dropdown fetch_models races with provider switch",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_ai.rs",
+          "start_line": 8,
+          "end_line": 8
+        }
+      ],
+      "rationale": "The report claims fetch_models can race with a provider switch, loading models from the old provider. fetch_models is an async operation that reads the current config at invocation time. If the user switches provider while a fetch is in flight, the result may apply to the wrong provider dropdown. Theoretically valid but requires very fast user interaction during a network fetch.",
+      "counterevidence": "Model fetch is typically fast (<1s). The user would need to switch provider during the fetch window. The dropdown is visually cleared on provider switch, so stale results would be overwritten by the next fetch.",
+      "verification": "not_run",
+      "remaining_check": "Low priority; race window is very narrow and self-correcting.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "2. Transient install / updater flags are force-cleared while workers still run",
+      "original_claim_redacted": "`populate_token_status()` blindly does `set_ocr_installing(false)`, `set_tts_installing(false)`, `set_tera_installing(false)`, `set_diar_installing(false)`, `set_update_checking(false)`, `set_update_available(false)`, plus `reset_component_install_state` / `set_component_busy_*`. GigaAM is the *only* installer that guards with `if !win.get_stt_gigaam_installing()`. Component install callbacks have **no generation token** (unlike Tera / Codex): a worker can still `set_component_busy_phase(8)` after reopen reset."
+    },
+    {
+      "id": "wave3_worker4_settings-C03",
+      "title": "Settings stealth toggle UI lag vs actual WDA application",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 87,
+          "end_line": 87
+        }
+      ],
+      "rationale": "The report claims the stealth toggle UI may show success before WDA is applied. However, STEALTH_EFFECTIVE (window_lifecycle.rs:80-92) is only set after verified WDA application. The Settings tab reads STEALTH_EFFECTIVE for its status display, not STEALTH_ON. The toggle UI updates the intent (STEALTH_ON), but the status indicator reflects the verified effective state.",
+      "counterevidence": "Two-flag design (STEALTH_ON vs STEALTH_EFFECTIVE) specifically prevents this concern.",
+      "verification": "not_run",
+      "remaining_check": "None; design addresses this directly.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "3. `fetch_models` has no generation guard (stale dropdown wins)",
+      "original_claim_redacted": "`settings_ai.rs` `fetch_models()` spawns a thread, reads `cfg`, GETs `/models`, then `invoke_from_event_loop` unconditionally `set_ai_models` / `set_ai_local_models`. Contrast `LOCAL_MODEL_RESOURCE_WARNING_GENERATION` and `CODEX_*_UI_GENERATION` in the same file."
+    },
+    {
+      "id": "wave3_worker4_settings-C04",
+      "title": "Import/export: apply_server_preview does not validate endpoint URLs",
+      "status": "hypothesis",
+      "severity": "medium",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_import_export.rs",
+          "start_line": 1,
+          "end_line": 1
+        }
+      ],
+      "rationale": "The report claims imported server settings are applied without URL validation. apply_server_preview applies imported config values to the live Settings UI for preview. The imported values are configuration strings (endpoints, keys), not executable code. The risk is accepting a malformed URL that fails silently, not code execution.",
+      "counterevidence": "Import applies to configuration fields (URLs, API keys). These are validated at use time (when connecting to the endpoint). The import is a preview, not a direct application to live config. User must explicitly save.",
+      "verification": "not_run",
+      "remaining_check": "Low priority; import is a user-initiated trusted operation.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "4. Opening Settings can write Codex config without a user gesture",
+      "original_claim_redacted": "`refresh_codex_account_status()` (called from both first-open and reuse when provider is `codex`) may `cfg.write()` + `config::save()` to fill `codex_model` / `codex_reasoning_effort`, auto-pick `codex_vision_model`, or force `vision_provider = \"off\"` when the catalog says the text model is not image-capable (`settings_ai.rs`, `catalog_is_authoritative` branch)."
+    },
+    {
+      "id": "wave3_worker4_settings-C05",
+      "title": "Settings tab index not reset on reopen",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 106,
+          "end_line": 137
+        }
+      ],
+      "rationale": "The report notes that reopening Settings shows the last-viewed tab instead of resetting to the first tab. This is arguably better UX — the user returns to where they left off. Not a bug.",
+      "counterevidence": "Retaining the last tab on reopen is a common and expected UX pattern. Resetting to tab 0 would be surprising.",
+      "verification": "not_run",
+      "remaining_check": "None; this is a design choice, not a defect.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "5. Systematic in-memory mutate-then-save (no rollback) — `ai_provider` is the worst",
+      "original_claim_redacted": "Invariant requires atomic commit-on-success. Almost every handler does `let mut c = cfg.write(); c.field = …; if save(&c).is_err() { return; }` and leaves the `RwLock` mutated. `on_ai_provider_changed` also runs `select_local_provider`, may set `suppress_tiles`, may rewrite `vision_provider`, then returns on save failure **without restoring**. `on_ai_prompt_cache_changed` mutates memory, skips `set_prompt_cache` on save error → memory / live static / disk three-way split. Counterexample already in-tree: `update_cloud_model()` rolls back `stt_model` and the combobox."
+    },
+    {
+      "id": "wave3_worker4_settings-C06",
+      "title": "populate_component_rows: component install state not reset",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 108,
+          "end_line": 108
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 1381,
+          "end_line": 1381
+        }
+      ],
+      "rationale": "The report claims component install state is not reset on reopen. However, the reuse path (line 108) explicitly calls reset_component_install_state before populate_component_rows. This appears to be addressed.",
+      "counterevidence": "reset_component_install_state is called at line 108 in the reuse path, before populate_component_rows at line 125.",
+      "verification": "not_run",
+      "remaining_check": "Verify reset_component_install_state clears all relevant properties.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "6. Optimistic UI vs disk on language, tile monitor, stealth, TTS",
+      "original_claim_redacted": "- `on_language_selected`: `select_bundled_translation` **before** save; save error is logged only."
+    },
+    {
+      "id": "wave3_worker4_settings-C07",
+      "title": "Diagnostics populate_diagnostics called before all data available",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 106,
+          "end_line": 137
+        }
+      ],
+      "rationale": "The report claims diagnostics may show stale data. populate_diagnostics is called in the reuse path (line ~115), reading current runtime state. The diagnostics tab shows live system information (versions, paths, status), which is refreshed each time it's called. No evidence of staleness.",
+      "counterevidence": "populate_diagnostics reads current system state each time it's called in the reuse path.",
+      "verification": "not_run",
+      "remaining_check": "None; diagnostics are refreshed on each open.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "7. Missing Rust seeds for properties that other handlers write",
+      "original_claim_redacted": "`ai_local_model_profile_index` and `ai_local_vision_available` are set in `on_ai_provider_changed` / `on_ai_local_base_url_save` / vision toggle, **never** in `populate_token_status()`. Reuse/first-open therefore depend on Slint defaults (`0` / `false`). `context_processing` and `context_dictating` are never cleared on populate (OK if work is live; a lie if the worker already finished while Win32-hidden and the flags stuck). `server_preview_*` strings are not blanked when `server_preview_ready` is forced false; `pending_server_import` is not cleared on reopen. Hotkeys are mentioned in the `open_settings` header comment and never wired in this scope."
+    },
+    {
+      "id": "wave3_worker4_settings-C08",
+      "title": "Memory tab: memory extraction race with session",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_memory.rs",
+          "start_line": 1,
+          "end_line": 1
+        }
+      ],
+      "rationale": "The report claims memory extraction can race with an active session. Memory operations (wire_memory) use the persistence layer which has its own SQLite connection serialization. Race conditions between memory UI actions and session writes are handled by SQLite's built-in transaction isolation.",
+      "counterevidence": "SQLite provides ACID guarantees. The persistence layer handles concurrent access via connection pooling or serialized access.",
+      "verification": "not_run",
+      "remaining_check": "Low priority; SQLite handles concurrency.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "8. Full-profile import can overwrite machine-local paths and dump secrets into a screen-shared line",
+      "original_claim_redacted": "`on_import_profile_clicked` loads via `config::import_from(&path, local_deep_lock)` then **replaces the entire live `SharedConfig`**. Unlike server import (`apply_server_settings` keeps this PC’s GigaAM dir), there is no host-side allowlist for `stt_gigaam_dir`, `ai_local_base_url`, `mic_device`, `tile_monitor_name`, TTS paths, or snippet/context blobs. Errors go to the UI as `format!(\"[err] {e:#}\")`; successful **export** does `format!(\"[ok] exported to {}\", path.display())`. Server export success also interpolates `path.display()` (errors were already genericized after audit Q8). `populate_token_status` also does `set_stt_whisper_bearer_input(c.stt_whisper_bearer.clone())` while OpenAI/Anthropic/AI bearers are deliberately blanked."
+    },
+    {
+      "id": "wave3_worker4_settings-C09",
+      "title": "Local AI installer: download/install not cancellable",
+      "status": "hypothesis",
+      "severity": "low",
+      "evidence_basis": "source_inspection",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_local_ai.rs",
+          "start_line": 1,
+          "end_line": 1
+        }
+      ],
+      "rationale": "The report claims local AI downloads cannot be cancelled. This is a UX limitation, not a safety issue. The download runs as a background task; closing Settings does not cancel it. Partial downloads are not harmful — the installer validates checksums.",
+      "counterevidence": "Download continues in background but is validated by checksum before use. Not a correctness issue.",
+      "verification": "not_run",
+      "remaining_check": "None; UX limitation, not a defect.",
+      "worker_status": "hypothesis",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "9. Connection-test tiles still leak host/error text (except local AI)",
+      "original_claim_redacted": "Module comments claim generic test tiles. `on_ai_bridge_test_clicked` and `on_stt_test_clicked` set `format!(\"[err] {e:#}\").chars().take(90)`. Local AI maps 503/transport to canned Russian strings. Mic test interpolates `error: {e}` and dBFS."
+    },
+    {
+      "id": "wave3_worker4_settings-C10",
+      "title": "Token save: empty field skipped — keys cannot be cleared from UI",
+      "status": "confirmed",
+      "severity": "low",
+      "evidence_basis": "source_proven",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_ai.rs",
+          "start_line": 547,
+          "end_line": 552
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_ai.rs",
+          "start_line": 618,
+          "end_line": 623
+        }
+      ],
+      "rationale": "on_ai_bearer_save (line 549) and on_groq_api_key_save (line 620) both return early on trimmed.is_empty(). Once a key is saved, the user cannot clear it via the Settings UI by submitting an empty field. The field silently rejects the empty input without any user feedback.",
+      "counterevidence": "This prevents accidental key deletion. The user can edit config.json directly to clear keys. Whether this is a bug or a safety feature depends on design intent. The behavior is intentional (log message says 'save skipped: empty input') but lacks user feedback.",
+      "verification": "not_run",
+      "remaining_check": "None; behavior is intentional but UX could be improved with user feedback.",
+      "worker_status": "confirmed",
+      "coordinator_review": "not_accepted_pending_exact_original_claim_review",
+      "original_candidate_title": "10. Empty token saves are no-ops — keys cannot be cleared from UI",
+      "original_claim_redacted": "`on_ai_bearer_save` / `on_groq_api_key_save` return on `trimmed.is_empty()` without writing. Populate only shows `[ok] set (N chars)` / `[--] not set`."
+    }
+  ],
+  "checks": {
+    "baseline_verified": true,
+    "head_matches_baseline": true,
+    "report_hashes": {
+      "docs/audit-grok/wave3_worker1_bridge.md": "975463b206ebf62b6137ed6d6091e25ebc365f203d8c6f9fa1ad7b7f26f532ac",
+      "docs/audit-grok/wave3_worker2_window.md": "e131412b3195df66605cd5751056789766a41541af9fce3b11c329f7e67b84b6",
+      "docs/audit-grok/wave3_worker3_tile.md": "4ff5c80a34f32527c71a628b5211f8e7cff7eea68a7e41dc001fbcfffdadd6c8",
+      "docs/audit-grok/wave3_worker4_settings.md": "f64f80441cc577cd5f3bb704c6f840289d4673824360fa07abc312570e120974"
+    },
+    "source_drift": "none_detected",
+    "reports_in_snapshot": false,
+    "note": "wave3 reports are not listed in snapshot.json source_files; they exist on disk at baseline commit and hashes match."
+  },
+  "limits": {
+    "no_reproduction_executed": true,
+    "verification_method": "static_source_inspection_only",
+    "no_cargo_builds": true,
+    "no_runtime_testing": true,
+    "coverage_scope": "wave3 reports only (4 reports, 33 candidates); not whole-repository",
+    "all_verification_not_run": "All candidates assessed by source inspection; zero reproductions executed"
+  },
+  "worker_lane": "wave3_verification",
+  "transport_status": "final_result_null; partial_file_output",
+  "coordinator_acceptance": "NOT_ACCEPTED: original candidate mapping mismatch and/or final_result_null"
+}

@@ -6,14 +6,17 @@ source_path: "slint-experiment/ui/tile.slint"
 batch_id: "B05"
 total_lines: 1116
 symbols_count: 79
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "f864d7c8aa28c8c8ab2656ba4f4a8b915de200d00281fed2bb29fd17339bf9ab"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/ui/tile.slint`
 
 - **Batch:** B05
 - **Physical Lines:** 1116
-- **Coverage:** 1116/1116 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (4)
 
@@ -108,7 +111,7 @@ review_state: validated
 | slint_callback | `followup-submitted` | L289 | `-` |
 | slint_callback | `followup-voice-toggled` | L292 | `-` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - UI Callback `clicked` declared at L33
 - UI Callback `clicked` declared at L63

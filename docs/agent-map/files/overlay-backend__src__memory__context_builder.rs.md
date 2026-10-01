@@ -6,18 +6,21 @@ source_path: "overlay-backend/src/memory/context_builder.rs"
 batch_id: "B08"
 total_lines: 344
 symbols_count: 23
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "7afd37b1378cfad5b350d7deddfaa8f7c94a6242d30d0fee41d5a495e4d02276"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/memory/context_builder.rs`
 
 - **Batch:** B08
 - **Physical Lines:** 344
-- **Coverage:** 344/344 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (23)
 

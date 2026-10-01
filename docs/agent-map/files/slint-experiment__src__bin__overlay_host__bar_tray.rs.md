@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_host/bar_tray.rs"
 batch_id: "B01"
 total_lines: 480
 symbols_count: 15
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "a1783d6fe7f87d0159ecb1eb852e5849d19e4ee9bc90a3c3317cfcde838e5ec3"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/bar_tray.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 480
-- **Coverage:** 480/480 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (15)
 

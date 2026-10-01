@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/local_ai/model_choice.rs"
 batch_id: "B06"
 total_lines: 370
 symbols_count: 27
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "dc2b409c9071c68c0891423e75994e49b2802226380bfb84675ca9d7d6931777"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/local_ai/model_choice.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 370
-- **Coverage:** 370/370 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (4)
 

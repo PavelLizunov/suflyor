@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/runtime/trigger_detect.rs"
 batch_id: "B06"
 total_lines: 657
 symbols_count: 16
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "df808f4401fa8576a4753af9dc5b47c95da357b45b14bb1d3b3b5abceda17f61"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/runtime/trigger_detect.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 657
-- **Coverage:** 657/657 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

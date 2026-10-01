@@ -6,14 +6,17 @@ source_path: "slint-experiment/ui/recover_offer.slint"
 batch_id: "B05"
 total_lines: 183
 symbols_count: 9
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "14d738de63876d736c4523a65bf09ee93b947c770e47f552b1bb9cb0a1c0534c"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/ui/recover_offer.slint`
 
 - **Batch:** B05
 - **Physical Lines:** 183
-- **Coverage:** 183/183 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 
@@ -35,7 +38,7 @@ review_state: validated
 | slint_callback | `drag-start-requested` | L50 | `-` |
 | slint_callback | `drag-moved` | L51 | `-` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - UI Callback `recover-accepted` declared at L47
 - UI Callback `dismissed` declared at L49

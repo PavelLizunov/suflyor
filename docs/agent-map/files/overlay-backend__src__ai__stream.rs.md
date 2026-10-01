@@ -6,18 +6,21 @@ source_path: "overlay-backend/src/ai/stream.rs"
 batch_id: "B06"
 total_lines: 366
 symbols_count: 5
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "c44e3fcc43e6cb9643f60cde2c9d7047f05a1c2e02ab89fee9a6efe0545d7bc4"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/ai/stream.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 366
-- **Coverage:** 366/366 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (5)
 
@@ -29,7 +32,7 @@ review_state: validated
 | function | `stream_inner` | L156 | `fn stream_inner(endpoint: AiEndpoint, messages: Vec<ChatMessage>, max_tokens: u32, tx: mpsc::Sender<AiEvent>, request_id: u64, request_started_at: std::time::Instant,) -> Result<()>` |
 | function | `drain_complete_frames` | L340 | `fn drain_complete_frames(byte_buf: &mut Vec<u8>) -> String` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Instantiates IPC channel at L40
 - Spawns asynchronous thread/task at L42

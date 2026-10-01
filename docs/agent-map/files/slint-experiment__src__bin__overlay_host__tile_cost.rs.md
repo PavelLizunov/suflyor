@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_host/tile_cost.rs"
 batch_id: "B03"
 total_lines: 69
 symbols_count: 2
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "a6d5bf17fb7a5e9c8fe56f21cf7eafec5848ba3feb57a4826693df7f2f929012"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/tile_cost.rs`
 
 - **Batch:** B03
 - **Physical Lines:** 69
-- **Coverage:** 69/69 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (2)
 

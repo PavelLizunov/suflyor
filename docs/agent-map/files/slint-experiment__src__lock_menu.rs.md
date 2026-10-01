@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/lock_menu.rs"
 batch_id: "B01"
 total_lines: 166
 symbols_count: 15
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "077d661963e4cd7cc8fb6e2623e1f771baf1fe2627a2d8e2efb0fb1830b8fa31"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/lock_menu.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 166
-- **Coverage:** 166/166 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (3)
 

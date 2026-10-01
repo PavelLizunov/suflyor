@@ -1,3 +1,5 @@
+> **Historical candidate evidence — not accepted review.** Reconstructed or edited by the prior coordinator; not an original independent Opus report. Source claims require reconciliation; the final historical verdict was `changes_required`.
+
 # O3: Audio Pipeline, STT, Diarization & WSOLA
 
 ## 1. Audio Capture Architecture (`overlay-backend/src/audio.rs` & `audio_macos.rs`)

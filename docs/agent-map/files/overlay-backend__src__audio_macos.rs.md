@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/audio_macos.rs"
 batch_id: "B07"
 total_lines: 1302
 symbols_count: 57
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "09b8b73f4ef504678b1cde4b89cd3a9d36084df998c499f7127127eeaa356015"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/audio_macos.rs`
 
 - **Batch:** B07
 - **Physical Lines:** 1302
-- **Coverage:** 1302/1302 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (11)
 
@@ -93,7 +96,7 @@ review_state: validated
 | function | `decimator_preserves_average_amplitude` | L1255 | `fn decimator_preserves_average_amplitude() -> ()` |
 | function | `decimator_preserves_1khz_sine_frequency` | L1272 | `fn decimator_preserves_1khz_sine_frequency() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Instantiates IPC channel at L411
 - Instantiates IPC channel at L414

@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/credentials.rs"
 batch_id: "B09"
 total_lines: 282
 symbols_count: 16
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "ca55678cf2413befb067551ccee562d09821cd1f5419769fa161172a6b1340d2"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/credentials.rs`
 
 - **Batch:** B09
 - **Physical Lines:** 282
-- **Coverage:** 282/282 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

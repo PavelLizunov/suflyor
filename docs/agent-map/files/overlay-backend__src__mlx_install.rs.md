@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/mlx_install.rs"
 batch_id: "B06"
 total_lines: 997
 symbols_count: 32
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "4dc5c8804cd2a4edb0c35247aadff47f9f985af9db0be909510f52336ef502d4"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/mlx_install.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 997
-- **Coverage:** 997/997 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (3)
 

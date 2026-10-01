@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/bin/overlay_host/settings_ai.rs"
 batch_id: "B02"
 total_lines: 1547
 symbols_count: 25
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "8de546dc1f5a2e438eb73a141c3e32c36d3a0c9fe2d0ea3dce1be36aa7751fc5"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/settings_ai.rs`
 
 - **Batch:** B02
 - **Physical Lines:** 1547
-- **Coverage:** 1547/1547 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (2)
 
@@ -52,7 +55,7 @@ review_state: validated
 | function | `codex_copy_writes_exact_displayed_code_and_skips_blank` | L1508 | `fn codex_copy_writes_exact_displayed_code_and_skips_blank() -> ()` |
 | function | `codex_copy_feedback_is_short_generic_and_localized` | L1529 | `fn codex_copy_feedback_is_short_generic_and_localized() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L211
 - Spawns asynchronous thread/task at L452
@@ -62,6 +65,6 @@ review_state: validated
 - Spawns asynchronous thread/task at L1321
 - Spawns asynchronous thread/task at L1385
 
-## Configuration Access
+## Heuristic configuration access matches
 
 - Configuration read at L561: `eprintln!("[overlay-host] ai_bearer saved to config.json");`

@@ -6,18 +6,21 @@ source_path: "overlay-backend/src/config/repair.rs"
 batch_id: "B09"
 total_lines: 183
 symbols_count: 10
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "e5240dc0990c8641a2310b2fa538ede9e62721beca5e836d0970c02c91e445a2"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/config/repair.rs`
 
 - **Batch:** B09
 - **Physical Lines:** 183
-- **Coverage:** 183/183 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (10)
 

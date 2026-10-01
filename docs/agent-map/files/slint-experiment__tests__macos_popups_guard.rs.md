@@ -6,18 +6,21 @@ source_path: "slint-experiment/tests/macos_popups_guard.rs"
 batch_id: "B05"
 total_lines: 42
 symbols_count: 2
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "6455c5a72f7a429444bce3e72fbffe05ee70630823f54ca085cd6c6f5fa7a53a"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/tests/macos_popups_guard.rs`
 
 - **Batch:** B05
 - **Physical Lines:** 42
-- **Coverage:** 42/42 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (2)
 

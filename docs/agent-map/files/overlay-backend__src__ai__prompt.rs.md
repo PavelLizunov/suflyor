@@ -6,18 +6,21 @@ source_path: "overlay-backend/src/ai/prompt.rs"
 batch_id: "B06"
 total_lines: 126
 symbols_count: 1
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "f9b573d67ea7a0b3f56bbc470eca67fb63761ada719bde860ba7db8f87246425"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/ai/prompt.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 126
-- **Coverage:** 126/126 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (1)
 

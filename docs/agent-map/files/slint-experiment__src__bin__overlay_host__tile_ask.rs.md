@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_host/tile_ask.rs"
 batch_id: "B03"
 total_lines: 688
 symbols_count: 4
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "823064c0975cd110ac67f74aeedf3ff483977c2027ce6167cf1f67016c810753"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/tile_ask.rs`
 
 - **Batch:** B03
 - **Physical Lines:** 688
-- **Coverage:** 688/688 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (4)
 
@@ -28,7 +31,7 @@ review_state: validated
 | function | `missing_cloud_auth_copy` | L191 | `fn missing_cloud_auth_copy(is_ru: bool) -> (&'static str, &'static str)` |
 | function | `cloud_auth_notice_has_both_ui_languages` | L679 | `fn cloud_auth_notice_has_both_ui_languages() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L540
 - Spawns asynchronous thread/task at L638

@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/recorder.rs"
 batch_id: "B07"
 total_lines: 1353
 symbols_count: 48
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "67022f06bcde538fc2a46026ad65ba1dfef9c26fd2106049ae95ffc10152139d"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/recorder.rs`
 
 - **Batch:** B07
 - **Physical Lines:** 1353
-- **Coverage:** 1353/1353 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (5)
 
@@ -78,6 +81,6 @@ review_state: validated
 | function | `tts_mask_records_written_offsets_without_modifying_raw_wav` | L1298 | `fn tts_mask_records_written_offsets_without_modifying_raw_wav() -> ()` |
 | function | `tts_mask_uses_the_post_padding_sample_offset` | L1326 | `fn tts_mask_uses_the_post_padding_sample_offset() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Instantiates IPC channel at L169

@@ -6,14 +6,17 @@ source_path: "overlay-backend/src/runtime/tests.rs"
 batch_id: "B06"
 total_lines: 1165
 symbols_count: 48
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "20e8ab10a99265c4963858d8c3750006b58dbdfb8b115b83939a2205f2d5b864"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/runtime/tests.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 1165
-- **Coverage:** 1165/1165 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 
@@ -74,7 +77,7 @@ review_state: validated
 | function | `manual_spawn_tile_over_budget_warns_but_proceeds` | L1121 | `fn manual_spawn_tile_over_budget_warns_but_proceeds() -> ()` |
 | function | `reask_last_ai_error_returns_none_without_panic` | L1145 | `fn reask_last_ai_error_returns_none_without_panic() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Instantiates IPC channel at L736
 - Spawns asynchronous thread/task at L738

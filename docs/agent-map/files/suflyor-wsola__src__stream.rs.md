@@ -6,14 +6,17 @@ source_path: "suflyor-wsola/src/stream.rs"
 batch_id: "B13"
 total_lines: 105
 symbols_count: 6
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "11f440a929388bbda2417b5cc53f5a679bbc7f784efdcf92f4442083350c0098"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-wsola/src/stream.rs`
 
 - **Batch:** B13
 - **Physical Lines:** 105
-- **Coverage:** 105/105 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

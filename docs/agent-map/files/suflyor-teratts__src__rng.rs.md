@@ -6,14 +6,17 @@ source_path: "suflyor-teratts/src/rng.rs"
 batch_id: "B12"
 total_lines: 94
 symbols_count: 8
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "673444022636b19df9216a0ba8b121c24fd49903d1b8a6a503dfccce1eddee00"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-teratts/src/rng.rs`
 
 - **Batch:** B12
 - **Physical Lines:** 94
-- **Coverage:** 94/94 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (1)
 

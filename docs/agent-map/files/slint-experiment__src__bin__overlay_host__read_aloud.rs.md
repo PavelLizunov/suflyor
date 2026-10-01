@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_host/read_aloud.rs"
 batch_id: "B03"
 total_lines: 263
 symbols_count: 4
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "e966ac760521c054dad26bab867c5333562b0c8551a5b2e7f02517ae96b222b1"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/read_aloud.rs`
 
 - **Batch:** B03
 - **Physical Lines:** 263
-- **Coverage:** 263/263 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (4)
 

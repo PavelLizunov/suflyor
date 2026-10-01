@@ -6,18 +6,21 @@ source_path: "overlay-backend/src/local_ai/tests.rs"
 batch_id: "B06"
 total_lines: 1969
 symbols_count: 84
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "40ffd125ab1a661a1b96edafbf0d197b16a13616df867067e9901dffd8903428"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `overlay-backend/src/local_ai/tests.rs`
 
 - **Batch:** B06
 - **Physical Lines:** 1969
-- **Coverage:** 1969/1969 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (84)
 
@@ -108,11 +111,11 @@ review_state: validated
 | function | `hardware_never_blocks_any_managed_model_download` | L1877 | `fn hardware_never_blocks_any_managed_model_download() -> ()` |
 | function | `old_size_4b_upgrade_compatibility_and_new_spec_integrity` | L1902 | `fn old_size_4b_upgrade_compatibility_and_new_spec_integrity() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Spawns asynchronous thread/task at L1039
 
-## Configuration Access
+## Heuristic configuration access matches
 
 - Configuration read at L341: `assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);`
 - Configuration read at L342: `assert!(!cfg.ai_local_quality);`

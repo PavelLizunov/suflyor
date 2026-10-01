@@ -6,14 +6,17 @@ source_path: "slint-experiment/src/bin/overlay_host/tile_controller.rs"
 batch_id: "B03"
 total_lines: 1013
 symbols_count: 20
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "7a1fac60bd910ccb4d13c8e9296cdcf9836e8832f04dfee3f8160d95407792fa"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/tile_controller.rs`
 
 - **Batch:** B03
 - **Physical Lines:** 1013
-- **Coverage:** 1013/1013 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (8)
 

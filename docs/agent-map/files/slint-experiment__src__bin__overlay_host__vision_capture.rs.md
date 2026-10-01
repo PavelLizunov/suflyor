@@ -6,18 +6,21 @@ source_path: "slint-experiment/src/bin/overlay_host/vision_capture.rs"
 batch_id: "B01"
 total_lines: 917
 symbols_count: 8
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "38375490cd21636d373380bc43844cdd635e4116fef475f7202cb3889ef4247d"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `slint-experiment/src/bin/overlay_host/vision_capture.rs`
 
 - **Batch:** B01
 - **Physical Lines:** 917
-- **Coverage:** 917/917 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (0)
 
-*No standalone type declarations.*
+*No type candidates extracted; absence of declarations is not established.*
 
 ## Symbols & Routines (8)
 
@@ -32,6 +35,6 @@ review_state: validated
 | function | `launch_vision_for_bgra` | L475 | `fn launch_vision_for_bgra(shot: slint_replay::capture::CapturedBgra, ep: Option<overlay_backend::config::AiEndpoint>, mode: vision::VisionMode, bridge: &Arc<OverlayBarBridge>, events: &Arc<dyn RuntimeEvents>, cfg: &overlay_backend::config::SharedConfig, slint_rt: &SharedSlintRuntime, rt_handle: &tokio::runtime::Handle, tiles: &TileWindows, weak_overlay: &slint::Weak<OverlayBarWindow>,) -> ()` |
 | function | `deterministic_vision_copy_follows_ui_language` | L902 | `fn deterministic_vision_copy_follows_ui_language() -> ()` |
 
-## Configuration Access
+## Heuristic configuration access matches
 
 - Configuration read at L624: `&& !cfg.read().ai_bearer.trim().is_empty()`

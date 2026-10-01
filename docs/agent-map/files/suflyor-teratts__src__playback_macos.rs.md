@@ -6,14 +6,17 @@ source_path: "suflyor-teratts/src/playback_macos.rs"
 batch_id: "B12"
 total_lines: 513
 symbols_count: 27
-review_state: validated
+review_state: unverified_heuristic_index
+extraction_method: regex_rust_or_slint
+source_sha256_at_historical_inventory: "e5b238741f988e469c769c7c817fc603ef7540e06e455627e06e397ae0bcb96a"
+source_matches_reconciliation_baseline: true
 ---
 
 # File Map: `suflyor-teratts/src/playback_macos.rs`
 
 - **Batch:** B12
 - **Physical Lines:** 513
-- **Coverage:** 513/513 lines (100%)
+- **Semantic coverage:** not measured; no full-line review evidence.
 
 ## Types & Structures (6)
 
@@ -58,7 +61,7 @@ review_state: validated
 | function | `exit_notifier_runs_when_its_scope_ends` | L495 | `fn exit_notifier_runs_when_its_scope_ends() -> ()` |
 | function | `stream_waits_for_prebuffer_but_short_eos_still_starts` | L507 | `fn stream_waits_for_prebuffer_but_short_eos_still_starts() -> ()` |
 
-## Key Behaviors & Concurrency
+## Heuristic behavior and concurrency matches
 
 - Instantiates IPC channel at L131
 - Instantiates IPC channel at L132
