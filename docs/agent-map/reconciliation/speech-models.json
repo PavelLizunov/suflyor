@@ -17,7 +17,8 @@
       "ui_route": {
         "controls": "Settings -> STT -> Provider: GigaAM (index 1), GPU DirectML toggle, On-demand download button",
         "slint_file": "slint-experiment/ui/settings_panel.slint:3811-3890",
-        "controller": "slint-experiment/src/bin/overlay_host/settings_stt.rs:113-205"
+        "controller": "slint-experiment/src/bin/overlay_host/settings_stt.rs:113-205",
+        "source_wiring": "slint-experiment/src/bin/overlay_host/settings_stt.rs:32-98; populate in settings_controller.rs:1827-1834"
       },
       "runtime_route": {
         "module": "overlay-backend/src/stt.rs",
@@ -39,7 +40,7 @@
       ],
       "platform_support": {
         "windows": "Supported (DirectML hardware acceleration or CPU fallback)",
-        "macos": "Supported (CPU fallback via ort; default STT provider on macOS per config.rs:1168-1172)",
+        "macos": "Supported source route: transcribe-rs ONNX CoreMl when stt_gigaam_gpu true, CPU fallback. Current defaults/migration prefer CPU after memory issue; exact native runtime acceptance not performed.",
         "linux": "Unsupported stub (overlay-backend/src/stt.rs:84-104)"
       },
       "upstream_license": {
@@ -460,6 +461,51 @@
         "overlay-backend/src/diarize.rs"
       ],
       "impact": "Formatting of cancel flag threading in run_diarization_with_engine"
+    },
+    {
+      "commit": "a78978ecf95aa938c204acb8de948bee294d9b10",
+      "date": "2026-08-20T07:26:09+03:00",
+      "subject": "feat(macos): enable GigaAM STT through Core ML",
+      "files_changed": [
+        "overlay-backend/Cargo.toml",
+        "overlay-backend/src/config.rs",
+        "overlay-backend/src/config/tests.rs",
+        "overlay-backend/src/stt.rs",
+        "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+        "slint-experiment/src/bin/overlay_host/settings_stt.rs",
+        "slint-experiment/src/bin/overlay_host_windows.rs",
+        "slint-experiment/src/slint-replay.po",
+        "slint-experiment/tests/macos_settings_guard.rs",
+        "slint-experiment/translations/ru/LC_MESSAGES/slint-replay.po",
+        "slint-experiment/ui/settings_panel.slint",
+        "slint-experiment/ui/slint-replay.po"
+      ],
+      "category": "GigaAM macOS STT support and memory policy; distinct from Nemotron diarization"
+    },
+    {
+      "commit": "ad03df2bb80c94dbe66d4f354fd82d704ce2bca2",
+      "date": "2026-08-20T07:39:19+03:00",
+      "subject": "fix(macos): migrate retired STT providers to GigaAM",
+      "files_changed": [
+        "overlay-backend/src/config.rs",
+        "overlay-backend/src/config/tests.rs"
+      ],
+      "category": "GigaAM macOS STT support and memory policy; distinct from Nemotron diarization"
+    },
+    {
+      "commit": "3bff600c739ade39d235a07c2fc0cab3ff3ba20f",
+      "date": "2026-08-29T21:24:28+00:00",
+      "subject": "fix: bound macOS GigaAM memory use",
+      "files_changed": [
+        "README.md",
+        "overlay-backend/examples/stt_macos_lifecycle_probe.rs",
+        "overlay-backend/src/config.rs",
+        "overlay-backend/src/config/tests.rs",
+        "overlay-backend/src/stt.rs",
+        "slint-experiment/src/bin/overlay_host/settings_stt.rs",
+        "slint-experiment/src/slint_session.rs"
+      ],
+      "category": "GigaAM macOS STT support and memory policy; distinct from Nemotron diarization"
     }
   ],
   "observed_checks": {
@@ -548,6 +594,12 @@
       "status": "rejected",
       "source": "vendor/nemotron-win-x64/MODEL_LICENSE:1-49",
       "reason": "Those restrictions are not present in this bundled file."
+    },
+    {
+      "claim": "GigaAM macOS GPU setting has no execution effect",
+      "status": "rejected",
+      "source": "overlay-backend/src/stt.rs:36-65; overlay-backend/src/config.rs:1532-1555",
+      "reason": "CoreMl selected when enabled with CPU fallback; defaults migrate to CPU after memory concern, not ignored setting."
     }
   ],
   "coordinator_review": "corrected bounded source inventory; not native or license acceptance"

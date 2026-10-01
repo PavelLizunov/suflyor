@@ -6,7 +6,9 @@ This directory contains a historical heuristic index and architectural notes, no
 
 - [Reconciliation task](../goal-agent-map-reconciliation.md): approved scope, constraints and remaining work.
 - [Frozen evidence snapshot](reconciliation/snapshot.json): exact source baseline and SHA-256 hashes of the existing Grok reports.
-- [Grok candidate register](reconciliation/candidates.json): every original candidate has a stable ID. Pending is not confirmed.
+- [Grok summary](reconciliation/SUMMARY.md) and [candidate register](reconciliation/candidates.json): all 119 original claims source-triaged; 40 source mechanisms confirmed, 74 hypotheses and 5 rejected. No native reproduction or independent acceptance is implied.
+- [Model registry](reconciliation/speech-models.md): distinguishes transcription, speaker diarization, CoreML history and source-versus-release status.
+- [Continuation queue](reconciliation/NEXT-STEPS.md): exact remaining full-map and native evidence work.
 - [Artifact manifest](manifest.json): measured record counts, hashes and explicit completeness limits.
 - [Operations](operations/): reproducibility and checkpoint/resume instructions. No independent automatic session-restart service is claimed.
 
@@ -49,7 +51,7 @@ for line in Path('docs/agent-map/records/symbols.jsonl').read_text().splitlines(
 
 ## Outstanding work
 
-- Verify all Grok candidates, retaining counterevidence and source/reproduction distinctions.
+- Resolve native/runtime preconditions of the 74 Grok hypotheses; source triage of all original candidates is complete with counterevidence and reproduction limits retained.
 - Reconcile old Opus claims and create source-linked feature and model contracts.
 - Add reliable language-aware extraction and line/symbol semantics before claiming exhaustive coverage.
 - Test durable resumption and leave unknown attempts unresolved rather than silently repeating work.

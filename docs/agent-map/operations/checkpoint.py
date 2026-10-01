@@ -31,7 +31,17 @@ def inspect(root, map_root):
     issues = []
     for entry in snapshot["source_files"] + snapshot["grok_reports"]:
         path = root / entry["path"]
-        if not path.is_file():
+        if not path.is_file() and entry in snapshot["grok_reports"]:
+            # Raw local reports are deliberately not published. A privacy-redacted
+            # copy is a portable substitute, but never masquerades as raw bytes.
+            portable = map_root / "reconciliation/grok-redaction-provenance.json"
+            copies = load(portable) if portable.is_file() else []
+            copy = next((row for row in copies if row["original_path"] == entry["path"] and row["original_sha256"] == entry["sha256"]), None)
+            candidate = root / copy["redacted_path"] if copy else None
+            if candidate and candidate.is_file() and digest(candidate) == copy["redacted_sha256"]:
+                continue
+            issues.append({"kind": "missing_raw_and_portable_report", "path": entry["path"]})
+        elif not path.is_file():
             issues.append({"kind": "missing_input", "path": entry["path"]})
         elif digest(path) != entry["sha256"]:
             issues.append({"kind": "input_drift", "path": entry["path"]})

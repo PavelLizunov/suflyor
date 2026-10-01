@@ -98,6 +98,18 @@ class CheckpointTests(unittest.TestCase):
         self.assertEqual(result["artifacts"][0]["state"], "unaccepted_proposal")
         self.assertEqual(len(result["artifacts"][0]["semantic_warnings"]), 2)
 
+    def test_portable_redacted_report_recovers_without_raw_file(self):
+        original_hash = hashlib.sha256(b"private report").hexdigest()
+        portable = self.rec / "grok-redacted/report.md"
+        portable.parent.mkdir()
+        portable.write_text("Redacted report without private endpoint")
+        self.snapshot["grok_reports"] = [{"path": "docs/audit-grok/report.md", "sha256": original_hash}]
+        self.write("snapshot.json", self.snapshot)
+        self.write("grok-redaction-provenance.json", [{"original_path": "docs/audit-grok/report.md", "original_sha256": original_hash, "redacted_path": str(portable.relative_to(self.root)), "redacted_sha256": hashlib.sha256(portable.read_bytes()).hexdigest()}])
+        self.assertEqual(checkpoint.inspect(self.root, self.map)["issues"], [])
+        portable.write_text("changed copy")
+        self.assertTrue(checkpoint.inspect(self.root, self.map)["issues"])
+
 
 if __name__ == "__main__":
     unittest.main()

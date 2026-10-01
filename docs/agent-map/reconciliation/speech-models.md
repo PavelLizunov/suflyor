@@ -23,6 +23,12 @@ Reviewed source: `a10c356af05a5832a14ea06a5d0cb6c49694e3f1`. This is a bounded s
 
 Do not infer model weight licenses from Rust or runtime-library licenses. Source pins are copied from [local-model constants](../../../overlay-backend/src/local_ai.rs#L90-L111) and [legacy diarization assets](../../../overlay-backend/src/diar_install.rs#L68-L85).
 
+## Older transcription changes that were easy to lose
+
+Git history also contains a real STT platform change: `a78978ec` enabled GigaAM through Core ML on macOS; `ad03df2b` migrated retired/unknown STT providers to GigaAM; `3bff600c` later bounded macOS GigaAM memory use. These are not Nemotron changes. [Accelerator selection](../../../overlay-backend/src/stt.rs#L36-L65) still chooses CoreMl when enabled and falls back to CPU on provider-load failure. [Defaults and migration](../../../overlay-backend/src/config.rs#L1532-L1555) now prefer CPU for affected older configs. The GPU toggle is not ignored on macOS.
+
+The remembered “new audio model” could refer to this older GigaAM STT work rather than the recent Nemotron diarizer. Both histories are now recorded explicitly instead of guessing the intended one.
+
 ## Nemotron integration chain
 
 1. [Optional transcript toggle and run controls](../../../slint-experiment/ui/transcript.slint#L464-L606) select the per-run engine; this is not a persistent `stt_provider` entry.

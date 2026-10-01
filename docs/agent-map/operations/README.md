@@ -24,7 +24,7 @@ python3 -B docs/agent-map/operations/checkpoint.py checkpoint
 python3 -B docs/agent-map/operations/checkpoint.py recover
 ```
 
-`verify` reads frozen file/report hashes and candidate outputs. Pending report files are listed as pending, not success. It checks candidate identity, baseline, source-reference ranges and explicit remaining checks; it cannot decide the truth of a claim.
+`verify` reads frozen file/report hashes and candidate outputs. If raw local Grok files are absent in a fresh clone, it verifies the linked redacted copies against transformation provenance instead; it never claims redacted bytes equal raw bytes. Pending report files are listed as pending, not success. It checks candidate identity, baseline, source-reference ranges and explicit remaining checks; it cannot decide the truth of a claim.
 
 `checkpoint` stores the same report transactionally in a local SQLite database with `synchronous=FULL`. It preserves previous structurally validated artifact identities when inputs drift or output validation fails. It does not confer semantic acceptance.
 
@@ -34,7 +34,7 @@ The default local database is `.campaign-state/reconciliation.sqlite`; it is not
 
 ## Test evidence
 
-The latest test execution passed eight dependency-free tests: idempotent persisted-artifact recovery, unknown-attempt non-retry, source-drift quarantine, missing-candidate rejection, source-range validation, pending-lane handling, null-result rejection and original-claim-substitution rejection. This is evidence of the helper's tested mechanics only, not native behavior or host-failure session restart.
+The latest test execution passed nine dependency-free tests: idempotent persisted-artifact recovery, unknown-attempt non-retry, source-drift quarantine, missing-candidate rejection, source-range validation, pending-lane handling, null-result rejection, original-claim-substitution rejection and portable redacted-report recovery. This is evidence of the helper's tested mechanics only, not native behavior or host-failure session restart.
 
 ## Publication discipline
 

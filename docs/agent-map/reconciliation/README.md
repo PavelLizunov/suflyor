@@ -14,7 +14,9 @@
 | Privacy, installers, CI | 22 | `security-build.json`, `security-build.md` |
 | Speech-model history | Separate integration inventory | `speech-models.json`, `speech-models.md` |
 
-Missing lane files are pending work, not accepted evidence. Opus output is a proposed classification until the coordinator checks source references and disputed reasoning.
+Missing lane files are pending work, not accepted evidence. The first four Opus lanes returned null with partial topic-misaligned files; eight exact-claim follow-up lanes returned null without files. Both receipts are retained. Those proposals are not accepted as independent review.
+
+The coordinator has now inspected the exact original text for all 119 candidates: 40 source mechanisms confirmed, 74 hypotheses and 5 rejected. Read [summary](SUMMARY.md), [coordinator evidence](coordinator-checks.json) and [remediation queue](REMEDIATION.md). No native application reproductions were run; full-project completeness remains unaccepted.
 
 ## Evidence statuses
 
