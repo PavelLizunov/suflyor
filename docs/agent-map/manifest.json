@@ -3,7 +3,7 @@
   "status": "PARTIAL_MAP_SOURCE_TRIAGE_COMPLETE_NATIVE_ACCEPTANCE_PENDING",
   "campaign_id": "suflyor-map-reconciliation",
   "reviewed_source_commit": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
-  "generated_at": "2026-10-01T21:01:25.335389+00:00",
+  "generated_at": "2026-10-01T21:02:29.498235+00:00",
   "historical_publication_commit": "e14ff1936349cd6790be749d68f5c7b5737af926",
   "historical_claimed_source_commit": "a4c998740de4d25c3939d1bcf63a7c07af820682",
   "historical_source_coherence": "not_established; inventory drift recorded",
@@ -124,8 +124,8 @@
     ],
     "model_worker_completion": "four first-pass Opus null/partial files; eight exact-claim Opus null/no files; one Gemini summary returned and corrected",
     "sql_contract_tests": 7,
-    "portable_recovery_tested_commit": "3188e6b05f36273bd32faebec3ab64dad0301afe",
-    "portable_recovery_result": "PASS 48+3 archived suites and exact 15-contract/119-record recovery; no overlays/network/native build",
+    "portable_recovery_tested_commit": "3bfc15ae5ff7fdc405f46055ab1d60a8c943b3f8",
+    "portable_recovery_result": "PASS62+3 with separate pinned parser-site, index validate and checkpoint/source recovery",
     "source_seam_tests": 19,
     "current_total_research_tests": 62,
     "existing_mocked_hermes_tests": 3,
@@ -1834,8 +1834,8 @@
     },
     {
       "path": "reconciliation/VERIFICATION.md",
-      "sha256": "c1f08f7fa2c47e931a94a1de676f3673d199ea1519603029d183ab5970dfe7af",
-      "bytes": 12294
+      "sha256": "69c135bcfc21d0a4cca6e803dc70e9eb59ef9cba612c91bf06eb1a1ae772dd89",
+      "bytes": 12490
     },
     {
       "path": "reconciliation/additional-source-findings.json",
@@ -1993,9 +1993,14 @@
       "bytes": 1128
     },
     {
+      "path": "reconciliation/portable-recovery-round4.json",
+      "sha256": "b00e89e10b5e389f59884a557508abc5cf4e16f0400f3a75ded2bd95a0aca829",
+      "bytes": 503
+    },
+    {
       "path": "reconciliation/progress.json",
-      "sha256": "25ce57fa274a43c5dedbe4ca49905484a4c9f0e6069da5403e20473172bde953",
-      "bytes": 4535
+      "sha256": "65c2b03b75b34ec3ff2a981c58fc551186958045a4a69b1d42659b8d2147f4da",
+      "bytes": 4487
     },
     {
       "path": "reconciliation/research-boundaries.json",
