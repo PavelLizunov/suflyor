@@ -11,10 +11,11 @@ This directory contains a historical heuristic index and architectural notes, no
 - [Reconciliation task](../goal-agent-map-reconciliation.md): approved scope, constraints and remaining work.
 - [Frozen evidence snapshot](reconciliation/snapshot.json): exact source baseline and SHA-256 hashes of the existing Grok reports.
 - [Grok summary](reconciliation/SUMMARY.md) and [candidate register](reconciliation/candidates.json): all 119 original claims source-triaged; 39 source mechanisms confirmed, 75 hypotheses and 5 rejected. Caller-level follow-up corrected an earlier UI-thread assumption. No native reproduction or independent acceptance is implied.
-- [Source-linked features](features/README.md): 15 bounded contracts covering speech/session/storage, AI/vision/local models, TTS/OCR, personal memory, config transfer, hotkeys/window/capture, KB/archive/re-STT/summary/coaching, updater/release and MLX/Hermes. Source references and limits are explicit; this is not complete project coverage.
+- [Source-linked features](features/README.md): 17 bounded contracts covering speech/session/storage, AI/vision/local models, TTS/OCR, personal memory, config transfer, hotkeys/window/capture, KB/archive/re-STT/summary/coaching, updater/release, MLX/Hermes, startup/health/diagnostics and config/UI/translation/assets. Source references and limits are explicit; this is not complete project coverage.
 - [Model registry](reconciliation/speech-models.md): distinguishes transcription, speaker diarization, CoreML history and source-versus-release status.
 - [Continuation prompt](reconciliation/CONTINUE-PROMPT.md): self-contained next-chat task/state/constraints.
-- [Syntax index](syntax/README.md): pinned Rust CST/Python AST declarations with explicit unsupported/cfg/macro limits.
+- [Syntax index](syntax/README.md): pinned Rust/Python/Slint/Swift/Objective-C/C/Bash/PowerShell navigation with explicit unsupported/parse-error/cfg/macro limits.
+- [Config/UI/resource inventory](schema/README.md): frozen Config field/default-source links, Slint declaration/import/translation/image CST, duplicate-preserving PO membership and asset hashes/XML metadata; not full caller/translation/native acceptance.
 - [Continuation queue](reconciliation/NEXT-STEPS.md): exact remaining full-map and native evidence work.
 - [Artifact manifest](manifest.json): measured record counts, hashes and explicit completeness limits.
 - [Operations](operations/): reproducibility and checkpoint/resume instructions. No independent automatic session-restart service is claimed.

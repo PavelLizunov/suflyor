@@ -99,11 +99,11 @@
     "wave4_worker3_cicd-C10",
     "wave4_worker3_cicd-C12"
   ],
-  "feature_contracts_source_inspected": 16,
-  "continuation_round": 5,
+  "feature_contracts_source_inspected": 17,
+  "continuation_round": 6,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 79,
-  "source_feature_references": 451,
+  "total_research_tests_passed": 89,
+  "source_feature_references": 473,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
   "portable_recovery_tested_commit": "a9e2a8c4424552e629c9247ec3aa151dbf58b7d2",
@@ -140,5 +140,16 @@
     "seven PowerShell grammar-error files; native parser not run"
   ],
   "startup_health_source_assertions_passed": 8,
-  "startup_health_portable_verification": "PASS exact a9e2a8c4424552e629c9247ec3aa151dbf58b7d2; no native/independent acceptance"
+  "startup_health_portable_verification": "PASS exact a9e2a8c4424552e629c9247ec3aa151dbf58b7d2; no native/independent acceptance",
+  "schema_inventory_fixtures_passed": 10,
+  "schema_inventory_counts": {
+    "Config_fields": 84,
+    "Slint_navigation_nodes": 2440,
+    "PO_entries": 740,
+    "PO_unique_keys": 739,
+    "assets": 58,
+    "inputs": 83
+  },
+  "schema_portable_verification": "pending exact covering commit",
+  "schema_independent_acceptance": false
 }

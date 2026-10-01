@@ -91,6 +91,14 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
 - User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.
 
+## Continuation round 6: config/UI/translation/assets inventory
+
+- Intended result: reproducible frozen-source declaration schema and static resource/translation edges, plus a manually inspected bounded contract. Keep syntax navigation separate from serialized-default/runtime/i18n/visual behavior acceptance.
+- Reuse pinned Rust/Slint grammars and existing syntax index; use installed Babel 2.10.3 PO reader and stdlib XML only after provenance checks. No new production/global dependencies, SDK, compiler, live config, app or remote worker execution.
+- Records: Config field types/serde attributes/default-helper source links (not evaluated defaults), Slint component/property/callback/import/tr/image CST ranges, exact catalog membership/fuzzy/empty statuses and frozen asset existence/hash/SVG metadata. Do not present same-name Rust token matches as resolved Config consumers or UI setters as proven wiring. Do not store private source comments/default endpoints in generated docs.
+- Verification: fixtures for UTF8/escaped strings/comments/dynamic literals/context/plural/catalog/asset traversal; frozen hashes/ranges and duplicate identity checks; exact committed archive regeneration/tests. Preserve parser gaps/native/translation quality/error-path/independent acceptance limits.
+- Material unknowns: Slint grammar shapes/escape semantics and transitive import graph, installed PO parser portability, Serde struct-default versus Config::defaults behavior, dynamic Rust-produced UI strings and binary asset embedding. No silent claim that the whole schema/caller scope is complete.
+
 ## Continuation round 5 scope
 
 - Entry checkout verified at `7909617a` on the task branch; only foreign untracked raw reports present. No inherited goal in this session; a new persisted goal preserves the full original scope and acceptance limits.

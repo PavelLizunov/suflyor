@@ -1,5 +1,15 @@
 # Reconciliation verification evidence
 
+## Round 6 — config/UI/translation/assets inventory (local, covering SHA pending)
+
+- Frozen baseline unchanged; task-owned docs/parser inventory only, no production/UI/catalog/asset modification. [Schema inventory/reproduction/limits](../schema/README.md), [seventeenth bounded contract](../features/config-ui-translation-and-assets.md), [PO-reader provenance](schema-parser-provenance.json).
+- 83 hash-verified inputs: 84 Config fields/default-source ranges (not evaluated/literal endpoints), 2,440 Slint declaration/resource nodes, 740 PO source entries preserving duplicate before Babel merge, 58 asset hashes/XML metadata. 23 UI files transitive root-import reachable; static references present. Existing original Grok 39/75/5 classifications unchanged.
+- All current 854 translation occurrences have catalog membership; five match duplicated `Installing…` with different source translations. No compiler duplicate precedence or translation quality accepted. Catalog 739 unique keys, 104 unreferenced by direct selected literals are not automatically dead.
+- Reused installed Babel 2.10.3 PO-reader source exactly matches pinned upstream wheel SHA256; licences and isolated offline hash-locked Babel/pytz setup tested. Python 3.12 only; `cgi` deprecation warning means Python 3.13 is not accepted. Native parsers unchanged at binding 0.25.2/hash-gated Slint.
+- Ten new inventory fixtures, total **89 local research tests** (including anti-false-membership/default/privacy/baseline/range guards). Frozen range/hash validator errors empty; contract registry 17/473 ranges; no native/app/compiler/independent acceptance.
+- Exact committed archive/regeneration pending; local checks alone are not a covering-SHA portable receipt.
+
+
 ## Startup/health contract extension — exact covering SHA tested
 
 - New sixteenth bounded feature contract: [startup/wizard/health/diagnostics](../features/startup-wizard-health-and-diagnostics.md), 41 exact principal-source ranges; registry now 451 ranges. No production behavior changed, no original Grok classifications changed.
