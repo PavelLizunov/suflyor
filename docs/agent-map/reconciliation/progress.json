@@ -106,8 +106,8 @@
   "source_feature_references": 510,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
-  "portable_recovery_tested_commit": "ce14c313570225ba5d93d69df37f4832f9646355",
-  "portable_recovery_result": "PASS 109+3 zero skips exact archive; 18 contracts/510 ranges; validators valid; full syntax byte-identical; parser/WASM separate",
+  "portable_recovery_tested_commit": "0d1f9e214d418e251e6d8bcd65eae72ab9e5ad95",
+  "portable_recovery_result": "PASS 116+3 zero skips exact archive; 18 contracts/510 ranges; validators valid; 298 successful syntax files/full byte-identical; parsers/runtime separate",
   "source_seam_tests_passed": 33,
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
@@ -167,7 +167,7 @@
   "nsis_portable_verification": "PASS exact ce14c313570225ba5d93d69df37f4832f9646355; 12 NSIS nodes; previous 16243 unchanged; byte-identical syntax; no installer semantics acceptance",
   "current_remaining_syntax": [],
   "powershell_canonical_fixtures_passed": 7,
-  "powershell_portable_verification": "pending covering exact commit",
+  "powershell_portable_verification": "PASS exact 0d1f9e214d418e251e6d8bcd65eae72ab9e5ad95; 24 PS AST files, 25 functions, 16230 other nodes unchanged; no input/native execution",
   "current_semantic_limits": [
     "all selected sources parser-covered is not semantic/caller/native compatibility acceptance",
     "macro cfg include type indirect callers remain unresolved"
