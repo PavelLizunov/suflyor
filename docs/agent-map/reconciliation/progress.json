@@ -100,9 +100,9 @@
     "wave4_worker3_cicd-C12"
   ],
   "feature_contracts_source_inspected": 18,
-  "continuation_round": 9,
+  "continuation_round": 10,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 116,
+  "total_research_tests_passed": 124,
   "source_feature_references": 510,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
@@ -171,5 +171,15 @@
   "current_semantic_limits": [
     "all selected sources parser-covered is not semantic/caller/native compatibility acceptance",
     "macro cfg include type indirect callers remain unresolved"
-  ]
+  ],
+  "ci_hypothesis_fixture_tests_passed": 8,
+  "existing_Bash_classifier_cases_passed": 24,
+  "existing_gate_deny_cases_passed": 15,
+  "hypothesis_portable_evidence_ids": [
+    "wave4_worker3_cicd-C04",
+    "wave4_worker3_cicd-C05",
+    "wave4_worker3_cicd-C06",
+    "wave4_worker3_cicd-C12"
+  ],
+  "ci_hypothesis_portable_verification": "pending exact covering commit; original statuses unchanged"
 }

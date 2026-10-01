@@ -6,6 +6,10 @@ This directory contains a historical heuristic index and architectural notes, no
 
 [Language-aware syntax navigation](syntax/README.md) now covers 298 successful file parses, canonical PowerShell AST replacing seven preserved historical grammar errors: 16,255 nodes, not functions or semantic review. Slint/Swift/Objective-C/C/Bash grammars and wheel/library provenance are pinned; binding remains 0.25.2. NSIS now uses hash-pinned prebuilt WASM; macros/includes/installer behavior not evaluated. See [grammar research and unresolved limits](reconciliation/parser-polyglot-research.md). No additional feature contracts, hypothesis resolutions or independent/native acceptance are claimed by this parser checkpoint.
 
+## Proportional hypothesis checks
+
+[CI portable fixtures](reconciliation/hypothesis-ci-portable.md) exercise original C04/C05 Git/source-model mechanisms and NUL-safe GitHub counterevidence, with C06/C12 source-wiring limits. No native/Actions/branch-policy/independent acceptance or original status promotion.
+
 ## Where to start
 
 - [Reconciliation task](../goal-agent-map-reconciliation.md): approved scope, constraints and remaining work.

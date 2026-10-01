@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+  "original_register_sha256": "ee8e2e9ede99fc829465d4f3b63d7a1233f73d3c8106633d9018fa5d2c0ddfb3",
+  "original_candidates": [
+    {
+      "id": "wave4_worker3_cicd-C04",
+      "status_unchanged": "hypothesis",
+      "native_reproduction": false,
+      "independent_acceptance": false
+    },
+    {
+      "id": "wave4_worker3_cicd-C05",
+      "status_unchanged": "hypothesis",
+      "native_reproduction": false,
+      "independent_acceptance": false
+    },
+    {
+      "id": "wave4_worker3_cicd-C06",
+      "status_unchanged": "hypothesis",
+      "native_reproduction": false,
+      "independent_acceptance": false
+    },
+    {
+      "id": "wave4_worker3_cicd-C12",
+      "status_unchanged": "hypothesis",
+      "native_reproduction": false,
+      "independent_acceptance": false
+    }
+  ],
+  "source_references": [
+    {
+      "path": "scripts/git-gate-native.ps1",
+      "start_line": 37,
+      "end_line": 76,
+      "source_sha256": "912e4274522b841b5f5ecdb86dde96832676b4ab9fe8a2762b90c7118d7fab7c"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "start_line": 43,
+      "end_line": 65,
+      "source_sha256": "f2b766b54591fc77911f21625b67bbe04ef610ae4324a5f477701bd7fa7505e0"
+    },
+    {
+      "path": ".github/scripts/is-docs-only.sh",
+      "start_line": 17,
+      "end_line": 55,
+      "source_sha256": "09917b0d8654ee6f2d775bb92e4b197a0b44b9643abdc5d043f5b56fb0c898e3"
+    },
+    {
+      "path": "scripts/git-gate-native.ps1",
+      "start_line": 55,
+      "end_line": 76,
+      "source_sha256": "912e4274522b841b5f5ecdb86dde96832676b4ab9fe8a2762b90c7118d7fab7c"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "start_line": 143,
+      "end_line": 162,
+      "source_sha256": "f2b766b54591fc77911f21625b67bbe04ef610ae4324a5f477701bd7fa7505e0"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "start_line": 126,
+      "end_line": 140,
+      "source_sha256": "f2b766b54591fc77911f21625b67bbe04ef610ae4324a5f477701bd7fa7505e0"
+    },
+    {
+      "path": ".github/scripts/test-gate-logic.sh",
+      "start_line": 6,
+      "end_line": 51,
+      "source_sha256": "338ce63c98f9e1df493f0b1d7820fb678c453537eeb174cc9ec34767f0f5a246"
+    },
+    {
+      "path": ".github/workflows/security.yml",
+      "start_line": 47,
+      "end_line": 97,
+      "source_sha256": "72fc30ab4d23bc2a52a8ab46c75202651dfad1e805f1d3360fa0efc1da598613"
+    }
+  ],
+  "checks": {
+    "new_research_fixtures": 8,
+    "existing_Bash_classifier_cases": 24,
+    "existing_gate_deny_logic_cases": 15
+  },
+  "limits": [
+    "real temporary Git and Bash classifier outputs; Python native classifier source model not actual PowerShell gate",
+    "external branch-protection and Windows native execution not verified",
+    "C07 C08 C10 not advanced in this slice"
+  ],
+  "all_original_statuses_preserved": true,
+  "full_project_coverage": false
+}

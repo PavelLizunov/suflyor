@@ -91,6 +91,12 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
 - User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.
 
+## Continuation round 10: proportional CI hypothesis fixtures
+
+- Intended result: bounded portable evidence for original wave4_worker3_cicd-C04/C05 (missing push base/quoted Git paths), counterevidence from existing GitHub NUL-safe classifier and selected CI gate/security wiring. Keep original claim identity/status intact; separate reproduced portable mechanism from Windows native gate/exploit/branch-protection impact.
+- Scope: task-owned Python fixtures create/remove their own temporary Git repositories; actual Git diff/ref behavior, conservative source-extracted classifier model only. Existing read-only Bash classifier may execute against those throwaway refs; no mutation of project history/source, no Cargo/PowerShell native gate, SDK/build/installer/cleanup/network Git actions. Explicit label that Python model is not actual PowerShell execution.
+- Verification: source hashes and exact spans, normal vs missing base, ASCII space vs quote/non-ASCII Git quoting/core.quotePath, rename/invalid refs/NUL-safe shell outputs, no destructive test outside temporary repositories; exact-SHA archive suite. Independent/native/trusted-review enforcement remain untested, no automatic candidate status promotion.
+
 ## Continuation round 9: canonical PowerShell parser-only corroboration
 
 - Intent: resolve seven grammar-error files with official System.Management.Automation.Language.Parser AST/tokens, not source rewriting/sanitization/error suppression. Reuse canonical .NET runtime distributed inside an official hash-verified portable PowerShell 7.4.13 Linux x64 release; ignored task-local files only, no global installation, SDK/dotnet/Cargo/Swift/worker/app/gate execution.

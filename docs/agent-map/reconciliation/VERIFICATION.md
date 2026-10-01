@@ -1,5 +1,13 @@
 # Reconciliation verification evidence
 
+## Round 10 — proportional CI hypothesis fixtures (local, covering SHA pending)
+
+- Original C04/C05/C06/C12 identity/status preserved; [portable evidence](hypothesis-ci-portable.md)/[structured receipts](hypothesis-ci-portable.json) link eight frozen source ranges and original register hash. Eight new research tests: actual temporary Git diffs/quoting/ref/rename and real NUL-safe Bash classifier plus labelled native source Python model; not PowerShell gate/Windows/branch-policy execution.
+- C04 single-commit fallback omits prior Rust fixture; C05 quotes/core.quotePath-dependent Unicode lose model prefix, ASCII spaces do not. GitHub NUL-safe classifier rejects code/mixed/renamed fixtures, classifies docs tabs/newlines correctly, invalid refs fail. Native user-visible/exploit preconditions remain unresolved. C06/C12 source wiring and fail-closed counterevidence recorded, external required checks uninspected.
+- **124 research +3 mocked Hermes tests passed locally, zero skips**. Existing Bash docs classifier **24 cases** and gate/deny logic **15 cases** all pass. No repo-source/workflow/gate production changes, original 39/75/5 counts unchanged.
+- Exact archive repeat pending; portable mechanisms are not independent/native/full-objective acceptance.
+
+
 ## Round 9 — canonical PowerShell parser-only route (exact covering SHA tested)
 
 - Official portable Linux-x64 PowerShell 7.4.13 asset SHA256 matched GitHub digest; MIT/third-party licences inspected, complete 623-file manifest hash-checked before runtime. Task-owned ParseInput helper only, NoProfile/NonInteractive/telemetry+update opt-out; no SDK/global install/Add-Type/dot-source/repo script/gate execution. [Provenance](powershell-parser-provenance.json)/[research](powershell-parser-research.md).
