@@ -1,11 +1,11 @@
 # Reconciliation verification evidence
 
-## Round 11 — Config/UI name edges and selected save chains (covering SHA pending)
+## Round 11 — Config/UI name edges and selected save chains (exact covering SHA tested)
 
 - Frozen 175 Rust inputs/schema hash validated; 2,951 unresolved name candidates (1,232 Config members/1,719 Slint method names); 176 UI matches ambiguous across components. No type/cfg/alias graph proof. [Name inventory](../schema/config-ui-name-edges.md), [four manual chains](../features/ui-setting-consumers-and-save-boundaries.md).
 - Seven new fixtures; local research suite now 131 tests, supplied parser/runtime/PO dependencies required for zero skips. Config memory mutation precedes save for scheme/opacity; return before globals/live on error, no rollback. Monitor runtime applied before save; language live selection before memory/save. Source order only, no fault/native UI acceptance.
 - Zero selected member candidate for auto_export_on_quit; targeted Rust source search found declaration/default only. Not universal dead-state proof or deletion recommendation. Original claim counts unchanged; registry 19 contracts/535 ranges.
-- Exact archive repeat/byte-identical name inventory pending; native/independent/full semantics open.
+- Exact **`5b27000cd2252c5e41957fe1d6adf629958fa7de`** archive passed **131 research +3 mocked Hermes tests, zero skips**; frozen checkpoint issues empty (19 contracts/535 ranges), name validator errors empty and complete name inventory regenerated **byte-identically**, SHA256 `11b670eda3635708daae5d6f9297c0675c6ebf11c3c590a61bab1bd8555bd26d`. [Portable receipt](portable-recovery-config-ui-edges.json); native/type/independent/full semantics open.
 
 
 ## Round 10 — proportional CI hypothesis fixtures (exact covering SHA tested)
