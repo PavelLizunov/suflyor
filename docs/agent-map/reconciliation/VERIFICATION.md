@@ -1,11 +1,11 @@
 # Reconciliation verification evidence
 
-## Startup/health contract extension — local, covering SHA pending
+## Startup/health contract extension — exact covering SHA tested
 
 - New sixteenth bounded feature contract: [startup/wizard/health/diagnostics](../features/startup-wizard-health-and-diagnostics.md), 41 exact principal-source ranges; registry now 451 ranges. No production behavior changed, no original Grok classifications changed.
 - Eight new source-seam assertions; complete local suite **79 tests passed, zero skips** with pinned grammars. Frozen checkpoint validator: 16 contracts, no issues; syntax artifacts unchanged from exact `a8c75253` parser receipt.
 - Coordinator checks corrected draft assumptions before registration: actual wizard finish/cancel clears slot (no completion flag/save), an existing wizard re-focuses without resetting, selecting mode saves config, report/log paths include credential-prefix redaction, readiness UI details are not report-redacted. These source tests are not independent semantic review or native privacy/timing acceptance.
-- Exact committed archive verification pending before portable receipt; config/UI schemas/native callers/remaining error paths/hypotheses/independent acceptance remain open.
+- Exact commit **`a9e2a8c4424552e629c9247ec3aa151dbf58b7d2`** tested from Git archive: **79 research +3 mocked Hermes tests, zero skips**, frozen checkpoint issues empty (16 contracts/451 source ranges), saved syntax validator errors empty (16,243 nodes). See [startup portable receipt](portable-recovery-startup-health.json). Native/compiler/independent acceptance not run; config/UI schemas/native callers/remaining error paths/hypotheses remain open.
 
 
 ## Round 5 — polyglot parser checkpoint (exact covering SHA tested)

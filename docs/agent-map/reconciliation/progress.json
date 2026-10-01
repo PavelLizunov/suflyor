@@ -106,8 +106,8 @@
   "source_feature_references": 451,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
-  "portable_recovery_tested_commit": "a8c752534ccba081aecc99040e4f03f54c65f47e",
-  "portable_recovery_result": "PASS 71+3 zero skips; exact Git archive; byte-identical full syntax regeneration; parsers supplied separately",
+  "portable_recovery_tested_commit": "a9e2a8c4424552e629c9247ec3aa151dbf58b7d2",
+  "portable_recovery_result": "PASS 79+3 tests zero skips from exact Git archive; 16 contracts/451 ranges; syntax/frozen hashes valid; parsers separate",
   "source_seam_tests_passed": 27,
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
@@ -140,5 +140,5 @@
     "seven PowerShell grammar-error files; native parser not run"
   ],
   "startup_health_source_assertions_passed": 8,
-  "startup_health_portable_verification": "pending covering commit"
+  "startup_health_portable_verification": "PASS exact a9e2a8c4424552e629c9247ec3aa151dbf58b7d2; no native/independent acceptance"
 }
