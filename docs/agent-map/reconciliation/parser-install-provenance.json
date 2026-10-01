@@ -1,0 +1,43 @@
+{
+  "platform": "linux-x86_64",
+  "python": "3.12",
+  "packages": [
+    {
+      "name": "tree-sitter",
+      "version": "0.25.2",
+      "filename": "tree_sitter-0.25.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+      "sha256": "b43a9e4c89d4d0839de27cd4d6902d33396de700e9ff4c5ab7631f277a85ead9",
+      "bytes": 635418,
+      "registry": "https://pypi.org/pypi/tree-sitter/0.25.2/json",
+      "download_url": "https://files.pythonhosted.org/packages/39/d1/b95f545e9fc5001b8a78636ef942a4e4e536580caa6a99e73dd0a02e87aa/tree_sitter-0.25.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+      "license": "MIT",
+      "licenses_in_wheel": [
+        "tree_sitter-0.25.2.dist-info/licenses/LICENSE"
+      ],
+      "installer": "pip --no-index --no-deps --only-binary to ignored parser-site-stable; exact prebuilt wheels"
+    },
+    {
+      "name": "tree-sitter-rust",
+      "version": "0.24.2",
+      "filename": "tree_sitter_rust-0.24.2-cp39-abi3-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+      "sha256": "e033c5a93b57c88e0a835880de39fc802909ff69f57aaff6000211c196ea5190",
+      "bytes": 164706,
+      "registry": "https://pypi.org/pypi/tree-sitter-rust/0.24.2/json",
+      "download_url": "https://files.pythonhosted.org/packages/ca/45/a051bbd3045a61182dde25b93ae9a33d2677c935b16952283e12eaf46051/tree_sitter_rust-0.24.2-cp39-abi3-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+      "licenses_in_wheel": [
+        "tree_sitter_rust-0.24.2.dist-info/licenses/LICENSE"
+      ],
+      "license": "MIT",
+      "installer": "pip --no-deps --no-index --target ignored parser-site; verified prebuilt wheel only"
+    }
+  ],
+  "schema_version": 1,
+  "reviewed_source_commit": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+  "scope": "isolated ignored parser-site; no production/global/runtime changes",
+  "grammar_semantics": "syntax-only CST; macros/cfg/type resolution not executed",
+  "wheel_hash_verification": "registry SHA256 matched downloaded wheel; embedded MIT licenses inspected",
+  "installed_paths_published": false,
+  "native_build_executed": false,
+  "rejected_attempt": "parser-failed-attempt.json: 0.26.0 native crashes",
+  "isolation": "one subprocess per Rust file; 30s timeout; failures explicit"
+}

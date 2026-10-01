@@ -55,6 +55,14 @@ The initial SQL fixture used a nonexistent `utterances.seq` column and failed be
 - workflow-5 bounded Gemini retrospective spotcheck settled with null result and no file output; receipt retains no reason/acceptance. Coordinator source review is not independent model acceptance.
 - [Round-3 exact covering-SHA receipt](portable-recovery-round3.json) at `3188e6b05f36273bd32faebec3ab64dad0301afe` reran 48 research + three existing mocked Hermes tests and verify/checkpoint/recover from tracked-only Git archive: 15 contracts, 119 records, zero failed-proposal promotions, no overlays/raw reports/prior DB/network/native builds.
 
+## Continuation round 4 / context handoff
+
+- Pinned prebuilt MIT parser wheels installed only under ignored research target, no production/global/DSH runtime dependency change. First binding 0.26.0 passed fixtures but SIGSEGV on large traversal; per-file attempt reported 89 native failures. Failed receipt preserved; not accepted as an index.
+- Alternate binding 0.25.2 + Rust grammar0.24.2 parsed all selected frozen Rust/Python files in subprocess isolation: 224 files (220 Rust/four Python), 13,961 nodes/declarations including 7,692 macro invocations, zero observed parse/native failures. 74 unsupported,22 protected/vendor excluded,520 nonselected remain explicit.
+- Syntax validator checks exact source SHA, UTF8 byte/line ranges, signature prefixes, parents and counts with no semantic acceptance. It passed for all saved output; Python stdlib version3.12 and exact wheel provenance preserved.
+- Full pinned suite passed 62 research checks plus three existing mocked Hermes tests. Syntax absence can skip Rust fixtures and is not parser acceptance. Latest covering-candidate archive repeat is required before reporting portable acceptance of these additions.
+- User requested context transfer and commit of completed work. [Continuation prompt](CONTINUE-PROMPT.md) records scope/next tasks; whole goal remains incomplete and must not be marked complete because of this handoff.
+
 ## Model dispatch outcome
 
 - `workflow-1`: four Opus final results null with partial, topic-misaligned JSON; one Gemini summary returned, then corrected against source. No blanket Opus acceptance.

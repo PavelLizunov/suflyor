@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+  "attempt": "tree-sitter-0.26.0-with-rust-0.24.2",
+  "versions": {"tree-sitter":"0.26.0","tree-sitter-rust":"0.24.2"},
+  "wheel_sha256": {"tree-sitter":"5a6b333b0282d8bb0af741f9b018bd2523d4eecb2686bf6717066a625fecfaa4","tree-sitter-rust":"e033c5a93b57c88e0a835880de39fc802909ff69f57aaff6000211c196ea5190"},
+  "fixtures": "12 syntax fixtures passed before broad attempt",
+  "monolithic_attempt": "SIGSEGV in Python garbage-collection/CST node traversal after several files; no accepted output",
+  "isolated_attempt": {"files":840,"syntax_parsed":135,"parser_process_failure":89,"unsupported_language":74,"excluded_protected_or_vendor":22,"non_selected_data_or_document":520,"declarations_from_successful_files":3726,"accepted":false},
+  "confirmed_reproductions": ["config.rs single-file SIGSEGV under 0.26.0", "multi-file completion/control traversal SIGSEGV"],
+  "alternative_probe": "0.25.2 binding with same Rust grammar parsed config/completion/control/4962-line host root without crash; final whole-snapshot verification still needed",
+  "cause": "Native binding/CST traversal incompatibility suspected, not independently root-caused; no application Rust execution/build involved",
+  "outcome": "Failed receipts preserved; no whole-project/parser acceptance from initial successful fixtures"
+}

@@ -21,7 +21,7 @@
   "independent_watchdog": false,
   "checkpoint_tests_passed": 22,
   "native_tests_run": false,
-  "next_step": "Remaining full source/all-caller/native adapter/startup/config/schema and language-aware semantic coverage; native hypotheses and independent whole-project acceptance still open.",
+  "next_step": "New chat: verify handoff/current Git; complete unsupported language parsing/startup/health/config/native caller semantics; no whole-map/native acceptance.",
   "remaining_hypothesis_ids": [
     "wave1_worker1_persistence-C02",
     "wave1_worker1_persistence-C05",
@@ -100,9 +100,9 @@
     "wave4_worker3_cicd-C12"
   ],
   "feature_contracts_source_inspected": 15,
-  "continuation_round": 3,
+  "continuation_round": 4,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 48,
+  "total_research_tests_passed": 62,
   "source_feature_references": 410,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
@@ -111,5 +111,19 @@
   "source_seam_tests_passed": 19,
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
-  "round3_spotcheck": "workflow-5 result null; no independent acceptance"
+  "round3_spotcheck": "workflow-5 result null; no independent acceptance",
+  "syntax_parsed_files": 224,
+  "syntax_declaration_nodes": 13961,
+  "syntax_status_counts": {
+    "non_selected_data_or_document": 520,
+    "excluded_protected_or_vendor": 22,
+    "unsupported_language": 74,
+    "syntax_parsed": 224
+  },
+  "syntax_parser_versions": {
+    "tree-sitter": "0.25.2",
+    "tree-sitter-rust": "0.24.2"
+  },
+  "syntax_fixtures_passed": 14,
+  "context_handoff_prompt": "docs/agent-map/reconciliation/CONTINUE-PROMPT.md"
 }

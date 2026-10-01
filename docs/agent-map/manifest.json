@@ -3,7 +3,7 @@
   "status": "PARTIAL_MAP_SOURCE_TRIAGE_COMPLETE_NATIVE_ACCEPTANCE_PENDING",
   "campaign_id": "suflyor-map-reconciliation",
   "reviewed_source_commit": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
-  "generated_at": "2026-10-01T18:27:53.767167+00:00",
+  "generated_at": "2026-10-01T21:01:25.335389+00:00",
   "historical_publication_commit": "e14ff1936349cd6790be749d68f5c7b5737af926",
   "historical_claimed_source_commit": "a4c998740de4d25c3939d1bcf63a7c07af820682",
   "historical_source_coherence": "not_established; inventory drift recorded",
@@ -72,7 +72,23 @@
     "complete_symbol_coverage": false,
     "native_checks_executed_by_map_generator": false,
     "manually_inspected_feature_contracts": 15,
-    "source_feature_references": 410
+    "source_feature_references": 410,
+    "syntax_index": {
+      "selected_files": 224,
+      "node_count": 13961,
+      "macro_invocations": 7692,
+      "status_counts": {
+        "non_selected_data_or_document": 520,
+        "excluded_protected_or_vendor": 22,
+        "unsupported_language": 74,
+        "syntax_parsed": 224
+      },
+      "parser_versions": {
+        "tree-sitter": "0.25.2",
+        "tree-sitter-rust": "0.24.2"
+      },
+      "semantic_acceptance": false
+    }
   },
   "review": {
     "historical_final_verdict": "changes_required",
@@ -111,14 +127,15 @@
     "portable_recovery_tested_commit": "3188e6b05f36273bd32faebec3ab64dad0301afe",
     "portable_recovery_result": "PASS 48+3 archived suites and exact 15-contract/119-record recovery; no overlays/network/native build",
     "source_seam_tests": 19,
-    "current_total_research_tests": 48,
-    "existing_mocked_hermes_tests": 3
+    "current_total_research_tests": 62,
+    "existing_mocked_hermes_tests": 3,
+    "syntax_fixture_tests": 14
   },
   "artifacts": [
     {
       "path": "README.md",
-      "sha256": "8a9c8fa9169c6f5555385e8691a5e0e9445ef77f38c819b763a8bfbd053b6a9a",
-      "bytes": 5430
+      "sha256": "e83d875f678d58cd3fe1439bc3f78a02babbf523203def135ac0bbb32214ca4d",
+      "bytes": 5659
     },
     {
       "path": "architecture/process_topology.md",
@@ -1751,6 +1768,16 @@
       "bytes": 16611
     },
     {
+      "path": "operations/parser-requirements-linux-cp312.txt",
+      "sha256": "492e8e85a2a578205edba1ceb84645f70e323895457ef0e82fab0c561a23621a",
+      "bytes": 360
+    },
+    {
+      "path": "operations/syntax_index.py",
+      "sha256": "31887dab862dcd3b3e0c9e947cf18fb63a82c860c18fdb3b562d3fa65d2339a4",
+      "bytes": 15445
+    },
+    {
       "path": "operations/test_catalog_contract.py",
       "sha256": "33be22500dd6b226160bd4cb3648c438258fe12fdaabea5ad59e92bb0f2288a2",
       "bytes": 6645
@@ -1776,6 +1803,16 @@
       "bytes": 4251
     },
     {
+      "path": "operations/test_syntax_index.py",
+      "sha256": "96199ccd229101095e2470e00312e80e8b8d301ad4593a1b33623467fcf55ddd",
+      "bytes": 7886
+    },
+    {
+      "path": "reconciliation/CONTINUE-PROMPT.md",
+      "sha256": "bd2ad0b5dcbb60c49102e0d91de2dafdc21e6b01947825b4233abd2717898866",
+      "bytes": 7543
+    },
+    {
       "path": "reconciliation/NEXT-STEPS.md",
       "sha256": "f664166563f874f27cdb71bf03e729389bd5ef20e83889df68cca7ee4445d66a",
       "bytes": 4075
@@ -1797,8 +1834,8 @@
     },
     {
       "path": "reconciliation/VERIFICATION.md",
-      "sha256": "459d4ada1ad5b5e7d931db8b9594b2afb667a683968385e9dceb959fd3b24e3c",
-      "bytes": 10907
+      "sha256": "c1f08f7fa2c47e931a94a1de676f3673d199ea1519603029d183ab5970dfe7af",
+      "bytes": 12294
     },
     {
       "path": "reconciliation/additional-source-findings.json",
@@ -1926,6 +1963,16 @@
       "bytes": 11000
     },
     {
+      "path": "reconciliation/parser-failed-attempt.json",
+      "sha256": "4776ae00fb6145b07ba06c28198d3b9f79db796e1b7e6504f0f31320547adcc6",
+      "bytes": 1383
+    },
+    {
+      "path": "reconciliation/parser-install-provenance.json",
+      "sha256": "a70ce8c9e0aea39f846fd4c7daf620f48f766e1a38cac0283a3ceec283d6db6e",
+      "bytes": 2323
+    },
+    {
       "path": "reconciliation/parser-research.md",
       "sha256": "8513ed927ad263638bf79372ab9bf8e8afec37954029a62cebe76c1cb8b0824d",
       "bytes": 4769
@@ -1947,8 +1994,8 @@
     },
     {
       "path": "reconciliation/progress.json",
-      "sha256": "ef3a3c9109486e32ee8facb48399563ef470d1066272d6860c6ce4614c7a5010",
-      "bytes": 4111
+      "sha256": "25ce57fa274a43c5dedbe4ca49905484a4c9f0e6069da5403e20473172bde953",
+      "bytes": 4535
     },
     {
       "path": "reconciliation/research-boundaries.json",
@@ -2094,6 +2141,21 @@
       "path": "reviews/O8_analysis.md",
       "sha256": "5a4e4336db0806168d98be7eeeb515859fcaec70d288c757941fe2639fc61d51",
       "bytes": 2622
+    },
+    {
+      "path": "syntax/README.md",
+      "sha256": "e509e48afda4e5b47bbd2adbd939aaf1b84fe3a9b27962bf281537c06151c2f8",
+      "bytes": 3843
+    },
+    {
+      "path": "syntax/declarations.jsonl",
+      "sha256": "8627a7e5059cc1d97b9108cd742ac29efd5aaaae9501f61b3b5990eedd825c21",
+      "bytes": 11149531
+    },
+    {
+      "path": "syntax/files.json",
+      "sha256": "104d22c5615b975f345d7c768d0723021090188a102eec7e062b431261786cb9",
+      "bytes": 413254
     }
   ]
 }

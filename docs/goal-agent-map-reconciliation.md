@@ -70,9 +70,23 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - Workflow-4 short Gemini counterevidence returned; coordinator accepted queue/provenance caveats, rejected misquoted/stale claims and disproved assumed Codex exclusive-summary reachability. No Astra/new Grok.
 - 34 research tests pass (20 recovery/provenance, seven SQL, seven source seams); no production source changed. Exact covering-SHA `8cd96a8bcbf3a68c9af8bde43bfa842fd34457a6` archive reran all 34 plus verify/checkpoint/recover successfully without overlays/raw reports/prior DB. Parser research done with no package install. Next: publish evidence, then remaining feature/all-language/native acceptance work.
 
+## Continuation round 4 scope
+
+- Implement a bounded syntax declaration index using Python stdlib AST and pinned prebuilt Tree-sitter Rust wheels in ignored `.campaign-state/parser-site`, not production manifests/global Python/DSH runtime. Compose researched existing parsers; no Rust SDK/native compiler or app dependency change.
+- Freeze exact selected wheel filenames/hashes/licenses/version/platform; install only verified wheels with no source/build scripts. Commit reproduction requirements and parser provenance; do not commit wheels/site/binaries.
+- Parse frozen tracked Rust/Python source hashes, preserving spans/signatures/scopes/attributes/cfg/test flags and macro-not-expanded boundaries. Report parse errors and unsupported languages explicitly; no hardcoded symbol/line semantic completeness.
+- Test multiline/generic/nested-enum/impl/comment/string/macros/Python fixtures and snapshot drift before whole selected-source extraction. Validate output ranges/counts deterministically; preserve historical regex artifacts separately.
+- Repeat exact-candidate tracked-only recovery/parser output checks before push. Full all-language semantics/native acceptance remain incomplete.
+
 ## Continuation round 3 outcome
 
 - Six additional principal chains mapped: 15 contracts, exact source references indexed. Confirmed archive/re-STT force/source differences, KB empty palette/byte cap, best-effort deletion/save, updater initial URL/digest vs unvalidated redirects and no numeric coaching metric proved.
 - MLX/Hermes source contracts added; Hermes configured nonloopback allowed, profile save failure can still acknowledge, summary stores differ. No services/model/filesystem mutations on owner data.
 - 48 research tests pass (22 recovery/provenance, seven SQL, 19 source seams), plus three existing mocked Hermes tests. New tests corrected multiple guessed fixture identifiers against actual source; no application fixes hidden.
 - Workflow-5 returned null without reviewer output, receipt saved; no automatic replay or independent acceptance. Exact covering-SHA `3188e6b05f36273bd32faebec3ab64dad0301afe` archive passed both suites and recovery (48+3 checks, 15 contracts, 119 records, no failed proposal acceptance). Next: publish receipt, then remaining all-language/source/caller coverage and native acceptance.
+
+## Continuation round 4 / user handoff
+
+- Accepted pinned binding 0.25.2 + Rust grammar0.24.2, isolated native parser workers. Prior 0.26.0 crashes saved, not accepted. Frozen Rust/Python224 files parsed with13961 nodes/declarations, zero current parser errors;74 unsupported/22 excluded/520 nonselected explicit.
+- 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
+- User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.

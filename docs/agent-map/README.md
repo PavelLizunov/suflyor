@@ -9,6 +9,8 @@ This directory contains a historical heuristic index and architectural notes, no
 - [Grok summary](reconciliation/SUMMARY.md) and [candidate register](reconciliation/candidates.json): all 119 original claims source-triaged; 39 source mechanisms confirmed, 75 hypotheses and 5 rejected. Caller-level follow-up corrected an earlier UI-thread assumption. No native reproduction or independent acceptance is implied.
 - [Source-linked features](features/README.md): 15 bounded contracts covering speech/session/storage, AI/vision/local models, TTS/OCR, personal memory, config transfer, hotkeys/window/capture, KB/archive/re-STT/summary/coaching, updater/release and MLX/Hermes. Source references and limits are explicit; this is not complete project coverage.
 - [Model registry](reconciliation/speech-models.md): distinguishes transcription, speaker diarization, CoreML history and source-versus-release status.
+- [Continuation prompt](reconciliation/CONTINUE-PROMPT.md): self-contained next-chat task/state/constraints.
+- [Syntax index](syntax/README.md): pinned Rust CST/Python AST declarations with explicit unsupported/cfg/macro limits.
 - [Continuation queue](reconciliation/NEXT-STEPS.md): exact remaining full-map and native evidence work.
 - [Artifact manifest](manifest.json): measured record counts, hashes and explicit completeness limits.
 - [Operations](operations/): reproducibility and checkpoint/resume instructions. No independent automatic session-restart service is claimed.
