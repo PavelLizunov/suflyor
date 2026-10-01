@@ -53,7 +53,7 @@ The initial SQL fixture used a nonexistent `utterances.seq` column and failed be
 - MLX contract distinguishes fast marker runtime load vs full file hash at install, exact owned-child readiness and serialized inference vs unbounded waiters. Hermes contract distinguishes configured nonloopback bind from stale loopback-only header, catalog summary vs conspect and save failure vs response success.
 - Source-seam fixtures initially failed on guessed identifiers/substring shapes, then reread actual implementation and reran; all 48 research tests passed (22 recovery/provenance +7 SQL +19 source seams). Three existing plugin limit tests ran with requests mocked, no network/user data.
 - workflow-5 bounded Gemini retrospective spotcheck settled with null result and no file output; receipt retains no reason/acceptance. Coordinator source review is not independent model acceptance.
-- Latest covering-SHA portable repeat remains required for this round before publication evidence is complete.
+- [Round-3 exact covering-SHA receipt](portable-recovery-round3.json) at `3188e6b05f36273bd32faebec3ab64dad0301afe` reran 48 research + three existing mocked Hermes tests and verify/checkpoint/recover from tracked-only Git archive: 15 contracts, 119 records, zero failed-proposal promotions, no overlays/raw reports/prior DB/network/native builds.
 
 ## Model dispatch outcome
 

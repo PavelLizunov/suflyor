@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "tested_commit": "3188e6b05f36273bd32faebec3ab64dad0301afe",
+  "method": "exact Git archive, tracked-only/no overlays/raw reports/prior DB; no network/dependency/native build",
+  "research_tests": {
+    "count": 48,
+    "result": "OK",
+    "breakdown": {
+      "checkpoint_provenance": 22,
+      "sqlite_schema": 7,
+      "source_seam": 19
+    }
+  },
+  "existing_hermes_tests": {
+    "count": 3,
+    "result": "OK",
+    "network": "mocked"
+  },
+  "sqlite_version": "3.45.1",
+  "canonical_candidates": 119,
+  "canonical_counts": {
+    "confirmed": 39,
+    "hypothesis": 75,
+    "rejected": 5
+  },
+  "source_feature_contracts": 15,
+  "source_feature_references": 410,
+  "accepted_git_text_forms": [
+    "vendor/nemotron-win-x64/GGML_LICENSE",
+    "vendor/nemotron-win-x64/LICENSE",
+    "vendor/nemotron-win-x64/NOTICE",
+    "vendor/nemotron-win-x64/THIRD_PARTY_NOTICES.md"
+  ],
+  "issues": [],
+  "worker_proposals_accepted": 0,
+  "automatic_dispatch": false,
+  "independent_acceptance": false,
+  "native_application_acceptance": false,
+  "result": "PASS exact covering-SHA research/portable recovery"
+}
