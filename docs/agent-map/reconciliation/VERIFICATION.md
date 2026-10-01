@@ -17,7 +17,7 @@
 | JSON/JSONL decode | Every published research JSON/JSONL decoded | Record semantics/symbol completeness not compiler-verified |
 | Python syntax | Checkpoint/test files parsed successfully | Not native Suflyor application compilation |
 | Navigation | Main corrected README/model/recovery/topology links resolve | Historical generated review links not all audited |
-| Recovery/SQL tests | `python3 -B -m unittest discover -s docs/agent-map/operations -p 'test_*.py' -v`: 24 tests, OK (20 provenance/recovery + 4 SQLite fixtures) | Helper and Python SQLite mechanics only; no native application or independent host-crash restart |
+| Recovery/SQL tests | `python3 -B -m unittest discover -s docs/agent-map/operations -p 'test_*.py' -v`: 34 tests, OK (20 provenance/recovery + 7 SQLite fixtures + 7 source-seam checks) | Helper and Python SQLite mechanics only; no native application or independent host-crash restart |
 | Checkpoint/recover commands | Completed; null/misaligned lane files labeled `unaccepted_proposal` | No automatic redispatch or independent acceptance |
 | Actual SQL migrations | Python SQLite 3.45.1 in-memory: migrations loaded; triggered FTS row deleted by session_id; no session FK on memory/diarization | Not native bundled rusqlite/Cargo tests or full DB durability |
 | Git whitespace | `git diff --check`, staged check and first checkpoint `git show --check`: clean | Docs gate, not behavioral/native gate |
@@ -35,6 +35,16 @@ The initial SQL fixture used a nonexistent `utterances.seq` column and failed be
 - Bounded Gemini spotcheck `workflow-3` completed with issues. Coordinator confirmed and fixed managed Whisper Turbo identity, capture-watchdog vs meeting-ending hint and diarization run/persist/poll links. Two quoted guarantees were absent from current documents and were not accepted as existing errors. Successful diarization replacement of manual names was additionally verified against SQL shape; native speaker rerun remains unexecuted.
 - Selected historical O1–O8 corrections are recorded separately (11 items); no blanket historical review acceptance or full all-line claim.
 
+## Continuation round 2 evidence
+
+- Six additional bounded contracts cover AI/vision/provider, managed local lifecycle, read-aloud/OCR, personal memory, portable config/Settings and hotkeys/window/capture. Nine contracts now index 277 source references; links/ranges checked, not an all-function coverage percentage.
+- Direct source recheck corrected TTS Windows JobObject absence, confirms init actually calls warm, AI channel=64/shared permit=2, stream timeout=120s/completion=180s, and current OCR in-memory stdin/stdout with dimension guards. Several older prose/comment assumptions were not propagated.
+- Seven SQL fixtures use actual migrations for FTS/curated tables, rerun name replacement, approval V2-field omission, source restore and active/default-profile query. Seven source-seam checks protect the exact enum/hotkey/AI/TTS/OCR/normalizer declarations without claiming compilation or behavior.
+- First source-seam run failed on two incorrect delimiter substrings (permit select form and end-of-spawn helper marker); tests were rebased onto inspected actual source and rerun. These are fixture failures, not application fixes.
+- Bounded Gemini workflow-4 completed with issues. Receipt records accepted queue/provenance/fallback caveats and rejected stale/misquoted rows; hypothetical Codex HTTP summary consequence is not established because its exclusive flag requires local managed prep.
+- [Parser research](parser-research.md) records installed-tool absence and live upstream alternatives. Verdict Compose (stdlib AST/TOML + pinned syntax grammars); no parser package/toolchain installed and no accurate AST index claimed.
+- Latest 34-test suite passed in working tree; exact covering-SHA tracked-only repeat remains required before claiming portability of round-2 additions.
+
 ## Model dispatch outcome
 
 - `workflow-1`: four Opus final results null with partial, topic-misaligned JSON; one Gemini summary returned, then corrected against source. No blanket Opus acceptance.
@@ -43,7 +53,7 @@ The initial SQL fixture used a nonexistent `utterances.seq` column and failed be
 
 ## Source findings beyond the original Grok register
 
-[Additional source findings](additional-source-findings.json) preserve two follow-up contracts without changing the 119 original IDs: successful diarization rerun replaces prior manual speaker names, and meeting-ending is a visual hint rather than automatic stop. The replacement mechanism is reproduced in the actual shipped schema through Python SQLite; native analysis/identity remapping is not tested. [Selected historical corrections](historical-review-corrections.json) cover 11 O1–O8 assertions, not every historical sentence.
+[Additional source findings](additional-source-findings.json) preserve three follow-up contracts without changing the 119 original IDs: successful diarization rerun replaces prior manual speaker names, meeting-ending is a visual hint rather than automatic stop, and candidate approval omits V2 source/entity/normalization metadata from the minted item. The replacement mechanism is reproduced in the actual shipped schema through Python SQLite; native analysis/identity remapping is not tested. [Selected historical corrections](historical-review-corrections.json) cover 14 selected historical/code-summary assertions, not every historical sentence.
 
 ## Remaining acceptance
 

@@ -3,7 +3,7 @@
   "status": "PARTIAL_MAP_SOURCE_TRIAGE_COMPLETE_NATIVE_ACCEPTANCE_PENDING",
   "campaign_id": "suflyor-map-reconciliation",
   "reviewed_source_commit": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
-  "generated_at": "2026-10-01T16:46:12.292200+00:00",
+  "generated_at": "2026-10-01T17:35:33.415732+00:00",
   "historical_publication_commit": "e14ff1936349cd6790be749d68f5c7b5737af926",
   "historical_claimed_source_commit": "a4c998740de4d25c3939d1bcf63a7c07af820682",
   "historical_source_coherence": "not_established; inventory drift recorded",
@@ -71,8 +71,8 @@
     "semantic_line_coverage": null,
     "complete_symbol_coverage": false,
     "native_checks_executed_by_map_generator": false,
-    "manually_inspected_feature_contracts": 3,
-    "source_feature_references": 83
+    "manually_inspected_feature_contracts": 9,
+    "source_feature_references": 277
   },
   "review": {
     "historical_final_verdict": "changes_required",
@@ -90,7 +90,8 @@
       "hypothesis": 75,
       "rejected": 5
     },
-    "bounded_feature_counterevidence": "workflow-3 returned issues; source verified and corrected; no full project acceptance"
+    "bounded_feature_counterevidence": "workflow-3 returned issues; source verified and corrected; no full project acceptance",
+    "round2_feature_counterevidence": "workflow-4 issues reviewed and bounded caller counterevidence retained; no independent full acceptance"
   },
   "automation": {
     "background_job": null,
@@ -100,18 +101,21 @@
     "settled_jobs": [
       "workflow-1",
       "workflow-2",
-      "workflow-3"
+      "workflow-3",
+      "workflow-4"
     ],
     "model_worker_completion": "four first-pass Opus null/partial files; eight exact-claim Opus null/no files; one Gemini summary returned and corrected",
-    "sql_contract_tests": 4,
+    "sql_contract_tests": 7,
     "portable_recovery_tested_commit": "059a04b1b90017fab032c25fc93d68b2be1f39eb",
-    "portable_recovery_result": "PASS 24 tests plus verify/checkpoint/recover in exact Git archive, no overlays or raw reports/prior DB"
+    "portable_recovery_result": "PASS 24 tests plus verify/checkpoint/recover in exact Git archive, no overlays or raw reports/prior DB",
+    "source_seam_tests": 7,
+    "current_total_research_tests": 34
   },
   "artifacts": [
     {
       "path": "README.md",
-      "sha256": "bf047e21980b7f989c154cd7d4c5fa147cb14c5c0a862ab153ffb3cbafdd1d8b",
-      "bytes": 5269
+      "sha256": "e7f328d9f69b510a4bda6af7d22e75631912cc93a303960e503fb1ff4ff69a4c",
+      "bytes": 5367
     },
     {
       "path": "architecture/process_topology.md",
@@ -125,13 +129,23 @@
     },
     {
       "path": "features/README.md",
-      "sha256": "b6ccaac2ef640a933dc41fe91e4027caf5b2af2a6b61acec217e594d4976c9da",
-      "bytes": 1508
+      "sha256": "f625084745a572c76306c728db7afeffcf0234f7f66d01863973a494140ec6f9",
+      "bytes": 2897
+    },
+    {
+      "path": "features/ai-and-vision-routing.md",
+      "sha256": "8c9ed924d7324cccc8e9843443242b1296551a7f62632db63c465c0fed86a3eb",
+      "bytes": 10321
     },
     {
       "path": "features/contracts.json",
-      "sha256": "71c36976c65299549d31922b686793860a2919196e8255c53a04fa883568570b",
-      "bytes": 12583
+      "sha256": "e260ab29c507f339f60fa2095978a292dbbd0109123d6ce2d8ec25a2ed9abc4f",
+      "bytes": 41572
+    },
+    {
+      "path": "features/hotkeys-windows-and-capture.md",
+      "sha256": "5b4dbb404f14b3f50a0358a70258e897ae819424865ce9c000a6bc443342eb67",
+      "bytes": 7146
     },
     {
       "path": "features/live-transcription.md",
@@ -139,9 +153,29 @@
       "bytes": 7375
     },
     {
+      "path": "features/managed-local-ai.md",
+      "sha256": "e9cfacd1fb321e59f4068e3dab2e74bd8137c022f419294eaa2779e17fd4cf22",
+      "bytes": 7367
+    },
+    {
+      "path": "features/personal-memory.md",
+      "sha256": "9d5763573c4b7472d60a0636f6defcb5be13f8e2c364c2c87c5db05636f02b4f",
+      "bytes": 8280
+    },
+    {
+      "path": "features/read-aloud-and-ocr.md",
+      "sha256": "d24bc17c567b53d653124d046e975da6d0b9b0e99ee3b67499658259c8987db5",
+      "bytes": 8390
+    },
+    {
       "path": "features/session-lifecycle-and-storage.md",
       "sha256": "b1e1a81573bc11e23bd47230df794b25bd278ac35b68c2858a91ce82ae4f5c72",
       "bytes": 8514
+    },
+    {
+      "path": "features/settings-and-portable-config.md",
+      "sha256": "af58397f0c94bbb057f0afef40de5da4c5ddd10a2622358967f6647b32622e06",
+      "bytes": 6991
     },
     {
       "path": "features/speaker-diarization.md",
@@ -1675,8 +1709,8 @@
     },
     {
       "path": "operations/README.md",
-      "sha256": "f8cccf92e1e1a007f6b0788b53a215264063c228c4649de71573df9ab3b03ec0",
-      "bytes": 4943
+      "sha256": "c88e5277c7e0dae02876e1d6f59a422631a54e4da6f0f5fb929a1f09a894a677",
+      "bytes": 5132
     },
     {
       "path": "operations/checkpoint.py",
@@ -1685,8 +1719,8 @@
     },
     {
       "path": "operations/test_catalog_contract.py",
-      "sha256": "91f31b03cc52670ec6ab0d7f2285be2e0984fe528c59742085a54222a77e8621",
-      "bytes": 3650
+      "sha256": "33be22500dd6b226160bd4cb3648c438258fe12fdaabea5ad59e92bb0f2288a2",
+      "bytes": 6645
     },
     {
       "path": "operations/test_checkpoint.py",
@@ -1694,9 +1728,14 @@
       "bytes": 14811
     },
     {
+      "path": "operations/test_source_contract.py",
+      "sha256": "a616a2b3b93999808051b2864af5d2f49687eeafab73c1b5e443aceda6deddf4",
+      "bytes": 4099
+    },
+    {
       "path": "reconciliation/NEXT-STEPS.md",
-      "sha256": "4e195db4a3ee96e79ada13bbf3e2e51d37f60ce81a2a793820615d1281b04351",
-      "bytes": 3607
+      "sha256": "9add9f06636503a79a88b9dc6ff1b772459fd76859672be3620f89cd322d0902",
+      "bytes": 3893
     },
     {
       "path": "reconciliation/README.md",
@@ -1715,13 +1754,13 @@
     },
     {
       "path": "reconciliation/VERIFICATION.md",
-      "sha256": "6d4c26de4d0e86e7128650a20a88540c0e709d1507f0e1c340cd554853c48cfb",
-      "bytes": 6708
+      "sha256": "e39f9f6ac19a0a94f1b76c37fc359ab6209228ccc05c500e09f0738c999845c2",
+      "bytes": 8639
     },
     {
       "path": "reconciliation/additional-source-findings.json",
-      "sha256": "4fad522f0ed5a8bf3b2ca220ebcc30602ac0e3f373d4edf198542d28ee637bc8",
-      "bytes": 2702
+      "sha256": "191bc92456db6d0a8f7110389781dab2b4de6384eb9100652d1698a6ff0a3560",
+      "bytes": 3960
     },
     {
       "path": "reconciliation/audio.json",
@@ -1730,13 +1769,13 @@
     },
     {
       "path": "reconciliation/candidates.json",
-      "sha256": "bf9f6aedd079ea555d5708f38498025977a4bb6fbdb7c66bf28c6286f0546169",
-      "bytes": 410162
+      "sha256": "ee8e2e9ede99fc829465d4f3b63d7a1233f73d3c8106633d9018fa5d2c0ddfb3",
+      "bytes": 410586
     },
     {
       "path": "reconciliation/coordinator-checks.json",
-      "sha256": "af91abaee9f5f493caad9bbc793d8ce694e69b4536791b4448363ad3e4aa2b04",
-      "bytes": 4729
+      "sha256": "95d615065822a79155be2cb96904e550371925fbaaa1d836a181f3b09888c85d",
+      "bytes": 4934
     },
     {
       "path": "reconciliation/data.json",
@@ -1840,8 +1879,13 @@
     },
     {
       "path": "reconciliation/historical-review-corrections.json",
-      "sha256": "89bc9e4c8d90d211e5ac55d6e59f1a81fcca2eff5b1c9c47210d63533de26252",
-      "bytes": 6447
+      "sha256": "cab61e510a8938f132612341f9372e0523556538b86449d696999c216ee6f83c",
+      "bytes": 11000
+    },
+    {
+      "path": "reconciliation/parser-research.md",
+      "sha256": "8513ed927ad263638bf79372ab9bf8e8afec37954029a62cebe76c1cb8b0824d",
+      "bytes": 4769
     },
     {
       "path": "reconciliation/portable-recovery-evidence.json",
@@ -1850,8 +1894,13 @@
     },
     {
       "path": "reconciliation/progress.json",
-      "sha256": "8866f309d27c155a2c3773ed4b668112124e4329b3a7c5d9d496b2313ab4d278",
-      "bytes": 3760
+      "sha256": "def104ed128402a684c448c4d13e8605ffa0f24efebc4efcc75829bffecc199e",
+      "bytes": 3949
+    },
+    {
+      "path": "reconciliation/round2-feature-spotcheck.json",
+      "sha256": "1a239abca00b3edb824e38be02d3faea65e12e2cd249ebb93174a8cd108e7d99",
+      "bytes": 3301
     },
     {
       "path": "reconciliation/security-build.json",

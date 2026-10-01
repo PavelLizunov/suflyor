@@ -45,6 +45,32 @@ class CatalogContractTests(unittest.TestCase):
         self.conn.execute("INSERT OR REPLACE INTO diarization(session_id,created_at_ms,model_id,num_speakers,segments_json,speaker_names_json) VALUES ('s1',2,'rerun-fixture',1,'[]','{}')")
         self.assertEqual(self.conn.execute("SELECT speaker_names_json FROM diarization WHERE session_id='s1'").fetchone()[0], "{}")
 
+    def test_legacy_approve_projection_does_not_transfer_v2_candidate_fields(self):
+        # Execute SQL matching approve_candidate's current selected/inserted columns.
+        self.conn.execute("INSERT INTO memory_candidates(profile_id,kind,text,status,created_at_ms,source_text,entity,norm_status) VALUES ('default','fact','normalized fixture','pending',1,'verbatim fixture','subject','llm')")
+        profile, kind, text, source = self.conn.execute("SELECT profile_id,kind,text,source_session_id FROM memory_candidates WHERE id=1 AND status='pending'").fetchone()
+        self.conn.execute("UPDATE memory_candidates SET status='approved' WHERE id=1")
+        self.conn.execute("INSERT INTO memory_items(profile_id,kind,text,source_session_id,approved_at_ms,embedding_status) VALUES (?,?,?,?,2,'none')", (profile, kind, text, source))
+        self.assertEqual(self.conn.execute("SELECT source_text,entity,norm_status FROM memory_items").fetchone(), (None, None, "none"))
+        self.assertEqual(self.conn.execute("SELECT source_text,entity,norm_status,status FROM memory_candidates").fetchone(), ("verbatim fixture", "subject", "llm", "approved"))
+
+    def test_manual_item_restore_returns_verbatim_provenance_once(self):
+        self.conn.execute("INSERT INTO memory_items(profile_id,kind,text,approved_at_ms,source_text,entity,norm_status) VALUES ('default','note','rewritten fixture',1,'verbatim fixture','subject','llm')")
+        self.conn.execute("UPDATE memory_items SET text=source_text,entity=NULL,norm_status='none',source_text=NULL WHERE id=1 AND source_text IS NOT NULL")
+        self.assertEqual(self.conn.execute("SELECT text,source_text,entity,norm_status FROM memory_items").fetchone(), ("verbatim fixture", None, None, "none"))
+        before = self.conn.total_changes
+        self.conn.execute("UPDATE memory_items SET text=source_text,entity=NULL,norm_status='none',source_text=NULL WHERE id=1 AND source_text IS NOT NULL")
+        self.assertEqual(self.conn.total_changes, before)
+
+    def test_active_memory_query_excludes_pending_candidates_and_archived_items(self):
+        self.conn.execute("INSERT INTO memory_candidates(profile_id,kind,text,created_at_ms) VALUES ('default','fact','pending fixture',1)")
+        self.conn.execute("INSERT INTO memory_items(profile_id,kind,text,approved_at_ms) VALUES ('default','note','active fixture',1)")
+        self.conn.execute("INSERT INTO memory_items(profile_id,kind,text,approved_at_ms,archived_at_ms) VALUES ('default','note','archived fixture',2,3)")
+        self.conn.execute("INSERT INTO memory_items(profile_id,kind,text,approved_at_ms) VALUES ('other','note','other profile',4)")
+        active = self.conn.execute("SELECT text FROM memory_items WHERE profile_id='default' AND archived_at_ms IS NULL ORDER BY approved_at_ms DESC LIMIT -1").fetchall()
+        self.assertEqual(active, [("active fixture",)])
+        self.assertEqual(self.conn.execute("SELECT status FROM memory_candidates").fetchone()[0], "pending")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -49,4 +49,17 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - Three bounded source-linked feature contracts added; 83 unique source references indexed after spotcheck corrections. Caller-level session dispatch downgraded blanket UI-blocking claim to hypothesis; original Grok counts are now 39 confirmed mechanisms, 75 hypotheses, 5 rejected.
 - Canonical report/claim/receipt/reference/count validation added; 24 tests pass (20 helper/provenance + 4 real-migration SQL fixtures). Tracked-only recovery found CRLF/LF license-byte drift, handled only by exact recorded baseline Git hash forms. Exact covering-SHA portable recovery at `059a04b1b90017fab032c25fc93d68b2be1f39eb` passed all 24 tests plus verify/checkpoint/recover with Git-archived files only, no raw reports or prior DB.
 - Short Gemini feature-counterevidence spotcheck workflow-3 completed and was collected; corrections preserve its receipt without whole-project acceptance. Managed local Whisper is large-v3-turbo Q8, meeting-ending is a status hint, and successful diarization rerun can replace manual names.
-- Eleven selected historical review corrections recorded. No production files changed, native builds/services/raw-report mutation/Astra/new Grok calls. Next: publish verified feature/recovery checkpoint and continue remaining feature contracts/all-language coverage.
+- Eleven selected historical review corrections recorded. No production files changed, native builds/services/raw-report mutation/Astra/new Grok calls. Published through `96936ee8`; continue remaining feature contracts/all-language coverage.
+
+## Continuation round 2 scope
+
+- Inspect and document AI protocol/provider and vision routes, managed local lifecycle/deep-lock boundaries, read-aloud/OCR sidecar contracts, and personal-memory consent/CRUD/retrieval/provenance chains.
+- Preserve exact baseline and source references; source comments do not override executed implementation. Tests mentioned in source remain unexecuted unless this round actually runs a relevant local research fixture.
+- No production edits or native execution. Extend only task-owned feature/evidence records and reuse existing checkpoint checks. Verify linked paths/ranges, counterevidence and publication hashes before committing/pushing the next coherent checkpoint.
+
+## Continuation round 2 outcome
+
+- Six more contracts added: nine source-linked features, 277 references. Original Grok 119-ID counts stay 39/75/5 after Windows TTS attach counterevidence correction.
+- TTS startup warm exists, Windows TTS JobObject attaches, OCR uses guarded memory/stdin/stdout not tempfile; direct source seam tests now cover these easily misread facts. Memory approval omits V2 provenance fields in new items, tested via SQL shape.
+- Workflow-4 short Gemini counterevidence returned; coordinator accepted queue/provenance caveats, rejected misquoted/stale claims and disproved assumed Codex exclusive-summary reachability. No Astra/new Grok.
+- 34 research tests pass (20 recovery/provenance, seven SQL, seven source seams); no production source changed. Parser research done with no package install. Next: covering-SHA portable repeat and GitHub publication, then remaining feature/all-language/native acceptance work.

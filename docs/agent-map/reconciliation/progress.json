@@ -13,13 +13,14 @@
   "transport_jobs_settled": [
     "workflow-1",
     "workflow-2",
-    "workflow-3"
+    "workflow-3",
+    "workflow-4"
   ],
   "semantic_acceptance": false,
   "independent_watchdog": false,
   "checkpoint_tests_passed": 20,
   "native_tests_run": false,
-  "next_step": "Complete remaining feature contracts and all-language coverage, continue source/caller reconciliation before native hypothesis testing; full project and independent native acceptance remain pending.",
+  "next_step": "Commit/push round2 contracts and exact candidate portable verification; complete remaining KB/archive/summary/coaching/update/release/MLX/Hermes/native feature chains and pinned parser setup, then scoped native acceptance.",
   "remaining_hypothesis_ids": [
     "wave1_worker1_persistence-C02",
     "wave1_worker1_persistence-C05",
@@ -97,13 +98,15 @@
     "wave4_worker3_cicd-C10",
     "wave4_worker3_cicd-C12"
   ],
-  "feature_contracts_source_inspected": 3,
-  "continuation_round": 1,
-  "sql_contract_tests_passed": 4,
-  "total_research_tests_passed": 24,
-  "source_feature_references": 83,
-  "historical_review_assertions_corrected": 11,
+  "feature_contracts_source_inspected": 9,
+  "continuation_round": 2,
+  "sql_contract_tests_passed": 7,
+  "total_research_tests_passed": 34,
+  "source_feature_references": 277,
+  "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
   "portable_recovery_tested_commit": "059a04b1b90017fab032c25fc93d68b2be1f39eb",
-  "portable_recovery_result": "PASS exact tracked-only candidate: 24 tests and verify/checkpoint/recover"
+  "portable_recovery_result": "PASS exact tracked-only candidate: 24 tests and verify/checkpoint/recover",
+  "source_seam_tests_passed": 7,
+  "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded"
 }

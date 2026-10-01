@@ -7,7 +7,7 @@ This directory contains a historical heuristic index and architectural notes, no
 - [Reconciliation task](../goal-agent-map-reconciliation.md): approved scope, constraints and remaining work.
 - [Frozen evidence snapshot](reconciliation/snapshot.json): exact source baseline and SHA-256 hashes of the existing Grok reports.
 - [Grok summary](reconciliation/SUMMARY.md) and [candidate register](reconciliation/candidates.json): all 119 original claims source-triaged; 39 source mechanisms confirmed, 75 hypotheses and 5 rejected. Caller-level follow-up corrected an earlier UI-thread assumption. No native reproduction or independent acceptance is implied.
-- [Source-linked features](features/README.md): live transcription, speaker diarization and session lifecycle/storage contracts with exact source references and verification limits.
+- [Source-linked features](features/README.md): nine bounded contracts covering speech/session/storage, AI/vision/local models, TTS/OCR, personal memory, config transfer and hotkeys/window/capture. Source references and limits are explicit; this is not complete project coverage.
 - [Model registry](reconciliation/speech-models.md): distinguishes transcription, speaker diarization, CoreML history and source-versus-release status.
 - [Continuation queue](reconciliation/NEXT-STEPS.md): exact remaining full-map and native evidence work.
 - [Artifact manifest](manifest.json): measured record counts, hashes and explicit completeness limits.

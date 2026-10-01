@@ -2,10 +2,333 @@
   "schema_version": 1,
   "features": [
     {
+      "id": "ai-and-vision-routing",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/ai-and-vision-routing.md",
+      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 746,
+          "end_line": 832
+        },
+        {
+          "path": "overlay-backend/src/ai/types.rs",
+          "start_line": 46,
+          "end_line": 85
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 845,
+          "end_line": 857
+        },
+        {
+          "path": "overlay-backend/src/credentials.rs",
+          "start_line": 1,
+          "end_line": 26
+        },
+        {
+          "path": "overlay-backend/src/credentials.rs",
+          "start_line": 132,
+          "end_line": 217
+        },
+        {
+          "path": "overlay-backend/src/ai/provider.rs",
+          "start_line": 14,
+          "end_line": 188
+        },
+        {
+          "path": "overlay-backend/src/ai/completion.rs",
+          "start_line": 32,
+          "end_line": 73
+        },
+        {
+          "path": "overlay-backend/src/ai/completion.rs",
+          "start_line": 136,
+          "end_line": 275
+        },
+        {
+          "path": "overlay-backend/src/ai/stream.rs",
+          "start_line": 33,
+          "end_line": 136
+        },
+        {
+          "path": "overlay-backend/src/ai/control.rs",
+          "start_line": 7,
+          "end_line": 15
+        },
+        {
+          "path": "overlay-backend/src/codex_subscription.rs",
+          "start_line": 158,
+          "end_line": 182
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 736,
+          "end_line": 756
+        },
+        {
+          "path": "overlay-backend/src/ai/stream.rs",
+          "start_line": 155,
+          "end_line": 224
+        },
+        {
+          "path": "overlay-backend/src/ai/stream.rs",
+          "start_line": 226,
+          "end_line": 363
+        },
+        {
+          "path": "overlay-backend/src/ai/control.rs",
+          "start_line": 16,
+          "end_line": 128
+        },
+        {
+          "path": "overlay-backend/src/ai/completion.rs",
+          "start_line": 237,
+          "end_line": 243
+        },
+        {
+          "path": "overlay-backend/src/ai/stream.rs",
+          "start_line": 198,
+          "end_line": 204
+        },
+        {
+          "path": "overlay-backend/src/ai/prompt.rs",
+          "start_line": 5,
+          "end_line": 126
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_routes.rs",
+          "start_line": 15,
+          "end_line": 86
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_ask.rs",
+          "start_line": 420,
+          "end_line": 651
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
+          "start_line": 119,
+          "end_line": 188
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
+          "start_line": 537,
+          "end_line": 699
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 1810,
+          "end_line": 1905
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 883,
+          "end_line": 949
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/vision_capture.rs",
+          "start_line": 475,
+          "end_line": 508
+        },
+        {
+          "path": "overlay-backend/src/vision.rs",
+          "start_line": 19,
+          "end_line": 28
+        },
+        {
+          "path": "overlay-backend/src/vision.rs",
+          "start_line": 128,
+          "end_line": 224
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/vision_capture.rs",
+          "start_line": 217,
+          "end_line": 235
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/vision_capture.rs",
+          "start_line": 646,
+          "end_line": 690
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/vision_capture.rs",
+          "start_line": 754,
+          "end_line": 891
+        },
+        {
+          "path": "overlay-backend/src/codex_subscription.rs",
+          "start_line": 1,
+          "end_line": 51
+        },
+        {
+          "path": "overlay-backend/src/codex_subscription.rs",
+          "start_line": 23,
+          "end_line": 36
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 574,
+          "end_line": 599
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 813,
+          "end_line": 846
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 445,
+          "end_line": 470
+        },
+        {
+          "path": "overlay-backend/src/ai/tests.rs"
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_routes.rs",
+          "start_line": 88,
+          "end_line": 146
+        }
+      ],
+      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
+      "native_verification": "not_run",
+      "independent_acceptance": false
+    },
+    {
+      "id": "hotkeys-windows-and-capture",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/hotkeys-windows-and-capture.md",
+      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host/hotkeys.rs",
+          "start_line": 74,
+          "end_line": 231
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/hotkeys.rs",
+          "start_line": 30,
+          "end_line": 64
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 2519,
+          "end_line": 2819
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 2701,
+          "end_line": 2787
+        },
+        {
+          "path": "slint-experiment/src/win32.rs",
+          "start_line": 127,
+          "end_line": 135
+        },
+        {
+          "path": "slint-experiment/src/win32.rs",
+          "start_line": 1060,
+          "end_line": 1069
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 285,
+          "end_line": 378
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_window.rs",
+          "start_line": 259,
+          "end_line": 318
+        },
+        {
+          "path": "slint-experiment/src/win32.rs",
+          "start_line": 196,
+          "end_line": 274
+        },
+        {
+          "path": "slint-experiment/src/win32.rs",
+          "start_line": 389,
+          "end_line": 434
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/kbd_shortcuts.rs"
+        },
+        {
+          "path": "slint-experiment/src/win32.rs",
+          "start_line": 858,
+          "end_line": 876
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_window.rs",
+          "start_line": 374,
+          "end_line": 450
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 54,
+          "end_line": 99
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 122,
+          "end_line": 175
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 176,
+          "end_line": 188
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 315,
+          "end_line": 354
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/window_lifecycle.rs",
+          "start_line": 493,
+          "end_line": 589
+        },
+        {
+          "path": "slint-experiment/src/win32.rs",
+          "start_line": 323,
+          "end_line": 359
+        },
+        {
+          "path": "slint-experiment/src/win32.rs",
+          "start_line": 1097,
+          "end_line": 1113
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/vision_capture.rs",
+          "start_line": 192,
+          "end_line": 244
+        },
+        {
+          "path": "slint-experiment/src/win32.rs",
+          "start_line": 551,
+          "end_line": 612
+        },
+        {
+          "path": "slint-experiment/src/native/windows/screen.rs",
+          "start_line": 3,
+          "end_line": 87
+        },
+        {
+          "path": "slint-experiment/src/native/macos/screen.m",
+          "start_line": 112,
+          "end_line": 182
+        }
+      ],
+      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
+      "native_verification": "not_run",
+      "independent_acceptance": false
+    },
+    {
       "id": "live-transcription",
       "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
       "contract": "docs/agent-map/features/live-transcription.md",
-      "review_state": "manual_source_inspection_after_bounded_gemini_spotcheck",
+      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
       "source_references": [
         {
           "path": "slint-experiment/ui/settings_panel.slint",
@@ -148,141 +471,537 @@
           "end_line": 1990
         }
       ],
-      "scope": "principal production chain and source-declared tests, not all lines/symbols",
+      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
       "native_verification": "not_run",
       "independent_acceptance": false
     },
     {
-      "id": "speaker-diarization",
+      "id": "managed-local-ai",
       "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
-      "contract": "docs/agent-map/features/speaker-diarization.md",
-      "review_state": "manual_source_inspection_after_bounded_gemini_spotcheck",
+      "contract": "docs/agent-map/features/managed-local-ai.md",
+      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
       "source_references": [
         {
-          "path": "slint-experiment/ui/transcript.slint",
-          "start_line": 464,
-          "end_line": 606
+          "path": "overlay-backend/src/local_ai/model_choice.rs",
+          "start_line": 9,
+          "end_line": 34
         },
         {
-          "path": "slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs",
-          "start_line": 890,
-          "end_line": 984
+          "path": "overlay-backend/src/local_ai/model_choice.rs",
+          "start_line": 240,
+          "end_line": 307
         },
         {
-          "path": "slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs",
-          "start_line": 519,
-          "end_line": 571
+          "path": "overlay-backend/src/local_ai/model_choice.rs",
+          "start_line": 36,
+          "end_line": 119
         },
         {
-          "path": "slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs",
-          "start_line": 1135,
-          "end_line": 1232
-        },
-        {
-          "path": "overlay-backend/src/diarize.rs",
-          "start_line": 162,
-          "end_line": 244
-        },
-        {
-          "path": "overlay-backend/src/diarize.rs",
-          "start_line": 397,
-          "end_line": 426
-        },
-        {
-          "path": "overlay-backend/src/diarize.rs",
-          "start_line": 246,
-          "end_line": 278
-        },
-        {
-          "path": "overlay-backend/src/nemotron_diar.rs",
-          "start_line": 15,
-          "end_line": 125
-        },
-        {
-          "path": "overlay-backend/src/nemotron_diar.rs",
-          "start_line": 125,
-          "end_line": 151
-        },
-        {
-          "path": "overlay-backend/src/diarize.rs",
-          "start_line": 429,
-          "end_line": 558
-        },
-        {
-          "path": "overlay-backend/src/diarize.rs",
-          "start_line": 357,
-          "end_line": 373
-        },
-        {
-          "path": "overlay-backend/src/diarize.rs",
-          "start_line": 83,
-          "end_line": 118
-        },
-        {
-          "path": "overlay-backend/src/diar_install.rs",
-          "start_line": 139,
-          "end_line": 212
-        },
-        {
-          "path": "overlay-backend/src/diar_install.rs",
-          "start_line": 215,
-          "end_line": 267
-        },
-        {
-          "path": "overlay-backend/src/diar_install.rs",
-          "start_line": 386,
-          "end_line": 483
-        },
-        {
-          "path": "scripts/build-slint-release.ps1",
-          "start_line": 75,
+          "path": "overlay-backend/src/local_ai/hardware_profile.rs",
+          "start_line": 6,
           "end_line": 109
         },
         {
-          "path": "scripts/slint-installer.nsi",
-          "start_line": 68,
-          "end_line": 83
+          "path": "slint-experiment/src/bin/overlay_host/settings_local_ai.rs",
+          "start_line": 26,
+          "end_line": 105
         },
         {
-          "path": "slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs",
-          "start_line": 1175,
-          "end_line": 1221
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 746,
+          "end_line": 776
         },
         {
-          "path": "slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs",
-          "start_line": 640,
-          "end_line": 697
+          "path": "overlay-backend/src/local_ai/model_state.rs",
+          "start_line": 175,
+          "end_line": 228
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 377,
+          "end_line": 420
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 35,
+          "end_line": 112
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 2854,
+          "end_line": 3000
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 2339,
+          "end_line": 2410
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 2784,
+          "end_line": 2838
+        },
+        {
+          "path": "overlay-backend/src/local_ai/model_state.rs",
+          "start_line": 303,
+          "end_line": 340
+        },
+        {
+          "path": "overlay-backend/src/local_ai/model_state.rs",
+          "start_line": 385,
+          "end_line": 430
+        },
+        {
+          "path": "overlay-backend/src/local_ai/model_state.rs",
+          "start_line": 479,
+          "end_line": 497
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 1949,
+          "end_line": 2034
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 910,
+          "end_line": 928
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 1417,
+          "end_line": 1445
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 1324,
+          "end_line": 1405
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 1212,
+          "end_line": 1276
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 2057,
+          "end_line": 2108
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 1603,
+          "end_line": 1729
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 1735,
+          "end_line": 1872
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 3062,
+          "end_line": 3088
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 3091,
+          "end_line": 3145
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 1594,
+          "end_line": 1602
+        },
+        {
+          "path": "overlay-backend/src/deep_lock.rs",
+          "start_line": 1,
+          "end_line": 71
+        },
+        {
+          "path": "overlay-backend/src/ai/control.rs",
+          "start_line": 105,
+          "end_line": 128
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/mlx_lifecycle.rs",
+          "start_line": 86,
+          "end_line": 140
+        },
+        {
+          "path": "overlay-backend/src/local_ai/tests.rs"
+        },
+        {
+          "path": "overlay-backend/src/deep_lock.rs",
+          "start_line": 215,
+          "end_line": 417
+        }
+      ],
+      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
+      "native_verification": "not_run",
+      "independent_acceptance": false
+    },
+    {
+      "id": "personal-memory",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/personal-memory.md",
+      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
+      "source_references": [
+        {
+          "path": "overlay-backend/migrations/0003_memory.sql"
+        },
+        {
+          "path": "overlay-backend/migrations/0005_memory_v2.sql"
         },
         {
           "path": "overlay-backend/src/persistence/sqlite_store.rs",
-          "start_line": 284,
-          "end_line": 305
+          "start_line": 445,
+          "end_line": 576
         },
         {
           "path": "overlay-backend/src/persistence/sqlite_store.rs",
-          "start_line": 243,
-          "end_line": 320
+          "start_line": 579,
+          "end_line": 600
         },
         {
-          "path": "overlay-backend/migrations/0006_diarization.sql"
+          "path": "overlay-backend/src/persistence/sqlite_store.rs",
+          "start_line": 602,
+          "end_line": 637
         },
         {
-          "path": "overlay-backend/src/nemotron_diar.rs",
-          "start_line": 154,
+          "path": "overlay-backend/src/persistence/sqlite_store.rs",
+          "start_line": 639,
+          "end_line": 687
+        },
+        {
+          "path": "overlay-backend/src/persistence/sqlite_store.rs",
+          "start_line": 84,
+          "end_line": 151
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_memory.rs",
+          "start_line": 26,
+          "end_line": 150
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_memory.rs",
+          "start_line": 152,
+          "end_line": 258
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_copy.rs",
+          "start_line": 312,
+          "end_line": 356
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_copy.rs",
+          "start_line": 447,
+          "end_line": 561
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs",
+          "start_line": 159,
+          "end_line": 229
+        },
+        {
+          "path": "overlay-backend/src/memory/candidates.rs",
+          "start_line": 21,
+          "end_line": 110
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_memory.rs",
+          "start_line": 125,
+          "end_line": 150
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_memory.rs",
+          "start_line": 326,
+          "end_line": 353
+        },
+        {
+          "path": "overlay-backend/src/memory/context_builder.rs",
+          "start_line": 165,
           "end_line": 190
         },
         {
-          "path": "overlay-backend/src/diarize.rs",
-          "start_line": 560,
-          "end_line": 750
+          "path": "overlay-backend/src/memory/context_builder.rs",
+          "start_line": 103,
+          "end_line": 161
         },
         {
-          "path": "overlay-backend/src/diar_install.rs",
-          "start_line": 505,
-          "end_line": 522
+          "path": "overlay-backend/src/memory/context_builder.rs",
+          "start_line": 20,
+          "end_line": 100
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_ask.rs",
+          "start_line": 563,
+          "end_line": 592
+        },
+        {
+          "path": "slint-experiment/src/slint_session.rs",
+          "start_line": 1036,
+          "end_line": 1044
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_followup.rs",
+          "start_line": 542,
+          "end_line": 554
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_ptt.rs",
+          "start_line": 379,
+          "end_line": 392
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/vision_capture.rs",
+          "start_line": 778,
+          "end_line": 797
+        },
+        {
+          "path": "overlay-backend/src/memory/summary_ref.rs",
+          "start_line": 34,
+          "end_line": 39
+        },
+        {
+          "path": "overlay-backend/src/memory/summary_ref.rs",
+          "start_line": 128,
+          "end_line": 190
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 2147,
+          "end_line": 2156
+        },
+        {
+          "path": "overlay-backend/src/memory/normalize.rs",
+          "start_line": 557,
+          "end_line": 633
+        },
+        {
+          "path": "overlay-backend/src/memory/normalize.rs",
+          "start_line": 493,
+          "end_line": 513
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_memory.rs",
+          "start_line": 262,
+          "end_line": 324
+        },
+        {
+          "path": "overlay-backend/src/memory/normalize.rs",
+          "start_line": 703,
+          "end_line": 956
+        },
+        {
+          "path": "overlay-backend/src/memory/context_builder.rs",
+          "start_line": 192,
+          "end_line": 344
+        },
+        {
+          "path": "overlay-backend/src/memory/summary_ref.rs",
+          "start_line": 192,
+          "end_line": 284
+        },
+        {
+          "path": "overlay-backend/src/persistence/sqlite_store.rs",
+          "start_line": 1004,
+          "end_line": 1343
         }
       ],
-      "scope": "principal production chain and source-declared tests, not all lines/symbols",
+      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
+      "native_verification": "not_run",
+      "independent_acceptance": false
+    },
+    {
+      "id": "read-aloud-and-ocr",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/read-aloud-and-ocr.md",
+      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
+      "source_references": [
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 2687,
+          "end_line": 2809
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/read_aloud.rs",
+          "start_line": 20,
+          "end_line": 116
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/read_aloud.rs",
+          "start_line": 193,
+          "end_line": 263
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_voice.rs",
+          "start_line": 100,
+          "end_line": 184
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 519,
+          "end_line": 535
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 1071,
+          "end_line": 1124
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 1431,
+          "end_line": 1456
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 1404,
+          "end_line": 1428
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 864,
+          "end_line": 940
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 1236,
+          "end_line": 1282
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 1284,
+          "end_line": 1428
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 968,
+          "end_line": 1044
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 950,
+          "end_line": 961
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 483,
+          "end_line": 562
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 285,
+          "end_line": 420
+        },
+        {
+          "path": "suflyor-tts/src/main.rs",
+          "start_line": 123,
+          "end_line": 352
+        },
+        {
+          "path": "suflyor-teratts/src/main.rs",
+          "start_line": 1,
+          "end_line": 25
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 1594,
+          "end_line": 1602
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 1566,
+          "end_line": 1591
+        },
+        {
+          "path": "suflyor-tts/src/engine.rs",
+          "start_line": 13,
+          "end_line": 96
+        },
+        {
+          "path": "suflyor-tts/src/playback.rs"
+        },
+        {
+          "path": "suflyor-tts/src/playback_macos.rs"
+        },
+        {
+          "path": "suflyor-teratts/src/playback.rs"
+        },
+        {
+          "path": "suflyor-teratts/src/playback_macos.rs"
+        },
+        {
+          "path": "suflyor-wsola/src/lib.rs"
+        },
+        {
+          "path": "overlay-backend/src/stt.rs",
+          "start_line": 379,
+          "end_line": 445
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 2087,
+          "end_line": 2123
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/vision_capture.rs",
+          "start_line": 78,
+          "end_line": 100
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/vision_capture.rs",
+          "start_line": 646,
+          "end_line": 690
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/vision_capture.rs",
+          "start_line": 153,
+          "end_line": 187
+        },
+        {
+          "path": "overlay-backend/src/ocr.rs",
+          "start_line": 96,
+          "end_line": 139
+        },
+        {
+          "path": "overlay-backend/src/ocr.rs",
+          "start_line": 132,
+          "end_line": 153
+        },
+        {
+          "path": "overlay-backend/src/tts_install.rs",
+          "start_line": 48,
+          "end_line": 65
+        },
+        {
+          "path": "overlay-backend/src/tts_install.rs",
+          "start_line": 98,
+          "end_line": 198
+        },
+        {
+          "path": "overlay-backend/src/teratts_install.rs",
+          "start_line": 38,
+          "end_line": 95
+        },
+        {
+          "path": "overlay-backend/src/teratts_install.rs",
+          "start_line": 120,
+          "end_line": 154
+        },
+        {
+          "path": "overlay-backend/src/teratts_install.rs",
+          "start_line": 237,
+          "end_line": 289
+        },
+        {
+          "path": "overlay-backend/src/ocr_install.rs",
+          "start_line": 24,
+          "end_line": 83
+        },
+        {
+          "path": "suflyor-teratts/NOTICE.md"
+        }
+      ],
+      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
       "native_verification": "not_run",
       "independent_acceptance": false
     },
@@ -290,7 +1009,7 @@
       "id": "session-lifecycle-and-storage",
       "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
       "contract": "docs/agent-map/features/session-lifecycle-and-storage.md",
-      "review_state": "manual_source_inspection_after_bounded_gemini_spotcheck",
+      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
       "source_references": [
         {
           "path": "slint-experiment/src/bin/overlay_host_windows.rs",
@@ -435,7 +1154,298 @@
           "end_line": 1403
         }
       ],
-      "scope": "principal production chain and source-declared tests, not all lines/symbols",
+      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
+      "native_verification": "not_run",
+      "independent_acceptance": false
+    },
+    {
+      "id": "settings-and-portable-config",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/settings-and-portable-config.md",
+      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 1353,
+          "end_line": 1380
+        },
+        {
+          "path": "overlay-backend/src/paths.rs",
+          "start_line": 22,
+          "end_line": 40
+        },
+        {
+          "path": "overlay-backend/src/paths.rs",
+          "start_line": 60,
+          "end_line": 98
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 1402,
+          "end_line": 1503
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 1383,
+          "end_line": 1400
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 1561,
+          "end_line": 1639
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 2063,
+          "end_line": 2070
+        },
+        {
+          "path": "overlay-backend/src/credentials.rs",
+          "start_line": 1,
+          "end_line": 26
+        },
+        {
+          "path": "overlay-backend/src/credentials.rs",
+          "start_line": 133,
+          "end_line": 217
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 104,
+          "end_line": 145
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 302,
+          "end_line": 312
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 1604,
+          "end_line": 1979
+        },
+        {
+          "path": "slint-experiment/tests/settings_reset_guard.rs",
+          "start_line": 20,
+          "end_line": 26
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_ai.rs",
+          "start_line": 727,
+          "end_line": 832
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_stt.rs",
+          "start_line": 14,
+          "end_line": 29
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 423,
+          "end_line": 447
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 527,
+          "end_line": 582
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 1645,
+          "end_line": 1662
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 1664,
+          "end_line": 1687
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 695,
+          "end_line": 728
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 1696,
+          "end_line": 1755
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_import_export.rs",
+          "start_line": 86,
+          "end_line": 120
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_import_export.rs",
+          "start_line": 126,
+          "end_line": 184
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 2045,
+          "end_line": 2056
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 1758,
+          "end_line": 1770
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 1777,
+          "end_line": 1797
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 1862,
+          "end_line": 1899
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_import_export.rs",
+          "start_line": 188,
+          "end_line": 238
+        },
+        {
+          "path": "overlay-backend/src/config/tests.rs"
+        },
+        {
+          "path": "slint-experiment/tests/settings_reset_guard.rs"
+        }
+      ],
+      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
+      "native_verification": "not_run",
+      "independent_acceptance": false
+    },
+    {
+      "id": "speaker-diarization",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/speaker-diarization.md",
+      "review_state": "manual_source_inspection; bounded Gemini counterevidence where recorded",
+      "source_references": [
+        {
+          "path": "slint-experiment/ui/transcript.slint",
+          "start_line": 464,
+          "end_line": 606
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs",
+          "start_line": 890,
+          "end_line": 984
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs",
+          "start_line": 519,
+          "end_line": 571
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs",
+          "start_line": 1135,
+          "end_line": 1232
+        },
+        {
+          "path": "overlay-backend/src/diarize.rs",
+          "start_line": 162,
+          "end_line": 244
+        },
+        {
+          "path": "overlay-backend/src/diarize.rs",
+          "start_line": 397,
+          "end_line": 426
+        },
+        {
+          "path": "overlay-backend/src/diarize.rs",
+          "start_line": 246,
+          "end_line": 278
+        },
+        {
+          "path": "overlay-backend/src/nemotron_diar.rs",
+          "start_line": 15,
+          "end_line": 125
+        },
+        {
+          "path": "overlay-backend/src/nemotron_diar.rs",
+          "start_line": 125,
+          "end_line": 151
+        },
+        {
+          "path": "overlay-backend/src/diarize.rs",
+          "start_line": 429,
+          "end_line": 558
+        },
+        {
+          "path": "overlay-backend/src/diarize.rs",
+          "start_line": 357,
+          "end_line": 373
+        },
+        {
+          "path": "overlay-backend/src/diarize.rs",
+          "start_line": 83,
+          "end_line": 118
+        },
+        {
+          "path": "overlay-backend/src/diar_install.rs",
+          "start_line": 139,
+          "end_line": 212
+        },
+        {
+          "path": "overlay-backend/src/diar_install.rs",
+          "start_line": 215,
+          "end_line": 267
+        },
+        {
+          "path": "overlay-backend/src/diar_install.rs",
+          "start_line": 386,
+          "end_line": 483
+        },
+        {
+          "path": "scripts/build-slint-release.ps1",
+          "start_line": 75,
+          "end_line": 109
+        },
+        {
+          "path": "scripts/slint-installer.nsi",
+          "start_line": 68,
+          "end_line": 83
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs",
+          "start_line": 1175,
+          "end_line": 1221
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs",
+          "start_line": 640,
+          "end_line": 697
+        },
+        {
+          "path": "overlay-backend/src/persistence/sqlite_store.rs",
+          "start_line": 284,
+          "end_line": 305
+        },
+        {
+          "path": "overlay-backend/src/persistence/sqlite_store.rs",
+          "start_line": 243,
+          "end_line": 320
+        },
+        {
+          "path": "overlay-backend/migrations/0006_diarization.sql"
+        },
+        {
+          "path": "overlay-backend/src/nemotron_diar.rs",
+          "start_line": 154,
+          "end_line": 190
+        },
+        {
+          "path": "overlay-backend/src/diarize.rs",
+          "start_line": 560,
+          "end_line": 750
+        },
+        {
+          "path": "overlay-backend/src/diar_install.rs",
+          "start_line": 505,
+          "end_line": 522
+        }
+      ],
+      "scope": "principal chain/source declared tests, not all source line/symbol semantics",
       "native_verification": "not_run",
       "independent_acceptance": false
     }

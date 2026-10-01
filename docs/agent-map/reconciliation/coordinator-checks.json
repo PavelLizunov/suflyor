@@ -136,6 +136,10 @@
     {
       "id": "wave3_worker1_bridge-C07",
       "reason": "Caller-level threading check downgrades blanket UI-blocking claim from confirmed to hypothesis."
+    },
+    {
+      "id": "wave2_worker3_tts-C03",
+      "reason": "Exact baseline has Windows TTS JobObject attach; earlier absence claim corrected. Remaining platform/attach-failure hypothesis explicit."
     }
   ]
 }
