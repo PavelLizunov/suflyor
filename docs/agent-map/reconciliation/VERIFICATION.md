@@ -1,12 +1,12 @@
 # Reconciliation verification evidence
 
-## Round 7 — native FFI census/ownership (local, covering SHA pending)
+## Round 7 — native FFI census/ownership (exact covering SHA tested)
 
 - Seven production macOS C/Objective-C bridges/175 Rust input sources frozen-hashed: 37 nonstatic C ABI exports, 37 matching Rust foreign declarations, 57 direct CST calls; all paired by name, no ABI/cfg/linker/type/reachability proof. [Inventory](../native/README.md), [ownership/caller contract](../features/native-macos-ffi-and-ownership.md).
 - Eight new parser fixtures and six source ownership assertions; **103 research tests passed locally, zero skips** with unchanged pinned parser/PO environment. Native source-hash/range/name/acceptance validator errors empty; contract registry 18/510 ranges; original 39/75/5 classifications unchanged.
 - Draft assumptions corrected by source/fixtures before seal: Rust validates screenshot size before slice/copy; OCR null success returns empty; system tap exclusions empty (not self-excluding); native safe-release failures deliberately retain state; mic-start recv has no timeout, unlike asynchronous system startup.
 - Source-only concerns: screenshot late callback retains image after 5s timeout without inspected cancellation, synchronous host screenshot may block UI, system Pending detach/native state retention; none natively reproduced or elevated to original-Grok bugs. Platform build/permissions/clipboard/audio/HAL/capture/ABI/model tests **not run**, independent review unavailable/not accepted.
-- Covering exact-SHA archive/reproduction pending; local count/source checks not whole-objective acceptance.
+- Exact **`acbc312a06b79062ec270b4f4f676198e6117a5e`** Git archive: **103 research +3 mocked Hermes tests passed, zero skips**; frozen checkpoint issues empty (18 contracts/510 ranges), syntax/schema/native validators errors empty. Full native census generation reproduced committed inventory byte-identically, SHA256 `8e1ee145f1024022d804465accf16a001d92b6a59621561ff2bce1a555338a1e`; [portable native receipt](portable-recovery-native.json). Parsers supplied separately, no native app/ABI/independent/whole-objective acceptance.
 
 
 ## Round 6 — config/UI/translation/assets inventory (exact covering SHA tested)
