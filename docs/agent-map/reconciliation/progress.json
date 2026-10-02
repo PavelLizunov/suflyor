@@ -106,8 +106,8 @@
   "source_feature_references": 709,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
-  "portable_recovery_tested_commit": "e9612309c4936f1ebfafd91b03a898f6034b388c",
-  "portable_recovery_result": "PASS 188+3 zero skips exact archive; 26 contracts/709 refs; ledger valid/byte-identical; stdlib SQLite not bundled rusqlite",
+  "portable_recovery_tested_commit": "01f91c94a6152eeff9979dfb35f91fd34819f381",
+  "portable_recovery_result": "PASS 194+3 zero skips exact archive; journal C05/C06 bounded; no Rust writer fault",
   "source_seam_tests_passed": 33,
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
@@ -253,5 +253,5 @@
     "wave1_worker1_persistence-C05",
     "wave1_worker1_persistence-C06"
   ],
-  "journal_identity_portable_verification": "pending exact covering commit"
+  "journal_identity_portable_verification": "PASS exact 01f91c94a6152eeff9979dfb35f91fd34819f381; six temporary JSONL fixtures; C05 C06 remain hypotheses"
 }
