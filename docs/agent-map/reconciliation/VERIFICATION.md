@@ -2,8 +2,7 @@
 
 ## Round 52 — original window C05/C06 taskbar styling and bar centering (exact covering SHA tested)
 
-- [Evidence](hypothesis-window-geometry-taskbar.md)/[receipt](hypothesis-window-geometry-taskbar.json): six source fixtures target 380 research tests. `set_skip_taskbar` invokes `ShowWindow(SW_SHOWNOACTIVATE)` upon style bit change, and `apply_bar_stealth` calls it without checking `BAR_TRAY_HIDDEN`.
-- `apply_overlay_hwnd` calculates bar centering using `get_window_rect(hwnd).unwrap_or(0)`, placing the bar left edge at the primary monitor midpoint if width is unmeasured, in contrast to `recenter_when_sized` which waits for the target width. No native display modifications were run. C05/C06 remain hypotheses; exact archive verified.
+- Exact **`1e930d948a1cd7baf982ca88a90da4c10b6c4725`** archive passed **380 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable window geometry/taskbar receipt](portable-recovery-window-geometry-taskbar.json). C05/C06 remain hypotheses; no native display modifications or window creation.
 
 ## Round 51 — original window C02/C04 stealth parking and registry scope (exact covering SHA tested)
 

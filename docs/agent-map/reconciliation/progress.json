@@ -438,5 +438,5 @@
     "wave3_worker2_window-C05",
     "wave3_worker2_window-C06"
   ],
-  "window_geometry_taskbar_portable_verification": "pending exact covering commit"
+  "window_geometry_taskbar_portable_verification": "PASS exact 1e930d948a1cd7baf982ca88a90da4c10b6c4725; six source fixtures; C05 C06 remain hypotheses"
 }
