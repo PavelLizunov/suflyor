@@ -571,5 +571,5 @@
     "wave2_worker4_local_ai-C01",
     "wave3_worker2_window-C11"
   ],
-  "local_ai_port_stealth_effective_portable_verification": "pending exact covering commit"
+  "local_ai_port_stealth_effective_portable_verification": "PASS exact 13071e3c8a9db0dd28f06492ab47170b53e3c889; six source fixtures; C01 C11 remain confirmed"
 }
