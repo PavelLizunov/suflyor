@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 47 — original local AI C08/C09 hardware profiles and context tokens (exact covering SHA tested)
+
+- [Evidence](hypothesis-local-ai-hardware-context.md)/[receipt](hypothesis-local-ai-hardware-context.json): six source fixtures target 350 research tests. `llama_server_args` injects `-ngl`, `--no-mmap`, and `-np 1` only for known profiles or macOS, omitting them on Windows `Unknown` hardware profiles.
+- `select_hardware_model_profile` normalizes VRAM only within ±1 GiB of 8/12/16 tiers (leaving other ratings as `Unknown`). `context_tokens` ignores the `_prep` parameter and clamps by live profile limits. No GPU probing or server execution was run. C08/C09 remain hypotheses; exact archive verified.
+
 ## Round 46 — original local AI C10/C11 JobObject and Whisper readiness (exact covering SHA tested)
 
 - Exact **`80c543fdfe8bcf3bfd4937775ef338ae606a1680`** archive passed **344 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable local AI JobObject/Whisper receipt](portable-recovery-local-ai-job-whisper.json). C10/C11 remain hypotheses; no server process execution or JobObject creation.
