@@ -80,22 +80,14 @@ async fn queued_stream_stops_when_receiver_is_dropped() {
 
 #[tokio::test]
 async fn complete_exclusive_does_not_deadlock_on_semaphore() {
-    let _stream_guard = STREAM_TEST_LOCK.lock().await;
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let base_url = format!("http://{}", listener.local_addr().unwrap());
-
-    std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
-        let mut request = [0_u8; 4_096];
-        let _ = std::io::Read::read(&mut stream, &mut request);
-        let resp = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 53\r\nConnection: close\r\n\r\n{\"choices\":[{\"message\":{\"content\":\"hello exclusive\"}}]}";
-        std::io::Write::write_all(&mut stream, resp).unwrap();
-        std::io::Write::flush(&mut stream).unwrap();
-    });
+    let (url, _captured) = serve_one_capture(
+        r#"{"choices":[{"message":{"content":"hello exclusive"}}]}"#,
+        "application/json",
+    );
 
     let res = tokio::time::timeout(
         std::time::Duration::from_secs(3),
-        complete_exclusive(&base_url, "", "test-model", Vec::new(), 10),
+        complete_exclusive(&url, "", "test-model", Vec::new(), 10),
     )
     .await;
 
