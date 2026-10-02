@@ -106,8 +106,8 @@
   "source_feature_references": 577,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
-  "portable_recovery_tested_commit": "48dbd31238b0c7c4ca123ffbc8e6e30c4f1091f0",
-  "portable_recovery_result": "PASS 138+3 zero skips exact archive; 20 contracts/553 ranges; SDK-name inventory valid/byte-identical; no native/type/independent acceptance",
+  "portable_recovery_tested_commit": "6853a54cad6f86e9397c7e72de0b75fb98775f2a",
+  "portable_recovery_result": "PASS 144+3 zero skips exact archive; 21 contracts/577 ranges; backend census valid/byte-identical; no storage/process/native execution",
   "source_seam_tests_passed": 33,
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
@@ -206,7 +206,7 @@
     "calls": 17,
     "resolved_symbol": false
   },
-  "credentials_process_portable_verification": "pending exact covering commit",
+  "credentials_process_portable_verification": "PASS exact 6853a54cad6f86e9397c7e72de0b75fb98775f2a; five files/28 imports/17 calls byte-identical; C03 C10 unchanged",
   "credentials_process_hypothesis_evidence_ids": [
     "wave2_worker3_tts-C03",
     "wave2_worker4_local_ai-C10"

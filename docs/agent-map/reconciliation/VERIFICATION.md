@@ -1,11 +1,11 @@
 # Reconciliation verification evidence
 
-## Round 13 — credentials/backend child ownership (covering SHA pending)
+## Round 13 — credentials/backend child ownership (exact covering SHA tested)
 
 - Five frozen backend SDK sources yield 28 imports/17 name-call candidates, no symbol/cfg/type resolution; host inventory unchanged. [Backend census](../native/backend-sdk-name-edges.md)/[storage and child contract](../features/credentials-and-managed-process-ownership.md); registry 21/577 ranges.
 - Six new source assertions; research total 144. Direct keys via credential slot/callback rather than Config; Windows temporary write blob zeroed/CredFree after UTF8 Result, Unix plaintext mode0700/0600/temp-write+flush/no sync_all/rename. No live secrets/read/write tests. Storage concurrency/durability/API errors remain unaccepted.
 - JobObject attach exists but unit-return/best-effort, zero failure cached; limit failure handle not explicitly closed. TTS broken-pipe drops Child without explicit wait/kill; Piper+Tera EOF Shutdown counterevidence, Nemotron ChildGuard kill/wait. Original TTS-C03/local_ai-C10 source hypotheses unchanged, no forced-parent-exit/native process repro.
-- Local/exact-SHA suite/regeneration pending; production/global/credential/process/model changes not performed, original counts 39/75/5 retained.
+- Exact **`6853a54cad6f86e9397c7e72de0b75fb98775f2a`** archive passed **144 research +3 mocked Hermes, zero skips**, frozen checkpoint issues empty (21 contracts/577 ranges), backend inventory validator zero errors and byte-identical generation SHA256 `0dfe1cc03ed6c03fe5a6f2fc8529f6e56876d47f737a7a70db8609927d6cf709`. [Portable receipt](portable-recovery-backend-sdk.json). Host SDK unchanged; no production/global/secret/process/model changes/native independent acceptance, 39/75/5 retained.
 
 
 ## Round 12 — selected Windows adapter ownership/SDK candidates (exact covering SHA tested)
