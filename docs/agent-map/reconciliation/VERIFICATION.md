@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 48 — original bridge C03/C04 generation fence and cancellation TOCTOU (exact covering SHA tested)
+
+- [Evidence](hypothesis-bridge-generation-fence.md)/[receipt](hypothesis-bridge-generation-fence.json): six source fixtures target 356 research tests. `maybe_spawn_auto_tile` mutates rate limits and prefix dedup queues prior to awaiting AI completion and before checking the session generation fence.
+- `transcript_forwarder` stamps auto-tile tasks with the current generation, which can observe the post-stop incremented generation if `stop_session` runs while the forwarder is executing synchronous code before hitting `.await`. No live task races were run. C03/C04 remain hypotheses; exact archive verified.
+
 ## Round 47 — original local AI C08/C09 hardware profiles and context tokens (exact covering SHA tested)
 
 - Exact **`2d6d586c666c4906baa4a390e5de813d530f889e`** archive passed **350 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable local AI hardware/context receipt](portable-recovery-local-ai-hardware-context.json). C08/C09 remain hypotheses; no GPU probing or server execution.
