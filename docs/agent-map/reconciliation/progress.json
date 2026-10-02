@@ -522,5 +522,5 @@
     "wave2_worker2_stt-C01",
     "wave2_worker2_stt-C02"
   ],
-  "stt_queue_network_portable_verification": "pending exact covering commit"
+  "stt_queue_network_portable_verification": "PASS exact 768093cb9fcf0ad5f5e2becb1e94b1a30e469505; six source fixtures; C01 C02 remain confirmed"
 }
