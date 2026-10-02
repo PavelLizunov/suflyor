@@ -2,8 +2,7 @@
 
 ## Round 49 — original bridge C05/C06 single flight and task cleanup (exact covering SHA tested)
 
-- [Evidence](hypothesis-bridge-single-flight-cleanup.md)/[receipt](hypothesis-bridge-single-flight-cleanup.json): six source fixtures target 362 research tests. `try_acquire_auto_tile` packs 63-bit generation and busy bit; a newer generation permit can acquire and supersede while an older task is still active.
-- `stop_session` aborts handles without joining, and background tasks spawned in `forward_audio_chunks`, `transcript_forwarder` auto-tiles, and `maybe_run_debrief` discard their join handles. No task cancellation load was run. C05/C06 remain hypotheses; exact archive verified.
+- Exact **`c344d99674c1ce0c4bcf40536068f721e91f9e79`** archive passed **362 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable bridge single flight/cleanup receipt](portable-recovery-bridge-single-flight-cleanup.json). C05/C06 remain hypotheses; no thread leaks or live task scheduling load.
 
 ## Round 48 — original bridge C03/C04 generation fence and cancellation TOCTOU (exact covering SHA tested)
 

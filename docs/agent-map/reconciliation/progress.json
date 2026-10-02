@@ -420,5 +420,5 @@
     "wave3_worker1_bridge-C05",
     "wave3_worker1_bridge-C06"
   ],
-  "bridge_single_flight_cleanup_portable_verification": "pending exact covering commit"
+  "bridge_single_flight_cleanup_portable_verification": "PASS exact c344d99674c1ce0c4bcf40536068f721e91f9e79; six source fixtures; C05 C06 remain hypotheses"
 }
