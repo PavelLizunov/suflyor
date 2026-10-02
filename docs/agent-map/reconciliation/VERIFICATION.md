@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 70 — original privacy C03 / settings C10 token redaction and empty token save (exact covering SHA tested)
+
+- [Evidence](hypothesis-privacy-secrets-token-clear.md)/[receipt](hypothesis-privacy-secrets-token-clear.json): six source fixtures target 489 research tests. `redact_secrets` matches only `Bearer `, `gsk_`, and `sk-`, suffering a double-space skip bug that leaks keys; non-matching vendor prefixes bypass redaction.
+- `on_ai_bearer_save` and `on_groq_api_key_save` abort on empty input, preventing token clearance from the UI. No live credentials were accessed. C03/C10 remain confirmed mechanisms; exact archive verified.
+
 ## Round 69 — original privacy C01/C02 home and URL log sanitization (exact covering SHA tested)
 
 - Exact **`9be29fc16486a27f632a75f57874844dd3aea59f`** archive passed **483 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable privacy sanitization receipt](portable-recovery-privacy-diagnostics-sanitization.json). C01/C02 remain confirmed mechanisms; no real user log reads or desktop directory writes.
