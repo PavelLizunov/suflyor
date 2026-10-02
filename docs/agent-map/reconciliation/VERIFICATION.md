@@ -1,9 +1,9 @@
 # Reconciliation verification evidence
 
-## Round 29 — original CI C08/C10 cleanup and workflow gates (covering SHA pending)
+## Round 29 — original CI C08/C10 cleanup and workflow gates (exact covering SHA tested)
 
 - [Evidence](hypothesis-ci-cleanup-gate.md)/[receipt](hypothesis-ci-cleanup-gate.json): six source fixtures target 242 research tests. Recursive uninstall cleanup has no reparse guard. The required `gate` job depends only on `changes` and `rust`; macOS and validate are separate.
-- The workflow calls an external docs classifier and does not interpolate PR title/body into shell. No Actions run, branch-protection inspection, installer, or deletion was performed. C08/C10 remain hypotheses; exact archive repeat pending.
+- Exact **`0c9ac32b1dfbd9e5a4df6886493a610da7aad7dd`** archive passed **242 research +3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable CI receipt](portable-recovery-ci-cleanup-gate.json). C08/C10 remain hypotheses; no Actions, branch protection, or deletion.
 
 ## Round 28 — original CI C06/C07 installer boundaries (exact covering SHA tested)
 

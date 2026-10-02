@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "tested_commit": "0c9ac32b1dfbd9e5a4df6886493a610da7aad7dd",
+  "method": "exact Git archive; frozen NSIS and workflow source inspection; no Actions, branch protection, installer, or deletion",
+  "research_tests": 242,
+  "research_skips": 0,
+  "existing_mocked_hermes_tests": 3,
+  "source_feature_contracts": 26,
+  "source_feature_references": 709,
+  "new_ci_cleanup_gate_fixtures": 6,
+  "original_hypothesis_ids_unchanged": [
+    "wave4_worker3_cicd-C08",
+    "wave4_worker3_cicd-C10"
+  ],
+  "navigation_ledger": {
+    "selected_files": 298,
+    "some_precise_navigation": 162,
+    "no_precise_navigation": 136,
+    "source_lines": 120858,
+    "reference_line_union": 39935,
+    "semantically_reviewed_lines": "not_established",
+    "validation_errors": [],
+    "regenerated_byte_identical": true,
+    "bytes": 276288,
+    "sha256": "b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2"
+  },
+  "checkpoint_issues": [],
+  "result": "PASS bounded CI cleanup/gate recovery; original hypotheses unchanged; full research incomplete",
+  "github_actions_acceptance": false,
+  "independent_acceptance": false,
+  "full_project_coverage": false
+}

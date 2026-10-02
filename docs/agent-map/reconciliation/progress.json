@@ -106,8 +106,8 @@
   "source_feature_references": 709,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
-  "portable_recovery_tested_commit": "bc08b3926e057d08b245cb83b15fb8daee9e7e4b",
-  "portable_recovery_result": "PASS 236+3 zero skips exact archive; installer C06/C07 bounded; no makensis or deletion",
+  "portable_recovery_tested_commit": "0c9ac32b1dfbd9e5a4df6886493a610da7aad7dd",
+  "portable_recovery_result": "PASS 242+3 zero skips exact archive; CI C08/C10 bounded; no Actions or deletion",
   "source_seam_tests_passed": 33,
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
@@ -301,5 +301,5 @@
     "wave4_worker3_cicd-C08",
     "wave4_worker3_cicd-C10"
   ],
-  "ci_cleanup_gate_portable_verification": "pending exact covering commit"
+  "ci_cleanup_gate_portable_verification": "PASS exact 0c9ac32b1dfbd9e5a4df6886493a610da7aad7dd; six source fixtures; C08 C10 remain hypotheses"
 }
