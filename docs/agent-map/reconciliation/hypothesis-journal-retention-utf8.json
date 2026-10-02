@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+  "original_register_sha256": "ee8e2e9ede99fc829465d4f3b63d7a1233f73d3c8106633d9018fa5d2c0ddfb3",
+  "original_candidates": [
+    {
+      "id": "wave1_worker1_persistence-C03",
+      "status_unchanged": "confirmed",
+      "native_reproduction": false
+    },
+    {
+      "id": "wave1_worker1_persistence-C17",
+      "status_unchanged": "hypothesis",
+      "native_reproduction": false
+    }
+  ],
+  "source_references": [
+    {
+      "path": "overlay-backend/src/persistence/indexer.rs",
+      "start_line": 32,
+      "end_line": 66,
+      "sha256": "d6728820a4474c66f21f6e169a251f1353c4c5baa48ff71b4b43a07088ab58bf"
+    },
+    {
+      "path": "overlay-backend/src/journal/retention.rs",
+      "start_line": 5,
+      "end_line": 55,
+      "sha256": "f3881102edd23e3e0c96806eab0e7696ae113a162f2cc256e38eeb4a93e5ca12"
+    }
+  ],
+  "fixtures_passed": 6,
+  "limits": [
+    "temporary files and Python retention model only",
+    "no Rust retention or owner journal execution"
+  ],
+  "native_application_acceptance": false,
+  "independent_acceptance": false,
+  "full_project_coverage": false
+}

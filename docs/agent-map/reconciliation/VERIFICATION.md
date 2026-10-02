@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 25 — persistence C03/C17 retention and UTF-8 (covering SHA pending)
+
+- [Evidence](hypothesis-journal-retention-utf8.md)/[receipt](hypothesis-journal-retention-utf8.json): six temporary-file/source fixtures target 218 research tests. Whole-file UTF-8 decoding fails before line parsing; the first valid physical line still parses alone.
+- Retention keeps newest JSONL files by mtime, then a positive byte cap can delete even those survivors. A zero byte cap disables the second pass, and non-JSONL files stay. This is a Python model, not Rust retention execution. C03 remains confirmed and C17 remains a hypothesis; exact archive repeat pending.
+
 ## Round 24 — original persistence C14/C15 schema boundaries (exact covering SHA tested)
 
 - [Evidence](hypothesis-memory-migrations.md)/[receipt](hypothesis-memory-migrations.json): six temporary schema/source fixtures target 212 research tests. Candidate status accepts a non-contract value; one pending snapshot followed by two write/insert pairs mints two items, while rechecking pending blocks the second.
