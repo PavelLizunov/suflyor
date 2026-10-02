@@ -106,8 +106,8 @@
   "source_feature_references": 709,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
-  "portable_recovery_tested_commit": "bf0ac534310770396146013e7752f1ac8ff01af1",
-  "portable_recovery_result": "PASS 272+3 zero skips exact archive; persistence C13 bounded; no Rust race or owner catalog",
+  "portable_recovery_tested_commit": "b9f39a3606696724a2b43c3dc9021646775c45ed",
+  "portable_recovery_result": "PASS 278+3 zero skips exact archive; config C05/C07 bounded; no owner credentials or Rust race",
   "source_seam_tests_passed": 33,
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
@@ -336,5 +336,5 @@
     "wave1_worker3_config-C05",
     "wave1_worker3_config-C07"
   ],
-  "credential_file_portable_verification": "pending exact covering commit"
+  "credential_file_portable_verification": "PASS exact b9f39a3606696724a2b43c3dc9021646775c45ed; six temporary dummy fixtures; C05 C07 remain hypotheses"
 }

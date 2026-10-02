@@ -1,9 +1,9 @@
 # Reconciliation verification evidence
 
-## Round 35 — original config C05/C07 credential files (covering SHA pending)
+## Round 35 — original config C05/C07 credential files (exact covering SHA tested)
 
 - [Evidence](hypothesis-credential-files.md)/[receipt](hypothesis-credential-files.json): six temporary dummy-file/source fixtures target 278 research tests. A regular open follows a symlink at `credentials.json.tmp`; directory permissions are metadata-then-chmod without `O_NOFOLLOW` or `fchmod`.
-- Invalid JSON reads as an empty map, so writing one new slot drops every previous slot. The selected source has no lock or merge. No owner credentials, Rust race, or Windows credential API was used. C05/C07 remain hypotheses; exact archive repeat pending.
+- Exact **`b9f39a3606696724a2b43c3dc9021646775c45ed`** archive passed **278 research +3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable credential receipt](portable-recovery-credential-files.json). C05/C07 remain hypotheses; no owner credentials, Rust race, or Windows credential API.
 
 ## Round 34 — original persistence C13 diarization rename (exact covering SHA tested)
 
