@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 22 — original persistence C08/C09 projection (covering SHA pending)
+
+- [Evidence](hypothesis-journal-projection.md)/[receipt](hypothesis-journal-projection.json): six temporary SQLite/source fixtures target 200 research tests. Finalized skip-set excludes crashed rows; missing stop heals after a later stop. Direct projection keeps `session_start.ai_model`; shipped backfill replaces it from turns or clears it when turnless.
+- `reindex_default` calls backfill after `index_all`, countering the original “not called” wording for that path. No Rust indexer, owner journal, live append, or archive UI was run. C08/C09 remain hypotheses; exact archive repeat pending.
+
 ## Round 21 — original persistence C05/C06 journal identity (exact covering SHA tested)
 
 - [Evidence](hypothesis-journal-write-identity.md)/[receipt](hypothesis-journal-write-identity.json): six temporary JSONL/source fixtures target 194 research tests. Writer continues after an error and latches the first one; session open is append, not exclusive; suffix is one-second stamp plus low 24 bits.
