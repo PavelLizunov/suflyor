@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 60 — original memory C03/C06 negation counting and recency fallback (exact covering SHA tested)
+
+- [Evidence](hypothesis-memory-negation-recency.md)/[receipt](hypothesis-memory-negation-recency.json): six source fixtures target 429 research tests. `NEGATIONS` defines only Cyrillic particles; `validate_rewrite` checks counts only without English particles or scope validation.
+- `query_terms` discards terms under 4 characters, and `context_for_meeting` falls back to `format_memory_block(&items)` unconditionally when queries produce no matches. No live prompts or database queries were run. C03/C06 remain confirmed mechanisms; exact archive verified.
+
 ## Round 59 — original STT C03/C04 runtime mutex and diarization coordination (exact covering SHA tested)
 
 - Exact **`833b725439a9ae97a4d0ca8df206d39b47abf82a`** archive passed **423 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable STT / diarization runtime receipt](portable-recovery-stt-diarization-runtime.json). C03/C04 remain hypotheses; no ONNX inference or sidecar process execution.
