@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 39 — original audio C06/C08 PTT accumulation and padding (exact covering SHA tested)
+
+- [Evidence](hypothesis-audio-ptt-recorder.md)/[receipt](hypothesis-audio-ptt-recorder.json): six source fixtures target 302 research tests. Windows and macOS PTT `record_source_until_stop` loops accumulate into unbounded buffers without an explicit length ceiling.
+- `plan_pad` arithmetic clamps gaps >10 min to `MAX_PAD_SAMPLES`, absorbs excess gap into skew, ignores backwards timestamps (pad = 0), and caps overall session padding by `pad_budget`. No hardware or live audio was run. C06/C08 remain hypotheses; exact archive verified.
+
 ## Round 38 — original installers C03/C04 protocols and staging (exact covering SHA tested)
 
 - Exact **`09fec629e2240e73140aa03722decc27b1a85de2`** archive passed **296 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable installer protocol receipt](portable-recovery-installer-protocols.json). C03/C04 remain hypotheses; no live requests or downloads.

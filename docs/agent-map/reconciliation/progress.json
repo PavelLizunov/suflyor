@@ -100,9 +100,9 @@
     "wave4_worker3_cicd-C12"
   ],
   "feature_contracts_source_inspected": 26,
-  "continuation_round": 38,
+  "continuation_round": 39,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 296,
+  "total_research_tests_passed": 302,
   "source_feature_references": 709,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
@@ -354,5 +354,11 @@
     "wave4_worker2_installers-C03",
     "wave4_worker2_installers-C04"
   ],
-  "installer_protocol_portable_verification": "PASS exact 09fec629e2240e73140aa03722decc27b1a85de2; six source fixtures; C03 C04 remain hypotheses"
+  "installer_protocol_portable_verification": "PASS exact 09fec629e2240e73140aa03722decc27b1a85de2; six source fixtures; C03 C04 remain hypotheses",
+  "audio_ptt_recorder_fixtures_passed": 6,
+  "audio_ptt_recorder_hypothesis_ids": [
+    "wave2_worker1_audio-C06",
+    "wave2_worker1_audio-C08"
+  ],
+  "audio_ptt_recorder_portable_verification": "pending exact covering commit"
 }
