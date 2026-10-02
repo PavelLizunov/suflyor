@@ -30,6 +30,7 @@
 - Round-24 schema C14/C15: six temporary schema/source fixtures, suite 212; status/approval fork, absent session FK, and no-downgrade loop bounded. [Limits](hypothesis-memory-migrations.md): no Rust runner/concurrency; exact `4719c517` archive passed 212+3 ([receipt](portable-recovery-memory-migrations.json)).
 - Round-25 retention/UTF-8 C03/C17: six temporary-file fixtures, suite 218; whole-file decode failure and sequential count/byte caps bounded. [Limits](hypothesis-journal-retention-utf8.md): Python model only; exact `3ad53ba7` archive passed 218+3 ([receipt](portable-recovery-journal-retention-utf8.json)).
 - Round-26 backup/recovery C01/C16: six temporary fixtures, suite 224; main-file copy and start/stop/summary/age gates bounded. [Limits](hypothesis-catalog-backup-recovery.md): no owner migration or Rust scan; exact `1f2bb215` archive passed 224+3 ([receipt](portable-recovery-catalog-backup-recovery.json)).
+- Round-27 gate C04/C05: six temporary Git fixtures, suite 230; narrow fallback and quoted-name boundary bounded. [Limits](hypothesis-gate-classification.md): no PowerShell gate or Actions; exact-SHA repeat pending.
 - WIP GitHub checkpoint on the dedicated task branch; task-owned files only.
 
 ## Not complete

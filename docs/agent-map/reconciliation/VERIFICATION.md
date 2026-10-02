@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 27 — original CI C04/C05 classification boundaries (covering SHA pending)
+
+- [Evidence](hypothesis-gate-classification.md)/[receipt](hypothesis-gate-classification.json): six temporary Git/source fixtures target 230 research tests. Missing `origin/master` narrows the model to `HEAD~1`; that range classifies as docs while the full range sees the preceding Rust file and classifies as targeted.
+- `--name-only` quotes `quote".md`, so suffix classification misses it; the `-z` form preserves the real name. No PowerShell gate, hook, push, or Actions job was run. C04/C05 remain hypotheses; exact archive repeat pending.
+
 ## Round 26 — confirmed persistence C01/C16 backup and recovery (exact covering SHA tested)
 
 - [Evidence](hypothesis-catalog-backup-recovery.md)/[receipt](hypothesis-catalog-backup-recovery.json): six temporary SQLite/JSONL fixtures target 224 research tests. Raw main-file backup leaves no WAL sidecar. Recovery accepts start-only input but rejects stop, summary, and age past 12 hours.
