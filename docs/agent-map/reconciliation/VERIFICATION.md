@@ -1,11 +1,11 @@
 # Reconciliation verification evidence
 
-## Round 14 — evidence integrity/navigation gaps (covering SHA pending)
+## Round 14 — evidence integrity/navigation gaps (exact covering SHA tested)
 
 - Read-only exact historical commit receipt check: 14 receipts/11 artifact hash+size checks, zero mismatches, four absent legacy boundary flags explicitly retained not accepted. No historical tests rerun by integrity utility; [report](portable-receipt-integrity.json).
 - [Navigation ledger](NAVIGATION-GAPS.md): 298 selected syntax files/120,858 source lines, 137 with some precise registered ranges/161 none, 33,524 reference-line union, 26 unranged/directory pointers zero credit. **No semantically reviewed-line number/percentage established**. Input source/registry hashes and intervals verified.
 - Eight new ledger/receipt bookkeeping fixtures; local research total 152, parser/runtime-dependent full suite verification pending. No production/native/secret/process action, original 39/75/5 statuses unchanged; ledger prioritizes missing real source chains rather than broadening ranges to inflate coverage.
-- Exact archive deterministic ledger and suite repeat pending; independent/native/full-objective acceptance open.
+- Exact **`b8bb920063162585e62a4598cf20719d84660147`** archive passed **152 research +3 mocked Hermes, zero skips**, checkpoint issues empty (21/577), navigation validator zero errors and deterministic byte-identical ledger SHA256 `a2fe17fba52909bd90a0b47f52320a06f608ee74590abc9fa804507b5c79e675`. [Portable gap receipt](portable-recovery-navigation-gaps.json). Historical Git receipt check performed in checkout (archive lacks Git objects); no semantic/independent/native/full acceptance.
 
 
 ## Round 13 — credentials/backend child ownership (exact covering SHA tested)

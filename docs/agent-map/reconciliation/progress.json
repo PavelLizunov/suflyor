@@ -106,8 +106,8 @@
   "source_feature_references": 577,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
-  "portable_recovery_tested_commit": "6853a54cad6f86e9397c7e72de0b75fb98775f2a",
-  "portable_recovery_result": "PASS 144+3 zero skips exact archive; 21 contracts/577 ranges; backend census valid/byte-identical; no storage/process/native execution",
+  "portable_recovery_tested_commit": "b8bb920063162585e62a4598cf20719d84660147",
+  "portable_recovery_result": "PASS 152+3 zero skips exact archive; 21 contracts/577 ranges; navigation ledger valid/byte-identical; reviewed semantics unknown",
   "source_seam_tests_passed": 33,
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
@@ -227,5 +227,5 @@
     "errors": 0,
     "tests_rerun": false
   },
-  "navigation_gaps_portable_verification": "pending exact covering commit"
+  "navigation_gaps_portable_verification": "PASS exact b8bb920063162585e62a4598cf20719d84660147; 137 some/161 no registered source pointers; no audited-line credit"
 }

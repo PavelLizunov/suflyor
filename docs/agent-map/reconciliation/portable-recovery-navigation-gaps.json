@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "tested_commit": "b8bb920063162585e62a4598cf20719d84660147",
+  "method": "exact Git archive, pinned parser/runtime inputs separate; interval/reference bookkeeping tests and source recovery, no audited-semantic/native line claim",
+  "research_tests": 152,
+  "research_skips": 0,
+  "existing_mocked_hermes_tests": 3,
+  "source_feature_contracts": 21,
+  "source_feature_references": 577,
+  "navigation_ledger": {
+    "selected_files": 298,
+    "some_precise_navigation": 137,
+    "no_precise_navigation": 161,
+    "source_lines": 120858,
+    "reference_line_union": 33524,
+    "semantically_reviewed_lines": "not_established",
+    "validation_errors": [],
+    "regenerated_byte_identical": true,
+    "bytes": 265706,
+    "sha256": "a2fe17fba52909bd90a0b47f52320a06f608ee74590abc9fa804507b5c79e675"
+  },
+  "historical_Git_receipt_integrity_checkout_check": {
+    "receipts": 14,
+    "artifact_hash_checks": 11,
+    "errors": 0,
+    "historical_tests_rerun": false
+  },
+  "checkpoint_issues": [],
+  "result": "PASS bounded source/reference/receipt integrity; full research incomplete",
+  "native_application_acceptance": false,
+  "independent_acceptance": false,
+  "full_project_coverage": false
+}
