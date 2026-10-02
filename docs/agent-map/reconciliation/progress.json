@@ -106,8 +106,8 @@
   "source_feature_references": 604,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
-  "portable_recovery_tested_commit": "b8bb920063162585e62a4598cf20719d84660147",
-  "portable_recovery_result": "PASS 152+3 zero skips exact archive; 21 contracts/577 ranges; navigation ledger valid/byte-identical; reviewed semantics unknown",
+  "portable_recovery_tested_commit": "2b630b649b93a510d80b9b52727e73ce08adea16",
+  "portable_recovery_result": "PASS 158+3 zero skips exact archive; 22 contracts/604 ranges; navigation ledger valid/byte-identical; DSP/native quality not executed",
   "source_seam_tests_passed": 33,
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
@@ -229,5 +229,5 @@
   },
   "navigation_gaps_portable_verification": "PASS exact b8bb920063162585e62a4598cf20719d84660147; 137 some/161 no registered source pointers; no audited-line credit",
   "wsola_playback_source_fixtures_passed": 6,
-  "wsola_playback_portable_verification": "pending exact covering commit"
+  "wsola_playback_portable_verification": "PASS exact 2b630b649b93a510d80b9b52727e73ce08adea16; six source assertions/27 refs, no Rust DSP/audio acceptance"
 }

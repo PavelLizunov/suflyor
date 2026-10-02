@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "tested_commit": "2b630b649b93a510d80b9b52727e73ce08adea16",
+  "method": "exact Git archive, pinned parser/runtime dependencies supplied separately; DSP source/test-intent assertions only, no Rust or native audio execution",
+  "research_tests": 158,
+  "research_skips": 0,
+  "existing_mocked_hermes_tests": 3,
+  "source_feature_contracts": 22,
+  "source_feature_references": 604,
+  "new_Wsola_playback_source_assertions": 6,
+  "navigation_ledger": {
+    "selected_files": 298,
+    "some_precise_navigation": 146,
+    "no_precise_navigation": 152,
+    "source_lines": 120858,
+    "reference_line_union": 35233,
+    "semantically_reviewed_lines": "not_established",
+    "validation_errors": [],
+    "regenerated_byte_identical": true,
+    "bytes": 268582,
+    "sha256": "4f02e231aeb8f7aac8a90811349d0a0a0e9d26c4661521492ad22539d4c6fa1e"
+  },
+  "checkpoint_issues": [],
+  "result": "PASS bounded DSP source/recovery evidence; full research incomplete",
+  "Rust_DSP_test_execution": false,
+  "allocation_pitch_listening_benchmark_accepted": false,
+  "native_application_acceptance": false,
+  "independent_acceptance": false,
+  "full_project_coverage": false
+}
