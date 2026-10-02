@@ -100,9 +100,9 @@
     "wave4_worker3_cicd-C12"
   ],
   "feature_contracts_source_inspected": 26,
-  "continuation_round": 75,
+  "continuation_round": 76,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 520,
+  "total_research_tests_passed": 526,
   "source_feature_references": 709,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
@@ -577,5 +577,19 @@
     "wave3_worker4_settings-C01",
     "wave3_worker4_settings-C08"
   ],
-  "settings_reuse_profile_import_portable_verification": "PASS exact cb699e937f007aa534340a19df76ca9c97a43d0f; seven source fixtures; C01 C08 remain confirmed"
+  "settings_reuse_profile_import_portable_verification": "PASS exact cb699e937f007aa534340a19df76ca9c97a43d0f; seven source fixtures; C01 C08 remain confirmed",
+  "rejected_claims_falsification_fixtures_passed": 6,
+  "rejected_claim_ids": [
+    "wave1_worker1_persistence-C07",
+    "wave1_worker1_persistence-C11",
+    "wave1_worker3_config-C10",
+    "wave3_worker1_bridge-C01",
+    "wave3_worker3_tile-C04"
+  ],
+  "total_grok_candidates_covered": 119,
+  "grok_candidates_confirmed_covered": 39,
+  "grok_candidates_hypotheses_covered": 75,
+  "grok_candidates_rejected_covered": 5,
+  "all_119_candidates_covered_in_operations_tests": true,
+  "rejected_claims_portable_verification": "pending exact covering commit"
 }

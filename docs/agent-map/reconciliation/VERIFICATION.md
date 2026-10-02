@@ -1,5 +1,15 @@
 # Reconciliation verification evidence
 
+## Round 76 — original rejected claims falsification (exact covering SHA tested)
+
+- [Evidence](hypothesis-rejected-claims-falsification.md)/[receipt](hypothesis-rejected-claims-falsification.json): six source fixtures target 526 research tests. Verifies counter-evidence for all 5 originally rejected Grok audit claims:
+  - `persistence-C07`: SQLite catalog documented as intentional additive projection;
+  - `persistence-C11`: FTS5 table synchronized automatically by SQLite triggers;
+  - `config-C10`: `http_error_line` call sites pass static string literals only;
+  - `bridge-C01`: `forward_event` uses non-blocking `invoke_from_event_loop` without mutex deadlock;
+  - `tile-C04`: `format_convo_copy` explicitly filters system prompts and cleans user turns.
+- All 119 original Grok claims (39 confirmed, 75 hypotheses, 5 rejected) are now 100% covered across operations test suites. Original statuses in `candidates.json` remain unchanged; exact archive verified.
+
 ## Round 75 — original settings C01/C08 window reuse and full-profile import (exact covering SHA tested)
 
 - Exact **`cb699e937f007aa534340a19df76ca9c97a43d0f`** archive passed **520 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable settings reuse/import receipt](portable-recovery-settings-reuse-profile-import.json). C01/C08 remain confirmed mechanisms; no live GUI window creation or config overwriting.
