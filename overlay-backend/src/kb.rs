@@ -90,7 +90,6 @@ pub fn all() -> &'static [KBEntry] {
 /// pollute the index).
 fn parse(md: &str, source: &'static str) -> Vec<KBEntry> {
     let mut out = Vec::new();
-    // First chunk is the preamble — drop it.
     let mut iter = md.split("\n## ");
     let _preamble = iter.next();
     for chunk in iter {
@@ -111,9 +110,6 @@ fn parse(md: &str, source: &'static str) -> Vec<KBEntry> {
         if key.is_empty() {
             continue;
         }
-        // Pull optional `Aliases: a, b, c` line(s) out of the body so the terms
-        // match queries (curated mis-spellings / STT variants) without
-        // cluttering the displayed/injected definition.
         let mut aliases: Vec<String> = Vec::new();
         let mut kept: Vec<&str> = Vec::new();
         for line in raw_body.lines() {
@@ -184,7 +180,7 @@ pub fn search(query: &str, limit: usize) -> Vec<KBEntry> {
     let mut rank3: Vec<&KBEntry> = Vec::with_capacity(limit);
 
     for e in entries {
-        let key_lower = &e.key; // already lowercase from parse()
+        let key_lower = &e.key;
         if key_lower == &q {
             rank0.push(e);
             if rank0.len() >= limit {
@@ -201,7 +197,6 @@ pub fn search(query: &str, limit: usize) -> Vec<KBEntry> {
         if rank0.len() + rank1.len() >= limit {
             continue;
         }
-        // heading_lower + body_lower pre-computed at parse() (see KBEntry).
         if e.heading_lower.len() >= q.len() && e.heading_lower.contains(&q) {
             if rank2.len() < limit {
                 rank2.push(e);
@@ -291,7 +286,6 @@ mod tests {
 
     #[test]
     fn reference_for_grounds_domain_terms() {
-        // An explicit domain term pulls its curated entry (grounds the LLM).
         let r = reference_for("расскажи про Exasol и его архитектуру", 3, 2000);
         assert!(r.is_some(), "an Exasol mention should match its KB entry");
         if let Some(text) = r {
@@ -299,25 +293,21 @@ mod tests {
             assert!(lower.contains("exasol"));
             assert!(lower.contains("mpp") || lower.contains("columnar"));
         }
-        // A generic question naming no KB key injects nothing (no noise).
         assert!(reference_for("zzqq xkcdq vmwpq blortz", 3, 2000).is_none());
     }
 
     #[test]
     fn reference_for_matches_aliases() {
-        // Curated mis-spelling / STT variant "starrox" pulls the StarRocks entry.
         let r = reference_for("что такое starrox", 3, 4000);
         assert!(r.is_some(), "alias 'starrox' should match StarRocks");
         if let Some(t) = r {
             assert!(t.to_lowercase().contains("starrocks"));
         }
-        // Cyrillic transliteration of Exasol.
         let e = reference_for("расскажи про экзасол", 3, 4000);
         assert!(e.is_some(), "alias 'экзасол' should match Exasol");
         if let Some(t) = e {
             assert!(t.to_lowercase().contains("exasol"));
         }
-        // Aliases for load-average and etcd-cli grounding.
         let la1 = reference_for("проверь load average на сервере", 3, 4000);
         assert!(
             la1.is_some(),
@@ -362,7 +352,6 @@ mod tests {
         assert!(glossary >= 1000, "glossary {glossary} below floor 1000");
         assert!(commands >= 100, "commands {commands} below floor 100");
         assert!(patterns >= 100, "patterns {patterns} below floor 100");
-        // sanity: source tags are correctly populated
         let by_source: std::collections::HashSet<_> = entries.iter().map(|e| e.source).collect();
         assert!(by_source.contains("glossary"));
         assert!(by_source.contains("commands"));
@@ -400,7 +389,6 @@ mod tests {
     /// Search ranks "starts-with" above plain body containment.
     #[test]
     fn search_prefix_beats_body_substring() {
-        // "tcp" should rank before some unrelated entry that happens to mention "tcp" in its body
         let results = search("tcp", 10);
         assert!(!results.is_empty());
         let first_key = &results[0].key;
@@ -429,7 +417,7 @@ mod tests {
     /// Limit is respected (or all results if fewer than limit).
     #[test]
     fn search_respects_limit() {
-        let results = search("a", 3); // 'a' will appear in many entries
+        let results = search("a", 3);
         assert!(results.len() <= 3);
     }
 
@@ -459,16 +447,10 @@ mod tests {
     /// = O(85M char ops) per keystroke.)
     #[test]
     fn search_truncates_oversized_query() {
-        // 110 000 chars of "kubernetes " — the truncated query becomes
-        // "kubernetes kubernetes ..." up to MAX_QUERY_CHARS, which is too
-        // long to match any KB heading/body. The point is the search MUST
-        // complete fast regardless of input size.
         let huge = "kubernetes ".repeat(10_000);
         let start = std::time::Instant::now();
         let _ = search(&huge, 5);
         let elapsed_ms = start.elapsed().as_millis();
-        // Pre-cap on a debug build this would take many seconds; cap +
-        // pre-lowered fields keep it well under a second.
         assert!(
             elapsed_ms < 500,
             "search took {elapsed_ms}ms — query cap or body cache broken?"

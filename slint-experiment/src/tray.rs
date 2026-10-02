@@ -211,8 +211,6 @@ impl Drop for TrayHandle {
             uID: TRAY_ICON_ID,
             ..Default::default()
         };
-        // SAFETY: `data` describes the icon this handle added; NIM_DELETE only
-        // removes it. DestroyWindow targets our own hidden message window.
         unsafe {
             let _ = Shell_NotifyIconW(NIM_DELETE, &data);
             let _ = DestroyWindow(self.hwnd);
@@ -256,9 +254,6 @@ pub fn install(
 fn install_win32() -> Result<TrayHandle, String> {
     let class_name: PCWSTR = windows::core::w!("suflyor_tray_message_window");
     let window_title: PCWSTR = windows::core::w!("suflyor tray");
-    // SAFETY: classic RegisterClassExW/CreateWindowExW/Shell_NotifyIconW
-    // sequence for a notification icon; every handle is either process-owned
-    // or checked, and the window is never shown (message-only role).
     unsafe {
         let module = GetModuleHandleW(None).map_err(|e| format!("GetModuleHandleW: {e}"))?;
         let class = WNDCLASSEXW {
@@ -270,8 +265,6 @@ fn install_win32() -> Result<TrayHandle, String> {
         };
         if RegisterClassExW(&class) == 0 {
             let err = GetLastError();
-            // A previous install in THIS process (dropped handle, class kept)
-            // is fine — same wndproc; anything else is a real failure.
             if err != ERROR_CLASS_ALREADY_EXISTS {
                 return Err(format!("RegisterClassExW failed: {err:?}"));
             }
@@ -316,8 +309,6 @@ pub fn show_icon() -> Result<(), String> {
         return Err("tray message window is unavailable".to_string());
     }
     let hwnd = HWND(raw as *mut std::ffi::c_void);
-    // SAFETY: the stored HWND belongs to the current process and remains alive
-    // until TrayHandle::drop clears TRAY_HWND.
     let module = unsafe { GetModuleHandleW(None) }.map_err(|e| format!("GetModuleHandleW: {e}"))?;
     match unsafe { add_notify_icon(hwnd, module) } {
         Ok(()) => {
@@ -349,7 +340,6 @@ pub fn hide_icon() {
         uID: TRAY_ICON_ID,
         ..Default::default()
     };
-    // SAFETY: data identifies only this process' notification icon.
     unsafe {
         let _ = Shell_NotifyIconW(NIM_DELETE, &data);
     }
@@ -373,8 +363,6 @@ pub fn return_focus() {
         uID: TRAY_ICON_ID,
         ..Default::default()
     };
-    // SAFETY: data identifies this process' currently visible notification
-    // icon. NIM_SETFOCUS changes only Shell focus bookkeeping.
     unsafe {
         let _ = Shell_NotifyIconW(NIM_SETFOCUS, &data);
     }
@@ -442,9 +430,6 @@ unsafe extern "system" fn tray_wndproc(
 ) -> LRESULT {
     let taskbar_created = TASKBAR_CREATED_MESSAGE.load(Ordering::Relaxed);
     if taskbar_created != 0 && msg == taskbar_created {
-        // Explorer restarted and discarded every notification icon. Re-add
-        // ours only when the bar is hidden; visible mode deliberately has no
-        // persistent tray entry.
         if TRAY_ICON_VISIBLE.load(Ordering::SeqCst) {
             match unsafe { GetModuleHandleW(None) }
                 .map_err(|e| format!("GetModuleHandleW: {e}"))
@@ -466,15 +451,8 @@ unsafe extern "system" fn tray_wndproc(
         return LRESULT(0);
     }
     if msg == TRAY_CALLBACK_MESSAGE {
-        // With NOTIFYICON_VERSION_4, LOWORD(lparam) is the mouse/keyboard
-        // event. The current cursor position anchors context requests, so an
-        // undefined WM_CONTEXTMENU wparam can never anchor at (1, 0).
         match (lparam.0 as u32) & 0xFFFF {
-            // v4 emits NIN_SELECT for mouse activation. Handling WM_LBUTTONUP
-            // as well toggles twice on affected shells (restore then hide).
             NIN_SELECT | NIN_KEYSELECT => dispatch_from_ctx(TrayAction::ShowHide),
-            // Some Explorer builds send only the legacy event even after
-            // NIM_SETVERSION(4); others send WM_CONTEXTMENU, or both.
             WM_RBUTTONUP | WM_CONTEXTMENU => request_tray_menu(),
             _ => {}
         }
@@ -483,7 +461,6 @@ unsafe extern "system" fn tray_wndproc(
     if msg == WM_DESTROY {
         return LRESULT(0);
     }
-    // SAFETY: default processing for everything else on our own window.
     unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
 }
 
@@ -576,7 +553,6 @@ mod tests {
 
     #[test]
     fn menu_routing_reflects_state() {
-        // Idle (bar visible, no session): Hide offered, session items disabled.
         let idle = menu_entries(&TraySnapshot::startup(), false);
         assert_eq!(idle.len(), 4);
         assert_eq!(idle[0].label, "Hide");
@@ -587,7 +563,6 @@ mod tests {
         assert!(!idle[2].enabled, "Stop needs a running session");
         assert!(idle[3].enabled, "Quit is always available");
 
-        // Hidden + running + paused: Restore, Resume checked, Stop enabled.
         let snap = TraySnapshot {
             bar_visible: false,
             paused: true,
@@ -600,7 +575,6 @@ mod tests {
         assert!(running[1].checked);
         assert!(running[2].enabled);
 
-        // Running, not paused: Pause enabled + unchecked.
         let snap = TraySnapshot {
             bar_visible: true,
             paused: false,
@@ -629,7 +603,6 @@ mod tests {
             [en[0].label, en[1].label, en[2].label, en[3].label],
             ["Hide", "Pause", "Stop", "Quit"]
         );
-        // Every label is non-empty in BOTH languages.
         for ru in menu_entries(&snap, true) {
             assert!(!ru.label.is_empty());
         }

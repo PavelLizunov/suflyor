@@ -80,10 +80,6 @@ pub async fn run_post_meeting_debrief(
 ) {
     let (endpoint, response_language, ui_is_ru, preferred_monitor, stealth) = {
         let c = cfg.read();
-        // Resolve the ACTIVE endpoint (local vs cloud) like every other ask path
-        // (reask / manual / F9). The old code read the cloud fields directly, so
-        // a local-provider user's debrief silently failed (empty cloud bearer) or
-        // billed a cloud Sonnet call. prep=true picks the structuring model.
         let ep = c.ai_endpoint(true);
         (
             ep,
@@ -93,16 +89,12 @@ pub async fn run_post_meeting_debrief(
             c.stealth_enabled,
         )
     };
-    // Mic-only transcript for "you" coaching. Snapshot is already capped
-    // at TRANSCRIPT_MAX_LINES (=80) upstream so no second cap needed.
     let mic_text: String = transcript
         .iter()
         .filter(|l| matches!(l.source, AudioSource::Mic))
         .map(|l| l.text.as_str())
         .collect::<Vec<_>>()
         .join("\n");
-    // Generated coaching follows the AI response language; deterministic tile
-    // chrome and notices follow the independent application UI language.
     let is_ru = response_language == "ru";
     let system_prompt = if is_ru {
         "Ты — speech coach. На входе — полный mic-транскрипт пользователя за встречу \
@@ -153,9 +145,6 @@ pub async fn run_post_meeting_debrief(
         }
     };
     log::info!("post-meeting debrief landed: {} chars", answer.len());
-    // D — persist the debrief so it's re-viewable in the archive ("Коучинг"
-    // button), next to the summary. Empty session_id = ephemeral (test sentinel)
-    // → skip. Best-effort: the live tile shows regardless.
     if !session_id.trim().is_empty() {
         crate::conspect::save_debrief(&session_id, &answer);
     }
@@ -165,12 +154,6 @@ pub async fn run_post_meeting_debrief(
     } else {
         "Debrief: what to improve".to_string()
     };
-    // Carry the OS-side monitor-name pin from cfg through the trait
-    // boundary. The Tauri adapter passes the name straight into
-    // `tile::pick_monitor(name)` for exact match; the Slint adapter
-    // ignores Named today (no enumerator yet) and falls back to Auto.
-    // Empty/None → Auto so we don't burden either side with empty-string
-    // edge cases.
     let monitor_hint = match preferred_monitor.as_deref() {
         Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
         _ => MonitorHint::Auto,
@@ -222,7 +205,6 @@ pub fn spawn_debrief_notice(events: &dyn RuntimeEvents, cfg: &SharedConfig, body
     }
 }
 
-// ===== Meeting summary (v0.12.0 — «Summary созвона», tester request) =====
 
 /// Meeting summary — run the FULL session transcript (both channels)
 /// through the structuring model and spawn the result as a Summary tile.
@@ -253,8 +235,6 @@ pub async fn run_meeting_summary(
         local_context,
     ) = {
         let c = cfg.read();
-        // Same endpoint policy as the debrief: prep=true picks the
-        // structuring model (local honors ai_local_prep_model).
         let ep = c.ai_endpoint(true);
         (
             c.response_language.clone(),
@@ -275,13 +255,6 @@ pub async fn run_meeting_summary(
     let formatted = format_transcript_for_summary(&transcript, is_ru);
     let fp = conspect::fingerprint(&formatted);
 
-    // v0.18.6 — reuse a saved conspect when the transcript is UNCHANGED (a
-    // re-press after stop, or a re-request right after an error). This is what
-    // kills the tester bug where re-requesting a summary made the model beg for
-    // the conspect text: we never re-send a reduce with empty parts — we resume
-    // the persisted one. A changed transcript (fingerprint differs) rebuilds.
-    // B3 — a FORCED rebuild (the archive's "Пересоздать"/"Сформировать") skips this
-    // reuse so it produces a fresh recap instead of returning the cached one.
     if let Some(saved) = (!force).then(|| conspect::load(&session_id)).flatten() {
         if saved.fingerprint == fp {
             if let Some(answer) = saved.final_summary.clone() {
@@ -313,9 +286,6 @@ pub async fn run_meeting_summary(
         }
     }
 
-    // B3 — a forced rebuild overwrites the live conspect as it maps, so back the old
-    // one up first: if this run never produces a final_summary (the regenerate
-    // failed), we roll back to the previous good recap rather than destroy it.
     let rollback_sid = if force && conspect::backup(&session_id) {
         Some(session_id.clone())
     } else {
@@ -342,11 +312,8 @@ pub async fn run_meeting_summary(
     )
     .await;
     let cs = if direct {
-        // Within budget → single pass; the one "source" is the whole transcript.
         Conspect::new(session_id, is_ru, fp, true, vec![formatted])
     } else {
-        // Over budget → map every consecutive slice. No cap and no middle cut:
-        // every transcript line reaches a map request.
         let budget = if is_local {
             SUMMARY_INPUT_BUDGET_LOCAL_CHARS
         } else {
@@ -367,8 +334,6 @@ pub async fn run_meeting_summary(
         ui_is_ru,
     )
     .await;
-    // B3 — forced run finished: keep the fresh recap if it produced one, else restore
-    // the backed-up previous summary (the rebuild failed → don't lose the old copy).
     if let Some(sid) = rollback_sid {
         if conspect::load(&sid).and_then(|c| c.final_summary).is_some() {
             conspect::drop_backup(&sid);
@@ -397,15 +362,11 @@ pub async fn retry_meeting_summary(
     let tile_title = summary_tile_title(ui_is_ru);
     let monitor_hint = monitor_hint_from(preferred_monitor.as_deref());
     let Some(cs) = conspect::load(&session_id) else {
-        // Nothing to resume (old session predating persistence, or the very
-        // first part never saved). Show the failure WITHOUT a retry button so
-        // the user isn't stuck re-pressing a no-op.
         log::warn!("meeting summary retry: no saved conspect for this session");
         spawn_summary_error_tile(&events, tile_title, monitor_hint, stealth, ui_is_ru, None);
         return;
     };
     if let Some(answer) = cs.final_summary.clone() {
-        // A prior attempt already finished — just show it.
         spawn_summary_tile(
             &events,
             tile_title,
@@ -465,7 +426,6 @@ impl ManagedPrepSession {
             return Ok(None);
         }
 
-        // Drain both live-request permits before any server transition.
         let ai = ai::acquire_exclusive_ai().await?;
         let lifecycle = crate::local_ai::lifecycle_lock()
             .acquire_owned()
@@ -533,8 +493,6 @@ impl ManagedPrepSession {
                     | crate::local_ai::ModelSwitch::FallbackStarted,
                     children,
                 )) => {
-                    // Dropping Child keeps the restored server alive; the managed
-                    // port sweep and Job Object still own process shutdown.
                     drop(children);
                 }
                 Ok((_outcome, children)) => {
@@ -880,9 +838,6 @@ async fn finish_summary_from_conspect_inner(
     let context_tokens =
         managed_summary_context(is_local, &base_url, prefer_quality, &local_context);
 
-    // MAP — fill every part still missing its conspectus (no-op for a single
-    // pass or an already-mapped conspect). Never reduce an incomplete map:
-    // completed parts stay persisted and Retry resumes from the first gap.
     if !cs.single_pass {
         if !ensure_map_parts_fit(&mut cs, &base_url, &bearer, &model, context_tokens).await {
             log::warn!("meeting summary: a map part cannot fit the active context");
@@ -931,7 +886,7 @@ async fn finish_summary_from_conspect_inner(
                 Ok(t) => {
                     log::info!("meeting summary: part {n}/{total} done ({} chars)", t.len());
                     cs.parts[idx].summary = Some(t);
-                    conspect::save(&cs); // persist each completed part immediately
+                    conspect::save(&cs);
                 }
                 Err(e) => {
                     log::warn!("meeting summary: part {n}/{total} failed: {e:#}");
@@ -951,9 +906,6 @@ async fn finish_summary_from_conspect_inner(
         }
     }
 
-    // v0.16.0 — keyword-gated memory reference, computed from the reconstructed
-    // transcript. None (the common case) keeps the request byte-identical to a
-    // no-memory build. (For a single pass the one source IS the transcript.)
     let joined = cs
         .parts
         .iter()
@@ -996,8 +948,6 @@ async fn finish_summary_from_conspect_inner(
     } else {
         let summaries = cs.usable_summaries();
         if summaries.is_empty() {
-            // Every map part failed — endpoint down. Error tile WITH retry, so
-            // the user can resume from the saved sources once it's back.
             log::warn!("meeting summary: no part could be conspected — endpoint down?");
             spawn_summary_error_tile(
                 events,
@@ -1026,8 +976,6 @@ async fn finish_summary_from_conspect_inner(
 
     match result {
         Ok(answer) => {
-            // Strip LaTeX/math markup once, up front — the sanitized text is what
-            // gets both persisted AND shown in the live tile (Баг1).
             let answer = conspect::sanitize_summary(&answer);
             log::info!("meeting summary landed: {} chars", answer.len());
             cs.final_summary = Some(answer.clone());
@@ -1126,7 +1074,6 @@ fn spawn_summary_error_tile(
             source: "summary".into(),
             is_translation: false,
             highlights: vec![],
-            // Empty id = nothing to resume → no retry button.
             summary_session: session_id.filter(|s| !s.is_empty()),
         },
         monitor_hint,
@@ -1137,7 +1084,6 @@ fn spawn_summary_error_tile(
     }
 }
 
-// ===== F3 Reask (Phase B2 port #2) =====
 
 /// Snapshot of `SharedRuntime` state the ported `reask_last` reads.
 /// Built by the src-tauri shim under one rt lock acquisition, then
@@ -1213,10 +1159,6 @@ pub async fn reask_last(
         }
     };
 
-    // Resolve the ACTIVE endpoint (local vs cloud). F3 was reading the RAW
-    // cloud fields, so reask silently hit the offline cloud bridge for
-    // local-provider users (the same bug fixed for F6/manual_spawn in #128 —
-    // F3 was missed). is_local also lets us zero the (free) local cost below.
     let (
         protocol,
         base_url,
@@ -1247,9 +1189,6 @@ pub async fn reask_last(
         )
     };
 
-    // Reuse the auto-tile prompt builder for the SYSTEM half (anti-injection
-    // guard, formatting rules, language rule). For the USER half wrap
-    // previous Q+A so the model knows to refine, not repeat.
     let trigger = Trigger::Question(last_q.clone());
     let (system_prompt, base_user_prompt) = build_auto_tile_prompts(
         &trigger,
@@ -1259,8 +1198,6 @@ pub async fn reask_last(
         // ТЗ 2026-07-06 (A) — the re-asked question selects the RELEVANT facts.
         &crate::memory::context_for_meeting(&meeting_context, Some(&last_q)),
         &response_language,
-        // F3 re-ask is user-initiated, not an auto "во время встречи" hint — the
-        // live-coaching read-aloud style applies only to auto-tiles (Фича1).
         false,
         false,
     );
@@ -1330,13 +1267,6 @@ pub async fn reask_last(
                     message: &format!("{e:#}"),
                 });
             }
-            // Spawn a GENERIC visible error tile so F3 is never silent
-            // (mirrors the F6 manual_spawn path below). The `tile:error`
-            // event had NO UI consumer in the Slint binary, so F3 looked
-            // dead when the AI was down. The message carries NO `{e}` chain:
-            // a reqwest error can embed the base_url / LAN IP, which must
-            // never reach a screen-shared tile. Full detail stays in the
-            // journal + log.
             let _ = events.spawn_tile_full(
                     TileSpec {
                         question: if ui_is_ru {
@@ -1367,8 +1297,6 @@ pub async fn reask_last(
             return None;
         }
     };
-    // Local inference is free — don't bill it at the cloud fallback rate
-    // (cost_microcents maps an unknown local model id to Sonnet pricing).
     let micro = if is_local || protocol == ai::AiProtocol::CodexSubscription {
         0
     } else {
@@ -1386,8 +1314,6 @@ pub async fn reask_last(
             purpose: "reask",
             model: &model,
             latency_ms: t0.elapsed().as_millis() as u64,
-            // The provider's real reason ("stop", "length" = truncated, …) —
-            // surfaced by `complete_once` (audit D4; previously hardcoded).
             finish_reason: &usage.finish_reason,
             text: &answer,
             output_tokens_est: usage.output,
@@ -1395,13 +1321,6 @@ pub async fn reask_last(
         });
     }
 
-    // Spawn as Manual kind (gray) to visually distinguish from the
-    // original. Phase B2 TileKind::Manual lives in src-tauri only;
-    // here we use the closest semantic kind (Ai) — the TauriEvents
-    // adapter collapses all kinds to Manual today so the visible
-    // tile chrome is preserved. (Per port #1 review-agent note,
-    // a future polish round will give the adapter real per-kind
-    // branches.)
     let display_q = format!("🔁 reask: {last_q}");
     let answer_trimmed = answer.trim().to_string();
     if let Err(e) = events.spawn_tile_full(
@@ -1421,8 +1340,6 @@ pub async fn reask_last(
         TileKind::Ai,
     ) {
         log::warn!("reask spawn_tile failed: {e}");
-        // Tile spawn failure is not fatal — we still want the cost +
-        // last_qa writeback so future F3 reasks can build on this one.
     }
 
     Some(ReaskOutcome {
@@ -1432,7 +1349,6 @@ pub async fn reask_last(
     })
 }
 
-// ===== F6 Manual spawn tile (Phase B2 port #3) =====
 
 /// Snapshot of `SharedRuntime` state the ported `manual_spawn_tile`
 /// reads. Built by the src-tauri shim under one rt lock acquisition.
@@ -1557,9 +1473,6 @@ pub async fn manual_spawn_tile(
 
     let Some(line) = inputs.last_line else {
         log::info!("manual_spawn_tile: no transcript yet");
-        // Spawn a VISIBLE feedback tile — the prior `tile:error` emit had no
-        // UI handler in the Slint adapter, so F6 on an empty transcript looked
-        // completely dead. Now the user always gets a tile explaining why.
         let _ = events.spawn_tile_full(
             TileSpec {
                 question: if ui_is_ru {
@@ -1605,7 +1518,6 @@ pub async fn manual_spawn_tile(
         // ТЗ 2026-07-06 (A) — the picked line IS the question → relevant facts.
         &crate::memory::context_for_meeting(&meeting_context, Some(&line.text)),
         &response_language,
-        // F6 manual tile is user-initiated — read-aloud style is auto-only (Фича1).
         false,
         false,
     );
@@ -1656,10 +1568,6 @@ pub async fn manual_spawn_tile(
                     message: &format!("{e:#}"),
                 });
             }
-            // Spawn a GENERIC error tile so F6 is never silent. The
-            // message is deliberately generic (NO `{e}` chain): the error
-            // can contain the base_url / LAN IP, which must never surface
-            // on-screen. Full detail stays in journal + log.
             let _ = events.spawn_tile_full(
                     TileSpec {
                         question: line.text.clone(),
@@ -1683,8 +1591,6 @@ pub async fn manual_spawn_tile(
             return None;
         }
     };
-    // Local inference is free (see reask_last) — zero it so F6 on a local
-    // model doesn't inflate the session cost meter / trip the cap.
     let micro = if is_local || protocol == ai::AiProtocol::CodexSubscription {
         0
     } else {
@@ -1698,8 +1604,6 @@ pub async fn manual_spawn_tile(
             purpose: "manual_spawn",
             model: &model,
             latency_ms: t0.elapsed().as_millis() as u64,
-            // The provider's real reason ("stop", "length" = truncated, …) —
-            // surfaced by `complete_once` (audit D4; previously hardcoded).
             finish_reason: &usage.finish_reason,
             text: &answer,
             output_tokens_est: usage.output,
@@ -1739,8 +1643,6 @@ pub async fn manual_spawn_tile(
                 });
             }
         }
-        // Pre-port used `{e:#}` (anyhow alternate / multiline) — keeps
-        // the full source chain in the log for observability. Match it.
         Err(e) => log::warn!("manual spawn_tile failed: {e:#}"),
     }
 
@@ -1833,10 +1735,6 @@ pub async fn ask_stream_loop(
             }
             ai::AiEvent::Done { reason } => {
                 finish = Some(reason.clone());
-                // Bump health on completion too, not only per-Delta: a
-                // successful but EMPTY-answer stream (zero deltas then Done)
-                // otherwise never clears a prior "AI down" state — matching the
-                // non-streaming paths, which bump on Ok regardless of content.
                 health
                     .last_ai_ok_ms
                     .store(crate::journal::now_unix_ms() as u64, Ordering::Relaxed);
@@ -1849,11 +1747,6 @@ pub async fn ask_stream_loop(
                         message,
                     });
                 }
-                // Mark AI down so HealthSignals flips the bar to "AI
-                // недоступен" within one health tick. The non-streaming
-                // auto-tile path (slint_session.rs) already does this; the
-                // Delta/Done arms bump last_ai_ok_ms (which clears it on the
-                // next success), so the err store mirrors that exactly.
                 health
                     .last_ai_err_ms
                     .store(crate::journal::now_unix_ms() as u64, Ordering::Relaxed);
@@ -1877,11 +1770,6 @@ pub async fn ask_stream_loop(
     let input_tokens = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
     let output_tokens = (accumulated.chars().count() as u64) / 4;
     let micro = ai::cost_microcents(&model, input_tokens, output_tokens);
-    // Local inference is free — zero the JOURNALED cost (mirrors reask_last /
-    // manual_spawn_tile). `cost_microcents` maps an unknown local model id to
-    // Sonnet pricing, so a non-zeroed `micro` would persist a phantom cost into
-    // the markdown export + debrief tally. The live meter is zeroed separately
-    // by the caller's `cost_apply` closure; cloud is unchanged.
     let micro = if is_local { 0 } else { micro };
     // Shim-provided closure: lock rt, add micro to session_cost,
     // return new total in USD. Single call, FnOnce, no re-entry.

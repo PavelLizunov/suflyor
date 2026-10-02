@@ -47,14 +47,14 @@ pub struct Config {
     pub active_profile: Option<String>,
 
     /// Audio device names (exact match against WASAPI enumeration).
-    pub mic_device: Option<String>, // e.g. "Headset Microphone (A50 Mic)"
-    pub system_audio_device: Option<String>, // e.g. "Line (A50 Stream Out)"
+    pub mic_device: Option<String>,
+    pub system_audio_device: Option<String>,
 
     /// AI proxy (OpenAI-compatible) — your Linux bridge.
-    pub ai_base_url: String, // e.g. "http://192.168.0.142:18902/v1"
+    pub ai_base_url: String,
     pub ai_bearer: String,  // BRIDGE_SECRET
-    pub ai_model: String,   // Live answers — fast, default claude-haiku-4-5
-    pub prep_model: String, // Pre-meeting context structuring — smart, default claude-sonnet-4-5
+    pub ai_model: String,
+    pub prep_model: String,
 
     /// EXPERIMENTAL — when true, the system prompt is sent with Anthropic
     /// `cache_control: ephemeral` so a pass-through bridge can prompt-cache
@@ -204,11 +204,11 @@ pub struct Config {
 
     /// Language tag (ISO 639-1) the assistant should ALWAYS respond in.
     /// Injected into the system prompt at runtime.
-    pub response_language: String, // e.g. "ru"
+    pub response_language: String,
 
     /// Groq Whisper STT.
     pub groq_api_key: String,
-    pub stt_language: Option<String>, // None = auto-detect, "ru" = forced Russian
+    pub stt_language: Option<String>,
     /// Groq Whisper model: "whisper-large-v3" (most accurate, slower) vs
     /// "whisper-large-v3-turbo" (~3× faster, slightly less accurate).
     /// Default: large-v3 — accuracy beats latency for interview use.
@@ -419,12 +419,6 @@ pub struct Config {
     #[serde(default)]
     pub compact_bar: bool,
 
-    // NOTE: the legacy `hotkey_*` (F9/F10/F11/F12) and `manual_ask_mode` and
-    // `custom_css` fields were REMOVED (P1.3). They were dead config that never
-    // matched runtime behaviour — the app uses FIXED hotkeys (F1/F3/F4/F6/F8/F9/
-    // Shift+F8/Shift+F9), push-to-talk is hard-wired, and there is no CSS surface
-    // in the Slint build. `#[serde(default)]` on the struct means old config.json
-    // files carrying these keys still load fine (serde ignores the unknown keys).
     /// UI language for Settings + Overlay + Tile chrome strings (NOT
     /// AI response language — that's `response_language` above). v0.0.42.
     /// Supported: "ru" (default, current primary), "en". Anything else
@@ -946,7 +940,7 @@ impl Config {
                     is_local: false,
                 })
             }
-            _ => None, // "off" (or unknown) → feature disabled
+            _ => None,
         }
     }
 
@@ -955,7 +949,6 @@ impl Config {
     /// from Windows Credential Manager. `detail` strings carry NO secrets.
     #[must_use]
     pub fn readiness(&self) -> ReadinessReport {
-        // AI — resolve the ACTIVE provider (local vs cloud) via the resolver.
         let ep = self.ai_endpoint(false);
         let ai_configured = if ep.protocol == AiProtocol::CodexSubscription {
             !ep.model.trim().is_empty()
@@ -981,7 +974,6 @@ impl Config {
             String::new()
         };
 
-        // STT — the active backend, keyed by `stt_provider`.
         let (stt_configured, stt_detail) = match self.stt_provider.as_str() {
             "gigaam" => {
                 let ok = !self.stt_gigaam_dir.trim().is_empty();
@@ -1012,17 +1004,11 @@ impl Config {
             }
         };
 
-        // Mic / system audio — a None / empty device means "system default",
-        // a valid config (configured = true); the live signal check lives on
-        // the Audio tab. Empty detail → the UI renders the localized "default".
         let device_detail = |d: &Option<String>| match d.as_deref() {
             Some(name) if !name.trim().is_empty() => name.to_string(),
             _ => String::new(),
         };
 
-        // Vision (F8) — resolve the SEPARATE vision channel. "off" → not
-        // configured (intentional). detail carries provider + url + model only,
-        // never a bearer (mirrors the AI line).
         let (vision_configured, vision_detail) = match self.vision_endpoint() {
             Some(ep) => {
                 let is_codex = ep.protocol == AiProtocol::CodexSubscription;
@@ -1155,8 +1141,6 @@ fn default_vision_provider() -> String {
 }
 
 fn default_ai_local_base_url() -> String {
-    // llama.cpp (the shipped setup-local-ai.ps1 pipeline) serves on :8080.
-    // Ollama users can change this to :11434 in Settings.
     "http://127.0.0.1:8080/v1".into()
 }
 
@@ -1195,34 +1179,31 @@ fn default_tile_body_opacity() -> f32 {
 }
 
 fn default_post_meeting_debrief_enabled() -> bool {
-    false // opt-in — surprise Sonnet calls are bad UX
+    false
 }
 
 fn default_record_audio_enabled() -> bool {
-    // ON by default — the saved audio is what a later "re-transcribe + re-summary
-    // from the archive" flow needs; every un-recorded call is lost to it. The
-    // Settings toggle + retention give the user control over privacy + disk.
     true
 }
 
 fn default_record_retention_sessions() -> u32 {
-    10 // ~ last 10 sessions; user-adjustable, 0 = unbounded
+    10
 }
 
 fn default_journal_retention_sessions() -> u32 {
-    100 // matches the pre-v0.15 hard-coded journal::KEEP_LAST_SESSIONS
+    100
 }
 
 fn default_journal_max_total_mb() -> u32 {
-    500 // matches the pre-v0.15 hard-coded journal::MAX_TOTAL_BYTES
+    500
 }
 
 fn default_record_max_total_mb() -> u32 {
-    20_000 // ~20 GB backstop on raw audio even in "keep all" mode; 0 = unlimited
+    20_000
 }
 
 fn default_session_archive_enabled() -> bool {
-    true // the JSONL journals already exist; the catalog just indexes them
+    true
 }
 
 fn default_max_session_cost_usd() -> f64 {
@@ -1240,37 +1221,26 @@ fn default_max_session_cost_usd() -> f64 {
 }
 
 fn default_detector_skip_mic() -> bool {
-    true // candidate's own voice shouldn't trigger explanation tiles
+    true
 }
 
 fn default_ui_language() -> String {
-    // v0.0.42: default RU because that's the current primary language
-    // (user is Russian-speaking; original Settings copy is Russian).
-    // EN is opt-in via Settings → Interface → Язык интерфейса.
     "ru".into()
 }
 
 fn default_hermes_bridge_port() -> u16 {
-    // Off the app's other local ports (llama.cpp 8080, Hermes API 8642,
-    // e5-sidecar 8082 из ADR) — deliberately distinct.
     8654
 }
 
 fn default_hermes_bridge_host() -> String {
-    // Loopback-only by default — safe; Hermes on the same machine reaches it.
     "127.0.0.1".into()
 }
 
 fn default_hermes_api_url() -> String {
-    // The local Hermes gateway API server (gateway/platforms/api_server.py
-    // DEFAULT_HOST/PORT). OpenAI-совместимый /v1.
     "http://127.0.0.1:8642/v1".into()
 }
 
 fn default_tile_font_size() -> u32 {
-    // v0.0.55: default 12 matches the historic `--fs-12` CSS var that
-    // .tile-body.markdown had previously hardcoded. Range 11-18 keeps
-    // tiles readable without breaking grid math.
     12
 }
 
@@ -1422,7 +1392,6 @@ pub fn load() -> Config {
                 Config::defaults()
             }
         },
-        // Fresh install — no config yet. Expected, so don't cry wolf.
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Config::defaults(),
         Err(e) => {
             log::warn!("config read failed ({e}), using defaults");
@@ -1430,13 +1399,6 @@ pub fn load() -> Config {
         }
     };
     let mut dirty = false;
-    // Heal an externally-mangled config: a non-UTF-8 tool (Notepad "ANSI" save,
-    // PowerShell without -Encoding utf8, a cp1252 paste) can round-trip
-    // config.json through Windows-1252, leaving the profile context as
-    // valid-UTF-8 mojibake ("**Ð Ð¾Ð»ÑŒ:**" = "**Роль:**") that strict-UTF-8 load
-    // then accepts. Detect that exact signature and reverse it so the user never
-    // sees garbled Cyrillic. Conservative — only repairs strings that reconstruct
-    // to valid UTF-8 GAINING Cyrillic, so legitimate text is untouched.
     if let Some(fixed) = repair::repair_cp1252_mojibake(&cfg.meeting_context) {
         log::warn!("config: repaired cp1252-mojibaked meeting_context on load");
         cfg.meeting_context = fixed;
@@ -1449,15 +1411,6 @@ pub fn load() -> Config {
             dirty = true;
         }
     }
-    // NB: we deliberately do NOT re-seed default snippets when the list is
-    // empty. A fresh install already gets them via Config::defaults() on the
-    // error arms above; re-seeding on every empty list clobbered a user who had
-    // intentionally deleted all their snippets (and rewrote config.json on
-    // every launch). To restore the canned set, use Settings → reset. (#134)
-    // Migrate a pre-profiles config: if the user already has a meeting_context
-    // but no named profiles, seed it as their first profile so the new
-    // multi-profile picker has something to show + select. Non-destructive: the
-    // live meeting_context is unchanged, just mirrored into a profile.
     if cfg.context_profiles.is_empty() && !cfg.meeting_context.trim().is_empty() {
         cfg.context_profiles.push(ContextProfile {
             name: DEFAULT_PROFILE_NAME.to_string(),
@@ -1467,9 +1420,6 @@ pub fn load() -> Config {
         log::info!("migrated meeting_context into a default profile");
         dirty = true;
     }
-    // RC3: the former implicit empty selection meant Piper. A user who made
-    // an explicit choice already has at least one of these fields populated,
-    // so migrate only the untouched legacy state.
     dirty |= migrate_legacy_tts_default(&mut cfg);
     dirty |= migrate_legacy_vision_same(&mut cfg);
     let managed_gigaam_ready = cfg!(target_os = "macos")
@@ -1477,15 +1427,7 @@ pub fn load() -> Config {
             &crate::local_ai::default_root(),
         ));
     dirty |= migrate_macos_gigaam_default(&mut cfg, managed_gigaam_ready);
-    // v2: CoreML was slower and retained substantially more RSS than CPU on
-    // Apple Silicon. Migrate the former implicit-on default once; users can
-    // still opt back in through Settings after this version is stamped.
     dirty |= migrate_macos_gigaam_cpu_default(&mut cfg);
-    // P1.3 — schema-versioning anchor. Stamp the file with the current schema
-    // version so a FUTURE release can detect an older layout (config_version <
-    // CURRENT) and run a one-time, number-keyed migration right here. Every
-    // field today is additive (serde fills missing ones from defaults), so the
-    // only action now is to stamp; the hook exists for the first breaking change.
     if cfg.config_version < CURRENT_CONFIG_VERSION {
         cfg.config_version = CURRENT_CONFIG_VERSION;
         dirty = true;
@@ -1695,7 +1637,6 @@ fn preserve_local_import_state(mut cfg: Config, local_deep_lock: bool) -> Config
 #[must_use]
 pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     let mut next = current.clone();
-    // Cloud AI provider/endpoint.
     next.ai_provider = imported.ai_provider;
     next.ai_base_url = imported.ai_base_url;
     next.ai_bearer = imported.ai_bearer;
@@ -1706,8 +1647,6 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     next.openai_model = imported.openai_model;
     next.anthropic_base_url = imported.anthropic_base_url;
     next.anthropic_model = imported.anthropic_model;
-    // Empty remains the legacy/fresh "unset" marker. Importing an older
-    // profile must not erase an explicit account model chosen on this PC.
     if !imported.codex_model.trim().is_empty() {
         next.codex_model = imported.codex_model;
         next.codex_reasoning_effort = imported.codex_reasoning_effort;
@@ -1717,14 +1656,12 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     }
     next.ai_mlx_model = imported.ai_mlx_model;
     next.vision_mlx_model = imported.vision_mlx_model;
-    // Local AI provider/endpoint.
     next.ai_local_base_url = imported.ai_local_base_url;
     next.ai_local_bearer = imported.ai_local_bearer;
     next.ai_local_model = imported.ai_local_model;
     next.ai_local_prep_model = imported.ai_local_prep_model;
     next.ai_local_vision = imported.ai_local_vision;
     next.ai_local_thinking = imported.ai_local_thinking;
-    // Vision channel (separate endpoint).
     next.vision_provider = imported.vision_provider;
     next.vision_base_url = imported.vision_base_url;
     next.vision_bearer = imported.vision_bearer;
@@ -1770,9 +1707,6 @@ pub fn import_server_settings_from(path: &std::path::Path, current: &Config) -> 
     Ok(next)
 }
 
-// ---------------------------------------------------------------------------
-// P1.7 — server-settings EXPORT (server fields only) + import PREVIEW.
-// ---------------------------------------------------------------------------
 
 /// P1.7 — export ONLY the AI/STT/vision SERVER fields to a user-picked path.
 /// Built from [`Config::defaults`] (so meeting_context, context_profiles,
@@ -1787,10 +1721,6 @@ pub fn import_server_settings_from(path: &std::path::Path, current: &Config) -> 
 /// `snippets`, audio devices, or any other machine-local field — the caller is
 /// responsible for warning the user the file holds secrets.
 pub fn export_server_settings_to(path: &std::path::Path, cfg: &Config) -> Result<()> {
-    // `merge_server_settings(current, imported)` copies the server fields of
-    // `imported` onto a clone of `current`. Feed defaults as `current` and the
-    // live config as `imported` → a Config whose ONLY non-default fields are the
-    // server ones. Single source of truth for "what is a server field".
     let server_only = merge_server_settings(&Config::defaults(), cfg.clone());
     let bytes = portable_config_bytes(&server_only).context("serialize server settings")?;
     std::fs::write(path, bytes).context("write server-settings export")?;
@@ -1870,7 +1800,6 @@ pub fn mask_host(url: &str) -> String {
     if url.is_empty() {
         return String::new();
     }
-    // Split off scheme:// if present.
     let (scheme, rest) = match url.find("://") {
         Some(i) => (&url[..i + 3], &url[i + 3..]),
         None => ("", url),
@@ -1909,7 +1838,7 @@ pub fn mask_host(url: &str) -> String {
                     ""
                 }
             }
-            None => "", // malformed (no closing bracket) — blank the whole authority
+            None => "",
         }
     } else {
         match host_port.rfind(':') {
@@ -1991,10 +1920,6 @@ pub fn preview_server_settings(current: &Config, imported: &Config) -> ServerSet
             label: "Vision".into(),
             provider_old: current.vision_provider.clone(),
             provider_new: imported.vision_provider.clone(),
-            // Show the cloud vision URL/model by default; the local vision
-            // fields fall back to it in vision_endpoint(), and showing both
-            // would crowd the preview. The provider line tells the user which
-            // one is active.
             base_url_old: current.vision_base_url.clone(),
             base_url_new: imported.vision_base_url.clone(),
             model_old: current.vision_model.clone(),
@@ -2009,8 +1934,6 @@ pub fn preview_server_settings(current: &Config, imported: &Config) -> ServerSet
             label: "STT".into(),
             provider_old: current.stt_provider.clone(),
             provider_new: imported.stt_provider.clone(),
-            // For STT the "base URL" that matters for a server transfer is the
-            // local whisper server; Groq cloud has no user URL. Show whisper.
             base_url_old: current.stt_whisper_url.clone(),
             base_url_new: imported.stt_whisper_url.clone(),
             model_old: current.stt_model.clone(),
@@ -2051,7 +1974,6 @@ pub fn preview_server_settings_from(
 #[must_use]
 pub fn apply_server_settings(current: &Config, imported: Config) -> Config {
     let mut next = merge_server_settings(current, imported);
-    // Keep the machine-local GigaAM model path from THIS PC.
     next.stt_gigaam_dir = current.stt_gigaam_dir.clone();
     next
 }

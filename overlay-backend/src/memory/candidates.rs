@@ -51,8 +51,6 @@ fn answer_candidates(session_id: &str, turns: &[AiTurn]) -> Vec<NewMemoryCandida
             !t.question.trim().is_empty() && t.answer.trim().chars().count() >= MIN_ANSWER_CHARS
         })
         .collect();
-    // Longest answer first (the "best" Q&A); ties keep input order via a stable
-    // sort, so the result is deterministic.
     substantive.sort_by(|a, b| {
         b.answer
             .trim()
@@ -65,7 +63,7 @@ fn answer_candidates(session_id: &str, turns: &[AiTurn]) -> Vec<NewMemoryCandida
     let mut out = Vec::new();
     for t in substantive {
         if !seen_question.insert(normalize(&t.question)) {
-            continue; // one candidate per distinct question
+            continue;
         }
         let chars = t.answer.trim().chars().count();
         out.push(NewMemoryCandidate {
@@ -73,7 +71,6 @@ fn answer_candidates(session_id: &str, turns: &[AiTurn]) -> Vec<NewMemoryCandida
             source_session_id: Some(session_id.to_string()),
             kind: "answer".to_string(),
             text: format!("Q: {}\nA: {}", t.question.trim(), t.answer.trim()),
-            // Language-neutral reason: a note glyph + the answer's char count.
             reason: format!("📝 {chars}"),
         });
         if out.len() >= MAX_ANSWER_CANDIDATES {
@@ -126,7 +123,6 @@ fn topic_candidates(session_id: &str, turns: &[AiTurn]) -> Vec<NewMemoryCandidat
                 source_session_id: Some(session_id.to_string()),
                 kind: "weak_topic".to_string(),
                 text,
-                // Language-neutral reason: a repeat glyph + the occurrence count.
                 reason: format!("🔁 ×{count}"),
             }
         })
@@ -156,12 +152,10 @@ fn tokenize(s: &str) -> Vec<&str> {
 fn is_stopword(token: &str) -> bool {
     matches!(
         token,
-        // English
         "what" | "that" | "this" | "with" | "from" | "your" | "have" | "about"
             | "into" | "does" | "when" | "which" | "would" | "should" | "could"
             | "their" | "there" | "where" | "will" | "they" | "then" | "than"
             | "such" | "some" | "just" | "also" | "very" | "much" | "more"
-        // Russian
             | "что" | "как" | "для" | "это" | "или" | "так" | "его" | "при"
             | "если" | "чтобы" | "когда" | "почему" | "какой" | "какая"
             | "какие" | "меня" | "тебя" | "может" | "можно" | "нужно" | "есть"
@@ -189,7 +183,6 @@ mod tests {
     }
 
     fn long(prefix: &str) -> String {
-        // A >= MIN_ANSWER_CHARS answer.
         format!("{prefix} {}", "x".repeat(MIN_ANSWER_CHARS))
     }
 
@@ -197,7 +190,7 @@ mod tests {
     fn substantive_answers_become_candidates() {
         let turns = vec![
             turn("what is a hash map", &long("a key-value structure")),
-            turn("ping", "ok"), // answer too short → skipped
+            turn("ping", "ok"),
         ];
         let cands = extract_heuristic("sess-1", &turns);
         let answers: Vec<_> = cands.iter().filter(|c| c.kind == "answer").collect();
@@ -218,7 +211,7 @@ mod tests {
             .into_iter()
             .filter(|c| c.kind == "answer")
             .collect();
-        assert_eq!(answers.len(), 1); // normalized question dedup
+        assert_eq!(answers.len(), 1);
     }
 
     #[test]
@@ -244,7 +237,6 @@ mod tests {
             .into_iter()
             .filter(|c| c.kind == "weak_topic")
             .collect();
-        // "kubernetes" appears in 2 distinct questions; "rust"/"ownership" once.
         assert!(topics.iter().any(|c| c.text.to_lowercase() == "kubernetes"));
         assert!(topics.iter().all(|c| c.text.to_lowercase() != "rust"));
         let kube = topics
@@ -264,7 +256,7 @@ mod tests {
             .into_iter()
             .filter(|c| c.kind == "weak_topic")
             .count();
-        assert_eq!(topics, 0); // all stop-words / < 4 chars
+        assert_eq!(topics, 0);
     }
 
     #[test]

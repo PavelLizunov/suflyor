@@ -205,12 +205,8 @@ pub fn install_models(cancel: &AtomicBool, on: &dyn Fn(DiarProgress)) -> Result<
 /// path itself needs the network and stays covered by the pin tests).
 fn install_models_in(root: &Path, cancel: &AtomicBool, on: &dyn Fn(DiarProgress)) -> Result<()> {
     std::fs::create_dir_all(root).with_context(|| format!("create {}", root.display()))?;
-    // Deterministic recovery: wipe artifacts a hard kill could have left (staging
-    // dirs mid-extract, temp downloads) before deciding what's already installed.
     clean_stale(root);
 
-    // Already complete + current → nothing to fetch (the button is normally hidden
-    // in this state; this is the defensive no-op + the network-free test seam).
     if models_installed_in(root) {
         for m in DIAR_MODELS {
             on(DiarProgress::AlreadyInstalled(m.label.to_string()));
@@ -219,15 +215,8 @@ fn install_models_in(root: &Path, cancel: &AtomicBool, on: &dyn Fn(DiarProgress)
         return Ok(());
     }
 
-    // Keep readiness false for the whole repair/reinstall. A still-valid sentinel
-    // plus an old marker could otherwise briefly make the set look complete after
-    // the first model lands but before the second one is replaced.
     invalidate_sentinel(root)?;
 
-    // Install each model, continuing past a failure so the UI can name EVERY model
-    // that failed (Settings shows a per-model «Не скачалось»). A failed model
-    // leaves nothing partial on the live names (install_one sweeps its staging +
-    // temp), so the post-loop validation is what decides success.
     let mut failed: Vec<&str> = Vec::new();
     for m in DIAR_MODELS {
         if cancel.load(Ordering::Acquire) {
@@ -243,14 +232,9 @@ fn install_models_in(root: &Path, cancel: &AtomicBool, on: &dyn Fn(DiarProgress)
     if !failed.is_empty() {
         bail!("не удалось установить: {}", failed.join(", "));
     }
-    // Validate the required model files BEFORE activation. Any model missing → the
-    // set is NOT committed (no sentinel), so it can never look installed.
     if !DIAR_MODELS.iter().all(|m| root.join(m.marker).is_file()) {
         bail!("модели установлены не полностью");
     }
-    // The complete set is on disk — commit the sentinel that makes it "installed".
-    // This is the ONLY writer, so a valid sentinel always vouches for a complete,
-    // current set.
     write_sentinel(root).context("commit diar install sentinel")?;
     on(DiarProgress::AllInstalled);
     Ok(())
@@ -276,14 +260,10 @@ fn install_one(m: &DiarModel, root: &Path, on: &dyn Fn(DiarProgress)) -> Result<
     curl_download(m.url, &tmp).with_context(|| format!("download {}", m.label))?;
 
     on(DiarProgress::Verifying(m.label.to_string()));
-    // A failed verify leaves the `.download` temp, which clean_stale sweeps on the
-    // next run (it is never read by the readiness check).
     verify_sha256(&tmp, m.sha256, m.label)?;
 
     if m.archive {
         on(DiarProgress::Unpacking(m.label.to_string()));
-        // Stage the extraction OFF the live tree: a kill mid-extract leaves only
-        // the staging dir dirty (swept by clean_stale), never a partial live tree.
         let stage = root.join(format!("{STAGING_PREFIX}{}", marker_top(m)));
         let _ = std::fs::remove_dir_all(&stage);
         std::fs::create_dir_all(&stage)
@@ -296,8 +276,6 @@ fn install_one(m: &DiarModel, root: &Path, on: &dyn Fn(DiarProgress)) -> Result<
         let _ = std::fs::remove_file(&tmp);
         commit_staged(m, root, &stage)
     } else {
-        // Windows rename does not replace an existing file. Remove the old live
-        // file first; readiness remains false until the final sentinel is written.
         let dest = root.join(m.filename);
         if dest.exists() {
             std::fs::remove_file(&dest).with_context(|| format!("replace {}", m.label))?;
@@ -318,7 +296,6 @@ fn install_one(m: &DiarModel, root: &Path, on: &dyn Fn(DiarProgress)) -> Result<
 /// partial.
 fn commit_staged(m: &DiarModel, root: &Path, stage: &Path) -> Result<()> {
     if !stage.join(m.marker).is_file() {
-        // Wipe the partial staging so it can't look installed.
         let _ = std::fs::remove_dir_all(stage);
         bail!("{}: модель установлена не полностью", m.label);
     }
@@ -332,7 +309,7 @@ fn commit_staged(m: &DiarModel, root: &Path, stage: &Path) -> Result<()> {
             let _ = std::fs::remove_dir_all(stage);
         })
         .with_context(|| format!("place {}", m.label))?;
-    let _ = std::fs::remove_dir_all(stage); // the now-empty staging shell
+    let _ = std::fs::remove_dir_all(stage);
     Ok(())
 }
 
@@ -461,8 +438,6 @@ pub fn install_nemotron() -> Result<()> {
     let path = nemotron_model_path().context("data dir unavailable")?;
     let root = path.parent().context("invalid model path")?;
     std::fs::create_dir_all(root).context("create model directory")?;
-    // A sentinel proves a verified install occurred, not that a user-writable
-    // model file has remained intact since then. Recheck before skipping repair.
     if nemotron_installed_in(root) {
         return Ok(());
     }
@@ -477,7 +452,6 @@ pub fn install_nemotron() -> Result<()> {
         bail!("Nemotron model length mismatch");
     }
     verify_sha256(&stage, NEMOTRON_SHA256, "Nemotron Q8")?;
-    // A failed replacement must not mark an old or partial file as ready.
     let sentinel = root.join(NEMOTRON_SENTINEL);
     if sentinel.exists() {
         std::fs::remove_file(&sentinel).context("invalidate old Nemotron sentinel")?;
@@ -557,7 +531,6 @@ mod tests {
         // Diarization needs BOTH: exactly one archive (seg) + one raw onnx (emb).
         assert_eq!(DIAR_MODELS.iter().filter(|m| m.archive).count(), 1);
         assert_eq!(DIAR_MODELS.iter().filter(|m| !m.archive).count(), 1);
-        // The public path getters index [0]=seg, [1]=emb — pin that layout.
         assert!(DIAR_MODELS[0].marker.ends_with("/model.onnx"));
         assert_eq!(DIAR_MODELS[1].marker, DIAR_MODELS[1].filename);
     }
@@ -593,7 +566,6 @@ mod tests {
 
     #[test]
     fn staged_partial_tree_never_reports_installed() {
-        // A kill mid-extract: the marker exists ONLY inside the staging dir.
         let tmp = tempfile::tempdir().unwrap();
         let stage = tmp.path().join(format!(
             "{STAGING_PREFIX}sherpa-onnx-pyannote-segmentation-3-0"
@@ -606,7 +578,6 @@ mod tests {
         .unwrap();
         force_emb_marker(tmp.path());
         assert!(!models_installed_in(tmp.path()));
-        // clean_stale wipes the staging shell; the live tree is untouched.
         clean_stale(tmp.path());
         assert!(!stage.exists());
         assert!(tmp
@@ -627,8 +598,8 @@ mod tests {
     fn valid_sentinel_with_a_missing_marker_is_not_installed() {
         let tmp = tempfile::tempdir().unwrap();
         force_seg_marker(tmp.path());
-        write_sentinel(tmp.path()).unwrap(); // sentinel claims both…
-        assert!(!models_installed_in(tmp.path())); // …but the emb file is gone
+        write_sentinel(tmp.path()).unwrap();
+        assert!(!models_installed_in(tmp.path()));
     }
 
     #[test]
@@ -651,7 +622,6 @@ mod tests {
     fn stale_or_garbage_sentinel_is_not_installed() {
         let tmp = tempfile::tempdir().unwrap();
         force_both_markers(tmp.path());
-        // Wrong version → stale.
         let stale = Sentinel {
             version: SENTINEL_VERSION + 1,
             models: expected_sentinel().models,
@@ -662,7 +632,6 @@ mod tests {
         )
         .unwrap();
         assert!(!models_installed_in(tmp.path()));
-        // A mismatched pin (the build updated a model) → stale.
         let mut wrong = expected_sentinel();
         wrong
             .models
@@ -673,16 +642,12 @@ mod tests {
         )
         .unwrap();
         assert!(!models_installed_in(tmp.path()));
-        // Garbage bytes → unparseable → not installed.
         std::fs::write(tmp.path().join(SENTINEL_FILE), b"not json").unwrap();
         assert!(!models_installed_in(tmp.path()));
     }
 
     #[test]
     fn already_installed_is_a_no_op() {
-        // A complete + current set short-circuits BEFORE any download is attempted
-        // (no network is reachable here, so a fetch would fail the test). This is
-        // the orchestration seam that needs no APPDATA and no network.
         let tmp = tempfile::tempdir().unwrap();
         force_both_markers(tmp.path());
         write_sentinel(tmp.path()).unwrap();
@@ -722,7 +687,6 @@ mod tests {
         let live = root.join("sherpa-onnx-pyannote-segmentation-3-0");
         std::fs::create_dir_all(&live).unwrap();
         std::fs::write(live.join("torn.onnx"), b"partial junk").unwrap();
-        // The staged extraction: complete (marker present) + a sibling file.
         let stage = root.join(format!(
             "{STAGING_PREFIX}sherpa-onnx-pyannote-segmentation-3-0"
         ));
@@ -753,7 +717,6 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         let m = &DIAR_MODELS[0];
-        // Staged WITHOUT the marker (a kill mid-extract).
         let stage = root.join(format!(
             "{STAGING_PREFIX}sherpa-onnx-pyannote-segmentation-3-0"
         ));
@@ -763,7 +726,6 @@ mod tests {
             b"tokens",
         )
         .unwrap();
-        // A prior live tree that must survive the rejected commit.
         let live = root.join("sherpa-onnx-pyannote-segmentation-3-0");
         std::fs::create_dir_all(&live).unwrap();
         std::fs::write(live.join("model.onnx"), b"previous").unwrap();
@@ -790,7 +752,6 @@ mod tests {
 
         assert!(!root.join(format!("{STAGING_PREFIX}x")).exists());
         assert!(!root.join("something.tar.bz2.download").exists());
-        // Real files survive.
         assert!(root
             .join("sherpa-onnx-pyannote-segmentation-3-0/model.onnx")
             .is_file());
@@ -805,7 +766,6 @@ mod tests {
         write_sentinel(tmp.path()).unwrap();
         assert!(sentinel_valid(tmp.path()));
         assert!(!tmp.path().join(format!("{SENTINEL_FILE}.tmp")).exists());
-        // Tampered pin → invalid.
         let mut tampered = expected_sentinel();
         tampered
             .models

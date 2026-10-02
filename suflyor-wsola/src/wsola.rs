@@ -246,14 +246,10 @@ impl Wsola {
             ));
         }
 
-        // Target output length based on stretch ratio
         let target_output_len = (input.len() as f64 * self.stretch_ratio).round() as usize;
 
-        // Take the reusable buffer out of self to avoid borrow conflicts
-        // (find_best_position borrows &mut self while output is also needed)
         let mut work = std::mem::take(&mut self.output_buf);
 
-        // Grow if needed, zero the portion we'll use; never shrink
         let estimated_output_len = target_output_len + self.segment_size * 2;
         if work.capacity() < estimated_output_len {
             if allow_internal_growth {
@@ -275,12 +271,10 @@ impl Wsola {
             }
         }
 
-        // Copy first segment
         let first_len = self.segment_size.min(input.len());
         work[..first_len].copy_from_slice(&input[..first_len]);
 
         let mut input_pos: f64 = advance_input as f64;
-        // Track output position fractionally to avoid cumulative rounding error
         let mut output_pos_f: f64 = advance_output_f;
         let mut actual_output_len = first_len;
         let mut iterations = 0usize;
@@ -298,7 +292,6 @@ impl Wsola {
                     "WSOLA main loop iteration bound exceeded",
                 ));
             }
-            // For compression (ratio < 1.0), stop once we've produced enough output
             if actual_output_len >= target_output_len {
                 break;
             }
@@ -306,7 +299,6 @@ impl Wsola {
             let nominal_pos = input_pos as usize;
             let output_pos = output_pos_f.round() as usize;
 
-            // Ensure we have room in the output buffer
             let needed = output_pos + self.segment_size;
             if needed > work.capacity() {
                 if allow_internal_growth {
@@ -324,11 +316,9 @@ impl Wsola {
                 work.resize(needed, 0.0);
             }
 
-            // Search for best matching position around nominal position
             let (best_pos, fractional_offset) =
                 self.find_best_position(input, &work, nominal_pos, output_pos);
 
-            // Overlap-add with cross-fade (using sub-sample offset for precision)
             self.overlap_add(input, &mut work, best_pos, output_pos, fractional_offset);
             actual_output_len = (output_pos + self.segment_size).max(actual_output_len);
 
@@ -385,7 +375,6 @@ impl Wsola {
 
         let num_candidates = search_end - search_start + 1;
 
-        // Use FFT-based correlation when search range is large enough to benefit
         if num_candidates > FFT_CANDIDATE_THRESHOLD && overlap_len >= FFT_OVERLAP_THRESHOLD {
             self.find_best_position_fft(
                 input,
@@ -430,7 +419,6 @@ impl Wsola {
             return (search_start, 0.0);
         }
 
-        // Collect correlation values for parabolic interpolation
         let num_candidates = search_end - search_start + 1;
         self.corr_values_buf.resize(num_candidates, 0.0);
         let mut computed = 0usize;
@@ -457,7 +445,6 @@ impl Wsola {
         }
         self.corr_values_buf.truncate(computed);
 
-        // Parabolic interpolation for sub-sample accuracy
         let best_idx = best_pos - search_start;
         let fractional_offset = parabolic_interpolation(&self.corr_values_buf, best_idx);
 
@@ -483,7 +470,6 @@ impl Wsola {
         let ref_signal = &output[output_pos..output_pos + overlap_len];
         let search_region_len = search_end - search_start + overlap_len;
 
-        // Clamp to available input
         let actual_region_end = (search_start + search_region_len).min(input.len());
         let actual_region_len = actual_region_end - search_start;
         if actual_region_len < overlap_len {
@@ -491,19 +477,15 @@ impl Wsola {
         }
         let search_signal = &input[search_start..actual_region_end];
 
-        // Compute raw cross-correlation via FFT (results stored in self.fft_corr_buf)
         self.fft_cross_correlate(ref_signal, search_signal);
 
-        // Compute reference energy (constant for all candidates)
         let ref_energy: f64 = ref_signal.iter().map(|&s| (s as f64) * (s as f64)).sum();
         if ref_energy < ENERGY_EPSILON {
             return (search_start, 0.0);
         }
 
-        // Find best candidate using normalized correlation
         let num_candidates = actual_region_len.saturating_sub(overlap_len) + 1;
 
-        // Reuse prefix_sq_buf for energy normalization
         self.prefix_sq_buf.resize(search_signal.len() + 1, 0.0);
         let mut accum = 0.0f64;
         for (i, &s) in search_signal.iter().enumerate() {
@@ -521,7 +503,6 @@ impl Wsola {
             &mut self.norm_corr_values_buf,
         );
 
-        // Clamp to valid range
         (best_pos.min(search_end), fractional_offset)
     }
 
@@ -540,9 +521,6 @@ impl Wsola {
         let fft_fwd = fft_fwd.clone();
         let fft_inv = fft_inv.clone();
 
-        // Resize and fill reusable buffers (grow-only, never shrink).
-        // Zero-fill first, then copy signal data Ã¢â‚¬â€ avoids per-element branch
-        // which inhibits auto-vectorization.
         self.fft_ref_buf.resize(fft_size, COMPLEX_ZERO);
         self.fft_ref_buf.fill(COMPLEX_ZERO);
         for (slot, &s) in self.fft_ref_buf.iter_mut().zip(ref_signal.iter()) {
@@ -555,17 +533,14 @@ impl Wsola {
             *slot = Complex::new(s, 0.0);
         }
 
-        // Forward FFT
         fft_fwd.process_with_scratch(&mut self.fft_ref_buf, &mut self.fft_fwd_scratch);
         fft_fwd.process_with_scratch(&mut self.fft_search_buf, &mut self.fft_fwd_scratch);
 
-        // Multiply conj(Ref) * Search into corr_buf (index-based for auto-vectorization)
         self.fft_corr_buf.resize(fft_size, COMPLEX_ZERO);
         for i in 0..fft_size {
             self.fft_corr_buf[i] = self.fft_ref_buf[i].conj() * self.fft_search_buf[i];
         }
 
-        // Inverse FFT in-place
         fft_inv.process_with_scratch(&mut self.fft_corr_buf, &mut self.fft_inv_scratch);
     }
 
@@ -609,10 +584,7 @@ impl Wsola {
         let out_avail = output.len().saturating_sub(output_pos);
         let len = segment_len.min(out_avail);
 
-        // If we have a fractional offset that would require reading past the end,
-        // reduce len by 1 to leave room for the interpolation neighbor.
         let len = if fractional_offset.abs() > 1e-10 && len > 0 {
-            // Need src_idx + 1 < input.len() for the last sample
             let last_src = input_pos as f64 + (len - 1) as f64 + fractional_offset;
             let last_idx = last_src.floor() as usize;
             if last_idx + 1 >= input.len() {
@@ -627,12 +599,6 @@ impl Wsola {
         let overlap_len = self.overlap_size.min(len);
         let use_interp = fractional_offset.abs() > 1e-10;
 
-        // For expansion (ratio > 1.0), the output advance exceeds the segment's
-        // non-overlap region, so the tail of the crossfade zone overlaps with
-        // zero-filled output (the previous segment didn't reach this far).
-        // Crossfading new content with zeros would create an amplitude dip.
-        // Only crossfade where real previous content exists; write full-amplitude
-        // new content in the gap region.
         let valid_overlap = if self.stretch_ratio > 1.0 {
             let advance_input = self.segment_size - self.overlap_size;
             let advance_output = (advance_input as f64 * self.stretch_ratio).round() as usize;
@@ -645,12 +611,6 @@ impl Wsola {
             overlap_len
         };
 
-        // Crossfade region: raised-cosine fade where previous content exists.
-        // For expansion, valid_overlap < overlap_size, so we rescale the
-        // crossfade to span the full 0Ã¢â€ â€™1 range within valid_overlap samples.
-        // Without rescaling, the crossfade only reaches ~50% at the gap
-        // boundary, creating a hard amplitude jump that produces comb-filtering
-        // artifacts on broadband (noise-like) percussive content.
         let need_rescale = valid_overlap > 0 && valid_overlap < overlap_len;
         let inv_valid = 1.0 / valid_overlap.max(1) as f32;
         for i in 0..valid_overlap {
@@ -674,8 +634,6 @@ impl Wsola {
             output[output_pos + i] = output[output_pos + i] * fade_out + in_sample * fade_in;
         }
 
-        // Gap region: previous segment didn't reach here (output is zero).
-        // Write new content at full amplitude to avoid the dip artifact.
         if use_interp {
             for i in valid_overlap..overlap_len {
                 output[output_pos + i] =
@@ -686,15 +644,12 @@ impl Wsola {
                 .copy_from_slice(&input[input_pos + valid_overlap..input_pos + overlap_len]);
         }
 
-        // Non-overlap region
         if use_interp {
-            // Sub-sample interpolated copy
             for i in overlap_len..len {
                 output[output_pos + i] =
                     subsample_interpolate(input, input_pos, i, fractional_offset);
             }
         } else {
-            // Direct copy (fast path, no fractional offset)
             let copy_start = overlap_len;
             output[output_pos + copy_start..output_pos + len]
                 .copy_from_slice(&input[input_pos + copy_start..input_pos + len]);
@@ -762,7 +717,6 @@ fn find_best_candidate(
     let mut best_ncorr = f64::NEG_INFINITY;
     let mut best_k: usize = 0;
 
-    // Collect normalized correlation values for parabolic interpolation
     norm_corr_values.resize(num_candidates, 0.0);
 
     for k in 0..num_candidates {
@@ -785,7 +739,6 @@ fn find_best_candidate(
         }
     }
 
-    // Parabolic interpolation for sub-sample accuracy
     let fractional_offset = parabolic_interpolation(norm_corr_values, best_k);
 
     (best_pos, fractional_offset)
@@ -970,7 +923,6 @@ fn normalized_cross_correlation_with_reference_stats(
         return 0.0;
     }
 
-    // Keep the explicit use of ref_sum2 to avoid recalculation in callers.
     let _ = ref_sum2;
     numerator / (ref_var * var_b).sqrt()
 }
@@ -993,7 +945,6 @@ fn parabolic_interpolation(corr: &[f64], k: usize) -> f64 {
 
     if denom.abs() > 1e-10 {
         let p = 0.5 * (alpha - gamma) / denom;
-        // Clamp to [-0.5, 0.5] for safety
         p.clamp(-0.5, 0.5)
     } else {
         0.0

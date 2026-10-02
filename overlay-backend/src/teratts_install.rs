@@ -202,8 +202,6 @@ pub fn install_with(
     std::fs::create_dir_all(tts_root).with_context(|| format!("create {}", tts_root.display()))?;
 
     let staging = tts_root.join(format!("teratts-v2-{}.staging", manifest.revision));
-    // A leftover staging dir comes from a killed/cancelled generation; files
-    // that still verify are resumed, everything else re-downloads.
     on(TeraProgress::Preparing);
     let total = manifest.files.len();
     for (index, entry) in manifest.files.iter().enumerate() {
@@ -249,9 +247,6 @@ pub fn install_with(
         bail!("отменено");
     }
 
-    // Self-heal: a release dir still present here FAILED validation at the
-    // top (valid installs early-return). On Windows the publish rename cannot
-    // replace it, so move it to a quarantine within the same parent first.
     if release.exists() {
         if let Err(e) = quarantine_broken_release(tts_root, &release, &manifest.revision) {
             wipe_staging(&staging);
@@ -303,9 +298,6 @@ fn is_within(parent: &Path, child: &Path) -> bool {
             _ => return false,
         }
     }
-    // Parent exhausted: child == parent or below it. Whatever follows the
-    // matched prefix must be plain path segments — `..` (or anything else
-    // non-Normal) never counts as containment.
     child_components.all(|c| matches!(c, Component::Normal(_)))
 }
 
@@ -527,8 +519,6 @@ mod tests {
     }
 
     fn tiny_manifest() -> Manifest {
-        // sha256 pin is the standard SHA-256("abc") constant; the blob pin is
-        // computed so the test never trusts a remembered digest.
         manifest_from_json(&format!(
             r#"{{
               "model": "test/model",
@@ -565,7 +555,6 @@ mod tests {
         std::fs::write(dir.path().join("models/a.onnx"), b"abd").unwrap();
         assert!(verify_file(onnx, &dir.path().join("models/a.onnx")).is_err());
 
-        // Blob digest of "abc": sha1("blob 3\0abc").
         use sha1::Digest as _;
         let mut hasher = sha1::Sha1::new();
         hasher.update(b"blob 3\0abc");
@@ -641,7 +630,7 @@ mod tests {
     fn install_with_honours_cancel_between_files() {
         let manifest = tiny_manifest();
         let root = tempfile::tempdir().unwrap();
-        let cancel = AtomicBool::new(true); // cancelled before the first file
+        let cancel = AtomicBool::new(true);
         let downloader = |_url: &str, dest: &Path| -> Result<()> {
             std::fs::write(dest, b"abc")?;
             Ok(())
@@ -659,8 +648,6 @@ mod tests {
         let manifest = tiny_manifest();
         let root = tempfile::tempdir().unwrap();
         let cancel = AtomicBool::new(false);
-        // Pre-stage a verified copy of the first file; the downloader must only
-        // be asked for the second.
         let staging = root
             .path()
             .join(format!("teratts-v2-{}.staging", manifest.revision));
@@ -721,7 +708,6 @@ mod tests {
         TeraInstalled::Missing
     }
 
-    // ===== Self-heal (broken release quarantine) =====
 
     fn ok_downloader(_url: &str, dest: &Path) -> Result<()> {
         std::fs::write(dest, b"abc")?;
@@ -751,11 +737,8 @@ mod tests {
             Path::new("root/tts/teratts")
         ));
         assert!(is_within(Path::new("root/tts"), Path::new("root/tts")));
-        // A sibling whose name merely starts with the same letters is OUT.
         assert!(!is_within(Path::new("root/tts"), Path::new("root/ttsx")));
         assert!(!is_within(Path::new("root/tts"), Path::new("root/other")));
-        // Traversal never counts as containment (`.` normalizes away and is
-        // genuinely inside; `..` escapes).
         assert!(!is_within(
             Path::new("root/tts"),
             Path::new("root/tts/../x")
@@ -769,10 +752,8 @@ mod tests {
     #[test]
     fn is_within_understands_drive_prefixes_and_case() {
         assert!(is_within(Path::new(r"C:\a\b"), Path::new(r"C:\a\b\c")));
-        // Drive-prefix neighbour: C:\a\bc is NOT below C:\a\b.
         assert!(!is_within(Path::new(r"C:\a\b"), Path::new(r"C:\a\bc")));
         assert!(!is_within(Path::new(r"C:\a\b"), Path::new(r"D:\a\b")));
-        // Windows paths compare case-insensitively.
         assert!(is_within(Path::new(r"C:\A\b"), Path::new(r"c:\a\B\c")));
     }
 
@@ -806,7 +787,6 @@ mod tests {
         let unique: std::collections::BTreeSet<_> = quarantined.iter().collect();
         assert_eq!(unique.len(), 2, "quarantine names must not collide");
 
-        // A release path outside the managed root must never be touched.
         let outside_root = tempfile::tempdir().unwrap();
         let outside = outside_root.path().join("teratts-v2-elsewhere");
         std::fs::create_dir_all(&outside).unwrap();
@@ -820,7 +800,6 @@ mod tests {
         let manifest = tiny_manifest();
         let root = tempfile::tempdir().unwrap();
         let release = release_path(root.path(), &manifest);
-        // Broken release: files but no publish marker.
         write_test_files(&release);
         std::fs::remove_file(release.join(MARKER)).ok();
 
@@ -829,7 +808,6 @@ mod tests {
 
         assert!(release.join(MARKER).is_file());
         assert!(check_dir(&manifest, &release).is_ok());
-        // The quarantine was swept after the successful publish.
         assert!(quarantine_dirs(root.path()).is_empty());
     }
 
@@ -838,7 +816,6 @@ mod tests {
         let manifest = tiny_manifest();
         let root = tempfile::tempdir().unwrap();
         let release = release_path(root.path(), &manifest);
-        // Broken release: marker present, one file truncated (size mismatch).
         write_test_files(&release);
         std::fs::write(release.join(MARKER), "{}").unwrap();
         std::fs::write(release.join("models/a.onnx"), b"a").unwrap();
@@ -856,7 +833,6 @@ mod tests {
         let manifest = tiny_manifest();
         let root = tempfile::tempdir().unwrap();
         let release = release_path(root.path(), &manifest);
-        // Nonempty dir of unrelated junk (e.g. an interrupted external tool).
         std::fs::create_dir_all(release.join("random")).unwrap();
         std::fs::write(release.join("random/junk.bin"), b"xxxxx").unwrap();
 
@@ -875,7 +851,6 @@ mod tests {
         let release = release_path(root.path(), &manifest);
         write_test_files(&release);
         std::fs::write(release.join(MARKER), "{}").unwrap();
-        // Canary file: a valid release must be preserved byte-for-byte.
         std::fs::write(release.join("canary.txt"), b"keep me").unwrap();
 
         let cancel = AtomicBool::new(false);
@@ -907,8 +882,6 @@ mod tests {
         let err =
             install_with(&manifest, root.path(), &cancel, &|_| {}, &ok_downloader).unwrap_err();
         assert!(format!("{err:#}").contains("отменено"));
-        // Cancel happens before quarantine: the broken dir waits for the next
-        // run, and nothing else is left behind.
         assert!(release.join("models/a.onnx").is_file());
         assert!(quarantine_dirs(root.path()).is_empty());
         assert!(!root

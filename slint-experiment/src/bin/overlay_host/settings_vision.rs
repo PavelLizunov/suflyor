@@ -46,13 +46,10 @@ pub(crate) fn wire_vision_settings(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
 ) {
-    // ===== V4 — vision (screenshot) channel: provider switch + field saves + test =====
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_vision_provider_changed(move |idx| {
-            // Selecting the catalog entry does not start or route to MLX. The
-            // explicit Vision enable button owns that state change.
             if cfg!(target_os = "macos") && idx == 6 {
                 return;
             }
@@ -135,7 +132,6 @@ pub(crate) fn wire_vision_settings(
     }
     {
         let cfg_c = cfg.clone();
-        // v0.11.0 — Test Practice toggle for plain F8 (study / self-check).
         win.on_vision_test_practice_changed(move |on| {
             let mut c = cfg_c.write();
             c.vision_test_practice = on;
@@ -268,14 +264,12 @@ pub(crate) fn wire_vision_settings(
                 return;
             }
             w.set_ocr_installing(true);
-            w.set_ocr_install_phase(1); // preparing
+            w.set_ocr_install_phase(1);
             let weak_done = w.as_weak();
             std::thread::spawn(move || {
                 let weak_cb = weak_done.clone();
                 let on = move |p: overlay_backend::ocr_install::OcrProgress| {
                     use overlay_backend::ocr_install::OcrProgress;
-                    // Semantic variant → phase int; the .slint renders the
-                    // localized text via @tr (no label needed for OCR).
                     let phase: i32 = match p {
                         OcrProgress::Downloading => 2,
                         OcrProgress::Verifying => 3,
@@ -300,11 +294,8 @@ pub(crate) fn wire_vision_settings(
                     };
                     w.set_ocr_installing(false);
                     if result.is_err() {
-                        w.set_ocr_install_phase(8); // generic failure
+                        w.set_ocr_install_phase(8);
                     } else {
-                        // Final phase was set by install() via the progress
-                        // callback; just flip the installed flag so the button
-                        // disappears.
                         w.set_ocr_installed(true);
                     }
                 });
@@ -364,8 +355,6 @@ pub(crate) fn wire_vision_settings(
                         ));
                     } else {
                         w.set_diar_models_installed(true);
-                        // Clear the status so the localized @tr("Speaker models are
-                        // installed.") confirmation renders (not the RU progress literal).
                         w.set_diar_install_status(slint::SharedString::default());
                     }
                 });

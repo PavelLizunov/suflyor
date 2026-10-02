@@ -69,7 +69,7 @@ fn from_jsonl_prompts_in(dir: &Path, session_id: &str) -> Option<Vec<TranscriptL
     let mut lines: Vec<String> = Vec::new();
     for raw in content.lines() {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(raw) else {
-            continue; // skip a torn / corrupt journal line
+            continue;
         };
         if v.get("kind").and_then(serde_json::Value::as_str) != Some("ai_request") {
             continue;
@@ -141,7 +141,7 @@ mod tests {
         assert!(matches!(lines[0].source, AudioSource::Mic));
         assert_eq!(lines[0].text, "привет");
         assert!(matches!(lines[1].source, AudioSource::System));
-        assert!(from_catalog(&store, "nope").is_none()); // absent → None
+        assert!(from_catalog(&store, "nope").is_none());
     }
 
     #[test]
@@ -160,12 +160,12 @@ mod tests {
         let lines = from_jsonl_prompts_in(dir, "S1").unwrap();
         assert_eq!(lines.len(), 1);
         let text = &lines[0].text;
-        assert_eq!(text.matches("контекст A").count(), 1); // overlap deduped
+        assert_eq!(text.matches("контекст A").count(), 1);
         assert!(text.contains("Q1 что такое хеш-таблица"));
         assert!(text.contains("Q2 сложность поиска"));
-        assert!(!text.contains("ответ — не источник")); // ai_response is NOT a source
+        assert!(!text.contains("ответ — не источник"));
 
-        assert!(from_jsonl_prompts_in(dir, "../escape").is_none()); // traversal guard
-        assert!(from_jsonl_prompts_in(dir, "missing").is_none()); // no journal → None
+        assert!(from_jsonl_prompts_in(dir, "../escape").is_none());
+        assert!(from_jsonl_prompts_in(dir, "missing").is_none());
     }
 }

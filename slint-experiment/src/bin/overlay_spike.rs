@@ -71,10 +71,6 @@ use ui::OverlaySpike;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let window = OverlaySpike::new()?;
 
-    // Deferred HWND grab — slint::Window::window_handle() returns
-    // HandleError::NotSupported until the native window is realized,
-    // which happens during the first event-loop iteration. A 200 ms
-    // single-shot timer that grabs after run() starts is reliable.
     let weak = window.as_weak();
     slint::Timer::single_shot(Duration::from_millis(200), move || {
         let Some(w) = weak.upgrade() else { return };
@@ -105,21 +101,6 @@ fn apply_and_log(hwnd: HWND) {
     let before = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
     eprintln!("[overlay-spike] EX style before: 0x{:x}", before as usize);
 
-    // Variant choice: WS_EX_LAYERED triggers GDI-style alpha which Slint's
-    // skia/winit rendering doesn't paint into, leaving the layered surface
-    // opaque black. The Tauri/WebView2 version achieves transparency via
-    // DWM compositing rather than WS_EX_LAYERED — winit's default window
-    // creation already enables DWM compositing, and Slint's
-    // `background: transparent` should drive per-pixel alpha through it.
-    //
-    // So this spike adds ONLY:
-    //   - WS_EX_TRANSPARENT  (click-through; doesn't affect rendering)
-    //   - WS_EX_TOOLWINDOW   (no taskbar entry; doesn't affect rendering)
-    //
-    // And RELIES on Slint's `background: transparent;` + winit default
-    // compositing for actual transparency. If the window still renders
-    // opaque, the migration needs to investigate winit::WindowBuilder
-    // ::with_transparent(true) wiring inside Slint's backend.
     let added = WS_EX_TRANSPARENT.0 as isize | WS_EX_TOOLWINDOW.0 as isize;
     let new_style = before | added;
     let prev = unsafe { SetWindowLongPtrW(hwnd, GWL_EXSTYLE, new_style) };
@@ -145,18 +126,6 @@ fn apply_and_log(hwnd: HWND) {
         return;
     }
 
-    // Phase 1 Day 1 transparency wiring spike — two attempts:
-    //
-    // (a) DwmExtendFrameIntoClientArea with margins=(-1,-1,-1,-1) — extends
-    //     the DWM-composited frame across the entire client area, which on
-    //     Windows 10+ enables per-pixel alpha for the window IF the window
-    //     content has an alpha channel.
-    // (b) DwmEnableBlurBehindWindow with hRgnBlur = empty region — tells
-    //     DWM to composite the window with per-pixel alpha (instead of the
-    //     default opaque GDI background).
-    //
-    // Neither succeeds if Slint's winit window was created without
-    // `with_transparent(true)`. We try both and report visually.
 
     let margins = MARGINS {
         cxLeftWidth: -1,
@@ -171,10 +140,6 @@ fn apply_and_log(hwnd: HWND) {
         }
     }
 
-    // Empty region = transparent "blur" zone, which in practice enables
-    // per-pixel alpha without applying actual blur. The trick fails on
-    // Windows 11 with default DWM settings (Acrylic) and you may see a
-    // light tint, but it's worth trying.
     let h_rgn = unsafe { CreateRectRgn(0, 0, -1, -1) };
     let bb = DWM_BLURBEHIND {
         dwFlags: DWM_BB_ENABLE | DWM_BB_BLURREGION,

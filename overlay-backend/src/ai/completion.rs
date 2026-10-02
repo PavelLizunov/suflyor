@@ -171,7 +171,7 @@ pub(crate) async fn complete_with_usage_inner(
                     last_err = Some(e);
                     break;
                 }
-                let delay_ms = 1000u64 * (1u64 << (attempt - 1)); // 1s, 2s, 4s
+                let delay_ms = 1000u64 * (1u64 << (attempt - 1));
                 log::warn!(
                     "AI complete attempt {}/{} failed: {msg} — retrying in {}ms",
                     attempt,

@@ -39,9 +39,6 @@ use super::{
 };
 use slint::Model;
 use std::cell::RefCell;
-// `conversations_evict_keys` lives in `tile_controller.rs`; only this module's
-// eviction unit test (`copy_tests`) exercises it, so import it TEST-ONLY — a
-// plain module-level import would be unused in the normal build (clippy -D).
 #[cfg(test)]
 use super::conversations_evict_keys;
 
@@ -89,8 +86,6 @@ pub(crate) fn format_transcript_for_copy(
             "Система"
         };
         let text = overlay_backend::text::collapse_ws(&u.text);
-        // F1: timecode = the line's START (previous line's timestamp; first = origin),
-        // matching the on-screen transcript + the player seek.
         let prefix = if with_timecodes {
             overlay_backend::session_audio::line_start_offset_ms(utts, i, session_start_ms)
                 .map(|off| format!("[{}] ", super::aux_windows::fmt_offset(off)))
@@ -133,9 +128,6 @@ pub(crate) fn user_question_for_copy(raw: &str) -> String {
     if raw.trim_start().starts_with("Транскрипт последних реплик") {
         return String::new();
     }
-    // A vision tile's first user turn is the canned screenshot prompt, not text
-    // the user typed — drop it so a multi-turn vision copy doesn't render
-    // "🧑 Что на этом скриншоте?…" as if the user had asked it.
     if raw.trim() == vision::DEFAULT_VISION_PROMPT
         || raw.trim().starts_with(vision::TRANSLATE_VISION_PROMPT)
     {
@@ -205,8 +197,6 @@ pub(crate) fn format_convo_copy(messages: &[ai::ChatMessage], rendered: &str) ->
     }
     let assistant_turns = turns.iter().filter(|(r, _)| *r == "assistant").count();
     if assistant_turns <= 1 {
-        // Single answer: copy just it (or the rendered body if, mid-stream, no
-        // assistant turn is recorded yet).
         return turns
             .iter()
             .rev()
@@ -216,8 +206,6 @@ pub(crate) fn format_convo_copy(messages: &[ai::ChatMessage], rendered: &str) ->
     }
     let mut out = String::new();
     for (role, text) in &turns {
-        // User turns carry the build_request wrapper (transcript + "Помоги
-        // ответить:") — copy only the real question, never the Mic/System dump.
         let display = if *role == "assistant" {
             (*text).clone()
         } else {
@@ -402,7 +390,6 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
                 }
                 t.set_mark_anchor(i32::try_from(i).unwrap_or(-1));
             }
-            // Recompute the count + the sole-marked index (when exactly one).
             let mut count = 0_i32;
             let mut single_idx = -1_i32;
             let mut single_text = SharedString::default();
@@ -517,8 +504,6 @@ pub(crate) fn wire_block_capture(tile: &TileWindow) {
             let Some(vm) = blocks.as_any().downcast_ref::<VecModel<MarkdownBlock>>() else {
                 return;
             };
-            // Mirror save-marked EXACTLY: a single mark copies the (possibly edited) trim buffer, so
-            // Copy never diverges from what the editor shows / To-memory would store; N>1 joins.
             let text = if t.get_marked_count() == 1 {
                 t.get_capture_text().to_string()
             } else {
@@ -617,14 +602,12 @@ fn join_marked_text(vm: &VecModel<MarkdownBlock>) -> String {
 /// coordinate limit. Pure → tested.
 fn build_select_text(vm: &VecModel<MarkdownBlock>) -> String {
     const CHAR_CAP: usize = 12_000;
-    // Newlines are collapsed, so height ≈ wrapped-line count ≤ CHAR_CAP / ~40 chars-per-line; at
-    // ~36px/line that stays well under the renderer's i16 (32767px) coordinate limit.
     const _: () = assert!((CHAR_CAP / 40) * 36 + 400 < 32_767);
     let mut out = String::new();
     for j in 0..vm.row_count() {
         let Some(r) = vm.row_data(j) else { continue };
         if r.kind == 6 {
-            continue; // HR — nothing to select
+            continue;
         }
         if !out.is_empty() {
             out.push('\n');
@@ -673,22 +656,15 @@ pub(crate) fn speak_answer_text(messages: &[ai::ChatMessage], rendered: &str) ->
     if let Some(answer) = answer {
         return answer;
     }
-    // A read-aloud tile is seeded with exactly one user turn and has no model
-    // answer. Speak that original selection, not its fenced visual rendering.
     if messages.len() == 1 && messages[0].role == "user" {
         let selected = message_text(&messages[0].content).trim().to_string();
         if !selected.is_empty() && rendered.contains("user\n") {
             return selected;
         }
     }
-    // During a normal streamed answer there is also no stored assistant turn
-    // yet; its live rendered body is the correct thing to read.
     rendered.trim().to_string()
 }
 
-// Which tile is currently being read aloud. TTS is process-global +
-// one-utterance-at-a-time, so we remember the convo_id that started the current
-// speech: closing THAT tile (or the app) stops it; a new speak re-points it.
 static SPEAKING_CONVO: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(i64::MIN);
 
 thread_local! {
@@ -794,8 +770,6 @@ pub(crate) fn current_speaking_convo() -> i32 {
     }
 }
 
-// Process-global pause latch, shared by the tile ⏯ button AND the Shift+Alt+3
-// hotkey so they stay coherent (TTS is global + one-at-a-time). false = playing.
 static SPEAK_PAUSED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Process-global read speed shown by the active tile player. A user's choice
@@ -843,8 +817,6 @@ pub(crate) fn reset_pause() {
 /// prompts / earlier turns). Purely local — no network egress — so it stays safe
 /// under screen-share / stealth.
 pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayBarBridge>) {
-    // Only advertise a working 🔊 when a voice + the sidecar are actually
-    // installed; a missing engine must not show a usable action (F2).
     tile.set_can_speak(overlay_backend::tts::is_available());
     tile.set_speak_error(false);
     SPEAK_TILES.with(|tiles| {
@@ -865,11 +837,6 @@ pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayB
             if text.trim().is_empty() {
                 return;
             }
-            // `tts::speak` re-checks availability (the sidecar/voice may have
-            // vanished since wiring — TOCTOU) and marks the STT suppression
-            // window ONLY when playback is accepted. Gate the tile's speaking
-            // state on that result so a missing engine neither shows as speaking
-            // nor falsely silences the mic (F2).
             if !speak_explicit(&text, convo_id) {
                 diag!("[overlay-host] read-aloud unavailable");
                 return;
@@ -884,8 +851,6 @@ pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayB
         if current_speaking_convo() != convo_id || !overlay_backend::tts::is_speaking() {
             return;
         }
-        // Shared global latch so this ⏯ button and the Shift+Alt+3 hotkey stay
-        // coherent (one TTS engine, one utterance at a time).
         let now_paused = toggle_pause();
         if let Some(t) = weak_p.upgrade() {
             t.set_speak_paused(now_paused);
@@ -939,7 +904,6 @@ mod copy_tests {
         assert_eq!(char_boundary(s, 3), 2, "mid-char clamps down");
         assert_eq!(char_boundary(s, 4), 4);
         assert_eq!(char_boundary(s, 99), 4, "past end clamps to len");
-        // The span a selection would take is always a valid slice.
         assert_eq!(&s[char_boundary(s, 1)..char_boundary(s, 3)], "а");
     }
 
@@ -953,11 +917,11 @@ mod copy_tests {
             marked: false,
         };
         let vm = VecModel::from(vec![
-            mk(1, "Заголовок"),  // H1
-            mk(0, "Абзац."),     // paragraph
-            mk(4, "пункт один"), // bullet → prefixed "• "
-            mk(6, ""),           // HR → skipped
-            mk(4, "пункт два"),  // bullet
+            mk(1, "Заголовок"),
+            mk(0, "Абзац."),
+            mk(4, "пункт один"),
+            mk(6, ""),
+            mk(4, "пункт два"),
         ]);
         // Blocks separated by ONE newline (not a blank line) — internal whitespace collapsed.
         assert_eq!(
@@ -1035,9 +999,9 @@ mod copy_tests {
         let utts = vec![
             Utterance {
                 session_id: "s".into(),
-                unix_ms: start + 29_000, // finalized ~00:29 into the session (≈ its end)
+                unix_ms: start + 29_000,
                 source: "system".into(),
-                text: "привет  мир".into(), // double space collapses
+                text: "привет  мир".into(),
                 audio_ms: None,
             },
             Utterance {
@@ -1048,31 +1012,24 @@ mod copy_tests {
                 audio_ms: None,
             },
         ];
-        // Default: "Спикер: текст", no timecodes, all lines, no trailing newline.
         assert_eq!(
             format_transcript_for_copy(&utts, Some(start), None, false),
             "Система: привет мир\nМикрофон: да"
         );
-        // With timecodes — F1: a line's START = the PREVIOUS line's timestamp; the
-        // FIRST line is 00:00 (NOT its own finalize time 00:29), so line 2 starts
-        // where line 1 ended (00:29).
         assert_eq!(
             format_transcript_for_copy(&utts, Some(start), None, true),
             "[00:00] Система: привет мир\n[00:29] Микрофон: да"
         );
-        // Selected subset (only row 1), chronological order.
         let mut sel = std::collections::HashSet::new();
         sel.insert(1_usize);
         assert_eq!(
             format_transcript_for_copy(&utts, Some(start), Some(&sel), false),
             "Микрофон: да"
         );
-        // Empty transcript → empty string.
         assert_eq!(
             format_transcript_for_copy(&[], Some(start), None, false),
             ""
         );
-        // with_timecodes but no session start → no prefix.
         assert_eq!(
             format_transcript_for_copy(&utts[..1], None, None, true),
             "Система: привет мир"
@@ -1105,8 +1062,6 @@ mod copy_tests {
             message_text(&ai::MessageContent::Text("plain".into())),
             "plain"
         );
-        // Parts: text parts are joined (image parts, when present, contribute
-        // nothing — exercised here with two text parts).
         let m = parts_msg("user", &["hello", "world"]);
         assert_eq!(message_text(&m.content), "hello\nworld");
     }
@@ -1120,8 +1075,6 @@ mod copy_tests {
 
     #[test]
     fn conversations_evict_keys_drops_oldest_half_keeps_newest() {
-        // FIX #8 — at the cap, the lowest-id half (oldest tiles) is evicted,
-        // and the highest ids (newest / currently-open tiles) are kept.
         let keys: Vec<i32> = (0..256).collect();
         let evicted = conversations_evict_keys(&keys, 256);
         assert_eq!(evicted.len(), 128, "evicts exactly half the cap");
@@ -1131,9 +1084,8 @@ mod copy_tests {
             !evicted.contains(&255),
             "the newest id (an open tile) is never evicted"
         );
-        // Unsorted input is handled (HashMap key order is arbitrary).
         let shuffled = [50, 3, 200, 7, 99];
-        let mut e = conversations_evict_keys(&shuffled, 4); // max/2 = 2 → drop 2 lowest
+        let mut e = conversations_evict_keys(&shuffled, 4);
         e.sort_unstable();
         assert_eq!(
             e,
@@ -1161,9 +1113,6 @@ mod copy_tests {
 
     #[test]
     fn copy_question_drops_translate_vision_prompt() {
-        // Feature #3 — a translate tile's first turn is the canned translate
-        // prompt, not user-typed text → drop it (both phonetics states; the ON
-        // variant is base+suffix, so starts_with the base still matches).
         assert_eq!(user_question_for_copy(vision::TRANSLATE_VISION_PROMPT), "");
         assert_eq!(user_question_for_copy(&vision::translate_prompt(true)), "");
     }
@@ -1203,7 +1152,6 @@ mod copy_tests {
             out,
             "You: вопрос 1\n\nAssistant: ответ 1\n\nYou: вопрос 2\n\nAssistant: ответ 2"
         );
-        // The raw Mic/System transcript must never reach the clipboard.
         assert!(!out.contains("СОБЕСЕДНИК"));
     }
 
@@ -1229,8 +1177,6 @@ mod copy_tests {
 
     #[test]
     fn speak_reads_latest_answer_only_not_prompts_or_old_turns() {
-        // The tester bug: 🔊 on a multi-turn tile read the prompts + every
-        // message. Read-aloud must speak ONLY the latest answer.
         let msgs = vec![
             msg("system", "ты ассистент"),
             msg("user", "Помоги ответить: вопрос 1"),
@@ -1272,7 +1218,6 @@ mod copy_tests {
             msg("user", "уже чистый"),
         ];
         strip_followup_directives(&mut msgs);
-        // system + assistant turns are untouched (only user turns get cleaned).
         assert_eq!(
             message_text(&msgs[0].content),
             format!("{FOLLOWUP_DIRECTIVE}sys")
@@ -1281,15 +1226,12 @@ mod copy_tests {
             message_text(&msgs[2].content),
             format!("{FOLLOWUP_DIRECTIVE}ответ")
         );
-        // user turns are stripped; an already-clean one is unchanged.
         assert_eq!(message_text(&msgs[1].content), "вопрос");
         assert_eq!(message_text(&msgs[3].content), "уже чистый");
     }
 
     #[test]
     fn strip_all_but_last_preserves_reasked_turn() {
-        // Mirrors fire_regenerate's `&mut messages[..len-1]`: prior turns are
-        // cleaned, but the last (re-asked) turn keeps whatever framing it had.
         let mut msgs = [
             msg("user", &format!("{FOLLOWUP_DIRECTIVE}старый вопрос")),
             msg("assistant", "старый ответ"),
@@ -1300,9 +1242,7 @@ mod copy_tests {
         ];
         let n = msgs.len() - 1;
         strip_followup_directives(&mut msgs[..n]);
-        // Prior user turn is cleaned…
         assert_eq!(message_text(&msgs[0].content), "старый вопрос");
-        // …but the last (re-asked) turn keeps its direct-question framing.
         assert_eq!(
             message_text(&msgs[2].content),
             format!("{FOLLOWUP_DIRECTIVE}перезапрашиваемый вопрос")

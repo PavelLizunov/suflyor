@@ -90,8 +90,6 @@ impl Store {
         let tx = self.conn.transaction().context("begin index tx")?;
         tx.execute("DELETE FROM sessions WHERE id = ?1", params![session.id])
             .context("clear prior session rows")?;
-        // The FTS5 index isn't FK-cascaded; clear this session's rows explicitly
-        // (the AFTER INSERT triggers repopulate it as the rows below re-insert).
         tx.execute(
             "DELETE FROM search_index WHERE session_id = ?1",
             params![session.id],
@@ -811,11 +809,10 @@ mod tests {
         assert!(store.get_diarization(&s.id).unwrap().is_some());
 
         store.delete_session(&s.id).unwrap();
-        assert_eq!(store.count_utterances(&s.id).unwrap(), 0); // FK cascade
-        assert!(store.search("hash", 10).unwrap().is_empty()); // FTS cleared
+        assert_eq!(store.count_utterances(&s.id).unwrap(), 0);
+        assert!(store.search("hash", 10).unwrap().is_empty());
         assert!(store.get_diarization(&s.id).unwrap().is_none());
         assert!(store.session_utterances(&s.id).unwrap().is_empty());
-        // Idempotent: deleting an absent session is a no-op.
         store.delete_session(&s.id).unwrap();
     }
 
@@ -857,15 +854,13 @@ mod tests {
 
     #[test]
     fn utterance_audio_ms_round_trips() {
-        // F1: the per-line audio offset survives insert→select; NULL (old lines)
-        // round-trips as None.
         let mut store = Store::open_in_memory().unwrap();
         let s = sample_session("2026-06-25_10-00-00_aud0");
         let mut u0 = utt(&s.id, 10, "mic", "first");
         u0.audio_ms = Some(0);
         let mut u1 = utt(&s.id, 20, "system", "second");
         u1.audio_ms = Some(4_200);
-        let u2 = utt(&s.id, 30, "mic", "third"); // audio_ms stays None
+        let u2 = utt(&s.id, 30, "mic", "third");
         store.replace_session(&s, &[u0, u1, u2], &[]).unwrap();
 
         let got = store.session_utterances(&s.id).unwrap();
@@ -878,11 +873,8 @@ mod tests {
     #[test]
     fn backfill_sets_headline_to_turn_mode() {
         let mut store = Store::open_in_memory().unwrap();
-        // A session journaled with the WRONG cloud headline (the historical bug:
-        // SessionStart logged the raw cloud `ai_model` even on a local session)…
         let mut s = sample_session("sess-backfill");
         s.ai_model = Some("claude-sonnet-4-6".into());
-        // …but whose turns actually ran on a local model (gemma twice → mode).
         let turns = vec![
             AiTurn {
                 session_id: s.id.clone(),
@@ -921,8 +913,6 @@ mod tests {
         store.replace_session(&s, &[], &[]).unwrap();
         store.backfill_session_models().unwrap();
         let got = store.get_session(&s.id).unwrap().unwrap();
-        // No AI turns → no model to attribute → headline cleared (archive "—"),
-        // not the stale cloud default it was journaled with.
         assert_eq!(got.ai_model, None);
     }
 
@@ -940,7 +930,6 @@ mod tests {
             latency_ms: None,
             attached_screenshot: false,
         };
-        // gemma ×2 beats a lone cloud escalation; the empty-model turn is ignored.
         let turns = vec![
             mk(10, "gemma-4-12B"),
             mk(20, "claude-sonnet-4-6"),
@@ -967,8 +956,6 @@ mod tests {
             latency_ms: None,
             attached_screenshot: false,
         };
-        // One turn each → a 1–1 tie; `ORDER BY COUNT(*) DESC, MAX(unix_ms) DESC`
-        // breaks it toward the model used most recently.
         let turns = vec![mk(10, "older-model"), mk(20, "newer-model")];
         store.replace_session(&s, &[], &turns).unwrap();
         store.backfill_session_models().unwrap();
@@ -982,7 +969,6 @@ mod tests {
         let s = sample_session("sess-1");
         let utts = vec![utt(&s.id, 1, "mic", "a"), utt(&s.id, 2, "mic", "b")];
         store.replace_session(&s, &utts, &[]).unwrap();
-        // Re-index the SAME session — counts must stay, not double.
         store.replace_session(&s, &utts, &[]).unwrap();
         assert_eq!(store.count_utterances(&s.id).unwrap(), 2);
         assert_eq!(store.list_sessions().unwrap().len(), 1);
@@ -1053,8 +1039,6 @@ mod tests {
         let utts = vec![utt(&s.id, 1, "mic", "uniquetoken here")];
         store.replace_session(&s, &utts, &[]).unwrap();
         assert_eq!(store.search("uniquetoken", 10).unwrap().len(), 1);
-        // Re-index the same session — the explicit search_index clear must keep
-        // it at one hit, not two.
         store.replace_session(&s, &utts, &[]).unwrap();
         assert_eq!(store.search("uniquetoken", 10).unwrap().len(), 1);
     }
@@ -1070,7 +1054,6 @@ mod tests {
         assert!(!store.search("деревья", 10).unwrap().is_empty());
     }
 
-    // ---- Curated memory (Phase 3b) ----
 
     fn new_cand(text: &str) -> NewMemoryCandidate {
         NewMemoryCandidate {
@@ -1090,8 +1073,6 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(v, migrations::LATEST_VERSION);
-        // Literal pin — bump deliberately when adding a migration (now incl. 0006
-        // diarization: per-session speaker segments + renames, D2).
         assert_eq!(v, 6);
     }
 
@@ -1111,18 +1092,16 @@ mod tests {
 
     #[test]
     fn list_candidates_respects_limit_newest_first() {
-        // F8 — the review tab caps how many rows it loads: a positive limit returns
-        // the newest N (created_at_ms DESC); a negative limit returns all.
         let mut store = Store::open_in_memory().unwrap();
         store.insert_candidate(&new_cand("oldest"), 100).unwrap();
         store.insert_candidate(&new_cand("middle"), 200).unwrap();
         store.insert_candidate(&new_cand("newest"), 300).unwrap();
         let capped = store.list_candidates("default", "pending", 2).unwrap();
-        assert_eq!(capped.len(), 2); // capped
-        assert_eq!(capped[0].text, "newest"); // newest first
+        assert_eq!(capped.len(), 2);
+        assert_eq!(capped[0].text, "newest");
         assert_eq!(capped[1].text, "middle");
         let all = store.list_candidates("default", "pending", -1).unwrap();
-        assert_eq!(all.len(), 3); // negative = unlimited
+        assert_eq!(all.len(), 3);
     }
 
     #[test]
@@ -1175,7 +1154,6 @@ mod tests {
     fn approve_missing_candidate_errs() {
         let mut store = Store::open_in_memory().unwrap();
         assert!(store.approve_candidate(999, 1).is_err());
-        // The failed transaction left no item behind.
         assert!(store
             .list_memory_items("default", true, -1)
             .unwrap()
@@ -1252,12 +1230,10 @@ mod tests {
                 10,
             )
             .unwrap();
-        // Provenance + status round-trip through the read.
         let it = &store.list_memory_items("default", true, -1).unwrap()[0];
         assert_eq!(it.source_text.as_deref(), Some("ну это бекап сервер z14"));
         assert_eq!(it.norm_status, "pending");
         assert_eq!(it.entity, None);
-        // A manual text edit resets the legacy normalization status.
         store
             .update_memory_item_text(id, "мой правленый факт")
             .unwrap();
@@ -1367,13 +1343,11 @@ mod tests {
         store.put_diarization(&d).unwrap();
         assert_eq!(store.get_diarization("s1").unwrap().unwrap(), d);
 
-        // Rename display speaker 1 → "Тимур"; segments untouched.
         store.rename_speaker("s1", 1, "Тимур").unwrap();
         let got = store.get_diarization("s1").unwrap().unwrap();
         assert_eq!(got.speaker_names.get(&1).map(String::as_str), Some("Тимур"));
         assert_eq!(got.segments, d.segments);
 
-        // Blank name clears the rename.
         store.rename_speaker("s1", 1, "   ").unwrap();
         assert!(store
             .get_diarization("s1")
@@ -1382,7 +1356,6 @@ mod tests {
             .speaker_names
             .is_empty());
 
-        // A re-run REPLACEs the row (new segments + count).
         let d2 = Diarization {
             num_speakers: 3,
             segments: vec![DiarSegment {
@@ -1397,7 +1370,6 @@ mod tests {
         assert_eq!(got.num_speakers, 3);
         assert_eq!(got.segments.len(), 1);
 
-        // Rename on a session with no diarization is a silent no-op.
         store.rename_speaker("missing", 0, "X").unwrap();
     }
 }

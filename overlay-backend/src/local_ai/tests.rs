@@ -127,8 +127,6 @@ fn mark_sparse(file: &std::fs::File) -> std::io::Result<()> {
     }
 
     let mut bytes_returned = 0_u32;
-    // SAFETY: `file` owns this synchronous handle for the whole call; no
-    // ownership is transferred and every optional buffer is intentionally null.
     let succeeded = unsafe {
         device_io_control(
             file.as_raw_handle(),
@@ -578,7 +576,6 @@ fn mmproj_attach_rules_are_model_specific() {
         mmproj_for_model(dir, &dir.join(GEMMA26_FILE)),
         Some(dir.join(MMPROJ26_FILE))
     );
-    // Non-Gemma model never gets a Gemma projector.
     assert!(mmproj_for_model(dir, &dir.join("qwen2.5-7b.gguf")).is_none());
 }
 
@@ -607,22 +604,17 @@ fn primary_model_requires_the_tested_llama_build() {
 fn owner_hardware_matrix_is_minimum_ram() {
     use HardwareModelProfile::*;
     let cases: &[(Option<u64>, Option<u64>, HardwareModelProfile)] = &[
-        // Exact minimums.
         (Some(8), Some(16), Fallback12B),
         (Some(8), Some(32), Primary26Vram8),
         (Some(12), Some(24), Primary26Vram12),
         (Some(16), Some(32), Primary26Vram16),
-        // Extra RAM beyond the minimum keeps the tier (monotonic).
         (Some(8), Some(64), Primary26Vram8),
         (Some(12), Some(64), Primary26Vram12),
         (Some(16), Some(64), Primary26Vram16),
-        // 8 VRAM with RAM inside the 16..31 fallback band.
         (Some(8), Some(24), Fallback12B),
-        // Insufficient RAM for the VRAM tier.
         (Some(16), Some(24), Unknown),
         (Some(12), Some(16), Unknown),
         (Some(8), Some(8), Unknown),
-        // Missing inputs.
         (None, Some(32), Unknown),
         (Some(16), None, Unknown),
         (None, None, Unknown),
@@ -704,7 +696,6 @@ fn only_nvidia_discovery_enters_the_confirmed_matrix() {
 
 #[test]
 fn normalization_snaps_near_nominal_readings_to_approved_tiers() {
-    // VRAM: ±1 GiB around each approved tier (8, 12, 16).
     assert_eq!(normalize_vram_gib(7), 8);
     assert_eq!(normalize_vram_gib(8), 8);
     assert_eq!(normalize_vram_gib(9), 8);
@@ -715,7 +706,6 @@ fn normalization_snaps_near_nominal_readings_to_approved_tiers() {
     assert_eq!(normalize_vram_gib(16), 16);
     assert_eq!(normalize_vram_gib(17), 16);
 
-    // RAM: ±1 GiB around each approved tier (16, 24, 32).
     assert_eq!(normalize_ram_gib(15), 16);
     assert_eq!(normalize_ram_gib(16), 16);
     assert_eq!(normalize_ram_gib(17), 16);
@@ -729,21 +719,18 @@ fn normalization_snaps_near_nominal_readings_to_approved_tiers() {
 
 #[test]
 fn normalization_never_promotes_clearly_smaller_hardware() {
-    // 6 GiB VRAM is 2 away from the 8 GiB tier — must stay 6.
     assert_eq!(normalize_vram_gib(6), 6);
     assert_eq!(normalize_vram_gib(4), 4);
     assert_eq!(normalize_vram_gib(10), 10);
     assert_eq!(normalize_vram_gib(14), 14);
     assert_eq!(normalize_vram_gib(18), 18);
 
-    // RAM clearly below a tier stays put.
     assert_eq!(normalize_ram_gib(14), 14);
     assert_eq!(normalize_ram_gib(22), 22);
     assert_eq!(normalize_ram_gib(26), 26);
     assert_eq!(normalize_ram_gib(30), 30);
     assert_eq!(normalize_ram_gib(34), 34);
 
-    // End-to-end: 6 GiB VRAM + 32 GiB RAM must remain Unknown.
     assert_eq!(
         hardware_profile_from_discovery(false, Some(6), Some(32)),
         HardwareModelProfile::Unknown,
@@ -753,26 +740,20 @@ fn normalization_never_promotes_clearly_smaller_hardware() {
 
 #[test]
 fn igpu_ram_reservation_snaps_to_existing_profile() {
-    // Owner's machine: 16 GiB NVIDIA + 32 GiB installed, iGPU reserves ~1 GiB
-    // → TotalPhysicalMemory reports 31 GiB usable.
     assert_eq!(
         hardware_profile_from_discovery(false, Some(16), Some(31)),
         HardwareModelProfile::Primary26Vram16,
         "16/31 must snap to the 16/32 profile (iGPU reservation)"
     );
-    // Same for the 8 GiB VRAM tier.
     assert_eq!(
         hardware_profile_from_discovery(false, Some(8), Some(31)),
         HardwareModelProfile::Primary26Vram8,
         "8/31 must snap to the 8/32 profile"
     );
-    // 12 GiB VRAM tier already accepts 24..=32, so 31 matches without
-    // normalization — verify it still works through the pipeline.
     assert_eq!(
         hardware_profile_from_discovery(false, Some(12), Some(31)),
         HardwareModelProfile::Primary26Vram12
     );
-    // Fallback tier: 8/15 → 8/16.
     assert_eq!(
         hardware_profile_from_discovery(false, Some(8), Some(15)),
         HardwareModelProfile::Fallback12B,
@@ -782,19 +763,16 @@ fn igpu_ram_reservation_snaps_to_existing_profile() {
 
 #[test]
 fn near_nominal_vram_snaps_to_existing_profile() {
-    // 15 GiB reported for a 16 GiB card (firmware underreport).
     assert_eq!(
         hardware_profile_from_discovery(false, Some(15), Some(32)),
         HardwareModelProfile::Primary26Vram16,
         "15/32 must snap to the 16/32 profile"
     );
-    // 11 GiB reported for a 12 GiB card.
     assert_eq!(
         hardware_profile_from_discovery(false, Some(11), Some(32)),
         HardwareModelProfile::Primary26Vram12,
         "11/32 must snap to the 12/32 profile"
     );
-    // 7 GiB reported for an 8 GiB card.
     assert_eq!(
         hardware_profile_from_discovery(false, Some(7), Some(16)),
         HardwareModelProfile::Fallback12B,
@@ -804,16 +782,12 @@ fn near_nominal_vram_snaps_to_existing_profile() {
 
 #[test]
 fn strongest_adapter_vram_normalizes_correctly() {
-    // Multi-GPU nvidia-smi output: iGPU (512 MiB) + dGPU (16384 MiB).
-    // parse_nvidia_memory_mib picks the strongest (max total).
     let (used, total) = parse_nvidia_memory_mib("128, 512\n1024, 16384\n").unwrap();
     assert_eq!((used, total), (1024, 16384));
-    // Same GiB conversion as detect_nvidia_vram_gib: round-to-nearest.
     let vram_gib = (total + 512) / 1024;
     assert_eq!(vram_gib, 16);
     assert_eq!(normalize_vram_gib(vram_gib), 16);
 
-    // Strongest adapter reports 15360 MiB (some 16 GiB cards underreport).
     let (_, total_under) = parse_nvidia_memory_mib("256, 512\n900, 15360\n").unwrap();
     let vram_under = (total_under + 512) / 1024;
     assert_eq!(vram_under, 15, "15360 MiB rounds to 15 GiB");
@@ -1191,16 +1165,11 @@ fn engine_update_throttle() {
     let root = tmp.path();
     let llama = root.join("llama.cpp");
     std::fs::create_dir_all(&llama).unwrap();
-    // No llama-server.exe yet → updater stays out of the way.
     assert!(!should_check_engine_update(root));
-    // Pretend an engine is installed.
     std::fs::write(llama.join("llama-server.exe"), b"x").unwrap();
-    // No .update-check stamp → check now.
     assert!(should_check_engine_update(root));
-    // A fresh stamp → within the throttle window → skip.
     std::fs::write(llama.join(".update-check"), now_unix().to_string()).unwrap();
     assert!(!should_check_engine_update(root));
-    // A stamp older than the interval → check again.
     let stale = now_unix().saturating_sub(ENGINE_UPDATE_THROTTLE_SECS + 1);
     std::fs::write(llama.join(".update-check"), stale.to_string()).unwrap();
     assert!(should_check_engine_update(root));
@@ -1216,25 +1185,20 @@ fn swap_backs_up_and_overwrites_keeping_models() {
     let backup = tmp.path().join("backup");
     std::fs::create_dir_all(&live).unwrap();
     std::fs::create_dir_all(&staging).unwrap();
-    // Live: old engine + a precious model.
     std::fs::write(live.join("llama-server.exe"), b"OLD-EXE").unwrap();
     std::fs::write(live.join("ggml.dll"), b"OLD-DLL").unwrap();
     std::fs::write(live.join("gemma.gguf"), b"MODEL").unwrap();
-    // Staging: new engine binaries only (no model).
     std::fs::write(staging.join("llama-server.exe"), b"NEW-EXE").unwrap();
     std::fs::write(staging.join("ggml.dll"), b"NEW-DLL").unwrap();
 
     swap_engine_binaries(&staging, &live, &backup).unwrap();
 
-    // New binaries are in place.
     assert_eq!(
         std::fs::read(live.join("llama-server.exe")).unwrap(),
         b"NEW-EXE"
     );
     assert_eq!(std::fs::read(live.join("ggml.dll")).unwrap(), b"NEW-DLL");
-    // The model is untouched.
     assert_eq!(std::fs::read(live.join("gemma.gguf")).unwrap(), b"MODEL");
-    // The old binaries are backed up; the model was not (never overwritten).
     assert_eq!(
         std::fs::read(backup.join("llama-server.exe")).unwrap(),
         b"OLD-EXE"
@@ -1248,18 +1212,16 @@ fn prune_engine_backups_keeps_count_and_spares_manual_and_live() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     for name in [
-        "llama.cpp.backup-b9000",    // updater-made (ours)
-        "llama.cpp.backup-b9100",    // updater-made (ours)
-        "llama.cpp.backup-prev",     // updater-made, no-stamp variant (ours)
-        "llama.cpp.backup-may",      // a MANUAL snapshot — must be spared
-        "llama.cpp.backup-baseline", // manual, starts with -b but NOT digits
-        "llama.cpp",                 // the live engine dir — must be spared
+        "llama.cpp.backup-b9000",
+        "llama.cpp.backup-b9100",
+        "llama.cpp.backup-prev",
+        "llama.cpp.backup-may",
+        "llama.cpp.backup-baseline",
+        "llama.cpp",
     ] {
         std::fs::create_dir_all(root.join(name)).unwrap();
     }
-    // keep >= count of ours → no-op.
     assert_eq!(prune_engine_backups(root, 10), 0);
-    // keep 0 → all THREE updater backups removed; manual + live untouched.
     assert_eq!(prune_engine_backups(root, 0), 3);
     assert!(!root.join("llama.cpp.backup-b9000").exists());
     assert!(!root.join("llama.cpp.backup-b9100").exists());
@@ -1305,7 +1267,6 @@ fn cuda_version_parse() {
         Some((12, 4))
     );
     assert_eq!(cuda_version_of("llama-b1-bin-win-cpu-x64.zip"), None);
-    // cudart name also contains the substring but we never feed it here
     assert_eq!(
         cuda_version_of("cudart-llama-bin-win-cuda-13.3-x64.zip"),
         Some((13, 3))
@@ -1352,7 +1313,6 @@ fn pick_cpu_when_forced() {
 #[test]
 #[cfg(windows)]
 fn pick_vulkan_for_non_nvidia_gpu() {
-    // AMD/Intel (GpuKind::Other) → the Vulkan build, no cudart (Баг2).
     let assets = vec![
         asset("llama-b9410-bin-win-cpu-x64.zip"),
         asset("llama-b9410-bin-win-cuda-13.3-x64.zip"),
@@ -1370,7 +1330,6 @@ fn pick_vulkan_for_non_nvidia_gpu() {
 #[test]
 #[cfg(windows)]
 fn pick_cpu_when_non_nvidia_but_no_vulkan_asset() {
-    // AMD/Intel machine but the release has no Vulkan build → CPU fallthrough.
     let assets = vec![
         asset("llama-b9410-bin-win-cpu-x64.zip"),
         asset("llama-b9410-bin-win-cuda-13.3-x64.zip"),
@@ -1404,7 +1363,6 @@ fn pick_whisper_cpu_takes_plain_build() {
         asset("whisper-cublas-12.4.0-bin-x64.zip"),
         asset("whisper-bin-x64.zip"),
     ];
-    // force_cpu = true -> plain CPU build even though a cuBLAS build exists.
     assert!(pick_whisper(&assets, true)
         .unwrap()
         .0
@@ -1420,7 +1378,6 @@ fn pick_whisper_gpu_takes_highest_cublas() {
         asset("whisper-cublas-12.4.0-bin-x64.zip"),
         asset("whisper-blas-bin-x64.zip"),
     ];
-    // force_cpu = false -> highest-version cuBLAS (GPU) build.
     assert!(pick_whisper(&assets, false)
         .unwrap()
         .0
@@ -1435,7 +1392,6 @@ fn pick_whisper_gpu_falls_back_to_cpu_when_no_cublas() {
         asset("whisper-blas-bin-x64.zip"),
         asset("whisper-bin-x64.zip"),
     ];
-    // GPU requested but no cuBLAS asset in the release -> plain CPU build.
     assert!(pick_whisper(&assets, false)
         .unwrap()
         .0
@@ -1462,7 +1418,6 @@ fn live_pick_llama_is_blackwell_capable() {
     let mut it = v.split('.');
     let maj: u32 = it.next().unwrap().parse().unwrap();
     let min: u32 = it.next().unwrap().parse().unwrap();
-    // Blackwell (RTX 50xx) needs CUDA >= 12.8; the newest pick must satisfy it.
     assert!(
         maj > 12 || (maj == 12 && min >= 8),
         "picked CUDA {v} is too old for Blackwell"
@@ -1471,8 +1426,6 @@ fn live_pick_llama_is_blackwell_capable() {
         pick.cudart_url.is_some(),
         "a matching cudart must be picked"
     );
-    // whisper picker against the live release too: GPU path must land on a
-    // cuBLAS build (Blackwell-capable via PTX JIT), CPU path on the plain build.
     let wassets = github_assets(WHISPER_REPO).unwrap();
     assert!(pick_whisper(&wassets, false)
         .unwrap()
@@ -1529,8 +1482,6 @@ fn apply_result_sets_local_and_keeps_secrets() {
         ai_bearer: "bridge_secret".to_string(),
         ai_local_prep_model: "stale-prep-model".to_string(),
         ai_local_quality: true,
-        // a prior cloud setting — apply_result switches F8 to local on a
-        // local install (vision rides the same local server).
         vision_provider: "cloud".to_string(),
         ..Default::default()
     };
@@ -1547,8 +1498,6 @@ fn apply_result_sets_local_and_keeps_secrets() {
     // secrets preserved
     assert_eq!(cfg.groq_api_key, "gsk_secret");
     assert_eq!(cfg.ai_bearer, "bridge_secret");
-    // installer enables fully-local F8 vision (Gemma 4 + mmproj on the same
-    // local server).
     assert!(cfg.ai_local_vision);
     assert_eq!(cfg.vision_provider, "same");
 }
@@ -1598,9 +1547,6 @@ fn apply_primary_routes_vision_only_when_the_installer_verified_it() {
     );
 }
 
-// P1-2: swap_engine_binaries must install engine files from a NESTED staging
-// layout (verify-before-swap finds llama-server.exe recursively; the swap used to
-// read only direct children → copied 0 files yet returned Ok → phantom "updated").
 #[test]
 fn swap_installs_nested_engine_layout() {
     let staging = tempfile::tempdir().unwrap();
@@ -1635,8 +1581,6 @@ fn swap_installs_flat_engine_layout() {
 
 #[test]
 fn swap_fails_without_llama_server_so_no_phantom_update() {
-    // No llama-server.exe staged → Err, so update_llama_engine never stamps
-    // .llama-build on a copied-nothing "success" (P1-2).
     let staging = tempfile::tempdir().unwrap();
     let live = tempfile::tempdir().unwrap();
     let backup_root = tempfile::tempdir().unwrap();
@@ -1664,45 +1608,35 @@ fn swap_rejects_ambiguous_duplicate_engine_file() {
     );
 }
 
-// P1-1: zip-slip guard for the engine extractor — only entries that stay inside
-// the extraction dir are allowed.
 #[test]
 fn archive_entry_safety_rejects_zip_slip() {
-    // safe relative entries
     assert!(archive_entry_is_safe("build/llama-server.exe"));
     assert!(archive_entry_is_safe("ggml.dll"));
     assert!(archive_entry_is_safe("a/b/c.dll"));
-    assert!(archive_entry_is_safe("")); // tar -tf trailing blank line
+    assert!(archive_entry_is_safe(""));
     assert!(archive_entry_is_safe(".gitignore"));
     assert!(archive_entry_is_safe("foo.bar.txt"));
     assert!(archive_entry_is_safe("a/b..c/d"));
-    // escapes — all rejected
     assert!(!archive_entry_is_safe("../escape.txt"));
     assert!(!archive_entry_is_safe("a/../../escape"));
-    assert!(!archive_entry_is_safe("..\\escape")); // backslash-normalised
-    assert!(!archive_entry_is_safe("/etc/passwd")); // posix-absolute
-    assert!(!archive_entry_is_safe("C:/escape.txt")); // drive
+    assert!(!archive_entry_is_safe("..\\escape"));
+    assert!(!archive_entry_is_safe("/etc/passwd"));
+    assert!(!archive_entry_is_safe("C:/escape.txt"));
     assert!(!archive_entry_is_safe("C:\\escape.txt"));
-    assert!(!archive_entry_is_safe("\\\\server\\share\\x")); // UNC
+    assert!(!archive_entry_is_safe("\\\\server\\share\\x"));
 
-    // Windows trailing-space coercion & traversal aliases:
     assert!(!archive_entry_is_safe(".. /x"));
     assert!(!archive_entry_is_safe("a/..  /b"));
     assert!(!archive_entry_is_safe("a/.. ./b"));
     assert!(!archive_entry_is_safe("a/.../b"));
     assert!(!archive_entry_is_safe("a/..../b"));
     assert!(!archive_entry_is_safe("a/. ./b"));
-    // A bare "." current-dir component is harmless and must stay allowed
-    // (tar may emit "./"-prefixed entries).
     assert!(archive_entry_is_safe("./build/x.dll"));
 }
 
-// ---- v0.35.2: all built-in profiles remain selectable on ANY hardware -------
 
 #[test]
 fn all_managed_models_accessible_regardless_of_hardware() {
-    // Every built-in profile index resolves to a distinct model with a valid
-    // file name, independent of the detected hardware profile.
     let models = [
         ManagedModel::from_index(0),
         ManagedModel::from_index(1),
@@ -1714,7 +1648,6 @@ fn all_managed_models_accessible_regardless_of_hardware() {
     for m in &models {
         assert!(!m.file_name().is_empty());
     }
-    // Round-trip through index.
     for m in models {
         assert_eq!(ManagedModel::from_index(m.index()), m);
     }
@@ -1722,13 +1655,9 @@ fn all_managed_models_accessible_regardless_of_hardware() {
 
 #[test]
 fn low_hardware_profile_is_recommendation_only() {
-    // 6 GiB NVIDIA + 16 GiB RAM → Unknown (not in the confirmed matrix).
     let profile = hardware_profile_from_discovery(false, Some(6), Some(16));
     assert_eq!(profile, HardwareModelProfile::Unknown);
-    // The recommendation flag is false…
     assert!(!primary_26b_allowed(profile));
-    // …but every ManagedModel variant is still constructible and the hardware
-    // profile does NOT gate model access.
     assert_eq!(ManagedModel::from_index(2), ManagedModel::Primary26B);
     assert_eq!(
         ManagedModel::Primary26B.file_name(),
@@ -1738,11 +1667,9 @@ fn low_hardware_profile_is_recommendation_only() {
 
 #[test]
 fn sixteen_vram_31_ram_normalizes_and_exposes_all_profiles() {
-    // Owner's machine with iGPU: 16 GiB VRAM, 31 GiB usable RAM.
     let profile = hardware_profile_from_discovery(false, Some(16), Some(31));
     assert_eq!(profile, HardwareModelProfile::Primary26Vram16);
     assert!(primary_26b_allowed(profile));
-    // All three models remain accessible.
     for idx in 0..3 {
         let m = ManagedModel::from_index(idx);
         assert!(!m.file_name().is_empty());
@@ -1751,14 +1678,9 @@ fn sixteen_vram_31_ram_normalizes_and_exposes_all_profiles() {
 
 #[test]
 fn unknown_hardware_does_not_block_26b_download_path() {
-    // download_quality_model no longer bails on hardware. Verify the function
-    // proceeds past the hardware check by calling it with a temp root and an
-    // immediate cancel — it must NOT return the old hardware-rejection error.
     let root = tempfile::tempdir().unwrap();
     let cancel = std::sync::atomic::AtomicBool::new(true);
     let result = download_quality_model(root.path(), &cancel, &|_| {});
-    // The cancel flag is set, so the download aborts with a cancellation error
-    // (or a mkdir/network error), but NEVER with the old hardware bail message.
     if let Err(e) = result {
         let msg = format!("{e:#}");
         assert!(
@@ -1782,7 +1704,6 @@ fn model_specs_pin_immutable_revisions_with_full_sha() {
         let spec = model.spec();
         assert_eq!(spec.file, model.file_name(), "spec file matches the model");
         assert!(spec.size > 0, "{}: size pinned", spec.label);
-        // Immutable revision, never the moving /main branch.
         assert!(
             spec.url.starts_with("https://huggingface.co/"),
             "{}: HF origin",
@@ -1814,7 +1735,6 @@ fn model_specs_pin_immutable_revisions_with_full_sha() {
             "{}: url downloads the exact model file",
             spec.label
         );
-        // Full 64-char LFS object hash.
         assert_eq!(spec.sha256.len(), 64, "{}: sha256 length", spec.label);
         assert!(
             spec.sha256.chars().all(|c| c.is_ascii_hexdigit()),
@@ -1839,7 +1759,6 @@ fn legacy_4b_spec_matches_the_pinned_hf_revision() {
     assert!(spec
         .url
         .contains("/resolve/bfc15c382204943c3a8fff0c750b94ae2364d7a3/"));
-    // The presence check must agree with the download spec's exact size + hash.
     assert_eq!(spec.size, LEGACY_GEMMA_SIZE);
     assert_eq!(spec.sha256, LEGACY_GEMMA_SHA256);
 }
@@ -1900,7 +1819,6 @@ fn hardware_never_blocks_any_managed_model_download() {
 /// spec (exact size + SHA-256 from the immutable HF revision).
 #[test]
 fn old_size_4b_upgrade_compatibility_and_new_spec_integrity() {
-    // -- new-spec integrity pins ------------------------------------------------
     let spec = ManagedModel::Legacy4B.spec();
     assert_eq!(spec.size, LEGACY_GEMMA_SIZE);
     assert_eq!(spec.size, 4_977_171_584);
@@ -1911,7 +1829,6 @@ fn old_size_4b_upgrade_compatibility_and_new_spec_integrity() {
     );
     assert_eq!(LEGACY_GEMMA_SIZE_PREV, 4_977_169_568);
 
-    // -- old-size file: presence + selection ------------------------------------
     let tmp = tempfile::tempdir().unwrap();
     let llama_dir = tmp.path().join("llama.cpp");
     std::fs::create_dir_all(&llama_dir).unwrap();
@@ -1942,7 +1859,6 @@ fn old_size_4b_upgrade_compatibility_and_new_spec_integrity() {
         "old-size file must be the fallback when 12B is absent"
     );
 
-    // -- explicit downloader must not corrupt-resume ----------------------------
     let cancel = std::sync::atomic::AtomicBool::new(false);
     let result = download_managed_model(tmp.path(), ManagedModel::Legacy4B, &cancel, &|_| {});
     assert!(
@@ -1955,7 +1871,6 @@ fn old_size_4b_upgrade_compatibility_and_new_spec_integrity() {
         "old-size file must not be modified by the downloader"
     );
 
-    // -- repair keeps the old-size selection ------------------------------------
     let mut cfg = crate::config::Config {
         ai_local_base_url: "http://127.0.0.1:8080/v1".to_string(),
         ai_local_model: LEGACY_GEMMA_FILE.to_string(),

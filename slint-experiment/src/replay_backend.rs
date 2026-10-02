@@ -106,12 +106,6 @@ pub fn load_session(path: &Path) -> Result<Vec<serde_json::Value>> {
     Ok(events)
 }
 
-// ===== Presentation helpers =====
-//
-// Mirrors the per-kind formatting from src/Replay.tsx ReplayRow().
-// Kept here (data layer) rather than main.rs so future iterations
-// can share via a presentation crate; today both sides would just
-// import these from `replay_backend`.
 
 /// Strip whitespace + collapse runs of spaces + truncate to N chars
 /// with an ellipsis. Mirrors React's `preview()`.
@@ -206,13 +200,6 @@ pub fn render_event(ev: &serde_json::Value) -> (String, String) {
             let tiles = ev_u64(ev, "tiles_spawned").unwrap_or(0);
             let errs = ev_u64(ev, "ai_errors").unwrap_or(0);
             let rl = ev_u64(ev, "rate_limited").unwrap_or(0);
-            // Parity with React: session_summary cost reads ONLY
-            // total_cost_microcents (no cost_usd fallback). Per-event
-            // ai_response cost in total_cost_usd() DOES fall back to
-            // cost_usd, so legacy sessions show $0 in this SUMMARY row
-            // but the correct $X.XXXX in the footer. Match the React
-            // behavior to avoid surprising users who've seen the
-            // existing app.
             let cost = overlay_backend::ai::microcents_to_usd(
                 ev_u64(ev, "total_cost_microcents").unwrap_or(0),
             );
@@ -234,10 +221,6 @@ pub fn render_event(ev: &serde_json::Value) -> (String, String) {
         "transcript_line" => {
             let src = ev_str(ev, "source");
             let icon = if src == "mic" { "mic" } else { "sys" };
-            // React renders transcript_line text FULL (no preview cap) so the
-            // user can read complete utterances without scrolling into the
-            // event JSON. Pilot does the same. Whitespace already normalized
-            // by the journal writer.
             (format!("{icon} {src}"), ev_str(ev, "text"))
         }
         "detector_decision" => {
@@ -257,9 +240,6 @@ pub fn render_event(ev: &serde_json::Value) -> (String, String) {
             } else {
                 "no trigger".to_string()
             };
-            // Empty-text edge case: avoid a leading space before `reason`.
-            // React renders text + reason as two spans so empty text is an
-            // empty span; the pilot concatenates, so we elide manually.
             let body = if text.is_empty() {
                 reason
             } else {

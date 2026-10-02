@@ -87,8 +87,8 @@ struct StretchSource {
     /// Input samples re-fed into the next chunk so the boundary region is rendered
     /// twice and can be crossfaded without shortening the timeline.
     overlap_in: usize,
-    prev_in_tail: Vec<f32>, // last `overlap_in` input samples of the previous chunk
-    held_tail: Vec<f32>,    // last XFADE_OUT output samples, withheld for the blend
+    prev_in_tail: Vec<f32>,
+    held_tail: Vec<f32>,
     out: Vec<f32>,
     read: usize,
     flushed: bool,
@@ -98,8 +98,6 @@ struct StretchSource {
 impl StretchSource {
     fn new(pcm: Arc<[i16]>, from: usize, sample_rate: u32, speed: f32) -> Self {
         let ratio = 1.0 / f64::from(speed);
-        // Speech-tuned WSOLA: 30 ms segments (≥ 2 pitch periods down to ~70 Hz F0),
-        // ±15 ms search — the sizing the crate itself uses for speech-adjacent WSOLA.
         let seg = (f64::from(sample_rate) * 0.030).round() as usize;
         let search = (f64::from(sample_rate) * 0.015).round() as usize;
         Self {
@@ -138,7 +136,6 @@ impl StretchSource {
                 }
             }
             if fresh == 0 {
-                // Input EOF: emit the withheld boundary tail once, then finish.
                 if self.flushed {
                     return false;
                 }
@@ -147,23 +144,18 @@ impl StretchSource {
                 self.read = 0;
                 return !self.out.is_empty();
             }
-            // Runt final chunk: zero-pad so WSOLA accepts it (needs ≥ one segment).
             let seg = self.wsola.segment_size();
             if inbuf.len() < seg {
                 inbuf.resize(seg, 0.0);
             }
             let mut stretched = self.wsola.process(&inbuf).unwrap_or_default();
-            // The chunk head re-renders the held tail's content (the re-fed input
-            // overlap) — crossfade the two renders to hide the seam.
             let blend = self.held_tail.len().min(stretched.len());
             for (i, s) in stretched.iter_mut().take(blend).enumerate() {
                 let t = (i as f32 + 0.5) / blend as f32;
                 *s = self.held_tail[i] * (1.0 - t) + *s * t;
             }
-            // Withhold this chunk's tail for the next boundary blend.
             let hold = XFADE_OUT.min(stretched.len());
             self.held_tail = stretched.split_off(stretched.len() - hold);
-            // Remember the input tail to re-feed next chunk (rendered again + blended).
             let tail_from = inbuf.len().saturating_sub(self.overlap_in);
             self.prev_in_tail.clear();
             self.prev_in_tail.extend_from_slice(&inbuf[tail_from..]);
@@ -206,8 +198,6 @@ impl rodio::Source for StretchSource {
 
 /// A loaded, controllable playback of one session's mixed PCM.
 pub(crate) struct TranscriptPlayer {
-    // Held ONLY to keep the audio device open — dropping it stops all playback —
-    // so it is never read after construction.
     #[allow(dead_code)]
     stream: MixerDeviceSink,
     player: Player,
@@ -321,10 +311,6 @@ impl TranscriptPlayer {
 
     /// Start or resume playback. At/after the end → restart from the beginning.
     pub(crate) fn play(&mut self) {
-        // Sync the cursor to the LIVE position first: a clip that reached its
-        // natural end leaves `cursor_sample` at the last source's START (it is not
-        // advanced while playing), so without this the end check below would miss
-        // and we'd resume from that stale point instead of restarting from 0.
         self.cursor_sample = self.position_sample();
         let from = if self.cursor_sample >= self.total() {
             0
@@ -435,7 +421,7 @@ pub(crate) fn ensure(session_id: &str) -> bool {
                     false
                 }
             },
-            Err(_) => false, // no recordings for this session
+            Err(_) => false,
         }
     })
 }
@@ -532,9 +518,6 @@ mod tests {
 
     #[test]
     fn speed_scales_playback_advance() {
-        // The seek-bar / timecode track ORIGINAL-recording position, so at N× the
-        // consumed-sample count must scale by N. Regression guard against dropping
-        // the speed factor → the bar racing ahead of / lagging the audio.
         assert_eq!(samples_advanced(1.0, 16_000, 1.0), 16_000);
         assert_eq!(samples_advanced(1.0, 16_000, 2.0), 32_000);
         assert_eq!(samples_advanced(2.0, 16_000, 1.5), 48_000);
@@ -542,13 +525,8 @@ mod tests {
 
     #[test]
     fn stretch_source_compresses_length_2x_and_3x_multichunk() {
-        // 3 s of a 16 kHz sawtooth (> WSOLA_CHUNK) → several chunk boundaries + the
-        // re-feed/crossfade harness. At N× the adapter emits ~1/N the samples
-        // (ratio = 1/speed). ±20% absorbs WSOLA's boundary overlap; the point is to
-        // catch ratio inversion (speed vs 1/speed → would MULTIPLY, not divide) and any
-        // chunk-boundary dropping/duplication.
         let sr = 16_000u32;
-        let n_in = 3 * sr as usize; // 48000, > WSOLA_CHUNK (16384) → ~3 chunks
+        let n_in = 3 * sr as usize;
         let pcm: Arc<[i16]> = Arc::from(
             (0..n_in)
                 .map(|i| (((i % 200) as i32 - 100) * 100) as i16)

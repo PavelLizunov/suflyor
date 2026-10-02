@@ -247,7 +247,6 @@ fn render_loop(
     let mut speed = 1.0_f32;
     let mut stretcher: Option<suflyor_wsola::StreamingWsola> = None;
     let mut stretch_finished = false;
-    // Stereo silence: 2 samples (L+R) per frame.
     let silence = samples_to_bytes(&vec![0.0_f32; buffer_frames * 2]);
 
     client
@@ -327,7 +326,6 @@ fn render_loop(
         }
 
         let take = avail.min(output.len());
-        // Duplicate each mono sample into an L+R stereo frame.
         let mut buf: Vec<f32> = Vec::with_capacity(take * 2);
         for _ in 0..take {
             if let Some(s) = output.pop_front() {

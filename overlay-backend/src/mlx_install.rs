@@ -847,7 +847,6 @@ mod tests {
                 progress(3);
                 Ok(())
             };
-        // Use the same engine with an injectable one-entry model.
         let final_dir =
             install_model_in(root.path(), &model, &cancel, &|_, _| {}, &download).unwrap();
         assert!(final_dir.join(MARKER).is_file());

@@ -22,7 +22,6 @@ fn short_model_name(full: &str) -> String {
 /// live, prefixed with 🟢 (all-local), ☁ (all-cloud), or ◐ (mixed). (#E10.2)
 pub(super) fn active_stack_label(c: &overlay_backend::config::Config) -> String {
     let (stt, stt_local): (String, bool) = match c.stt_provider.as_str() {
-        // Show the platform accelerator so the bar reflects accelerated vs CPU.
         "gigaam" => (
             format!("GigaAM {}", gigaam_accelerator_name(c.stt_gigaam_gpu)),
             true,
@@ -39,9 +38,6 @@ pub(super) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
         "codex" => c.codex_model.as_str(),
         _ => c.ai_model.as_str(),
     };
-    // For a LOCAL model show the friendly "Gemma 12B" / "Gemma 26B-A4B" so the user
-    // can tell the fallback vs primary model apart at a glance (the user asked to see
-    // the selected model more explicitly); cloud models keep the short id.
     let model = if c.ai_provider == "mlx" {
         model_full.rsplit('/').next().unwrap_or(model_full).to_string()
     } else if ai_local {
@@ -51,8 +47,6 @@ pub(super) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
     } else {
         short_model_name(model_full)
     };
-    // ASCII tag + Latin-1 middle dot only — fancier glyphs (✕/✓/arrows) render
-    // as missing-glyph boxes on the user's Slint+skia font fallback.
     let tag = if stt_local && ai_local {
         "local"
     } else if !stt_local && !ai_local {
@@ -242,7 +236,7 @@ pub(super) fn refresh_lock_chip(o: &OverlayBarWindow, cfg: &config::SharedConfig
 
 #[cfg(test)]
 mod tile_heading_tests {
-    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
+    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
     use super::{
         active_stack_label, ai_perf_label, manual_tile_failure, manual_tile_heading,
         manual_tile_not_configured, manual_tile_placeholder, memory_size_label, mic_busy_status,

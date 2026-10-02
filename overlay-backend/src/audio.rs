@@ -158,7 +158,6 @@ pub fn start_capture(
     let (tx, rx) = mpsc::channel::<AudioChunk>(128);
     let stop = Arc::new(AtomicBool::new(false));
 
-    // System audio (loopback on render endpoint)
     {
         let tx = tx.clone();
         let stop = stop.clone();
@@ -177,7 +176,6 @@ pub fn start_capture(
             })?;
     }
 
-    // Microphone (direct capture endpoint)
     {
         let tx = tx;
         let stop = stop.clone();
@@ -353,7 +351,6 @@ fn capture_thread(
         buffer_duration_hns: min_period,
     };
 
-    // The loopback trick: render endpoint, but Capture direction in initialize.
     let init_dir = Direction::Capture;
     client
         .initialize_client(&desired, &init_dir, &mode)
@@ -373,10 +370,9 @@ fn capture_thread(
     }
 
     let mut byte_q: VecDeque<u8> = VecDeque::with_capacity(64 * 1024);
-    let mut f32_buf: Vec<f32> = Vec::with_capacity(actual_rate as usize); // ~1 sec
-    let chunk_samples_target = actual_rate as usize / 5; // ~200 ms native chunks
+    let mut f32_buf: Vec<f32> = Vec::with_capacity(actual_rate as usize);
+    let chunk_samples_target = actual_rate as usize / 5;
 
-    // Downsampling state — simple averaging decimator from actual_rate → 16k.
     let ratio = actual_rate as f64 / TARGET_SAMPLE_RATE as f64;
     let mut dropped_chunks: u64 = 0;
     let mut last_frame_at = Instant::now();
@@ -418,7 +414,6 @@ fn capture_thread(
                 );
                 last_no_frame_heartbeat = Instant::now();
             }
-            // Zoom paused, headphones idle, or ordinary silence: keep waiting.
             continue;
         }
 
@@ -432,7 +427,6 @@ fn capture_thread(
         }
         last_frame_at = Instant::now();
 
-        // Decode f32 LE
         while byte_q.len() >= 4 {
             let b = [
                 byte_q.pop_front().unwrap(),
@@ -443,7 +437,6 @@ fn capture_thread(
             f32_buf.push(f32::from_le_bytes(b));
         }
 
-        // Emit when we've buffered ~200 ms of native audio.
         if f32_buf.len() >= chunk_samples_target {
             let pcm_i16 = resample_and_quantise(&f32_buf, ratio);
             f32_buf.clear();
@@ -463,8 +456,6 @@ fn capture_thread(
                     Ok(()) => {}
                     Err(mpsc::error::TrySendError::Full(_)) => {
                         dropped_chunks += 1;
-                        // ~ every 5 s of dropped audio, so the stall is observable
-                        // in the log instead of a silent capture-buffer overrun.
                         if dropped_chunks % 25 == 1 {
                             log::warn!(
                                 "[{source:?}] STT feed stalled — dropped ~{}s of audio ({dropped_chunks} chunks)",
@@ -513,9 +504,6 @@ pub fn record_source_until_stop(
         AudioSource::System => (sys_device, Direction::Render),
     };
 
-    // Mirror start_capture's device-resolution logic: try requested
-    // direction first, fall back to the other (handles A50 Stream Out
-    // which lives on Capture but provides system audio).
     let (device, used_dir) = match device_name.as_deref() {
         Some(name) if !name.is_empty() => {
             if let Some(d) = find_device_by_name(&endpoint_dir, name) {
@@ -563,11 +551,9 @@ pub fn record_source_until_stop(
     client.start_stream()?;
 
     let mut byte_q: VecDeque<u8> = VecDeque::with_capacity(64 * 1024);
-    // Reserve for ~30 sec worst case; grows automatically if longer.
     let mut all_f32: Vec<f32> = Vec::with_capacity((actual_rate as usize) * 30);
 
     while !stop.load(Ordering::Acquire) {
-        // Short timeout so we notice the stop flag quickly (≤500 ms).
         if event.wait_for_event(500).is_err() {
             continue;
         }
@@ -649,7 +635,7 @@ const DIAG_CHIME_RATE: u32 = 44_100;
 /// the end), convert i16→f32, and return them as little-endian bytes ready for
 /// the WASAPI render buffer. `cursor` indexes individual i16 samples.
 fn clip_frames_to_bytes(clip: &[i16], cursor: &mut usize, frames: usize) -> Vec<u8> {
-    let mut out = Vec::with_capacity(frames * 8); // 2 ch × 4 bytes (f32)
+    let mut out = Vec::with_capacity(frames * 8);
     for _ in 0..(frames * 2) {
         let s = if clip.is_empty() {
             0.0
@@ -671,8 +657,6 @@ fn play_test_clip(stop: Arc<AtomicBool>) -> Result<()> {
     let device = get_default_device(&Direction::Render).context("default render device")?;
     let mut client = device.get_iaudioclient()?;
     let (_def, min_period) = client.get_device_period()?;
-    // Present our format as 44.1 kHz STEREO f32; autoconvert resamples/upmixes
-    // to whatever the output device actually runs.
     let desired = WaveFormat::new(
         32,
         32,
@@ -696,7 +680,6 @@ fn play_test_clip(stop: Arc<AtomicBool>) -> Result<()> {
         .map(|b| i16::from_le_bytes([b[0], b[1]]))
         .collect();
     let mut cursor = 0_usize;
-    // Pre-fill the entire buffer before starting, then top it up on each event.
     let pre = clip_frames_to_bytes(&clip, &mut cursor, buffer_frames as usize);
     render_client.write_to_device(buffer_frames as usize, &pre, None)?;
     client.start_stream()?;
@@ -734,7 +717,6 @@ pub fn play_tone_and_capture(sys_device: Option<String>) -> Result<Vec<i16>> {
             log::warn!("diagnostics test cue failed: {e:#}");
         }
     });
-    // Let the render stream come up before sampling the loopback.
     std::thread::sleep(std::time::Duration::from_millis(250));
     let captured = record_sys_blocking(1200, sys_device);
     stop.store(true, Ordering::Release);
@@ -839,14 +821,11 @@ mod tests {
 
     #[test]
     fn rms_dbfs_silence_and_full_scale() {
-        // Empty / all-zero → -inf (silence).
         assert_eq!(rms_dbfs(&[]), f64::NEG_INFINITY);
         assert_eq!(rms_dbfs(&[0, 0, 0, 0]), f64::NEG_INFINITY);
-        // Full-scale square wave → ~0 dBFS.
         let full = [i16::MAX, i16::MIN, i16::MAX, i16::MIN];
         let d = rms_dbfs(&full);
         assert!(d > -0.5 && d <= 0.0, "full-scale ~0 dBFS, got {d}");
-        // A tiny signal sits well below the -45 dBFS speech threshold.
         assert!(
             rms_dbfs(&[10, -10, 10, -10]) < -45.0,
             "tiny signal must read as quiet"
@@ -855,9 +834,8 @@ mod tests {
 
     #[test]
     fn clip_frames_to_bytes_length_and_wrap() {
-        let clip = [100i16, -100, 200, -200]; // 2 stereo frames
+        let clip = [100i16, -100, 200, -200];
         let mut cursor = 0_usize;
-        // 3 frames → 3 × 2ch × 4 bytes = 24; reads wrap past the clip end.
         let b = clip_frames_to_bytes(&clip, &mut cursor, 3);
         assert_eq!(b.len(), 24);
         assert_eq!(cursor, 6, "3 frames × 2 channels = 6 samples consumed");
@@ -872,7 +850,6 @@ mod tests {
     fn decimator_48k_to_16k_is_3_to_1() {
         let input: Vec<f32> = (0..48).map(|i| (i as f32) / 100.0).collect();
         let out = resample_and_quantise(&input, 3.0);
-        // 48 / 3 = 16 samples out
         assert_eq!(out.len(), 16);
     }
 
@@ -890,7 +867,7 @@ mod tests {
         let sample_rate = 48_000.0;
         let target_rate = 16_000.0;
         let freq = 1000.0;
-        let n_samples = 9600; // 200 ms
+        let n_samples = 9600;
         let input: Vec<f32> = (0..n_samples)
             .map(|i| (2.0 * std::f32::consts::PI * freq * i as f32 / sample_rate).sin())
             .collect();
@@ -898,8 +875,6 @@ mod tests {
         let out = resample_and_quantise(&input, (sample_rate / target_rate) as f64);
         assert_eq!(out.len(), 3200, "200 ms at 16 kHz = 3200 samples");
 
-        // Autocorrelation: find lag at peak (excluding lag=0). For 1 kHz at
-        // 16 kHz, period = 16 samples → peak should be at lag 16 (±1).
         let signal: Vec<f32> = out.iter().map(|&s| s as f32 / i16::MAX as f32).collect();
         let mut best_lag = 0usize;
         let mut best_corr = f32::MIN;
@@ -921,12 +896,9 @@ mod tests {
 
     #[test]
     fn decimator_ratio_one_is_identity_quantisation() {
-        // ratio=1.0 means no resampling — output length == input length,
-        // and each sample is just quantised to i16.
         let input = vec![0.0_f32, 0.5, -0.5, 1.0, -1.0];
         let out = resample_and_quantise(&input, 1.0);
         assert_eq!(out.len(), input.len());
-        // Check sign + approximate magnitude on bounds.
         assert_eq!(out[0], 0);
         assert!(
             (out[3] - i16::MAX).abs() <= 1,
@@ -936,7 +908,6 @@ mod tests {
 
     #[test]
     fn decimator_oversaturation_clamped() {
-        // f32 input > 1.0 should be clamped, not wrap around to negative.
         let input = vec![2.0_f32, -2.0, 5.5];
         let out = resample_and_quantise(&input, 1.0);
         assert_eq!(out[0], i16::MAX);
@@ -946,8 +917,7 @@ mod tests {
 
     #[test]
     fn decimator_preserves_average_amplitude() {
-        // Constant DC signal at 0.5 should stay near 0.5 after averaging.
-        let input = vec![0.5f32; 4800]; // 100 ms at 48k
+        let input = vec![0.5f32; 4800];
         let out = resample_and_quantise(&input, 3.0);
         let target_i16 = (0.5 * i16::MAX as f32) as i16;
         for &s in &out {

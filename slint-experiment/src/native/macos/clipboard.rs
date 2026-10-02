@@ -17,7 +17,6 @@ pub fn set_text(text: &str) -> Result<(), String> {
     if written == 1 {
         Ok(())
     } else {
-        // Category only — the payload must never surface in an error string.
         Err("AppKit pasteboard write failed".into())
     }
 }

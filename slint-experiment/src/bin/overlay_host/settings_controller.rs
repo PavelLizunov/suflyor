@@ -96,9 +96,6 @@ pub(crate) fn open_settings(
     // wizard" button forwards the same registry to `open_wizard`.
     registry: &WindowRegistry,
 ) {
-    // Light up the bar's ⚙ chip while Settings is open (user: "значок
-    // настроек не загорается когда настройки открыты"). Cleared in the
-    // window's close handler below.
     if let Some(o) = overlay_weak.upgrade() {
         o.set_settings_open(true);
     }
@@ -164,10 +161,7 @@ pub(crate) fn open_settings(
         }
     }
     populate_diagnostics(&win, cfg);
-    // Phase E8 — show the running version in the Updates tab.
     win.set_app_version(SharedString::from(env!("CARGO_PKG_VERSION")));
-    // Phase E6 v29 / F — load the profile list + active context into the editor,
-    // and seed the Coaching + Auto-tiles controls (previously dead/cosmetic).
     {
         let snap = cfg.read();
         refresh_profiles(&win, &snap);
@@ -177,15 +171,12 @@ pub(crate) fn open_settings(
         win.set_auto_tiles_enabled(snap.auto_tiles_enabled);
         win.set_suppress_tiles(snap.suppress_tiles);
         win.set_trigger_keywords_input(SharedString::from(snap.trigger_keywords.as_str()));
-        // v0.15.0 — seed the storage/retention controls. Days wins the display
-        // when both bounds are set (hand-edited config); saving from the UI
-        // then keeps exactly one bound active.
         let (mode, value) = if snap.record_retention_days > 0 {
             (2, snap.record_retention_days.to_string())
         } else if snap.record_retention_sessions > 0 {
             (1, snap.record_retention_sessions.to_string())
         } else {
-            (0, "10".to_string()) // placeholder N for when the user switches mode
+            (0, "10".to_string())
         };
         win.set_retention_mode(mode);
         win.set_retention_value(SharedString::from(value));
@@ -194,15 +185,9 @@ pub(crate) fn open_settings(
         ));
         win.set_journal_mb_value(SharedString::from(snap.journal_max_total_mb.to_string()));
 
-        // Onboarding «Компоненты» — readiness rows, refreshed on EVERY open
-        // (see populate_component_rows; also called on the reused-window path).
         populate_component_rows(&win, &snap);
     }
 
-    // Onboarding «Компоненты» — inline install for the LIGHT, single-call
-    // installers (voices / OCR). The heavy ones (engine / model / STT) keep their
-    // dedicated panels with progress + cancel, so they have no inline button.
-    // Wired ONCE on the fresh window (the callback persists across reopens).
     {
         let weak = win.as_weak();
         let cfg_inst = cfg.clone();
@@ -211,19 +196,15 @@ pub(crate) fn open_settings(
                 return;
             };
             if w.get_component_busy_index() != -1 {
-                return; // one inline install at a time
+                return;
             }
             w.set_component_busy_index(idx);
-            w.set_component_busy_phase(1); // preparing
+            w.set_component_busy_phase(1);
             w.set_component_busy_label(SharedString::from(""));
-            // Language for the voice-pack labels interpolated into the @tr
-            // phase templates (English UI must not show Cyrillic names).
             let ru = cfg_inst.read().ui_is_ru();
             let weak_done = w.as_weak();
             let cfg_t = cfg_inst.clone();
             std::thread::spawn(move || {
-                // Windows keeps components::status() order. macOS filters the
-                // first two Windows-only rows, so Voices moves from 3 to 1.
                 let result: std::result::Result<(), String> = match idx {
                     idx if idx == if cfg!(target_os = "macos") { 1 } else { 3 } => {
                         let cancel = std::sync::atomic::AtomicBool::new(false);
@@ -274,7 +255,6 @@ pub(crate) fn open_settings(
                     _ => Ok(()),
                 };
                 if let Err(e) = &result {
-                    // Log detail locally; the UI line stays generic (screen-shareable).
                     diag!("[overlay-host] component install (idx={idx}) failed: {e}");
                 }
                 let failed = result.is_err();
@@ -283,11 +263,8 @@ pub(crate) fn open_settings(
                         return;
                     };
                     if failed {
-                        // Keep the row marked busy so the generic message shows; the
-                        // next Settings open clears it (populate resets busy-index).
-                        w.set_component_busy_phase(8); // generic failure
+                        w.set_component_busy_phase(8);
                     } else {
-                        // Refresh from live state — the just-installed row goes green.
                         reset_component_install_state(&w);
                         let snap = cfg_t.read();
                         populate_component_rows(&w, &snap);
@@ -300,7 +277,6 @@ pub(crate) fn open_settings(
     #[cfg(windows)]
     settings_audio::wire(&win, cfg);
 
-    // Preserve the existing macOS microphone settings behavior.
     #[cfg(not(windows))]
     {
         // V0.8.4 — WASAPI device enumeration (cold COM + a per-endpoint
@@ -328,7 +304,6 @@ pub(crate) fn open_settings(
                         .map(|d| SharedString::from(d.as_str()))
                         .collect()
                 };
-                // Find the saved device's index (default 0 = system default).
                 let sel = saved
                     .as_deref()
                     .and_then(|name| devices.iter().position(|d| d == name))
@@ -370,10 +345,6 @@ pub(crate) fn open_settings(
                     match result {
                         Ok(samples) if samples.is_empty() => "no audio captured".to_string(),
                         Ok(samples) => {
-                            // RMS energy + a -45 dBFS speech threshold (silent room
-                            // is < -55 dBFS). Shared helper with the diagnostics tab
-                            // — User: "я могу ничего не говорить, но всё равно OK"
-                            // was the old peak==0 check passing on any tiny noise.
                             let dbfs = overlay_backend::audio::rms_dbfs(&samples);
                             if dbfs < -45.0 {
                                 format!(
@@ -424,7 +395,6 @@ pub(crate) fn open_settings(
         if let Ok(mut st) = s3.lock() {
             st.stealth = on;
         }
-        // #111 — global source-of-truth so later-created windows inherit it.
         set_global_stealth(on);
         // #E10.2 — persist so stealth survives a restart. Intent is preserved
         // even when the apply below fails, so the next toggle retries (I1).
@@ -447,12 +417,9 @@ pub(crate) fn open_settings(
         if let Some(w) = weak_stealth_status.upgrade() {
             w.set_stealth_effective(effective);
         }
-        // Every other open window (incl. this Settings window) via the one path.
         registry_stealth.apply_stealth(on);
     });
 
-    // V0.8.4 — Windows Settings → Interface setup wizard button. Re-opens the
-    // guided first-run wizard on demand (it is also auto-shown on first launch).
     #[cfg(windows)]
     {
         // The wizard slot lives in the registry; forward the same registry so the
@@ -477,11 +444,8 @@ pub(crate) fn open_settings(
     settings_mlx::wire(&win, cfg);
     crate::settings_hermes::wire_hermes_settings(&win, cfg);
 
-    // ===== V4 — vision (screenshot) channel: provider switch + field saves + test =====
-    // Extracted to settings_vision.rs (P1 domain split) — wired verbatim there.
     wire_vision_settings(&win, cfg);
 
-    // ===== Read-aloud (Озвучка): voice chooser + speed preset + test =====
     wire_voice_settings(&win, cfg);
 
     // ===== Local AI: one-click in-app installer (download pipeline + Cancel) =====
@@ -491,8 +455,6 @@ pub(crate) fn open_settings(
     #[cfg(windows)]
     wire_local_ai(&win, cfg, state, overlay_weak);
 
-    // Phase E6 v20 — tile opacity slider. Persists to config AND
-    // applies to all currently-visible tiles via tiles_ref.
     {
         let cfg_c = cfg.clone();
         let tiles_c = tiles_ref.clone();
@@ -506,11 +468,7 @@ pub(crate) fn open_settings(
                     return;
                 }
             }
-            // Phase E6 v36 — update the process-global so EVERY future
-            // tile (F9 / F3 / KB-palette / auto-spawn) spawns at this
-            // opacity, not just the ones currently on screen.
             set_global_tile_opacity(clamped);
-            // Apply live to all currently-visible tiles.
             for tile in tiles_c.borrow().iter() {
                 tile.set_body_opacity(clamped);
             }
@@ -518,10 +476,6 @@ pub(crate) fn open_settings(
         });
     }
 
-    // Tile-placement monitor picker. Index 0 = Auto (pick_monitor); index i>0 =
-    // the (i-1)-th live monitor. Persists its top-left signature (survives a
-    // monitor reorder) and updates the process-global so every future tile
-    // honours the choice immediately.
     {
         let cfg_m = cfg.clone();
         win.on_tile_monitor_changed(move |idx| {
@@ -532,9 +486,6 @@ pub(crate) fn open_settings(
                     .get((idx - 1) as usize)
                     .map(|m| (m.left, m.top))
             };
-            // Apply to the runtime FIRST so new tiles honour the choice even if
-            // persisting config later fails — the dropdown never lies about where
-            // tiles will spawn. Saving config.json is best-effort.
             set_global_tile_monitor(pin);
             {
                 let mut c = cfg_m.write();
@@ -547,12 +498,6 @@ pub(crate) fn open_settings(
         });
     }
 
-    // Phase E6 v38 — interface-language switch. Selecting Русский/English
-    // in the Interface tab switches the bundled translation LIVE (Slint
-    // re-evaluates every @tr() binding) and persists ui_language so the
-    // choice survives restart. Previously the dropdown was inert — it
-    // showed "Русский" but never applied anything, so a stale .po made
-    // the UI look English even though "ru" was nominally selected.
     {
         let cfg_lang = cfg.clone();
         let win_lang = win.as_weak();
@@ -609,10 +554,6 @@ pub(crate) fn open_settings(
         });
     }
 
-    // Colour-scheme switch. Selecting a scheme in the Interface tab recolours
-    // EVERY window live (Theme is a per-window global, so we walk each one),
-    // updates the process-global so future tiles/palette inherit it, and
-    // persists color_scheme. Mirrors the tile-opacity handler's shape.
     {
         let cfg_scheme = cfg.clone();
         let overlay_scheme = overlay_weak.clone();
@@ -633,9 +574,7 @@ pub(crate) fn open_settings(
                     return;
                 }
             }
-            // Future windows (tiles, palette) read this at construction.
             set_global_scheme(scheme);
-            // Re-skin all currently-live windows: bar inline, the rest via registry.
             if let Some(o) = overlay_scheme.upgrade() {
                 apply_scheme_bar(&o, scheme);
             }
@@ -644,7 +583,6 @@ pub(crate) fn open_settings(
         });
     }
 
-    // P0 — Diagnostics tab owns its callbacks (diagnostics.rs); Settings only wires.
     wire_diagnostics(&win, cfg);
 
     // ===== STT (speech-to-text): provider switch + GigaAM GPU + field saves + test =====
@@ -653,20 +591,11 @@ pub(crate) fn open_settings(
     // into wire_stt_settings; the mic device/test callbacks stay in open_settings.)
     wire_stt_settings(&win, cfg);
 
-    // ===== 💭 Memory (Phase 3b.3): curated personal memory review =====
-    // Pending candidates (approve/reject) + approved items (delete) over the
-    // SQLite memory tables, + Extract (heuristic over recent sessions).
-    // Extracted to settings_memory.rs.
     wire_memory(&win);
 
-    // P1.7 — config parsed from a picked server-settings file, awaiting the
-    // user's explicit Apply (set by the import-preview handler, taken by Apply,
-    // cleared by Cancel). Kept out of the live config until confirmed.
     let pending_server_import: Rc<RefCell<Option<overlay_backend::config::Config>>> =
         Rc::new(RefCell::new(None));
 
-    // Phase E6 v28 — full-profile export (incl. keys). Native save
-    // dialog via rfd; writes the whole config.json to the chosen path.
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
@@ -734,17 +663,12 @@ pub(crate) fn open_settings(
     // (above) + `refresh_profiles` + `msg_refresh_after_import` STAY here.
     wire_import_export(&win, cfg, &pending_server_import, overlay_weak);
 
-    // Phase E6 v29 — meeting-context (Profile) save. Writes to
-    // cfg.meeting_context + persists; new AI calls read it from cfg
-    // so it applies immediately (no restart needed for this field).
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_meeting_context_save(move |text| {
             {
                 let mut c = cfg_c.write();
-                // Phase F — also mirror into the active profile so the picker
-                // and the live context never drift.
                 c.save_active_context(&text);
                 if let Err(e) = overlay_backend::config::save(&c) {
                     eprintln!("[overlay-host] meeting_context save failed: {e:#}");
@@ -763,8 +687,6 @@ pub(crate) fn open_settings(
             }
         });
     }
-    // Phase F — multi-profile picker handlers. Each mutates cfg, persists, and
-    // refreshes the picker + editor from cfg so the UI mirrors config exactly.
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
@@ -836,9 +758,6 @@ pub(crate) fn open_settings(
         win.on_profile_delete(move || {
             let mut c = cfg_c.write();
             c.delete_active_profile();
-            // Confirm-without-verify was the v0.18 "Готово when not done" class:
-            // report success ONLY if the save actually persisted, else the profile
-            // reappears on next launch with a green status (audit Q3).
             let saved = overlay_backend::config::save(&c);
             if let Some(w) = weak.upgrade() {
                 refresh_profiles(&w, &c);
@@ -852,9 +771,6 @@ pub(crate) fn open_settings(
             }
         });
     }
-    // Phase F — Coaching + Auto-tiles toggles (were dead). Each persists; the
-    // detector + session-stop logic read these from cfg at runtime, so changes
-    // apply without a restart.
     {
         let cfg_c = cfg.clone();
         win.on_coaching_debrief_changed(move |on| {
@@ -871,9 +787,6 @@ pub(crate) fn open_settings(
             let _ = overlay_backend::config::save(&c);
         });
     }
-    // v0.13.0 — raw-audio recording toggle + "open recordings folder". The tee
-    // in slint_session reads record_audio_enabled at the NEXT session start, so
-    // a change applies to the next session (an in-flight recording keeps going).
     {
         let cfg_c = cfg.clone();
         win.on_record_audio_changed(move |on| {
@@ -882,10 +795,6 @@ pub(crate) fn open_settings(
             let _ = overlay_backend::config::save(&c);
         });
     }
-    // v0.15.0 — recordings retention policy. The prune runs at the NEXT session
-    // start (recorder::start), so a change applies from the next call on.
-    // Invalid / partial numeric input is ignored — the config keeps its last
-    // valid value (the field re-seeds to canonical on the next Settings open).
     {
         let cfg_c = cfg.clone();
         win.on_retention_changed(move |mode, value| {
@@ -915,13 +824,11 @@ pub(crate) fn open_settings(
             let _ = overlay_backend::config::save(&c);
         });
     }
-    // v0.15.0 — journal (archive transcripts) retention: count + MB cap, both
-    // 0 = unlimited. Applied at the next session start (journal open prune).
     {
         let cfg_c = cfg.clone();
         win.on_journal_retention_changed(move |keep, mb| {
             let (Ok(keep), Ok(mb)) = (keep.trim().parse::<u32>(), mb.trim().parse::<u32>()) else {
-                return; // partial / non-numeric input — keep the last valid value
+                return;
             };
             let mut c = cfg_c.write();
             c.journal_retention_sessions = keep;
@@ -933,8 +840,6 @@ pub(crate) fn open_settings(
         win.on_open_recordings_clicked(move || {
             match overlay_backend::recorder::recordings_dir() {
                 Ok(dir) => {
-                    // Create it first so the folder opens even before the first
-                    // recording exists. Explorer launch is fire-and-forget.
                     let _ = std::fs::create_dir_all(&dir);
                     #[cfg(target_os = "macos")]
                     let _ = std::process::Command::new("open").arg(&dir).spawn();
@@ -1033,7 +938,6 @@ pub(crate) fn open_settings(
             }
             let endpoint = {
                 let c = cfg_c.read();
-                // Structuring uses the smarter "prep" model.
                 c.ai_endpoint(true)
             };
             if (!matches!(
@@ -1132,14 +1036,12 @@ pub(crate) fn open_settings(
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            // Toggle OFF: stop the in-flight recording.
             if let Some(stop) = dictate_stop.borrow_mut().take() {
                 stop.store(true, Ordering::Release);
                 w.set_context_dictating(false);
                 w.set_meeting_context_result(SharedString::from("расшифровка…"));
                 return;
             }
-            // Toggle ON: start a new recording.
             let (
                 mic_dev,
                 stt_backend,
@@ -1166,7 +1068,6 @@ pub(crate) fn open_settings(
                 ));
                 return;
             }
-            // M2 — single-mic guard (shared with PTT-mic + voice follow-up).
             let Some(mic_guard) = try_acquire_mic() else {
                 w.set_meeting_context_result(SharedString::from("[--] микрофон занят"));
                 return;
@@ -1232,8 +1133,6 @@ pub(crate) fn open_settings(
         });
     }
 
-    // Phase E6 v25 — frameless Settings drag (cursor-delta, same as
-    // bar + tiles). The "Settings" sidebar header is the handle.
     {
         let weak = win.as_weak();
         win.on_drag_start_requested(move || {
@@ -1271,8 +1170,6 @@ pub(crate) fn open_settings(
             let _ = w.hide();
         }
         *settings_close.borrow_mut() = None;
-        // Un-light the bar's ⚙ chip + refresh the active-stack readout (the
-        // user may have switched STT/AI provider while Settings was open).
         if let Some(o) = overlay_for_close.upgrade() {
             o.set_settings_open(false);
             o.set_active_stack(SharedString::from(active_stack_label(
@@ -1421,14 +1318,11 @@ pub(crate) fn populate_component_rows(
                     _ => {}
                 }
             }
-            // Light, single-call installers wired inline in the hub.
             let installable = matches!(c.kind, ComponentKind::Voices)
                 || (cfg!(windows) && c.kind == ComponentKind::Ocr);
-            // «Открыть» jump target for the heavy components (their full installer
-            // with progress + cancel lives in a dedicated panel); -1 = inline.
             let jump_tab: i32 = match c.kind {
-                ComponentKind::Engine | ComponentKind::LocalModel => 11, // AI мост
-                ComponentKind::Stt => 12,                                // STT
+                ComponentKind::Engine | ComponentKind::LocalModel => 11,
+                ComponentKind::Stt => 12,
                 ComponentKind::Voices | ComponentKind::Ocr => -1,
             };
             let (name, hint) = if is_macos && c.kind == ComponentKind::Stt {
@@ -1475,10 +1369,6 @@ pub(crate) fn refresh_profiles(win: &SettingsWindow, c: &overlay_backend::config
         .map(|p| SharedString::from(p.name.as_str()))
         .collect();
     win.set_profile_names(ModelRc::new(VecModel::from(names)));
-    // Default to the first profile (0) when profiles exist but none is marked
-    // active (e.g. after deleting the active one): otherwise the ComboBox bound
-    // to -1 shows blank AND Rename/Delete stay disabled though selectable
-    // profiles exist (audit #28). -1 only when there are no profiles at all.
     win.set_active_profile_index(match c.active_profile_index() {
         Some(i) => i as i32,
         None if !c.context_profiles.is_empty() => 0,
@@ -1553,11 +1443,6 @@ pub(crate) fn populate_tts_voices(win: &SettingsWindow, c: &overlay_backend::con
                 .iter()
                 .map(|v| SharedString::from(v.name.as_str()))
                 .collect();
-            // Show the voice the ENGINE actually resolves to, not blindly
-            // voices[0]: for an empty/uninstalled `tts_voice`, `pick_voice_id`
-            // mirrors the sidecar's preference (Irina → any Piper → any RU →
-            // first), so the dropdown label matches the voice that Test /
-            // read-aloud will play.
             let vref = overlay_backend::tts::parse_voice_ref(&c.tts_voice);
             let configured = if vref.engine == overlay_backend::tts::EngineKind::Piper {
                 vref.id.as_str()
@@ -1609,10 +1494,6 @@ pub(crate) fn populate_token_status(
     win.set_tts_test_status(SharedString::from(""));
     let codex_login_busy = win.get_codex_auth_busy();
     invalidate_codex_snapshot_ui();
-    // Phase E6 v18 — ASCII status prefixes ("[ok]" / "[--]") instead of
-    // Unicode ✓ / ❌ which Slint+skia rendered as missing-glyph boxes
-    // on the user's font fallback. Same root cause as the Close button
-    // fix in settings_panel.slint and the quit chip fix in cycle 15.
     let c = cfg.read();
     let ai_status = if c.ai_bearer.is_empty() {
         "[--] not set".to_string()
@@ -1679,9 +1560,6 @@ pub(crate) fn populate_token_status(
     win.set_codex_models_busy(false);
     win.set_openai_key_input(SharedString::default());
     win.set_anthropic_key_input(SharedString::default());
-    // ТЗ 2026-07-09 — Hermes tab transient status props on every (re)open: clear
-    // the action results (stale «готово…» must not linger) and refresh the LIVE
-    // bridge status (the reused window keeps its old text otherwise).
     win.set_hermes_api_test_result(SharedString::default());
     win.set_hermes_api_setup_status(SharedString::default());
     win.set_hermes_profile_status(SharedString::default());
@@ -1692,8 +1570,6 @@ pub(crate) fn populate_token_status(
     win.set_hermes_bridge_remote(!overlay_backend::bridge::is_loopback_host(
         &c.hermes_bridge_host,
     ));
-    // Phase E6 v20 — load tile opacity from config so the slider
-    // reflects the saved value on Settings re-open.
     win.set_tile_body_opacity(c.tile_body_opacity);
     // I1 — Stealth-tab EFFECTIVE-state line, reseeded on every open (reused-
     // window rule): a stale failure / active state from a previous session
@@ -1703,8 +1579,6 @@ pub(crate) fn populate_token_status(
     // intent side of the line can never go stale on the reuse path.
     win.set_stealth_toggle(c.stealth_enabled);
     win.set_stealth_effective(global_stealth_effective());
-    // Tile-placement monitor dropdown — rebuilt here AND on a live language
-    // switch (Rust-built labels don't auto-refresh like @tr bindings do).
     populate_tile_monitors(win, &c);
     win.set_ai_base_url_input(SharedString::from(c.ai_base_url.clone()));
     win.set_openai_base_url_input(SharedString::from(c.openai_base_url.clone()));
@@ -1722,24 +1596,14 @@ pub(crate) fn populate_token_status(
     win.set_vision_local_base_url_input(SharedString::from(c.vision_local_base_url.clone()));
     win.set_vision_local_model_input(SharedString::from(c.vision_local_model.clone()));
     win.set_vision_test_result(SharedString::from(""));
-    // Clear the DB-maintenance result so a prior ✓/⚠ doesn't linger on reopen
-    // (reused-window transient-status rule; settings_reset_guard enforces this).
     win.set_db_repair_status(SharedString::from(""));
-    // Disarm any half-armed destructive clear so reopening Settings never leaves a
-    // "tap again to delete" button primed.
     win.set_db_clear_armed(SharedString::from(""));
-    // A1 — drop any in-flight inline memory edit so reopening Settings never lands
-    // on a row stuck in edit mode (reused-window transient-state rule).
     win.set_memory_editing_id(-1);
-    // Apple Vision ships with macOS; Windows re-checks its user-writable
-    // Tesseract install on every open.
     win.set_ocr_installed(
         cfg!(target_os = "macos") || overlay_backend::ocr_install::is_installed(),
     );
     win.set_ocr_installing(false);
     win.set_ocr_install_phase(0);
-    // Speaker-diarization models — same reset-on-reopen discipline (the window is
-    // reused; a stale install status must not survive).
     win.set_diar_models_installed(overlay_backend::diar_install::models_installed());
     win.set_diar_installing(false);
     win.set_diar_install_status(slint::SharedString::default());
@@ -1764,19 +1628,10 @@ pub(crate) fn populate_token_status(
     win.set_profile_io_result(blank());
     win.set_server_preview_ready(false);
     win.set_update_status(blank());
-    // Q2 — clear the updater's transient state too, else the "⬇ Update now"
-    // button + its stale download URL survive a reopen while the status text was
-    // already cleared above (reused-window state-truth gap). The user just
-    // re-checks; nothing persists a half-finished check across opens.
     win.set_update_available(false);
     win.set_update_download_url(blank());
     win.set_update_checking(false);
     win.set_memory_status(blank());
-    // «Компоненты» tab — the per-row install progress (busy index + status text)
-    // is transient (set by the install worker). Reset BOTH so a reopened Settings
-    // can't show a stale "Подготовка…" on a row whose install already finished
-    // (the project's #1 reused-window stale-status class — caught by
-    // settings_reset_guard).
     win.set_component_busy_phase(0);
     win.set_component_busy_label(blank());
     win.set_component_busy_index(-1);
@@ -1798,9 +1653,6 @@ pub(crate) fn populate_token_status(
             }
         });
     });
-    // #E10.1 — seed both model dropdowns (cloud bridge + local) with the saved
-    // model so each shows immediately; the full lists are fetched from
-    // {base_url}/models AFTER the read guard is released (see end of fn).
     let seed_one = |saved: &str| -> ModelRc<SharedString> {
         let v: Vec<SharedString> = if saved.is_empty() {
             vec![]
@@ -1840,16 +1692,9 @@ pub(crate) fn populate_token_status(
     win.set_ai_local_vision(c.ai_local_vision);
     win.set_vision_phonetics(c.vision_phonetics);
     win.set_vision_test_practice(c.vision_test_practice);
-    // Read-aloud (Озвучка): build the installed-voice dropdown + reflect the
-    // saved voice/speed. The neural voices live in `%APPDATA%\suflyor\tts`;
-    // `tts::voices()` scans them (empty until the user installs one → the panel
-    // shows a "no voices" hint and disables the Test button). RC17: the Tera
-    // status is blanked first (reused window), then re-seeded per engine.
     win.set_tera_model_status(blank());
     populate_tts_voices(win, &c);
     {
-        // Reset the transient install state on (re)open — the Settings window is
-        // reused, so a leftover "Готово…" / progress string must not survive.
         win.set_tts_installing(false);
         win.set_tts_install_phase(0);
         win.set_tts_install_label(SharedString::from(""));
@@ -1858,13 +1703,11 @@ pub(crate) fn populate_token_status(
         win.set_tera_install_label(SharedString::from(""));
     }
     win.set_ai_local_thinking(c.ai_local_thinking);
-    // Local model choice + whether the optional 26B-A4B is downloaded.
     win.set_ai_local_quality(effective_quality);
     refresh_local_context_controls(win, &c);
     {
         let root = local_root;
         win.set_quality_model_present(overlay_backend::local_ai::quality_model_present(&root));
-        // Matching 26B projector and engine support remain visible separately.
         win.set_quality_vision_present(overlay_backend::local_ai::quality_vision_present(&root));
         win.set_quality_vision_supported(overlay_backend::local_ai::quality_vision_supported(
             &root,
@@ -1877,15 +1720,12 @@ pub(crate) fn populate_token_status(
         win.set_vision12b_status(blank());
         win.set_engine_update_status(blank());
     }
-    // Phase E10 — STT provider selector + local-engine fields.
     win.set_stt_provider_index(stt_provider_index(&c.stt_provider));
-    // Recognition language (stt_language): None=auto → 0, "ru" → 1, "en" → 2.
     win.set_stt_language_index(match c.stt_language.as_deref() {
         Some("ru") => 1,
         Some("en") => 2,
         _ => 0,
     });
-    // Cloud recognition model (stt_model): turbo → 0, large-v3 → 1.
     win.set_stt_cloud_model_index(cloud_model_index(&c.stt_model));
     if !win.get_stt_gigaam_installing() {
         let installed = super::settings_stt::installed_gigaam_dir(&c.stt_gigaam_dir);
@@ -1905,11 +1745,7 @@ pub(crate) fn populate_token_status(
     win.set_stt_whisper_url_input(SharedString::from(c.stt_whisper_url.clone()));
     win.set_stt_whisper_bearer_input(SharedString::from(c.stt_whisper_bearer.clone()));
     win.set_stt_whisper_model_input(SharedString::from(c.stt_whisper_model.clone()));
-    // Phase E6 v38 — reflect the saved interface language in the
-    // Interface-tab dropdown (0=Русский, 1=English).
     win.set_ui_language_index(if c.ui_language == "en" { 1 } else { 0 });
-    // Reflect the saved colour scheme in the Interface-tab dropdown, and seed
-    // this Settings window's own Theme global so it opens already skinned.
     win.set_color_scheme_index(clamp_scheme(c.color_scheme));
     apply_scheme_settings(win, c.color_scheme);
 
@@ -1950,7 +1786,6 @@ mod tests {
             assert_ne!(name_ru, name_en, "kind {kind:?} name must be localized");
             assert_ne!(hint_ru, hint_en, "kind {kind:?} hint must be localized");
         }
-        // Spot-check the wording the tester sees.
         assert_eq!(
             component_row_copy(ComponentKind::Engine, false).0,
             "Engine (llama.cpp)"

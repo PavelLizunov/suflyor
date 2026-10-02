@@ -74,7 +74,6 @@ pub(crate) fn wire_hermes_settings(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
 ) {
-    // -- seed fields from config --
     {
         let c = cfg.read();
         win.set_hermes_bridge_enabled(c.hermes_bridge_enabled);
@@ -85,14 +84,12 @@ pub(crate) fn wire_hermes_settings(
         win.set_hermes_api_url(SharedString::from(c.hermes_api_url.clone()));
         win.set_hermes_api_key(SharedString::from(c.hermes_api_key.clone()));
     }
-    // Reflect the CURRENT live state (boot may have started it already).
     let (host, port) = {
         let c = cfg.read();
         (c.hermes_bridge_host.clone(), c.hermes_bridge_port)
     };
     win.set_hermes_bridge_status(SharedString::from(current_bridge_status(&host, port)));
 
-    // -- toggle: persist + start/stop live --
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
@@ -117,7 +114,6 @@ pub(crate) fn wire_hermes_settings(
         });
     }
 
-    // -- port save (re-applies the bridge if running) --
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
@@ -159,8 +155,6 @@ pub(crate) fn wire_hermes_settings(
         });
     }
 
-    // -- «Установить плагин в Hermes» (ТЗ 2026-07-10: установка ТОЛЬКО из
-    // приложения — файлы + .env + config.yaml, см. hermes_install.rs) --
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
@@ -200,7 +194,6 @@ pub(crate) fn wire_hermes_settings(
         });
     }
 
-    // -- bind host save (re-applies the bridge if running; updates the warning) --
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
@@ -219,7 +212,6 @@ pub(crate) fn wire_hermes_settings(
         });
     }
 
-    // -- Hermes API url/key save --
     {
         let cfg_c = cfg.clone();
         win.on_hermes_api_url_save(move |txt| {
@@ -237,9 +229,6 @@ pub(crate) fn wire_hermes_settings(
         });
     }
 
-    // -- «Взять ключ из локального Hermes» (тестер не обязан знать, что такое
-    // API_SERVER_KEY): включает platforms.api_server в конфиге ЛОКАЛЬНОГО
-    // Hermes, создаёт/читает ключ и вписывает его в suflyor. --
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
@@ -326,7 +315,6 @@ pub(crate) fn wire_hermes_settings(
         });
     }
 
-    // -- «Подготовить профиль» (P3): seed line → Hermes → new active profile --
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
@@ -348,7 +336,6 @@ pub(crate) fn wire_hermes_settings(
                 let status = run_prepare_profile(&url, &key, &seed, &cfg_save);
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_res.upgrade() {
-                        // Refresh the profile list + status on success.
                         {
                             let snap = cfg_save.read();
                             super::refresh_profiles(&w, &snap);
@@ -442,7 +429,6 @@ mod tests {
             "Первая строка"
         );
         assert_eq!(profile_name_from_seed("   "), "Созвон (Hermes)");
-        // Long line is capped to 48 chars.
         assert_eq!(profile_name_from_seed(&"я".repeat(100)).chars().count(), 48);
     }
 }

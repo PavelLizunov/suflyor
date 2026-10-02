@@ -12,9 +12,6 @@ use super::*;
 /// one `release` in the worker's completion path. (Same pattern as `MIC_BUSY`.)
 static RETRANSCRIBE_BUSY: AtomicBool = AtomicBool::new(false);
 
-// ============================================================================
-// Session archive (Phase 3a) — browse + FTS-search the SQLite catalog.
-// ============================================================================
 
 /// Phase 3a — open (or re-focus) the 🗄 session-archive browser (F7 / 🗄 chip).
 /// Lists every indexed session newest-first and full-text-searches their
@@ -43,7 +40,7 @@ pub(in super::super) fn open_archive(
     {
         let slot = archive_ref.borrow();
         if let Some(existing) = slot.as_ref() {
-            existing.set_confirm_delete_index(-1); // F2: never reopen onto a stale confirm overlay
+            existing.set_confirm_delete_index(-1);
             let _ = existing.show();
             if let Ok(hwnd) = grab_hwnd(existing.window()) {
                 focus_window(hwnd);
@@ -62,8 +59,6 @@ pub(in super::super) fn open_archive(
         .set_scheme(clamp_scheme(global_scheme()));
     win.global::<ui::Platform>()
         .set_is_macos(cfg!(target_os = "macos"));
-    // Egress signpost: warn (in the header) that "↻ Summary" re-uploads saved
-    // audio when STT is the cloud (Groq). Local backends stay one-click, no note.
     win.set_stt_is_cloud(!cfg.read().stt_is_local());
 
     // v0.17.2 (тестер P0.1) — reindex BEFORE listing. The catalog used to be
@@ -90,12 +85,8 @@ pub(in super::super) fn open_archive(
     // open leaves the slot empty → the "unavailable" state.
     let store: StoreSlot = Arc::new(Mutex::new(None));
 
-    // One recordings snapshot for this browse session (v0.17.1 — was a
-    // filesystem stat PER ROW per rebuild; see recording_ids_snapshot).
     let recordings = Rc::new(recording_ids_snapshot());
 
-    // Row wording language, snapshotted for this browse session (mirrors the
-    // other per-open snapshots; a language switch applies on the next open).
     let ru = cfg.read().ui_language == "ru";
 
     // Баг5-class guard: the archive results render in an UN-VIRTUALIZED 50px-row
@@ -113,8 +104,6 @@ pub(in super::super) fn open_archive(
         let active_id_load = active_id.clone();
         let archive_enabled = cfg.read().session_archive_enabled;
         std::thread::spawn(move || {
-            // Reindex SWEEP first (gated on the archive toggle), so the list below
-            // catches anything finished since the launch-time sweep.
             if archive_enabled {
                 match overlay_backend::persistence::reindex_default(active_id_load.as_deref()) {
                     Ok(st) => eprintln!(
@@ -124,8 +113,6 @@ pub(in super::super) fn open_archive(
                     Err(e) => eprintln!("[overlay-host] archive: reindex on open failed: {e:#}"),
                 }
             }
-            // Open the read handle OFF the event loop (it runs migrations + WAL
-            // setup) and build the initial rows from it.
             let opened: Option<Store> = match open_default_store() {
                 Ok(s) => Some(s),
                 Err(e) => {
@@ -162,8 +149,6 @@ pub(in super::super) fn open_archive(
         });
     }
 
-    // Search-as-you-type: empty query → full list; else an FTS5 prefix search
-    // over utterances + AI questions/answers.
     {
         let weak = win.as_weak();
         let store_q = store.clone();
@@ -173,8 +158,6 @@ pub(in super::super) fn open_archive(
                 return;
             };
             let trimmed = q.trim();
-            // Fresh conspect snapshot per rebuild (A2): after a summary completes we
-            // invoke_query_changed, and this re-read flips the row to "Просмотреть".
             let conspects = overlay_backend::conspect::session_ids();
             let debriefs = overlay_backend::conspect::debrief_session_ids();
             let rows: Vec<ArchiveRow> = {
@@ -202,16 +185,11 @@ pub(in super::super) fn open_archive(
                     }
                 }
             };
-            // v0.22.0 — a list rebuild invalidates the index-keyed rename state,
-            // so cancel any in-progress edit (else ✓ would persist to whatever
-            // session now occupies that row index — a silent mis-rename).
             p.set_renaming_index(-1);
             p.set_results(ModelRc::new(VecModel::from(rows)));
         });
     }
 
-    // Activate a row → spawn a read-only tile with that session's full content.
-    // The archive stays OPEN so several sessions can be opened in a row.
     {
         let weak = win.as_weak();
         let store_a = store.clone();
@@ -244,9 +222,6 @@ pub(in super::super) fn open_archive(
         });
     }
 
-    // v0.22.0 — inline rename: ✎ pre-fills the field from the row's current
-    // name; ✓ / Enter persists to the session_names sidecar + refreshes the
-    // list; ✗ cancels. Clearing the field reverts the row to the time label.
     {
         let weak = win.as_weak();
         win.on_rename_requested(move |idx, name| {
@@ -283,15 +258,11 @@ pub(in super::super) fn open_archive(
                 }
             }
             p.set_renaming_index(-1);
-            // Re-run the query handler so the row title reflects the new name.
             let q = p.get_query();
             p.invoke_query_changed(q);
         });
     }
 
-    // v0.22.0 — ↻ regen: re-ask the LOCAL model for a fresh title from the
-    // session's saved transcript, persist + refresh. Local-only + best-effort
-    // (a cloud-only config simply does nothing — no egress, no cost).
     {
         let weak = win.as_weak();
         let store_g = store.clone();
@@ -325,7 +296,7 @@ pub(in super::super) fn open_archive(
             }
             let ep = cfg_g.read().ai_endpoint(true);
             if !ep.is_local {
-                return; // local-only naming — never spend cloud money on a title
+                return;
             }
             let weak2 = weak.clone();
             rth_g.spawn(async move {
@@ -372,7 +343,6 @@ pub(in super::super) fn open_archive(
                 p.set_retranscribe_status(SharedString::from("Активную сессию удалить нельзя"));
                 return;
             }
-            // Show the in-app confirm overlay; the actual delete is in delete-confirmed.
             p.set_confirm_delete_title(row.title);
             p.set_confirm_delete_index(idx);
         });
@@ -385,8 +355,6 @@ pub(in super::super) fn open_archive(
             let Some(p) = weak.upgrade() else {
                 return;
             };
-            // Dismiss, then re-fetch + re-validate by index (the list can't change
-            // behind the modal scrim, but stay defensive).
             p.set_confirm_delete_index(-1);
             let results = p.get_results();
             let Some(row) = archive_row_at(&results, idx) else {
@@ -409,8 +377,6 @@ pub(in super::super) fn open_archive(
             };
             match outcome {
                 Ok(()) => {
-                    // (debrief sidecar cleanup lives in delete_session_everywhere)
-                    // Rebuild the list (the row is gone); also resets edit-state.
                     let q = p.get_query();
                     p.invoke_query_changed(q);
                 }
@@ -503,11 +469,6 @@ pub(in super::super) fn open_archive(
                 return;
             };
             p.set_retranscribe_busy(true);
-            // ТЗ3 — a session with NO saved recordings can't be re-STT'd, so
-            // summarize from the saved catalog transcript, else the journal's
-            // ai_request prompts (summary_source). run_meeting_summary spawns its
-            // own Summary tile, exactly like the re-STT path below. Additive: the
-            // has-recordings path past this branch is unchanged.
             if !row.has_recordings {
                 let src = {
                     let slot = lock_store(&store_s);
@@ -535,7 +496,6 @@ pub(in super::super) fn open_archive(
                         if let Some(win) = weak_done.upgrade() {
                             win.set_retranscribe_busy(false);
                             win.set_retranscribe_status(SharedString::from(""));
-                            // A2: refresh rows so this one flips to "Просмотреть" now.
                             win.invoke_query_changed(win.get_query());
                         }
                     });
@@ -581,7 +541,6 @@ pub(in super::super) fn open_archive(
                             source: "summary".into(),
                             is_translation: false,
                             highlights: vec![],
-                            // Re-STT failed before any conspect — nothing to resume.
                             summary_session: None,
                         },
                         overlay_backend::events::MonitorHint::Auto,
@@ -598,7 +557,6 @@ pub(in super::super) fn open_archive(
                     if let Some(win) = weak_done.upgrade() {
                         win.set_retranscribe_busy(false);
                         win.set_retranscribe_status(SharedString::from(""));
-                        // A2: refresh rows so this one flips to "Просмотреть" now.
                         win.invoke_query_changed(win.get_query());
                     }
                 });
@@ -621,8 +579,6 @@ pub(in super::super) fn open_archive(
                 return;
             }
             let title = row.title.clone();
-            // F3 — overwriting an existing summary asks first; with no prior summary
-            // (no conspect on disk) it runs straight away.
             if overlay_backend::conspect::exists(&sid) {
                 p.set_confirm_resummary_index(idx);
                 p.set_confirm_resummary_title(title);
@@ -649,9 +605,6 @@ pub(in super::super) fn open_archive(
             }
         });
     }
-    // "Просмотреть" — re-show a session's SAVED summary as a tile (NO AI call),
-    // reusing the normal summary-tile rendering (markdown + copy). An absent/empty
-    // recap → a brief status (the row's ↻ regenerates).
     {
         let weak = win.as_weak();
         let events_c = events.clone();
@@ -692,9 +645,6 @@ pub(in super::super) fn open_archive(
         });
     }
 
-    // D — "Коучинг": re-show the saved post-meeting debrief read-only as a tile
-    // (no AI), mirroring view-summary. The button shows only when a debrief was
-    // persisted (ArchiveRow.has_debrief), so load_debrief is normally Some.
     {
         let weak = win.as_weak();
         let events_c = events.clone();
@@ -754,8 +704,6 @@ pub(in super::super) fn open_archive(
         });
     }
 
-    // v0.17.1 — drag the frameless window by its header (mirror of the tile
-    // drag: pointer-down anchors, moved-while-pressed moves the HWND).
     {
         let weak = win.as_weak();
         win.on_drag_start_requested(move || {
@@ -788,8 +736,6 @@ pub(in super::super) fn open_archive(
         slint_replay::win32::set_round_corners(hwnd);
         focus_window(hwnd);
     });
-    // Light the 🗄 bar chip while the archive is open (like 🆘 / ⚙). Cleared
-    // by the F7 toggle + the in-window close handler.
     if let Some(o) = weak_overlay.upgrade() {
         o.set_archive_open(true);
     }
@@ -928,7 +874,6 @@ fn archive_time_label(started_at_ms: Option<i64>, id: &str) -> String {
     }
     match overlay_backend::journal::stamp_to_unix_secs(id) {
         Some(secs) => overlay_backend::journal::format_msk_label((secs as i64) * 1000),
-        // Not a stamp-shaped id — show it as before rather than guessing.
         None => pretty_session_label(id),
     }
 }
@@ -953,7 +898,7 @@ fn status_label(status: &str, ru: bool) -> &'static str {
                 "In progress"
             }
         }
-        _ => "", // completed / unknown — clean row, no status flag
+        _ => "",
     }
 }
 
@@ -997,9 +942,6 @@ fn session_to_row(
 ) -> ArchiveRow {
     let time = archive_time_label(s.started_at_ms, &s.id);
     let name = overlay_backend::session_names::get(&s.id);
-    // Prefer the session NAME (v0.22.0) as the row title; fall back to the
-    // time. The title carries NO status prefix — an abnormal state is flagged
-    // in the subtitle instead (localized, next to the counts).
     let title = name.clone().unwrap_or_else(|| time.clone());
     let transcript_word = if ru {
         "Стенограмма"
@@ -1007,8 +949,6 @@ fn session_to_row(
         "Transcript"
     };
     let ai_word = if ru { "ИИ" } else { "AI" };
-    // Subtitle = time (when a NAME is the title) · transcript count · AI count
-    // · model (only when known) · status (only when abnormal).
     let mut parts: Vec<String> = Vec::new();
     if name.is_some() {
         parts.push(time);
@@ -1024,7 +964,6 @@ fn session_to_row(
     }
     let subtitle = parts.join(" · ");
     let meta = if s.total_cost_microcents > 0 {
-        // SessionRow stores i64; the >0 guard makes the checked conversion exact.
         let micro = u64::try_from(s.total_cost_microcents).unwrap_or(0);
         format!("${:.3}", overlay_backend::ai::microcents_to_usd(micro))
     } else {
@@ -1037,11 +976,6 @@ fn session_to_row(
         meta: SharedString::from(meta),
         has_recordings: recordings.contains(&s.id),
         name: SharedString::from(name.unwrap_or_default()),
-        // F4 / D1 — "Summary" needs a RELIABLE source: a saved recording (re-STT) or
-        // indexed transcript lines (catalog). AI-Q&A-only sessions (ai_turns>0 but no
-        // recording/transcript) were counted before, yet in practice they yield no
-        // usable summary (the from_jsonl_prompts fallback is too thin — the tester saw
-        // a "Сформировать" that then failed), so they now read "Недостаточно данных".
         has_data: recordings.contains(&s.id) || s.transcript_lines > 0,
         has_summary: conspects.contains(&s.id),
         has_debrief: debriefs.contains(&s.id),
@@ -1059,9 +993,6 @@ fn hit_to_row(
     debriefs: &std::collections::HashSet<String>,
     ru: bool,
 ) -> ArchiveRow {
-    // Prefer the session NAME (v0.22.0) so a named session reads the same in
-    // search results as in the full list; fall back to the МСК time. Keep the
-    // raw name too, to pre-fill the inline rename field.
     let name = overlay_backend::session_names::get(&h.session_id);
     let label = name
         .clone()
@@ -1105,8 +1036,6 @@ fn hit_to_row(
         meta: SharedString::from(kind_word),
         has_recordings: recordings.contains(&h.session_id),
         name: SharedString::from(name.unwrap_or_default()),
-        // An FTS hit exists only because transcript / AI text matched → always
-        // has a summary source.
         has_data: true,
         has_summary: conspects.contains(&h.session_id),
         has_debrief: debriefs.contains(&h.session_id),
@@ -1124,16 +1053,12 @@ fn build_session_markdown(
     let mut out = String::new();
     if let Some(s) = session {
         out.push_str(&format!("# {}\n\n", session_title(s.started_at_ms, &s.id)));
-        // The SAME human wording as the archive rows (the body is Russian,
-        // like the rest of this markdown) — no code-like `lines N · ai N`
-        // metadata and no "—" dash for an unknown model.
         out.push_str(&format!("Стенограмма: {}", s.transcript_lines));
         out.push_str(&format!(" · ИИ: {}", s.ai_turns_count));
         if let Some(model) = s.ai_model.as_deref().filter(|m| !m.is_empty()) {
             out.push_str(&format!(" · {model}"));
         }
         if s.total_cost_microcents > 0 {
-            // SessionRow stores i64; the >0 guard makes the checked conversion exact.
             let micro = u64::try_from(s.total_cost_microcents).unwrap_or(0);
             out.push_str(&format!(
                 " · ${:.3}",
@@ -1142,8 +1067,6 @@ fn build_session_markdown(
         }
         out.push_str("\n\n");
     }
-    // Transcript region — chronological, with a session-relative timecode
-    // (derived from the session start) and the two-way channel label.
     let session_start = session.and_then(|s| s.started_at_ms).filter(|&ms| ms > 0);
     if utterances.is_empty() {
         out.push_str("_Транскрипт не сохранён_\n\n");
@@ -1154,9 +1077,7 @@ fn build_session_markdown(
             } else {
                 "Система"
             };
-            // Collapse internal whitespace/newlines so one utterance = one line.
             let text = overlay_backend::text::collapse_ws(&u.text);
-            // F1: start = previous line's timestamp (first = origin); see session_audio.
             match overlay_backend::session_audio::line_start_offset_ms(utterances, i, session_start)
             {
                 Some(off) => {
@@ -1202,29 +1123,24 @@ mod tests {
 
     #[test]
     fn archive_time_label_prefers_started_at_then_id_then_raw() {
-        // Real start time wins (UTC ms → МСК).
         assert_eq!(
             archive_time_label(Some(1_779_580_800_000), "2026-06-04_09-30-00_zz"),
             "24.05.2026 03:00:00 (МСК)"
         );
-        // No indexed time (old rows / FTS hits) → parse the UTC id stamp.
         assert_eq!(
             archive_time_label(None, "2026-06-04_09-30-00_zz"),
             "04.06.2026 12:30:00 (МСК)"
         );
-        // Zero/garbage started_at_ms falls through to the id.
         assert_eq!(
             archive_time_label(Some(0), "2026-06-04_09-30-00_zz"),
             "04.06.2026 12:30:00 (МСК)"
         );
-        // Non-stamp id → raw, as before.
         assert_eq!(archive_time_label(None, "weird"), "weird");
     }
 
     #[test]
     fn fts_query_prefixes_tokens_and_drops_punctuation() {
         assert_eq!(fts_query("hash map"), "hash* map*");
-        // unicode61 splits on the hyphen, so the two halves become two prefixes.
         assert_eq!(fts_query("хеш-таблицу"), "хеш* таблицу*");
         assert_eq!(fts_query("   "), "");
         assert_eq!(fts_query("!?.,"), "");
@@ -1234,7 +1150,6 @@ mod tests {
         Session {
             id: "2026-06-04_09-30-00_zz".into(),
             journal_path: "C:/sessions/x.jsonl".into(),
-            // 2026-05-24 00:00:00 UTC → 03:00:00 МСК in the row label.
             started_at_ms: Some(1_779_580_800_000),
             finished_at_ms: Some(1_779_580_800_002),
             status: "completed".into(),
@@ -1267,11 +1182,10 @@ mod tests {
             "got {:?}",
             row.title
         );
-        // UX-clarity — short LOCALIZED labels instead of code-like metadata.
         assert!(row.subtitle.as_str().contains("Стенограмма: 12"));
         assert!(row.subtitle.as_str().contains("ИИ: 3"));
         assert!(row.subtitle.as_str().contains("gemma"));
-        assert_eq!(row.meta.as_str(), ""); // zero cost → blank meta
+        assert_eq!(row.meta.as_str(), "");
 
         let en = session_to_row(
             &sample_session(),
@@ -1292,7 +1206,7 @@ mod tests {
             for status in ["completed", "crashed", "active"] {
                 let mut s = sample_session();
                 s.status = status.into();
-                s.ai_model = None; // the old code showed a "—" dash here
+                s.ai_model = None;
                 let row =
                     session_to_row(&s, &no_recordings(), &no_recordings(), &no_recordings(), ru);
                 let visible = format!("{} | {} | {}", row.title, row.subtitle, row.meta);
@@ -1314,7 +1228,6 @@ mod tests {
             &no_recordings(),
             true,
         );
-        // The title stays clean; the status reads as a word in the subtitle.
         assert!(ru.title.as_str().starts_with("24.05.2026 03:00:00 (МСК)"));
         assert!(
             ru.subtitle.as_str().ends_with("Прервана"),
@@ -1340,7 +1253,7 @@ mod tests {
     #[test]
     fn session_row_shows_cost_when_nonzero() {
         let mut s = sample_session();
-        s.total_cost_microcents = 2_400_000; // $0.024
+        s.total_cost_microcents = 2_400_000;
         let row = session_to_row(
             &s,
             &no_recordings(),
@@ -1367,7 +1280,6 @@ mod tests {
             &no_recordings(),
             true,
         );
-        // Hits carry only the UTC id stamp → parsed + shifted to МСК (+3h).
         assert!(
             row.title
                 .as_str()
@@ -1375,8 +1287,8 @@ mod tests {
             "got {:?}",
             row.title
         );
-        assert_eq!(row.meta.as_str(), "ответ"); // localized hit kind
-        assert_eq!(row.subtitle.as_str(), "a key value structure"); // whitespace collapsed
+        assert_eq!(row.meta.as_str(), "ответ");
+        assert_eq!(row.subtitle.as_str(), "a key value structure");
 
         let en = hit_to_row(
             &h,
@@ -1415,19 +1327,19 @@ mod tests {
             attached_screenshot: false,
         }];
         let md = build_session_markdown(None, &utts, &turns);
-        assert!(md.contains("Микрофон: hello there")); // session None → no timecode
+        assert!(md.contains("Микрофон: hello there"));
         assert!(md.contains("Question: **what is it?**"));
         assert!(md.contains("Answer: an answer."));
     }
 
     #[test]
     fn session_markdown_transcript_has_timecodes_and_ru_labels() {
-        let s = sample_session(); // started_at_ms = Some(1_779_580_800_000)
+        let s = sample_session();
         let start = 1_779_580_800_000_i64;
         let utts = vec![
             Utterance {
                 session_id: "s".into(),
-                unix_ms: start + 29_000, // finalized 00:29 in (≈ its end)
+                unix_ms: start + 29_000,
                 source: "system".into(),
                 text: "привет".into(),
                 audio_ms: None,
@@ -1436,13 +1348,11 @@ mod tests {
                 session_id: "s".into(),
                 unix_ms: start + 135_000,
                 source: "mic".into(),
-                text: "да   слышу".into(), // internal whitespace collapses to one space
+                text: "да   слышу".into(),
                 audio_ms: None,
             },
         ];
         let md = build_session_markdown(Some(&s), &utts, &[]);
-        // F1: a line's START = the PREVIOUS line's timestamp; the FIRST line is 00:00
-        // (NOT its own finalize time 00:29), so line 2 starts where line 1 ended (00:29).
         assert!(md.contains("[00:00] Система: привет"), "got: {md}");
         assert!(md.contains("[00:29] Микрофон: да слышу"), "got: {md}");
     }

@@ -50,8 +50,6 @@ pub fn index_journal_file(store: &mut Store, path: &Path) -> Result<Option<Sessi
     // Set on the first recognized event; stays false for an empty / all-corrupt
     // journal so we skip it instead of inserting a permanent empty crashed row.
     let mut has_event = false;
-    // An ai_request awaiting its ai_response, so a turn carries both the
-    // question and the answer.
     let mut pending: Option<AiTurn> = None;
 
     for line in content.lines() {
@@ -60,7 +58,7 @@ pub fn index_journal_file(store: &mut Store, path: &Path) -> Result<Option<Sessi
             continue;
         }
         let Ok(v) = serde_json::from_str::<Value>(line) else {
-            continue; // skip a corrupt line, keep indexing the rest
+            continue;
         };
         match v.get("kind").and_then(Value::as_str).unwrap_or_default() {
             "session_start" => {
@@ -89,8 +87,6 @@ pub fn index_journal_file(store: &mut Store, path: &Path) -> Result<Option<Sessi
             }
             "ai_request" => {
                 has_event = true;
-                // A new request before the prior one got a response → flush the
-                // prior as an answer-less (errored / incomplete) turn.
                 if let Some(p) = pending.take() {
                     ai_turns.push(p);
                 }
@@ -182,7 +178,7 @@ pub fn index_all(
     let mut stats = IndexStats::default();
     let finalized = store.finalized_session_ids()?;
     let Ok(entries) = std::fs::read_dir(sessions_dir) else {
-        return Ok(stats); // no sessions dir yet → nothing to index
+        return Ok(stats);
     };
     for entry in entries.flatten() {
         let path = entry.path();
@@ -201,8 +197,6 @@ pub fn index_all(
         }
         match index_journal_file(store, &path) {
             Ok(Some(_)) => stats.indexed += 1,
-            // An empty / no-usable-event journal: no row inserted, count it as
-            // skipped so it is re-scanned once content appears (G3).
             Ok(None) => stats.skipped += 1,
             Err(e) => {
                 log::warn!("catalog: index {} failed: {e:#}", path.display());
@@ -330,13 +324,11 @@ mod tests {
             &[r#"{"kind":"session_start","unix_ms":1}"#],
         );
 
-        // First sweep skips the live one, indexes a + b.
         let first = index_all(&mut store, dir.path(), Some("live")).unwrap();
         assert_eq!(first.scanned, 3);
         assert_eq!(first.indexed, 2);
         assert_eq!(first.skipped, 1);
 
-        // Second sweep: a + b already indexed, live still skipped → nothing new.
         let second = index_all(&mut store, dir.path(), Some("live")).unwrap();
         assert_eq!(second.indexed, 0);
         assert_eq!(second.skipped, 3);
@@ -392,7 +384,6 @@ mod tests {
         assert_eq!(sessions[0].status, "completed");
         assert_eq!(sessions[0].finished_at_ms, Some(2000));
 
-        // Third sweep: now finalized → skipped, still a single completed row.
         let third = index_all(&mut store, dir.path(), None).unwrap();
         assert_eq!(third.indexed, 0);
         assert_eq!(third.skipped, 1);
@@ -405,10 +396,8 @@ mod tests {
     fn index_all_skips_empty_journal_then_indexes_later_content() {
         let mut store = Store::open_in_memory().unwrap();
         let dir = tempfile::tempdir().unwrap();
-        // An empty .jsonl (created, zero bytes).
         write_jsonl(dir.path(), "empty.jsonl", &[]);
 
-        // First sweep: scanned, but no usable event → skipped, NO catalog row.
         let first = index_all(&mut store, dir.path(), None).unwrap();
         assert_eq!(first.scanned, 1);
         assert_eq!(first.indexed, 0);
@@ -418,7 +407,6 @@ mod tests {
             "empty journal must not poison the catalog with a crashed row"
         );
 
-        // Corrupt and unknown lines are not usable events either.
         write_jsonl(
             dir.path(),
             "empty.jsonl",
@@ -429,7 +417,6 @@ mod tests {
         assert_eq!(corrupt.skipped, 1);
         assert!(store.list_sessions().unwrap().is_empty());
 
-        // Content lands later (start + stop) in the SAME file.
         write_jsonl(
             dir.path(),
             "empty.jsonl",
@@ -438,7 +425,6 @@ mod tests {
                 r#"{"kind":"session_stop","unix_ms":2000}"#,
             ],
         );
-        // Second sweep: the file is re-scanned (never finalized) → indexed.
         let second = index_all(&mut store, dir.path(), None).unwrap();
         assert_eq!(second.indexed, 1);
         let sessions = store.list_sessions().unwrap();

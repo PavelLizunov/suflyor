@@ -74,7 +74,7 @@ impl HealthSignals {
             "ok" => 1,
             "degraded" => 2,
             "down" => 3,
-            _ => 0, // "idle"
+            _ => 0,
         }
     }
 
@@ -102,12 +102,6 @@ impl HealthSignals {
         let mic_age = read(&self.last_mic_frame_ms);
         let stt_age = read(&self.last_stt_ok_ms);
         let ai_age = read(&self.last_ai_ok_ms);
-        // V0.8.0 (Поток A) — AI is "down" IMMEDIATELY when the most recent AI
-        // event was a FAILURE (err timestamp newer than the last ok), regardless
-        // of the 600s staleness threshold. Otherwise fall back to age-based
-        // classification (also covers "no recent ask" = idle/degraded). This is
-        // why the bar can flip to "AI down" within one 2s health tick instead of
-        // 10 minutes — the user reported auto-tiles silently stopping.
         let ai_ok_raw = self.last_ai_ok_ms.load(Ordering::Relaxed);
         let ai_err_raw = self.last_ai_err_ms.load(Ordering::Relaxed);
         let ai = if ai_err_raw != 0 && ai_err_raw >= ai_ok_raw {
@@ -151,23 +145,17 @@ mod tests {
         assert_eq!(HealthSignals::classify(Some(999_999), 1000, 5000), "down");
     }
 
-    // V0.8.0 (Поток A) — a fresh AI failure flips `ai` to "down" immediately
-    // (not after the 600s stale threshold), and a later success auto-clears it.
     #[test]
     fn ai_error_marks_down_immediately_then_clears_on_success() {
         let h = HealthSignals::default();
         let now = 1_000_000u64;
 
-        // A recent SUCCESS → "ok" (well under 180s).
         h.last_ai_ok_ms.store(now - 1_000, Ordering::Relaxed);
         assert_eq!(h.snapshot(now).ai, "ok");
 
-        // A FAILURE newer than the last success → "down" right away, even though
-        // the last *success* is only 1s old (would classify "ok" by age alone).
         h.last_ai_err_ms.store(now - 500, Ordering::Relaxed);
         assert_eq!(h.snapshot(now).ai, "down");
 
-        // A newer SUCCESS supersedes the error → back to "ok" (auto-clear).
         h.last_ai_ok_ms.store(now, Ordering::Relaxed);
         assert_eq!(h.snapshot(now).ai, "ok");
     }
@@ -175,7 +163,6 @@ mod tests {
     #[test]
     fn ai_idle_without_error_is_not_down() {
         let h = HealthSignals::default();
-        // No ok, no err → genuinely idle (never asked), NOT a false "down".
         assert_eq!(h.snapshot(1_000_000).ai, "idle");
     }
 
@@ -189,8 +176,6 @@ mod tests {
         let start = 1_000_000u64;
         h.last_mic_frame_ms.store(start, Ordering::Relaxed);
 
-        // 10s in: system frames keep the shared signal fresh, mic seeded at
-        // start is still inside the 15s threshold → all green.
         let now = start + 10_000;
         h.last_audio_frame_ms.store(now - 200, Ordering::Relaxed);
         let snap = h.snapshot(now);
@@ -205,29 +190,23 @@ mod tests {
         assert_eq!(snap.mic, "degraded");
         assert_eq!(snap.audio, "degraded");
 
-        // 61s in: mic down; shared signal still fresh off the loopback.
         let now = start + 61_000;
         h.last_audio_frame_ms.store(now - 200, Ordering::Relaxed);
         let snap = h.snapshot(now);
         assert_eq!(snap.mic, "down");
         assert_eq!(snap.audio, "down");
 
-        // Mic recovers → audio green again on the very next snapshot.
         h.last_mic_frame_ms.store(now - 200, Ordering::Relaxed);
         let snap = h.snapshot(now);
         assert_eq!(snap.mic, "ok");
         assert_eq!(snap.audio, "ok");
     }
 
-    // Suflyor E2 — preserve system-loopback semantics: system silence is
-    // NORMAL (nothing is playing); a live mic keeps the shared signal fresh,
-    // so audio stays "ok" with no system frames of their own.
     #[test]
     fn system_silence_with_live_mic_stays_ok() {
         let h = HealthSignals::default();
         let now = 1_000_000u64;
         h.last_mic_frame_ms.store(now - 200, Ordering::Relaxed);
-        // Shared signal bumped by the mic chunks themselves.
         h.last_audio_frame_ms.store(now - 200, Ordering::Relaxed);
         let snap = h.snapshot(now);
         assert_eq!(snap.mic, "ok");

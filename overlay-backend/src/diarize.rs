@@ -223,9 +223,6 @@ pub fn run_diarization_with_engine(
         let best = best.context("no speakers detected during automatic selection")?;
         (best.segments, best.speakers)
     };
-    // Guard the silent dead-end: if EVERY cluster was dropped (no speech, or the
-    // transcript has no aligned timecodes), fail loudly so the UI can prompt a
-    // re-run instead of persisting a "success" with nothing to show.
     if real_speakers == 0 {
         bail!("no speakers detected (no speech, or transcript has no aligned timecodes)");
     }
@@ -274,8 +271,6 @@ fn run_nemotron(
         ));
         let (segments, speakers, model_id) =
             crate::nemotron_diar::diarize(&wav, duration_ms, cancel)?;
-        // Preserve the native speaker activity and overlap. In contrast to the
-        // legacy path, a voice without a matching GigaAM line is not a phantom.
         let _ = utts;
         Ok(Diarization {
             session_id: session_id.to_string(),
@@ -582,16 +577,12 @@ mod tests {
 
     #[test]
     fn timeline_reliable_flags_short_legacy_recordings() {
-        // 10-min transcript span (last audio_ms = 600 s).
         let utts = vec![utt("system", Some(0)), utt("system", Some(600_000))];
-        assert!(timeline_reliable(Some(600_000), &utts)); // padded → covers the span
-        assert!(timeline_reliable(Some(598_000), &utts)); // 2 s short → within tol
-        assert!(!timeline_reliable(Some(540_000), &utts)); // 1 min short → legacy/unpadded
-        assert!(timeline_reliable(None, &utts)); // unknown length → don't cry wolf
-        assert!(timeline_reliable(Some(1000), &[utt("system", None)])); // no audio_ms → ditto
-                                                                        // E-fix: a late MIC line (goodbye said after the call hung up) must NOT count —
-                                                                        // only SYSTEM lines define the span, so a WAV covering the system span stays reliable
-                                                                        // even though the mic line is timestamped 5 min later (this used to fire the banner).
+        assert!(timeline_reliable(Some(600_000), &utts));
+        assert!(timeline_reliable(Some(598_000), &utts));
+        assert!(!timeline_reliable(Some(540_000), &utts));
+        assert!(timeline_reliable(None, &utts));
+        assert!(timeline_reliable(Some(1000), &[utt("system", None)]));
         let late_mic = vec![
             utt("system", Some(0)),
             utt("system", Some(600_000)),
@@ -613,11 +604,8 @@ mod tests {
     #[test]
     fn max_overlap_picks_the_dominant_segment() {
         let segs = [seg(0, 1000, 0), seg(900, 3000, 1)];
-        // window [0,1000): sp0 overlaps 1000, sp1 overlaps 100 → sp0
         assert_eq!(max_overlap_speaker(0, 1000, &segs), Some(0));
-        // window [1000,3000): only sp1 → sp1
         assert_eq!(max_overlap_speaker(1000, 3000, &segs), Some(1));
-        // window in a gap → None
         assert_eq!(max_overlap_speaker(5000, 6000, &segs), None);
     }
 
@@ -632,32 +620,28 @@ mod tests {
     #[test]
     fn system_windows_bounds_by_next_and_cap() {
         let utts = [
-            utt("mic", Some(100)),     // skipped (mic)
-            utt("system", Some(1000)), // → next system at 2000 → [1000,2000)
-            utt("system", None),       // skipped (no audio_ms)
-            utt("system", Some(2000)), // → last → capped [2000, 2000+30000)
+            utt("mic", Some(100)),
+            utt("system", Some(1000)),
+            utt("system", None),
+            utt("system", Some(2000)),
         ];
         let w = system_windows(&utts);
         assert_eq!(w, vec![(1, 1000, 2000), (3, 2000, 2000 + WINDOW_CAP_MS)]);
-        // a >CAP gap is capped, not extended to the next start
         let far = [utt("system", Some(0)), utt("system", Some(500_000))];
         assert_eq!(system_windows(&far)[0], (0, 0, WINDOW_CAP_MS));
     }
 
     #[test]
     fn filter_drops_phantom_and_renumbers() {
-        // sp0 + sp2 win real windows; sp1 is a phantom (its segment overlaps no
-        // utterance window). Survivors renumber 0,2 → 0,1 by first appearance.
         let raw = [
             seg(0, 1000, 0),
-            seg(1500, 1600, 1), // phantom: sits in the gap, never a window
+            seg(1500, 1600, 1),
             seg(3000, 4000, 2),
         ];
         let utts = [utt("system", Some(0)), utt("system", Some(3000))];
-        let windows = system_windows(&utts); // [0,3000)+[3000,3000+cap)
+        let windows = system_windows(&utts);
         let (clean, m) = filter_and_renumber(&raw, &windows);
         assert_eq!(m, 2, "two real speakers");
-        // phantom sp1 dropped; sp0→0, sp2→1
         assert_eq!(clean.len(), 2);
         assert_eq!(clean[0].speaker, 0);
         assert_eq!(clean[1].speaker, 1);
@@ -674,14 +658,10 @@ mod tests {
 
     #[test]
     fn filter_returns_zero_when_everything_is_dropped() {
-        // No windows (no system utterances with audio_ms) → no winners → all dropped.
-        // This is the condition run_diarization turns into a loud error, not an
-        // empty "success".
         let raw = [seg(0, 1000, 0), seg(2000, 3000, 1)];
         let (clean, m) = filter_and_renumber(&raw, &[]);
         assert!(clean.is_empty());
         assert_eq!(m, 0);
-        // Empty input → (empty, 0) too.
         let (empty, n) = filter_and_renumber(&[], &[]);
         assert!(empty.is_empty());
         assert_eq!(n, 0);
@@ -691,9 +671,9 @@ mod tests {
     fn align_all_labels_system_lines_and_leaves_mic_none() {
         let segs = [seg(0, 2000, 0), seg(2000, 5000, 1)];
         let utts = [
-            utt("mic", Some(100)),     // → None (caller = «Вы»)
-            utt("system", Some(200)),  // window [200,2200)→ mostly sp0
-            utt("system", Some(3000)), // window [3000,..)→ sp1
+            utt("mic", Some(100)),
+            utt("system", Some(200)),
+            utt("system", Some(3000)),
         ];
         let a = align_all(&utts, &segs);
         assert_eq!(a, vec![None, Some(0), Some(1)]);

@@ -19,7 +19,6 @@ use std::sync::{Arc, Mutex};
 
 use base64::Engine as _;
 
-// ===== Engine selection (RC17) =====
 
 /// Read-aloud engine selection (config `tts_engine`). Diarization is NOT
 /// affected — it always runs in the Piper sidecar (`suflyor-tts.exe`).
@@ -652,8 +651,6 @@ mod speech_text {
         let mut fence = false;
         for raw in md.lines() {
             let t = raw.trim();
-            // Code fence ``` / ~~~ — drop the fence line; keep the code inside as
-            // plain text (reading the code beats reading the fence markers).
             if t.starts_with("```") || t.starts_with("~~~") {
                 fence = !fence;
                 continue;
@@ -662,7 +659,6 @@ mod speech_text {
                 lines.push(strip_inline(raw));
                 continue;
             }
-            // Horizontal rule (---, ***, ___) or a table separator (|---|:--:|).
             if is_rule(t) || is_table_separator(t) {
                 continue;
             }
@@ -728,7 +724,6 @@ mod speech_text {
         let mut out = String::with_capacity(s.len());
         let mut i = 0;
         while i < b.len() {
-            // An image link starts with '!'; skip it and parse the '[' that follows.
             let open = if b[i] == '!' && i + 1 < b.len() && b[i + 1] == '[' {
                 i + 1
             } else {
@@ -1275,8 +1270,6 @@ impl Tts {
         true
     }
     pub fn pause(&self) {
-        // Preserve the remaining suppression before telling the sidecar to
-        // pause, so a long pause can't let the deadline expire.
         pause_speaking();
         let target = self.last_target.load(Ordering::Acquire);
         if target != TARGET_NONE {
@@ -1339,8 +1332,6 @@ impl Tts {
             "tts: STOP target={target} generation={generation:?} tracked={tracked} delivered={delivered} cleared={cleared}"
         );
         if target != TARGET_NONE && !delivered {
-            // The sidecar is already gone — playback died with it. Never
-            // respawn an engine just to deliver STOP to nothing.
             log::debug!("tts: STOP not delivered — target sidecar not running");
         }
     }
@@ -1424,7 +1415,6 @@ impl Tts {
     }
 }
 
-// ===== Process-global handle =====
 
 static GLOBAL: std::sync::OnceLock<std::sync::Mutex<Tts>> = std::sync::OnceLock::new();
 
@@ -1515,9 +1505,6 @@ pub fn warm() {
 /// `ru` picks the display language of the friendly labels; ids are stable.
 #[must_use]
 pub fn voices(ru: bool) -> Vec<VoiceInfo> {
-    // Re-scan the filesystem (not the init-time cache) so a voice installed
-    // mid-session via the «Озвучка» install button appears in the chooser
-    // without restarting the app.
     scan_installed_voices(ru)
 }
 /// Whether at least one voice is installed and the sidecar is present. Re-scans
@@ -1736,7 +1723,6 @@ mod tests {
         );
         assert_eq!(friendly_name("vits-mms-rus", true), "MMS (рус)");
         assert_eq!(friendly_name("custom", true), "custom");
-        // English UI: same voices, Latin labels (they used to stay Cyrillic).
         assert_eq!(
             friendly_name("vits-piper-ru_RU-irina-medium", false),
             "Irina (F)"
@@ -1774,7 +1760,6 @@ mod tests {
 
     #[test]
     fn speak_encodes_base64() {
-        // The wire format must round-trip arbitrary text (incl. newlines).
         let text = "Привет!\nВторая строка.";
         let b64 = base64::engine::general_purpose::STANDARD.encode(text);
         let decoded = base64::engine::general_purpose::STANDARD
@@ -1796,7 +1781,6 @@ mod tests {
         assert_eq!(rewind_extension_ms(15, 100), 0);
     }
 
-    // ===== RC17: engine selection, namespaces, handshake, fallback =====
 
     #[test]
     fn engine_selection_defaults_to_piper() {
@@ -1823,7 +1807,6 @@ mod tests {
                 id: "vits-piper-ru_RU-irina-medium".into()
             }
         );
-        // Legacy bare id (pre-RC17 config) resolves to Piper.
         assert_eq!(
             parse_voice_ref("vits-piper-ru_RU-irina-medium").engine,
             EngineKind::Piper
@@ -1847,7 +1830,6 @@ mod tests {
         assert_eq!(ready.voices, vec!["ru_f1".to_string(), "ru_m5".to_string()]);
         assert_eq!(ready.sample_rate, 44100);
         assert_eq!(ready.state, "ready");
-        // Not-installed state with no voices still parses.
         let empty = parse_ready_line(
             "READY engine=tera revision=abc voices= sample_rate=44100 state=not-installed",
         )
@@ -1858,13 +1840,10 @@ mod tests {
 
     #[test]
     fn ready_handshake_rejects_foreign_lines() {
-        // Legacy suflyor-tts handshake: still just "READY" — must NOT parse
-        // as a Tera handshake.
         assert!(parse_ready_line("READY").is_none());
         assert!(parse_ready_line("READY engine=piper").is_none());
         assert!(parse_ready_line("STARTED id=1").is_none());
         assert!(parse_ready_line("").is_none());
-        // Missing a required key=value field → malformed.
         assert!(
             parse_ready_line("READY engine=tera revision=x sample_rate=oops state=ready").is_none()
         );
@@ -2128,17 +2107,12 @@ mod tests {
 
     #[test]
     fn tera_engine_falls_back_when_sidecar_missing() {
-        // Test binaries have no suflyor-teratts.exe next to them, so Tera is
-        // unusable and a Tera-selected client must NOT report itself usable —
-        // the Piper fallback path decides availability.
         let _lock = SPEAKING_GLOBAL_LOCK.lock().unwrap();
         clear_speaking();
         let tts = Tts::spawn(EngineKind::Tera, Some("tera:ru_f1".into()), 0, "ru");
         assert_eq!(tts.engine_kind(), EngineKind::Tera);
         assert!(!tts.tera_usable());
         assert!(!tts.speak("Привет"));
-        // A rejected speak must NOT mark the STT suppression window — errors
-        // never falsely mark playback as active.
         assert!(!is_speaking());
         tts.set_engine(EngineKind::Piper);
         assert_eq!(tts.engine_kind(), EngineKind::Piper);
@@ -2166,9 +2140,6 @@ mod tests {
 
     #[test]
     fn send_reports_failure_when_the_sidecar_cannot_run() {
-        // Write-failure P2: a SPEAK into an un-runnable sidecar must report
-        // false (the caller falls back / skips the suppression window)
-        // instead of silently pretending the line was delivered.
         let mut sidecar = missing_exe_sidecar(EngineKind::Tera);
         assert!(!sidecar.send("SPEAK aaa"));
         assert!(sidecar.proc.is_none());
@@ -2177,9 +2148,6 @@ mod tests {
 
     #[test]
     fn control_commands_never_respawn_a_dead_sidecar() {
-        // STOP-dead-sidecar P2: PAUSE/RESUME/STOP deliver only to a LIVE
-        // child — a dead/never-spawned sidecar gets no respawn (no pointless
-        // engine boot), and the failure is reported so callers can log it.
         let mut sidecar = missing_exe_sidecar(EngineKind::Tera);
         assert!(!sidecar.send_if_alive("STOP"));
         assert!(!sidecar.send_if_alive("PAUSE"));
@@ -2189,8 +2157,6 @@ mod tests {
 
     #[test]
     fn stop_clears_speaking_even_when_no_sidecar_runs() {
-        // The suppression estimate is cleared regardless of delivery, so a
-        // dead sidecar cannot leave the mic suppressed.
         let _lock = SPEAKING_GLOBAL_LOCK.lock().unwrap();
         mark_speaking_for(100);
         assert!(is_speaking());

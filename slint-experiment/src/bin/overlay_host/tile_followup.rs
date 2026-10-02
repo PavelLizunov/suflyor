@@ -34,26 +34,6 @@ pub(crate) fn user_turn_markdown(question: &str) -> String {
     let fence = "~".repeat(longest.max(2) + 1);
     format!("{fence}user\n{}\n{fence}\n\n", question.trim())
 }
-// ============================================================================
-// Follow-up reframe — root cause of the escalate→follow-up bug.
-// ============================================================================
-// The stored conversation carries the F9 "answer the last question FROM THE
-// TRANSCRIPT" frame in the system prompt AND the first transcript user turn, so a
-// follow-up keeps getting answered as the ORIGINAL question. v1 of this fix only
-// reframed the system + demoted the transcript turn but KEPT the multi-turn array
-// — and a live test (journal-confirmed) showed the model STILL re-answered the
-// original even with a neutral system + the new question last. So the model (or
-// the LAN bridge) anchors on the multi-turn DIALOG itself, not just the wording.
-//
-// v2 — COLLAPSE: for a TEXT dialog, fold the prior turns into labelled REFERENCE
-// context inside ONE system message and send the new question as the SINGLE user
-// turn. With no prior "conversation" in the array there is nothing for the model
-// to continue, so the latest question is unambiguously THE task. A VISION dialog
-// (image in a `Parts` turn) is left multi-turn + unchanged (collapsing would drop
-// the screenshot; the reported bug is the text F9/escalate path). SEND-TIME only:
-// the STORED history stays original, so copy/display are unaffected and the
-// reframe is recomputed fresh each turn. If a single-user-turn send STILL returns
-// the prior topic, the fault is the bridge ignoring the user turn (not the client).
 
 /// Neutral system prompt for a follow-up / re-ask SEND. The new question is sent
 /// as a SINGLE user turn; `prior_context` (the folded prior dialog) is reference
@@ -74,9 +54,6 @@ fn followup_system_prompt(
     let ctx_block = if meeting_context.trim().is_empty() {
         String::new()
     } else {
-        // Audit Finding 2: mirror ai::build_request's profile semantics so a ROLE/
-        // style profile is honored in follow-ups as strongly as in the first answer
-        // (it used to be framed only as weak "background", causing persona drift).
         format!(
             "\n\nПрофиль/контекст пользователя — применяй его ОДИНАКОВО к этому \
              продолжению диалога. Если профиль задаёт РОЛЬ или стиль общения \
@@ -116,7 +93,6 @@ fn followup_system_prompt(
 /// transcript" instruction.
 fn strip_transcript_scaffold(s: &str) -> String {
     let mut out = s.to_string();
-    // Drop the "answer the last transcript question" trailer.
     if let Some(p) = out.find("На основе последнего вопроса в транскрипте")
     {
         out.truncate(p);
@@ -125,7 +101,6 @@ fn strip_transcript_scaffold(s: &str) -> String {
     if let Some(p) = out.find("Помоги ответить:") {
         out = out[p + "Помоги ответить:".len()..].to_string();
     }
-    // Drop the transcript header line.
     out = out.replace("Транскрипт последних реплик (внизу — самые свежие):", "");
     out.trim().to_string()
 }
@@ -142,7 +117,6 @@ fn reframe_for_send(
     let Some(last_user) = history.iter().rposition(|m| m.role == "user") else {
         return history.to_vec();
     };
-    // Vision: keep the multi-turn array (the screenshot lives in a Parts turn).
     if history
         .iter()
         .any(|m| matches!(&m.content, ai::MessageContent::Parts(_)))
@@ -153,7 +127,6 @@ fn reframe_for_send(
         ai::MessageContent::Text(t) => t.clone(),
         _ => String::new(),
     };
-    // Fold every prior turn (skip the F9 system) into labelled reference context.
     let mut prior = String::new();
     for (i, m) in history.iter().enumerate() {
         if i == last_user {
@@ -235,11 +208,6 @@ pub(crate) fn wire_voice_followup(
                 t.set_source_label(SharedString::from("stt · расшифровка…"));
                 return;
             }
-            // The 30 s watchdog already fired (stop was already true): the prior
-            // recording has ended + shipped, so this is NOT a real toggle-off —
-            // fall through to start a FRESH recording instead of swallowing the
-            // click (audit #23: the first 🎤 click after a watchdog timeout was
-            // a dead-click that the user had to repeat).
         }
         // Toggle ON — snapshot STT config, then record on a thread.
         let (
@@ -270,7 +238,6 @@ pub(crate) fn wire_voice_followup(
         let Some(tx) = VFU_TX.get().cloned() else {
             return;
         };
-        // M2 — only one mic capture at a time across all recorders.
         let Some(mic_guard) = try_acquire_mic() else {
             t.set_source_label(SharedString::from("stt · микрофон занят"));
             return;
@@ -339,11 +306,6 @@ pub(crate) fn wire_escalate(
     slint_rt: &SharedSlintRuntime,
     rt_handle: &tokio::runtime::Handle,
 ) {
-    // Only offer escalation when the live answer endpoint is local (otherwise the
-    // answer is already cloud and 🧠 is a no-op upgrade) AND a cloud bearer is
-    // configured: escalation routes to the cloud bridge (`ai_endpoint_cloud`), so
-    // for a local-only user who never set `ai_bearer` the button would fail with a
-    // generic error every time — don't offer a dead affordance to that cohort.
     {
         let c = cfg.read();
         if !c.ai_endpoint(false).is_local || c.ai_bearer.trim().is_empty() {
@@ -359,11 +321,7 @@ pub(crate) fn wire_escalate(
     let slint_rt_c = slint_rt.clone();
     let rt_handle_c = rt_handle.clone();
     tile.on_escalate_clicked(move || {
-        // V0.8.1 — make the WHOLE conversation sticky-cloud from here on.
         route_c.set(AskRoute::Cloud);
-        // Mark the tile as cloud-escalated (review NIT-1) so it's visible the
-        // answer now came off-box — parity with the Shift+F9 🧠 badge. Egress is
-        // a conscious action (the user clicked 🧠); this just makes it legible.
         if let Some(t) = weak.upgrade() {
             t.set_trigger_label(SharedString::from("cloud (escalated)"));
             t.set_trigger_color(slint::Color::from_rgb_u8(0x38, 0xbd, 0xf8));
@@ -395,9 +353,6 @@ pub(crate) fn fire_followup_ask(
     cfg: &overlay_backend::config::SharedConfig,
     slint_rt: &SharedSlintRuntime,
     rt_handle: &tokio::runtime::Handle,
-    // V0.8.0 (Поток D) — which endpoint to route to: Text (default), Vision
-    // (F8 tile keeps the dialog about the screenshot), or Cloud (one-shot smart
-    // escalation). Was the V5 `use_vision: bool`.
     route: AskRoute,
 ) {
     let (convo_id, question) = turn;
@@ -418,9 +373,6 @@ pub(crate) fn fire_followup_ask(
             Some(c) => (c.messages.clone(), c.rendered.clone()),
             None => {
                 diag!("followup: no conversation for convo_id={convo_id}");
-                // M1 — clear busy so a follow-up fired before the first answer
-                // seeded the conversation can't wedge this tile's inputs dead
-                // (button/LineEdit are gated on followup-busy / voice-recording).
                 if let Some(t) = tile_weak.upgrade() {
                     t.set_followup_busy(false);
                     t.set_voice_recording(false);
@@ -430,21 +382,8 @@ pub(crate) fn fire_followup_ask(
         }
     };
 
-    // New request = full history + this user turn. V0.8.3 — wrap the question as
-    // an explicit DIRECT question (FOLLOWUP_DIRECTIVE) so the transcript-framed
-    // system prompt doesn't make the model ignore it / re-answer the original.
-    // Only the model sees the wrapper — the prefix below + the journal use the
-    // clean question, and copy strips the marker.
     let mut messages = history;
-    // Clean any legacy FOLLOWUP_DIRECTIVE wrappers older builds left on prior
-    // turns (the directive is no longer added — `reframe_for_send` below is what
-    // redirects the model now).
     strip_followup_directives(&mut messages);
-    // Append the new question BARE. The old verbose FOLLOWUP_DIRECTIVE wrapper
-    // made the model META-reply ("это продолжение? звучит как 'Д.'"); the
-    // send-time reframe (neutral system + demoted transcript turns) is the real
-    // redirect, so the user turn stays clean (and so does the STORED history +
-    // the copied transcript).
     messages.push(ai::ChatMessage {
         role: "user".into(),
         content: ai::MessageContent::Text(question.clone()),
@@ -457,12 +396,9 @@ pub(crate) fn fire_followup_ask(
         user_turn_markdown(&question)
     );
 
-    // Show the question immediately + mark busy; register the slot so the
-    // ai:event deltas land in this tile.
     if let Some(tile) = tile_weak.upgrade() {
         tile.set_followup_busy(true);
         tile.set_source_label(SharedString::from("ai · asking…"));
-        // Plain ellipsis — no hourglass glyph (tofu on the skia font fallback).
         let shown = format!("{prefix}…");
         tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&shown))));
     }
@@ -494,8 +430,6 @@ pub(crate) fn fire_followup_ask(
         )
     };
     let attached_screenshot = route.attaches_screenshot();
-    // v0.8.2 (MAJOR-2) — a sticky-cloud follow-up is billable; warn if the
-    // session cost cap is already exceeded (mirrors fire_f9_ask).
     warn_if_over_cost_cap(
         events,
         cfg,
@@ -543,10 +477,6 @@ pub(crate) fn fire_followup_ask(
         // prompt (no double-add of memory).
         let meeting_context =
             overlay_backend::memory::context_for_meeting(&meeting_context, Some(&question));
-        // THE FIX — send a reframed copy (neutral continuation system + demoted
-        // transcript turns) so the model answers THIS question, not the original
-        // transcript question. The STORED history (request_messages installed
-        // above) stays original — the reframe is recomputed fresh on every turn.
         let send_messages = reframe_for_send(&messages, &response_language, &meeting_context);
         let sys_full = send_messages
             .first()
@@ -562,9 +492,6 @@ pub(crate) fn fire_followup_ask(
             if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation {
                 return;
             }
-            // Journal the follow-up request so it pairs with the AiResponse that
-            // ask_stream_loop writes on completion (F9 + PTT already do this;
-            // without it every follow-up turn leaves an orphaned response).
             if let Some(j) = journal_for_loop.as_ref() {
                 j.write(&journal::JournalEvent::AiRequest {
                     unix_ms: journal::now_unix_ms(),
@@ -578,7 +505,6 @@ pub(crate) fn fire_followup_ask(
             }
             let rt_for_cost = slint_rt_for_work.clone();
             let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
-                // Local inference is free — don't bill it (and don't trip the cap).
                 let micro = if is_local { 0 } else { micro };
                 let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
                 s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);
@@ -655,7 +581,6 @@ pub(crate) fn fire_regenerate(
             }
         }
     };
-    // Drop the trailing assistant turn(s) so we re-ask the same question.
     while matches!(messages.last(), Some(m) if m.role == "assistant") {
         messages.pop();
     }
@@ -683,7 +608,6 @@ pub(crate) fn fire_regenerate(
         )
     };
     let attached_screenshot = route.attaches_screenshot();
-    // v0.8.2 (MAJOR-2) — a sticky-cloud regenerate is billable; warn over cap.
     warn_if_over_cost_cap(
         events,
         cfg,
@@ -696,16 +620,6 @@ pub(crate) fn fire_regenerate(
         t.set_source_label(SharedString::from("ai · перегенерация…"));
         t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks("…"))));
     }
-    // V0.8.3 (escalate→followup bug) — route the regenerate through the SAME
-    // `current_streaming` slot + generation gating as fire_followup_ask (was a
-    // detached, ungated PttStreamSink). `prefix = ""` because a regenerate
-    // REPLACES the tile body with the fresh answer (matches the old display),
-    // but now `handle_ai_event` is the SOLE writer of conversations[convo_id]:
-    // the generation is bumped (so an in-flight stream is superseded/gated) and
-    // the task is abortable. Before this, 🧠-escalate (which calls here) left the
-    // conversation in a divergent, ungated state, so the 2nd follow-up after an
-    // escalation re-sent stale history and re-emitted the escalation answer
-    // verbatim.
     let weak_for_mlx_error = tile_weak.clone();
     let generation = install_streaming_tile(
         bridge,
@@ -781,9 +695,6 @@ pub(crate) fn fire_regenerate(
                 _ => None,
             })
             .unwrap_or_default();
-        // The re-asked question = the last user turn in the (assistant-trimmed)
-        // history. Journal the request so it pairs with the AiResponse (parity
-        // with F9/follow-up; regenerate previously left an orphan response).
         let usr_full = messages
             .iter()
             .rev()
@@ -881,9 +792,6 @@ mod tests {
         }
     }
 
-    // A text follow-up collapses to EXACTLY [system(+prior context), user(new q)]:
-    // the new question is the single user turn, the prior Q&A is reference context,
-    // and the F9 transcript framing is gone.
     #[test]
     fn reframe_collapses_text_followup_to_single_user_turn_with_context() {
         let history = vec![
@@ -893,7 +801,6 @@ mod tests {
             msg("user", "1+1?"),
         ];
         let out = reframe_for_send(&history, "ru", "");
-        // Collapsed to exactly system + one user turn.
         assert_eq!(
             out.len(),
             2,
@@ -902,9 +809,7 @@ mod tests {
         );
         assert_eq!(out[0].role, "system");
         assert_eq!(out[1].role, "user");
-        // The single user turn IS the new question.
         assert_eq!(text_of(&out[1]), "1+1?");
-        // F9 transcript framing gone; the prior Q + A folded in as reference.
         assert!(!text_of(&out[0]).contains("из транскрипта"));
         assert!(
             text_of(&out[0]).contains("что такое ChatGPT"),
@@ -920,8 +825,6 @@ mod tests {
         );
     }
 
-    // A vision dialog (image in a Parts turn) is left multi-turn + unchanged so the
-    // screenshot is not dropped.
     #[test]
     fn reframe_leaves_vision_dialog_multiturn() {
         let history = vec![
@@ -958,7 +861,6 @@ mod tests {
         assert!(!s.contains("предложи краткий ответ"));
     }
 
-    // The neutral system carries language + meeting-context + the folded prior.
     #[test]
     fn followup_system_prompt_carries_language_context_and_prior() {
         let s = followup_system_prompt("ru", "Senior SRE", "Пользователь ранее спросил: X");
@@ -972,8 +874,6 @@ mod tests {
 
     #[test]
     fn followup_system_prompt_carries_role_style_semantics() {
-        // Audit Finding 2: a ROLE/style profile must be honored in follow-ups as
-        // strongly as in the first answer (was previously framed as weak background).
         let s = followup_system_prompt("ru", "отвечай как психолог", "");
         assert!(
             s.contains("РОЛЬ") || s.contains("роль"),

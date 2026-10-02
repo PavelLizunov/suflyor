@@ -164,7 +164,7 @@ pub(super) enum GpuKind {
 pub(super) fn detect_gpu() -> GpuKind {
     #[cfg(target_os = "macos")]
     {
-        GpuKind::Other // Metal GPU acceleration on macOS / Apple Silicon
+        GpuKind::Other
     }
     #[cfg(windows)]
     {
@@ -230,7 +230,6 @@ pub(super) fn detect_nvidia_memory_mib() -> Option<(u64, u64)> {
 }
 
 pub(super) fn parse_nvidia_memory_mib(text: &str) -> Option<(u64, u64)> {
-    // One selected dedicated adapter; never add VRAM across devices.
     text.lines()
         .filter_map(|line| {
             let (used, total) = line.split_once(',')?;

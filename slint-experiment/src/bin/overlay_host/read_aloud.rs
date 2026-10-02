@@ -25,8 +25,6 @@ thread_local! {
 }
 
 pub(super) fn restore_text_clipboard(saved: &Option<String>) {
-    // ponytail: SA1 preserves only UTF-8 text; snapshot every pasteboard item
-    // and format if non-text clipboard parity becomes a product requirement.
     match saved {
         Some(text) => slint_replay::win32::clipboard_write_text(text),
         None => slint_replay::win32::clipboard_clear(),
@@ -131,8 +129,6 @@ pub(super) fn spawn_text_tile(
             }
         });
     }
-    // A selected-text tile is a real Text conversation: the selected passage
-    // becomes reference context and the next typed/voice turn asks about it.
     let live = live_route(AskRoute::Text);
     {
         let weak_fu = tile.as_weak();
@@ -163,9 +159,6 @@ pub(super) fn spawn_text_tile(
     tiles.borrow_mut().push(tile);
     refresh_open_tiles(weak_overlay, tiles);
 
-    // Auto-start the read (mirror wire_speak's click handler). Mark the tile as
-    // speaking ONLY when playback is accepted — a missing sidecar/voice must not
-    // show as speaking nor falsely suppress STT (F2).
     speak_explicit(text, convo_id);
 }
 
@@ -205,7 +198,6 @@ pub(super) fn fill_ocr_tile(
         return;
     };
     tile.set_followup_busy(false);
-    // OCR output isn't regeneratable (no model call to vary) — hide 🔄.
     tile.set_can_regenerate(false);
     let trimmed = text.trim();
     let source = ocr_source_label();
@@ -217,8 +209,6 @@ pub(super) fn fill_ocr_tile(
         };
         tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(empty))));
         tile.set_source_label(SharedString::from(source));
-        // Nothing to read or copy — don't present no-op 🔊/📋 controls (the
-        // conversation is never seeded on this path, so they'd be dead anyway).
         tile.set_can_speak(false);
         tile.set_can_copy(false);
         return;
@@ -237,9 +227,6 @@ pub(super) fn fill_ocr_tile(
             rendered: trimmed.to_string(),
         },
     );
-    // Auto-read (mirror spawn_text_tile's tail). Mark the tile as speaking ONLY
-    // when playback is accepted — a missing sidecar/voice must not show as
-    // speaking nor falsely suppress STT (F2).
     speak_explicit(trimmed, convo_id);
 }
 

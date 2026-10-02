@@ -196,7 +196,6 @@ pub fn line_start_offset_ms(
     i: usize,
     session_start_ms: Option<i64>,
 ) -> Option<i64> {
-    // Accurate: the stored audio offset for this line.
     if let Some(Some(a)) = utts.get(i).map(|u| u.audio_ms) {
         return Some(a.max(0));
     }
@@ -224,8 +223,6 @@ mod tests {
             text: String::new(),
             audio_ms: audio,
         };
-        // ACCURATE path: audio_ms present → returned directly (clamped ≥0),
-        // regardless of unix_ms / session start.
         let rec = vec![
             mk(30_000, Some(0)),
             mk(135_000, Some(4_200)),
@@ -235,14 +232,11 @@ mod tests {
         assert_eq!(line_start_offset_ms(&rec, 1, Some(1_000)), Some(4_200));
         assert_eq!(line_start_offset_ms(&rec, 2, Some(1_000)), Some(9_900));
 
-        // FALLBACK (old sessions, audio_ms None): prev-line finalize − origin;
-        // first line = origin (00:00), NOT its own 29s finalize.
         let old = vec![mk(30_000, None), mk(135_000, None), mk(140_000, None)];
         let start = Some(1_000);
         assert_eq!(line_start_offset_ms(&old, 0, start), Some(0));
         assert_eq!(line_start_offset_ms(&old, 1, start), Some(29_000));
         assert_eq!(line_start_offset_ms(&old, 2, start), Some(134_000));
-        // Neither audio_ms nor a usable origin → None (no timecode, seek 0).
         assert_eq!(line_start_offset_ms(&old, 1, None), None);
         assert_eq!(line_start_offset_ms(&old, 1, Some(0)), None);
     }
@@ -251,14 +245,13 @@ mod tests {
     fn sample_ms_mapping_roundtrips_and_clamps() {
         let sr = 16_000;
         assert_eq!(sample_for_ms(0, sr, 100_000), 0);
-        assert_eq!(sample_for_ms(-5, sr, 100_000), 0); // negative offset → start
-        assert_eq!(sample_for_ms(1000, sr, 100_000), 16_000); // 1s = sr samples
-        assert_eq!(sample_for_ms(1000, sr, 8_000), 8_000); // past end → clamp to total
+        assert_eq!(sample_for_ms(-5, sr, 100_000), 0);
+        assert_eq!(sample_for_ms(1000, sr, 100_000), 16_000);
+        assert_eq!(sample_for_ms(1000, sr, 8_000), 8_000);
         assert_eq!(ms_for_sample(16_000, sr), 1000);
         assert_eq!(ms_for_sample(0, sr), 0);
-        assert_eq!(ms_for_sample(8_000, 0), 0); // sample_rate guard
+        assert_eq!(ms_for_sample(8_000, 0), 0);
         for &ms in &[0_i64, 250, 1500, 37_000] {
-            // round-trips for offsets that divide evenly at 16 kHz
             let s = sample_for_ms(ms, sr, usize::MAX);
             assert_eq!(ms_for_sample(s, sr), ms);
         }
@@ -267,9 +260,9 @@ mod tests {
     #[test]
     fn mix_clamps_and_pads() {
         assert_eq!(mix_pcm(&[100, 200], &[100, 200]), vec![200, 400]);
-        assert_eq!(mix_pcm(&[30000], &[30000]), vec![i16::MAX]); // clamp +
-        assert_eq!(mix_pcm(&[-30000], &[-30000]), vec![i16::MIN]); // clamp -
-        assert_eq!(mix_pcm(&[100], &[100, 50, 25]), vec![200, 50, 25]); // pad
+        assert_eq!(mix_pcm(&[30000], &[30000]), vec![i16::MAX]);
+        assert_eq!(mix_pcm(&[-30000], &[-30000]), vec![i16::MIN]);
+        assert_eq!(mix_pcm(&[100], &[100, 50, 25]), vec![200, 50, 25]);
         assert_eq!(mix_pcm(&[], &[]), Vec::<i16>::new());
     }
 
@@ -291,20 +284,20 @@ mod tests {
     fn load_mixed_sums_channels_and_errors_when_empty() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
-        assert!(load_mixed_from_dir(dir).is_err()); // neither channel → Err
+        assert!(load_mixed_from_dir(dir).is_err());
         write_wav(&dir.join("mic.wav"), &[100, 200]);
         write_wav(&dir.join("system.wav"), &[10, 20, 30]);
         let (pcm, sr) = load_mixed_from_dir(dir).unwrap();
         assert_eq!(sr, 16_000);
-        assert_eq!(pcm, vec![110, 220, 30]); // summed + padded
+        assert_eq!(pcm, vec![110, 220, 30]);
     }
 
     #[test]
     fn system_recording_ms_reads_header_duration() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
-        assert_eq!(system_recording_ms_in_dir(dir), None); // absent → None
-        write_wav(&dir.join("system.wav"), &vec![0i16; 32_000]); // 2s @ 16 kHz
+        assert_eq!(system_recording_ms_in_dir(dir), None);
+        write_wav(&dir.join("system.wav"), &vec![0i16; 32_000]);
         assert_eq!(system_recording_ms_in_dir(dir), Some(2000));
     }
 
@@ -314,7 +307,7 @@ mod tests {
         let dir = tmp.path();
         write_wav(&dir.join("mic.wav"), &[5, 6, 7]);
         let (pcm, _) = load_mixed_from_dir(dir).unwrap();
-        assert_eq!(pcm, vec![5, 6, 7]); // system silent → mic passes through
+        assert_eq!(pcm, vec![5, 6, 7]);
     }
 
     #[test]

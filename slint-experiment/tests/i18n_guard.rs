@@ -9,7 +9,7 @@
 //! If this fails: either add the `msgid`/`msgstr` pair to
 //! `translations/ru/LC_MESSAGES/slint-replay.po`, or (rarely) the string is a
 //! deliberate non-translatable token — then it shouldn't be wrapped in `@tr`.
-#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
 use std::collections::HashSet;
 use std::fs;
@@ -25,7 +25,6 @@ fn tr_msgids(src: &str) -> Vec<String> {
     let mut i = 0;
     while i + needle.len() <= bytes.len() {
         if &bytes[i..i + needle.len()] == needle {
-            // skip whitespace to the opening quote
             let mut j = i + needle.len();
             while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
                 j += 1;
@@ -36,14 +35,12 @@ fn tr_msgids(src: &str) -> Vec<String> {
                 while j < bytes.len() {
                     match bytes[j] {
                         b'\\' if j + 1 < bytes.len() => {
-                            // keep the escape sequence verbatim (matches .po form)
                             s.push('\\');
                             s.push(bytes[j + 1] as char);
                             j += 2;
                         }
                         b'"' => break,
                         c => {
-                            // push raw byte; rebuild utf-8 below via from_utf8 of slice
                             s.push(c as char);
                             j += 1;
                         }
@@ -350,10 +347,6 @@ fn every_display_literal_is_translated_or_technical() {
 
 #[test]
 fn every_tr_string_has_a_russian_translation() {
-    // The byte-level scan above mangles multi-byte UTF-8 (pushes each byte as a
-    // char). That's fine for ASCII msgids — and Slint @tr msgids are the ENGLISH
-    // source, i.e. ASCII — so any string containing non-ASCII is a Cyrillic
-    // literal we skip here (the .po side stores the English msgid, not Cyrillic).
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let po = fs::read_to_string(root.join("translations/ru/LC_MESSAGES/slint-replay.po"))
         .expect("read ru .po");
@@ -373,8 +366,6 @@ fn every_tr_string_has_a_russian_translation() {
             .to_string();
         let src = fs::read_to_string(&path).expect("read slint");
         for id in tr_msgids(&src) {
-            // Only ASCII msgids are real English source strings that MUST be in
-            // the .po; a mangled multi-byte string isn't a clean key.
             if !id.is_ascii() || id.is_empty() {
                 continue;
             }

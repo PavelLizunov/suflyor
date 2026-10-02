@@ -114,9 +114,6 @@ impl LocalAiBusyGuard {
     /// caller must NOT start a second worker.
     #[must_use]
     pub fn try_acquire(flag: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Option<Self> {
-        // LAZY `then` (not `then_some`): on a FAILED acquire we must NOT construct
-        // a guard — its Drop would store(false) and free the op that actually
-        // holds the flag.
         flag.compare_exchange(
             false,
             true,
@@ -140,7 +137,7 @@ pub type SharedState = Arc<Mutex<AppState>>;
 #[must_use]
 pub fn new_shared_state() -> SharedState {
     Arc::new(Mutex::new(AppState {
-        always_on_top: true, // overlay defaults to topmost
+        always_on_top: true,
         ..Default::default()
     }))
 }
@@ -312,7 +309,6 @@ mod tests {
 
     #[test]
     fn tile_title_line_collapses_to_one_line() {
-        // The bug: a multi-line transcript title rendered as cramped header lines.
         assert_eq!(
             tile_title_line("вот этот домик\nтоп-топ-топ\nидём туда"),
             "вот этот домик топ-топ-топ идём туда"
@@ -338,20 +334,11 @@ mod tests {
     #[test]
     fn next_model_outputs_are_canonical_ids() {
         use overlay_backend::ai::pricing_per_million;
-        // Safe-default arm output — any (3.0, 15.0) match is the
-        // "unknown model" fallback, NOT a real recognized ID.
         const SAFE_DEFAULT: (f64, f64) = (3.0, 15.0);
 
-        // Cycle from each of the 3 canonical full IDs 4 times each —
-        // must always land on a recognized ID per pricing.
         let starts = ["claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-7"];
         for start in starts {
-            // Verify the start ID itself is recognized — paranoia
-            // since it's the test setup.
             let p0 = pricing_per_million(start);
-            // sonnet-4-6 happens to share pricing (3.0, 15.0) with the
-            // safe default. Allow that explicit case; reject everything
-            // else hitting that exact arm.
             assert!(
                 p0 != SAFE_DEFAULT || start == "claude-sonnet-4-6" || start == "claude-sonnet-4-5",
                 "start ID {start:?} hits safe-default pricing — bad test setup"
@@ -370,7 +357,6 @@ mod tests {
             }
         }
 
-        // Legacy short-name aliases also map to recognized IDs.
         for alias in ["haiku", "sonnet", "opus"] {
             let out = next_model(alias);
             let p = pricing_per_million(out);
@@ -380,7 +366,6 @@ mod tests {
             );
         }
 
-        // Unknown input falls back to cheap default (haiku-4-5).
         assert_eq!(next_model("garbage"), "claude-haiku-4-5");
     }
 
@@ -393,7 +378,6 @@ mod tests {
     #[test]
     fn palette_row_preview_slicing() {
         use overlay_backend::kb::KBEntry;
-        // 1. Body with multiple sentences — keeps only first.
         let e = KBEntry::new(
             "k8s".into(),
             "kubernetes — k8s".into(),
@@ -406,7 +390,6 @@ mod tests {
         assert_eq!(r.preview, "Container orchestration platform");
         assert_eq!(r.source, "glossary");
 
-        // 2. Body longer than 160 chars in a single sentence → trimmed.
         let long_body = "a".repeat(300);
         let e2 = KBEntry::new(
             "long".into(),
@@ -418,7 +401,6 @@ mod tests {
         assert_eq!(r2.preview.chars().count(), 160);
         assert!(long_body.starts_with(&r2.preview));
 
-        // 3. Empty heading → falls back to key.
         let e3 = KBEntry::new(
             "naked".into(),
             String::new(),
@@ -429,7 +411,6 @@ mod tests {
         assert_eq!(r3.title, "naked");
         assert_eq!(r3.preview, "tiny body");
 
-        // 4. Newline-only body → empty preview.
         let e4 = KBEntry::new(
             "nl".into(),
             "Newline-only".into(),

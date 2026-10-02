@@ -50,8 +50,6 @@ fn tray_actions_route_through_existing_bar_callbacks() {
     let bar_tray = read(root, "src/bin/overlay_host/bar_tray.rs");
     assert!(host.contains("#[path = \"overlay_host/bar_tray.rs\"]"));
 
-    // Session actions must reuse the bar's own callbacks (single lifecycle
-    // implementation — the tray must never start/stop sessions itself).
     assert!(
         bar_tray.contains("o.invoke_pause_toggle_clicked();"),
         "tray Pause/Resume must invoke the bar's pause callback"
@@ -61,8 +59,6 @@ fn tray_actions_route_through_existing_bar_callbacks() {
         "tray Stop must invoke the bar's timer-toggle callback"
     );
 
-    // Stop must be guarded by the live session flag (the toggle callback
-    // would otherwise START a session from the tray).
     let dispatch_start = bar_tray
         .find("fn tray_action_dispatch(")
         .expect("tray dispatch helper");
@@ -120,10 +116,9 @@ fn startup_is_always_visible_and_hide_is_explicit_only() {
         1,
         "single hide helper"
     );
-    // Chip handler + tray dispatch are the only hide callers.
     assert_eq!(
         implementation.matches("hide_bar_to_tray(").count(),
-        3, // definition + bar chip handler + tray ShowHide dispatch
+        3,
         "hide is reachable only from the explicit chip and the tray"
     );
 }
@@ -134,7 +129,6 @@ fn restore_keeps_compact_mode_and_icon_lifecycle_is_clean() {
     let host = read(root, "src/bin/overlay_host_windows.rs");
     let bar_tray = read(root, "src/bin/overlay_host/bar_tray.rs");
 
-    // Restore must not resize / re-compact the bar.
     let restore_start = bar_tray
         .find("fn restore_bar_from_tray(")
         .expect("restore helper");
@@ -155,8 +149,6 @@ fn restore_keeps_compact_mode_and_icon_lifecycle_is_clean() {
         "restoring the bar must remove its temporary notification icon"
     );
 
-    // Tray restore surface lifecycle: installed before the event loop, dropped
-    // right after it returns so any temporary icon is removed on shutdown.
     let install_pos = host
         .find("slint_replay::tray::install(")
         .expect("tray install");

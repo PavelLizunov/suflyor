@@ -9,7 +9,6 @@ use super::*;
 /// touch the user's live config).
 #[test]
 fn merge_server_settings_takes_servers_keeps_locals() {
-    // `current` = this PC: distinctive LOCAL values + placeholder servers.
     let mut current = Config::defaults();
     current.meeting_context = "LOCAL meeting ctx".into();
     current.context_profiles = vec![ContextProfile {
@@ -30,14 +29,11 @@ fn merge_server_settings_takes_servers_keeps_locals() {
         title: "Local snippet".into(),
         body: "stays".into(),
     }];
-    // Local PLACEHOLDER server values (must be OVERWRITTEN by the import).
     current.ai_provider = "cloud".into();
     current.ai_base_url = "http://OLD-cloud/v1".into();
     current.ai_bearer = "OLD-bearer".into();
     current.groq_api_key = "OLD-groq".into();
 
-    // `imported` = backup carried from the other PC: different servers AND
-    // different locals (the locals must be IGNORED).
     let mut imported = Config::defaults();
     imported.ai_provider = "local".into();
     imported.ai_base_url = "http://NEW-cloud:18902/v1".into();
@@ -81,7 +77,6 @@ fn merge_server_settings_takes_servers_keeps_locals() {
 
     let merged = merge_server_settings(&current, imported);
 
-    // --- server fields come from `imported` ---
     assert_eq!(merged.ai_provider, "local");
     assert_eq!(merged.ai_base_url, "http://NEW-cloud:18902/v1");
     assert_eq!(merged.ai_bearer, "NEW-bearer");
@@ -111,7 +106,6 @@ fn merge_server_settings_takes_servers_keeps_locals() {
     assert_eq!(merged.stt_whisper_bearer, "NEW-whisper-bearer");
     assert_eq!(merged.stt_whisper_model, "whisper-NEW");
 
-    // --- local fields stay from `current` (NOT from `imported`) ---
     assert_eq!(merged.meeting_context, "LOCAL meeting ctx");
     assert_eq!(merged.context_profiles.len(), 1);
     assert_eq!(merged.context_profiles[0].name, "local-prof");
@@ -167,7 +161,6 @@ fn export_server_settings_writes_servers_only_no_locals() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("server-settings.json");
 
-    // A config with BOTH distinctive servers AND distinctive locals.
     let mut cfg = imported_with_secret_tokens();
     cfg.meeting_context = "PRIVATE meeting ctx".into();
     cfg.context_profiles = vec![ContextProfile {
@@ -191,22 +184,18 @@ fn export_server_settings_writes_servers_only_no_locals() {
     let raw = std::fs::read(&path).unwrap();
     let out: Config = serde_json::from_slice(&raw).unwrap();
 
-    // Server fields present (incl. creds — intentional).
     assert_eq!(out.ai_provider, "local");
     assert_eq!(out.ai_base_url, "http://192.168.7.7:18902/v1");
     assert_eq!(out.ai_bearer, "SECRET-AI-BEARER-zzz");
     assert_eq!(out.groq_api_key, "gsk_SECRET_GROQ_zzz");
     assert_eq!(out.vision_bearer, "SECRET-VISION-BEARER-zzz");
     assert_eq!(out.stt_whisper_url, "http://127.0.0.1:8081/v1");
-    // Machine-local fields are BLANK (came from defaults, not from cfg).
     assert_eq!(out.meeting_context, "");
     assert!(out.context_profiles.is_empty());
     assert!(out.active_profile.is_none());
     assert!(out.mic_device.is_none());
     assert!(out.system_audio_device.is_none());
     assert!(out.tile_monitor_name.is_none());
-    // trigger_keywords / snippets default to the canned set, NOT the user's
-    // custom values — the point is they don't carry the user's locals.
     assert_ne!(out.trigger_keywords, "mykw");
     assert!(out.snippets.iter().all(|s| s.key != "s"));
     assert_eq!(out.ui_language, default_ui_language());
@@ -235,7 +224,6 @@ fn export_server_settings_writes_servers_only_no_locals() {
 /// security invariant) NEVER includes a secret VALUE in ANY produced string.
 #[test]
 fn preview_server_settings_is_redacted_and_diffs() {
-    // `current` = this PC: cloud, has a bearer + groq key, a LOCAL gigaam dir.
     let mut current = Config::defaults();
     current.ai_provider = "cloud".into();
     current.ai_base_url = "http://OLD-bridge/v1".into();
@@ -248,7 +236,6 @@ fn preview_server_settings_is_redacted_and_diffs() {
     let imported = imported_with_secret_tokens();
     let p = preview_server_settings(&current, &imported);
 
-    // --- group diffs (neutral values flow through; presence is a bool) ---
     assert_eq!(p.cloud_ai.provider_old, "cloud");
     assert_eq!(p.cloud_ai.provider_new, "local");
     assert_eq!(p.cloud_ai.base_url_old, "http://OLD-bridge/v1");
@@ -258,21 +245,17 @@ fn preview_server_settings_is_redacted_and_diffs() {
     assert!(p.cloud_ai.key_present_old && p.cloud_ai.key_present_new);
     assert!(p.cloud_ai.changed());
 
-    // Local AI: current has no local bearer (defaults), imported does.
     assert!(!p.local_ai.key_present_old);
     assert!(p.local_ai.key_present_new);
     assert_eq!(p.local_ai.model_new, "gemma-4-E4B");
 
-    // Vision: imported has a cloud vision bearer → present_new true.
     assert!(p.vision.key_present_new);
     assert_eq!(p.vision.provider_new, "cloud");
 
-    // STT: groq key present both sides; provider cloud -> gigaam.
     assert!(p.stt.key_present_old && p.stt.key_present_new);
     assert_eq!(p.stt.provider_old, "cloud");
     assert_eq!(p.stt.provider_new, "gigaam");
 
-    // Machine-local GigaAM dir: current kept, incoming surfaced (informational).
     assert_eq!(p.gigaam_dir_current, r"C:\THIS-PC\gigaam");
     assert_eq!(p.gigaam_dir_incoming, r"D:\OTHER-PC\gigaam");
 
@@ -321,7 +304,6 @@ fn mask_host_blanks_host_keeps_scheme_port_path() {
     assert_eq!(mask_host("https://bridge.internal/api"), "https://***/api");
     assert_eq!(mask_host("http://127.0.0.1:8080/v1"), "http://***:8080/v1");
     assert_eq!(mask_host(""), "");
-    // No scheme, host only.
     assert_eq!(mask_host("10.0.0.5:9000"), "***:9000");
 }
 
@@ -333,14 +315,12 @@ fn apply_server_settings_keeps_local_gigaam_dir() {
     current.stt_gigaam_dir = r"C:\THIS-PC\gigaam".into();
     current.ai_bearer = "OLD".into();
 
-    let imported = imported_with_secret_tokens(); // has D:\OTHER-PC\gigaam
+    let imported = imported_with_secret_tokens();
 
     let next = apply_server_settings(&current, imported);
-    // Server fields imported…
     assert_eq!(next.ai_provider, "local");
     assert_eq!(next.ai_bearer, "SECRET-AI-BEARER-zzz");
     assert_eq!(next.groq_api_key, "gsk_SECRET_GROQ_zzz");
-    // …but the machine-local GigaAM path is KEPT from this PC.
     assert_eq!(next.stt_gigaam_dir, r"C:\THIS-PC\gigaam");
 }
 
@@ -348,7 +328,6 @@ fn apply_server_settings_keeps_local_gigaam_dir() {
 /// puts a secret value (bearer / API key) into a detail string.
 #[test]
 fn readiness_reflects_active_providers() {
-    // Cloud AI + Groq STT, fully configured.
     let mut c = Config::defaults();
     c.ai_provider = "cloud".into();
     c.ai_base_url = "http://bridge/v1".into();
@@ -367,12 +346,10 @@ fn readiness_reflects_active_providers() {
     assert!(!r.stt.detail.contains("SECRET"), "no key in STT detail");
     assert!(r.mic.configured && r.sys.configured);
 
-    // Cloud AI with empty bearer → not configured (cloud needs a bearer).
     let mut c_nb = c.clone();
     c_nb.ai_bearer = String::new();
     assert!(!c_nb.readiness().ai.configured);
 
-    // Local AI: needs URL + model, NO bearer.
     let mut c2 = Config::defaults();
     c2.ai_provider = "local".into();
     c2.ai_local_base_url = "http://127.0.0.1:8080/v1".into();
@@ -387,7 +364,6 @@ fn readiness_reflects_active_providers() {
     assert!(r2.ai.configured, "local AI needs no bearer");
     assert!(r2.ai.detail.contains("local"));
 
-    // GigaAM STT: needs a model dir.
     let mut c3 = Config::defaults();
     c3.stt_provider = "gigaam".into();
     c3.stt_gigaam_dir = String::new();
@@ -470,11 +446,9 @@ fn config_save_load_roundtrip() {
 /// fill them with defaults instead of failing.
 #[test]
 fn config_partial_json_uses_serde_defaults() {
-    // Minimal file — just ai_model. Everything else must come from defaults.
     let minimal = r#"{"ai_model":"claude-old"}"#;
     let cfg: Config = serde_json::from_str(minimal).expect("must parse with defaults");
     assert_eq!(cfg.ai_model, "claude-old");
-    // Fields not in JSON default to their Default impl (empty strings, false, None).
     assert_eq!(cfg.ai_bearer, "");
     assert!(!cfg.stealth_enabled);
     assert!(cfg.context_profiles.is_empty());
@@ -483,17 +457,11 @@ fn config_partial_json_uses_serde_defaults() {
 
 #[test]
 fn config_defaults_stamp_current_schema_version() {
-    // A fresh install (the Err/NotFound arms of load() use Config::defaults)
-    // must carry the current schema version, so it never looks "older than
-    // itself" to the load()-time migration stamp.
     assert_eq!(Config::defaults().config_version, CURRENT_CONFIG_VERSION);
 }
 
 #[test]
 fn config_pre_versioning_json_reads_as_zero() {
-    // A file written before versioning has no config_version key. serde must
-    // fill the u32 Default (0) — that's the sentinel load() keys on to stamp
-    // the file up to CURRENT (and, in future, run number-keyed migrations).
     let cfg: Config = serde_json::from_str(r#"{"ai_model":"x"}"#).unwrap();
     assert_eq!(cfg.config_version, 0);
     assert!(cfg.config_version < CURRENT_CONFIG_VERSION);
@@ -501,9 +469,6 @@ fn config_pre_versioning_json_reads_as_zero() {
 
 #[test]
 fn preserve_corrupt_config_renames_aside_keeping_bytes() {
-    // P1.4: an unparseable config.json must be moved to a recoverable
-    // `*.broken-<ts>` sibling — never silently dropped — so a corruption
-    // event can't destroy the user's live keys / profiles.
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("config.json");
     let garbage = b"{ this is not valid json @@@";
@@ -511,9 +476,7 @@ fn preserve_corrupt_config_renames_aside_keeping_bytes() {
 
     preserve_corrupt_config(&path);
 
-    // Original gone (moved off the load path).
     assert!(!path.exists(), "corrupt config.json should be renamed away");
-    // Exactly one recoverable sibling, holding the original bytes verbatim.
     let mut broken: Vec<_> = std::fs::read_dir(dir.path())
         .unwrap()
         .filter_map(|e| e.ok())
@@ -536,10 +499,9 @@ fn parse_error_never_echoes_the_offending_token() {
     // an `invalid type` error. parse_config_bytes must surface ONLY a
     // secret-free location, never the value at the failing position.
     let secret = "sk-LIVE-SECRET-DO-NOT-LOG-9f3a";
-    // String where a u32 is expected → serde's raw Display would quote it.
     let json = format!("{{\"config_version\":\"{secret}\"}}");
     let err = parse_config_bytes(json.as_bytes()).unwrap_err();
-    let msg = format!("{err:#}"); // anyhow alternate = full chain
+    let msg = format!("{err:#}");
     assert!(
         !msg.contains(secret),
         "parse error leaked the secret token: {msg}"
@@ -556,15 +518,10 @@ fn parse_error_never_echoes_the_offending_token() {
 
 #[test]
 fn config_with_utf8_bom_is_stripped_not_reset() {
-    // Notepad "UTF-8 with BOM" / a PowerShell JSON round-trip prepend
-    // EF BB BF. load() must strip it and parse, NOT fall back to defaults
-    // (which would silently wipe the user's hand-edited config).
     let json = br#"{"response_language":"en"}"#;
     let mut with_bom = vec![0xEF_u8, 0xBB, 0xBF];
     with_bom.extend_from_slice(json);
-    // Raw BOM bytes WOULD fail to parse (this is the bug being guarded).
     assert!(serde_json::from_slice::<Config>(&with_bom).is_err());
-    // The load() path strips the BOM first, so it parses to the real value.
     let bytes = with_bom
         .strip_prefix(&[0xEF, 0xBB, 0xBF])
         .unwrap_or(&with_bom);
@@ -574,7 +531,6 @@ fn config_with_utf8_bom_is_stripped_not_reset() {
 
 #[test]
 fn config_empty_object_yields_all_defaults() {
-    // Even "{}" must parse — every field has a default.
     let cfg: Config = serde_json::from_str("{}").expect("empty object should parse");
     assert_eq!(cfg.ai_bearer, "");
     assert_eq!(cfg.ai_model, "");
@@ -640,17 +596,12 @@ fn secret_redacted_blanks_every_secret_keeps_the_rest() {
 
 #[test]
 fn v015_retention_fields_default_to_pre_v015_behaviour() {
-    // A pre-v0.15 config (no retention keys) must carry the pre-v0.15
-    // CONSTANTS: audio keep 10 / no age limit, journals keep 100 / 500 MB.
-    // (The prune behaviour for these values is pinned by the recorder's
-    // prune tests + journal's size-cap tests; this test pins the VALUES.)
     let cfg: Config = serde_json::from_str("{}").expect("parses");
     assert_eq!(cfg.record_retention_sessions, 10);
     assert_eq!(cfg.record_retention_days, 0);
     assert_eq!(cfg.journal_retention_sessions, 100);
     assert_eq!(cfg.journal_max_total_mb, 500);
     assert_eq!(cfg.record_max_total_mb, 20_000);
-    // And the explicit "unlimited" spelling round-trips.
     let cfg: Config = serde_json::from_str(
         r#"{"record_retention_sessions":0,"record_retention_days":30,
                 "journal_retention_sessions":0,"journal_max_total_mb":0}"#,
@@ -1003,7 +954,6 @@ fn vision_endpoint_cloud_falls_back_to_text_bridge_and_sonnet() {
     d.vision_provider = "cloud".into();
     d.ai_base_url = "http://bridge/v1".into();
     d.ai_bearer = "secret".into();
-    // vision_* left empty → fall back to the text bridge + Sonnet default.
     let v = d.vision_endpoint();
     assert_eq!(v.as_ref().map(|e| e.is_local), Some(false));
     assert_eq!(
@@ -1043,7 +993,6 @@ fn vision_endpoint_local_falls_back_to_text_local() {
     d.vision_provider = "local".into();
     d.ai_local_base_url = "http://127.0.0.1:8080/v1".into();
     d.ai_local_model = "gemma".into();
-    // vision_local_* empty → fall back to ai_local_*.
     let v = d.vision_endpoint();
     assert_eq!(v.as_ref().map(|e| e.is_local), Some(true));
     assert_eq!(v.map(|e| e.model), Some("gemma".to_string()));
@@ -1051,7 +1000,6 @@ fn vision_endpoint_local_falls_back_to_text_local() {
 
 #[test]
 fn vision_endpoint_default_provider_is_cloud() {
-    // Fresh defaults → vision enabled (cloud) so F8 works out of the box.
     assert_eq!(Config::defaults().vision_provider, "cloud");
     assert!(Config::defaults().vision_endpoint().is_some());
 }
@@ -1085,7 +1033,6 @@ fn mlx_defaults_are_additive_and_fail_closed_until_owned_runtime_is_ready() {
         "text-only catalog entry must never route images"
     );
 
-    // Gemma4 VLM declares image support and routes images under the same text model.
     cfg.ai_mlx_model = crate::mlx_install::GEMMA4_MODEL.into();
     assert!(cfg.same_text_model_accepts_images_declared());
     cfg.vision_provider = "same".into();
@@ -1123,7 +1070,7 @@ fn ai_endpoint_local_uses_local_fields_and_prep_fallback() {
     d.ai_provider = "local".into();
     d.ai_local_base_url = "http://127.0.0.1:11434/v1".into();
     d.ai_local_model = "qwen2.5:7b".into();
-    d.ai_local_prep_model = String::new(); // empty → falls back to live
+    d.ai_local_prep_model = String::new();
     let live = d.ai_endpoint(false);
     assert!(live.is_local);
     assert_eq!(live.base_url, "http://127.0.0.1:11434/v1");
@@ -1137,25 +1084,19 @@ fn ai_endpoint_local_uses_local_fields_and_prep_fallback() {
     assert_eq!(d.ai_endpoint(true).model, "qwen2.5:14b");
 }
 
-// V0.8.0 (Поток D) — ai_endpoint_cloud() always resolves to the cloud
-// bridge + the smart prep_model, even when the active provider is local.
 #[test]
 fn ai_endpoint_cloud_always_uses_cloud_bridge_and_prep_model() {
     let mut d = Config::defaults();
-    // Active provider is LOCAL (default-local user, the escalation scenario).
     d.ai_provider = "local".into();
     d.ai_local_base_url = "http://127.0.0.1:8080/v1".into();
     d.ai_local_model = "gemma-4-E4B".into();
-    // Cloud bridge fields are still set (they always are in config).
     d.ai_base_url = "http://bridge/v1".into();
     d.ai_bearer = "secret".into();
     d.prep_model = "claude-sonnet-4-6".into();
 
-    // Normal resolve honours the local provider...
     assert!(d.ai_endpoint(false).is_local);
     assert_eq!(d.ai_endpoint(false).base_url, "http://127.0.0.1:8080/v1");
 
-    // ...but the cloud-escalation resolver IGNORES it: cloud bridge + smart.
     let cloud = d.ai_endpoint_cloud();
     assert!(!cloud.is_local, "escalation must bill + allow screenshots");
     assert_eq!(cloud.base_url, "http://bridge/v1");
@@ -1228,7 +1169,6 @@ fn stt_backend_whisper_uses_url_bearer_model_and_is_local() {
 
 #[test]
 fn stt_provider_defaults_from_partial_json() {
-    // Old config without STT fields follows the platform default.
     let cfg: Config = serde_json::from_str(r#"{"ai_model":"x"}"#).expect("parse");
     assert_eq!(
         cfg.stt_provider,
@@ -1244,7 +1184,6 @@ fn stt_provider_defaults_from_partial_json() {
     assert!(!cfg.ai_local_thinking);
     // CoreML is opt-in on macOS; DirectML remains the Windows default.
     assert_eq!(cfg.stt_gigaam_gpu, !cfg!(target_os = "macos"));
-    // Colour scheme defaults to 0 (Glacier) for configs predating the field.
     assert_eq!(cfg.color_scheme, 0);
 }
 
@@ -1307,8 +1246,6 @@ fn macos_replaces_a_retired_stt_provider_when_managed_gigaam_is_ready() {
 
 #[test]
 fn config_missing_provider_fields_default_cloud() {
-    // An old config.json without the new fields loads as cloud + the
-    // llama.cpp default URL, and resolves to the cloud endpoint.
     let cfg: Config = serde_json::from_str(r#"{"ai_model":"x"}"#).expect("parse");
     assert_eq!(cfg.ai_provider, "cloud");
     assert_eq!(cfg.ai_local_base_url, "http://127.0.0.1:8080/v1");
@@ -1322,21 +1259,15 @@ fn config_missing_provider_fields_default_cloud() {
 #[test]
 fn new_v002_field_defaults() {
     let d = Config::defaults();
-    // Cost cap default — 0.0 since v0.0.28 means chip is OFF.
-    // Old installs (with explicit value in their config.json) keep
-    // their value via the per-field serde(default=...) loader.
     assert!(
         d.max_session_cost_usd.abs() < 0.001,
         "max_session_cost_usd default should be 0.0 (chip off), got {}",
         d.max_session_cost_usd
     );
-    // detector_skip_mic ON by default — fix for live regression #96
-    // (candidate's own voice shouldn't trigger explanation tiles).
     assert!(
         d.detector_skip_mic,
         "detector_skip_mic default should be true (interview use-case)"
     );
-    // post_meeting_debrief OFF by default — opt-in per privacy/cost.
     assert!(
         !d.post_meeting_debrief_enabled,
         "post_meeting_debrief_enabled default should be false (opt-in only)"
@@ -1352,15 +1283,11 @@ fn new_v002_field_defaults() {
 /// v0.0.28: max_session_cost_usd default flipped 1.00 → 0.0 (chip off).
 #[test]
 fn pre_v002_config_gets_correct_field_defaults_via_serde() {
-    // Simulate a v0.0.1 config — has all fields up to v0.0.1 but no
-    // max_session_cost_usd or detector_skip_mic.
     let pre_v002 = r#"{
             "ai_model": "claude-haiku-4-5",
             "stealth_enabled": false
         }"#;
     let cfg: Config = serde_json::from_str(pre_v002).expect("must parse old config");
-    // Field defaults MUST be applied via serde(default=...) on the
-    // field itself:
     assert!(
         cfg.max_session_cost_usd.abs() < 0.001,
         "missing field should fall to 0.0 (cap off) — v0.0.28 default"
@@ -1405,8 +1332,6 @@ fn explicit_zero_cost_cap_preserved() {
 fn defaults_use_models_present_in_pricing_table() {
     use crate::ai::pricing_per_million;
     let d = Config::defaults();
-    // Catch a typo by checking each model resolves to a non-fallback price.
-    // Fallback (unknown) is sonnet's price; haiku must NOT be that.
     let (haiku_in, _) = pricing_per_million(&d.ai_model);
     assert!(
         haiku_in < 3.0,
@@ -1492,14 +1417,12 @@ fn default_snippets_cover_breadth() {
         "snippet library shrank to {} — must stay ≥50",
         d.snippets.len()
     );
-    // Domain coverage spot-check — make sure no whole category was
-    // accidentally deleted.
     let keys: Vec<&str> = d.snippets.iter().map(|s| s.key.as_str()).collect();
     for domain in [
         "k8s",
         "pg",
         "incident",
-        "sli", // originals
+        "sli",
         "linux-oom",
         "linux-net",
         "tcp",
@@ -1613,50 +1536,37 @@ fn context_profile_serialisation_roundtrip() {
 fn profile_lifecycle_add_select_rename_delete() {
     let mut c = Config::defaults();
     c.meeting_context = "stale".into();
-    // add() creates a BLANK profile, makes it active, and clears the live
-    // context (does NOT clone the previous meeting_context).
     assert_eq!(c.add_profile("A"), Some(0));
     assert_eq!(c.active_profile.as_deref(), Some("A"));
     assert_eq!(c.context_profiles[0].context, "");
     assert_eq!(c.meeting_context, "");
-    // fill A's context the normal way: type + save into the active profile
     c.save_active_context("ctx A");
     assert_eq!(c.context_profiles[0].context, "ctx A");
-    // blank + duplicate names are rejected
     assert!(c.add_profile("  ").is_none());
     assert!(c.add_profile("A").is_none());
-    // a second profile is ALSO blank + active, regardless of current context
     assert_eq!(c.add_profile("B"), Some(1));
     assert_eq!(c.active_profile_index(), Some(1));
     assert_eq!(c.context_profiles[1].context, "");
     assert_eq!(c.meeting_context, "");
-    // selecting loads that profile's context into the live field
     c.select_profile(0);
     assert_eq!(c.meeting_context, "ctx A");
     assert_eq!(c.active_profile.as_deref(), Some("A"));
-    // editing + saving updates BOTH the live field and the active profile
     c.save_active_context("ctx A edited");
     assert_eq!(c.meeting_context, "ctx A edited");
     assert_eq!(c.context_profiles[0].context, "ctx A edited");
-    // rename rejects duplicates, accepts a fresh name
     assert!(!c.rename_active_profile("B"));
     assert!(c.rename_active_profile("A2"));
     assert_eq!(c.context_profiles[0].name, "A2");
     assert_eq!(c.active_profile.as_deref(), Some("A2"));
-    // deleting the active profile activates the next + loads its context
     c.delete_active_profile();
     assert_eq!(c.context_profiles.len(), 1);
     assert_eq!(c.active_profile.as_deref(), Some("B"));
-    assert_eq!(c.meeting_context, ""); // B was created blank
-                                       // deleting the last profile clears the active selection
+    assert_eq!(c.meeting_context, "");
     c.delete_active_profile();
     assert!(c.context_profiles.is_empty());
     assert!(c.active_profile.is_none());
 }
 
-// Regression for the user-reported bug: a new profile must NOT inherit the
-// active profile's context. Creating "FOOT" while "ninitux" was active had
-// silently copied ninitux's description into FOOT.
 #[test]
 fn add_profile_does_not_clone_active_profile_context() {
     let mut c = Config::defaults();
@@ -1664,13 +1574,10 @@ fn add_profile_does_not_clone_active_profile_context() {
     c.save_active_context("ninitux description");
     assert_eq!(c.context_profiles[0].context, "ninitux description");
     assert_eq!(c.meeting_context, "ninitux description");
-    // add FOOT while ninitux is active and its context is live
     assert_eq!(c.add_profile("FOOT"), Some(1));
     assert_eq!(c.active_profile.as_deref(), Some("FOOT"));
-    // FOOT must be EMPTY, and the live context cleared — not a clone
     assert_eq!(c.context_profiles[1].context, "");
     assert_eq!(c.meeting_context, "");
-    // ninitux is left untouched
     assert_eq!(c.context_profiles[0].context, "ninitux description");
 }
 
@@ -1698,13 +1605,11 @@ fn mask_host_bracketed_ipv6_without_port_is_fully_masked() {
 
 #[test]
 fn mask_host_keeps_real_ports_and_dns_ipv4() {
-    // bracketed IPv6 WITH a port keeps the port
     assert_eq!(
         mask_host("http://[2001:db8::1]:9000/v1"),
         "http://***:9000/v1"
     );
     assert_eq!(mask_host("http://[::1]:8080"), "http://***:8080");
-    // DNS + IPv4 hosts unchanged (regression guard)
     assert_eq!(
         mask_host("http://192.168.0.142:18902/v1"),
         "http://***:18902/v1"
@@ -1739,7 +1644,6 @@ fn mask_host_strips_userinfo_and_redacts_credentials() {
 
 #[test]
 fn mask_host_handles_query_and_fragment_boundaries() {
-    // RFC 3986: authority is delimited by '/', '?', or '#' without requiring a trailing slash.
     assert_eq!(
         mask_host("http://192.168.0.142:18902?token=secret123"),
         "http://***:18902?token=secret123"
@@ -1767,7 +1671,6 @@ fn deep_lock_defaults_false_and_survives_serde_roundtrip() {
     assert!(back.deep_lock, "deep lock must persist across restart");
     assert!(back.suppress_tiles);
 
-    // A config written before the field existed deserializes to OFF.
     let mut legacy = serde_json::json!({ "ui_language": "ru" });
     legacy["suppress_tiles"] = serde_json::json!(true);
     let parsed: Config = serde_json::from_value(legacy).unwrap();
@@ -1778,7 +1681,6 @@ fn deep_lock_defaults_false_and_survives_serde_roundtrip() {
 /// the machine-local deep-lock field.
 #[test]
 fn server_settings_transfer_never_carries_deep_lock() {
-    // Full-profile export omits the field entirely.
     let dir = tempfile::tempdir().unwrap();
     let profile_path = dir.path().join("profile.json");
     let mut locked = imported_with_secret_tokens();
@@ -1789,13 +1691,11 @@ fn server_settings_transfer_never_carries_deep_lock() {
         serde_json::from_slice(&std::fs::read(&profile_path).unwrap()).unwrap();
     assert!(profile.get("deep_lock").is_none());
 
-    // Server-settings export omits it too.
     let path = dir.path().join("server-settings.json");
     export_server_settings_to(&path, &locked).unwrap();
     let server: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     assert!(server.get("deep_lock").is_none());
 
-    // IMPORT side: merge keeps THIS PC's flag, whatever the file says.
     let mut current = Config::defaults();
     current.deep_lock = true;
     let mut imported = Config::defaults();
@@ -1850,9 +1750,6 @@ fn full_profile_import_preserves_local_deep_lock() {
 /// field to `Config` and the explicit-only visibility contract is broken.
 #[test]
 fn config_persists_no_tray_hidden_state() {
-    // Unknown legacy/experimental visibility keys must be ignored rather than
-    // becoming sticky startup state. Checking JSON object keys avoids the old
-    // substring assertion accidentally matching an unrelated value.
     let parsed: Config = serde_json::from_str(
         r#"{"bar_tray_hidden":true,"hidden_to_tray":true,"start_hidden":true}"#,
     )
@@ -1881,9 +1778,6 @@ fn legacy_config_loads_and_startup_stays_visible() {
     assert!(parsed.compact_bar, "legacy compact mode must survive");
     assert_eq!(parsed.ui_language, "ru");
     assert!(parsed.suppress_tiles);
-    // The bar visibility contract lives in slint_replay::tray::TraySnapshot
-    // (startup() == visible); nothing in Config can override it — assert the
-    // config side has no opt-out by checking the default shape stays clean.
     let fresh: Config = serde_json::from_str("{}").unwrap();
     assert!(!fresh.compact_bar);
 }

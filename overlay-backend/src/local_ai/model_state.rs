@@ -289,8 +289,6 @@ pub(super) fn repair_managed_model_state_for_model(
         || !cfg.ai_local_prep_model.is_empty()
         || cfg.ai_local_vision != local_vision
         || cfg.vision_provider != vision_provider;
-    // The managed server is launched on 127.0.0.1. Canonicalise legacy
-    // localhost/[::1] spellings so persisted requests use the same listener.
     cfg.ai_local_base_url = LLAMA_BASE_URL.to_string();
     cfg.ai_local_quality = quality;
     cfg.ai_local_model = model_name;
@@ -385,8 +383,6 @@ pub fn local_model_resource_warning(root: &Path, base_url: &str, model_id: &str)
 pub(super) fn selected_llama_gguf(llama_dir: &Path, model: ManagedModel) -> PathBuf {
     match model {
         ManagedModel::Primary26B => {
-            // Selection is a worker-only launch boundary. The exact pinned hash
-            // is rechecked here (or served from the matching metadata cache).
             let present = cached_pinned_file_matches(
                 &llama_dir.join(GEMMA26_FILE),
                 GEMMA26_SIZE,

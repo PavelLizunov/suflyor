@@ -54,7 +54,7 @@ pub fn stamp_to_unix_secs(id: &str) -> Option<u64> {
     }
     let days = days_from_civil(y, mo, d);
     if days < 0 {
-        return None; // pre-1970 stamp — not a real session id
+        return None;
     }
     Some((days as u64) * 86_400 + h * 3600 + mi * 60 + s)
 }

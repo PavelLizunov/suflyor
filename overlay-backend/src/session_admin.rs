@@ -21,10 +21,6 @@ fn is_safe_id(session_id: &str) -> bool {
         && !session_id.contains('/')
         && !session_id.contains('\\')
         && !session_id.contains("..")
-        // The id must be EXACTLY its own file name. This rejects "." (which would
-        // make `<recordings_dir>.join(".")` resolve to the recordings ROOT and
-        // `remove_dir_all` wipe every session's audio) and any other component
-        // trickery. Mirrors conspect::safe_stem's round-trip guard.
         && Path::new(session_id).file_name() == Some(std::ffi::OsStr::new(session_id))
 }
 
@@ -94,7 +90,6 @@ pub fn delete_session_everywhere(store: &mut Store, session_id: &str) -> Result<
     // journal lacks — best-effort, never block the catalog delete.
     crate::conspect::delete(session_id);
     crate::conspect::delete_debrief(session_id);
-    // Catalog row LAST — only reached when every FS artifact above is gone.
     store.delete_session(session_id)?;
     Ok(())
 }
@@ -129,7 +124,6 @@ mod tests {
         assert!(!sessions.join("S1.jsonl").exists());
         assert!(!recordings.join("S1").exists());
 
-        // Retry on a fully-cleaned session is still Ok (idempotent).
         delete_session_files_in(&sessions, &recordings, "S1").unwrap();
     }
 

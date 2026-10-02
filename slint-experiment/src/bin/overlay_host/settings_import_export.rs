@@ -51,9 +51,6 @@ pub(crate) fn wire_import_export(
     pending: &Rc<RefCell<Option<overlay_backend::config::Config>>>,
     overlay_weak: &slint::Weak<OverlayBarWindow>,
 ) {
-    // P1.7 — server-ONLY EXPORT. Native save dialog; writes ONLY the AI/STT
-    // server fields (incl. creds — intentional for a PC->PC transfer) and none
-    // of the machine-local fields (profiles/devices/snippets/context).
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
@@ -71,8 +68,6 @@ pub(crate) fn wire_import_export(
                     match overlay_backend::config::export_server_settings_to(&path, &snapshot) {
                         Ok(()) => format!("[ok] server settings exported to {}", path.display()),
                         Err(e) => {
-                            // Generic + log: the error chain can carry a path /
-                            // internals into this screen-shared field (audit Q8).
                             eprintln!("[overlay-host] server export failed: {e:#}");
                             "[err] export failed (see log)".to_string()
                         }
@@ -103,8 +98,6 @@ pub(crate) fn wire_import_export(
                 w.set_profile_io_result(SharedString::from("import cancelled"));
                 return;
             };
-            // Read + parse + build the redacted preview. The parse error stays
-            // value-free (parse_config_bytes inside). No save happens yet.
             match overlay_backend::config::preview_server_settings_from(&path, &snapshot) {
                 Ok((preview, imported)) => {
                     apply_server_preview(&w, &preview);
@@ -165,7 +158,6 @@ pub(crate) fn wire_import_export(
         });
     }
 
-    // P1.7 — CANCEL the preview: drop the stashed config + hide the diff.
     {
         let weak = win.as_weak();
         let pending = pending.clone();
@@ -187,7 +179,6 @@ pub(crate) fn apply_server_preview(
     win: &SettingsWindow,
     p: &overlay_backend::config::ServerSettingsPreview,
 ) {
-    // "value" or "—" for an empty string; "set"/"—" for a presence bool.
     let v = |s: &str| {
         let t = s.trim();
         if t.is_empty() {

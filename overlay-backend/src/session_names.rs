@@ -53,7 +53,7 @@ fn prune(map: &mut Map) {
         return;
     }
     let mut by_recency: Vec<(String, u128)> = map.iter().map(|(k, e)| (k.clone(), e.ts)).collect();
-    by_recency.sort_by_key(|(_, ts)| std::cmp::Reverse(*ts)); // newest first
+    by_recency.sort_by_key(|(_, ts)| std::cmp::Reverse(*ts));
     let keep: std::collections::HashSet<String> = by_recency
         .into_iter()
         .take(MAX_ENTRIES)
@@ -123,7 +123,6 @@ mod tests {
         set_in(&dir, "sess-1", "Обзор функций", 100).unwrap();
         assert_eq!(get_in(&dir, "sess-1").as_deref(), Some("Обзор функций"));
         assert_eq!(get_in(&dir, "missing"), None);
-        // Replace.
         set_in(&dir, "sess-1", "Новое имя", 200).unwrap();
         assert_eq!(get_in(&dir, "sess-1").as_deref(), Some("Новое имя"));
         let _ = std::fs::remove_dir_all(&dir);
@@ -152,13 +151,12 @@ mod tests {
                 format!("s{i}"),
                 Entry {
                     name: format!("n{i}"),
-                    ts: i as u128, // higher i = newer
+                    ts: i as u128,
                 },
             );
         }
         prune(&mut map);
         assert_eq!(map.len(), MAX_ENTRIES);
-        // The newest (highest ts) must survive; the oldest must be gone.
         assert!(map.contains_key(&format!("s{}", MAX_ENTRIES + 49)));
         assert!(!map.contains_key("s0"));
     }

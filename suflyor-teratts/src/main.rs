@@ -236,8 +236,6 @@ impl<P: Player> Controller<P> {
             self.emit_failed(id, RejectReason::UnknownVoice.token());
             return;
         };
-        // With a known voice list validate up front; when it is empty (model
-        // missing) the synth worker's load failure reports the real reason.
         if !self.voices.is_empty() && !self.voices.iter().any(|v| v == &voice) {
             self.emit_failed(id, RejectReason::UnknownVoice.token());
             return;
@@ -335,8 +333,6 @@ impl<P: Player> Controller<P> {
                         self.generation.store(0, Ordering::Release);
                         self.emit_event(Event::Failed { id: active, reason });
                     } else if let Some(player) = self.player.as_mut() {
-                        // One bad browser-copied fragment must not stop all the
-                        // already synthesized speech. Drain the good chunks.
                         player.end_of_stream();
                     }
                 }
@@ -510,7 +506,6 @@ fn worker(mut controller: Controller<RealPlayer>, rx: mpsc::Receiver<Message>) {
             Message::Shutdown => break,
         }
     }
-    // stdin closed (the app exited): stop speech immediately.
     controller.close_active();
 }
 
@@ -812,7 +807,6 @@ mod tests {
         assert!(total >= 2, "expected multiple chunks, got {total}");
         assert_eq!(h.generation.load(Ordering::Acquire), 1);
 
-        // STOP while every chunk is still "synthesizing" (no results yet).
         h.controller.on_cmd(Cmd::Stop);
         assert_eq!(
             take_events(&h),
@@ -821,7 +815,6 @@ mod tests {
         assert!(h.player_log.borrow().iter().any(|e| e == "stop:1"));
         assert_eq!(h.generation.load(Ordering::Acquire), 0);
 
-        // All stale results arrive late: nothing plays, nothing is emitted.
         for _ in 0..total {
             h.controller.on_synth_result(ok_audio(1));
         }
@@ -836,7 +829,6 @@ mod tests {
         let stale_jobs = h.jobs.borrow().clone();
         assert!(!stale_jobs.is_empty());
 
-        // A newer SPEAK mid-synthesis interrupts the old utterance.
         h.controller.on_cmd(Cmd::Speak("Короткая замена.".into()));
         assert_eq!(
             take_events(&h),
@@ -848,7 +840,6 @@ mod tests {
         );
         assert_eq!(h.generation.load(Ordering::Acquire), 2);
 
-        // Old-generation results are dropped without playing.
         for job in &stale_jobs {
             h.controller.on_synth_result(ok_audio(job.utterance));
         }
@@ -859,7 +850,6 @@ mod tests {
             .iter()
             .any(|e| e.starts_with("feed:1")));
 
-        // The new generation plays and finishes normally.
         h.controller.on_synth_result(ok_audio(2));
         assert_eq!(take_events(&h), vec![Event::Playing { id: 2 }]);
         assert!(h.player_log.borrow().iter().any(|e| e == "feed:2:4"));
@@ -883,7 +873,6 @@ mod tests {
     #[test]
     fn every_started_gets_exactly_one_terminal_event() {
         let mut h = harness();
-        // id 1 superseded, id 2 stopped, id 3 synth-fails, id 4 finishes.
         h.controller.on_cmd(Cmd::Speak(long_text()));
         h.controller.on_cmd(Cmd::Speak(long_text()));
         h.controller.on_cmd(Cmd::Stop);
@@ -934,7 +923,6 @@ mod tests {
             ]
         );
         assert!(h.player_log.borrow().iter().any(|e| e == "stop:1"));
-        // A late duplicate result for the failed utterance is dropped.
         h.controller.on_synth_result(ok_audio(1));
         assert!(take_events(&h).is_empty());
     }
@@ -1063,7 +1051,6 @@ mod tests {
         h.controller.on_cmd(Cmd::Speak("Текст.".into()));
         h.controller.on_cmd(Cmd::Stop);
         take_events(&h);
-        // Late notification from the stopped player: no second terminal event.
         h.controller.on_playback_done(1);
         assert!(take_events(&h).is_empty());
     }
@@ -1090,7 +1077,6 @@ mod tests {
         let jobs = h.jobs.borrow();
         assert_eq!(jobs.len(), 1);
         assert_eq!(jobs[0].lang, "en");
-        // rate +10 → speed 2× → duration_scale 0.5
         assert!((jobs[0].duration_scale - 0.5).abs() < f32::EPSILON);
     }
 
@@ -1104,7 +1090,6 @@ mod tests {
             reason_token(&anyhow::anyhow!("synth: sampler failed: ORT error"), "x"),
             "synth"
         );
-        // No colon: the whole head is filtered to protocol-safe ASCII.
         assert_eq!(reason_token(&anyhow::anyhow!("SYNTH bad"), "x"), "synthbad");
         // Nothing usable falls back to the generic token.
         assert_eq!(reason_token(&anyhow::anyhow!("ошибка"), "x"), "x");

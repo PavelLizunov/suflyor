@@ -197,7 +197,6 @@ impl RuntimeEvents for Noop {
             kind.as_journal_tag(),
             spec.question.len()
         );
-        // Deterministic id: encode kind tag for verifiable test output.
         Ok(format!(
             "noop-tile-{}-{}",
             kind.as_journal_tag(),
@@ -243,8 +242,6 @@ mod tests {
         let id2 = sink
             .spawn_tile_full(spec("kb"), MonitorHint::Auto, false, TileKind::Ai)
             .unwrap();
-        // Stable per (kind, question len): same kind + len=3 → same id
-        // (noop is deterministic by design; real impls assign unique ids).
         assert_eq!(id1, id2);
         assert!(id1.starts_with("noop-tile-ai-"));
     }
@@ -299,8 +296,6 @@ mod tests {
 
     #[test]
     fn monitor_hint_named_carries_string_through_clone_and_debug() {
-        // Named must accept non-empty + empty names, clone cheaply, and
-        // render its content in Debug output so log lines stay useful.
         let h = MonitorHint::Named("\\\\.\\DISPLAY2".into());
         let cloned = h.clone();
         assert_eq!(h, cloned);
@@ -309,8 +304,6 @@ mod tests {
             dbg.contains("DISPLAY2"),
             "Named monitor name must appear in Debug output, got: {dbg}"
         );
-        // Empty-name Named is allowed at the type level; consumers
-        // translate it to None. Sanity-check the round-trip:
         let empty = MonitorHint::Named(String::new());
         assert_ne!(empty, MonitorHint::Auto);
     }
@@ -338,8 +331,6 @@ mod tests {
 
     #[test]
     fn trait_object_forwards_spawn_tile_full_to_impl() {
-        // spawn_tile_full is the only spawn method: verify a trait object
-        // forwards the spec + placement fields to the impl intact.
         #[derive(Default)]
         struct RecordingSink {
             recorded: std::sync::Mutex<Option<(TileSpec, MonitorHint, bool, TileKind)>>,

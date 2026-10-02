@@ -286,7 +286,6 @@ mod tests {
 
     #[test]
     fn parse_args_requires_wav_seg_emb() {
-        // missing wav / seg / emb each error
         assert!(parse_args(&["--seg".into(), "s".into(), "--emb".into(), "e".into()]).is_err());
         assert!(parse_args(&["w".into(), "--emb".into(), "e".into()]).is_err());
         assert!(parse_args(&["w".into(), "--seg".into(), "s".into()]).is_err());
@@ -294,7 +293,7 @@ mod tests {
 
     #[test]
     fn parse_args_rejects_dangling_flag_and_extra_positional() {
-        assert!(parse_args(&["w".into(), "--seg".into()]).is_err()); // no value
+        assert!(parse_args(&["w".into(), "--seg".into()]).is_err());
         assert!(parse_args(&[
             "w".into(),
             "extra".into(),
@@ -303,14 +302,12 @@ mod tests {
             "--emb".into(),
             "e".into()
         ])
-        .is_err()); // second positional
+        .is_err());
     }
 
     #[test]
     fn parse_args_rejects_flag_as_value_and_bad_numbers() {
-        // a flag where a value belongs
         assert!(parse_args(&["w".into(), "--seg".into(), "--emb".into(), "e".into()]).is_err());
-        // non-numeric --num-speakers / --threshold
         let base = ["w", "--seg", "s", "--emb", "e"];
         let mut count = base.map(String::from).to_vec();
         count.extend(["--num-speakers".into(), "x".into()]);

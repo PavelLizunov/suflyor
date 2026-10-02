@@ -651,7 +651,6 @@ pub(crate) fn wire_ai_settings(
             // Log presence only — ai_base_url often embeds the user's LAN
             // IP / proxy port (network-topology leak). See ai.rs no-log note.
             eprintln!("[overlay-host] ai_base_url saved ({} chars)", trimmed.len());
-            // #E10.1 — re-query the cloud model list against the new URL.
             fetch_models(weak.clone(), cfg_c.clone(), ModelTarget::Cloud);
         });
     }
@@ -721,8 +720,6 @@ pub(crate) fn wire_ai_settings(
         });
     }
     {
-        // E9 — experimental prompt-caching toggle (default off; persists +
-        // applies live via the ai.rs static).
         let cfg_c = cfg.clone();
         win.on_ai_prompt_cache_changed(move |on| {
             {
@@ -737,14 +734,11 @@ pub(crate) fn wire_ai_settings(
             diag!("ai_prompt_cache -> {on}");
         });
     }
-    // E9 Phase 1 — local AI provider switch + local-field saves + test.
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         let overlay = overlay_weak.clone();
         win.on_ai_provider_changed(move |idx| {
-            // Selecting the catalog entry only reveals it; activation stays
-            // behind the explicit "Enable for text" action.
             if cfg!(target_os = "macos") && idx == 4 {
                 return;
             }
@@ -831,7 +825,6 @@ pub(crate) fn wire_ai_settings(
                     window.set_codex_copy_status(SharedString::default());
                 }
             }
-            // #E10.1 — switching to Local auto-populates the model dropdown.
             if let Some((
                 base_url,
                 quality,
@@ -1218,7 +1211,6 @@ pub(crate) fn wire_ai_settings(
                 ));
                 refresh_local_model_resource_warning(&w, root, saved_base_url, model);
             }
-            // #E10.1 — re-query models against the new URL.
             fetch_models(weak.clone(), cfg_c.clone(), ModelTarget::Local);
         });
     }
@@ -1295,8 +1287,6 @@ pub(crate) fn wire_ai_settings(
             let mut c = cfg_c.write();
             c.ai_local_thinking = on;
             let _ = overlay_backend::config::save(&c);
-            // Mirror the boot-time + provider-switch logic: no-think is the
-            // INVERSE of "thinking" and only applies to the local provider.
             overlay_backend::ai::set_local_no_think(c.ai_provider == "local" && !on);
         });
     }

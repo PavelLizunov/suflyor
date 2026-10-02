@@ -257,8 +257,6 @@ fn endpoint_id_string(endpoint_id: &PCWSTR) -> Option<String> {
     if endpoint_id.is_null() {
         return None;
     }
-    // SAFETY: Windows owns this null-terminated string for the duration of the
-    // callback. Copy it before returning from the COM call.
     unsafe { endpoint_id.to_string().ok() }
 }
 

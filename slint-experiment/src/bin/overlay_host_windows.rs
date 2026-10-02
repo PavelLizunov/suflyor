@@ -52,18 +52,9 @@ use window_lifecycle::*;
 #[path = "overlay_host/app_bootstrap.rs"]
 mod app_bootstrap;
 
-// G1 (2026-07-03) — layout-independent Ctrl+C/V/X/A/Z/Y via a per-window winit filter.
 #[path = "overlay_host/kbd_shortcuts.rs"]
 mod kbd_shortcuts;
 
-// Phase 2 of the modularization (docs/overlay-host-modularization-plan.md §5.2):
-// diagnostics readiness population + the REDACTED clipboard report live in their
-// own file alongside the binary. `use diagnostics::*;` re-exports the moved
-// `populate_diagnostics`, `build_diag_report`, and the redaction helpers
-// (`redact_ipv4`/`redact_urls`/`is_ipv4`) so existing call sites — and the
-// Settings-tab `Check all` / `Copy report` closures that will move in Phase 7 —
-// resolve unchanged. The shared `hotkey_diag_row` (Phase 3) + `active_stack_label`
-// (also drives the bar) stay here and are reached from diagnostics via its glob.
 #[path = "overlay_host/diagnostics.rs"]
 mod diagnostics;
 use diagnostics::*;
@@ -93,13 +84,6 @@ use hotkeys::*;
 mod recovery;
 use recovery::*;
 
-// Phase 4 of the modularization (docs/overlay-host-modularization-plan.md §5.4):
-// the first-run setup wizard — `open_wizard`, `wire_wizard_steps`, and the
-// wizard-only `refill_wizard_summary` — lives in its own file alongside the
-// binary. `use wizard::*;` re-exports them so `main`'s 2200 ms first-run Timer
-// and `open_settings`' "Run setup wizard" button resolve unchanged. The shared
-// mic guard (`try_acquire_mic`/`release_mic`) the step-4 check uses stays here
-// (a dozen non-wizard sites need it) and is reached from wizard.rs via its glob.
 #[cfg(windows)]
 #[path = "overlay_host/wizard.rs"]
 mod wizard;
@@ -121,8 +105,6 @@ use wizard::*;
 mod vision_capture;
 use vision_capture::*;
 
-// The production capture watchdog is macOS-only. Its pure policy still builds
-// under `cargo test --bin overlay-host` on Windows.
 #[cfg(any(target_os = "macos", test))]
 #[path = "overlay_host/capture_watchdog.rs"]
 mod capture_watchdog;
@@ -164,34 +146,14 @@ use tile_window::*;
 #[path = "overlay_host/tile_copy.rs"]
 mod tile_copy;
 use tile_copy::*;
-// Wave 2 of the `tile_controller.rs` split (plan §5.10): the ASK-INITIATION
-// side — the route model (`AskRoute`/`LiveRoute`/`live_route`), the ask
-// entrypoints (`fire_f3_reask`/`fire_f6_manual_spawn`/`fire_f9_ask`/
-// `fire_ptt_ask`), the follow-up/escalate flow (`fire_followup_ask`/
-// `fire_regenerate`/`wire_escalate`/`wire_voice_followup` + its `VFU_TX` drain),
-// the PTT helpers (`spawn_ptt_watchdog`/`ptt_tile_error`), and the cost/
-// transcript helpers (`warn_if_over_cost_cap`/`cost_cap_reason`/
-// `select_recent_labeled`). `main`'s hotkey DISPATCH + bar-chip wiring resolve
-// these via `use tile_ask::*;`. The STREAM-WRITE side (`OverlayBarBridge` +
-// `handle_ai_event`, `install_streaming_tile`/`gated_events`, `PttStreamSink`)
-// stays in `tile_controller.rs`; the moved code reaches it through the glob.
 #[path = "overlay_host/tile_ask.rs"]
 mod tile_ask;
 use tile_ask::*;
 
-// `tile_cost.rs` — pure cost-cap + transcript-selection helpers split out of
-// `tile_ask.rs` (P1 `tile_ask` split, docs/overlay-host-modular-structure-current.md).
-// `use tile_cost::*;` re-exports them so the ask entrypoints still in `tile_ask.rs`
-// reach `cost_cap_reason` / `warn_if_over_cost_cap` / `select_recent_labeled`
-// through the crate root.
 #[path = "overlay_host/tile_cost.rs"]
 mod tile_cost;
 use tile_cost::*;
 
-// `tile_routes.rs` — the AskRoute (Text/Vision/Cloud) model + LiveRoute split out
-// of `tile_ask.rs` (P1 split). `use tile_routes::*;` re-exports it so the ask
-// entrypoints + the other tile modules (vision_capture, tile_controller) reach
-// `AskRoute` / `LiveRoute` / `live_route` through the crate root.
 #[path = "overlay_host/tile_routes.rs"]
 mod tile_routes;
 use tile_routes::*;
@@ -200,19 +162,10 @@ use tile_routes::*;
 mod mlx_lifecycle;
 use mlx_lifecycle::*;
 
-// `tile_ptt.rs` — push-to-talk ask flow (the 30s watchdog + the PTT tile-error
-// helper + `fire_ptt_ask`) split out of `tile_ask.rs` (P1 split). `use
-// tile_ptt::*;` re-exports it so `main`'s PTT hotkey dispatch reaches
-// `fire_ptt_ask` through the crate root.
 #[path = "overlay_host/tile_ptt.rs"]
 mod tile_ptt;
 use tile_ptt::*;
 
-// `tile_followup.rs` — the tile continuation surfaces (follow-up reframe + the
-// `6ffbc40` fix, `fire_followup_ask` / `fire_regenerate`, `wire_escalate` /
-// `wire_voice_followup` + `VFU_TX`) split out of `tile_ask.rs` (P1 split). `use
-// tile_followup::*;` re-exports them so the F9 / PTT tiles + `main`'s drains
-// reach them through the crate root.
 #[path = "overlay_host/tile_followup.rs"]
 mod tile_followup;
 use tile_followup::*;
@@ -247,7 +200,6 @@ use settings_controller::*;
 #[path = "overlay_host/settings_vision.rs"]
 mod settings_vision;
 use settings_vision::*;
-// Read-aloud (Озвучка) Settings-tab callbacks — voice chooser + speed + test.
 #[path = "overlay_host/settings_voice.rs"]
 mod settings_voice;
 use settings_voice::*;
@@ -263,10 +215,6 @@ use settings_voice::*;
 mod settings_stt;
 use settings_stt::*;
 
-// Phase 3b.3 — the 💭 Memory Settings tab (curated-memory review). `use
-// settings_memory::*;` re-exports `wire_memory`, which `open_settings` calls to
-// bind the/item lists + approve/reject/delete/extract over the SQLite
-// memory tables (3b.1) + the heuristic extractor (3b.2a).
 #[path = "overlay_host/settings_memory.rs"]
 mod settings_memory;
 use settings_memory::*;
@@ -428,12 +376,6 @@ pub(crate) fn try_acquire_mic() -> Option<MicGuard> {
         .then(|| MicGuard(()))
 }
 
-// ===== Tuning constants — extracted from inline literals 2026-05-27 =====
-//
-// Code-quality audit (top-3 priority) flagged 9 scattered bare-number
-// sites: probe durations, status auto-revert, hotkey poll, HWND grab
-// delay, tile dimensions. Grouped here so a future config-driven UI
-// can wire each to a Settings tab without grepping the binary.
 
 /// Mic/sys probe record duration (audio::record_*_blocking).
 const PROBE_DURATION_MS: u64 = 3000;
@@ -510,11 +452,6 @@ fn main() -> Result<(), slint::PlatformError> {
         eprintln!("[overlay-host] hermes bridge: {status}");
     }
 
-    // Read-aloud — initialize the process-global TTS client once (engine +
-    // voice + rate from config; empty voice = auto-pick within the engine).
-    // RC17: `tts_engine` selects Piper (default) or the experimental Tera
-    // sidecar; Piper remains the automatic fallback. The Tera sidecar speaks
-    // `response_language`-tagged text.
     {
         let c = cfg.read();
         let voice = if c.tts_voice.trim().is_empty() {
@@ -549,8 +486,6 @@ fn main() -> Result<(), slint::PlatformError> {
         );
     }
     {
-        // Log key PRESENCE only (never the values) so a tester can confirm
-        // from the log file whether their AI/STT keys are configured.
         let c = cfg.read();
         let active_ai = c.ai_endpoint(false);
         diag!(
@@ -573,9 +508,6 @@ fn main() -> Result<(), slint::PlatformError> {
                 "set"
             }
         );
-        // E10.3 — log the resolved AI + STT stack (which engine + which
-        // endpoint) so the log shows what is actually used. The tester could
-        // not tell from logs whether AI was local/cloud or on which port.
         let ai_desc = format!("{} model={}", c.ai_provider, active_ai.model);
         let stt_desc = match c.stt_provider.as_str() {
             "gigaam" => format!(
@@ -593,23 +525,14 @@ fn main() -> Result<(), slint::PlatformError> {
         diag!("stack: AI={} STT={}", ai_desc, stt_desc);
     }
 
-    // Phase E6 v36 — seed the process-global tile opacity from config so
-    // the very first tile spawned (before the Settings panel is ever
-    // opened) already honours the saved transparency.
     set_global_tile_opacity(cfg.read().tile_body_opacity);
-    // Seed the tile-monitor pin (Settings ▸ tile placement) the same way, so the
-    // first tile honours the saved display even before Settings opens; unset or
-    // an unplugged display → pick_monitor (auto).
     set_global_tile_monitor(
         cfg.read()
             .tile_monitor_name
             .as_deref()
             .and_then(parse_tile_monitor_pin),
     );
-    // E9 — seed the experimental prompt-cache toggle from config.
     ai::set_prompt_cache(cfg.read().ai_prompt_cache);
-    // E10 — disable local-model "thinking" for fast answers unless the user
-    // opted in. Only affects the local AI provider (cloud bodies unchanged).
     {
         let c = cfg.read();
         ai::set_local_no_think(c.ai_provider == "local" && !c.ai_local_thinking);
@@ -638,13 +561,6 @@ fn main() -> Result<(), slint::PlatformError> {
     // before any model load; the session bakes this choice in.
     overlay_backend::stt::configure_gigaam_accelerator(cfg.read().stt_gigaam_gpu);
 
-    // V0.8.4 — warm up LOCAL models shortly after boot so the user's FIRST real
-    // request isn't penalised by cold-start (GigaAM lazy-loads its model on the
-    // first transcribe; an llama-server's first inference fills caches). Fire-and-
-    // forget on the tokio runtime after a short delay (lets an auto-started local
-    // server finish booting first). Cloud is skipped — no cold-start + it would
-    // spend API quota. Best-effort: any error is just logged (the real request
-    // then loads the model the normal way). Reuses the diagnostics pings.
     {
         let cfg_w = cfg.clone();
         rt_handle.spawn(async move {
@@ -661,15 +577,6 @@ fn main() -> Result<(), slint::PlatformError> {
                 )
             };
             if ai_local {
-                // UI-audit 2026-06-13 (user: "Gemma works only after I press
-                // Install local AI"): the old code did ONE test_connection and
-                // gave up on the first HTTP 503 "Loading model" — but a freshly
-                // launched llama-server returns 503 for the whole time the model
-                // is loading into VRAM (seconds for 4B, much longer for 12B). So
-                // the warm-up always "skipped", and the FIRST real ask hit a
-                // still-loading server → felt broken until the user clicked
-                // Install (which polls readiness). POLL here too: retry past 503
-                // until the model answers or a generous deadline (12B cold-load).
                 let t = std::time::Instant::now();
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(180);
                 loop {
@@ -685,7 +592,6 @@ fn main() -> Result<(), slint::PlatformError> {
                             break;
                         }
                         Err(_) if std::time::Instant::now() < deadline => {
-                            // still loading (503) or briefly unreachable — wait.
                             tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                         }
                         Err(e) => {
@@ -726,10 +632,6 @@ fn main() -> Result<(), slint::PlatformError> {
         diag!("[overlay-host] Slint windows excluded from taskbar at creation");
     }
     let overlay = OverlayBarWindow::new()?;
-    // Seed the process-global colour scheme from config, then apply to the bar's
-    // Theme global so the very first paint uses the user's choice (default
-    // 0=Glacier). Every later-created window (tiles, palette, settings) reads
-    // `global_scheme()` at construction.
     set_global_scheme(cfg.read().color_scheme);
     apply_scheme_bar(&overlay, global_scheme());
 
@@ -756,18 +658,12 @@ fn main() -> Result<(), slint::PlatformError> {
         last_transcript_push: std::sync::Mutex::new(
             std::time::Instant::now() - std::time::Duration::from_secs(1),
         ),
-        // Backdate so the first cap hit is visible immediately.
         last_cap_notice: std::sync::Mutex::new(
             std::time::Instant::now() - std::time::Duration::from_secs(20),
         ),
     });
     let events: Arc<dyn RuntimeEvents> = Arc::new(SlintEvents::new(bridge.clone()));
 
-    // Phase D1 — select bundled translation per config.ui_language.
-    // MUST be called AFTER creating at least one component (Slint
-    // requirement: the platform backend has to be initialized first,
-    // and component creation triggers that). Default "ru" per
-    // overlay_backend::config::default_ui_language().
     let lang = cfg.read().ui_language.clone();
     match slint::select_bundled_translation(&lang) {
         Ok(()) => eprintln!("[overlay-host] translation set to {lang}"),
@@ -778,9 +674,6 @@ fn main() -> Result<(), slint::PlatformError> {
     overlay.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
     overlay.set_active_stack(SharedString::from(active_stack_label(&cfg.read())));
 
-    // Poll request latency + process footprints into the footer (~1.5s). The
-    // detailed request sample expires after 30s, so an old fast answer is never
-    // presented as current speed. One timer owns all low-rate telemetry.
     let mlx_prewarm_loading = Arc::new(AtomicBool::new(false));
     let _tps_timer = slint::Timer::default();
     {
@@ -981,13 +874,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     eprintln!("[overlay-host] deep lock boot: foreign :8080 listener left alive");
                 }
             }
-            // Bring the local servers UP FIRST (on the CURRENT engine) so AI + STT
-            // are available immediately; the throttled engine refresh further down
-            // then runs BEHIND the running servers, so a slow ~160 MB download can
-            // never delay first AI/STT availability (review I1).
-            //
-            // One-time best-effort STT launch. Whisper has not shown llama's
-            // dies-on-boot fragility; ensure_servers skips it if it already answers.
             let want_whisper = {
                 let c = cfg_w.read();
                 c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081")
@@ -1194,8 +1080,6 @@ fn main() -> Result<(), slint::PlatformError> {
                                 let s = state_w.lock().unwrap_or_else(|p| p.into_inner());
                                 s.local_ai_lock.clone()
                             };
-                            // A manual install/switch/summary owns the lifecycle:
-                            // let it bring :8080 up; re-check next tick.
                             let guard = lifecycle_lock.try_acquire_owned().ok();
                             if let Some(_ai_guard) = guard {
                                 // Re-check UNDER the lock — a manual op may have
@@ -1217,19 +1101,11 @@ fn main() -> Result<(), slint::PlatformError> {
                                                 let mut s = state_w
                                                     .lock()
                                                     .unwrap_or_else(|p| p.into_inner());
-                                                // Reap only definitively-exited
-                                                // handles (Ok(Some)); keep running
-                                                // (Ok(None)) AND unknown (Err) so a
-                                                // live child is never lost from
-                                                // kill-on-quit tracking.
                                                 s.local_ai_servers.retain_mut(|c| {
                                                     !matches!(c.try_wait(), Ok(Some(_)))
                                                 });
                                                 s.local_ai_servers.extend(started);
                                             }
-                                            // Sync the persisted model name to what
-                                            // is actually serving + refresh the bar
-                                            // so the readout shows the real model.
                                             let label = {
                                                 let mut c = cfg_w.write();
                                                 if outcome
@@ -1260,7 +1136,6 @@ fn main() -> Result<(), slint::PlatformError> {
                                         }
                                         overlay_backend::local_ai::ModelSwitch::PortBusy => {
                                             watchdog.note_attempt(attempt_now, false);
-                                            // started is empty on PortBusy; harmless.
                                             overlay_backend::local_ai::terminate_servers(started);
                                             diag!(
                                                 "local AI :8080 held by a foreign process — not restarting"
@@ -1320,7 +1195,6 @@ fn main() -> Result<(), slint::PlatformError> {
     // alone, so a failed exclusion can't present a false success.
     overlay.set_stealth_active(false);
     overlay.set_timer_label(SharedString::from("00:00"));
-    // v0.13.1 — the mic is LIVE (not muted) by default; the chip shows it lit.
     overlay.set_mic_active(true);
     overlay.set_mic_muted(false);
     {
@@ -1333,16 +1207,6 @@ fn main() -> Result<(), slint::PlatformError> {
 
     apply_overlay_hwnd(&overlay, &state);
 
-    // ===== Mic chip = MUTE toggle (v0.13.1) =====
-    //
-    // Click mutes / un-mutes the microphone. When muted: mic-source transcript
-    // lines are dropped (the transcript forwarder already honours rt.mic_muted)
-    // AND mic audio is NOT written to the session recording (the recorder tee
-    // honours it too) — one control, both effects. System audio is unaffected.
-    // The "test mic level" probe now lives only in Settings → Audio.
-    //
-    // `mic_active` here means "mic is LIVE" (= NOT muted): it starts true, and
-    // the bar chip shows a slashed-mic icon + dims when muted.
     {
         let s = state.clone();
         let weak = overlay.as_weak();
@@ -1358,7 +1222,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     Ok(g) => g,
                     Err(p) => p.into_inner(),
                 };
-                st.mic_active = !muted; // "live" when not muted
+                st.mic_active = !muted;
             }
             if let Some(o) = weak.upgrade() {
                 o.set_mic_active(!muted);
@@ -1414,10 +1278,6 @@ fn main() -> Result<(), slint::PlatformError> {
                 return;
             }
 
-            // During a session the production capture already owns the macOS
-            // process tap. Reuse its System chunks instead of opening a second
-            // aggregate device with the same UID. Outside a session the bounded
-            // standalone probe remains unchanged.
             let session_active =
                 slint_replay::runtime_state::lock(&slint_rt_sys).capture.is_some();
             let use_session_stream = session_active
@@ -1531,19 +1391,6 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Session timer (Phase E3: real session start/stop) =====
-    //
-    // Clicking the timer chip now starts or stops the real audio +
-    // STT pipeline via slint_session::start_session/stop_session. On
-    // start failure (e.g. groq_api_key empty), the chip stays off and
-    // the diagnostic appears via the bridge's tile:error path
-    // (currently logged; UI toast comes in a follow-up).
-    //
-    // ── Pause / Resume (v0.22.0) — the bar chip next to the timer. Toggles
-    // SlintRuntime.paused (the flag the audio + transcript forwarders gate on),
-    // mirrors it into AppState for the timer-freeze, and flips the chip icon +
-    // status pill. The chip is only shown while a session runs, so this fires
-    // only mid-session. Resume keeps the SAME session (same recording + id).
     {
         let s = state.clone();
         let weak = overlay.as_weak();
@@ -1577,10 +1424,6 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // The chip's local AppState.timer_active flag tracks the user's
-    // INTENT (toggle on / toggle off). The real session lifecycle
-    // (capture handle, tasks) lives in SlintRuntime — they're kept
-    // in sync via this handler.
     {
         let s = state.clone();
         let weak = overlay.as_weak();
@@ -1601,10 +1444,6 @@ fn main() -> Result<(), slint::PlatformError> {
             if stop_pending_for_timer_toggle.load(Ordering::Acquire) {
                 return;
             }
-            // v0.22.0 — every Start/Stop toggle clears any paused state: a new
-            // session starts recording, and a Stop ends it outright. The audio
-            // pipeline's own flag is reset here too (start_session also resets
-            // it, but a Stop-while-paused must clear it now).
             slint_replay::runtime_state::lock(&rt_for_timer).paused = false;
             #[cfg(target_os = "macos")]
             let session_intent = {
@@ -1616,11 +1455,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     .fetch_add(1, Ordering::AcqRel)
                     .wrapping_add(1)
             };
-            // Capture the elapsed session seconds BEFORE the stop-reset below.
-            // The debrief snapshot further down used to RE-READ st.session_secs
-            // AFTER this handler had already zeroed it on Stop, so every session
-            // measured 0 ms → the debrief gate always saw "<30s" → the
-            // post-meeting debrief NEVER fired (the real "разбор не появляется").
             let (new_active, session_secs_at_stop) = {
                 let mut st = match s.lock() {
                     Ok(g) => g,
@@ -1639,19 +1473,13 @@ fn main() -> Result<(), slint::PlatformError> {
                 o.set_session_paused(false);
                 if !new_active {
                     o.set_timer_label(SharedString::from("00:00"));
-                    // v0.22.0 — clear the auto-name so a stopped session shows none.
                     o.set_session_name(SharedString::from(""));
-                    // Clear any "paused"/"recording" status back to idle so a
-                    // Stop-while-paused doesn't leave a stale pill.
                     o.set_status_text(SharedString::from("idle"));
                     o.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
                 }
             }
 
             if new_active {
-                // Starting — kick off real capture/STT/forwarder via
-                // the slint_session orchestrator. Must run within the
-                // tokio runtime context (spawn_* calls inside).
                 let events_c = events_for_timer.clone();
                 let cfg_c = cfg_for_timer.clone();
                 let rt_c = rt_for_timer.clone();
@@ -1670,7 +1498,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                     if let Err(e) = slint_session::start_session(events_c, cfg_c, rt_c) {
                         eprintln!("[overlay-host] start_session failed: {e:#}");
-                        // Revert UI toggle since the pipeline didn't start.
                         let _ = slint::invoke_from_event_loop(move || {
                             #[cfg(target_os = "macos")]
                             if generation_c.load(Ordering::Acquire) != session_intent {
@@ -1696,20 +1523,11 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                 });
             } else {
-                // Stopping — snapshot transcript + abort tasks + fire
-                // Phase E5 post-meeting debrief if the gate allows.
                 let rt_c = rt_for_timer.clone();
                 let events_c = events_for_timer.clone();
                 let cfg_c = cfg_for_timer.clone();
                 let rt_handle_c = rt_handle_for_timer.clone();
-                // Value captured BEFORE the stop-reset above (the live counter is
-                // already 0 here). This gates the debrief's ≥30s check, so a real
-                // session no longer reads as "too short".
                 let session_secs_snapshot = session_secs_at_stop;
-                // D — session id (journal stem) for persisting the debrief. It
-                // survives Stop, but snapshot it now since `rt_c` is moved into
-                // stop_session below. Empty (no session) → the debrief save is
-                // skipped (the live tile still shows).
                 let session_id_snapshot = slint_replay::runtime_state::lock(&rt_for_timer)
                     .current_session_id
                     .clone()
@@ -1738,8 +1556,6 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // macOS-only fail-safe for an already-flowing capture that stops making
-    // progress. It finalizes this host's sole session and waits for manual Start.
     #[cfg(target_os = "macos")]
     let _capture_watchdog_timer = {
         let timer = Timer::default();
@@ -1840,8 +1656,6 @@ fn main() -> Result<(), slint::PlatformError> {
                         stop_pending.store(false, Ordering::Release);
                         return;
                     }
-                    // ponytail: transparent restart stays deferred until the journal and
-                    // recorder can continue one session without splitting its history.
                     diag!("[macos] capture watchdog: stopping stagnant capture");
                     stop_session_and_maybe_debrief(
                         runtime,
@@ -1892,9 +1706,6 @@ fn main() -> Result<(), slint::PlatformError> {
     let tiles_for_poll = tiles.clone();
     let cfg_for_poll = cfg.clone();
     let weak_overlay_poll = overlay.as_weak();
-    // V5 — auto-tiles carry a COMPLETE answer (not a stream); to give them the
-    // same follow-up / 🔄 / 🎤 as F9 we seed the conversation here, which needs
-    // the bridge (conversations map), events, runtime, and tokio handle.
     let bridge_for_poll = bridge.clone();
     let events_for_poll = events.clone();
     let slint_rt_for_poll = slint_rt.clone();
@@ -1922,15 +1733,9 @@ fn main() -> Result<(), slint::PlatformError> {
         while processed < MAX_SPAWNS_PER_TICK {
             let Ok(req) = spawn_rx.try_recv() else { break };
             processed += 1;
-            // Drop oldest tile if we're at the cap. Slint releases
-            // the native window when the Strong refcount hits 0.
             while tiles_for_poll.borrow().len() >= MAX_LIVE_TILES {
                 let dropped = tiles_for_poll.borrow_mut().remove(0);
-                // Abort the evicted tile's in-flight AI request (keyed by the
-                // synchronous tile-id; -1 for non-"+ tile" tiles is a no-op).
                 abort_tile_stream(dropped.get_tile_id());
-                // FIX #8 — prune this tile's conversation too (no-op if it had
-                // none), so the map doesn't outlive the force-evicted tile.
                 bridge_for_poll.drop_conversation(dropped.get_convo_id());
                 let _ = dropped.hide();
                 slint_replay::win32::force_hide(dropped.window());
@@ -1938,8 +1743,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     "[overlay-host] live tile cap hit (>= {MAX_LIVE_TILES}) — dropping oldest"
                 );
             }
-            // Keep the bar's open-tile count honest even if the new() below
-            // fails after a cap eviction (review minor).
             refresh_open_tiles(&weak_overlay_poll, &tiles_for_poll);
             let tile = match TileWindow::new() {
                 Ok(t) => t,
@@ -1965,21 +1768,15 @@ fn main() -> Result<(), slint::PlatformError> {
                 req.kind.as_journal_tag(),
                 if req.stealth { "stealth" } else { "" }
             )));
-            // Phase E6 v12 — first highlight (if any) becomes the
-            // trigger badge. Backend's trigger_highlights() already
-            // formats it as "keyword ..." or "question ...".
-            // Color: orange for keyword/aggressive, blue for question.
             if let Some(first) = req.spec.highlights.first() {
                 tile.set_trigger_label(SharedString::from(first.clone()));
                 let is_keyword = first.starts_with("keyword");
                 tile.set_trigger_color(if is_keyword {
-                    slint::Color::from_rgb_u8(0xfb, 0x92, 0x3c) // orange
+                    slint::Color::from_rgb_u8(0xfb, 0x92, 0x3c)
                 } else {
-                    slint::Color::from_rgb_u8(0x6c, 0xcf, 0xff) // cyan
+                    slint::Color::from_rgb_u8(0x6c, 0xcf, 0xff)
                 });
             }
-            // Render answer markdown via the spike adapter
-            // (same pattern as on_spawn_tile_clicked at ~line 996).
             let blocks: Vec<MarkdownBlock> = markdown::parse(&req.spec.answer)
                 .into_iter()
                 .map(|b| MarkdownBlock {
@@ -1991,8 +1788,6 @@ fn main() -> Result<(), slint::PlatformError> {
                 })
                 .collect();
             tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
-            // Phase E6 v20 — apply saved tile opacity from config so
-            // new auto-tiles inherit the user's last slider setting.
             tile.set_body_opacity(cfg_for_poll.read().tile_body_opacity);
             let weak_tile = tile.as_weak();
             // Phase E6 v17 — capture the vec so close-handler can
@@ -2007,7 +1802,6 @@ fn main() -> Result<(), slint::PlatformError> {
             tile.on_close_clicked(move || {
                 eprintln!("[overlay-host] tile (poll/F3) close_clicked fired");
                 if let Some(t) = weak_tile.upgrade() {
-                    // FIX #8 — prune this tile's conversation (no-op if none).
                     bridge_for_close.drop_conversation(t.get_convo_id());
                     let close_hwnd = grab_hwnd(t.window()).ok();
                     let _ = t.hide();
@@ -2025,9 +1819,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                 }
             });
-            // Phase E6 v17 — pin toggles visual state. Pinned tiles
-            // stay around even when session stops (auto-hide skips
-            // them). User: "кнопка pin не работает".
             let weak_pin = tile.as_weak();
             tile.on_pin_clicked(move || {
                 eprintln!("[overlay-host] tile (poll/F3) pin_clicked fired");
@@ -2051,11 +1842,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     toggle_tile_maximize(hwnd, &t);
                 }
             });
-            // V5 — auto-tiles (auto-detector / F3 reask / F6 manual) carry a
-            // COMPLETE answer, not a stream, so seed the conversation manually
-            // so follow-up + 🔄 + 🎤 work exactly like F9. Only AI-answer kinds
-            // get a dialog — KB / snippet / translate / reload aren't
-            // conversational, and Vision goes through launch_vision_for_bgra.
             let is_conversational = matches!(
                 req.kind,
                 TileKind::Ai
@@ -2069,28 +1855,12 @@ fn main() -> Result<(), slint::PlatformError> {
             if is_conversational && !req.spec.answer.trim().is_empty() {
                 let convo_id = CONVO_SEQ.fetch_add(1, Ordering::Relaxed) as i32;
                 tile.set_convo_id(convo_id);
-                tile.set_followup_busy(false); // answer already complete
-                                               // Seed [system, user(question), assistant(answer)] the same way
-                                               // F9 builds history, so regenerate re-asks the same question and
-                                               // a follow-up carries full context.
+                tile.set_followup_busy(false);
                 let (meeting_context, response_language) = {
                     let c = cfg_for_poll.read();
                     (c.meeting_context.clone(), c.response_language.clone())
                 };
                 let question = req.spec.question.clone();
-                // v0.12.2 — Summary tiles seed their dialog with the REAL recap
-                // payload ([summary-prompt, transcript]) instead of the bare title,
-                // so the generic regenerate/escalate (which re-ask the stored
-                // [system, user] of a 1-user-turn history WITHOUT reframing) rebuild
-                // the summary correctly. ТЗ1-Баг2 — the transcript is taken from the
-                // session's PERSISTED conspect sources (what actually built THIS
-                // summary), so a follow-up on an archived summary answers about that
-                // session; the LIVE accumulator is only the fallback when no conspect
-                // sources exist. `summary_seed_has_transcript` records whether the
-                // seed captured a transcript at all — a session restart before this
-                // tile paints can leave both empty → 🔄/🧠 rebuild from nothing, so we
-                // leave them OFF for that (rare) tile below. Displayed answer is
-                // unaffected (already computed). Stays true for every non-Summary kind.
                 let mut summary_seed_has_transcript = true;
                 if matches!(req.kind, TileKind::Summary) {
                     let (is_local, transcript) = {
@@ -2102,18 +1872,6 @@ fn main() -> Result<(), slint::PlatformError> {
                             .collect::<Vec<_>>();
                         (is_local, tx)
                     };
-                    // v0.16.0 — same keyword-gated memory LOGIC as the bar
-                    // build. Computed at seed time, so a 🔄/🧠 rebuild uses the
-                    // CURRENT transcript + memory — the v0.12.2 "rebuild" sema:
-                    // the transcript here is also read live, and a fact added
-                    // after the bar press SHOULD shape the rebuild. Small
-                    // read-only catalog query on a user-initiated path (same
-                    // budget class as context_for_meeting, v0.11.2).
-                    // v0.17.0 — for an OVER-BUDGET transcript the bar runs
-                    // map-reduce (runtime.rs); a seeded pair can't replay N map
-                    // calls, so this 🔄 seed falls back to the middle-truncated
-                    // single pass — a documented degraded rebuild. The bar /
-                    // archive button remains the quality path.
                     let is_ru = response_language == "ru";
                     // v0.17.1 (мега-аудит) — format ONCE and reuse for both the
                     // memory_ref gating and the seed (was two full passes over
@@ -2156,7 +1914,6 @@ fn main() -> Result<(), slint::PlatformError> {
                         role: "assistant".into(),
                         content: ai::MessageContent::Text(req.spec.answer.clone()),
                     });
-                    // FIX #8 — bounded insert (caps + half-evicts the map).
                     bridge_for_poll.store_conversation(
                         convo_id,
                         ConvoState {
@@ -2192,9 +1949,6 @@ fn main() -> Result<(), slint::PlatformError> {
                             content: ai::MessageContent::Text(rendered.clone()),
                         });
                         let _ = slint::invoke_from_event_loop(move || {
-                            // Seed + un-busy ONLY if that exact tile still exists — a tile
-                            // closed mid-build must not get a late, orphaned conversation.
-                            // FIX #8 — bounded insert (caps + half-evicts the map).
                             if let Some(t) = weak_seed.upgrade() {
                                 bridge_seed.store_conversation(
                                     convo_id,
@@ -2205,7 +1959,6 @@ fn main() -> Result<(), slint::PlatformError> {
                         });
                     });
                 }
-                // V0.8.1 — per-tile live route (sticky-cloud after 🧠).
                 let live = live_route(AskRoute::Text);
                 {
                     let weak_fu = tile.as_weak();
@@ -2278,13 +2031,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     );
                 }
             }
-            // v0.18.6 — a summary Error tile that carries a session id gets a
-            // working «Повторить» button. It resumes from the PERSISTED conspect
-            // (re-maps only the parts that failed, then re-runs the cheap reduce)
-            // instead of re-mapping everything or asking the user to paste the
-            // conspect — the fix for the tester's "empty window / begs for the
-            // conspect text" bugs. Error tiles are not conversational, so this is
-            // their only wired action besides close.
             if matches!(req.kind, TileKind::Error) {
                 if let Some(session_id) = req.spec.summary_session.clone() {
                     tile.set_can_retry(true);
@@ -2295,8 +2041,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     let cfg_retry = cfg_for_poll.clone();
                     let rt_handle_retry = rt_handle_for_poll.clone();
                     tile.on_retry_clicked(move || {
-                        // One summary at a time — reuse the bar's busy latch so a
-                        // retry can't stack with a bar press or a second retry.
                         if let Some(o) = weak_overlay_retry.upgrade() {
                             if o.get_summary_busy() {
                                 eprintln!(
@@ -2306,8 +2050,6 @@ fn main() -> Result<(), slint::PlatformError> {
                             }
                             o.set_summary_busy(true);
                         }
-                        // Dismiss the error tile (drop it from the live Vec like
-                        // the close handler) — the resume spawns a fresh tile.
                         if let Some(t) = weak_retry.upgrade() {
                             let close_hwnd = grab_hwnd(t.window()).ok();
                             let _ = t.hide();
@@ -2336,7 +2078,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     });
                 }
             }
-            // (monitor placement applied via apply_tile_hwnd_with_monitor.)
             present_tile_window(&tile);
             apply_tile_hwnd_with_monitor(&tile);
             tiles_for_poll.borrow_mut().push(tile);
@@ -2344,9 +2085,6 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     });
 
-    // Periodic timer (every 1 s) — updates the session-timer label
-    // when active. Slint Timer::default() with `start(Repeated, ...)`
-    // pattern.
     let tick_state = state.clone();
     let tick_weak = overlay.as_weak();
     let tick_slint_rt = slint_rt.clone();
@@ -2370,9 +2108,6 @@ fn main() -> Result<(), slint::PlatformError> {
             if active {
                 if let Some(o) = tick_weak.upgrade() {
                     o.set_timer_label(SharedString::from(format_timer(secs)));
-                    // v0.22.0 — mirror the (background) auto-name onto the bar.
-                    // Reading rt each tick is cheap (1 s cadence); the compare
-                    // skips a redundant set + repaint when the name is unchanged.
                     let want = {
                         let s = slint_replay::runtime_state::lock(&tick_slint_rt);
                         let full = s.session_name.clone().unwrap_or_default();
@@ -2386,24 +2121,12 @@ fn main() -> Result<(), slint::PlatformError> {
         },
     );
 
-    // (#E10.2) The bar's brain-emoji cloud-model cycle chip was removed —
-    // model choice now lives in Settings (the cloud + local model dropdowns)
-    // and the bar's active-stack readout shows what's actually live.
 
-    // (#E10.2) The ⭐ bookmark chip was removed (no use-case found).
-    // journal::append_bookmark stays available for a future re-add.
 
-    // KB palette — opened via the F4 global hotkey (registered below).
-    // (The 💡 tips chip was removed; F4 is the sole entry point.)
     let palette: Rc<RefCell<Option<PaletteWindow>>> = Rc::new(RefCell::new(None));
-    // V0.8.3 — "Написать" text-input window, created on demand like the palette.
     let text_ask: Rc<RefCell<Option<TextAskWindow>>> = Rc::new(RefCell::new(None));
-    // First-run setup wizard, created on demand like text_ask / palette.
     let wizard: Rc<RefCell<Option<WizardWindow>>> = Rc::new(RefCell::new(None));
-    // 🆘 Help window (F1 / 🆘 chip), created on demand.
     let help: Rc<RefCell<Option<HelpWindow>>> = Rc::new(RefCell::new(None));
-    // 🗄 Session-archive browser (F7 + 🗄 bar chip), created on demand like the
-    // palette/help. Phase 3a — browse + FTS-search the SQLite session catalog.
     let archive: Rc<RefCell<Option<ArchiveWindow>>> = Rc::new(RefCell::new(None));
     // ТЗ1 — process-lifetime slot for the read-only transcript viewer so it
     // (a) survives the archive closing, like session tiles, and (b) sits in the
@@ -2459,8 +2182,6 @@ fn main() -> Result<(), slint::PlatformError> {
                                 s.is_ok(),
                                 t.is_ok()
                             );
-                            // Detail for the log; a pre-create miss also self-heals:
-                            // the F8 show path re-applies + verifies on EVERY show (I4).
                             if let Err(e) = s {
                                 eprintln!(
                                     "[overlay-host] capture pre-stealth: stealth FAILED: {e}"
@@ -2538,14 +2259,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     continue;
                 }
                 if event.id == f4_id {
-                    // Phase E6 v37 — F4 is a TOGGLE, not open-only. User
-                    // report: "при вызове f4 я не могу сразу закрыть его".
-                    // Previously the second F4 press hit open_palette's
-                    // reuse branch (just re-show) so F4 could never close
-                    // the palette; and Esc inside the window doesn't fire
-                    // because a hotkey-spawned always-on-top window has no
-                    // keyboard focus yet. A toggle is focus-independent —
-                    // the global hotkey always fires regardless of focus.
                     let palette_open = hp_palette.borrow().is_some();
                     if palette_open {
                         diag!("[overlay-host] F4 pressed — closing palette (toggle)");
@@ -2557,9 +2270,6 @@ fn main() -> Result<(), slint::PlatformError> {
                         open_palette(&hp_palette, &hp_tiles, &hp_state, &hp_weak_overlay);
                     }
                 } else if event.id == f1_id {
-                    // V0.8.4 — F1 toggles the 🆘 help (focus-independent, like F4;
-                    // a hotkey-spawned always-on-top window has no keyboard focus,
-                    // so Esc inside it wouldn't fire reliably as the only closer).
                     let help_open = hp_help.borrow().is_some();
                     if help_open {
                         diag!("[overlay-host] F1 pressed — closing help (toggle)");
@@ -2574,10 +2284,6 @@ fn main() -> Result<(), slint::PlatformError> {
                         open_help(&hp_help, &hp_weak_overlay);
                     }
                 } else if event.id == f7_id {
-                    // Phase 3a — F7 toggles the 🗄 session archive (focus-
-                    // independent, like F4/F1; a hotkey-spawned always-on-top
-                    // window starts unfocused, so a toggle is the reliable
-                    // closer rather than relying on Esc landing).
                     let archive_open = hp_archive.borrow().is_some();
                     if archive_open {
                         diag!("[overlay-host] F7 pressed — closing archive (toggle)");
@@ -2602,24 +2308,12 @@ fn main() -> Result<(), slint::PlatformError> {
                         );
                     }
                 } else if event.id == f3_id {
-                    // Phase E3 slice 3 — F3 reask via overlay-backend's
-                    // ported reask_last. Refines the last AI answer using
-                    // newest transcript context. Replaces the prior D2
-                    // stub that re-invoked the +tile chip.
                     diag!("[overlay-host] F3 pressed — reask_last");
                     fire_f3_reask(&hp_events, &hp_cfg, &hp_rt, &hp_rt_handle);
                 } else if event.id == f6_id {
-                    // Phase E3 slice 3 — F6 manual spawn from last
-                    // transcript line (bypasses auto-detector).
                     diag!("[overlay-host] F6 pressed — manual_spawn_tile");
                     fire_f6_manual_spawn(&hp_events, &hp_cfg, &hp_rt, &hp_rt_handle);
                 } else if event.id == f9_id {
-                    // Phase E3 slice 2 — F9 live AI ask via overlay-backend's
-                    // `ask_stream_loop`. Synchronously creates a placeholder
-                    // tile + registers it in the bridge's current_streaming
-                    // slot, then spawns the streaming AI task. Deltas land
-                    // back through the bridge's ai:event handler and update
-                    // the tile body live.
                     diag!("[overlay-host] F9 pressed — live ask streaming");
                     fire_f9_ask(
                         &hp_bridge,
@@ -2633,10 +2327,6 @@ fn main() -> Result<(), slint::PlatformError> {
                         None,
                     );
                 } else if event.id == sf9_id {
-                    // V0.8.0 (Поток D) — Shift+F9 escalates ONE ask to the smart
-                    // cloud model (deeper reasoning), without flipping the
-                    // persistent provider. Egress is intentional + visible (the
-                    // tile shows a 🧠 cloud badge).
                     diag!("[overlay-host] Shift+F9 — one-shot CLOUD escalation");
                     fire_f9_ask(
                         &hp_bridge,
@@ -2650,7 +2340,6 @@ fn main() -> Result<(), slint::PlatformError> {
                         None,
                     );
                 } else if event.id == f8_id {
-                    // V3 — F8 screenshot → Lightshot region select → vision (describe).
                     diag!("[overlay-host] F8 pressed — capture overlay");
                     fire_f8_vision_capture(
                         &hp_bridge,
@@ -2661,8 +2350,6 @@ fn main() -> Result<(), slint::PlatformError> {
                         &hp_tiles,
                         &hp_weak_overlay,
                         &hp_capture_overlay,
-                        // Plain F8: describe, OR test-practice if the Settings
-                        // toggle is on (Shift+F8 below always = translate).
                         if hp_cfg.read().vision_test_practice {
                             overlay_backend::vision::VisionMode::TestPractice
                         } else {
@@ -2670,7 +2357,6 @@ fn main() -> Result<(), slint::PlatformError> {
                         },
                     );
                 } else if event.id == sf8_id {
-                    // Feature #3 — Shift+F8: same region capture, TRANSLATE mode.
                     diag!("[overlay-host] Shift+F8 pressed — translate capture");
                     fire_f8_vision_capture(
                         &hp_bridge,
@@ -2684,8 +2370,6 @@ fn main() -> Result<(), slint::PlatformError> {
                         overlay_backend::vision::VisionMode::Translate,
                     );
                 } else if event.id == cf8_id {
-                    // Read-aloud feature — Ctrl+F8: same region capture, OCR mode
-                    // (verbatim transcription of the selected text → later TTS).
                     diag!("[overlay-host] Ctrl+F8 pressed — OCR / read-aloud capture");
                     fire_f8_vision_capture(
                         &hp_bridge,
@@ -2699,8 +2383,6 @@ fn main() -> Result<(), slint::PlatformError> {
                         overlay_backend::vision::VisionMode::Ocr,
                     );
                 } else if event.id == sa1_id {
-                    // Shift+Alt+1 — read the SELECTED text: copy the foreground
-                    // selection, then read the clipboard aloud (zero OCR artifacts).
                     diag!("[overlay-host] Shift+Alt+1 — read selection (clipboard)");
                     let saved = slint_replay::win32::clipboard_read_text();
                     let bridge_sa1 = hp_bridge.clone();
@@ -2758,8 +2440,6 @@ fn main() -> Result<(), slint::PlatformError> {
                         let tiles_sa1 = tiles_sa1.clone();
                         let overlay_sa1 = overlay_sa1.clone();
                         let title = title.clone();
-                        // Ctrl+C is async — the foreground app writes the clipboard
-                        // on its own message loop; read after a short second delay.
                         Timer::single_shot(std::time::Duration::from_millis(140), move || {
                             let copied = slint_replay::win32::clipboard_read_text();
                             diag!(
@@ -2768,8 +2448,6 @@ fn main() -> Result<(), slint::PlatformError> {
                             );
                             restore_text_clipboard(saved.as_ref());
                             if let Some(text) = copied {
-                                // Spawn a visible tile showing the text + 🔊/⏯/📋/✕,
-                                // which auto-starts the read-aloud.
                                 spawn_text_tile(
                                     &text,
                                     &title,
@@ -2782,12 +2460,8 @@ fn main() -> Result<(), slint::PlatformError> {
                             }
                         });
                     });
-                    // Poll the actual key state instead of guessing a fixed
-                    // release delay. At 25 ms x 40 this remains bounded.
                     after_read_aloud_hotkey_release(40, copy_selection);
                 } else if event.id == sa2_id {
-                    // Shift+Alt+2 — OCR a screen region and read it using the
-                    // platform-local engine (Tesseract / Apple Vision).
                     diag!("[overlay-host] Shift+Alt+2 — OCR region + read");
                     fire_f8_vision_capture(
                         &hp_bridge,
@@ -2801,8 +2475,6 @@ fn main() -> Result<(), slint::PlatformError> {
                         overlay_backend::vision::VisionMode::Ocr,
                     );
                 } else if event.id == sa3_id {
-                    // Shift+Alt+3 — pause / resume the current read-aloud (shares
-                    // the latch with the tile's ⏯, and syncs that tile's icon).
                     diag!("[overlay-host] Shift+Alt+3 — pause/resume read-aloud");
                     let paused = toggle_pause();
                     let target = current_speaking_convo();
@@ -2833,8 +2505,6 @@ fn main() -> Result<(), slint::PlatformError> {
     let ptt_state: Rc<RefCell<Option<PttRec>>> = Rc::new(RefCell::new(None));
     let (ptt_pcm_tx, mut ptt_pcm_rx) =
         tokio_mpsc::unbounded_channel::<(audio::AudioSource, Arc<AtomicBool>, Vec<i16>)>();
-    // V5 — voice follow-up channel: a tile 🎤 ships (convo_id, route, text)
-    // here once recorded + transcribed; the drain below routes it to the tile.
     let (vfu_tx, mut vfu_rx) = tokio_mpsc::unbounded_channel::<(i32, AskRoute, String)>();
     let _ = VFU_TX.set(vfu_tx);
 
@@ -2846,15 +2516,9 @@ fn main() -> Result<(), slint::PlatformError> {
         let state_busy = state.clone();
         overlay.on_ptt_mic_pressed(move || {
             if ptt_state.borrow().is_some() {
-                return; // one PTT at a time
+                return;
             }
-            // M2 — single-mic guard (shared with voice follow-up + dictation).
             let Some(mic_guard) = try_acquire_mic() else {
-                // Suflyor E1 — mic held by a tile voice follow-up / dictation.
-                // Used to return SILENTLY; now flash the same generic notice
-                // the sibling mic consumers show (no device names) on the bar's
-                // status pill, reverting after STATUS_REVERT_SECS exactly like
-                // the sys-probe result does.
                 if let Some(o) = weak.upgrade() {
                     o.set_status_text(SharedString::from(mic_busy_status(cfg_p.read().ui_is_ru())));
                     o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x9b, 0x2b));
@@ -3036,7 +2700,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                 }
                 if pcm.is_empty() {
-                    continue; // record error or empty hold — nothing to ask
+                    continue;
                 }
                 fire_ptt_ask(
                     (source, pcm),
@@ -3071,7 +2735,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     .find(|t| t.get_convo_id() == convo_id)
                     .map(|t| t.as_weak());
                 let Some(weak) = weak else {
-                    continue; // tile already closed — drop the result
+                    continue;
                 };
                 if text.trim().is_empty() {
                     if let Some(t) = weak.upgrade() {
@@ -3140,33 +2804,18 @@ fn main() -> Result<(), slint::PlatformError> {
             if let Some(o) = weak.upgrade() {
                 apply_bar_stealth(&o, &s, new_stealth);
             }
-            // Every other open window through the single registry path.
             registry_stealth.apply_stealth(new_stealth);
         });
     }
 
-    // ===== Close all tiles (#110) =====
-    // User: "не хватает кнопки закрыть все тайлы когда их много". Bulk-close
-    // every open tile window in one click. Resets the spawn counter to 0,
-    // which also hides the bar's "close all" chip again (it's gated on
-    // tiles-spawned > 0).
     {
         let tiles_ref = tiles.clone();
         let s = state.clone();
         let weak = overlay.as_weak();
-        // FIX #8 — prune each closed tile's conversation too (no-op for the
-        // non-conversational ones), so bulk-close doesn't orphan ConvoState.
         let bridge_for_close_all = bridge.clone();
-        // Phase 1 (§5.1) — refresh the bar's open-tile chip through the registry.
         let registry_close_all = registry.clone();
         overlay.on_close_all_tiles_clicked(move || {
-            // Abort every tile's in-flight AI request so bulk-close frees the
-            // GPU instead of leaving the model generating for closed tiles.
             abort_all_tile_streams();
-            // Reset cascade placement — close-all clears the screen, so the next
-            // tile must restart from the top-right cluster. This bulk path calls
-            // refresh_tiles_chip (NOT refresh_open_tiles), so it would otherwise
-            // miss the n==0 reset and keep marching left — the user's exact repro.
             TILE_SLOT_COUNTER.store(0, std::sync::atomic::Ordering::Relaxed);
             let n = {
                 let mut v = tiles_ref.borrow_mut();
@@ -3191,14 +2840,11 @@ fn main() -> Result<(), slint::PlatformError> {
             if let Some(o) = weak.upgrade() {
                 o.set_tiles_spawned(0);
                 o.set_can_restore_tile(false);
-                // #B1 — vec was just cleared; sync the live open-tile count to 0.
                 registry_close_all.refresh_tiles_chip(&o);
             }
         });
     }
 
-    // A single-click undo for the read-aloud tile's close button. The same
-    // component and conversation are restored; no AI/TTS request is repeated.
     {
         let tiles_ref = tiles.clone();
         let weak = overlay.as_weak();
@@ -3216,7 +2862,6 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== 📷 capture chip — same flow as the F8 hotkey (screenshot → vision) =====
     {
         let bridge_c = bridge.clone();
         let events_c = events.clone();
@@ -3237,7 +2882,6 @@ fn main() -> Result<(), slint::PlatformError> {
                 &tiles_c,
                 &weak_c,
                 &cap_c,
-                // 📷 chip mirrors plain F8 (describe / test-practice per Settings).
                 if cfg_c.read().vision_test_practice {
                     overlay_backend::vision::VisionMode::TestPractice
                 } else {
@@ -3247,7 +2891,6 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== "Написать" — typed-question input window (V0.8.3) =====
     {
         let slot = text_ask.clone();
         let bridge_c = bridge.clone();
@@ -3271,7 +2914,6 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Spawn tile (Phase C: real AI ask via overlay_backend::ai) =====
     {
         let s = state.clone();
         let t = tiles.clone();
@@ -3293,8 +2935,6 @@ fn main() -> Result<(), slint::PlatformError> {
             };
             overlay.set_tiles_spawned(seq as i32);
             let display_seq = TILE_DISPLAY_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
-            // Synchronous id — the abort-registry key (the HWND isn't realized
-            // yet at this point, so keying on it lost the registration).
             let tile_id = next_tile_id();
 
             let tile = match TileWindow::new() {
@@ -3305,11 +2945,6 @@ fn main() -> Result<(), slint::PlatformError> {
                 }
             };
 
-            // "+ тайл" — real AI ask about the recent transcript. The tile is
-            // shown IMMEDIATELY (below) with a plain-text placeholder, then
-            // filled when the resolved AI endpoint answers — so the button
-            // always gives instant feedback even if the model is slow/down.
-            // User: "+ тайл не прожимается".
             let (is_ru, deep_locked) = {
                 let c = cfg_ref.read();
                 (
@@ -3327,9 +2962,6 @@ fn main() -> Result<(), slint::PlatformError> {
             } else {
                 String::new()
             };
-            // The visible number is owned by the tile UI ALONE (tile.slint
-            // prepends #<sequence>); the title carries none — the old
-            // "Вопрос по встрече #3" rendered doubled: "#3  Вопрос по встрече #3".
             let heading = manual_tile_heading(has_tx, is_ru);
             tile.set_sequence(display_seq as i32);
             tile.set_tile_id(tile_id);
@@ -3337,10 +2969,6 @@ fn main() -> Result<(), slint::PlatformError> {
             tile.set_source_label(SharedString::from("ai · asking…"));
             wire_tile_drag(&tile);
 
-            // Initial body — shown instantly: the AI-in-flight hint, or a
-            // plain, ACTIONABLE empty-state hint when there's nothing to ask
-            // yet. No hourglass glyph — rare Unicode renders as a tofu square
-            // on the skia font fallback (project no-tofu rule).
             let placeholder_text = SharedString::from(manual_tile_placeholder(
                 deep_locked,
                 has_tx,
@@ -3365,8 +2993,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     let _ = tw.hide();
                     slint_replay::win32::force_hide(tw.window());
                     if let Some(target) = close_hwnd {
-                        // Abort this tile's in-flight AI request so the GPU isn't
-                        // left generating for a closed tile (keyed by tile-id).
                         abort_tile_stream(tile_id);
                         vec_for_close.borrow_mut().retain(|item| {
                             grab_hwnd(item.window()).ok() != Some(target)
@@ -3410,9 +3036,6 @@ fn main() -> Result<(), slint::PlatformError> {
                 }
                 return;
             }
-            // Resolve the ACTIVE endpoint (local vs cloud) — the old code used
-            // the cloud fields unconditionally, which silently failed for a
-            // local-provider user (the cloud bridge wasn't even running).
             let ep = cfg_ref.read().ai_endpoint(false);
             let is_local = ep.is_unmetered();
             let (base_url, bearer, model) =
@@ -3463,9 +3086,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     };
                     match result {
                         Ok((response, usage)) => {
-                            // Local inference is free — don't bill it (mirrors
-                            // every other ask path; otherwise a local "+ tile"
-                            // would inflate the meter at cloud Sonnet pricing).
                             let cost_micro = if is_local {
                                 0
                             } else {
@@ -3493,12 +3113,6 @@ fn main() -> Result<(), slint::PlatformError> {
                                 format!("ai · {} · ${:.4}", model, cost_usd)
                             };
                             tile.set_source_label(SharedString::from(label));
-                            // Bill the session like F6/F9 so the cost cap can see
-                            // "+ tile" spend. This was a silent hole: cloud
-                            // "+ tile" clicks never accumulated into the session
-                            // meter, so max_session_cost_usd never tripped. (The
-                            // bar's $ label was removed in the Glacier redesign;
-                            // the accumulation stays — the cost cap still reads it.)
                             {
                                 let mut st =
                                     slint_replay::runtime_state::lock(&slint_rt_cost);
@@ -3542,7 +3156,6 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== 🆘 Help (F1 / 🆘 chip) =====
     {
         let help_ref = help.clone();
         let ow = overlay.as_weak();
@@ -3551,7 +3164,6 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== 🗄 Session archive (F7 / 🗄 chip) =====
     {
         let archive_ref = archive.clone();
         let transcript_ref = transcript.clone();
@@ -3577,13 +3189,6 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== 📝 Meeting summary (v0.12.0 — Summary chip) =====
-    // Snapshot the FULL session transcript (runtime_state accumulator, not
-    // the 80-line rolling window) and run it through run_meeting_summary.
-    // Works mid-session AND between Стоп and the next Старт (the
-    // accumulator survives stop_session). The summary-busy bar property
-    // doubles as the in-flight guard: re-clicks while lit are ignored, so
-    // a slow model can't stack parallel summary calls.
     {
         let rt_for_summary = slint_rt.clone();
         let events_for_summary = events.clone();
@@ -3603,26 +3208,16 @@ fn main() -> Result<(), slint::PlatformError> {
                 (
                     s.full_transcript.iter().cloned().collect::<Vec<_>>(),
                     s.full_transcript_truncated,
-                    // Key the persisted conspect by this session so a re-press /
-                    // retry resumes it. Empty = ephemeral (no session yet) — the
-                    // backend then runs without persistence.
                     s.current_session_id.clone().unwrap_or_default(),
                 )
             };
             if let Err(reason) = overlay_backend::runtime::summary_gate(&transcript) {
                 eprintln!("[overlay-host] summary skipped: {reason}");
-                // The button must visibly react — friendly notice tile
-                // instead of silence (kind=Error → not conversational).
-                // NOTE: advice mentions ONLY Старт — PTT results don't flow
-                // through push_transcript_line, so suggesting PTT here would
-                // send the user in a circle (review-agent finding).
                 let (is_ru, stealth, preferred_monitor) = {
                     let c = cfg_for_summary.read();
                     (c.ui_is_ru(), c.stealth_enabled, c.tile_monitor_name.clone())
                 };
                 let (title, msg) = summary_empty_copy(is_ru);
-                // Same monitor policy as the real summary tile (and every
-                // other ask path) — Named pin from config, else Auto.
                 let hint = match preferred_monitor.as_deref() {
                     Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
                     _ => MonitorHint::Auto,
@@ -3634,7 +3229,6 @@ fn main() -> Result<(), slint::PlatformError> {
                         source: "summary".into(),
                         is_translation: false,
                         highlights: vec![],
-                        // No transcript yet → nothing to resume, so no retry.
                         summary_session: None,
                     },
                     hint,
@@ -3676,7 +3270,6 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Settings =====
     {
         let s = state.clone();
         let settings_ref = settings.clone();
@@ -3698,16 +3291,9 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Aggressive auto-tile toggle =====
-    // Phase E6 v10 — surface backend's cfg.auto_tile_every_line as a
-    // bar-level switch. Reads current value into chip state at startup,
-    // then toggles on click + persists to config.json. The backend
-    // detector pipeline in slint_session already honours this flag
-    // (every_line=true → MAX_TILES_PER_MIN_AGGRESSIVE=20).
     {
         let cfg_for_agg = cfg.clone();
         let weak_for_agg = overlay.as_weak();
-        // Sync initial state from cfg.
         if let Some(o) = weak_for_agg.upgrade() {
             o.set_aggressive_active(cfg_for_agg.read().auto_tile_every_line);
         }
@@ -3751,8 +3337,6 @@ fn main() -> Result<(), slint::PlatformError> {
         *lock_menu.borrow_mut() = Some(menu.clone());
         let menu_focus = Rc::new(RefCell::new(LockMenuFocusState::default()));
         {
-            // This is a top-level native window, so it needs ordinary drop-down
-            // dismissal semantics instead of the old in-bar popup behaviour.
             use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
             use winit::event::WindowEvent;
             let menu_weak = Rc::downgrade(&menu);
@@ -4169,8 +3753,6 @@ fn main() -> Result<(), slint::PlatformError> {
                                 );
                             }
                         }
-                        // Reap exited server handles so kill-on-quit tracking
-                        // stays honest.
                         state_stop
                             .lock()
                             .unwrap_or_else(|p| p.into_inner())
@@ -4202,8 +3784,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     {
                         return;
                     }
-                    // The model can take the full strict-ready budget — say so
-                    // immediately; the chip stays red + deep until confirmed.
                     {
                         let ru = cfg_for_lock.read().ui_is_ru();
                         if let Some(o) = weak_for_lock.upgrade() {
@@ -4215,7 +3795,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     eprintln!(
                         "[overlay-host] deep lock unlock requested — starting the managed model"
                     );
-                    // Deep -> Listening reloads the model but keeps tile suppression.
                     let target_listening = requested == LockMode::Listening;
                     let state_unlock = state_for_lock.clone();
                     let cfg_unlock = cfg_for_lock.clone();
@@ -4398,9 +3977,6 @@ fn main() -> Result<(), slint::PlatformError> {
                                             LockStatus::UnlockFailed,
                                         ),
                                     ));
-                                    // The status pill is small — also spawn the
-                                    // concise localized error tile so a failed
-                                    // reload is impossible to miss.
                                     let _ = events_unlock.spawn_tile_full(
                                         overlay_backend::events::TileSpec {
                                             question: if ru {
@@ -4427,15 +4003,9 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Compact "reader mode" toggle =====
-    // Collapse the wide bar to a small read-aloud pill (+ resize the window so
-    // it stops eating the screen) for using the app purely as a TTS reader.
-    // Persisted via cfg.compact_bar; the global Shift+Alt+1/2/3 read-aloud
-    // hotkeys keep working regardless of the bar size.
     {
         let cfg_for_compact = cfg.clone();
         let weak_for_compact = overlay.as_weak();
-        // Sync initial state + window size from cfg (the bar may reopen compact).
         if let Some(o) = weak_for_compact.upgrade() {
             let compact = cfg_for_compact.read().compact_bar;
             o.set_compact_bar(compact);
@@ -4458,11 +4028,6 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Hide to tray =====
-    // Separate action beside the compact control: hides ONLY the bar window.
-    // Explicit-only — startup is always visible and nothing is persisted; the
-    // tray icon (installed below) is the restore path. Compact mode is not
-    // touched, so a restore returns the bar exactly as it was.
     {
         let weak_for_hide = overlay.as_weak();
         overlay.on_hide_to_tray_clicked(move || {
@@ -4474,12 +4039,6 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Bar drag-to-move (Phase E6 v22 — manual cursor-delta) =====
-    // drag-start-requested (pointer-down on status pill) records the
-    // anchor; drag-moved (move while pressed) moves the window by the
-    // cursor delta. No WM_NCLBUTTONDOWN modal loop → Slint sees the
-    // mouse-up normally → TouchArea never sticks → chips stay
-    // clickable after a drag. User: "вся зона стала drag".
     {
         let weak_for_drag = overlay.as_weak();
         overlay.on_drag_start_requested(move || {
@@ -4508,11 +4067,6 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Quit (two-step inline confirm) =====
-    // The X press ARMS an inline "Quit? Yes/No" on the bar instead of
-    // killing the app outright (user: "крестик моментально всё закрывает
-    // без предупреждения"). A 4s timer auto-disarms so the bar doesn't
-    // get stuck in the armed state if the user walks away.
     {
         let weak = overlay.as_weak();
         overlay.on_quit_clicked(move || {
@@ -4594,9 +4148,6 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // Smoke convenience: SLINT_OVERLAY_AUTO_TILE=1 spawns one tile
-    // after 500 ms so screenshot scripts can verify markdown rendering
-    // without driving the UI. Removable Phase 6 cleanup.
     if std::env::var("SLINT_OVERLAY_AUTO_TILE").is_ok() {
         let weak = overlay.as_weak();
         Timer::single_shot(Duration::from_millis(AUTO_TILE_DELAY_MS), move || {
@@ -4606,17 +4157,6 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // Phase E6 v13 — auto-enable sys (loopback) capture on startup.
-    // User feedback: "почему каждый раз когда ты стартуешь ты не
-    // прокликиваешь sys звук и не включаешь?" — every launch the
-    // user had to click the sys chip manually before audio could
-    // be captured, even though their use-case (interviews, Zoom,
-    // YouTube prep) ALWAYS wants sys capture on. Opt-out via env
-    // var SLINT_OVERLAY_NO_AUTO_SYS=1 if a future caller needs the
-    // old behaviour (e.g. CI smoke runs). macOS only arms the chip here: the
-    // session remains the sole Core Audio owner instead of racing a startup
-    // probe for the same process tap.
-    //
     if std::env::var("SLINT_OVERLAY_NO_AUTO_SYS").is_err() {
         let weak = overlay.as_weak();
         #[cfg(target_os = "macos")]
@@ -4684,7 +4224,6 @@ fn main() -> Result<(), slint::PlatformError> {
         Timer::single_shot(Duration::from_millis(2200), move || {
             match journal::find_unfinished_session_in_default_dir() {
                 Some(unfinished) => {
-                    // Log the LINK id + counts only — never transcript/answer text.
                     eprintln!(
                         "[overlay-host] unfinished session detected ({}): {} line(s), qa={} — offering recovery",
                         unfinished.session_id,
@@ -4846,8 +4385,6 @@ fn main() -> Result<(), slint::PlatformError> {
     // Quit action calls `slint::quit_event_loop()`.
     overlay.show()?;
     let result = slint::run_event_loop_until_quit();
-    // — remove the tray icon on the clean shutdown path (icon gone before
-    // the process exits; a relaunch child adds its own, never a duplicate).
     #[cfg(windows)]
     drop(_tray_handle);
     #[cfg(target_os = "macos")]
@@ -4856,14 +4393,8 @@ fn main() -> Result<(), slint::PlatformError> {
         drop(installed_status_item);
     }
     TRAY_AVAILABLE.store(false, Ordering::Relaxed);
-    // All event-loop exits share the normal session stop path.
     let _ = slint_session::stop_session(slint_rt.clone(), &cfg);
-    // MLX owns exactly one child and stdin pipe process-wide. Clear its
-    // endpoint before the general async-runtime teardown can leave a stale
-    // request route visible.
     stop_mlx_model();
-    // E10.4 — kill any local-AI servers the in-app installer launched so they
-    // do not outlive the app (best-effort; clean-exit path only).
     let local_ai_servers = {
         let mut s = state.lock().unwrap_or_else(|p| p.into_inner());
         std::mem::take(&mut s.local_ai_servers)
@@ -4882,8 +4413,6 @@ fn main() -> Result<(), slint::PlatformError> {
     result
 }
 
-// `classify_ai_error` moved to slint_replay::app_state so the unit
-// tests can pin the categories table without spinning up the UI.
 use slint_replay::app_state::classify_ai_error;
 
 /// Recompute status pill based on capture flags.
@@ -4918,7 +4447,7 @@ fn stop_session_and_maybe_debrief(
 
 #[cfg(test)]
 mod mic_guard_tests {
-    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
+    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
     use super::try_acquire_mic;
 
     /// The single-mic latch is shared by all six mic consumers (PTT mic, per-tile
@@ -4953,7 +4482,6 @@ mod mic_guard_tests {
         assert!(g4.is_some(), "after the holder drops, the mic is reusable");
         drop(g4);
 
-        // Leave the global latch free (and re-confirm release worked).
         assert!(
             try_acquire_mic().is_some(),
             "the latch is free again at end of test"

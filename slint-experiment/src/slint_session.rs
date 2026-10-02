@@ -95,7 +95,6 @@ const SYSTEM_AUDIO_OWNER_AUX: u8 = 1;
 const SYSTEM_AUDIO_OWNER_SESSION: u8 = 2;
 static SYSTEM_AUDIO_OWNER: AtomicU8 = AtomicU8::new(SYSTEM_AUDIO_OWNER_NONE);
 static SYSTEM_AUDIO_SESSION_STUCK: AtomicBool = AtomicBool::new(false);
-// ponytail: one process-wide gate; split per provider only if parallel MLX inference becomes safe.
 static AUTO_TILE_SINGLE_FLIGHT_STATE: AtomicU64 = AtomicU64::new(0);
 
 struct AutoTilePermit<'a> {
@@ -114,7 +113,6 @@ impl Drop for AutoTilePermit<'_> {
     }
 }
 
-// Low bit = busy; upper bits keep the newest session generation even while idle.
 fn try_acquire_auto_tile(state: &AtomicU64, session_gen: u64) -> Option<AutoTilePermit<'_>> {
     let busy_state = session_gen.wrapping_shl(1) | 1;
     let mut current = state.load(Ordering::Acquire);
@@ -276,21 +274,14 @@ fn start_session_inner(
     rt: SharedSlintRuntime,
     recovered_from: Option<String>,
 ) -> Result<()> {
-    // ===== 1. Stop any prior session + reset state =====
     let prior_capture = {
         let mut s = lock(&rt);
         let prior_cap = s.capture.take(); // Drop signals capture thread to stop.
         s.system_audio_collector = None;
         s.transcript.clear();
-        // v0.12.0 — the Summary accumulator resets at session START (not
-        // stop) so the Summary button keeps working between Стоп and the
-        // next Старт.
         s.full_transcript.clear();
         s.full_transcript_truncated = false;
-        // A fresh session always starts un-paused (the bar's Pause chip resets
-        // its own AppState flag in the timer handler).
         s.paused = false;
-        // v0.22.0 — clear the previous session's auto-name + its latches/throttle.
         s.session_name = None;
         s.session_name_requested = false;
         s.session_name_inflight = false;
@@ -298,8 +289,6 @@ fn start_session_inner(
         s.session_name_at_len = 0;
         s.last_transcript_ms = 0;
         s.session_cost_microcents = 0;
-        // New session generation — invalidates any in-flight auto-tile task
-        // from a prior session (it bails post-AI-call on the gen mismatch).
         s.session_gen = s.session_gen.wrapping_add(1);
         if let Some(h) = s.transcript_task.take() {
             h.abort();
@@ -314,9 +303,6 @@ fn start_session_inner(
         s.health.last_audio_frame_ms.store(0, Ordering::Relaxed);
         s.health.last_stt_ok_ms.store(0, Ordering::Relaxed);
         s.health.last_ai_ok_ms.store(0, Ordering::Relaxed);
-        // V0.8.0 (Поток A) — also clear the AI-error marker + the error-tile
-        // debounce, else a session that ended on an AI failure would open the
-        // NEXT session already showing "AI недоступен" (stale err >= ok=0).
         s.health.last_ai_err_ms.store(0, Ordering::Relaxed);
         s.last_ai_error_tile_ms = 0;
         // Suflyor E2 — seed the per-source mic clock with the session start
@@ -350,11 +336,8 @@ fn start_session_inner(
 
     let mut system_audio_owner = SystemAudioSessionStartGuard::acquire()?;
 
-    // Tell the UI cost is back to zero (chips depending on session_usd
-    // get a chance to reset). Pre-port React side did the same.
     events.emit("cost:update", serde_json::json!({ "session_usd": 0.0_f64 }));
 
-    // ===== 2. Read cfg fields needed for capture + STT =====
     let (mic_dev, sys_dev, stt_backend, stt_is_local, groq_key, language, whisper_prompt) = {
         let c = cfg.read();
         (
@@ -367,7 +350,6 @@ fn start_session_inner(
             stt::build_whisper_prompt(&c.trigger_keywords, &c.meeting_context),
         )
     };
-    // Only the cloud (Groq) backend needs a key — local GigaAM/Whisper don't.
     if !stt_is_local && groq_key.trim().is_empty() {
         anyhow::bail!("Groq API key not set in settings (cfg.groq_api_key empty)");
     }
@@ -379,16 +361,11 @@ fn start_session_inner(
             anyhow::bail!("GigaAM model dir invalid: {e}");
         }
     }
-    // Phase E6 diagnostic — surface device names so we can debug
-    // mic-transcript-not-working complaints. Empty = "default device".
     log_info(&format!(
         "audio devices — mic={:?} sys={:?}",
         mic_dev.as_deref().unwrap_or("<default>"),
         sys_dev.as_deref().unwrap_or("<default>"),
     ));
-    // Log the RESOLVED backend (not just cfg.stt_model, which is the Groq model
-    // and is meaningless for the local engines). model= still shown for the
-    // Whisper-family backends where it's the actual model id.
     let backend_desc = match &stt_backend {
         overlay_backend::config::SttBackendCfg::Cloud { model, .. } => {
             format!("cloud-groq (model={model})")
@@ -410,9 +387,6 @@ fn start_session_inner(
         }
     ));
 
-    // ===== 3. Open fresh journal =====
-    // v0.15.0 — journal retention from config (was hard-coded 100 / 500 MB):
-    // 0 = unlimited for either bound.
     let journal = {
         let (keep, max_mb) = {
             let c = cfg.read();
@@ -449,17 +423,12 @@ fn start_session_inner(
     }
     lock(&rt).journal = Some(journal.clone());
 
-    // v0.18.6 — derive + record the session id (the journal-file stem) up front
-    // so the Summary button can key its persisted conspect by it EVEN WHEN audio
-    // recording is off. Falls back to a timestamp if the stem is unreadable.
-    // Kept across Стоп (like full_transcript); the next Старт overwrites it.
     let session_id = journal
         .current_path()
         .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
         .unwrap_or_else(|| format!("session_{}", now_unix_ms()));
     lock(&rt).current_session_id = Some(session_id.clone());
 
-    // ===== 4. Spawn audio capture =====
     let (audio_rx, capture_handle) = audio::start_capture(mic_dev, sys_dev)
         .context("audio::start_capture failed (check mic / system audio devices in Settings)")?;
     let health = lock(&rt).health.clone();
@@ -482,8 +451,6 @@ fn start_session_inner(
         )
     };
     let recorder = if record_enabled {
-        // Reuse the session id derived above (the conspect + the recordings dir
-        // share one key, so a re-Summary from the archive lines up with both).
         match overlay_backend::recorder::SessionRecorder::start(
             &session_id,
             keep_sessions,
@@ -495,7 +462,6 @@ fn start_session_inner(
                 Some(recorder)
             }
             Err(e) => {
-                // Recording is best-effort: a failure must NOT abort the session.
                 log_info(&format!(
                     "audio recording unavailable (continuing without it): {e:#}"
                 ));
@@ -507,7 +473,6 @@ fn start_session_inner(
     };
     let stt_audio_rx = forward_audio_chunks(audio_rx, rt.clone(), recorder);
 
-    // ===== 5. Spawn STT pipeline =====
     let stt_rx = stt::spawn(
         stt_audio_rx,
         stt_backend,
@@ -518,7 +483,6 @@ fn start_session_inner(
     lock(&rt).capture = Some(capture_handle);
     system_audio_owner.disarm();
 
-    // ===== 6. Spawn health emitter (2s ticker) =====
     let health_for_tick = health.clone();
     let events_for_tick = events.clone();
     let rt_for_tick = rt.clone();
@@ -530,12 +494,6 @@ fn start_session_inner(
             tick.tick().await;
             let now_ms = now_unix_ms() as u64;
             let snap = health_for_tick.snapshot(now_ms);
-            // Suflyor E2 — a mic that fails to open/capture used to be
-            // log-only; now one GENERIC notice tile per failure episode
-            // (latched; re-arms on recovery). Same Error-tile machinery as
-            // the AI-down notice — no new notification path. The health dot
-            // (audio → degraded/down via the per-source fold) covers the
-            // transient case; the tile fires only on a sustained "down".
             let notify_mic_down = {
                 let mut s = lock(&rt_for_tick);
                 let (notify, latch) = mic_notice_decision(snap.mic, s.mic_down_notified);
@@ -565,14 +523,10 @@ fn start_session_inner(
             }
             let payload = serde_json::to_value(&snap).unwrap_or(serde_json::Value::Null);
             events_for_tick.emit("health:update", payload);
-            // (speech:coach emit lives in the snapshot_speech_coach
-            // helper — Slint binary will wire it in E2 follow-up
-            // alongside the speech-coach state migration.)
         }
     });
     lock(&rt).health_task = Some(health_task);
 
-    // ===== 7. Spawn transcript forwarder =====
     let events_for_fwd = events.clone();
     let rt_for_fwd = rt.clone();
     let journal_for_fwd = journal.clone();
@@ -586,7 +540,6 @@ fn start_session_inner(
     ));
     lock(&rt).transcript_task = Some(forwarder);
 
-    // ===== 8. Signal session start =====
     events.emit(
         "session:started",
         serde_json::json!({ "unix_ms": now_unix_ms() }),
@@ -606,17 +559,10 @@ fn forward_audio_chunks(
             let (paused, mic_muted) = {
                 let mut state = lock(&rt);
                 let now_ms = now_unix_ms() as u64;
-                // Capture is alive even when pause/mute keeps this chunk away
-                // from STT. Keep the shared signal fresh at this common gate.
                 state
                     .health
                     .last_audio_frame_ms
                     .store(now_ms, Ordering::Relaxed);
-                // Suflyor E2 — per-source mic liveness, bumped BEFORE the
-                // mute/pause gates: a muted or paused mic is still ALIVE, and
-                // only a mic that delivers nothing must age into the
-                // degraded/down health state (a failed open/capture otherwise
-                // hid behind the system loopback's shared-signal bumps).
                 if matches!(chunk.source, AudioSource::Mic) {
                     state
                         .health
@@ -632,18 +578,10 @@ fn forward_audio_chunks(
             if paused {
                 continue;
             }
-            // Suflyor E5 — muted mic audio is dropped at the earliest shared
-            // gate, BEFORE STT submission (previously it was transcribed and
-            // only then discarded) and — unchanged — before the recorder tee
-            // (v0.13.1 mute contract: mic mute drops mic transcript + mic
-            // recording; system audio is unaffected).
             if mic_muted {
                 continue;
             }
             if let Some(recorder) = recorder.as_ref() {
-                // Raw PCM is always recorded. Only direct system-loopback
-                // chunks get text-free app-TTS mask metadata; real microphone
-                // speech remains available during simultaneous read-aloud.
                 recorder.feed_with_tts_mask(
                     &chunk,
                     matches!(chunk.source, AudioSource::System)
@@ -654,8 +592,6 @@ fn forward_audio_chunks(
                 Ok(permit) => permit,
                 Err(_) => break,
             };
-            // Pause may have been toggled while bounded STT back-pressure held
-            // this chunk. Recheck before it can reach any provider.
             if lock(&rt).paused {
                 continue;
             }
@@ -690,10 +626,6 @@ async fn transcript_forwarder(
         if lock(&rt).paused {
             continue;
         }
-        // Phase E6 diagnostic — log every STT event so we can debug
-        // "mic transcript not working" complaints. COUNT only, never the
-        // recognized text: overlay-host.log is shareable ("Collect logs") and
-        // must not carry the meeting transcript.
         log_info(&format!(
             "transcript event: source={:?} ({} chars)",
             ev.source,
@@ -716,9 +648,6 @@ async fn transcript_forwarder(
             let mut s = lock(&rt);
             push_transcript_line(&mut s, line.clone());
         }
-        // v0.22.0 — drive the background session-namer: first-shot once enough
-        // transcript lands, then throttled re-gen as the topic grows (local-only;
-        // a cheap no-op on most calls).
         crate::session_namer::maybe_spawn_namer(&rt, &cfg, now_unix_ms());
         journal.write(&JournalEvent::TranscriptLine {
             unix_ms: now_unix_ms(),
@@ -734,8 +663,6 @@ async fn transcript_forwarder(
         let payload = serde_json::to_value(&line).unwrap_or(serde_json::Value::Null);
         events.emit("transcript:line", payload);
 
-        // Meeting-ending detector (system audio only — pre-port
-        // semantic). Emit `meeting:ending` exactly once per session.
         if line.source == AudioSource::System && meeting_ending_phrase_match(&line.text) {
             let mut s = lock(&rt);
             if !s.meeting_ending_emitted {
@@ -756,8 +683,6 @@ async fn transcript_forwarder(
             let rt_for_tile = rt.clone();
             let journal_for_tile = journal.clone();
             let line_text = line.text.clone();
-            // Stamp the task with the current session generation so it can
-            // detect a stop/restart that happens during its AI call.
             let gen_for_tile = lock(&rt).session_gen;
             tokio::spawn(async move {
                 maybe_spawn_auto_tile(
@@ -874,10 +799,6 @@ async fn maybe_spawn_auto_tile(
     text: String,
     session_gen: u64,
 ) {
-    // "Reader mode" tile mute (config.suppress_tiles): skip auto-detected AI
-    // tiles entirely so the user can record + just listen without tiles
-    // popping up. Manual asks (F6/F9/PTT), KB, summary, and error tiles use
-    // other paths and are unaffected.
     if cfg.read().suppress_tiles {
         return;
     }
@@ -927,7 +848,6 @@ async fn maybe_spawn_auto_tile(
         return;
     }
 
-    // ===== Detector trigger =====
     let detected = auto_tile_trigger(&text, every_line, &trigger_keywords);
     let (triggered, trigger_kind): (bool, Option<String>) = match &detected {
         Some(backend_runtime::Trigger::Question(_)) if every_line => {
@@ -955,7 +875,6 @@ async fn maybe_spawn_auto_tile(
         None
     };
 
-    // ===== Rate-limit =====
     let cap = if every_line {
         MAX_TILES_PER_MIN_AGGRESSIVE
     } else {
@@ -998,7 +917,6 @@ async fn maybe_spawn_auto_tile(
         .collect::<Vec<_>>()
         .join(" ");
 
-    // ===== Dedup recently-spawned prefixes =====
     {
         let normalized: String = normalized_full.chars().take(60).collect();
         let mut s = lock(&rt);
@@ -1009,16 +927,12 @@ async fn maybe_spawn_auto_tile(
             .iter()
             .any(|(prefix, _)| prefix == &normalized)
         {
-            // No transcript text in the log (it is shareable via "Collect logs").
             log_info("tile dedup: skipping a duplicate question prefix");
             return;
         }
         s.recent_question_prefixes.push((normalized, now));
     }
 
-    // ===== Prompt inputs + QA cache key =====
-    // Collect every prompt-affecting input before lookup so a cached answer cannot
-    // outlive transcript grounding, approved memory, coaching, or provider profile.
     let recent_transcript: Vec<String> = {
         let s = lock(&rt);
         s.transcript
@@ -1062,16 +976,11 @@ async fn maybe_spawn_auto_tile(
     };
 
     if let Some(cached_answer) = cache_hit {
-        // No transcript text in the log (shareable via "Collect logs").
         log_info("qa_cache HIT (avoided AI call)");
         let trigger_text_for_q = match &trigger {
             backend_runtime::Trigger::Question(q) => q.clone(),
             backend_runtime::Trigger::Keyword(kw, _) => kw.clone(),
         };
-        // Phase E6 v12 — populate highlights with the trigger keyword
-        // (or "❓" + question prefix) so the tile UI can show a badge
-        // explaining why this tile spawned. User: "ключевые слова не
-        // помечены я не понимаю на какое окно смотреть".
         let highlights_for_spec = trigger_highlights(&trigger);
         {
             let mut s = lock(&rt);
@@ -1098,8 +1007,6 @@ async fn maybe_spawn_auto_tile(
         return;
     }
 
-    // Variant + counts only — never the question / keyword / transcript-line
-    // TEXT (the log is shareable via "Collect logs").
     let trigger_kind = match &trigger {
         backend_runtime::Trigger::Question(q) => format!("question ({} chars)", q.chars().count()),
         backend_runtime::Trigger::Keyword(kw, _) => {
@@ -1127,7 +1034,6 @@ async fn maybe_spawn_auto_tile(
         return;
     }
 
-    // ===== Build prompts + AI call =====
     let trigger_text = match &trigger {
         backend_runtime::Trigger::Question(q) => q.clone(),
         backend_runtime::Trigger::Keyword(kw, _) => kw.clone(),
@@ -1187,12 +1093,6 @@ async fn maybe_spawn_auto_tile(
             (t.trim().to_string(), u)
         }
         Err(e) => {
-            // V0.8.0 (Поток A) — the auto-tile AI call failed. Previously
-            // this returned SILENTLY (log + journal only), so the user saw
-            // auto-tiles simply stop with no explanation ("почему тайлы
-            // перестали появляться"). Now we (1) mark AI down so the bar
-            // flips to "AI недоступен" within one 2s health tick, and
-            // (2) spawn ONE debounced, sanitized error tile.
             let chain = format!("{e:#}");
             log_warn(&format!("auto-tile AI failed: {chain}"));
             journal.write(&JournalEvent::Error {
@@ -1200,25 +1100,14 @@ async fn maybe_spawn_auto_tile(
                 module: "auto_tile_ai",
                 message: &chain,
             });
-            // v0.8.2 (M1 fix) — mirror the success path's session_gen guard
-            // (the `if … != session_gen` check below). If the session was
-            // stopped/restarted DURING this (up to ~9-min, with retries)
-            // failing call, do NOT poison the NEXT session: skip marking AI
-            // down (would flip the new session's bar to "AI недоступен" until
-            // its first success) and skip spawning a stray error tile into it.
-            // The log + journal above stay unconditional (local diagnostics).
             if lock(&rt).session_gen != session_gen {
                 log_info("auto-tile: session changed during failed AI call — not surfacing error");
                 return;
             }
-            // Mark AI down immediately (snapshot returns "down" while this
-            // err is newer than the last ok; auto-clears on next success).
             lock(&rt)
                 .health
                 .last_ai_err_ms
                 .store(now_unix_ms() as u64, Ordering::Relaxed);
-            // Debounce: at most one error tile per AI_ERROR_TILE_DEBOUNCE_MS,
-            // so a sustained outage (detector fires per line) doesn't spam.
             let now = now_unix_ms() as u64;
             let should_notify = {
                 let mut s = lock(&rt);
@@ -1277,15 +1166,11 @@ async fn maybe_spawn_auto_tile(
     };
     let latency_ms = t0.elapsed().as_millis() as u64;
 
-    // E9 — if the session was stopped/restarted during this (up to
-    // ~9-minute, with retries) AI call, abandon the result: don't cache,
-    // bill, or spawn a tile into a session that no longer exists.
     if lock(&rt).session_gen != session_gen {
         log_info("auto-tile: session changed during AI call — discarding result");
         return;
     }
 
-    // ===== Cache the answer =====
     {
         let mut s = lock(&rt);
         if s.qa_cache.len() >= QA_CACHE_MAX_ENTRIES {
@@ -1304,8 +1189,6 @@ async fn maybe_spawn_auto_tile(
             .insert(cache_key, (answer.clone(), Instant::now()));
     }
 
-    // ===== Cost accumulate + emit =====
-    // Local inference is free — don't bill it.
     let micro = if is_local {
         0
     } else {
@@ -1326,8 +1209,6 @@ async fn maybe_spawn_auto_tile(
         purpose: "auto_tile",
         model: &model,
         latency_ms,
-        // The provider's real reason ("stop", "length" = truncated, …) —
-        // surfaced by `complete_once` (audit D4; previously hardcoded).
         finish_reason: &usage.finish_reason,
         text: &answer,
         output_tokens_est: usage.output,
@@ -1338,11 +1219,8 @@ async fn maybe_spawn_auto_tile(
         return;
     }
 
-    // ===== Spawn auto-tile =====
     let question_label = match &trigger {
         backend_runtime::Trigger::Question(q) => q.clone(),
-        // De-emojified to match the rest of the UI (Codex icon pass): the
-        // keyword itself is the tile title / stored last_question, no glyph.
         backend_runtime::Trigger::Keyword(kw, _) => kw.clone(),
     };
     {
@@ -1356,8 +1234,6 @@ async fn maybe_spawn_auto_tile(
     };
     let label_for_log = question_label.clone();
     let answer_for_journal = answer.clone();
-    // Phase E6 v12 — pass trigger info so the tile shows a badge
-    // explaining which keyword/question spawned it.
     let highlights_for_spec = trigger_highlights(&trigger);
     match events.spawn_tile_full(
         TileSpec {
@@ -1408,8 +1284,6 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
         SYSTEM_AUDIO_SESSION_STUCK.store(true, Ordering::Release);
     }
     s.system_audio_collector = None;
-    // Bump generation so an in-flight auto-tile call from this session
-    // discards its result instead of spawning a tile after the stop.
     s.session_gen = s.session_gen.wrapping_add(1);
     if let Some(h) = s.transcript_task.take() {
         h.abort();
@@ -1423,20 +1297,12 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
     s.health.last_audio_frame_ms.store(0, Ordering::Relaxed);
     s.health.last_stt_ok_ms.store(0, Ordering::Relaxed);
     s.health.last_ai_ok_ms.store(0, Ordering::Relaxed);
-    // v0.8.2 (N2) — symmetry with start_session (which resets all five): also
-    // clear the AI-error marker + error-tile debounce on stop so health reads
-    // clean between sessions (defense-in-depth alongside the M1 gen-guard).
     s.health.last_ai_err_ms.store(0, Ordering::Relaxed);
     s.last_ai_error_tile_ms = 0;
-    // Suflyor E2 — zero (NOT seed) so the final post-stop emit reads "idle",
-    // and re-arm the mic-down notice for the next session.
     s.health.last_mic_frame_ms.store(0, Ordering::Relaxed);
     s.mic_down_notified = false;
     let snapshot: Vec<TranscriptLine> = s.transcript.iter().cloned().collect();
     s.transcript.clear();
-    // v0.12.0 — deliberately NOT clearing s.full_transcript here: the
-    // Summary button must still work after Стоп (it resets on the next
-    // Старт in start_session_inner).
     let journal = s.journal.take();
     drop(s);
     drop(capture);
@@ -1444,9 +1310,6 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
         release_system_audio_session();
     }
     stt::reset_gigaam_cache();
-    // Write the SessionSummary roll-up + SessionStop marker before closing, so
-    // the journal has the "how did this session go" one-liner on disk (audit:
-    // these were defined + counted but never emitted on the shipping stack).
     if let Some(j) = journal {
         if let Some(c) = j.snapshot_counters() {
             let now = overlay_backend::journal::now_unix_ms();
@@ -1485,8 +1348,6 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
         if cfg.read().session_archive_enabled {
             if let Some(path) = journal_path {
                 std::thread::spawn(move || {
-                    // Shutdown above normally made SessionStop durable. Retain
-                    // the retries for a shutdown error or transient SQLITE_BUSY.
                     let mut last_err: Option<anyhow::Error> = None;
                     for attempt in 0..4u8 {
                         if attempt > 0 {
@@ -1513,8 +1374,6 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
                                     break;
                                 }
                             }
-                            // No usable event yet (the journal writer is still
-                            // draining the stop marker) — retry on the next pass.
                             Ok(None) => last_err = None,
                             Err(e) => last_err = Some(e),
                         }
@@ -1556,11 +1415,6 @@ pub fn debrief_gate(
     if !c.post_meeting_debrief_enabled {
         return Err("post-meeting debrief disabled in Settings → 🎯 Coaching");
     }
-    // Resolve the ACTIVE provider (local OR cloud) — the SAME `configured` check
-    // that powers "AI: ready" in Diagnostics. The old gate tested the raw cloud
-    // `ai_bearer`, which is ALWAYS empty for a local-provider user, so their
-    // debrief was silently skipped even though `run_post_meeting_debrief` itself
-    // already resolves the local endpoint (a local server needs no bearer).
     if !c.readiness().ai.configured {
         return Err(SKIP_AI_NOT_CONFIGURED);
     }
@@ -1606,9 +1460,6 @@ pub fn maybe_run_debrief(
         }
         Err(reason) => {
             log_info(&format!("post-meeting debrief skipped: {reason}"));
-            // C — surface a NOTICE for the cases the user would expect feedback
-            // on; stay silent for "disabled" and trivially-short / no-speech
-            // sessions (don't nag on quick test runs).
             let is_ru = cfg.read().ui_is_ru();
             let mic_lines = transcript
                 .iter()
@@ -1684,9 +1535,6 @@ pub fn meeting_ending_phrase_match(text: &str) -> bool {
     false
 }
 
-// Tiny log shims — slint-experiment doesn't depend on the `log`
-// crate. Match the existing eprintln pattern used elsewhere in
-// the binary.
 fn log_warn(msg: &str) {
     eprintln!("[slint-session] WARN: {msg}");
 }
@@ -1816,15 +1664,13 @@ mod tests {
         SYSTEM_AUDIO_SESSION_STUCK.store(false, Ordering::Release);
         SYSTEM_AUDIO_OWNER.store(SYSTEM_AUDIO_OWNER_NONE, Ordering::Release);
 
-        // Simulate a running session holding the owner
         let mut session = SystemAudioSessionStartGuard::acquire().expect("initial session acquire");
-        session.disarm(); // Leaves SYSTEM_AUDIO_OWNER as SESSION, simulating running state
+        session.disarm();
         assert_eq!(
             SYSTEM_AUDIO_OWNER.load(Ordering::Acquire),
             SYSTEM_AUDIO_OWNER_SESSION
         );
 
-        // Releasing prior session allows subsequent acquire
         release_system_audio_session();
         let session2 = SystemAudioSessionStartGuard::acquire()
             .expect("restarted session acquire should succeed");
@@ -1990,17 +1836,11 @@ mod tests {
     #[test]
     fn mic_notice_fires_once_per_down_episode() {
         assert_eq!(mic_notice_decision("ok", false), (false, false));
-        // degraded alone never notifies (the health dot covers it).
         assert_eq!(mic_notice_decision("degraded", false), (false, false));
-        // First "down" → notify + latch.
         assert_eq!(mic_notice_decision("down", false), (true, true));
-        // Sustained down → silent.
         assert_eq!(mic_notice_decision("down", true), (false, true));
-        // Recovery re-arms...
         assert_eq!(mic_notice_decision("ok", true), (false, false));
-        // ...so the NEXT episode notifies again.
         assert_eq!(mic_notice_decision("down", false), (true, true));
-        // idle (between sessions) leaves the latch untouched.
         assert_eq!(mic_notice_decision("idle", true), (false, true));
     }
 

@@ -368,7 +368,6 @@ fn drain_mlx_stderr(stderr: std::process::ChildStderr) {
     let mut line = String::new();
     let mut prev_was_generic = false;
     {
-        // Bound parsed diagnostics; keep draining the pipe below without allocating.
         let mut bounded = reader.by_ref().take(65_536);
         while bounded.read_line(&mut line).is_ok_and(|bytes| bytes > 0) {
             let trimmed = line.trim_end_matches(['\r', '\n']);
@@ -486,8 +485,6 @@ fn start_macos(model: &str) -> Result<MlxEndpoint> {
             .read_line(&mut line)
             .map(|_| line);
         let _ = send.send(result);
-        // READY is the only protocol line today. Keep draining defensively so
-        // future diagnostics cannot fill the child's stdout pipe and stall it.
         let _ = std::io::copy(&mut reader, &mut std::io::sink());
     });
     let line = match receive.recv_timeout(Duration::from_secs(180)) {

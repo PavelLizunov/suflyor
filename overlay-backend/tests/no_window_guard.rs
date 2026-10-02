@@ -37,7 +37,6 @@ fn every_command_spawn_hides_its_console() {
         let src = fs::read_to_string(&path).unwrap_or_else(|e| {
             panic!("read {file}: {e}");
         });
-        // Only scan production code — stop at the first #[cfg(test)] module.
         let prod = src.split("#[cfg(test)]").next().unwrap_or(&src);
         let lines: Vec<&str> = prod.lines().collect();
 
@@ -45,8 +44,6 @@ fn every_command_spawn_hides_its_console() {
             if !line.contains("Command::new") {
                 continue;
             }
-            // Check a ±12-line window for a hidden-console marker or a
-            // known GUI-app spawn (function name / comment in context).
             let start = i.saturating_sub(12);
             let end = (i + 13).min(lines.len());
             let context: String = lines[start..end].join("\n");

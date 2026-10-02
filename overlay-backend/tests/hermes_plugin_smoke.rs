@@ -33,15 +33,12 @@ fn install_into_scratch_hermes_home() {
     let cfg = std::fs::read_to_string(root.join("config.yaml")).expect("config.yaml written");
     assert!(cfg.contains("- suflyor"));
 
-    // Second run must be idempotent and report the already-enabled path.
     let again =
         overlay_backend::hermes_install::install_plugin("http://127.0.0.1:8654", "smoke-token-123")
             .expect("re-install failed");
     println!("again: {again}");
     assert!(again.contains("уже включён"));
 
-    // «Взять ключ из локального Hermes»: first run creates api_server+key,
-    // second run reads the SAME key back without touching the file.
     let (key1, changed1) =
         overlay_backend::hermes_install::ensure_api_server().expect("api setup failed");
     println!("api key created: changed={changed1}");

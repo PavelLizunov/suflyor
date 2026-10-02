@@ -90,9 +90,6 @@ fn read_next_chunk<R: std::io::Read>(
     samples: &mut hound::WavIntoSamples<R, i16>,
     max: usize,
 ) -> Result<Vec<i16>> {
-    // Cap the PRE-allocation at 2M samples (4 MB): a Cloud window is 9.6M
-    // samples and pre-allocating 19 MB for a file that turns out to be 10 s
-    // long is waste; Vec growth amortises the big-window case just fine.
     let mut buf = Vec::with_capacity(max.min(1 << 21));
     for s in samples.by_ref().take(max) {
         buf.push(s.context("read WAV samples")?);
@@ -183,7 +180,6 @@ pub async fn transcribe_session(
     if !dir.exists() {
         bail!("no recordings found for this session");
     }
-    // Snapshot the STT config once (provider, language, whisper prompt).
     let (backend, language, whisper_prompt) = {
         let c = cfg.read();
         (
@@ -193,9 +189,6 @@ pub async fn transcribe_session(
         )
     };
 
-    // Fail fast (mirror `start_session_inner`'s pre-flight) BEFORE loading any
-    // WAV into RAM: a misconfigured backend should error in milliseconds, not
-    // after reading up to ~230 MB/channel only to fail inside `transcribe_once`.
     match &backend {
         SttBackendCfg::Cloud { api_key, .. } if api_key.trim().is_empty() => {
             bail!("cloud STT is not configured (empty API key)");
@@ -212,7 +205,7 @@ pub async fn transcribe_session(
         }
     };
 
-    let mut texts = [String::new(), String::new()]; // [mic, system]
+    let mut texts = [String::new(), String::new()];
     for (idx, file, who, source) in [
         (0usize, "mic.wav", "you", AudioSource::Mic),
         (1, "system.wav", "the other side", AudioSource::System),
@@ -221,8 +214,6 @@ pub async fn transcribe_session(
         if !path.exists() {
             continue;
         }
-        // v0.17.0 — STREAM the channel in per-backend windows instead of one
-        // full-file load + one giant inference (план B: 7-8 h recordings).
         let reader =
             hound::WavReader::open(&path).with_context(|| format!("open {}", path.display()))?;
         validate_wav_spec(&reader.spec()).with_context(|| format!("load {file}"))?;
@@ -251,7 +242,7 @@ pub async fn transcribe_session(
             let mut buf =
                 read_next_chunk(&mut samples, chunk).with_context(|| format!("load {file}"))?;
             if buf.is_empty() {
-                break; // end-of-file (header over-claimed)
+                break;
             }
             let window_start = ((part - 1) as u64).saturating_mul(chunk as u64);
             crate::session_audio::silence_tts_spans(&mut buf, &tts_mask, source, window_start);
@@ -298,8 +289,6 @@ pub async fn retranscribe_and_summarize(
     let transcript = transcribe_session(&cfg, session_id, on_progress).await?;
     let n = transcript.len();
     on_progress(Progress::Step("Building summary…".to_string()));
-    // Pass the archive session id so the conspect persists under it — a failed
-    // reduce can then be retried from the saved parts without re-running STT.
     crate::runtime::run_meeting_summary(events, cfg, transcript, session_id.to_string(), false)
         .await;
     Ok(n)
@@ -334,7 +323,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("stereo.wav");
         let spec = hound::WavSpec {
-            channels: 2, // not mono
+            channels: 2,
             sample_rate: 44_100,
             bits_per_sample: 16,
             sample_format: hound::SampleFormat::Int,
@@ -365,11 +354,9 @@ mod tests {
         assert!(matches!(only_sys[0].source, AudioSource::System));
     }
 
-    // ── v0.17.0 chunked streaming ──
 
     #[test]
     fn read_next_chunk_windows_a_wav_without_loss() {
-        // 5 samples, windows of 2 → [2, 2, 1, 0] and the content round-trips.
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("mic.wav");
         let spec = hound::WavSpec {
@@ -400,11 +387,8 @@ mod tests {
         let gigaam = SttBackendCfg::Gigaam {
             model_dir: "d".into(),
         };
-        // Cloud window must stay under Groq's 25 MB file cap:
-        // secs × 16000 Hz × 2 B + 44 B header.
         let cloud_bytes = chunk_secs(&cloud) * u64::from(recorder::SAMPLE_RATE) * 2 + 44;
         assert!(cloud_bytes < 25 * 1024 * 1024, "{cloud_bytes}");
-        // GigaAM windows are much smaller (in-process RAM bound).
         assert!(chunk_secs(&gigaam) <= 60);
     }
 
@@ -420,9 +404,9 @@ mod tests {
 
     #[test]
     fn is_silent_window_skips_padding_and_noise_but_keeps_speech() {
-        assert!(is_silent_window(&[0, 0, 0, 0])); // pure D0.5 padding
-        assert!(is_silent_window(&[10, -30, 5, -12])); // noise floor
-        assert!(!is_silent_window(&[0, 0, 5000, 0])); // one real sample → transcribe it
+        assert!(is_silent_window(&[0, 0, 0, 0]));
+        assert!(is_silent_window(&[10, -30, 5, -12]));
+        assert!(!is_silent_window(&[0, 0, 5000, 0]));
         assert!(!is_silent_window(&[i16::MIN])); // extreme; unsigned_abs → no panic
     }
 }

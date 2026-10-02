@@ -237,14 +237,7 @@ pub(crate) fn fire_f9_ask(
     rt_handle: &tokio::runtime::Handle,
     tiles: &TileWindows,
     weak_overlay: &slint::Weak<OverlayBarWindow>,
-    // V0.8.0 (Поток D) — Text for a normal F9, Cloud for a Shift+F9 one-shot
-    // escalation to the smart cloud model. (Vision isn't used here — F8 has its
-    // own path.)
     route: AskRoute,
-    // V0.8.3 — Some(text) = a typed "✏ Написать" question: answer it DIRECTLY
-    // (no live-transcript / screenshot context). None = a normal F9/Shift+F9 ask
-    // built from the transcript. Lets the text-input window reuse this whole
-    // tile-create + stream + cost + journal + follow-up pipeline.
     typed_question: Option<String>,
 ) {
     let missing_cloud_auth = {
@@ -277,7 +270,6 @@ pub(crate) fn fire_f9_ask(
     }
 
     let is_text = typed_question.is_some();
-    // ===== 1. Sync placeholder tile creation =====
     let tile = match TileWindow::new() {
         Ok(t) => t,
         Err(e) => {
@@ -285,9 +277,6 @@ pub(crate) fn fire_f9_ask(
             return;
         }
     };
-    // Phase E6 fix — share the same display-sequence counter so F9
-    // tiles get a unique #N label in line with auto-tiles + manual_
-    // spawn tiles (previously stuck at #0).
     let seq = TILE_DISPLAY_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
     tile.set_sequence(seq as i32);
     tile.set_tile_title(SharedString::from(if is_text {
@@ -296,11 +285,6 @@ pub(crate) fn fire_f9_ask(
         "F9 ask · live"
     }));
     tile.set_source_label(SharedString::from("ai · asking…"));
-    // Phase E6 v12 — purple trigger badge for manual F9 ask so user
-    // sees which tile came from a hotkey vs auto-detector. V0.8.0 (Поток D):
-    // a CLOUD-escalated ask (Shift+F9) gets a distinct 🧠 cloud badge so the
-    // user sees THIS answer came from the cloud model (egress is visible).
-    // V0.8.3 — a typed "✏ Написать" ask gets its own green badge.
     if is_text {
         tile.set_trigger_label(SharedString::from("text ask"));
         tile.set_trigger_color(slint::Color::from_rgb_u8(0x34, 0xd3, 0x99));
@@ -311,13 +295,10 @@ pub(crate) fn fire_f9_ask(
         tile.set_trigger_label(SharedString::from("F9 manual ask"));
         tile.set_trigger_color(slint::Color::from_rgb_u8(0xa7, 0x8b, 0xfa));
     }
-    // Phase E6 v45 — this tile carries a conversation, so it shows the
-    // continue-dialog input. busy=true until the first answer completes.
     let convo_id = CONVO_SEQ.fetch_add(1, Ordering::Relaxed) as i32;
     tile.set_convo_id(convo_id);
     tile.set_followup_busy(true);
     wire_tile_drag(&tile);
-    // Plain text, no hourglass glyph (tofu on the skia font fallback).
     let initial_prefix = typed_question
         .as_deref()
         .map(user_turn_markdown)
@@ -332,9 +313,7 @@ pub(crate) fn fire_f9_ask(
     tile.on_close_clicked(move || {
         eprintln!("[overlay-host] tile (F9) close_clicked fired");
         if let Some(t) = weak_close.upgrade() {
-            // Closing the tile that's being read aloud must silence it.
             super::stop_if_speaking(t.get_convo_id());
-            // FIX #8 — prune this tile's conversation (no-op if none).
             bridge_for_close.drop_conversation(t.get_convo_id());
             let close_hwnd = grab_hwnd(t.window()).ok();
             let _ = t.hide();
@@ -365,9 +344,6 @@ pub(crate) fn fire_f9_ask(
             toggle_tile_maximize(hwnd, &t);
         }
     });
-    // V0.8.1 — shared per-tile live route (Text/Cloud). Shift+F9 seeds Cloud;
-    // 🧠-escalate flips it to Cloud; the continuation surfaces below read it at
-    // click time so the conversation stays sticky-cloud after one escalation.
     let live = live_route(route);
     // Phase E6 v45 — continue-dialog: a follow-up question reuses this
     // tile's conversation + streams the reply below the thread.
@@ -380,8 +356,6 @@ pub(crate) fn fire_f9_ask(
         let rt_handle_fu = rt_handle.clone();
         let live_fu = live.clone();
         tile.on_followup_submitted(move |q| {
-            // V0.8.1 — read the LIVE route at click time (Cloud after 🧠 or
-            // Shift+F9, else Text).
             fire_followup_ask(
                 (convo_id, q.to_string()),
                 weak_fu.clone(),
@@ -394,8 +368,6 @@ pub(crate) fn fire_f9_ask(
             );
         });
     }
-    // V5 — 🔄 regenerate, available on every answer tile (re-runs via the text
-    // endpoint for F9/PTT tiles, vision endpoint for F8 tiles).
     tile.set_can_regenerate(true);
     {
         let weak_re = tile.as_weak();
@@ -418,12 +390,9 @@ pub(crate) fn fire_f9_ask(
             );
         });
     }
-    // V5 — 🎤 voice follow-up. Reads the live route (sticky-cloud aware).
     wire_voice_followup(&tile, convo_id, live.clone(), cfg);
     wire_copy(&tile, convo_id, bridge);
     wire_speak(&tile, convo_id, bridge);
-    // V0.8.0 (Поток D) — 🧠 escalate to cloud (only shown if the answer is local).
-    // V0.8.1 — also flips `live` to Cloud so the rest of the dialog stays cloud.
     wire_escalate(
         &tile, convo_id, &live, bridge, events, cfg, slint_rt, rt_handle,
     );
@@ -434,9 +403,6 @@ pub(crate) fn fire_f9_ask(
     tiles.borrow_mut().push(tile);
     refresh_open_tiles(weak_overlay, tiles);
 
-    // ===== 2. Register the tile in the bridge's streaming slot =====
-    // request_messages is filled once `messages` is built below (before
-    // the stream task spawns, so no event can fold an empty history).
     let generation = install_streaming_tile(
         bridge,
         StreamingTile {
@@ -448,7 +414,6 @@ pub(crate) fn fire_f9_ask(
         },
     );
 
-    // ===== 3. Snapshot cfg + cost-cap + transcript + screenshot =====
     let (
         endpoint_hint,
         meeting_context,
@@ -459,8 +424,6 @@ pub(crate) fn fire_f9_ask(
         needs_mlx,
     ) = {
         let c = cfg.read();
-        // V0.8.0 (Поток D) — route picks the endpoint: normal F9 = Text (local
-        // or cloud per provider), Shift+F9 = Cloud (smart model, one-shot).
         let endpoint = route.endpoint(&c);
         let needs_mlx = route_needs_mlx(route, &c);
         let local_vision = if needs_mlx {
@@ -504,8 +467,6 @@ pub(crate) fn fire_f9_ask(
         let shot = s.last_screenshot.take();
         (lines, shot)
     };
-    // A local TEXT model can't accept an image_url part — drop the
-    // screenshot unless the user flagged the local model as vision-capable.
     let screenshot = if matches!(endpoint_hint.protocol, ai::AiProtocol::CodexSubscription)
         || (is_local_hint && !local_vision)
     {
@@ -560,9 +521,6 @@ pub(crate) fn fire_f9_ask(
             &meeting_context,
             typed_question.as_deref(),
         );
-        // V0.8.3 — a typed "✏ Написать" question is answered DIRECTLY (the typed
-        // text IS the question; no live-transcript / screenshot noise). A normal
-        // F9 ask is built from the live transcript as before.
         let messages = match typed_question.as_deref() {
             Some(q) => ai::build_request(&meeting_context, &response_language, &[], None, Some(q)),
             None => ai::build_request(
@@ -592,7 +550,6 @@ pub(crate) fn fire_f9_ask(
             None => String::new(),
         };
         let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
-        // The request and response must carry the same journal purpose.
         let purpose = if is_text { "text_ask" } else { "live_ask" };
         let _ = slint::invoke_from_event_loop(move || {
             // A newer ask may have superseded this one while the worker ran; the
@@ -626,7 +583,6 @@ pub(crate) fn fire_f9_ask(
             }
             let rt_for_cost = slint_rt_for_work.clone();
             let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
-                // Local inference is free — don't bill it (and don't trip the cap).
                 let micro = if is_local { 0 } else { micro };
                 let mut s = slint_replay::runtime_state::lock(&rt_for_cost);
                 s.session_cost_microcents = s.session_cost_microcents.saturating_add(micro);

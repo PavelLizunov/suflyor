@@ -37,7 +37,6 @@ fn looks_like_untranslated_echo(output: &str) -> bool {
         .any(|c| ('А'..='я').contains(&c) || c == 'ё' || c == 'Ё');
     let ascii_letters = output.chars().filter(|c| c.is_ascii_alphabetic()).count();
     let total_letters = output.chars().filter(|c| c.is_alphabetic()).count();
-    // Echo = effectively no Cyrillic and almost every letter is ASCII.
     !has_cyrillic && total_letters > 0 && ascii_letters * 10 >= total_letters * 9
 }
 
@@ -62,7 +61,6 @@ fn summary_heading_checker_catches_a_dropped_section() {
         "## Решения\n…\n## Действия\n…\n## Риски\n…",
         &required
     ));
-    // The reduce dropped "Риски" — must be caught.
     assert!(!summary_has_all_headings(
         "## Решения\n…\n## Действия\n…",
         &required
@@ -71,15 +69,12 @@ fn summary_heading_checker_catches_a_dropped_section() {
 
 #[test]
 fn translate_echo_detector() {
-    // Pure-English output = the echo bug.
     assert!(looks_like_untranslated_echo(
         "The interviewer asked about hash maps and load factors."
     ));
-    // Proper Russian = fine.
     assert!(!looks_like_untranslated_echo(
         "Интервьюер спросил про хеш-таблицы и коэффициент заполнения."
     ));
-    // Mixed (a Latin term in a Russian sentence) = fine, not an echo.
     assert!(!looks_like_untranslated_echo(
         "Хеш-таблица (hash map) — это структура данных."
     ));
@@ -88,15 +83,14 @@ fn translate_echo_detector() {
 #[test]
 fn auto_name_contract() {
     assert!(name_is_clean("Путь к высокому доходу"));
-    assert!(!name_is_clean("\"Путь к высокому доходу\"")); // wrapping quotes
-    assert!(!name_is_clean("«Обзор функций приложения»")); // wrapping guillemets
+    assert!(!name_is_clean("\"Путь к высокому доходу\""));
+    assert!(!name_is_clean("«Обзор функций приложения»"));
     assert!(!name_is_clean(
         "Очень длинное название которое явно превышает лимит из четырёх слов"
-    )); // > 4 words
-    assert!(!name_is_clean("")); // empty
+    ));
+    assert!(!name_is_clean(""));
 }
 
-// ---- Tier 2: live eval (ignored; needs SUFLYOR_EVAL=1 + a running local model) ----
 
 #[test]
 #[ignore = "live: set SUFLYOR_EVAL=1 (+ SUFLYOR_EVAL_BASE_URL/_MODEL) and run with --ignored"]
@@ -105,10 +99,5 @@ fn live_local_ai_invariants() {
         eprintln!("SUFLYOR_EVAL != 1 — skipping live eval");
         return;
     }
-    // Documented stub: extend this to call `overlay_backend::ai::complete`
-    // against the local endpoint (SUFLYOR_EVAL_BASE_URL / _MODEL) with a fixed
-    // transcript, then assert `summary_has_all_headings`, `name_is_clean`, and
-    // `!looks_like_untranslated_echo` on the REAL model output. Left as a stub so
-    // the Tier-1 checkers ship today without requiring a loaded model in CI.
     eprintln!("live eval stub — wire ai::complete against the local model to expand");
 }

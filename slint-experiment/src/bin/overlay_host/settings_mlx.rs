@@ -1,4 +1,3 @@
-// macOS-only Settings wiring for the two pinned, on-demand MLX models.
 
 use super::{ComponentHandle, SettingsWindow, SharedString};
 use std::sync::{

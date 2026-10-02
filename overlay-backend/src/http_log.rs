@@ -31,8 +31,6 @@ mod tests {
 
     #[test]
     fn never_carries_body_text() {
-        // The body that WOULD have been snippet-logged before the fix. The helper
-        // only ever receives its length, so none of its content can appear.
         let body = "TRANSCRIPT_SENTINEL secret prompt http://192.168.55.66/v1 C:/Users/alice";
         let line = http_error_line("STT", 500, body.len());
         assert!(

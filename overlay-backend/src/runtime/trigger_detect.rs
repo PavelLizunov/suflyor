@@ -50,7 +50,6 @@ pub fn build_auto_tile_prompts(
             )
         };
 
-        // Фича1 — live-coaching режим: тайлы как готовые к чтению вслух реплики.
         let coaching_block = if live_coaching {
             "\n=== Режим чтения вслух (коучинг) ===\n\
              Пользователь ПРОЧИТАЕТ ответ вслух дословно. Пиши короткими уверенными \
@@ -232,7 +231,6 @@ pub fn looks_like_real_speech(text: &str) -> bool {
     if tokens.len() < 2 {
         return false;
     }
-    // Single-word echo? ("угу угу угу угу")
     let first = tokens[0].to_lowercase();
     if tokens.iter().all(|t| t.to_lowercase() == first) {
         return false;
@@ -274,9 +272,6 @@ pub fn strip_filler_prefix(lower: &str) -> String {
         let mut matched = false;
         for f in FILLERS {
             if let Some(rest) = s.strip_prefix(f) {
-                // Word boundary: filler must be followed by non-alnum
-                // (space, comma, punct) or end. Avoids matching "вот"
-                // as prefix of "воткни".
                 let next_is_alnum = rest.chars().next().is_some_and(char::is_alphanumeric);
                 if !next_is_alnum {
                     s = trim_punct(rest);

@@ -171,7 +171,6 @@ pub fn start(cfg: SharedConfig) -> Result<BridgeHandle, String> {
 /// Read + auth + dispatch + respond for one request. Never panics; every
 /// failure path answers with a generic JSON error.
 fn handle_request(mut req: tiny_http::Request, cfg: &SharedConfig, token: &str) {
-    // Auth FIRST (before reading the body): constant shape, generic error.
     let expected_auth = format!("Bearer {token}");
     let authed = req
         .headers()
@@ -182,7 +181,6 @@ fn handle_request(mut req: tiny_http::Request, cfg: &SharedConfig, token: &str) 
     let (status, body, needs_save) = if !authed {
         (401, serde_json::json!({"error": "unauthorized"}), false)
     } else {
-        // Body (capped). take() bounds the read; an over-cap body is rejected.
         let mut raw = Vec::new();
         let read_ok = req
             .as_reader()
@@ -208,8 +206,6 @@ fn handle_request(mut req: tiny_http::Request, cfg: &SharedConfig, token: &str) 
         }
     };
     if needs_save {
-        // Persist the profile upsert. Done OUTSIDE dispatch so tests never
-        // touch the user's real config.json.
         let c = cfg.read();
         if let Err(e) = crate::config::save(&c) {
             log::warn!("[bridge] config save failed: {e}");
@@ -427,8 +423,6 @@ fn dispatch(
                         .collect();
                     (200, serde_json::json!({ "hits": items }), false)
                 }
-                // FTS5 syntax errors from odd queries land here — the caller
-                // sees a clean 400 rather than a 500.
                 Err(_) => (400, serde_json::json!({"error": "bad query"}), false),
             }
         }
@@ -612,7 +606,6 @@ mod tests {
             "/sessions/nope/summary",
             serde_json::Value::Null,
         );
-        // No ai_turns rows → empty list → "no summary" 404 (not a 500).
         assert_eq!(st, 404);
     }
 
@@ -638,13 +631,11 @@ mod tests {
         assert_eq!(st, 200);
         assert!(body["queued"].as_bool().unwrap());
         assert!(!save);
-        // Queued as a PENDING candidate — approved memory stays empty.
         assert_eq!(s.count_candidates("default", "pending").unwrap(), 1);
         assert!(s
             .list_memory_items("default", false, -1)
             .unwrap()
             .is_empty());
-        // Blank / oversized text rejected.
         let (st, ..) = call(
             &mut s,
             &cfg,
@@ -667,7 +658,6 @@ mod tests {
     #[test]
     fn profile_upsert_create_update_activate() {
         let (mut s, cfg) = scratch();
-        // Create + activate.
         let (st, body, save) = call(
             &mut s,
             &cfg,
@@ -683,7 +673,6 @@ mod tests {
             assert_eq!(c.active_profile.as_deref(), Some("Собес X"));
             assert_eq!(c.meeting_context, "Компания X, роль Y");
         }
-        // Update in place (no duplicate).
         let (st, body, _) = call(
             &mut s,
             &cfg,
@@ -694,7 +683,6 @@ mod tests {
         assert_eq!(st, 200);
         assert!(!body["created"].as_bool().unwrap());
         assert_eq!(cfg.read().context_profiles.len(), 1);
-        // Bad payloads.
         let (st, ..) = call(
             &mut s,
             &cfg,
@@ -703,7 +691,6 @@ mod tests {
             serde_json::json!({"name": "", "context": "x"}),
         );
         assert_eq!(st, 400);
-        // GET /profiles reflects the state.
         let (st, body, _) = call(&mut s, &cfg, "GET", "/profiles", serde_json::Value::Null);
         assert_eq!(st, 200);
         assert_eq!(body["active"], "Собес X");
@@ -712,7 +699,6 @@ mod tests {
 
     #[test]
     fn query_decoding_cyrillic() {
-        // «влад» percent-encoded (UTF-8) + '+' as space.
         let (_, q) = split_query("/search?q=%D0%B2%D0%BB%D0%B0%D0%B4+%D0%BA");
         assert_eq!(q[0].1, "влад к");
     }
@@ -729,17 +715,14 @@ mod tests {
 
     #[test]
     fn verify_authorization_behavior() {
-        // Matching
         assert!(verify_authorization(b"Bearer token123", b"Bearer token123"));
         assert!(verify_authorization(b"", b""));
 
-        // Same-length mismatch
         assert!(!verify_authorization(
             b"Bearer token123",
             b"Bearer token124"
         ));
 
-        // Different-length mismatch
         assert!(!verify_authorization(b"Bearer token123", b"Bearer token12"));
         assert!(!verify_authorization(
             b"Bearer token123",

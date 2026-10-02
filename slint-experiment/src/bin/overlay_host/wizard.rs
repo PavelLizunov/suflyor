@@ -74,7 +74,6 @@ pub(crate) fn wire_wizard_steps(
     // recover_offer_ref / tiles are all reached via the registry now).
     registry: &WindowRegistry,
 ) {
-    // nav-next: advance + auto-run the NEW step's check; refill summary at step 7.
     {
         let weak = win.as_weak();
         let cfg_c = cfg.clone();
@@ -106,8 +105,6 @@ pub(crate) fn wire_wizard_steps(
         win.on_nav_skip(move || {
             if let Some(w) = weak.upgrade() {
                 w.set_step((w.get_step() + 1).min(6));
-                // Refill the summary if Skip lands on step 7 too — otherwise a
-                // fully-skipped run shows blank rows (caught in live testing).
                 if w.get_step() == 6 {
                     refill_wizard_summary(&w, &cfg_c);
                 }
@@ -115,7 +112,6 @@ pub(crate) fn wire_wizard_steps(
         });
     }
 
-    // Step 1: mode → write provider fields + save (this CREATES config.json).
     {
         let cfg_c = cfg.clone();
         win.on_mode_selected(move |m| {
@@ -128,10 +124,6 @@ pub(crate) fn wire_wizard_steps(
                 }
                 1 => {
                     c.ai_provider = "local".into();
-                    // Prefer GigaAM when it's configured (its model dir is set) —
-                    // it's the stronger local STT and avoids defaulting to a
-                    // whisper-server the user may not be running. Same "configured"
-                    // test the diagnostics readiness() uses. Fall back to whisper.
                     c.stt_provider = if c.stt_gigaam_dir.trim().is_empty() {
                         "whisper".into()
                     } else {
@@ -139,7 +131,7 @@ pub(crate) fn wire_wizard_steps(
                     };
                     c.vision_provider = "local".into();
                 }
-                _ => {} // Mixed: leave provider fields as-is.
+                _ => {}
             }
             if let Err(e) = overlay_backend::config::save(&c) {
                 eprintln!("[overlay-host] wizard mode save failed: {e:#}");
@@ -193,7 +185,6 @@ pub(crate) fn wire_wizard_steps(
         });
     }
 
-    // Step 3: STT — REUSE stt::test_connection_backend.
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
@@ -271,8 +262,6 @@ pub(crate) fn wire_wizard_steps(
         });
     }
 
-    // Step 5: system audio — REUSE play_tone_and_capture (the diag sys-phase
-    // self-test: play a tone through the default output, hear it on loopback).
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
@@ -312,9 +301,6 @@ pub(crate) fn wire_wizard_steps(
         });
     }
 
-    // Steps 2/6: "Install local AI" / "Open diagnostics" — dismiss the wizard
-    // first (it's always-on-top, so otherwise the re-shown Settings opens BEHIND
-    // it and looks like nothing happened), then open Settings on the right tab.
     {
         let weak = win.as_weak();
         let ow = overlay_weak.clone();
@@ -326,10 +312,6 @@ pub(crate) fn wire_wizard_steps(
             if let Some(o) = ow.upgrade() {
                 o.invoke_open_settings_clicked();
             }
-            // 🧠 AI bridge tab (index 11) — the local-AI installer lives there.
-            // Баг4 — actually START the install (mirrors "Open diagnostics" auto-
-            // running its check just below). The button previously only navigated,
-            // so the user landed in complex Settings with nothing installing.
             if let Some(sw) = set.borrow().as_ref() {
                 sw.set_active_tab(11);
                 sw.invoke_install_local_ai_clicked();
@@ -347,7 +329,6 @@ pub(crate) fn wire_wizard_steps(
             if let Some(o) = ow.upgrade() {
                 o.invoke_open_settings_clicked();
             }
-            // 🩺 Diagnostics tab (index 13) + auto-run the readiness check.
             if let Some(sw) = set.borrow().as_ref() {
                 sw.set_active_tab(13);
                 sw.invoke_diagnostics_check_all_clicked();
@@ -355,8 +336,6 @@ pub(crate) fn wire_wizard_steps(
         });
     }
 
-    // Frameless window drag — the header row is the handle (same cursor-delta
-    // idiom as Settings/bar/tiles): grab_hwnd + drag_begin/drag_update reused.
     {
         let weak = win.as_weak();
         win.on_drag_start_requested(move || {
@@ -414,7 +393,6 @@ pub(crate) fn wire_wizard_steps(
             if let Some(o) = ow.upgrade() {
                 apply_bar_stealth(&o, &state_c, on);
             }
-            // All other open windows (incl. this wizard) via the single path.
             registry_c.apply_stealth(on);
         });
     }
@@ -480,7 +458,6 @@ pub(crate) fn open_wizard(
         // like the bar/tiles — otherwise under stealth they leak an existence
         // entry while open (content is WDA-hidden, but the window button isn't).
         let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
-        // OS-level rounded corners (opaque frameless window) — same as archive.
         slint_replay::win32::set_round_corners(hwnd);
         focus_window(hwnd);
     });

@@ -47,8 +47,6 @@ impl AskRoute {
         match self {
             AskRoute::Text => c.ai_endpoint(false),
             AskRoute::Vision => c.vision_endpoint().unwrap_or_else(|| {
-                // A Vision tile must never drift onto a text-only model when
-                // its configured route becomes unavailable between turns.
                 overlay_backend::config::AiEndpoint {
                     protocol: overlay_backend::ai::AiProtocol::OpenAiCompatible,
                     base_url: String::new(),

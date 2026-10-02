@@ -64,8 +64,6 @@ pub fn diarize(
         .spawn()
         .context("start Nemotron")?;
     crate::local_ai::assign_to_lifetime_job(&child);
-    // Ownership is scoped to this method: a dropped worker cannot leave the CLI
-    // behind, and failure never writes to the session's persisted row.
     struct ChildGuard(std::process::Child);
     impl Drop for ChildGuard {
         fn drop(&mut self) {

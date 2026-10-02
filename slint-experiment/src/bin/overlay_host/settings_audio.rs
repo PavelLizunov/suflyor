@@ -110,8 +110,6 @@ fn show_devices(
         current.mic_device.as_deref(),
         label.as_str(),
     );
-    // Some headsets expose their mixed system stream as a Capture endpoint
-    // (A50 Stream Out). The backend already resolves Render, then Capture.
     let system = DeviceChoices::new(
         outputs.into_iter().chain(inputs).collect(),
         current.system_audio_device.as_deref(),
@@ -128,8 +126,6 @@ fn show_devices(
 }
 
 pub(super) fn refresh(win: &SettingsWindow, cfg: &config::SharedConfig) {
-    // At most one enumeration per reused window. The completion reads the
-    // latest config and translated label, not a pre-enumeration snapshot.
     if win.get_audio_devices_loading() {
         return;
     }
@@ -144,8 +140,6 @@ pub(super) fn refresh(win: &SettingsWindow, cfg: &config::SharedConfig) {
             match devices {
                 Ok(devices) => show_devices(&win, &cfg, devices.inputs, devices.outputs),
                 Err(_) => {
-                    // Availability is unknown, but the saved choice is known.
-                    // Do not leave a first-open loading placeholder selected.
                     show_devices(&win, &cfg, Vec::new(), Vec::new());
                     win.set_audio_devices_failed(true);
                 }
@@ -187,8 +181,6 @@ fn choose(
         Some(value) => match persist_selection(cfg, system, value, persist) {
             Ok(()) => {
                 win.set_audio_save_state(1);
-                // Remove the unavailable row only after saving the replacement.
-                // Otherwise the old missing flag would disable the new mic too.
                 if missing {
                     let mut available = names.clone();
                     available.pop();
@@ -206,7 +198,6 @@ fn choose(
                 index
             }
             Err(_) => {
-                // Never forward the config error chain (it can contain paths).
                 win.set_audio_save_state(2);
                 previous
             }
@@ -341,7 +332,6 @@ mod tests {
         assert_eq!(win.get_system_device_index(), 1);
         assert_eq!(win.get_system_devices().row_count(), 3);
         assert_eq!(win.get_audio_save_state(), 1);
-        // Slint changes its bound index before delivering the callback.
         win.set_system_device_index(0);
         choose(&win, &cfg, true, 0, |_| {
             Err(anyhow::anyhow!("synthetic failure"))
@@ -355,8 +345,6 @@ mod tests {
         choose(&win, &cfg, true, 0, |_| Ok(()));
         assert!(cfg.read().system_audio_device.is_none());
         assert_eq!(win.get_system_device_index(), 0);
-        // Fresh enumeration must use current config, including changes made
-        // while the worker was enumerating, rather than its starting snapshot.
         cfg.write().system_audio_device = Some("A50 Stream Out".into());
         show_devices(&win, &cfg, vec!["A50 Stream Out".into()], vec![]);
         assert_eq!(win.get_system_device_index(), 1);
@@ -408,7 +396,6 @@ mod tests {
             .with_winit_event_loop_builder(event_loop)
             .select()
             .unwrap();
-        // Creating a component registers its bundled translation catalog.
         let win = SettingsWindow::new().unwrap();
         let lang = std::env::var("AUDIO_FIXTURE_LANGUAGE").unwrap_or_else(|_| "en".into());
         slint::select_bundled_translation(&lang).unwrap();

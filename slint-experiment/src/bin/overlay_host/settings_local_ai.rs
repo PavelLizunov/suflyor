@@ -131,7 +131,7 @@ pub(crate) fn wire_local_ai(
         win.on_install_local_ai_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
             if w.get_local_ai_installing() {
-                return; // re-entry guard (same window)
+                return;
             }
             // Deep lock (v0.37): the managed server is deliberately unloaded —
             // an install would silently resurrect it. Unlock from the bar first.
@@ -153,7 +153,7 @@ pub(crate) fn wire_local_ai(
                 let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
                 s.local_ai_busy.clone()
             }) else {
-                return; // another local-AI op is already running
+                return;
             };
             w.set_local_ai_installing(true);
             w.set_local_ai_progress(0.0);
@@ -163,8 +163,6 @@ pub(crate) fn wire_local_ai(
             let state_t = state_c.clone();
             let overlay_t = overlay_c.clone();
             let weak_t = w.as_weak();
-            // Shared cancel flag (lives in AppState so the Cancel button can
-            // flip it); reset before each run.
             let cancel = {
                 let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
                 s.local_ai_cancel.clone()
@@ -222,11 +220,6 @@ pub(crate) fn wire_local_ai(
                 else {
                     return;
                 };
-                // Re-install hardening: stop any servers we previously launched
-                // so a fresh `--mmproj` llama-server can bind :8080. Without this
-                // a stale vision-less server keeps the port and the new one
-                // silently fails to start (wait_ready still sees the old one and
-                // reports success). Fresh installs have nothing to drain.
                 let mut opts = overlay_backend::local_ai::InstallOptions::default();
                 let (restore_previous, restore_whisper, previous_choice) = {
                     let c = cfg_t.read();
@@ -291,9 +284,6 @@ pub(crate) fn wire_local_ai(
                                 w.set_managed_local_server(true);
                                 w.set_ai_local_quality(quality);
                                 w.set_quality_selection_allowed(quality_selection_allowed);
-                                // The Settings window is reused. Replace a prior
-                                // custom-server list so its selected model cannot
-                                // disagree with the model this reinstall launched.
                                 w.set_ai_local_models(ModelRc::new(VecModel::from(vec![
                                     SharedString::from(model.clone()),
                                 ])));
@@ -330,11 +320,6 @@ pub(crate) fn wire_local_ai(
                         });
                     }
                     Err(e) => {
-                        // A reinstall deliberately stops the old managed server
-                        // before replacing files. If any later stage fails (or is
-                        // cancelled), restore the last effective persisted model
-                        // and keep its handles tracked instead of leaving local AI
-                        // down until the next app restart.
                         let mut restored_servers = Vec::new();
                         let mut restored_label = None;
                         let mut restored_settings = None;
@@ -414,12 +399,6 @@ pub(crate) fn wire_local_ai(
                                     vision_provider,
                                 )) = restored_settings
                                 {
-                                    // A primary restore can downgrade to 12B.
-                                    // Refresh the reused Settings window from
-                                    // the persisted effective state so its
-                                    // active profile, vision controls, model
-                                    // list, and resource warning agree with
-                                    // the server that is now running.
                                     w.set_ai_local_quality(quality);
                                     w.set_ai_local_model_profile_index(
                                         overlay_backend::local_ai::ManagedModel::from_config(
@@ -532,8 +511,6 @@ pub(crate) fn wire_local_ai(
             if w.get_model_switching() {
                 return;
             }
-            // No-op if already on the requested model (the active button is
-            // disabled, but guard anyway).
             if custom_path.is_none()
                 && w.get_ai_local_model_profile_index() == want_model.index()
                 && !w.get_ai_local_custom_active()
@@ -564,19 +541,11 @@ pub(crate) fn wire_local_ai(
                 ));
                 return;
             }
-            // UI-audit 2026-06-13 (IMPORTANT): do NOT flip ai_local_quality /
-            // config optimistically. If the relaunch returns PortBusy/
-            // FailedToStart, an optimistic flip would leave the "●" active
-            // marker + the button enabled-states pointing at a model the server
-            // is NOT running, while the status says "не выполнено". We commit
-            // the flip (config + UI) ONLY on a confirmed Switched outcome below;
-            // until then the UI keeps showing the previous (still-running) model.
-            // B3 — process-global dedup (survives Settings reopen) + RAII release.
             let Some(busy_guard) = slint_replay::app_state::LocalAiBusyGuard::try_acquire({
                 let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
                 s.local_ai_busy.clone()
             }) else {
-                return; // another local-AI op is already running
+                return;
             };
             w.set_model_switching(true);
             let custom_name = custom_path.as_ref().and_then(|path| {
@@ -647,9 +616,6 @@ pub(crate) fn wire_local_ai(
                         c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081"),
                     )
                 };
-                // Backend frees :8080 owner-aware, relaunches with the chosen
-                // GGUF, and POLLS until it answers — returning the honest
-                // outcome (review #1/#2) instead of a blind "done".
                 let (outcome, started) = overlay_backend::local_ai::switch_local_model(
                     &root,
                     previous,
@@ -665,16 +631,12 @@ pub(crate) fn wire_local_ai(
                 );
                 let to_terminate = {
                     let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
-                    // Reap only DEFINITIVELY-exited handles (Ok(Some)); keep
-                    // running (Ok(None)) AND unknown (Err) so a live child is
-                    // never lost from kill-on-quit tracking (review #3).
                     s.local_ai_servers
                         .retain_mut(|c| !matches!(c.try_wait(), Ok(Some(_))));
                     if serving {
                         s.local_ai_servers.extend(started);
                         Vec::new()
                     } else {
-                        // Failed relaunch — don't track its dead/wedged children.
                         started
                     }
                 };
@@ -682,11 +644,6 @@ pub(crate) fn wire_local_ai(
                 // (no-op when switched). No port sweep → whisper (:8081) is left
                 // alone.
                 overlay_backend::local_ai::terminate_servers(to_terminate);
-                // Commit the choice ONLY on a confirmed switch: persist
-                // ai_local_quality + the active-stack model name (the bar reads
-                // cfg.ai_local_model; the request "model" field is ignored by
-                // single-model llama.cpp). On failure nothing is persisted, so
-                // the next launch still starts the model that's actually running.
                 if switched {
                     let mut c = cfg_t.write();
                     overlay_backend::local_ai::apply_llama_choice(&mut c, &root, &target);
@@ -700,9 +657,6 @@ pub(crate) fn wire_local_ai(
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_done.upgrade() {
                         w.set_model_switching(false);
-                        // A failed worker-side SHA review removes the rejected
-                        // exact-size primary. Refresh this reused Settings window
-                        // from disk so its normal download control is available.
                         if outcome
                             == overlay_backend::local_ai::ModelSwitch::TargetUnavailable
                         {
@@ -787,8 +741,6 @@ pub(crate) fn wire_local_ai(
         });
     }
 
-    // Slider movement is preview-only: update the estimate without persisting or
-    // restarting. The Apply button calls `ai_local_context_changed` once.
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
@@ -822,9 +774,6 @@ pub(crate) fn wire_local_ai(
         });
     }
 
-    // Managed llama.cpp context preset. Auto stays compact; manual presets use
-    // one fixed context for live + prep. A restart is transactional through the
-    // same backend primitive as a model switch.
     {
         let cfg_c = cfg.clone();
         let state_c = state.clone();
@@ -1035,26 +984,19 @@ pub(crate) fn wire_local_ai(
         });
     }
 
-    // Download EXACTLY the clicked bundled model (4B/12B/26B) on demand, on any
-    // hardware. Same worker/progress pattern as the installer; the backend
-    // verifies the pinned SHA-256 before the file is ever loaded. On success the
-    // matching "Installed" button appears; the user taps it to switch (no
-    // auto-switch, so a background download can't swap the model mid-call). The
-    // generic full-stack installer (`install-local-ai-clicked`) stays separate.
     {
         let state_c = state.clone();
         let weak = win.as_weak();
         win.on_download_model_clicked(move |index| {
             let Some(w) = weak.upgrade() else { return };
             if w.get_quality_downloading() {
-                return; // re-entry guard (same window)
+                return;
             }
-            // B3 — process-global dedup (survives Settings reopen) + RAII release.
             let Some(busy_guard) = slint_replay::app_state::LocalAiBusyGuard::try_acquire({
                 let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
                 s.local_ai_busy.clone()
             }) else {
-                return; // another local-AI op is already running
+                return;
             };
             let model = overlay_backend::local_ai::ManagedModel::from_index(index);
             let model_label = model.spec().label;
@@ -1155,8 +1097,6 @@ pub(crate) fn wire_local_ai(
         });
     }
 
-    // Download the matching 26B vision projector. On success, relaunch :8080
-    // transactionally so the projector is attached before F8 is enabled.
     {
         let cfg_c = cfg.clone();
         let state_c = state.clone();
@@ -1164,14 +1104,13 @@ pub(crate) fn wire_local_ai(
         win.on_download_vision12b_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
             if w.get_vision12b_downloading() {
-                return; // re-entry guard (same window)
+                return;
             }
-            // B3 — process-global dedup (survives Settings reopen) + RAII release.
             let Some(busy_guard) = slint_replay::app_state::LocalAiBusyGuard::try_acquire({
                 let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
                 s.local_ai_busy.clone()
             }) else {
-                return; // another local-AI op is already running
+                return;
             };
             w.set_vision12b_downloading(true);
             w.set_vision12b_status(SharedString::from("Подготовка…"));
@@ -1312,10 +1251,6 @@ pub(crate) fn wire_local_ai(
         });
     }
 
-    // v0.18.2 — manual "Update engine": pull the latest llama.cpp, verify it runs
-    // on this PC, then swap it in (verify-before-swap keeps a bad build from
-    // breaking local AI). On a real update the live server was stopped, so we
-    // relaunch it with the user's preferred model. Bypasses the weekly throttle.
     {
         let cfg_c = cfg.clone();
         let state_c = state.clone();
@@ -1324,7 +1259,7 @@ pub(crate) fn wire_local_ai(
         win.on_update_engine_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
             if w.get_engine_updating() {
-                return; // re-entry guard (same window)
+                return;
             }
             // Deep lock (v0.37): a real engine swap stops :8080 and the
             // watchdog won't restart it while locked — refuse until unlocked.
@@ -1338,12 +1273,11 @@ pub(crate) fn wire_local_ai(
                     return;
                 }
             }
-            // B3 — process-global dedup (survives Settings reopen) + RAII release.
             let Some(busy_guard) = slint_replay::app_state::LocalAiBusyGuard::try_acquire({
                 let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
                 s.local_ai_busy.clone()
             }) else {
-                return; // another local-AI op is already running
+                return;
             };
             w.set_engine_updating(true);
             w.set_engine_update_status(SharedString::from("Проверяю обновление движка…"));
@@ -1399,8 +1333,6 @@ pub(crate) fn wire_local_ai(
                 };
                 let res = overlay_backend::local_ai::update_llama_engine(&root, &cancel, &on);
                 overlay_backend::local_ai::mark_engine_update_checked(&root);
-                // A real swap stopped :8080 — relaunch with the preferred model so
-                // local AI stays up on the new engine.
                 let restarted_model = if matches!(
                     res.as_ref(),
                     Ok(overlay_backend::local_ai::EngineUpdate::Updated { .. })
@@ -1473,7 +1405,6 @@ pub(crate) fn wire_local_ai(
                     if let Some(b) = build {
                         w.set_engine_build(SharedString::from(format!("b{b}")));
                     }
-                    // The engine may now (or no longer) support managed vision.
                     w.set_quality_vision_supported(supported);
                     if let Some((quality, base_url, model, local_vision, vision_provider)) =
                         restarted_model

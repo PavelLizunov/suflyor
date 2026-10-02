@@ -74,7 +74,7 @@ fn cyr_upper_confusable(c: char) -> Option<char> {
 fn split_fused_token(tok: &str) -> Vec<String> {
     let chars: Vec<char> = tok.chars().collect();
     if !chars.iter().any(|c| c.is_ascii_alphabetic()) || !chars.iter().copied().any(is_cyr) {
-        return vec![tok.to_string()]; // pure-script / no-letter → untouched
+        return vec![tok.to_string()];
     }
     let folded: Vec<char> = (0..chars.len())
         .map(|i| {
@@ -98,8 +98,6 @@ fn split_fused_token(tok: &str) -> Vec<String> {
             0
         }
     };
-    // Group into maximal same-script runs, then split ONLY between a Latin letter-run and a Cyrillic
-    // letter-run when both are ≥2 letters (a shorter side stays attached — no orphan 1-char splits).
     let mut runs: Vec<(u8, String)> = Vec::new();
     for &c in &folded {
         let k = script(c);
@@ -143,7 +141,7 @@ pub fn heuristic_clean(text: &str) -> String {
                 let is_stutter_word =
                     core.chars().count() >= 4 && core.chars().all(char::is_alphabetic);
                 if is_stutter_word && core == word_core(prev) {
-                    continue; // immediate repeat of a ≥4-letter word → an STT stutter
+                    continue;
                 }
             }
             out.push(tok);
@@ -214,7 +212,6 @@ fn segment_clauses(s: &str) -> Vec<String> {
         let clause: String = chars[start..].iter().collect();
         push_trimmed(&clause, &mut raw);
     }
-    // Repack over-long clauses into ≤MAX comma-windows so a grounding span stays bounded.
     let mut windows: Vec<String> = Vec::new();
     for clause in raw {
         if clause.chars().count() <= MAX {
@@ -264,7 +261,6 @@ pub fn heuristic_condense(cleaned: &str) -> String {
             .next()
             .unwrap_or_else(|| cleaned.trim().to_string());
     }
-    // Rank by content-word count, keep the top 2, then restore SOURCE order.
     let mut idx: Vec<usize> = (0..clauses.len()).collect();
     idx.sort_by_key(|&i| std::cmp::Reverse(content_words(&clauses[i]).len()));
     let mut top: Vec<usize> = idx.into_iter().take(2).collect();
@@ -495,8 +491,6 @@ pub fn validate_rewrite(span: &str, fact: &str) -> bool {
     if f.is_empty() || f.chars().count() > 200 {
         return false;
     }
-    // Content words must be an ORDERED subsequence of the span's (rooted + in order) — no fabrication,
-    // no reorder/recombination. Then numbers verbatim-in-order, then negation-count preserved.
     if !grounded_in_order(&content_words(f), &content_words(span)) {
         return false;
     }
@@ -565,7 +559,6 @@ pub async fn normalize_fact(
     if clauses.is_empty() {
         return Ok(None);
     }
-    // The user message is the NUMBERED clause list the model SELECTS from (it never copies verbatim).
     let numbered = clauses
         .iter()
         .enumerate()
@@ -582,13 +575,6 @@ pub async fn normalize_fact(
             content: MessageContent::Text(numbered),
         },
     ];
-    // P3 pivot: split the AI-call failure by whether a RETRY could ever help.
-    // - TRANSIENT (offline / timeout / 5xx / rate-limit) → Err: the caller leaves the row 'pending'
-    //   so a later sweep retries once the AI is back — the whole offline-reliability fix (D1).
-    // - PERMANENT (4xx: bad bearer/model, oversized req) → Ok(None): give up cleanly (keep the
-    //   heuristic text, mark terminal), else the row would stick 'pending' FOREVER and be re-hammered
-    //   on every sweep trigger for an error retry can't fix — and a permanent-error row at the head of
-    //   the queue would break the whole sweep, starving the retryable rows behind it.
     let resp = match ai::complete(base_url, bearer, model, messages, 500).await {
         Ok(r) => r,
         Err(e) if ai::is_permanent_ai_error(&format!("{e:#}")) => return Ok(None),
@@ -598,10 +584,6 @@ pub async fn normalize_fact(
         .into_iter()
         .filter_map(|f| {
             let fact = f.fact.as_str();
-            // Ground the clean fact in ONE clause: the model's selected index (a hint), else scan ALL
-            // clauses. A fact fusing two clauses' words fails EVERY single clause → dropped. So the
-            // stored text is the model's clean rewrite, but only if it's a faithful rewrite of a
-            // single source clause (no fabrication / cross-clause fusion) — safety is structural.
             let grounded = f
                 .clause
                 .and_then(|n| n.checked_sub(1))
@@ -611,18 +593,15 @@ pub async fn normalize_fact(
             if !grounded {
                 return None;
             }
-            // entity is metadata — keep it only if it too is a source quote (never fabricated).
             let entity = f.entity.and_then(|e| locate_span(&cleaned, &e));
             Some((fact.to_string(), entity))
         })
         .take(3)
         .collect();
     if facts.is_empty() {
-        return Ok(None); // AI replied but nothing grounded → terminal 'heuristic', not a retry.
+        return Ok(None);
     }
     let entity = facts.iter().find_map(|(_, e)| e.clone());
-    // Join with "; " (not "\n") so a multi-fact record stays single-line-editable in the
-    // Настройки→Память LineEdit — same convention as `join_marked_text`.
     let text = facts
         .iter()
         .map(|(t, _)| t.as_str())
@@ -653,13 +632,12 @@ fn parse_facts(resp: &str) -> Vec<ParsedFact> {
     #[derive(serde::Deserialize)]
     struct FactDto {
         #[serde(default)]
-        clause: serde_json::Value, // number OR string OR missing — coerced below, never fails parse
+        clause: serde_json::Value,
         #[serde(default)]
         entity: String,
         #[serde(default)]
         fact: String,
     }
-    // Slice from the first '{' to the last '}' — drops ```json fences / surrounding prose.
     let (Some(start), Some(end)) = (resp.find('{'), resp.rfind('}')) else {
         return Vec::new();
     };
@@ -675,7 +653,7 @@ fn parse_facts(resp: &str) -> Vec<ParsedFact> {
         .filter_map(|f| {
             let fact = f.fact.trim().to_string();
             if fact.is_empty() {
-                return None; // nothing to ground → drop
+                return None;
             }
             let clause = f
                 .clause
@@ -712,27 +690,22 @@ mod tests {
         );
         assert_eq!(heuristic_clean("  a   b  "), "a b");
         assert_eq!(heuristic_clean(""), "");
-        // Numbers and short words are NEVER collapsed (may be real doubles).
         assert_eq!(heuristic_clean("порт 80 80"), "порт 80 80");
         assert_eq!(heuristic_clean("код два два"), "код два два");
         assert_eq!(heuristic_clean("5 5"), "5 5");
-        // Clean text is unchanged.
         assert_eq!(heuristic_clean("сервер бэкапов"), "сервер бэкапов");
     }
 
     #[test]
     fn split_fused_token_de_garbles_mixed_script_only() {
-        // The owner's case: Latin acronym fused to a Cyrillic word via a confusable «М» → split.
         assert_eq!(
             split_fused_token("LLМоткрытых"),
             vec!["LLM".to_string(), "открытых".to_string()]
         );
-        // All-caps fused → split without needing the fold (no confusable bridges into a word).
         assert_eq!(
             split_fused_token("APIСЕРВЕР"),
             vec!["API".to_string(), "СЕРВЕР".to_string()]
         );
-        // Pure-script / identifiers / negation words are UNTOUCHED — no meaning can change.
         for t in [
             "сервер",
             "GigaChat",
@@ -753,7 +726,6 @@ mod tests {
 
     #[test]
     fn locate_span_returns_verbatim_source_slice() {
-        // Case + whitespace tolerant; returns the ORIGINAL slice incl. inner punctuation/spacing.
         assert_eq!(
             locate_span(
                 "Ну это Бекап-Сервер  z14-4443, ага",
@@ -768,7 +740,6 @@ mod tests {
     fn locate_span_rejects_truncated_identifier_and_fabrication() {
         // Truncated IP: token «11» ≠ «116» → no contiguous match → None (never a wrong IP).
         assert_eq!(locate_span("айпи 10.255.28.116", "10.255.28.11"), None);
-        // A word not in the source → None.
         assert_eq!(locate_span("кот не ест таблетки", "собака"), None);
     }
 
@@ -779,7 +750,6 @@ mod tests {
         // catch this; contiguous-token matching does, by construction.
         let src = "сервер Альфа продакшн, сервер Бета тестовый";
         assert_eq!(locate_span(src, "Бета продакшн"), None);
-        // The true contiguous claim IS found (verbatim slice).
         assert_eq!(
             locate_span(src, "Бета тестовый").as_deref(),
             Some("Бета тестовый")
@@ -788,16 +758,12 @@ mod tests {
 
     #[test]
     fn locate_span_rejects_boundary_and_overlong() {
-        // Bridging a sentence («ушёл. Она») or clause («жив; база») → rejected: a fact is ONE
-        // clause, not two fused by verbatim inner punctuation.
         assert_eq!(locate_span("Он ушёл. Она осталась", "ушёл. Она"), None);
         assert_eq!(locate_span("сервер жив; база мертва", "жив; база"), None);
-        // But a dot BETWEEN digits (IP/version) is NOT a boundary — must still locate.
         assert_eq!(
             locate_span("айпи 10.255.28.116 готов", "10.255.28.116").as_deref(),
             Some("10.255.28.116")
         );
-        // An over-long contiguous span (a whole tile paragraph) → rejected (one short utterance).
         let long = "слово ".repeat(60); // ~360 chars, one contiguous token run
         assert_eq!(locate_span(&long, long.trim()), None);
     }
@@ -810,15 +776,14 @@ mod tests {
         assert_eq!(fs[0].clause, Some(2));
         assert_eq!(fs[0].fact, "бекап-сервер z14");
         assert_eq!(fs[0].entity.as_deref(), Some("z14"));
-        // ```json fences + prose tolerated; a STRING clause is coerced; a missing clause → None.
         let fs = parse_facts(
             "Вот:\n```json\n{\"facts\":[{\"clause\":\"1\",\"entity\":\"\",\"fact\":\"кофе по утрам\"},\
              {\"entity\":\"порт\",\"fact\":\"порт 8080\"}]}\n```\nготово",
         );
         assert_eq!(fs.len(), 2);
-        assert_eq!(fs[0].clause, Some(1)); // "1" string coerced
+        assert_eq!(fs[0].clause, Some(1));
         assert_eq!(fs[0].entity, None);
-        assert_eq!(fs[1].clause, None); // missing → None (caller re-scans all clauses)
+        assert_eq!(fs[1].clause, None);
         assert_eq!(fs[1].fact, "порт 8080");
     }
 
@@ -826,7 +791,6 @@ mod tests {
     fn parse_facts_rejects_empty_and_garbage() {
         assert!(parse_facts(r#"{"facts":[]}"#).is_empty());
         assert!(parse_facts("не json вообще").is_empty());
-        // Present but empty `fact` (nothing to ground) → dropped even if a clause is set.
         assert!(parse_facts(r#"{"facts":[{"clause":1,"entity":"x"}]}"#).is_empty());
     }
 
@@ -839,7 +803,6 @@ mod tests {
                     сторону это самое, использования этих самых, как их там, открытых моделей. \
                     Вот так-то да-да. ыбочку и";
         let cl = segment_clauses(line);
-        // «А-аа, вот, значит, так.» / «Вот так-то да-да.» / «ыбочку и» are <2 content words → dropped.
         assert!(
             cl.iter()
                 .any(|c| c.contains("решили идти") && c.contains("открытых моделей")),
@@ -849,7 +812,6 @@ mod tests {
             !cl.iter().any(|c| c.contains("ыбочку")),
             "garbage clause dropped: {cl:?}"
         );
-        // A clause that validates a clean rewrite exists (the whole point — the fact can ground now).
         let content = cl.iter().find(|c| c.contains("решили идти")).unwrap();
         assert!(validate_rewrite(
             content,
@@ -859,7 +821,6 @@ mod tests {
 
     #[test]
     fn owner_garbled_line_cleans_end_to_end() {
-        // The owner's ACTUAL failing line, verbatim (with the recognizer-FUSED «LLМоткрытых»).
         let raw = "А-аа, вот, значит, так. А-а-а, да, это самое, мы, в общем, тогда решили идти в \
                    сторону это самое, так-то этого направления использования этих самых, как их \
                    там, LLМоткрытых моделей. Вот так-то да-да. ыбочку и";
@@ -890,7 +851,6 @@ mod tests {
             "kept the content clause: {out}"
         );
         assert!(!out.contains("ыбочку"), "dropped garbage: {out}");
-        // A single clean clause passes through unchanged.
         assert_eq!(
             heuristic_condense("сервер бэкапов готов"),
             "сервер бэкапов готов"
@@ -899,7 +859,6 @@ mod tests {
 
     #[test]
     fn validate_rewrite_accepts_faithful_clean_rewrite() {
-        // Drops filler, keeps word order, inflects — content words rooted + in order, number verbatim.
         assert!(validate_rewrite(
             "ну это бекап сервер z14 наверное",
             "бекап-сервер z14"
@@ -908,13 +867,11 @@ mod tests {
             "мы как бы провели встречу и договорились двигаться",
             "провели встречу, договорились двигаться"
         ));
-        // Inflection: договорённости shares a ≥4-char root with договорились.
         assert!(validate_rewrite("в итоге договорились", "договорённости"));
     }
 
     #[test]
     fn validate_rewrite_rejects_fabrication_number_and_negation_change() {
-        // A synonym/fabricated content word not rooted in the span.
         assert!(!validate_rewrite(
             "сервер вчера перезагружен",
             "сервер взломан"
@@ -922,32 +879,25 @@ mod tests {
         // A truncated / wrong number is a different digit-token.
         assert!(!validate_rewrite("айпи 10.0.0.116 готов", "айпи 10.0.0.11"));
         assert!(!validate_rewrite("порт 8080 открыт", "порт 9090 открыт"));
-        // ADDING a negation absent from the span (meaning inversion).
         assert!(!validate_rewrite("сервер работает", "сервер не работает"));
-        // DROPPING a negation the span had — the inversion a cleaning model most often makes (F1).
         assert!(!validate_rewrite("сервер не отвечает", "сервер отвечает"));
         assert!(!validate_rewrite("доступ не дали", "доступ дали"));
         // REORDERING a numeric range keeps the digit-token SET but flips meaning (F2).
         assert!(!validate_rewrite("бэкап с 10 до 20", "бэкап с 20 до 10"));
-        // Over-long (a whole paragraph is not one clean fact).
         let long = "слово ".repeat(60);
         assert!(!validate_rewrite(&long, long.trim()));
     }
 
     #[test]
     fn validate_rewrite_rejects_reorder_and_within_clause_recombination() {
-        // Role swap — same words, REORDERED → not an ordered subsequence → rejected (safety review).
         assert!(!validate_rewrite(
             "клиент платит подрядчику двести тысяч",
             "подрядчик платит клиенту"
         ));
-        // Within-clause recombination: «поднят» belongs to «тест», «прод» is «стабилен»; the fact
-        // reorders across the comma → not an ordered subsequence → rejected.
         assert!(!validate_rewrite(
             "тест сервер поднят, прод сервер стабилен",
             "прод сервер поднят"
         ));
-        // But a faithful order-preserving pick from the same clause IS accepted.
         assert!(validate_rewrite(
             "тест сервер поднят, прод сервер стабилен",
             "прод сервер стабилен"

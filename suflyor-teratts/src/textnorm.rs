@@ -46,9 +46,6 @@ pub fn prepare(raw_text: &str, indexer: &UnicodeIndexer) -> Result<ModelText> {
     })
 }
 
-// ---------------------------------------------------------------------------
-// Spacing passes
-// ---------------------------------------------------------------------------
 
 /// Separate punctuation from a following non-space character without splitting
 /// decimal literals (`3.5`) or closing tags (`.</ru>`).
@@ -104,9 +101,6 @@ fn is_word_letter(c: char) -> bool {
         || c == '\u{0451}'
 }
 
-// ---------------------------------------------------------------------------
-// Vocabulary filter
-// ---------------------------------------------------------------------------
 
 /// Keep only characters whose NFKD decomposition exists in the indexer table.
 /// With `preserve_digits`, digits survive this pass long enough for tagged
@@ -123,15 +117,11 @@ fn skip_unsupported(text: &str, indexer: &UnicodeIndexer, preserve_digits: bool)
         }
     }
     if skipped > 0 {
-        // Count only: the protocol must not echo user text into logs.
         eprintln!("[suflyor-teratts] skipped {skipped} unsupported char(s)");
     }
     kept
 }
 
-// ---------------------------------------------------------------------------
-// Language tags
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct TagToken {
@@ -229,9 +219,6 @@ pub fn validate_language_tags(text: &str) -> Result<()> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Number expansion
-// ---------------------------------------------------------------------------
 
 fn is_wordish(c: char) -> bool {
     c.is_alphanumeric() || c == '_'
@@ -240,7 +227,6 @@ fn is_wordish(c: char) -> bool {
 /// Spell out numeric literals inside each balanced language span, matching the
 /// reference `TAGGED_NUMBER` boundaries.
 fn expand_tagged_numbers(text: &str) -> String {
-    // Fast path: no digits at all.
     if !text.chars().any(|c| c.is_ascii_digit()) {
         return text.to_string();
     }
@@ -375,8 +361,6 @@ mod tests {
                 Some(c)
                     if c.is_ascii()
                         || ('\u{0400}'..='\u{04FF}').contains(&c)
-                        // Combining marks so NFKD decompositions (Ё → Е + ̈,
-                        // й → и + ̆) stay supported, like the real table.
                         || ('\u{0300}'..='\u{036F}').contains(&c)
                         || matches!(c, '+' | '<' | '>' | '/' | '…' | '«' | '»') =>
                 {
@@ -445,8 +429,6 @@ mod tests {
             expand_tagged_numbers("<ru>Пи равен 3,14</ru>"),
             "<ru>Пи равен три целые и четырнадцать сотых</ru>"
         );
-        // Sentence-final period defeats the fractional lookahead, so the
-        // reference regex backtracks and expands only the integer part.
         assert_eq!(
             expand_tagged_numbers("<ru>Пи равен 3,14.</ru>"),
             "<ru>Пи равен три,14.</ru>"
@@ -457,7 +439,6 @@ mod tests {
     fn full_pipeline_produces_nfkd_and_duration_text() {
         let idx = test_indexer();
         let mt = prepare("<ru>Ёлка 1.</ru>", &idx).unwrap();
-        // NFKD decomposes Ё → Е + combining diaeresis.
         assert!(mt.model_text.contains('\u{0308}'));
         assert!(!mt.duration_text.contains('+'));
         assert_eq!(mt.duration_text, mt.model_text.replace('+', ""));

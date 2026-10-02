@@ -74,8 +74,6 @@ pub(in super::super) fn open_text_ask(
     {
         let slot = slot_ref.borrow();
         if let Some(existing) = slot.as_ref() {
-            // Refresh the profile label in case it changed since this window was
-            // first opened (reused windows keep their original handlers).
             existing.set_active_profile(SharedString::from(text_ask_profile_label(cfg)));
             let _ = existing.show();
             if let Ok(hwnd) = grab_hwnd(existing.window()) {
@@ -137,8 +135,6 @@ pub(in super::super) fn open_text_ask(
             *slot.borrow_mut() = None;
         });
     }
-    // ТЗ 2026-07-06 (C) — frameless drag (cursor-delta, same as help/wizard);
-    // the header row is the handle.
     {
         let weak = win.as_weak();
         win.on_drag_start_requested(move || {
@@ -159,15 +155,12 @@ pub(in super::super) fn open_text_ask(
             }
         });
     }
-    // Restore the last dragged position (validated against visible monitors
-    // inside; stale/None → centered as before).
     let saved_pos = cfg.read().text_ask_pos;
     present_window_stealth_aware_at(&win, saved_pos, |hwnd| {
         // Keep these transient overlay windows out of the taskbar + Alt-Tab,
         // like the bar/tiles — otherwise under stealth they leak an existence
         // entry while open (content is WDA-hidden, but the window button isn't).
         let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
-        // OS-level rounded corners (opaque frameless window) — same as archive.
         slint_replay::win32::set_round_corners(hwnd);
         focus_window(hwnd);
     });

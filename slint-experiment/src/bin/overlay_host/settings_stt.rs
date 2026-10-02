@@ -194,8 +194,6 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
             let mut c = cfg_c.write();
             c.stt_gigaam_gpu = on;
             let _ = overlay_backend::config::save(&c);
-            // Apply immediately for the next model load. An active live session
-            // keeps its current shared handle until that session stops.
             overlay_backend::stt::configure_gigaam_accelerator(on);
             overlay_backend::stt::reset_gigaam_cache();
         });
@@ -233,7 +231,6 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
         });
     }
 
-    // Phase E10 — STT provider selector + local-engine fields.
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
@@ -260,9 +257,6 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
             diag!("stt_provider -> {provider}");
         });
     }
-    // Cloud recognition model (stt_model): 0=turbo (fast), 1=large-v3 (accurate).
-    // Handy-style rollback: on save failure the in-memory config value AND the
-    // visible combobox selection revert to the previous state.
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
@@ -281,8 +275,6 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
         });
     }
     {
-        // Recognition language (stt_language): 0=auto, 1=ru, 2=en. None = let the
-        // engine auto-detect per phrase (Whisper/Groq); a forced language pins it.
         let cfg_c = cfg.clone();
         win.on_stt_language_changed(move |idx| {
             let lang = match idx {

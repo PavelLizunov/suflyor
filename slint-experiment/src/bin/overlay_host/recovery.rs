@@ -160,13 +160,9 @@ pub(crate) fn seed_recovery_context(
 ) -> usize {
     let mut c = cfg.write();
     let combined = compose_recovery_context(&c.meeting_context, recovered);
-    // save_active_context updates meeting_context AND mirrors into the active
-    // profile, matching the Profile editor's persistence path.
     c.save_active_context(&combined);
     let chars = c.meeting_context.chars().count();
     if let Err(e) = overlay_backend::config::save(&c) {
-        // Non-fatal: the in-memory seed already applies to this session; we
-        // just couldn't persist it. NEVER log context text (user content).
         eprintln!("[overlay-host] recovery context persist failed (non-fatal): {e:#}");
     }
     chars
@@ -195,7 +191,6 @@ pub(crate) fn open_recover_offer(
     state: &slint_replay::app_state::SharedState,
     overlay_weak: &slint::Weak<OverlayBarWindow>,
 ) {
-    // Single-instance: if it's somehow already open, just refocus it.
     {
         let slot = slot_ref.borrow();
         if let Some(existing) = slot.as_ref() {
@@ -226,7 +221,6 @@ pub(crate) fn open_recover_offer(
     }
     win.set_transcript_preview(SharedString::from(recovered.last_lines.join("\n")));
 
-    // Dismiss / Esc / X — close + drop, nothing else (old JSONL stays on disk).
     {
         let weak = win.as_weak();
         let slot = slot_ref.clone();
@@ -238,8 +232,6 @@ pub(crate) fn open_recover_offer(
         });
     }
 
-    // Frameless drag — keep the recovery offer consistent with every other
-    // movable auxiliary window.
     {
         let weak = win.as_weak();
         win.on_drag_start_requested(move || {
@@ -259,7 +251,6 @@ pub(crate) fn open_recover_offer(
         });
     }
 
-    // Recover — seed context, then start a session linked to the recovered one.
     {
         let weak = win.as_weak();
         let slot = slot_ref.clone();
@@ -278,14 +269,11 @@ pub(crate) fn open_recover_offer(
                 "[overlay-host] recovery accepted; context seeded ({chars} chars) — starting linked session"
             );
 
-            // 2) Close the offer window.
             if let Some(w) = weak.upgrade() {
                 let _ = w.hide();
             }
             *slot.borrow_mut() = None;
 
-            // 3) Flip the bar's session timer ON (mirror the timer-toggle
-            //    "start" branch) so the UI reflects the running session.
             {
                 let mut st = match state_c.lock() {
                     Ok(g) => g,
@@ -298,8 +286,6 @@ pub(crate) fn open_recover_offer(
                 o.set_timer_active(true);
             }
 
-            // 4) Start the session linked to the recovered one. On failure,
-            //    revert the timer UI exactly like the timer-toggle path.
             let events_s = events_c.clone();
             let cfg_s = cfg_c.clone();
             let rt_s = rt_c.clone();
@@ -333,7 +319,6 @@ pub(crate) fn open_recover_offer(
 
     present_window_stealth_aware(&win, |hwnd| {
         let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
-        // OS-level rounded corners (opaque frameless window) — same as archive.
         slint_replay::win32::set_round_corners(hwnd);
         focus_window(hwnd);
     });
@@ -403,7 +388,6 @@ mod tests {
         let twice = compose_recovery_context(&once, &rec);
         assert_eq!(header_count(&twice), 1);
         assert!(twice.ends_with(prose), "reseed must keep prose verbatim");
-        // Prose appears exactly once — not duplicated by the strip + prepend.
         assert_eq!(twice.matches("Меня зовут Нини.").count(), 1);
     }
 
@@ -416,7 +400,7 @@ mod tests {
         let block = build_recovery_block(&rec);
 
         assert_eq!(compose_recovery_context("", &rec), block);
-        assert_eq!(compose_recovery_context("   \n  ", &rec), block); // blank-only
+        assert_eq!(compose_recovery_context("   \n  ", &rec), block);
 
         let prose = "Контекст собеседования: backend, Rust, async.";
         assert_eq!(
@@ -436,8 +420,6 @@ mod tests {
     #[test]
     fn strip_collapses_leftover_blank_lines() {
         let block = build_recovery_block(&recovered());
-        // Extra blank lines between footer and prose (the "leftover trailing
-        // blank line" case) are collapsed, not preserved.
         let messy = format!("{block}\n\n\n\nмои заметки");
         assert_eq!(strip_recovery_block(&messy), "мои заметки");
     }

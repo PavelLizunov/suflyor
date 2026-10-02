@@ -47,7 +47,6 @@ pub struct ComponentStatus {
 pub fn status(cfg: &Config) -> Vec<ComponentStatus> {
     let root = crate::local_ai::default_root();
 
-    // Engine (llama.cpp build number).
     let engine_build = crate::local_ai::installed_engine_build(&root);
     let engine = ComponentStatus {
         kind: ComponentKind::Engine,
@@ -55,8 +54,6 @@ pub fn status(cfg: &Config) -> Vec<ComponentStatus> {
         detail: engine_detail(engine_build),
     };
 
-    // Local model: 12B QAT is the current fallback; a complete legacy 4B is
-    // still usable during an in-place upgrade until the user installs 12B.
     let base = crate::local_ai::base_model_present(&root);
     let quality = crate::local_ai::quality_model_present(&root);
     let fallback = base.then(|| {
@@ -71,10 +68,6 @@ pub fn status(cfg: &Config) -> Vec<ComponentStatus> {
         detail: local_model_detail(fallback.as_deref(), quality),
     };
 
-    // STT (GigaAM): installed when the model file exists at the pinned size in
-    // the configured (or default) dir. Reuses local_ai's path + presence check
-    // (single source of truth with the installer) — NOT validate_gigaam_dir,
-    // which loads the model.
     let gigaam_dir = if cfg.stt_gigaam_dir.trim().is_empty() {
         crate::local_ai::gigaam_default_dir(&root)
     } else {
@@ -91,7 +84,6 @@ pub fn status(cfg: &Config) -> Vec<ComponentStatus> {
         },
     };
 
-    // Voices (TTS sidecar) + OCR (Tesseract) — their own installed checks.
     let voices_installed = crate::tts_install::any_voice_installed();
     let voices = ComponentStatus {
         kind: ComponentKind::Voices,
@@ -144,7 +136,7 @@ mod tests {
     #[test]
     fn local_model_detail_covers_tiers() {
         assert_eq!(local_model_detail(None, false), "");
-        assert_eq!(local_model_detail(None, true), ""); // 26B without fallback → incomplete
+        assert_eq!(local_model_detail(None, true), "");
         assert_eq!(local_model_detail(Some("Gemma 12B"), false), "Gemma 12B");
         assert_eq!(
             local_model_detail(Some("Gemma 12B"), true),
@@ -167,7 +159,6 @@ mod tests {
         ] {
             assert_eq!(s.iter().filter(|c| c.kind == k).count(), 1, "{k:?} once");
         }
-        // Not-installed components carry an empty detail (UI owns the label).
         for c in &s {
             if !c.installed {
                 assert!(c.detail.is_empty(), "{:?} empty when absent", c.kind);

@@ -163,7 +163,6 @@ fn safe_stem(session_id: &str) -> Option<String> {
     if s.is_empty() || s.contains(['/', '\\', ':']) || s.contains("..") {
         return None;
     }
-    // Must be a bare filename component (no parent dirs / specials).
     if Path::new(s).file_name() != Some(std::ffi::OsStr::new(s)) {
         return None;
     }
@@ -214,8 +213,6 @@ fn load_in(dir: &Path, session_id: &str) -> Option<Conspect> {
     let bytes = std::fs::read(&path).ok()?;
     match serde_json::from_slice::<Conspect>(&bytes) {
         Ok(mut c) => {
-            // Clean LaTeX/math markup from summaries saved before the sanitizer
-            // existed, so old recaps also render real symbols on display (Баг1).
             if let Some(fs) = c.final_summary.as_deref() {
                 c.final_summary = Some(sanitize_summary(fs));
             }
@@ -286,12 +283,9 @@ pub fn sanitize_summary(s: &str) -> String {
     ] {
         out = replace_latex_command(&out, cmd, sym);
     }
-    // 2) inline / display math delimiters → gone.
     for d in ["\\(", "\\)", "\\[", "\\]"] {
         out = out.replace(d, "");
     }
-    // 3) drop `$` used as a math delimiter (non-alnum on both sides); keep a `$`
-    //    glued to a digit/letter (prices).
     let chars: Vec<char> = out.chars().collect();
     let mut cleaned = String::with_capacity(out.len());
     for (i, &ch) in chars.iter().enumerate() {
@@ -372,8 +366,6 @@ fn save_debrief_in(dir: &Path, session_id: &str, text: &str) -> anyhow::Result<(
     let tmp = dir.join(format!("{stem}.txt.tmp"));
     std::fs::write(&tmp, text.as_bytes())?;
     std::fs::rename(&tmp, &path)?;
-    // Bound the dir to the newest N, same policy as the conspect store (a debrief
-    // is written once per session, so mtime == creation order).
     prune_in(dir, KEEP_NEWEST, "txt");
     Ok(())
 }
@@ -521,7 +513,6 @@ fn prune_in(dir: &Path, keep: usize, ext: &str) {
     if files.len() <= keep {
         return;
     }
-    // Newest first; drop everything past `keep`.
     files.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.cmp(&a.1)));
     for (_, path) in files.into_iter().skip(keep) {
         if let Err(e) = std::fs::remove_file(&path) {
@@ -570,7 +561,6 @@ mod tests {
         );
         assert_eq!(sanitize_summary("A \\to B"), "A → B");
         assert_eq!(sanitize_summary("cost \\(x\\) done"), "cost x done");
-        // prices with `$` glued to a digit survive
         assert_eq!(sanitize_summary("бюджет $100 и $250"), "бюджет $100 и $250");
         assert_eq!(sanitize_summary("обычный текст"), "обычный текст");
         // CRIT-1 regression: legit backslash tokens (paths) survive the command-
@@ -602,13 +592,12 @@ mod tests {
     fn debrief_save_load_round_trip() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
-        assert!(load_debrief_in(dir, "s1").is_none()); // absent → None
+        assert!(load_debrief_in(dir, "s1").is_none());
         save_debrief_in(dir, "s1", "pace: ok\nfillers: few 'эээ'").unwrap();
         assert_eq!(
             load_debrief_in(dir, "s1").as_deref(),
             Some("pace: ok\nfillers: few 'эээ'")
         );
-        // path-escape rejected by safe_stem
         assert!(save_debrief_in(dir, "../escape", "x").is_err());
     }
 
@@ -618,11 +607,10 @@ mod tests {
         let dir = tmp.path();
         save_debrief_in(dir, "s1", "coaching text").unwrap();
         assert!(dir.join("s1.txt").exists());
-        assert!(delete_debrief_in(dir, "s1")); // removed
+        assert!(delete_debrief_in(dir, "s1"));
         assert!(!dir.join("s1.txt").exists());
         assert!(!delete_debrief_in(dir, "s1")); // already gone → false, no panic
-        assert!(!delete_debrief_in(dir, "../escape")); // unsafe id rejected
-                                                       // A delete does not disturb a different session's debrief.
+        assert!(!delete_debrief_in(dir, "../escape"));
         save_debrief_in(dir, "s2", "other").unwrap();
         assert!(!delete_debrief_in(dir, "s1"));
         assert_eq!(load_debrief_in(dir, "s2").as_deref(), Some("other"));
@@ -632,7 +620,6 @@ mod tests {
     fn save_debrief_prunes_to_keep_newest() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
-        // Default KEEP_NEWEST is large; prune directly to assert the txt filter.
         for i in 0..5 {
             save_debrief_in(dir, &format!("s{i}"), "x").unwrap();
         }
@@ -648,36 +635,32 @@ mod tests {
     #[test]
     fn exists_in_reflects_file_presence() {
         let tmp = tempfile::tempdir().unwrap();
-        assert!(!exists_in(tmp.path(), "session_123")); // absent → false
+        assert!(!exists_in(tmp.path(), "session_123"));
         save_in(tmp.path(), &sample("session_123")).unwrap();
-        assert!(exists_in(tmp.path(), "session_123")); // present → true
-        assert!(!exists_in(tmp.path(), "other")); // a different id → false
-        assert!(!exists_in(tmp.path(), "../escape")); // unsafe stem → false
+        assert!(exists_in(tmp.path(), "session_123"));
+        assert!(!exists_in(tmp.path(), "other"));
+        assert!(!exists_in(tmp.path(), "../escape"));
     }
 
     #[test]
     fn backup_restore_drop_round_trip() {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
-        assert!(!backup_in(dir, "s1")); // nothing to back up yet
+        assert!(!backup_in(dir, "s1"));
         let mut c = sample("s1");
         c.final_summary = Some("good recap".into());
         save_in(dir, &c).unwrap();
-        // Backup moves the live .json aside (B3 — before a forced rebuild).
         assert!(backup_in(dir, "s1"));
         assert!(!dir.join("s1.json").exists());
         assert!(dir.join("s1.json.bak").exists());
-        // Restore (FAILED rebuild) brings the previous recap back intact.
         assert!(restore_backup_in(dir, "s1"));
         assert!(!dir.join("s1.json.bak").exists());
         assert_eq!(
             load_in(dir, "s1").and_then(|c| c.final_summary).as_deref(),
             Some("good recap")
         );
-        // Drop (SUCCESSFUL rebuild): back up, the rebuild writes a fresh .json, drop
-        // the backup — the new .json stays, the .bak is gone.
         assert!(backup_in(dir, "s1"));
-        save_in(dir, &c).unwrap(); // stand-in for the rebuild's fresh save
+        save_in(dir, &c).unwrap();
         drop_backup_in(dir, "s1");
         assert!(!dir.join("s1.json.bak").exists());
         assert!(dir.join("s1.json").exists());
@@ -687,7 +670,7 @@ mod tests {
     fn usable_summaries_skips_none_and_blank() {
         let mut c = sample("s");
         c.parts[0].summary = Some("real conspectus".into());
-        c.parts[1].summary = Some("   ".into()); // blank → not usable
+        c.parts[1].summary = Some("   ".into());
         assert_eq!(c.usable_summaries(), vec!["real conspectus".to_string()]);
         assert!(c.has_usable_parts());
         assert_eq!(c.missing_part_indices(), vec![1]);
@@ -714,16 +697,15 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
         std::fs::write(dir.join("S1.json"), b"{}").unwrap();
-        assert!(delete_in(dir, "S1")); // removed
+        assert!(delete_in(dir, "S1"));
         assert!(!dir.join("S1.json").exists());
         assert!(!delete_in(dir, "S1")); // already gone → false, no panic
-        assert!(!delete_in(dir, "../escape")); // unsafe id rejected
+        assert!(!delete_in(dir, "../escape"));
     }
 
     #[test]
     fn prune_keeps_newest_n() {
         let tmp = tempfile::tempdir().unwrap();
-        // Write 5 conspects; keep 2.
         for i in 0..5 {
             let c = sample(&format!("s{i}"));
             save_in(tmp.path(), &c).unwrap();
@@ -744,7 +726,6 @@ mod tests {
         save_in(tmp.path(), &c).unwrap();
         c.parts[0].summary = Some("now mapped".into());
         save_in(tmp.path(), &c).unwrap();
-        // One file, latest content.
         let n = std::fs::read_dir(tmp.path())
             .unwrap()
             .flatten()

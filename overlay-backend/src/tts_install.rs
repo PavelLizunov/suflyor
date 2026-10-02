@@ -126,10 +126,6 @@ pub fn install_voices(cancel: &AtomicBool, on: &dyn Fn(VoiceProgress), ru: bool)
     let root = tts_dir().context("APPDATA not set — no voices dir")?;
     std::fs::create_dir_all(&root).with_context(|| format!("create {}", root.display()))?;
 
-    // Install packs INDEPENDENTLY: one pack failing (a transient CDN reset on the
-    // 2nd voice) must NOT discard a voice that already installed — otherwise the
-    // UI reports total failure while a usable voice sits on disk (the tester's
-    // exact case). Succeed if AT LEAST ONE voice ends up installed.
     let mut ok = 0usize;
     let mut failed: Vec<&str> = Vec::new();
     for pack in VOICE_PACKS {
@@ -203,9 +199,6 @@ mod tests {
 
     #[test]
     fn packs_have_valid_pins() {
-        // Each pack must have a sherpa tts-models URL ending in .tar.bz2 and a
-        // 64-hex-char SHA-256 — a botched edit (wrong url/sha) would break the
-        // verify-before-use guarantee silently.
         for p in VOICE_PACKS {
             assert!(p.url.starts_with("https://github.com/k2-fsa/sherpa-onnx/"));
             assert!(p.url.ends_with(".tar.bz2"));

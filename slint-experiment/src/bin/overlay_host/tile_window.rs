@@ -162,25 +162,15 @@ pub(crate) fn toggle_tile_maximize(hwnd: slint_replay::win32::HWND, tile: &TileW
     tile.window().set_size(slint::LogicalSize::new(w, h));
     tile.set_tile_maximized(new);
 
-    // Phase E6 v45 — keep the resized tile fully on-screen. Growing in
-    // place from the top-left pushed tiles near a screen edge/corner off
-    // the monitor (user: "тайл у угла раскрывается за экран"). Windows native
-    // rects use physical pixels; AppKit/CoreGraphics geometry uses points.
     #[cfg(windows)]
     let scale = tile.window().scale_factor();
     #[cfg(target_os = "macos")]
     let scale = 1.0_f32;
     let pw = (w * scale) as i32;
     let ph = (h * scale) as i32;
-    // Clamp against the WORK AREA (monitor minus taskbar) of the tile's
-    // own monitor so a maximized tile near an edge/corner stays fully
-    // visible AND its bottom row (the follow-up input) clears the taskbar.
     if let (Ok((x, y, _r, _b)), Some(m)) = (get_window_rect(hwnd), work_area_for_window(hwnd)) {
         let mut nx = x;
         let mut ny = y;
-        // Pull the right/bottom edges inside first, then guarantee the
-        // top-left stays visible (matters if the tile is wider/taller
-        // than the work area — keep the top-left corner reachable).
         if nx + pw > m.right {
             nx = m.right - pw;
         }
@@ -257,8 +247,6 @@ pub(crate) fn wire_tile_drag(tile: &TileWindow) {
 /// already excluded from capture. Same pattern the persistent capture overlay
 /// uses. When stealth is off there's nothing to hide, so show normally.
 pub(crate) fn present_tile_window(tile: &TileWindow) {
-    // G1 — layout-independent Ctrl+C/V/X/A/Z/Y for the tile's editable fields (capture
-    // editor + follow-up LineEdit) and copy/select-all on the read-only answer text.
     crate::kbd_shortcuts::install(tile.window());
     if global_stealth() {
         set_platform_window_position(tile.window(), -32000, -32000);
@@ -274,12 +262,6 @@ pub(crate) fn present_tile_window(tile: &TileWindow) {
 /// (~80 LOC of layered math); this is a simpler 2-col wrap that
 /// fits on any landscape monitor without overflow.
 pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
-    // Phase E6 v36 — every spawn path funnels through here, so this is
-    // the one place to apply the saved tile body opacity. Without this,
-    // only tiles that existed when the Settings slider moved went
-    // transparent; freshly spawned tiles reset to opaque (user bug
-    // report). Set synchronously on the passed handle so it takes
-    // effect on the first painted frame.
     tile.set_body_opacity(global_tile_opacity());
 
     let weak = tile.as_weak();
@@ -289,23 +271,9 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             return;
         };
 
-        // Phase E6 fix v4 — use make_transparent_tile (no WS_EX_
-        // TRANSPARENT) so tiles accept clicks for buttons + drag.
-        // Previous make_transparent_overlay set WS_EX_TRANSPARENT
-        // which made every click pass through to underlying windows
-        // (Explorer/desktop), silently swallowing every chrome-row
-        // press → drag-to-move never fired. Same root cause as user
-        // complaint "тайлы нельзя двигать".
         let _ = make_transparent_tile(hwnd);
         let _ = set_skip_taskbar(hwnd, true);
 
-        // Phase E6 v5 — Slint's `always-on-top: true` declaration is
-        // applied at window creation but doesn't reliably translate
-        // to HWND_TOPMOST on Windows + winit + skia. Explicitly set
-        // HWND_TOPMOST so tile windows sit above Explorer / desktop
-        // / browser windows and the user can interact with them.
-        // Without this, clicks land on whatever non-topmost window
-        // is at the pixel under the tile.
         let _ = set_always_on_top(hwnd, true);
 
         // #111 — inherit stealth: a tile spawned while stealth is on must
@@ -319,19 +287,10 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             }
         }
 
-        // Phase E6 fix v3 — read the ACTUAL physical window size that
-        // Slint produced (HiDPI-aware), then place using that real
-        // width so the right-edge alignment is accurate. Previous
-        // version forced TILE_DEFAULT_W (460 raw pixels) which
-        // overrode Slint's logical-to-physical scaling and made
-        // tile content overflow the dark fill area on 125% scaling.
         let (_cur_x, _cur_y, real_w, real_h) =
             get_window_rect(hwnd).unwrap_or((0, 0, TILE_DEFAULT_W, TILE_DEFAULT_H));
 
         let monitors = enum_monitors();
-        // Honour the user's monitor pin (Settings ▸ tile placement) by matching
-        // its saved top-left; fall back to pick_monitor (auto) when unset or the
-        // pinned display is unplugged (not found) — never an off-screen tile.
         let pinned = global_tile_monitor()
             .and_then(|(l, t)| monitors.iter().find(|m| m.left == l && m.top == t).copied());
         if let Some(mon) = pinned.or_else(|| pick_monitor(&monitors)) {
@@ -345,14 +304,6 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             let cols: usize = 2;
             let total_slots = (rows * cols).max(1);
 
-            // Phase E6 v9 — cascade-offset on wrap. Previously
-            // `slot = COUNTER % total_slots` made the 5th+ tile land
-            // ON TOP of the 1st tile, etc. User complaint: "потом
-            // они начали друг на друга прыгать". Now: track which
-            // cycle (wraparound generation) we're on, and offset
-            // every wrapped tile by (cascade_dx, cascade_dy) per
-            // cycle — visually a stagger like macOS cascade-windows.
-            // Hard clamps still prevent off-screen.
             let raw_seq = TILE_SLOT_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let slot = raw_seq % total_slots;
             let cascade_dx: i32 = 32;
@@ -365,15 +316,6 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             let x_base = if col == 0 { x_inner } else { x_outer };
             let y_base = mon.top + top_margin + (row as i32) * (real_h + gap_y);
 
-            // Cascade offset grows leftward + downward so wrapped tiles peek out
-            // from under their first-cycle siblings (negative dx because the
-            // right cluster is already at the right edge). The cascade GENERATION
-            // is clamped to the room that actually fits the work-area, so a long
-            // session or a spam burst (raw_seq keeps climbing even while
-            // MAX_LIVE_TILES caps the OPEN count) can never march a tile off the
-            // left/bottom edge — it pins at the last in-band step. Cross-burst
-            // marching is separately fixed by resetting TILE_SLOT_COUNTER when the
-            // last tile closes (see refresh_open_tiles).
             let cycle = cascade_cycle(
                 raw_seq,
                 total_slots,
@@ -408,9 +350,6 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
                 mon.left, mon.top, mon.right, mon.bottom,
                 real_w, real_h, slot, cycle, row, col, x_clamped, y_clamped,
             );
-            // Move-only — preserve Slint's natural size so HiDPI
-            // rendering stays correct (text fills the dark fill area
-            // instead of overflowing).
             let _ = move_window_pos_only(hwnd, x_clamped, y_clamped);
             set_platform_window_position(t.window(), x_clamped, y_clamped);
         } else {
@@ -424,9 +363,6 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
     });
 }
 
-// Tests live at the END of the module (clippy::items_after_test_module, denied
-// under -D warnings on clippy 1.96+): a `#[cfg(test)] mod` must not be followed
-// by production items.
 #[cfg(test)]
 mod cascade_tests {
     use super::cascade_cycle;
@@ -434,17 +370,11 @@ mod cascade_tests {
     #[test]
     fn cascade_clamp_pins_in_band() {
         let (dx, dy) = (32, 24);
-        // 1920×1080 primary, mon_left=0, tile 360 tall, x_base near the right
-        // edge (1400), y_base 100. x-room 1392 -> max_cycle_x 43; y-room 612 ->
-        // max_cycle_y 25; tighter axis = 25.
-        // A runaway raw_seq must PIN at 25, not march off-screen.
         assert_eq!(
             cascade_cycle(100_000, 10, 1400, 100, 0, 1080, 360, dx, dy),
             25
         );
-        // raw_seq below total_slots -> first batch, cycle 0.
         assert_eq!(cascade_cycle(5, 10, 1400, 100, 0, 1080, 360, dx, dy), 0);
-        // Mid-range raw_seq stays at its natural (in-band) cycle.
         assert_eq!(cascade_cycle(25, 10, 1400, 100, 0, 1080, 360, dx, dy), 2);
     }
 }

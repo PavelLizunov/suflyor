@@ -109,8 +109,6 @@ mod tests {
 
     #[test]
     fn supports_follows_nfkd_components() {
-        // Table with base letters but no combining marks: composed "й"
-        // (NFKD → и + combining breve) is unsupported, plain "a" is.
         let idx = fake_table(|cp| {
             let c = char::from_u32(cp);
             match c {

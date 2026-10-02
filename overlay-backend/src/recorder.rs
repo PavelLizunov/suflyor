@@ -146,8 +146,6 @@ impl SessionRecorder {
             Ok(_) => {}
             Err(e) => log::warn!("recorder: age prune failed (non-fatal): {e:#}"),
         }
-        // Byte-budget backstop (fs-audit #5): applies even when count/age are 0
-        // ("keep all"), so raw audio can never fill the disk. 0 = unlimited.
         match prune_recordings_over_total_in(
             &root,
             max_total_mb,
@@ -291,7 +289,7 @@ impl ChannelWriter {
         timestamp_ms: u64,
     ) -> Option<(u64, u64)> {
         if self.failed {
-            return None; // dead channel — never re-create (would truncate prior audio)
+            return None;
         }
         if self.writer.is_none() {
             match hound::WavWriter::create(dir.join(name), spec) {
@@ -303,8 +301,6 @@ impl ChannelWriter {
                 }
             }
         }
-        // Per-session disk guard: cap TOTAL padding; over-budget silence is absorbed
-        // into `skew` (like an over-cap gap) so the WAV can't balloon to gigabytes.
         let pad_budget = MAX_TOTAL_PAD_SAMPLES.saturating_sub(self.total_pad);
         let (pad, new_skew) = plan_pad(
             self.written,
@@ -327,9 +323,6 @@ impl ChannelWriter {
             let start = self.written;
             for &s in pcm {
                 if w.write_sample(s).is_err() {
-                    // Mark failed + DROP the writer (so no re-create truncates the
-                    // partial file); the samples written so far stay on disk and
-                    // are finalised on Stop.
                     log::warn!(
                         "recorder: write error on {name} — channel closed (kept what was written)"
                     );
@@ -519,10 +512,9 @@ pub fn prune_old_recordings_in(
     if dirs.len() <= keep {
         return Ok(0);
     }
-    dirs.sort_by_key(|d| std::cmp::Reverse(d.0)); // newest first
+    dirs.sort_by_key(|d| std::cmp::Reverse(d.0));
     let mut removed = 0usize;
     for (mtime, p) in dirs.into_iter().skip(keep) {
-        // Too-recent (or future-dated) dir → possibly still being written; skip.
         if now
             .duration_since(mtime)
             .map(|age| age < min_age)
@@ -583,7 +575,6 @@ fn prune_recordings_older_than_at(
         let Some(mtime) = e.metadata().ok().and_then(|m| m.modified().ok()) else {
             continue;
         };
-        // Unknown / future-dated mtime → treat as recent, never delete.
         let Ok(age) = now.duration_since(mtime) else {
             continue;
         };
@@ -636,14 +627,13 @@ pub fn prune_recordings_over_total_in(
     if total <= budget {
         return Ok(0);
     }
-    dirs.sort_by_key(|d| d.0); // oldest first — delete oldest until under budget
+    dirs.sort_by_key(|d| d.0);
     let mut freed = 0u64;
     let mut removed = 0usize;
     for (mtime, size, p) in dirs {
         if total.saturating_sub(freed) <= budget {
             break;
         }
-        // Too-recent / future-dated dir → may still be recording; skip.
         if now
             .duration_since(mtime)
             .map(|age| age < min_age)
@@ -708,8 +698,6 @@ pub fn repair_unfinalized_in(root: &Path, min_age: std::time::Duration) -> Resul
             if p.extension().and_then(|e| e.to_str()) != Some("wav") {
                 continue;
             }
-            // Skip too-recent files (a still-writing prior session keeps bumping
-            // mtime, so it always looks recent → never touched while live).
             let recent = f
                 .metadata()
                 .ok()
@@ -747,13 +735,8 @@ fn repair_wav_header(path: &Path) -> Result<bool> {
         .with_context(|| format!("open {}", path.display()))?;
     let len = file.metadata().context("stat")?.len();
     if len < WAV_HEADER_LEN {
-        return Ok(false); // not even a full header — leave it
+        return Ok(false);
     }
-    // Confirm the EXACT canonical 44-byte PCM layout hound writes (RIFF/WAVE +
-    // a 16-byte `fmt ` chunk + a `data` chunk at offset 36) before touching any
-    // bytes. A foreign WAV (WAVEFORMATEXTENSIBLE has data-size at offset 64; a
-    // LIST/fact chunk shifts `data` past 36) must be left ALONE — otherwise we'd
-    // rewrite the wrong offsets and corrupt someone else's file (review v0.13.0).
     let mut head = [0u8; 44];
     file.read_exact(&mut head).context("read header")?;
     let canonical = &head[0..4] == b"RIFF"
@@ -764,17 +747,16 @@ fn repair_wav_header(path: &Path) -> Result<bool> {
     if !canonical {
         return Ok(false);
     }
-    let data_bytes_actual = ((len - WAV_HEADER_LEN) & !1) as u32; // round to whole i16
+    let data_bytes_actual = ((len - WAV_HEADER_LEN) & !1) as u32;
                                                                   // RIFF size = everything after the first 8 bytes = data + the 36-byte
                                                                   // fmt/header remainder. Derive from the ROUNDED data size so the two agree
                                                                   // for an odd-length crash-truncated file (review v0.13.0 minor).
     let riff_size_actual = data_bytes_actual + 36;
-    // Read currently-stored data-chunk size (offset 40, u32 LE).
     file.seek(SeekFrom::Start(40)).context("seek data size")?;
     let mut cur = [0u8; 4];
     file.read_exact(&mut cur).context("read data size")?;
     if u32::from_le_bytes(cur) == data_bytes_actual {
-        return Ok(false); // already correct (finalised normally)
+        return Ok(false);
     }
     file.seek(SeekFrom::Start(4)).context("seek riff size")?;
     file.write_all(&riff_size_actual.to_le_bytes())
@@ -817,47 +799,32 @@ mod tests {
 
     #[test]
     fn plan_pad_no_gap_when_wav_tracks_wall_clock() {
-        // A 200 ms (3200-sample) chunk emitted at t=200 ms: target_end 3200,
-        // start 0, written 0 → no pad. A contiguous chunk at t=400 ms, written
-        // 3200 → still no pad. The steady-state case pads nothing.
         assert_eq!(pp(0, 0, 200, 3200), (0, 0));
         assert_eq!(pp(3200, 0, 400, 3200), (0, 0));
     }
 
     #[test]
     fn plan_pad_fills_a_silence_gap() {
-        // 3200 samples (200 ms) written; next 200 ms chunk arrives at t=1200 ms
-        // after an 800 ms loopback-quiet gap. target_start 16000, gap 12800
-        // silence samples, no skew.
         assert_eq!(pp(3200, 0, 1200, 3200), (12800, 0));
     }
 
     #[test]
     fn plan_pad_zero_timestamp_appends() {
-        // ts=0 (unit tests / a degenerate first chunk) → target 0 → never pads,
-        // pure append. Pins the behavior the other recorder tests rely on.
         assert_eq!(pp(0, 0, 0, 4), (0, 0));
         assert_eq!(pp(1000, 0, 0, 4), (0, 0));
     }
 
     #[test]
     fn plan_pad_forward_only_on_backwards_timestamp() {
-        // A timestamp that would place the chunk BEFORE the current WAV position
-        // (jitter / overlap) pads 0 — the WAV never seeks back.
         assert_eq!(pp(100_000, 0, 1000, 3200), (0, 0));
     }
 
     #[test]
     fn plan_pad_caps_gap_and_absorbs_excess_into_skew() {
-        // A gap larger than MAX_PAD_SAMPLES pads only the cap; the excess becomes
-        // skew so the NEXT chunk doesn't re-pad the same deficit (which would
-        // splice minutes of silence into post-gap speech).
-        let big_ts = 3_600_000; // 1 h → target_end 57_600_000 samples
+        let big_ts = 3_600_000;
         let (pad, skew) = pp(0, 0, big_ts, 3200);
         assert_eq!(pad, MAX_PAD_SAMPLES);
         assert_eq!(skew, (57_600_000 - 3200) - MAX_PAD_SAMPLES);
-        // A contiguous follow-up 200 ms later: with skew applied its target lands
-        // exactly at `written`, so it pads 0 (aligned to the previous chunk).
         let written = MAX_PAD_SAMPLES + 3200;
         let (pad2, skew2) = pp(written, skew, big_ts + 200, 3200);
         assert_eq!(
@@ -869,10 +836,7 @@ mod tests {
 
     #[test]
     fn plan_pad_session_pad_budget_caps_total() {
-        // Disk guard: with only 1000 samples of session budget left, a 12800-sample
-        // gap pads just 1000 and absorbs the remaining 11800 into skew.
         assert_eq!(plan_pad(3200, 0, 1200, 3200, 1000), (1000, 11800));
-        // Budget exhausted → no padding at all; the whole gap becomes skew.
         assert_eq!(plan_pad(3200, 0, 1200, 3200, 0), (0, 12800));
     }
 
@@ -912,10 +876,8 @@ mod tests {
         let dir = tmp.path().join("sess_two");
         {
             let rec = SessionRecorder::start_in(dir.clone()).unwrap();
-            // System: 200 ms at t=200, then 200 ms at t=1200 → 1200 ms = 19200.
             rec.feed(&chunk_ts(AudioSource::System, &vec![70i16; 3200], 200));
             rec.feed(&chunk_ts(AudioSource::System, &vec![70i16; 3200], 1200));
-            // Mic: 200 ms at t=200, then 200 ms at t=700 → 700 ms = 11200.
             rec.feed(&chunk_ts(AudioSource::Mic, &vec![50i16; 3200], 200));
             rec.feed(&chunk_ts(AudioSource::Mic, &vec![50i16; 3200], 700));
         }
@@ -933,7 +895,6 @@ mod tests {
     fn size_cap_prunes_oldest_until_under_budget() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        // 6 session dirs × 256 KB = 1.5 MB total (creation order = mtime order).
         for i in 0..6 {
             let d = root.join(format!("2026-06-1{i}_00-00-00_aaaa{i}"));
             std::fs::create_dir_all(&d).unwrap();
@@ -941,13 +902,9 @@ mod tests {
         }
         let zero = std::time::Duration::ZERO; // fresh dirs eligible (no grace)
 
-        // 0 = unlimited → never prunes.
         assert_eq!(prune_recordings_over_total_in(root, 0, zero).unwrap(), 0);
-        // Budget >= total → no-op.
         assert_eq!(prune_recordings_over_total_in(root, 100, zero).unwrap(), 0);
-        // 1 MB budget vs 1.5 MB total → free 0.5 MB = delete the 2 oldest dirs.
         assert_eq!(prune_recordings_over_total_in(root, 1, zero).unwrap(), 2);
-        // The tree is now within budget, 4 dirs left.
         let remaining: u64 = std::fs::read_dir(root)
             .unwrap()
             .flatten()
@@ -969,9 +926,7 @@ mod tests {
             rec.feed(&chunk(AudioSource::Mic, &[100, -100, 200, -200]));
             rec.feed(&chunk(AudioSource::System, &[1, 2, 3]));
             rec.feed(&chunk(AudioSource::Mic, &[300, -300]));
-            // drop → Stop + join → headers finalised
         }
-        // mic.wav has 6 samples, system.wav has 3 — both valid + readable.
         let mic = hound::WavReader::open(dir.join("mic.wav")).expect("mic readable");
         assert_eq!(mic.spec().sample_rate, SAMPLE_RATE);
         assert_eq!(mic.spec().channels, 1);
@@ -1001,7 +956,6 @@ mod tests {
         ch.write_chunk(&bad_dir, "system.wav", spec, &[1, 2, 3], 0);
         assert!(ch.failed, "a create failure latches the channel failed");
         assert!(ch.writer.is_none());
-        // Second chunk must short-circuit on `failed` (no second create attempt).
         ch.write_chunk(&bad_dir, "system.wav", spec, &[4, 5, 6], 0);
         assert!(ch.failed);
         assert!(!bad_dir.exists(), "a failed channel creates nothing");
@@ -1044,7 +998,6 @@ mod tests {
             }
             w.finalize().unwrap();
         }
-        // Zero out the RIFF (offset 4) + data (offset 40) sizes.
         {
             let mut f = File::options().write(true).open(&wav).unwrap();
             f.seek(SeekFrom::Start(4)).unwrap();
@@ -1052,7 +1005,6 @@ mod tests {
             f.seek(SeekFrom::Start(40)).unwrap();
             f.write_all(&0u32.to_le_bytes()).unwrap();
         }
-        // A reader now sees zero samples (header lies).
         let broken = hound::WavReader::open(&wav)
             .unwrap()
             .into_samples::<i16>()
@@ -1062,7 +1014,6 @@ mod tests {
         let n = repair_unfinalized_in(&root, std::time::Duration::ZERO).unwrap();
         assert_eq!(n, 1, "exactly one file repaired");
 
-        // After repair the 1000 samples are visible again.
         let fixed: Vec<i16> = hound::WavReader::open(&wav)
             .unwrap()
             .into_samples::<i16>()
@@ -1072,7 +1023,6 @@ mod tests {
         assert_eq!(fixed[0], 0);
         assert_eq!(fixed[999], 999);
 
-        // Idempotent — a second sweep finds nothing to fix.
         assert_eq!(
             repair_unfinalized_in(&root, std::time::Duration::ZERO).unwrap(),
             0
@@ -1102,7 +1052,7 @@ mod tests {
             w.finalize().unwrap();
             let mut f = File::options().write(true).open(&canon).unwrap();
             f.seek(SeekFrom::Start(40)).unwrap();
-            f.write_all(&0u32.to_le_bytes()).unwrap(); // break it
+            f.write_all(&0u32.to_le_bytes()).unwrap();
         }
         let before = std::fs::read(&canon).unwrap();
         assert_eq!(
@@ -1129,10 +1079,10 @@ mod tests {
         let foreign = sdir.join("foreign.wav");
         let mut bytes = vec![0u8; 64];
         bytes[0..4].copy_from_slice(b"RIFF");
-        bytes[4..8].copy_from_slice(&999u32.to_le_bytes()); // wrong riff size
+        bytes[4..8].copy_from_slice(&999u32.to_le_bytes());
         bytes[8..12].copy_from_slice(b"WAVE");
         bytes[12..16].copy_from_slice(b"fmt ");
-        bytes[16..20].copy_from_slice(&18u32.to_le_bytes()); // NON-canonical fmt size
+        bytes[16..20].copy_from_slice(&18u32.to_le_bytes());
         std::fs::write(&foreign, &bytes).unwrap();
         let foreign_before = std::fs::read(&foreign).unwrap();
         assert_eq!(
@@ -1151,8 +1101,6 @@ mod tests {
     fn prune_keeps_newest_and_removes_older() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().to_path_buf();
-        // Four session dirs created oldest→newest; small sleeps give distinct
-        // mtimes so "newest" is unambiguous.
         let mut paths = vec![];
         for i in 0..4 {
             let d = root.join(format!("sess{i}"));
@@ -1170,10 +1118,8 @@ mod tests {
         assert!(!paths[1].exists());
         assert!(paths[2].exists());
         assert!(paths[3].exists());
-        // Idempotent + keep>=count is a no-op.
         assert_eq!(prune_old_recordings_in(&root, 2, zero).unwrap(), 0);
         assert_eq!(prune_old_recordings_in(&root, 10, zero).unwrap(), 0);
-        // keep==0 means unbounded → never prunes.
         assert_eq!(prune_old_recordings_in(&root, 0, zero).unwrap(), 0);
     }
 
@@ -1211,7 +1157,6 @@ mod tests {
         assert_eq!(repair_unfinalized_in(tmp.path(), z).unwrap(), 0);
     }
 
-    // ── prune_recordings_older_than_* — v0.15.0 age-based retention ──
 
     #[test]
     fn age_prune_zero_days_is_noop_and_fresh_dirs_survive() {
@@ -1258,8 +1203,6 @@ mod tests {
 
     #[test]
     fn age_prune_keeps_dir_at_exact_age_boundary() {
-        // age == max_age must be KEPT (the comparison is `age <= max_age` →
-        // skip): "older than N days" is strict. Pins the boundary semantics.
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().to_path_buf();
         let d = root.join("sess0");

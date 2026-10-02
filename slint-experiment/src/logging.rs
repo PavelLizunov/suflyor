@@ -73,22 +73,12 @@ pub fn init() {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    // Rotate when the log passes ~2 MiB so it can't grow without bound.
     if let Ok(meta) = std::fs::metadata(&path) {
         if meta.len() > 2 * 1024 * 1024 {
             let _ = std::fs::rename(&path, path.with_extension("log.old"));
         }
     }
     if let Ok(file) = OpenOptions::new().create(true).append(true).open(&path) {
-        // RELEASE is built `windows_subsystem="windows"` → NO console, so the
-        // process stderr is invalid and EVERY `eprintln!` (~170 of them across
-        // the binary) is silently discarded — testers ended up with an almost
-        // empty log. Redirect stderr to the log file so all of them land in
-        // `overlay-host.log`. DEBUG keeps its console untouched (the terminal
-        // still prints), and `line()` writes its own entries via `LOG_FILE`.
-        // The file is kept alive in `LOG_FILE` below, so the handle backing
-        // stderr stays valid for the whole process; a failure here is non-fatal
-        // (logging must never take the app down).
         #[cfg(all(windows, not(debug_assertions)))]
         {
             use std::os::windows::io::AsRawHandle;
@@ -101,9 +91,6 @@ pub fn init() {
         let _ = LOG_FILE.set(Mutex::new(file));
     }
 
-    // Wire the `log` facade to this sink (see FacadeLogger above). Must run
-    // AFTER the stderr redirect so the very first forwarded record already
-    // lands in the file. A second init() call would fail set_logger — ignored.
     if log::set_logger(&FACADE_LOGGER).is_ok() {
         log::set_max_level(log::LevelFilter::Info);
     }
@@ -149,8 +136,6 @@ fn stamped_line(msg: &str) -> String {
         (secs / 60) % 60,
         secs % 60
     );
-    // DEBUG: stderr goes to the console, NOT the file. WINDOWS RELEASE redirects
-    // stderr to this file; MACOS RELEASE writes `line()` entries here directly.
     format!("[{stamp}] {msg}")
 }
 

@@ -90,7 +90,6 @@ fn force_no_think_overrides_global_toggle() {
             .and_then(serde_json::Value::as_bool)
             == Some(false)
     }
-    // Global OFF (the default): live answers think, structuring does NOT.
     set_local_no_think(false);
     let mut live = json!({});
     apply_local_no_think(&mut live, false);
@@ -105,12 +104,10 @@ fn force_no_think_overrides_global_toggle() {
         "structuring must force no-think even when the global toggle is off"
     );
 
-    // Global ON (user disabled thinking): both paths disable it.
     set_local_no_think(true);
     let mut live2 = json!({});
     apply_local_no_think(&mut live2, false);
     assert!(thinking_disabled(&live2));
-    // Restore the default so other tests / process state aren't perturbed.
     set_local_no_think(false);
 }
 
@@ -121,7 +118,7 @@ fn drain_returns_empty_when_no_complete_frame() {
     let mut b: Vec<u8> = b"data: hello".to_vec();
     let s = drain_complete_frames(&mut b);
     assert_eq!(s, "");
-    assert_eq!(b, b"data: hello"); // bytes preserved for next chunk
+    assert_eq!(b, b"data: hello");
 }
 
 #[test]
@@ -129,7 +126,7 @@ fn drain_splits_at_double_newline() {
     let mut b: Vec<u8> = b"data: a\n\ndata: b".to_vec();
     let s = drain_complete_frames(&mut b);
     assert_eq!(s, "data: a\n\n");
-    assert_eq!(b, b"data: b"); // unfinished frame stays
+    assert_eq!(b, b"data: b");
 }
 
 /// THE bug we're guarding against: a Russian 2-byte char's bytes are
@@ -138,12 +135,10 @@ fn drain_splits_at_double_newline() {
 /// would panic. New code must keep the leftover for the next call.
 #[test]
 fn drain_does_not_panic_when_utf8_split_across_chunks() {
-    // "Привет" — П = 0xD0 0x9F. Find the byte offset that lands mid-char.
     let full = "data: \"Привет\"\n\n";
     let bytes = full.as_bytes();
-    // First non-ASCII byte should be П's leading 0xD0. Split right after it.
     let p_start = bytes.iter().position(|&b| b == 0xD0).unwrap();
-    let split = p_start + 1; // includes 0xD0 (leading byte) but not 0x9F (trailing)
+    let split = p_start + 1;
     let chunk1 = &bytes[..split];
     let chunk2 = &bytes[split..];
     assert!(
@@ -158,7 +153,6 @@ fn drain_does_not_panic_when_utf8_split_across_chunks() {
 
     b.extend_from_slice(chunk2);
     let s2 = drain_complete_frames(&mut b);
-    // Now we have a complete frame ending in \n\n. Must decode cleanly.
     assert_eq!(s2, full);
     assert!(b.is_empty());
 }
@@ -182,16 +176,13 @@ fn drain_normalizes_crlf_sse_frames() {
     assert!(bytes.is_empty());
 }
 
-// ── Smoke check on build_request shape ──
 
 #[test]
 fn build_request_always_includes_system_prompt() {
     let msgs = build_request("", "ru", &[], None, None);
-    // system + user
     assert_eq!(msgs.len(), 2);
     assert_eq!(msgs[0].role, "system");
     assert_eq!(msgs[1].role, "user");
-    // Russian directive present
     if let MessageContent::Text(s) = &msgs[0].content {
         assert!(s.contains("русском"));
     } else {
@@ -201,9 +192,6 @@ fn build_request_always_includes_system_prompt() {
 
 #[test]
 fn build_request_injects_kb_reference_for_named_term() {
-    // A question naming a KB term (Exasol) pulls its entry into the system
-    // prompt. Regression guard for the byte-cap bug: the Cyrillic Exasol
-    // body is ~1.8 KB, so too small a cap silently dropped it.
     let msgs = build_request("", "ru", &[], None, Some("Что такое Exasol?"));
     if let MessageContent::Text(s) = &msgs[0].content {
         assert!(
@@ -230,7 +218,6 @@ fn build_request_injects_kb_reference_for_named_term() {
     }
 }
 
-// ── NEW: cost/pricing math ──
 
 #[test]
 fn cost_microcents_haiku_known_value() {
@@ -282,7 +269,6 @@ fn gpt_5_2_pricing_and_endpoint_debug_are_safe() {
 
 #[test]
 fn cost_unknown_model_defaults_to_sonnet() {
-    // Per pricing_per_million fallback.
     let m_known = cost_microcents("claude-sonnet-4-5", 1000, 1000);
     let m_unknown = cost_microcents("qwen-14b", 1000, 1000);
     assert_eq!(
@@ -316,12 +302,9 @@ fn cost_saturating_no_overflow() {
     assert_eq!(m, u64::MAX, "should saturate, not panic");
 }
 
-// ── is_permanent_ai_error classifier (used by retry wrapper) ──
 
 #[test]
 fn permanent_error_400_no_retry() {
-    // 400 = bad request payload (e.g. oversized prompt, malformed JSON).
-    // Retrying won't fix the request — fail fast.
     assert!(is_permanent_ai_error("HTTP 400: invalid request"));
 }
 
@@ -335,21 +318,16 @@ fn permanent_error_auth_no_retry() {
 
 #[test]
 fn permanent_error_404_no_retry() {
-    // 404 = endpoint missing (typo in ai_base_url) or model not found.
-    // Will keep 404'ing on retry — fail fast.
     assert!(is_permanent_ai_error("HTTP 404: not found"));
 }
 
 #[test]
 fn permanent_error_413_no_retry() {
-    // 413 = payload too large. Retry without changing payload pointless.
     assert!(is_permanent_ai_error("HTTP 413: request entity too large"));
 }
 
 #[test]
 fn transient_error_5xx_retries() {
-    // Server-side problems — bridge restart, upstream Claude blip, etc.
-    // Retry MAY succeed.
     assert!(!is_permanent_ai_error("HTTP 500: internal server error"));
     assert!(!is_permanent_ai_error("HTTP 502: bad gateway"));
     assert!(!is_permanent_ai_error("HTTP 503: service unavailable"));
@@ -358,14 +336,11 @@ fn transient_error_5xx_retries() {
 
 #[test]
 fn transient_error_429_retries() {
-    // Rate limit — retry after exponential backoff usually clears it.
-    // Note: NOT in the permanent list per the docstring (4xx EXCEPT 429).
     assert!(!is_permanent_ai_error("HTTP 429: rate limited"));
 }
 
 #[test]
 fn transient_network_errors_retry() {
-    // Connection refused, timeout, DNS — all transient.
     assert!(!is_permanent_ai_error("Connection refused"));
     assert!(!is_permanent_ai_error("request timed out"));
     assert!(!is_permanent_ai_error("DNS resolution failed"));
@@ -374,9 +349,6 @@ fn transient_network_errors_retry() {
 
 #[test]
 fn empty_error_does_not_match_permanent() {
-    // Defensive: empty error string should NOT be classified as permanent
-    // (otherwise we'd suppress retry for any error that gets stringified
-    // to "").
     assert!(!is_permanent_ai_error(""));
 }
 
@@ -398,7 +370,6 @@ fn build_request_attaches_screenshot_as_image_part() {
     }
 }
 
-// ── Audit D4: provider finish_reason must survive the non-streaming path ──
 
 /// One-shot mock OpenAI-compatible server: answers the FIRST
 /// /chat/completions POST with `body`, then exits. Mirrors the bridge.rs
@@ -676,7 +647,6 @@ async fn deep_lock_guard_refuses_every_managed_sender() {
     let err = count_chat_tokens(&managed, "", "m", &[]).await.unwrap_err();
     assert!(crate::deep_lock::is_blocked_error(&err.to_string()));
 
-    // Streaming surfaces the guard as an Error event (never a hang).
     let mut rx = stream_chat(
         managed.clone(),
         String::new(),

@@ -11,7 +11,6 @@ pub fn build_request(
 ) -> Vec<ChatMessage> {
     let mut messages = Vec::with_capacity(3);
 
-    // System prompt: explicit role + meeting context + strict output rules.
     let lang_block = match response_language {
         "ru" => {
             "ВАЖНО: отвечай ИСКЛЮЧИТЕЛЬНО на русском языке. \

@@ -120,5 +120,5 @@ pub enum ContentPart {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageUrl {
-    pub url: String, // "data:image/jpeg;base64,..."
+    pub url: String,
 }

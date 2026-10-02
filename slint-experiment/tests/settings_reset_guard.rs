@@ -24,7 +24,7 @@
 //!   convention). Worker-owned in-flight BOOLs (`*_downloading`/`*_updating`) are
 //!   deliberately reset by their worker's terminal callback, NOT by populate, so
 //!   they are out of scope (including them would false-positive).
-#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
 use std::fs;
 use std::path::Path;
@@ -37,7 +37,6 @@ fn transient_string_props(slint_src: &str) -> Vec<String> {
         let Some(rest) = line.trim_start().strip_prefix(MARKER) else {
             continue;
         };
-        // NAME runs until the first `:` (has a default), `;` (no default), or ws.
         let name: String = rest
             .chars()
             .take_while(|c| !matches!(c, ':' | ';' | ' ' | '\t'))
@@ -57,7 +56,6 @@ fn populate_body(rs_src: &str) -> &str {
         .find("fn populate_token_status")
         .expect("populate_token_status not found in settings_controller.rs");
     let after = &rs_src[start..];
-    // The first byte after the signature; search for the next top-level item.
     let body = &after["fn populate_token_status".len()..];
     let mut end = body.len();
     for marker in ["\nfn ", "\npub fn ", "\npub(crate) fn "] {
@@ -79,7 +77,6 @@ fn every_transient_status_prop_is_reset_on_reopen() {
 
     let mut missing: Vec<String> = Vec::new();
     for prop in transient_string_props(&slint) {
-        // Slint hyphen-name -> Rust setter: `ai-bearer-status` -> `set_ai_bearer_status(`.
         let setter = format!("set_{}(", prop.replace('-', "_"));
         if !body.contains(&setter) {
             missing.push(format!(

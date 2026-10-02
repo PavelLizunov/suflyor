@@ -55,7 +55,6 @@ async fn run_post_meeting_debrief_with_noop_events_does_not_panic() {
     run_post_meeting_debrief(sink, cfg, transcript, String::new()).await;
 }
 
-// ── Meeting-summary battery (v0.12.0 — S1) ──
 
 fn line(source: AudioSource, text: &str, ms: u64) -> TranscriptLine {
     TranscriptLine {
@@ -107,7 +106,7 @@ fn summary_format_labels_channels_ru_en() {
     let t = vec![
         line(AudioSource::Mic, " моя реплика ", 0),
         line(AudioSource::System, "их реплика", 1),
-        line(AudioSource::Mic, "   ", 2), // whitespace-only — dropped
+        line(AudioSource::Mic, "   ", 2),
     ];
     assert_eq!(
         format_transcript_for_summary(&t, true),
@@ -129,8 +128,6 @@ fn summary_truncate_passes_under_budget_unchanged() {
 
 #[test]
 fn summary_truncate_keeps_head_tail_and_marker() {
-    // 20 lines × 10 chars (incl. newline cost) — budget 100 keeps
-    // ~3 head lines + ~6 tail lines, drops the middle.
     let lines: Vec<String> = (0..20).map(|i| format!("Вы: ст{i:03}")).collect();
     let text = lines.join("\n");
     let (out, truncated) = truncate_transcript_middle(&text, 100, true);
@@ -143,8 +140,6 @@ fn summary_truncate_keeps_head_tail_and_marker() {
 
 #[test]
 fn summary_truncate_handles_single_giant_line() {
-    // No newlines at all — line-based cut degenerates; the char-slice
-    // fallback must still deliver head + marker + tail.
     let text = "а".repeat(500);
     let (out, truncated) = truncate_transcript_middle(&text, 90, true);
     assert!(truncated);
@@ -198,14 +193,11 @@ fn summary_seed_is_system_plus_user_with_transcript() {
     assert_eq!(seed.len(), 2, "seed must be exactly [system, user]");
     assert_eq!(seed[0].role, "system");
     assert_eq!(seed[1].role, "user");
-    // System carries the recap instructions…
     let sys = match &seed[0].content {
         ai::MessageContent::Text(s) => s.clone(),
         _ => String::new(),
     };
     assert!(sys.contains("Участники"));
-    // …and the user turn is the channel-labelled transcript (NOT a title),
-    // so a 1-user-turn regenerate re-asks THIS and rebuilds the summary.
     let usr = match &seed[1].content {
         ai::MessageContent::Text(s) => s.clone(),
         _ => String::new(),
@@ -215,9 +207,6 @@ fn summary_seed_is_system_plus_user_with_transcript() {
 
 #[test]
 fn summary_seed_matches_what_run_meeting_summary_would_send() {
-    // The seed used by the tile must equal the bar-button's request pair so
-    // 🔄/🧠 rebuild byte-identically. Local budget path (12k) over a short
-    // transcript = no truncation, so the system has no "усечён" note.
     let t = vec![
         line(AudioSource::Mic, "коротко", 0),
         line(AudioSource::System, "ок", 1),
@@ -231,7 +220,6 @@ fn summary_seed_matches_what_run_meeting_summary_would_send() {
     assert_eq!(sys, summary_system_prompt(true, false));
 }
 
-// ── v0.17.0 map-reduce (план B: 7-8 h workdays) ──
 
 #[test]
 fn split_for_map_packs_lines_within_budget_and_preserves_words() {
@@ -241,7 +229,6 @@ fn split_for_map_packs_lines_within_budget_and_preserves_words() {
     for p in &parts {
         assert!(p.chars().count() <= 30, "part over budget: {p:?}");
     }
-    // No words lost or reordered.
     let joined: Vec<&str> = parts.iter().flat_map(|p| p.split_whitespace()).collect();
     let original: Vec<&str> = formatted.split_whitespace().collect();
     assert_eq!(joined, original);
@@ -249,9 +236,6 @@ fn split_for_map_packs_lines_within_budget_and_preserves_words() {
 
 #[test]
 fn split_for_map_word_wraps_one_giant_line() {
-    // The re-Summary transcript is ONE giant line per channel — exactly
-    // план B's case. A single line over budget must word-wrap, not become
-    // one oversized part.
     let giant = format!("Вы: {}", "слово ".repeat(200).trim_end());
     let parts = split_transcript_for_map(&giant, 100);
     assert!(parts.len() > 5, "{}", parts.len());
@@ -306,8 +290,6 @@ fn reduce_seed_carries_rules_part_headers_and_memory_ref() {
         ai::MessageContent::Text(s) => s.clone(),
         _ => String::new(),
     };
-    // Final pass keeps the five-section rules + gains the reduce note +
-    // the decode-only СПРАВКА.
     assert!(sys.contains("Участники"));
     assert!(sys.contains("КОНСПЕКТЫ ПОСЛЕДОВАТЕЛЬНЫХ"));
     assert!(sys.contains("недоверенными данными"));
@@ -346,7 +328,6 @@ fn summary_seed_memory_ref_is_decode_only_and_none_is_byte_identical() {
         line(AudioSource::Mic, "обсудим по Альфе", 0),
         line(AudioSource::System, "давай", 1),
     ];
-    // None / empty / whitespace → byte-identical to the pre-v0.16 seed.
     let plain = build_summary_seed(&t, true, false, None);
     let empty = build_summary_seed(&t, true, false, Some("   "));
     assert_eq!(text_of(&plain[0]), text_of(&empty[0]));
@@ -376,9 +357,6 @@ async fn run_meeting_summary_with_noop_events_does_not_panic() {
         line(AudioSource::System, "согласен, делаем", 1),
     ];
     let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
-    // Empty session id = the "ephemeral / don't persist" sentinel, so the
-    // conspect sidecar is never touched and the test stays hermetic (no
-    // write to the real %APPDATA%).
     run_meeting_summary(sink, cfg, transcript, String::new(), false).await;
 }
 
@@ -395,8 +373,8 @@ fn incomplete_map_keeps_every_gap_for_retry() {
         vec!["src a".into(), "src b".into(), "src c".into()],
     );
     cs.parts[0].summary = Some("- решили выкатить в пятницу".into());
-    cs.parts[1].summary = None; // this part's map failed
-    cs.parts[2].summary = Some("   ".into()); // blank → not usable
+    cs.parts[1].summary = None;
+    cs.parts[2].summary = Some("   ".into());
     let summaries = cs.usable_summaries();
     assert_eq!(
         summaries,
@@ -406,12 +384,6 @@ fn incomplete_map_keeps_every_gap_for_retry() {
     assert_eq!(cs.missing_part_indices(), vec![1, 2]);
 }
 
-// ── Prompt-builder battery (moved from src-tauri Phase B2 port #2) ──
-// These tests don't call AI — they exercise build_auto_tile_prompts
-// with adversarial / edge-case inputs and assert the resulting
-// prompt STILL contains the safety + formatting rules. Catches
-// regressions where someone shortens the prompt and accidentally
-// drops a guard.
 
 /// Anti-prompt-injection block must always appear, regardless of input
 /// shape — it's the only thing defending the model from interviewer
@@ -480,7 +452,6 @@ fn prompt_contains_whisper_artifact_recovery_hints() {
     );
     assert!(sys.contains("К87С") || sys.contains("K8s"));
     assert!(sys.contains("гинкс") || sys.contains("nginx"));
-    // Newly added in morning addendum:
     assert!(sys.contains("3к") || sys.contains("k3s"));
     assert!(sys.contains("эстиди") || sys.contains("etcd"));
     assert!(sys.contains("истио") || sys.contains("istio"));
@@ -595,12 +566,10 @@ fn compact_prompt_is_materially_shorter_and_standard_unchanged() {
     let (sys_std, usr_std) = build_auto_tile_prompts(&q, &lines, ctx, "ru", false, false);
     let (sys_cmp, usr_cmp) = build_auto_tile_prompts(&q, &lines, ctx, "ru", false, true);
 
-    // Standard behavior preserved
     assert!(sys_std.contains("Ты — техничный AI-ассистент"));
     assert!(sys_std.contains("=== БЕЗОПАСНОСТЬ (важно) ==="));
     assert!(usr_std.contains("Как организовать таймауты?"));
 
-    // Compact prompt is materially shorter
     assert!(
         sys_cmp.len() < sys_std.len() / 2,
         "compact system prompt ({}) should be < 50% of standard ({})",
@@ -618,7 +587,6 @@ fn compact_prompt_preserves_guards_context_language_coaching() {
     let lines = vec!["реплика из транскрипта".to_string()];
     let ctx = "Staff SRE, k8s, eBPF";
 
-    // 1. Injection defense guard + meeting context + language
     let (sys_ru, usr_q) = build_auto_tile_prompts(
         &Trigger::Question("как настроить cgroup?".into()),
         &lines,
@@ -633,7 +601,6 @@ fn compact_prompt_preserves_guards_context_language_coaching() {
     assert!(sys_ru.contains("по-русски"));
     assert!(usr_q.contains("как настроить cgroup?"));
 
-    // 2. English response language
     let (sys_en, _) = build_auto_tile_prompts(
         &Trigger::Question("how to scale?".into()),
         &lines,
@@ -644,7 +611,6 @@ fn compact_prompt_preserves_guards_context_language_coaching() {
     );
     assert!(sys_en.contains("English"));
 
-    // 3. Live coaching
     let (sys_coach, _) = build_auto_tile_prompts(
         &Trigger::Question("как отвечать?".into()),
         &lines,
@@ -656,7 +622,6 @@ fn compact_prompt_preserves_guards_context_language_coaching() {
     assert!(sys_coach.contains("чтения вслух"));
     assert!(sys_coach.contains("без слов-паразитов"));
 
-    // 4. Empty transcript handling
     let (_, usr_empty) = build_auto_tile_prompts(
         &Trigger::Question("вопрос?".into()),
         &[],
@@ -667,7 +632,6 @@ fn compact_prompt_preserves_guards_context_language_coaching() {
     );
     assert!(usr_empty.contains("транскрипт пуст"));
 
-    // 5. Keyword trigger behavior
     let (_, usr_kw) = build_auto_tile_prompts(
         &Trigger::Keyword("etcd".into(), "мы используем etcd для данных".into()),
         &lines,
@@ -734,7 +698,6 @@ async fn reask_last_no_prior_qa_emits_error_and_returns_none() {
 async fn ask_stream_loop_processes_deltas_then_done_and_calls_cost_apply_once() {
     use std::sync::Mutex as StdMutex;
     let (tx, rx) = tokio::sync::mpsc::channel::<ai::AiEvent>(8);
-    // Feed events from a separate task so the receiver loop drives.
     let feeder = tokio::spawn(async move {
         tx.send(ai::AiEvent::Delta {
             text: "Hello".into(),
@@ -754,14 +717,13 @@ async fn ask_stream_loop_processes_deltas_then_done_and_calls_cost_apply_once() 
         })
         .await
         .unwrap();
-        // Closing tx after Done is the natural shutdown.
     });
 
     let calls = Arc::new(StdMutex::new(Vec::<u64>::new()));
     let calls_clone = calls.clone();
     let cost_apply: CostApplyFn = Box::new(move |micro| {
         calls_clone.lock().unwrap().push(micro);
-        0.0001234 // arbitrary USD total for the cost:update emit
+        0.0001234
     });
 
     let sink: Arc<dyn RuntimeEvents> = Arc::new(Noop);
@@ -770,7 +732,7 @@ async fn ask_stream_loop_processes_deltas_then_done_and_calls_cost_apply_once() 
         rx,
         "claude-haiku-4-5".into(),
         "live_ask",
-        false, // cloud — bill normally
+        false,
         "sys".into(),
         "usr".into(),
         None,
@@ -894,8 +856,6 @@ async fn ask_stream_loop_journals_caller_supplied_purpose() {
     .await;
     feeder.await.unwrap();
 
-    // write() queues lines synchronously, so everything is already in the
-    // channel now that the loop has returned — drain and find the response.
     let response_line = std::iter::from_fn(|| lines.try_recv().ok())
         .filter_map(|command| match command {
             WriterCmd::Line(line) => Some(line),
@@ -926,8 +886,6 @@ async fn ask_stream_loop_journals_caller_supplied_purpose() {
 async fn ask_stream_loop_local_journals_zero_cost() {
     use std::sync::Mutex as StdMutex;
 
-    // Sanity: the model id we use really does fall back to a non-zero
-    // (Sonnet) price, so a zero result can only come from the is_local gate.
     let phantom = ai::cost_microcents("my-local-gemma-3-it", 1000, 1000);
     assert!(
         phantom > 0,
@@ -961,7 +919,7 @@ async fn ask_stream_loop_local_journals_zero_cost() {
         rx,
         "my-local-gemma-3-it".into(),
         "live_ask",
-        true, // local — must NOT bill / journal a cost
+        true,
         "sys prompt".into(),
         "usr prompt".into(),
         None,

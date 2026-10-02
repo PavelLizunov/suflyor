@@ -50,7 +50,6 @@ pub const DEFAULT_OCR_LANG: &str = "rus+eng";
 /// Returns the first directory that actually contains `tesseract.exe`.
 #[must_use]
 pub fn tesseract_root() -> Option<PathBuf> {
-    // 1. Next to the running executable.
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let cand = dir.join("tesseract");
@@ -59,7 +58,6 @@ pub fn tesseract_root() -> Option<PathBuf> {
             }
         }
     }
-    // 2. The app data dir.
     if let Some(d) = crate::paths::data_root() {
         let cand = d.join("tesseract");
         if cand.join(EXE_NAME).is_file() {
@@ -98,8 +96,6 @@ pub fn run_ocr(bgra: &[u8], width: u32, height: u32, lang: &str) -> Result<Strin
     let exe = root.join(EXE_NAME);
     let tessdata = root.join("tessdata");
 
-    // Guard the buffer so the BMP encoder can never read out of bounds on a
-    // short / mismatched slice.
     let need = (width as usize)
         .checked_mul(height as usize)
         .and_then(|n| n.checked_mul(4))
@@ -124,10 +120,7 @@ pub fn run_ocr(bgra: &[u8], width: u32, height: u32, lang: &str) -> Result<Strin
         .ok_or_else(|| anyhow!("tesseract stdin unavailable"))?;
     let writer = std::thread::spawn(move || {
         use std::io::Write;
-        // A broken pipe (tesseract died early) is not fatal here — the exit
-        // status below is the source of truth.
         let _ = stdin.write_all(&bmp);
-        // Dropping `stdin` closes the pipe so tesseract sees EOF.
     });
     let out = child.wait_with_output().context("tesseract wait")?;
     let _ = writer.join();
@@ -156,7 +149,7 @@ fn spawn_tesseract(exe: &Path, tessdata: &Path, lang: &str) -> std::io::Result<C
 /// appends, strip trailing whitespace per line, and trim leading/trailing blank
 /// lines. Line order + interior blank lines are preserved.
 fn normalize_ocr_text(s: &str) -> String {
-    s.replace('\u{000C}', "") // page form-feed (\f)
+    s.replace('\u{000C}', "")
         .lines()
         .map(str::trim_end)
         .collect::<Vec<_>>()
@@ -171,42 +164,36 @@ fn normalize_ocr_text(s: &str) -> String {
 fn bgra_to_bmp(bgra: &[u8], width: u32, height: u32) -> Vec<u8> {
     let w = width as usize;
     let h = height as usize;
-    // Each output row is `w*3` bytes padded up to a 4-byte boundary.
     let row_bytes = (w * 3 + 3) & !3;
     let pad = row_bytes - w * 3;
     let img_size = row_bytes * h;
     let file_size = 54 + img_size;
 
     let mut out = Vec::with_capacity(file_size);
-    // BITMAPFILEHEADER (14 bytes)
     out.extend_from_slice(b"BM");
     out.extend_from_slice(&(file_size as u32).to_le_bytes());
-    out.extend_from_slice(&0u32.to_le_bytes()); // reserved
-    out.extend_from_slice(&54u32.to_le_bytes()); // pixel data offset
-                                                 // BITMAPINFOHEADER (40 bytes)
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out.extend_from_slice(&54u32.to_le_bytes());
     out.extend_from_slice(&40u32.to_le_bytes());
     out.extend_from_slice(&(width as i32).to_le_bytes());
-    out.extend_from_slice(&(-(height as i32)).to_le_bytes()); // negative = top-down
-    out.extend_from_slice(&1u16.to_le_bytes()); // planes
-    out.extend_from_slice(&24u16.to_le_bytes()); // bits per pixel
-    out.extend_from_slice(&0u32.to_le_bytes()); // BI_RGB (no compression)
+    out.extend_from_slice(&(-(height as i32)).to_le_bytes());
+    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&24u16.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
     out.extend_from_slice(&(img_size as u32).to_le_bytes());
-    out.extend_from_slice(&2835i32.to_le_bytes()); // 72 DPI x (px/m)
-    out.extend_from_slice(&2835i32.to_le_bytes()); // 72 DPI y
-    out.extend_from_slice(&0u32.to_le_bytes()); // palette colors
-    out.extend_from_slice(&0u32.to_le_bytes()); // important colors
+    out.extend_from_slice(&2835i32.to_le_bytes());
+    out.extend_from_slice(&2835i32.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
 
-    // Pixel rows, top-down, BGR (drop alpha) + row padding.
     for y in 0..h {
         let row = y * w * 4;
         for x in 0..w {
             let p = row + x * 4;
-            // Bounds were guaranteed by the caller's length check, but index
-            // safely anyway so a future caller can't trip UB.
             if let Some(px) = bgra.get(p..p + 3) {
-                out.push(px[0]); // B
-                out.push(px[1]); // G
-                out.push(px[2]); // R
+                out.push(px[0]);
+                out.push(px[1]);
+                out.push(px[2]);
             } else {
                 out.extend_from_slice(&[0, 0, 0]);
             }
@@ -222,25 +209,19 @@ mod tests {
 
     #[test]
     fn bmp_header_is_well_formed_and_top_down() {
-        // 2x2 BGRA (top-down): the encoder must emit a 24-bit BI_RGB BMP with a
-        // NEGATIVE height (top-down) and the right total size.
         let bgra = vec![
-            10, 20, 30, 255, 11, 21, 31, 255, // row 0
-            12, 22, 32, 255, 13, 23, 33, 255, // row 1
+            10, 20, 30, 255, 11, 21, 31, 255,
+            12, 22, 32, 255, 13, 23, 33, 255,
         ];
         let bmp = bgra_to_bmp(&bgra, 2, 2);
         assert_eq!(&bmp[0..2], b"BM", "magic");
-        // row = 2*3=6 bytes → padded to 8; img = 8*2 = 16; file = 54+16 = 70.
         let file_size = u32::from_le_bytes([bmp[2], bmp[3], bmp[4], bmp[5]]);
         assert_eq!(file_size as usize, bmp.len());
         assert_eq!(file_size, 70);
-        // biHeight (offset 22) must be negative (top-down).
         let h = i32::from_le_bytes([bmp[22], bmp[23], bmp[24], bmp[25]]);
         assert_eq!(h, -2);
-        // bpp (offset 28) = 24.
         let bpp = u16::from_le_bytes([bmp[28], bmp[29]]);
         assert_eq!(bpp, 24);
-        // First pixel bytes (offset 54) are the BGR of pixel (0,0) = 10,20,30.
         assert_eq!(&bmp[54..57], &[10, 20, 30]);
     }
 
@@ -258,9 +239,8 @@ mod tests {
 
     #[test]
     fn run_ocr_rejects_empty_or_short_buffer() {
-        // Zero dims and a too-short buffer must error BEFORE any spawn.
         assert!(run_ocr(&[], 0, 0, "rus").is_err());
-        assert!(run_ocr(&[0, 0, 0, 0], 4, 4, "rus").is_err()); // needs 64 bytes
+        assert!(run_ocr(&[0, 0, 0, 0], 4, 4, "rus").is_err());
     }
 
     #[test]

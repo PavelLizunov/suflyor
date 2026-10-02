@@ -38,9 +38,9 @@ const NAME_MAX_TOKENS: u32 = 32;
 /// and only when the triggering line follows a lull of ≥ [`REGEN_LULL_MS`] — so
 /// the refresh lands in a quiet gap, not mid-speech. The shared `AI_SEMAPHORE`
 /// keeps it behind live answers regardless.
-const REGEN_INTERVAL_MS: u128 = 240_000; // 4 min
+const REGEN_INTERVAL_MS: u128 = 240_000;
 const REGEN_MIN_NEW_LINES: usize = 25;
-const REGEN_LULL_MS: u128 = 6_000; // 6 s
+const REGEN_LULL_MS: u128 = 6_000;
 
 /// What the namer should do on a given line.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -69,7 +69,7 @@ struct Gate {
 /// First-shot vs throttled re-gen vs nothing — pure, see tests.
 fn decide(g: &Gate) -> NamerAction {
     if g.inflight {
-        return NamerAction::Skip; // one namer task at a time
+        return NamerAction::Skip;
     }
     if !g.requested {
         return if g.len >= NAME_TRIGGER_LINES {
@@ -78,8 +78,6 @@ fn decide(g: &Gate) -> NamerAction {
             NamerAction::Skip
         };
     }
-    // First shot already used; refresh only on real growth, after the interval,
-    // and when this line follows a lull (so it lands in a quiet gap).
     if g.has_name
         && g.now_ms.saturating_sub(g.at_ms) >= REGEN_INTERVAL_MS
         && g.len.saturating_sub(g.at_len) >= REGEN_MIN_NEW_LINES
@@ -116,9 +114,6 @@ pub fn maybe_spawn_namer(rt: &SharedSlintRuntime, cfg: &SharedConfig, now_ms: u1
         } else {
             s.session_name_requested = true;
             s.session_name_inflight = true;
-            // Arm the throttle on the ATTEMPT (not on success): a FAILED local
-            // re-gen — or the cloud bail below — then waits a fresh interval
-            // instead of re-attempting on every lull-following line.
             s.session_name_at_ms = now_ms;
             s.session_name_at_len = s.full_transcript.len();
             let lines = s.full_transcript.iter().map(|l| l.text.clone()).collect();
@@ -131,9 +126,6 @@ pub fn maybe_spawn_namer(rt: &SharedSlintRuntime, cfg: &SharedConfig, now_ms: u1
     // Resolve the endpoint OUTSIDE the rt lock. Only the free LOCAL model names.
     let ep = cfg.read().ai_endpoint(true);
     if !ep.is_local {
-        // Cloud / no local: release the guard. `requested` is latched + the
-        // throttle is already armed, so there's no per-line churn — naming is
-        // local-only by design.
         lock(rt).session_name_inflight = false;
         return;
     }
@@ -145,12 +137,6 @@ pub fn maybe_spawn_namer(rt: &SharedSlintRuntime, cfg: &SharedConfig, now_ms: u1
         // write is small file I/O and must not run under the rt mutex.
         let persist = {
             let mut s = lock(&rt);
-            // Generation guard: discard a title that outlived its session, AND let
-            // only the OWNING generation release its own in-flight latch — a late
-            // task from a prior session must not clear the CURRENT session's latch
-            // (that would let a second namer spawn for the live session). (The
-            // throttle `at_ms`/`at_len` were already advanced at claim time, so a
-            // failed reply leaves the prior name and re-arms the interval.)
             if s.session_gen != gen {
                 None
             } else {
@@ -174,7 +160,6 @@ pub fn maybe_spawn_namer(rt: &SharedSlintRuntime, cfg: &SharedConfig, now_ms: u1
                 }
             }
         };
-        // Persist to the archive sidecar (empty session id = ephemeral → no-op).
         if let Some((sid, name)) = persist {
             overlay_backend::session_names::set(&sid, &name, now_ms);
         }
@@ -274,7 +259,6 @@ mod tests {
 
     #[test]
     fn clean_keeps_interior_dots() {
-        // A trailing-only strip must not touch a dot inside the title.
         assert_eq!(clean_name("Обзор v1.2 релиза"), "Обзор v1.2 релиза");
     }
 
@@ -329,28 +313,23 @@ mod tests {
 
     #[test]
     fn decide_regen_needs_name_interval_growth_and_lull() {
-        // All conditions satisfied → Regen.
         let mut base = gate(true, true, REGEN_MIN_NEW_LINES + 1);
         base.now_ms = REGEN_INTERVAL_MS;
         base.gap_ms = REGEN_LULL_MS;
         assert_eq!(decide(&base), NamerAction::Regen);
 
-        // No name yet (first shot failed) → never re-gen.
         let mut no_name = base;
         no_name.has_name = false;
         assert_eq!(decide(&no_name), NamerAction::Skip);
 
-        // Interval not elapsed → Skip.
         let mut early = base;
         early.now_ms = REGEN_INTERVAL_MS - 1;
         assert_eq!(decide(&early), NamerAction::Skip);
 
-        // Not enough new lines → Skip.
         let mut small = base;
         small.len = REGEN_MIN_NEW_LINES - 1;
         assert_eq!(decide(&small), NamerAction::Skip);
 
-        // Mid-speech (no lull) → Skip.
         let mut busy = base;
         busy.gap_ms = REGEN_LULL_MS - 1;
         assert_eq!(decide(&busy), NamerAction::Skip);

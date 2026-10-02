@@ -275,17 +275,14 @@ mod tests {
             "local",
             "http://127.0.0.1:8080/v1"
         )));
-        // External Ollama on the same provider stays two-state.
         assert!(!cfg_is_managed_local(&cfg(
             "local",
             "http://127.0.0.1:11434/v1"
         )));
-        // A LAN host on :8080 is not ours.
         assert!(!cfg_is_managed_local(&cfg(
             "local",
             "http://192.168.0.10:8080/v1"
         )));
-        // Cloud provider never runs the three-state machine.
         assert!(!cfg_is_managed_local(&cfg(
             "cloud",
             "http://127.0.0.1:8080/v1"
@@ -384,7 +381,6 @@ mod tests {
 
     #[test]
     fn copy_is_localized_and_state_distinct() {
-        // Every state has RU AND EN copy, and the states don't share it.
         let hint_unlocked = state_hint(true, true, false, false);
         let hint_listening = state_hint(true, true, true, false);
         let hint_deep = state_hint(true, true, true, true);

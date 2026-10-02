@@ -126,7 +126,6 @@ mod tests {
             0x9C => '\u{0153}',
             0x9E => '\u{017E}',
             0x9F => '\u{0178}',
-            // ASCII + Latin-1 high + the 5 cp1252-undefined passthroughs.
             _ => b as char,
         }
     }
@@ -138,7 +137,6 @@ mod tests {
 
     #[test]
     fn repairs_real_mojibake() {
-        // Includes the cp1252-only signature byte 0x8C (Œ) from "ь" = D1 8C.
         let original = "**Роль:** Семейный психолог / Медиатор\n*   Конфликтология и медиация";
         let moji = corrupt(original);
         assert_ne!(
@@ -166,15 +164,12 @@ mod tests {
 
     #[test]
     fn leaves_legit_latin1_untouched() {
-        // French accents: high bytes, but a lone 0xE9 etc. is invalid UTF-8 so
-        // reconstruction fails — must not be "repaired".
         assert_eq!(repair_cp1252_mojibake("café résumé naïve"), None);
     }
 
     #[test]
     fn idempotent_on_already_clean() {
         let clean = "Роль: инженер";
-        // corrupt → repair gives clean; repairing clean again is a no-op.
         let moji = corrupt(clean);
         let fixed = repair_cp1252_mojibake(&moji).unwrap();
         assert_eq!(fixed, clean);

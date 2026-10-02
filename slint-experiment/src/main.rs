@@ -91,9 +91,6 @@ fn fmt_bytes(n: u64) -> String {
 fn fmt_modified(unix: u64) -> String {
     let secs = unix;
     let days_since_epoch = secs / 86_400;
-    // Cheap Gregorian conversion sufficient for "newer file first" display.
-    // 1970-01-01 = day 0; full date math via the `time` crate in Phase 1.
-    // For pilot, just emit "epoch+Nd HH:MM" so the user can distinguish files.
     let h = (secs / 3600) % 24;
     let m = (secs / 60) % 60;
     format!("epoch+{days_since_epoch}d {h:02}:{m:02}")
@@ -178,8 +175,6 @@ fn sync_window(window: &MainWindow, state: &mut PilotState) {
     window.set_events(ModelRc::new(VecModel::from(visible)));
 
     let (cost, count) = total_cost_usd(&state.events);
-    // Saturate at i32::MAX so a future huge journal can't wrap to negative
-    // (10 MB cap makes this practically unreachable, but cheap to guard).
     let events_i32 = i32::try_from(state.events.len()).unwrap_or(i32::MAX);
     let count_i32 = i32::try_from(count).unwrap_or(i32::MAX);
     window.set_total_events(events_i32);
@@ -208,7 +203,6 @@ fn main() -> Result<(), slint::PlatformError> {
     let window = MainWindow::new()?;
     let state = Rc::new(RefCell::new(PilotState::new()));
 
-    // ----- Initial load: list sessions, auto-select newest -----
     {
         let mut s = state.borrow_mut();
         match list_sessions() {
@@ -220,7 +214,6 @@ fn main() -> Result<(), slint::PlatformError> {
                 eprintln!("[slint-replay] list_sessions failed: {e:#}");
             }
         }
-        // Auto-load newest if any.
         if let Some(first) = s.sessions.first() {
             let path = first.path.clone();
             load_session_into_state(&mut s, &path);
@@ -229,7 +222,6 @@ fn main() -> Result<(), slint::PlatformError> {
     }
     window.set_selected_session_index(0);
 
-    // ----- Callbacks -----
 
     let s = state.clone();
     let w = window.as_weak();
@@ -278,7 +270,6 @@ fn main() -> Result<(), slint::PlatformError> {
     let w = window.as_weak();
     window.on_back_clicked(move || {
         if let Some(w) = w.upgrade() {
-            // Pilot: just hide. Real Replay (Phase 1+) returns to overlay.
             let _ = w.hide();
         }
     });
@@ -309,7 +300,7 @@ fn main() -> Result<(), slint::PlatformError> {
 // thread) so each scenario can be a true `#[test]`. Documented in the
 // pilot report as a known Slint-testing gotcha.
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)] // test brevity
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use serde_json::json;
@@ -325,10 +316,6 @@ mod tests {
         i_slint_backend_testing::init_no_event_loop();
         let window = MainWindow::new().expect("create window");
 
-        // ===================================================================
-        // Scenario 1 — load: given populated state, sync_window pushes
-        // the events model into Slint at the right row count + chip count.
-        // ===================================================================
         {
             let mut state = PilotState::new();
             state.events = vec![
@@ -350,16 +337,11 @@ mod tests {
                 3,
                 "scenario 1: no hidden kinds → all visible"
             );
-            // chip_kinds order is by count desc, then kind asc as tie-breaker.
             assert_eq!(state.chip_kinds.len(), 2);
-            assert_eq!(state.chip_kinds[0], "transcript_line"); // count=2
-            assert_eq!(state.chip_kinds[1], "ai_response"); // count=1
+            assert_eq!(state.chip_kinds[0], "transcript_line");
+            assert_eq!(state.chip_kinds[1], "ai_response");
         }
 
-        // ===================================================================
-        // Scenario 2 — chip toggle: hiding a kind drops only that kind's
-        // events from the visible model, totals stay unfiltered.
-        // ===================================================================
         {
             let mut state = PilotState::new();
             state.events = vec![
@@ -376,8 +358,6 @@ mod tests {
                 .expect("ai_response chip should exist");
             let kind = state.chip_kinds[idx].clone();
 
-            // Mirror what on_chip_clicked does — toggle into hidden_kinds,
-            // re-sync to push the filtered events to the window.
             state.hidden_kinds.insert(kind.clone());
             sync_window(&window, &mut state);
 
@@ -399,7 +379,6 @@ mod tests {
                 "scenario 2: ai_response chip flagged hidden"
             );
 
-            // Toggle back on — all 3 visible.
             state.hidden_kinds.remove(&kind);
             sync_window(&window, &mut state);
             assert_eq!(
@@ -409,24 +388,14 @@ mod tests {
             );
         }
 
-        // ===================================================================
-        // Scenario 3 — session switch: load_session_into_state's reset
-        // semantics (clear hidden_kinds, replace events) leave the new
-        // session showing all its events.
-        // ===================================================================
         {
             let mut state = PilotState::new();
             state.events = vec![ev("transcript_line", 1000), ev("transcript_line", 2000)];
             state.hidden_kinds.insert("transcript_line".to_string());
             sync_window(&window, &mut state);
-            // Pre-condition: 2 total, 0 visible.
             assert_eq!(window.get_total_events(), 2);
             assert_eq!(window.get_events().row_count(), 0);
 
-            // Switching to session B: same mutation load_session_into_state
-            // does (clear filter, replace events). The disk-reading branch is
-            // exercised by the binary at runtime; here we test the post-load
-            // state transition.
             state.hidden_kinds.clear();
             state.events = vec![
                 ev("ai_response", 3000),
@@ -448,11 +417,6 @@ mod tests {
             );
             assert_eq!(window.get_ai_response_count(), 3, "scenario 3: ai count");
 
-            // Scenario 3b — call the REAL load_session_into_state to
-            // exercise the disk path and confirm hidden_kinds is cleared
-            // even when the load itself errors out. Catches the regression
-            // class "load_session_into_state forgot to clear hidden_kinds
-            // in the Err branch" — the inlined mutation above would NOT.
             state.hidden_kinds.insert("ai_response".to_string());
             assert!(!state.hidden_kinds.is_empty(), "pre: hidden seeded");
             load_session_into_state(&mut state, "C:/nonexistent/slint-pilot-test.jsonl");

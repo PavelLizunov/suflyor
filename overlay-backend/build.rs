@@ -44,9 +44,6 @@ fn build_process_memory() {
 
 #[cfg(not(target_os = "macos"))]
 fn build_mic_capture() {
-    // The `cc` build-dependency is macOS-target-gated, so the bridge can
-    // only be compiled on a macOS host. Cross-compiling overlay-backend to
-    // macOS from another host is not supported.
     eprintln!("overlay-backend: macOS targets must be built on macOS (mic_capture bridge)");
     std::process::exit(1);
 }

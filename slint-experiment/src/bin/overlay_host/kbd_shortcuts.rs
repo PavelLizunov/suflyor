@@ -41,13 +41,9 @@ pub(crate) fn install(win: &slint::Window) {
         else {
             return EventResult::Propagate;
         };
-        // Latin layouts already match Slint's built-in shortcuts — leave them untouched
-        // (structurally excludes any US/DE/FR regression from the new path).
         if matches!(&event.logical_key, Key::Character(c) if c.is_ascii()) {
             return EventResult::Propagate;
         }
-        // Ctrl only: excluding Alt keeps AltGr (Ctrl+Alt) combos out; excluding Shift
-        // avoids hijacking Ctrl+Shift+<letter>.
         if !(key_down(VK_CONTROL) && !key_down(VK_MENU) && !key_down(VK_SHIFT)) {
             return EventResult::Propagate;
         }
@@ -64,9 +60,6 @@ pub(crate) fn install(win: &slint::Window) {
             ElementState::Pressed => slint::platform::WindowEvent::KeyPressed { text },
             ElementState::Released => slint::platform::WindowEvent::KeyReleased { text },
         };
-        // Core recomputes modifiers from its own tracked state, so the physically-held
-        // Ctrl still applies → the synthetic letter arrives as Ctrl+<letter> on the
-        // focused item. Swallow the original so the "м" isn't also handled.
         let _ = slint_win.try_dispatch_event(synth);
         EventResult::PreventDefault
     });
@@ -99,13 +92,13 @@ mod tests {
 
     #[test]
     fn vk_to_letter_maps_letters_only() {
-        assert_eq!(vk_to_letter(0x56), Some('v')); // VK_V
-        assert_eq!(vk_to_letter(0x43), Some('c')); // VK_C
-        assert_eq!(vk_to_letter(0x41), Some('a')); // VK_A
-        assert_eq!(vk_to_letter(0x58), Some('x')); // VK_X
-        assert_eq!(vk_to_letter(0x30), None); // '0' digit — not a letter
-        assert_eq!(vk_to_letter(0x11), None); // VK_CONTROL
-        assert_eq!(vk_to_letter(0), None); // unmapped
-        assert_eq!(vk_to_letter(0x1_0000), None); // out of u8 range
+        assert_eq!(vk_to_letter(0x56), Some('v'));
+        assert_eq!(vk_to_letter(0x43), Some('c'));
+        assert_eq!(vk_to_letter(0x41), Some('a'));
+        assert_eq!(vk_to_letter(0x58), Some('x'));
+        assert_eq!(vk_to_letter(0x30), None);
+        assert_eq!(vk_to_letter(0x11), None);
+        assert_eq!(vk_to_letter(0), None);
+        assert_eq!(vk_to_letter(0x1_0000), None);
     }
 }

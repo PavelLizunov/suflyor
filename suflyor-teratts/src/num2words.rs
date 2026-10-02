@@ -44,9 +44,6 @@ pub fn num2words(literal: &str, lang: &str) -> Option<String> {
     Some(out)
 }
 
-// ---------------------------------------------------------------------------
-// English
-// ---------------------------------------------------------------------------
 
 const EN_UNITS: [&str; 20] = [
     "zero",
@@ -144,9 +141,6 @@ fn spell_decimal_en(int_value: u64, frac: Option<&str>) -> Option<String> {
     Some(format!("{} point {}", int_words, digits.join(" ")))
 }
 
-// ---------------------------------------------------------------------------
-// Russian
-// ---------------------------------------------------------------------------
 
 const RU_UNITS_M: [&str; 10] = [
     "ноль",
@@ -312,7 +306,6 @@ fn spell_decimal_ru(int_value: u64, frac: Option<&str>) -> Option<String> {
     let Some(frac) = frac else {
         return Some(spell_int_ru(int_value));
     };
-    // Mirror float semantics: trailing zeros do not change the value.
     let frac = frac.trim_end_matches('0');
     if frac.is_empty() {
         return Some(spell_int_ru(int_value));
@@ -328,7 +321,6 @@ fn spell_decimal_ru(int_value: u64, frac: Option<&str>) -> Option<String> {
         let one = frac_value % 10 == 1 && frac_value % 100 != 11;
         let denominator = frac_denominator_ru(digits, one)?;
         if one {
-            // "одна десятая" already carries the numeral.
             return Some(format!("{int_words} и {denominator}"));
         }
         return Some(format!(
@@ -336,9 +328,6 @@ fn spell_decimal_ru(int_value: u64, frac: Option<&str>) -> Option<String> {
             spell_below_1000_ru(frac_value, true)
         ));
     }
-    // Longer fractions than the named table: spell digits one by one. This
-    // deviates from num2words (rare in practice) and is documented in the
-    // RC17 goal doc.
     let mut digit_words: Vec<&str> = Vec::new();
     for c in frac.chars() {
         digit_words.push(RU_UNITS_F[(c as u8 - b'0') as usize]);

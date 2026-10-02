@@ -29,7 +29,6 @@ async fn main() {
     // model can burn the whole token budget on reasoning and return empty).
     ai::set_local_no_think(ep.is_local && !cfg.ai_local_thinking);
 
-    // Exact app path: build the request (incl. KB/RAG injection) then send it.
     let messages = ai::build_request("", &cfg.response_language, &[], None, Some(&question));
 
     println!("===== SYSTEM PROMPT (what the model receives) =====");

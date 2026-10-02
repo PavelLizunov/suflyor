@@ -167,8 +167,6 @@ fn main() {
             Err(TryRecvError::Disconnected) => break,
         }
     }
-    // Snapshot while the handle is still alive, then explicit teardown:
-    // CaptureHandle::drop stops + joins the workers.
     let metrics = handle.metrics_snapshot();
     drop(handle);
 
@@ -193,11 +191,6 @@ fn main() {
         metrics.system.last_emitted_session_ms
     );
 
-    // Each stream has a single producer worker that try_sends the chunk before
-    // recording it in the metrics, so a concurrent snapshot can legitimately
-    // see one received chunk not yet counted in emitted_chunks. Metrics may
-    // also exceed received counts (a final chunk can still be queued). Fail
-    // only when received chunks exceed the emitted metric by MORE than one.
     let mut consistent = true;
     if mic.chunks > metrics.mic.emitted_chunks.saturating_add(1) {
         eprintln!(
@@ -244,7 +237,6 @@ mod tests {
         assert_eq!(stats.chunks, 2);
         assert_eq!(stats.samples, 8);
         assert_eq!(stats.nonzero_samples, 3);
-        // i16::MIN must not overflow the absolute-amplitude aggregate.
         assert_eq!(stats.max_abs, 32768);
         assert!(stats.max_rms_db < 0.0 && stats.max_rms_db > -40.0);
     }

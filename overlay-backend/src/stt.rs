@@ -180,9 +180,6 @@ pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> 
                     anyhow::bail!("whisper-server unreachable");
                 }
             };
-            // whisper.cpp has no /models route, so a 404/405 here still means the
-            // server is UP and reachable (a truly-down server fails at send()).
-            // Report that plainly instead of a scary raw 404.
             if resp.status().is_success() {
                 Ok(format!(
                     "HTTP {} — whisper-server ready",
@@ -228,7 +225,6 @@ const VAD_RMS_THRESHOLD: f32 = 50.0;
 /// How long silence must persist to flush an utterance (ms).
 const VAD_HANG_MS: u64 = 800;
 /// Force flush for System loopback audio if buffer is this long (seconds).
-// ponytail: a 5s cap forcibly bisected multi-clause questions; 10s aligns with natural pauses and full questions.
 const SYSTEM_MAX_UTTERANCE_SEC: u64 = 10;
 /// Force flush for Microphone audio if buffer is this long (seconds).
 const DEFAULT_MAX_UTTERANCE_SEC: u64 = 10;
@@ -308,11 +304,6 @@ pub fn spawn(
     let stt_semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(6));
 
     tokio::spawn(async move {
-        // Resolve the one shared GigaAM model OFF the async executor when the
-        // local backend is selected. Live and ad-hoc flows serialize on this
-        // model instead of retaining separate hundreds-of-MiB ORT sessions.
-        // A load failure leaves the pipeline producing no transcripts (the
-        // Settings "Test" button surfaces the real error to the user).
         let gigaam: Option<SharedGigaamModel> =
             if let SttBackendCfg::Gigaam { model_dir } = &backend {
                 let dir = model_dir.clone();
@@ -338,9 +329,6 @@ pub fn spawn(
                 None
             };
 
-        // `reqwest::Client::builder().build()` only fails if TLS init
-        // fails — that's a process-wide TLS backend initialization failure,
-        // not a recoverable runtime condition. Exempt from `expect_used` deny.
         #[allow(
             clippy::expect_used,
             reason = "TLS-init failure is non-recoverable at process startup"
@@ -350,8 +338,6 @@ pub fn spawn(
             .build()
             .expect("reqwest client");
 
-        // Resolve the HTTP target (url, optional bearer, model) once for the
-        // Whisper-style backends. None for GigaAM (handled in-process).
         let http_target: Option<(String, Option<String>, String)> = match &backend {
             SttBackendCfg::Cloud { api_key, model } => Some((
                 GROQ_STT_URL.to_string(),
@@ -370,21 +356,15 @@ pub fn spawn(
             SttBackendCfg::Gigaam { .. } => None,
         };
 
-        // Per-source rolling buffer + silence tracking
         let mut buffers: HashMap<AudioSource, Utterance> = HashMap::new();
         let mut tts_suppressed_sources: HashSet<AudioSource> = HashSet::new();
 
         let mut max_rms_log: HashMap<AudioSource, (f32, u64)> = HashMap::new();
         while let Some(chunk) = audio_rx.recv().await {
-            // Health: bump audio-frame timestamp. Chunks arrive every ~200ms
-            // so this is plenty granular for the 15s "degraded" threshold.
             health.last_audio_frame_ms.store(
                 crate::journal::now_unix_ms() as u64,
                 std::sync::atomic::Ordering::Relaxed,
             );
-            // Drop read-aloud audio at ingestion, not only when a VAD buffer
-            // eventually flushes. Exact Tera DONE can then unmute immediately
-            // without submitting the buffered tail of the spoken tile.
             if crate::tts::should_suppress_stt() {
                 buffers.remove(&chunk.source);
                 if tts_suppressed_sources.insert(chunk.source) {
@@ -403,7 +383,6 @@ pub fn spawn(
             }
             let utt = buffers.entry(chunk.source).or_default();
             let rms = rms_i16(&chunk.pcm_i16);
-            // Every ~5s log the max RMS we saw — helps diagnose silent/missing capture.
             let entry = max_rms_log.entry(chunk.source).or_insert((0.0, 0));
             if rms > entry.0 {
                 entry.0 = rms;
@@ -430,11 +409,6 @@ pub fn spawn(
             if rms < VAD_RMS_THRESHOLD {
                 utt.silent_run_ms = utt.silent_run_ms.saturating_add(chunk_duration_ms);
             } else {
-                // H (fable) — snap the utterance start to VOICE ONSET, not the buffer's first
-                // chunk. Each channel's first captured chunk is ~t0 and the buffer accumulates
-                // leading silence until voice arrives, so without this the first voiced line on
-                // BOTH channels inherited start≈0 and displayed "00:00" (wrong order + timecodes).
-                // timestamp_ms is stamped at chunk END, so back off one chunk to its start.
                 if !utt.had_voice {
                     utt.start_ts_ms = chunk.timestamp_ms.saturating_sub(chunk_duration_ms);
                 }
@@ -447,9 +421,6 @@ pub fn spawn(
             let (should_flush, forced_by_size) =
                 utterance_flush_decision(dur_sec, utt.silent_run_ms, utt.had_voice, cap_sec);
             if forced_by_size {
-                // info, not warn (v0.17.1 audit): the size-cap flush is normal,
-                // designed behavior for continuous speech — a warn read like an
-                // error in the tester log once the log facade went live.
                 log::info!(
                     "STT forced flush for {:?}: {:.1}s buffer reached cap ({}s) — \
                      had_voice={} silent_run={}ms (VAD threshold {})",
@@ -466,9 +437,6 @@ pub fn spawn(
                 let to_send = std::mem::take(utt);
                 buffers.remove(&chunk.source);
 
-                // Anti-hallucination gate: buffer must look like real speech.
-                // Catches "background noise + keyboard click" patterns that
-                // would otherwise trip Whisper into producing fake transcripts.
                 let speech_like = buffer_likely_speech(&to_send.samples);
                 if !speech_like {
                     log::info!(
@@ -477,13 +445,6 @@ pub fn spawn(
                         dur_sec
                     );
                 }
-                // Anti-feedback: drop EITHER source while the read-aloud plays.
-                // The system loopback hears the TTS directly; the MIC picks up the
-                // speakers' acoustic echo (the tester saw read-aloud text appear on
-                // the bar — the mic path was previously ungated). Both would be
-                // transcribed (shown on the bar / answered by the AI). The user is
-                // listening to the read-aloud, not talking, so suppressing both is
-                // correct; `is_speaking` clears shortly after playback ends.
                 let tts_feedback = crate::tts::should_suppress_stt();
                 if tts_feedback {
                     log::info!(
@@ -518,7 +479,7 @@ pub fn spawn(
                             // inference runs slower than the flush rate.
                             let _permit = match sem.acquire_owned().await {
                                 Ok(p) => p,
-                                Err(_) => return, // semaphore closed, shutting down
+                                Err(_) => return,
                             };
                             let joined = tokio::task::spawn_blocking(move || {
                                 gigaam_transcribe(&model, &samples)
@@ -537,7 +498,6 @@ pub fn spawn(
                             .await;
                         });
                     } else if let Some((url, bearer, model)) = http_target.clone() {
-                        // Cloud Groq or local whisper-server — HTTP multipart.
                         let client = client.clone();
                         let language = language.clone();
                         let whisper_prompt = whisper_prompt.clone();
@@ -550,10 +510,9 @@ pub fn spawn(
                             model
                         );
                         tokio::spawn(async move {
-                            // Bound concurrent HTTP calls — wait if 6 already in flight.
                             let _permit = match sem.acquire_owned().await {
                                 Ok(p) => p,
-                                Err(_) => return, // semaphore closed, runtime shutting down
+                                Err(_) => return,
                             };
                             let result = transcribe(
                                 &client,
@@ -606,7 +565,6 @@ pub fn buffer_likely_speech(samples: &[i16]) -> bool {
     if samples.is_empty() {
         return false;
     }
-    // Test 1: overall energy
     let mean = rms_i16(samples);
     if mean < VAD_RMS_THRESHOLD * MIN_MEAN_RMS_FRACTION {
         log::debug!(
@@ -616,8 +574,7 @@ pub fn buffer_likely_speech(samples: &[i16]) -> bool {
         );
         return false;
     }
-    // Test 2: voice-chunk ratio
-    let chunk = (TARGET_SAMPLE_RATE as usize) / 5; // ~200 ms
+    let chunk = (TARGET_SAMPLE_RATE as usize) / 5;
     let mut total = 0usize;
     let mut voiced = 0usize;
     for c in samples.chunks(chunk) {
@@ -655,23 +612,18 @@ pub fn is_likely_hallucination(text: &str) -> bool {
     if trimmed.is_empty() {
         return true;
     }
-    // Pure punctuation / no alphanumeric chars at all.
     if !trimmed.chars().any(|c| c.is_alphanumeric()) {
         return true;
     }
     let lower = trimmed.to_lowercase();
 
-    // Known hallucination phrases (substring match — they sometimes have
-    // small variations like trailing periods).
     const KNOWN_HALLUCINATIONS: &[&str] = &[
-        // English
         "subscribe to my channel",
         "subscribe to our channel",
         "thanks for watching",
         "thank you for watching",
         "please like and subscribe",
         "don't forget to subscribe",
-        // Russian / YouTube
         "продолжение следует",
         "спасибо за просмотр",
         "подпишись на канал",
@@ -681,8 +633,6 @@ pub fn is_likely_hallucination(text: &str) -> bool {
         // Common gibberish leak from training data
         "субтитры подогнал",
         "редактор субтитров",
-        // Live-test 2026-05-25: Russian YouTube subtitlers — Whisper
-        // hallucinates these as the audio's "credits line" during silence.
         "субтитры создавал",
         "субтитры от",
         "корректор",
@@ -699,10 +649,8 @@ pub fn is_likely_hallucination(text: &str) -> bool {
         }
     }
 
-    // Repetition loop: same word repeated ≥3 times in a row.
     let words: Vec<&str> = lower.split_whitespace().collect();
     if words.len() >= 3 {
-        // Same-word loop ("опыт опыт опыт ...")
         let all_same = words.iter().all(|w| *w == words[0]);
         if all_same {
             log::info!(
@@ -711,7 +659,6 @@ pub fn is_likely_hallucination(text: &str) -> bool {
             );
             return true;
         }
-        // Same 2-word phrase repeated ("опыт работы опыт работы опыт работы")
         if words.len() >= 6 && words.len().is_multiple_of(2) {
             let pair_match = (0..words.len() / 2)
                 .all(|i| words[2 * i] == words[0] && words[2 * i + 1] == words[1]);
@@ -814,8 +761,6 @@ pub async fn transcribe_once(
             let pcm = pcm.to_vec();
             tokio::task::spawn_blocking(move || {
                 let model = shared_gigaam_model(&dir).map_err(|e| {
-                    // Don't surface the model_dir path (it embeds the user's
-                    // username) into a screen-capturable tile.
                     public_gigaam_load_error(e, "local STT model failed to load (see log)")
                 })?;
                 gigaam_transcribe(&model, &pcm)
@@ -835,10 +780,8 @@ async fn transcribe(
     prompt: Option<&str>,
     stt_model: &str,
 ) -> Result<String> {
-    // Encode WAV once; reuse on retries.
     let wav = encode_wav_pcm_i16_mono_16k(pcm)?;
 
-    // Exponential backoff: 0s, 1s, 2s (3 attempts total).
     let mut last_err: Option<anyhow::Error> = None;
     for attempt in 0u32..3 {
         if attempt > 0 {
@@ -890,7 +833,6 @@ async fn transcribe_once_attempt(
         .file_name("audio.wav")
         .mime_str("audio/wav")?;
 
-    // Use configured model; fall back to default if empty.
     let model = if stt_model.is_empty() {
         DEFAULT_GROQ_MODEL
     } else {
@@ -906,9 +848,6 @@ async fn transcribe_once_attempt(
             form = form.text("language", lang.to_string());
         }
     }
-    // Whisper `prompt` parameter (OpenAI-compatible) biases the decoder
-    // toward this vocabulary. Critical for technical terms in Russian
-    // speech: without it "kubernetes" gets phonetised to "кобернетес".
     if let Some(p) = prompt {
         if !p.is_empty() {
             form = form.text("prompt", p.to_string());
@@ -938,10 +877,6 @@ async fn transcribe_once_attempt(
 
     if !resp.status().is_success() {
         let status = resp.status();
-        // Keep the status (drives is_permanent_error + tells the user 401 vs 5xx)
-        // but DROP the response body everywhere: it can carry paths/internals/
-        // transcript that would paint into the PTT tile AND land in the shareable
-        // "Собрать логи" export (P0-1). Log status + size only.
         let body = resp.text().await.unwrap_or_default();
         log::warn!(
             "{}",
@@ -968,9 +903,6 @@ async fn finish_transcript(
     match result {
         Ok(text) if !text.trim().is_empty() => {
             if is_likely_hallucination(&text) {
-                // Log a COUNT, never the recognized text — overlay-host.log is
-                // shareable (the "Collect logs" button) and must not carry the
-                // user's meeting transcript.
                 log::info!(
                     "STT [{:?}] hallucination filtered ({} chars)",
                     src,
@@ -981,8 +913,6 @@ async fn finish_transcript(
                     crate::journal::now_unix_ms() as u64,
                     std::sync::atomic::Ordering::Relaxed,
                 );
-                // COUNT only — never the recognized text (shareable log; no
-                // meeting transcript in it).
                 log::info!("STT got text [{:?}]: {} chars", src, text.chars().count());
                 let _ = tx
                     .send(TranscriptEvent {
@@ -1076,20 +1006,11 @@ pub fn build_whisper_prompt(keywords: &str, meeting_context: &str) -> Option<Str
     }
 
     let mut out = String::with_capacity(MAX_CHARS);
-    // Lead with the canonical tech vocab so Whisper biases strongest here.
-    // "Англоязычные термины пишутся латиницей" hints the decoder to keep
-    // Latin spellings for the listed words even when audio is ambiguous.
     out.push_str(
         "Технический разговор о DevOps и SRE. Англоязычные термины \
                   пишутся латиницей: ",
     );
 
-    // BUDGET ALLOCATION: vocab is generic, user keywords are specific.
-    // When the expanded vocab would consume the whole 800-char budget,
-    // we'd squeeze out the per-user keywords entirely (regression caught
-    // by `whisper_prompt_includes_keywords_for_bias` test). Reserve at
-    // minimum 180 chars for keywords + 100 for context if those inputs
-    // are present, then trim vocab to whatever's left.
     let kw_joined = if !kw.is_empty() {
         Some(kw.join(", "))
     } else {
@@ -1132,15 +1053,9 @@ pub fn build_whisper_prompt(keywords: &str, meeting_context: &str) -> Option<Str
         }
     }
 
-    // Hard char-cap (defensive — should be redundant after the budget
-    // logic above, but if any of those calcs underestimate we still
-    // never ship a prompt that Groq will 400 on).
     if out.chars().count() > MAX_CHARS {
         out = out.chars().take(MAX_CHARS).collect::<String>();
     }
-    // Belt-and-suspenders against the Groq 896-char hard limit. If we
-    // ever produce >800 chars (i.e. the cap above didn't engage for some
-    // reason), force-truncate to 800 instead of letting the API 400.
     const GROQ_HARD_LIMIT: usize = 800;
     if out.chars().count() > GROQ_HARD_LIMIT {
         log::warn!(
@@ -1164,17 +1079,15 @@ fn encode_wav_pcm_i16_mono_16k(pcm: &[i16]) -> Result<Vec<u8>> {
     out.write_all(&riff_size.to_le_bytes())?;
     out.write_all(b"WAVE")?;
 
-    // fmt chunk
     out.write_all(b"fmt ")?;
-    out.write_all(&16u32.to_le_bytes())?; // chunk size
-    out.write_all(&1u16.to_le_bytes())?; // PCM
-    out.write_all(&1u16.to_le_bytes())?; // mono
-    out.write_all(&TARGET_SAMPLE_RATE.to_le_bytes())?; // sample rate
-    out.write_all(&(TARGET_SAMPLE_RATE * 2).to_le_bytes())?; // byte rate
+    out.write_all(&16u32.to_le_bytes())?;
+    out.write_all(&1u16.to_le_bytes())?;
+    out.write_all(&1u16.to_le_bytes())?;
+    out.write_all(&TARGET_SAMPLE_RATE.to_le_bytes())?;
+    out.write_all(&(TARGET_SAMPLE_RATE * 2).to_le_bytes())?;
     out.write_all(&2u16.to_le_bytes())?; // block align
-    out.write_all(&16u16.to_le_bytes())?; // bits per sample
+    out.write_all(&16u16.to_le_bytes())?;
 
-    // data chunk
     out.write_all(b"data")?;
     out.write_all(&data_size.to_le_bytes())?;
     for &s in pcm {
@@ -1200,7 +1113,6 @@ mod tests {
         assert_eq!(sys_cap, 10);
         assert_eq!(mic_cap, 10);
 
-        // Utterance stays buffered at 9.9s and flushes at 10.0s
         assert_eq!(
             utterance_flush_decision(9.9, 600, true, sys_cap),
             (false, false)
@@ -1218,7 +1130,6 @@ mod tests {
             (true, true)
         );
 
-        // 800ms voice-silence flushes before cap
         assert_eq!(
             utterance_flush_decision(2.0, 800, true, sys_cap),
             (true, false)
@@ -1237,17 +1148,15 @@ mod tests {
         assert!(is_permanent_error("STT HTTP 403 Forbidden"));
         assert!(is_permanent_error("STT HTTP 404 Not Found"));
         assert!(is_permanent_error("STT HTTP 413 Payload Too Large"));
-        // Transport failures are now generic + retryable (carry no HTTP status).
         assert!(!is_permanent_error("STT network error"));
         assert!(!is_permanent_error("whisper-server unreachable"));
-        // 5xx / 429 remain retryable.
         assert!(!is_permanent_error("STT HTTP 500 Internal Server Error"));
         assert!(!is_permanent_error("STT HTTP 429 Too Many Requests"));
     }
 
     #[test]
     fn wav_header_is_44_bytes() {
-        let pcm = vec![0i16; 1600]; // 100 ms
+        let pcm = vec![0i16; 1600];
         let wav = encode_wav_pcm_i16_mono_16k(&pcm).unwrap();
         assert_eq!(wav.len(), 44 + pcm.len() * 2);
         assert_eq!(&wav[0..4], b"RIFF");
@@ -1261,7 +1170,6 @@ mod tests {
     /// can read what we send (vs just checking magic bytes).
     #[test]
     fn wav_roundtrip_through_hound_preserves_samples_and_format() {
-        // Deterministic non-trivial signal: triangle-ish wave + DC offset.
         let pcm_in: Vec<i16> = (0..1600)
             .map(|i| {
                 let phase = (i * 7) % 1000 - 500;
@@ -1301,13 +1209,11 @@ mod tests {
 
     #[test]
     fn rms_handles_empty_input_without_div_by_zero() {
-        // RMS of [] must not NaN/inf — should be 0.
         assert_eq!(rms_i16(&[]), 0.0);
     }
 
     #[test]
     fn rms_ignores_sign_via_squaring() {
-        // |-100| == |+100| under RMS (squared then sqrt).
         let pos: Vec<i16> = vec![100; 500];
         let neg: Vec<i16> = vec![-100; 500];
         assert!((rms_i16(&pos) - rms_i16(&neg)).abs() < 0.01);
@@ -1315,29 +1221,23 @@ mod tests {
 
     #[test]
     fn rms_max_amplitude_does_not_overflow_or_nan() {
-        // i16::MAX squared as f64 is well within range, but i16::MIN squared
-        // is special (|-32768| > i16::MAX). Make sure f64 path handles it.
         let v: Vec<i16> = vec![i16::MIN; 100];
         let r = rms_i16(&v);
         assert!(r.is_finite(), "RMS of i16::MIN must not be NaN/inf");
         assert!((r - 32768.0).abs() < 1.0, "expected ≈32768, got {r}");
     }
 
-    // ── WAV encoder edge cases ──
 
     #[test]
     fn wav_with_empty_pcm_produces_valid_header_only() {
         let wav = encode_wav_pcm_i16_mono_16k(&[]).unwrap();
         assert_eq!(wav.len(), 44, "header is exactly 44 bytes for 0-sample PCM");
-        // data chunk size (bytes 40..44) must be 0.
         assert_eq!(&wav[40..44], &[0, 0, 0, 0], "data chunk size = 0");
-        // RIFF size (bytes 4..8) = 36 + 0
         assert_eq!(&wav[4..8], &36u32.to_le_bytes());
     }
 
     #[test]
     fn wav_riff_size_matches_actual_content_length() {
-        // 1000 samples = 2000 bytes data → RIFF size = 36 + 2000 = 2036
         let pcm = vec![0i16; 1000];
         let wav = encode_wav_pcm_i16_mono_16k(&pcm).unwrap();
         let riff_size = u32::from_le_bytes([wav[4], wav[5], wav[6], wav[7]]);
@@ -1346,11 +1246,9 @@ mod tests {
         assert_eq!(data_size, 2000);
     }
 
-    // ── Retry classifier ──
 
     #[test]
     fn permanent_errors_short_circuit_retry() {
-        // 4xx-permanent: 401, 403, 404, 413
         assert!(is_permanent_error("Groq HTTP 401: invalid api key"));
         assert!(is_permanent_error("HTTP 403 Forbidden — IP blocked"));
         assert!(is_permanent_error("HTTP 404: model not found"));
@@ -1374,7 +1272,6 @@ mod tests {
             "reqwest error chain should contain URL details"
         );
 
-        // Verify transport_failure_kind returns only a safe category label
         let kind = crate::ai::control::transport_failure_kind(&err);
         assert!(!kind.contains("user"));
         assert!(!kind.contains("secret_pass"));
@@ -1386,7 +1283,6 @@ mod tests {
         ));
     }
 
-    // ── build_whisper_prompt ──
 
     #[test]
     fn whisper_prompt_returns_none_for_empty_inputs() {
@@ -1402,8 +1298,6 @@ mod tests {
     /// Hard cap of 800 must hold for ANY input.
     #[test]
     fn whisper_prompt_never_exceeds_groq_hard_limit() {
-        // Synthesize a realistic large input: 500-char user keywords
-        // (Russian DevOps stack) + 300-char meeting_context.
         let big_kw = "kubernetes etcd istio prometheus grafana loki tempo jaeger elasticsearch \
                       kibana opensearch postgres mysql redis kafka rabbitmq mongo clickhouse \
                       docker containerd nginx haproxy envoy traefik linux bash systemd cgroup \
@@ -1427,17 +1321,11 @@ mod tests {
         let p = build_whisper_prompt("custom-tool another", "").unwrap();
         assert!(p.contains("custom-tool"));
         assert!(p.contains("another"));
-        // Comma-separated for natural language flow
         assert!(p.contains("custom-tool, another"));
     }
 
     #[test]
     fn whisper_prompt_leads_with_canonical_tech_vocab() {
-        // Canonical English tech vocab must be present FIRST (highest decoder weight).
-        // Only assert words near the START of CANONICAL_TECH_VOCAB — words at
-        // the tail (e.g. "dmesg", "proxmox") may legitimately get trimmed when
-        // the per-user budget is reserved (e.g. 500-char trigger_keywords).
-        // The bias for highest-priority terms is still preserved.
         let p = build_whisper_prompt("etcd", "").unwrap();
         assert!(
             p.contains("kubernetes"),
@@ -1447,7 +1335,6 @@ mod tests {
         assert!(p.contains("gitlab"));
         assert!(p.contains("ansible"));
         assert!(p.contains("prometheus"));
-        // Canonical vocab appears before user keywords
         let canon_pos = p.find("kubernetes").unwrap();
         let user_pos = p.find("etcd").unwrap();
         assert!(
@@ -1469,7 +1356,6 @@ mod tests {
 
     #[test]
     fn whisper_prompt_caps_at_max_chars_for_token_budget() {
-        // 200 keywords × 8 chars each = 1600 chars; must cap to ~800.
         let keywords: String = (0..200)
             .map(|i| format!("term{i:03}"))
             .collect::<Vec<_>>()
@@ -1503,40 +1389,34 @@ mod tests {
 
     #[test]
     fn whisper_prompt_skips_context_when_budget_exhausted() {
-        // Keywords fill the entire 800-char budget — context must NOT be appended.
         let huge_kw: String = (0..500)
             .map(|i| format!("verylongtermname{i:04}"))
             .collect::<Vec<_>>()
             .join(" ");
         let p = build_whisper_prompt(&huge_kw, "context that should be dropped").unwrap();
-        // The kw budget is full; "Контекст:" should be absent.
         assert!(
             !p.contains("Контекст:"),
             "context must be dropped when keyword budget overflows"
         );
     }
 
-    // ── Anti-hallucination tests ──
 
     #[test]
     fn noise_gate_rejects_pure_silence() {
-        let silent = vec![0i16; 16000 * 2]; // 2s of silence
+        let silent = vec![0i16; 16000 * 2];
         assert!(!buffer_likely_speech(&silent));
     }
 
     #[test]
     fn noise_gate_rejects_low_level_noise() {
-        // Random low-amplitude noise — below VAD threshold mean.
         let noise: Vec<i16> = (0..32000).map(|i| ((i * 7) % 30 - 15) as i16).collect();
         assert!(!buffer_likely_speech(&noise), "low noise should be skipped");
     }
 
     #[test]
     fn noise_gate_rejects_silence_plus_one_spike() {
-        // 2s silence + 100ms loud spike. Voice ratio < 25% → drop.
         let mut buf = vec![0i16; 32000];
         for sample in buf.iter_mut().take(1600) {
-            // 100ms at start
             *sample = 5000;
         }
         assert!(!buffer_likely_speech(&buf), "isolated spike isn't speech");
@@ -1544,7 +1424,6 @@ mod tests {
 
     #[test]
     fn noise_gate_accepts_sustained_speech() {
-        // 2s of sustained signal above threshold.
         let speech: Vec<i16> = (0..32000)
             .map(|i| ((i as f32 * 0.1).sin() * 5000.0) as i16)
             .collect();
@@ -1575,7 +1454,6 @@ mod tests {
     fn hallucination_filter_drops_repetition_loop() {
         assert!(is_likely_hallucination("опыт опыт опыт опыт"));
         assert!(is_likely_hallucination("foo foo foo"));
-        // 2-word loop
         assert!(is_likely_hallucination(
             "опыт работы опыт работы опыт работы"
         ));
@@ -1591,7 +1469,6 @@ mod tests {
             !is_likely_hallucination("Спасибо за ответ"),
             "not a YT phrase"
         );
-        // Edge: repeated word but not a loop.
         assert!(!is_likely_hallucination(
             "опыт работы и опыт жизни — оба важны"
         ));
@@ -1599,21 +1476,17 @@ mod tests {
 
     #[test]
     fn transient_errors_keep_retrying() {
-        // 5xx + network: must NOT be classified permanent
         assert!(!is_permanent_error("HTTP 500: internal server error"));
         assert!(!is_permanent_error("HTTP 502: bad gateway"));
         assert!(!is_permanent_error("HTTP 503: service unavailable"));
         assert!(!is_permanent_error("HTTP 504: gateway timeout"));
-        // 408 + 429 are intentionally retryable
         assert!(!is_permanent_error("HTTP 408: request timeout"));
         assert!(!is_permanent_error("HTTP 429: rate limited"));
-        // Network failures
         assert!(!is_permanent_error("connection reset by peer"));
         assert!(!is_permanent_error("dns lookup failed"));
         assert!(!is_permanent_error("tcp timed out"));
     }
 
-    // ── Unsupported-platform GigaAM seam ──
 
     #[cfg(not(any(windows, target_os = "macos")))]
     #[test]

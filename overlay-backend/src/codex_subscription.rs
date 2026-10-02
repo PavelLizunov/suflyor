@@ -1396,8 +1396,6 @@ fn spawn_app_server(
     codex_home: &Path,
     workspace: &Path,
 ) -> std::io::Result<Child> {
-    // Windows `creation_flags(CREATE_NO_WINDOW)` is applied below after the
-    // environment allowlist is configured.
     let mut command = Command::new(executable);
     command
         .env_clear()
@@ -1452,8 +1450,6 @@ fn rpc_request(id: u64, method: &str, params: Value) -> Value {
 
 fn codex_executable_candidates() -> Vec<PathBuf> {
     let mut candidates = Vec::new();
-    // Prefer the real Codex Desktop bundle over WindowsApps execution aliases,
-    // which can exist on PATH but reject CreateProcess with access denied.
     if let Some(local) = dirs::data_local_dir() {
         let bundled = local.join("OpenAI").join("Codex").join("bin");
         if let Ok(entries) = fs::read_dir(bundled) {

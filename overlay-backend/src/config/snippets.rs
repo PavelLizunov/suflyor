@@ -64,7 +64,6 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                            **Error budget:** SLO 99.9% = 43min downtime/month. Если бюджет сгорел — **stop feature releases, focus on reliability**. Не «прибавим строгости» — продакшн уже сгорел.\n\n\
                            **SLO ≠ SLA.** SLA = договорное обещание клиенту (с штрафами). SLO = внутренний таргет, обычно строже SLA.".into(),
                 },
-                // ── Kubernetes deep cuts ──────────────────────────────
                 Snippet { key: "k8s-net".into(), title: "K8s networking — Service / Ingress / CNI".into(), body:
                     "**Service types (от меньшего scope):**\n\
                      - **ClusterIP** — внутри cluster, default\n\
@@ -121,7 +120,6 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      - Mount как files (volumeMount), `defaultMode: 0400`\n\
                      - Rotation: short TTL + автоматическая инъекция (Vault dynamic secrets)\n\
                      - RBAC: `kubectl auth can-i get secrets -n prod` от service account".into() },
-                // ── Linux troubleshooting ─────────────────────────────
                 Snippet { key: "linux-oom".into(), title: "Linux OOM killer — кто и почему".into(), body:
                     "**Симптомы:** процесс пропал без stacktrace, в `dmesg` строка `Out of memory: Killed process X (name)`.\n\n\
                      **Расследование:**\n\
@@ -209,7 +207,6 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      WantedBy=multi-user.target\n\
                      ```\n\n\
                      После правок: `systemctl daemon-reload && systemctl restart myapp`.".into() },
-                // ── Networking deep cuts ──────────────────────────────
                 Snippet { key: "tcp".into(), title: "TCP states + 3-way handshake + проблемы".into(), body:
                     "**3-way handshake:** SYN → SYN+ACK → ACK. После — `ESTABLISHED`.\n\
                      **Close:** FIN → ACK → FIN → ACK. Между FIN+ACK и финальным ACK — `TIME_WAIT` (~60s).\n\n\
@@ -253,7 +250,7 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      **Cert chain:** leaf → intermediate(s) → root CA. **Сервер ДОЛЖЕН отдавать leaf + intermediates** (не root — он у клиента).\n\n\
                      **Debug:**\n\
                      - `openssl s_client -connect host:443 -servername host` — handshake debug, видит весь chain\n\
-                     - `curl -vI https://host` — verbose с TLS info\n\
+                     - `curl -vI https:
                      - `ssllabs.com/ssltest` — внешняя проверка\n\n\
                      **Типичные ошибки:**\n\
                      - `unable to verify the first certificate` — не отдан intermediate\n\
@@ -297,7 +294,6 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      - `502 Bad Gateway` — proxy не достучался до upstream\n\
                      - `503 Service Unavailable` — temporary, scheduled maintenance, отдай `Retry-After`\n\
                      - `504 Gateway Timeout` — upstream timeout".into() },
-                // ── Databases ─────────────────────────────────────────
                 Snippet { key: "pg-replica".into(), title: "PostgreSQL replication — streaming, logical, варианты".into(), body:
                     "**Streaming replication (binary, физический WAL):**\n\
                      - Setup: `pg_basebackup -h primary -U replicator -D /var/lib/postgresql -R`\n\
@@ -377,7 +373,6 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      - `PARTITION BY toYYYYMM(date)` — manageable parts\n\
                      - **TTL** — `TTL date + INTERVAL 90 DAY DELETE` для retention\n\
                      - Profile: `SELECT * FROM system.query_log WHERE query LIKE '%table%'`".into() },
-                // ── Observability ─────────────────────────────────────
                 Snippet { key: "prom".into(), title: "Prometheus + Alertmanager — основное".into(), body:
                     "**Архитектура:** Pull-based — Prometheus сам ходит за метриками на `/metrics` endpoint targets (полная противоположность InfluxDB push).\n\n\
                      **Service discovery:** static, file_sd, kubernetes_sd, consul_sd, ec2_sd. Targets находятся автоматом.\n\n\
@@ -450,7 +445,6 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      **Sampling:**\n\
                      - **Head-based** (% sampling прямо в SDK) — простой, тебе может не повезти не зацепить incident\n\
                      - **Tail-based** (в Collector, по error/latency) — дороже но «правильнее»".into() },
-                // ── CI/CD ─────────────────────────────────────────────
                 Snippet { key: "deploy".into(), title: "Deploy strategies — blue/green vs canary vs rolling".into(), body:
                     "**Rolling update (default K8s Deployment):**\n\
                      - Постепенно заменяем N pods, `maxSurge` + `maxUnavailable`\n\
@@ -525,7 +519,6 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      - **Audit log** — кто/когда читал каждый secret\n\
                      - **Least privilege** — отдельный SA на каждый workload\n\
                      - **Не передавай secrets через args** (видны в `ps`) — только env или mounted files".into() },
-                // ── Cloud ─────────────────────────────────────────────
                 Snippet { key: "aws-vpc".into(), title: "AWS VPC — subnets / routing / connectivity".into(), body:
                     "**Структура VPC:**\n\
                      - **VPC** = appname + CIDR (10.0.0.0/16)\n\
@@ -579,7 +572,6 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      - **SSE-S3 / SSE-KMS** — encryption at rest, KMS даёт audit log\n\
                      - **Object Lock + WORM** — compliance (нельзя удалить N дней)\n\
                      - **Versioning** + **MFA Delete** — защита от ransomware/accidental delete".into() },
-                // ── Containers ────────────────────────────────────────
                 Snippet { key: "docker".into(), title: "Docker — layers, multi-stage, dockerfile best practices".into(), body:
                     "**Layers:**\n\
                      - Каждая `RUN` / `COPY` / `ADD` создаёт новый layer\n\
@@ -630,9 +622,8 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      7. **Identification/Auth Failures** — weak passwords allowed, нет rate limit на login, predictable session IDs\n\
                      8. **Software/Data Integrity Failures** — unsigned updates, npm/pip packages from random source, CI без integrity check\n\
                      9. **Security Logging Failures** — не логировать auth events; **или** логировать sensitive data\n\
-                     10. **SSRF** — Server-Side Request Forgery. App fetches `?url=...` без validation → атакующий достаёт `http://169.254.169.254/` (metadata)\n\n\
+                     10. **SSRF** — Server-Side Request Forgery. App fetches `?url=...` без validation → атакующий достаёт `http:
                      **Defense in depth:** WAF + secure code + monitoring + patch cadence. Никогда **одна** мера.".into() },
-                // ── SRE ───────────────────────────────────────────────
                 Snippet { key: "capacity".into(), title: "Capacity planning — формулы + что учитывать".into(), body:
                     "**Базовый расчёт:**\n\n\
                      `Required capacity = peak_qps × avg_response_time × safety_factor`\n\n\
@@ -658,7 +649,7 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      2. **Severity:** SEV1 (page) / SEV2 (slack) / SEV3 (ticket)\n\
                      3. **First actions** (≤5 шагов, конкретные команды):\n\
                         - `kubectl logs deployment/api -n prod --tail=200`\n\
-                        - `curl https://api.example.com/health`\n\
+                        - `curl https:
                         - dashboard URL\n\
                      4. **Common causes** (с диагностикой каждой):\n\
                         - DB connection pool exhausted → `SELECT count(*) FROM pg_stat_activity`\n\
@@ -697,7 +688,6 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      - SLO = договор между **infra и product** team\n\
                      - Если product хочет deploy 10× в день → нужен ОБЪЕКТИВНЫЙ budget tracker\n\
                      - Нет budget tracker = SLO = wishful thinking".into() },
-                // ── Microservices ─────────────────────────────────────
                 Snippet { key: "saga".into(), title: "Saga pattern — распределённые транзакции".into(), body:
                     "**Проблема:** один бизнес-процесс трогает 3 сервиса (Order → Payment → Inventory). 2PC дорогой и хрупкий.\n\n\
                      **Saga = последовательность local транзакций с compensating actions.**\n\n\
@@ -764,7 +754,6 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      - **resilience4j** (Java), **polly** (.NET), **tenacity** (Python)\n\
                      - **Envoy** делает это в service mesh без кода\n\
                      - **Hystrix** deprecated — see resilience4j".into() },
-                // ── Message Queues ────────────────────────────────────
                 Snippet { key: "kafka".into(), title: "Kafka — partitions, consumer groups, semantics".into(), body:
                     "**Базовые концепции:**\n\
                      - **Topic** = log of messages\n\
@@ -806,7 +795,6 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      - \"Pub/sub микросервисов\" → оба подходят, выбирай team familiarity\n\
                      - \"Order processing, последовательность важна per-customer\" → Kafka (partition by customer_id)\n\n\
                      **Anti-patterns:** RabbitMQ как long-term storage (TTL maxes out), Kafka как RPC bus (overkill).".into() },
-                // ── Performance / Caching ─────────────────────────────
                 Snippet { key: "cache".into(), title: "Cache strategies — write-through / -back / -around".into(), body:
                     "**Read patterns:**\n\
                      - **Cache-aside** (lazy loading): app сам проверяет cache → miss → fetch DB → populate cache. Простой, fault-tolerant\n\
@@ -827,7 +815,6 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      - **Event-driven** — DB change → publish → cache subscribers invalidate\n\
                      - **Versioned keys** — `user:42:v3` — release new version = effectively new cache\n\n\
                      **Cache stampede:** thundering herd когда expired key fetched 1000× одновременно. Lock + double-check или probabilistic early refresh.".into() },
-                // ── Search ────────────────────────────────────────────
                 Snippet { key: "es".into(), title: "Elasticsearch basics — index, mapping, query".into(), body:
                     "**Inverted index:** для каждого term → список documents где он встречается. Это база full-text search.\n\n\
                      **Иерархия:**\n\
@@ -851,7 +838,6 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      - Использовать как primary DB (нет transactions, eventual consistency)\n\
                      - Indexing 10M docs за раз без bulk API + refresh tuning\n\
                      - `wildcard` queries (`*foo*`) на больших indexes — full scan".into() },
-                // ── Streaming / ML-Ops ────────────────────────────────
                 Snippet { key: "mlops".into(), title: "ML-Ops basics — model serving + monitoring".into(), body:
                     "**ML lifecycle:**\n\
                      1. **Data ingestion + validation** (Great Expectations, TFDV)\n\
@@ -875,7 +861,6 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      - **Concept drift** — relationship X→Y меняется\n\
                      - **Model performance в проде** — нужны ground-truth labels (delayed feedback)\n\
                      - **Shadow deployment** — новая модель работает рядом, results сравниваются offline".into() },
-                // ── Diagnostic checklist ──────────────────────────────
                 Snippet { key: "slow".into(), title: "«Сайт тормозит» — общий чеклист 5 минут".into(), body:
                     "**Step 1: где именно медленно** (узнать ДО digging):\n\
                      - DevTools Network tab → TTFB или waterfall?\n\
@@ -928,7 +913,6 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      - `tracemalloc.start()` → `tracemalloc.take_snapshot()` → diff\n\
                      - `objgraph.show_growth()` — что новых instances\n\
                      - `memory_profiler` decorator для line-level".into() },
-                // ── Misc one-liners ───────────────────────────────────
                 Snippet { key: "jvm".into(), title: "JVM tuning — флаги + GC выбор".into(), body:
                     "**Heap size:**\n\
                      - `-Xms4G -Xmx4G` — установи min=max чтоб JVM не resize'ил\n\
@@ -989,7 +973,7 @@ pub(super) fn default_snippets() -> Vec<Snippet> {
                      **Useful patterns:**\n\
                      - IP: `\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b`\n\
                      - Email (rough): `[\\w.+-]+@[\\w-]+\\.[\\w.-]+`\n\
-                     - URL: `https?://\\S+`\n\
+                     - URL: `https?:
                      - Hex color: `#[0-9a-fA-F]{6}`\n\
                      - UUID: `[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`\n\
                      - ISO timestamp: `\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}`\n\n\

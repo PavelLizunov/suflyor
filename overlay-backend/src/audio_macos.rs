@@ -63,14 +63,14 @@ const SYS_START_TAP: i32 = 1;
 const SYS_START_AGGREGATE: i32 = 2;
 const SYS_START_FORMAT: i32 = 3;
 const SYS_START_IO_PROC: i32 = 4;
-const SYS_START_DEVICE: i32 = 5; // AudioDeviceStart refused (incl. TCC)
+const SYS_START_DEVICE: i32 = 5;
 const SYS_START_NO_MEMORY: i32 = 6;
 
 /// System worker lifecycle states — see `CaptureHandle::drop` for why the
 /// pending state is the only one that is not joinable.
 const SYSTEM_WORKER_PENDING: u8 = 0; // inside system_capture_start (may block in TCC)
-const SYSTEM_WORKER_RUNNING: u8 = 1; // start returned; draining or tearing down
-const SYSTEM_WORKER_FINISHED: u8 = 2; // worker returned; native tap already gone
+const SYSTEM_WORKER_RUNNING: u8 = 1;
+const SYSTEM_WORKER_FINISHED: u8 = 2;
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
@@ -105,7 +105,6 @@ pub struct DeviceList {
     pub inputs: Vec<String>,
 }
 
-// --- Native bridge (mic_capture.m) -----------------------------------------
 
 /// Opaque controller owned by the native side; only handled as a pointer.
 #[repr(C)]
@@ -200,8 +199,6 @@ extern "C" fn permission_callback<F>(raw: u32, context: *mut c_void)
 where
     F: FnOnce(MicrophonePermission) + Send + 'static,
 {
-    // SAFETY: request_microphone_permission creates this Box and the native
-    // bridge invokes its completion exactly once, including terminal states.
     let callback = unsafe { Box::from_raw(context.cast::<F>()) };
     let _ = catch_unwind(AssertUnwindSafe(|| {
         callback(MicrophonePermission::from_raw(raw));
@@ -210,7 +207,6 @@ where
 
 /// Current TCC microphone state. This never opens a prompt.
 pub fn microphone_permission() -> MicrophonePermission {
-    // SAFETY: status has no pointers and only queries AVFoundation.
     MicrophonePermission::from_raw(unsafe { mic_capture_permission_status() })
 }
 
@@ -228,7 +224,6 @@ where
     F: FnOnce(MicrophonePermission) + Send + 'static,
 {
     let context = Box::into_raw(Box::new(callback)).cast::<c_void>();
-    // SAFETY: context remains valid until the exactly-once native callback.
     unsafe { mic_capture_request_permission(permission_callback::<F>, context) };
 }
 
@@ -282,7 +277,6 @@ fn system_worker_joinable(state: u8) -> bool {
     state != SYSTEM_WORKER_PENDING
 }
 
-// --- Public API (mirrors audio_unavailable.rs) ------------------------------
 
 /// Enumerate default render + capture endpoint names on macOS.
 pub fn list_devices() -> Result<DeviceList> {
@@ -412,9 +406,6 @@ pub fn start_capture(
     let stop = Arc::new(AtomicBool::new(false));
     let worker_stop = stop.clone();
     let (started_tx, started_rx) = std::sync::mpsc::channel::<Result<u32, MicStartupError>>();
-    // One shared timestamp origin for the whole session: Mic and System
-    // chunk timestamps stay aligned even when the system TCC flow returns
-    // much later than the microphone start.
     let session_start = Instant::now();
     let metrics = Arc::new(AudioMetrics::default());
 
@@ -426,10 +417,6 @@ pub fn start_capture(
             capture_worker(mic_tx, worker_stop, started_tx, session_start, mic_metrics);
         })?;
 
-    // Synchronous startup report: the native start attempt still runs on the
-    // mic worker, but a failure no longer fails the whole capture. Permission
-    // failure is terminal; a missing or unstable default input keeps this
-    // worker armed while system capture continues independently.
     let mic_worker = match started_rx.recv() {
         Ok(Ok(rate)) => {
             log::info!("[Mic] audio_route open mode=default device=default_input rate={rate} Hz");
@@ -452,7 +439,6 @@ pub fn start_capture(
             // The channel only disconnects after the worker has exited, so
             // this join is bounded; clear the thread before we continue.
             let _ = worker.join();
-            // Fixed generic warning: no raw channel/OS details in logs.
             log::warn!(
                 "[Mic] microphone worker exited before reporting startup — \
                  continuing with system audio only"
@@ -475,10 +461,7 @@ pub fn start_capture(
     let system_worker = match system_worker {
         Ok(handle) => handle,
         Err(_) => {
-            // Fixed generic messages: the raw OS error can carry host
-            // specifics we do not want surfaced in tiles/logs.
             if mic_worker.is_some() {
-                // Mic is running: degrade to microphone-only capture.
                 log::warn!(
                     "[Sys] system audio worker failed to start — \
                      continuing with microphone-only capture"
@@ -493,8 +476,6 @@ pub fn start_capture(
                     },
                 ));
             }
-            // Neither source started: the mic worker was already stopped
-            // and joined above, so there is nothing left to tear down.
             return Err(anyhow!(
                 "audio capture unavailable: no capture worker could start"
             ));
@@ -637,7 +618,6 @@ pub fn record_mic_blocking(duration_ms: u64, _mic_device: Option<String>) -> Res
     record_source_until_stop(AudioSource::Mic, None, None, stop)
 }
 
-// --- Worker -----------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RetryResult<T> {
@@ -677,8 +657,6 @@ fn reopen_mic(stop: &AtomicBool) -> Option<(*mut MicController, f64)> {
         }
         let mut native_rate = 0.0;
         let mut error_code = 0;
-        // SAFETY: the returned controller is owned by this worker and stopped
-        // before replacement or worker exit.
         let controller =
             unsafe { mic_capture_start(NATIVE_BUFFER_FRAMES, &mut native_rate, &mut error_code) };
         if !controller.is_null() {
@@ -695,8 +673,6 @@ fn reopen_system(stop: &AtomicBool) -> Option<(*mut SystemCaptureController, f64
     retry_route_start(stop, ROUTE_RESTART_DELAY, || {
         let mut native_rate = 0.0;
         let mut error_code = 0;
-        // SAFETY: the returned controller is owned by this worker and stopped
-        // before replacement or worker exit.
         let controller = unsafe {
             system_capture_start(NATIVE_BUFFER_FRAMES, &mut native_rate, &mut error_code)
         };
@@ -748,7 +724,7 @@ fn capture_worker(
     let ring_capacity = unsafe { mic_capture_ring_capacity(controller) } as usize;
     let mut scratch = vec![0.0_f32; ring_capacity.max(NATIVE_BUFFER_FRAMES as usize)];
     let mut accum: Vec<f32> = Vec::with_capacity(rate / 5 + NATIVE_BUFFER_FRAMES as usize);
-    let mut chunk_target = (rate / 5).max(1); // ~200 ms at the native rate
+    let mut chunk_target = (rate / 5).max(1);
     let mut ratio = native_rate / f64::from(TARGET_SAMPLE_RATE);
     let mut dropped_chunks: u64 = 0;
 
@@ -782,7 +758,6 @@ fn capture_worker(
         let ring_dropped = unsafe { mic_capture_take_dropped(controller) };
         if ring_dropped > 0 {
             metrics.record_ring_overflow(Stream::Mic, ring_dropped);
-            // Logged here — outside the realtime tap — and without payloads.
             log::warn!("[Mic] macOS native ring overflow — dropped {ring_dropped} frames");
         }
         if n > 0 {
@@ -790,7 +765,6 @@ fn capture_worker(
             metrics.observe_pending_samples(Stream::Mic, accum.len() as u64);
         }
 
-        // Emit when we've buffered ~200 ms of native audio.
         if accum.len() >= chunk_target {
             let pcm_i16 = resample_and_quantise(&accum, ratio);
             accum.clear();
@@ -813,7 +787,6 @@ fn capture_worker(
                 Err(mpsc::error::TrySendError::Full(_)) => {
                     dropped_chunks += 1;
                     metrics.record_queue_drop(Stream::Mic);
-                    // ~ every 5 s of dropped audio, so the stall is observable.
                     if dropped_chunks % 25 == 1 {
                         log::warn!(
                             "[Mic] STT feed stalled — dropped ~{}s of audio ({dropped_chunks} chunks)",
@@ -867,22 +840,18 @@ fn system_capture_worker(
     }
 
     if stop.load(Ordering::Acquire) {
-        // Stopped while start was pending: tear the tap down immediately,
-        // before allocating any drain buffers.
         unsafe { system_capture_stop(controller) };
         state.store(SYSTEM_WORKER_FINISHED, Ordering::Release);
         return;
     }
 
-    // Native startup is verified; from this point the worker is joinable and
-    // must observe `stop` promptly.
     state.store(SYSTEM_WORKER_RUNNING, Ordering::Release);
 
     let mut rate = native_rate as usize;
     let ring_capacity = unsafe { system_capture_ring_capacity(controller) } as usize;
     let mut scratch = vec![0.0_f32; ring_capacity.max(NATIVE_BUFFER_FRAMES as usize)];
     let mut accum: Vec<f32> = Vec::with_capacity(rate / 5 + NATIVE_BUFFER_FRAMES as usize);
-    let mut chunk_target = (rate / 5).max(1); // ~200 ms at the native rate
+    let mut chunk_target = (rate / 5).max(1);
     let mut ratio = native_rate / f64::from(TARGET_SAMPLE_RATE);
     let mut dropped_chunks: u64 = 0;
 
@@ -925,7 +894,6 @@ fn system_capture_worker(
         let ring_dropped = unsafe { system_capture_take_dropped(controller) };
         if ring_dropped > 0 {
             metrics.record_ring_overflow(Stream::System, ring_dropped);
-            // Logged here — outside the realtime tap — and without payloads.
             log::warn!("[Sys] macOS native ring overflow — dropped {ring_dropped} frames");
         }
         if n > 0 {
@@ -933,7 +901,6 @@ fn system_capture_worker(
             metrics.observe_pending_samples(Stream::System, accum.len() as u64);
         }
 
-        // Emit when we've buffered ~200 ms of native audio.
         if accum.len() >= chunk_target {
             let pcm_i16 = resample_and_quantise(&accum, ratio);
             accum.clear();
@@ -956,7 +923,6 @@ fn system_capture_worker(
                 Err(mpsc::error::TrySendError::Full(_)) => {
                     dropped_chunks += 1;
                     metrics.record_queue_drop(Stream::System);
-                    // ~ every 5 s of dropped audio, so the stall is observable.
                     if dropped_chunks % 25 == 1 {
                         log::warn!(
                             "[Sys] STT feed stalled — dropped ~{}s of audio ({dropped_chunks} chunks)",
@@ -972,8 +938,6 @@ fn system_capture_worker(
         }
     }
 
-    // Synchronous teardown: stops the device, destroys the IOProc, aggregate
-    // device, process tap and frees the controller + ring.
     unsafe { system_capture_stop(controller) };
     state.store(SYSTEM_WORKER_FINISHED, Ordering::Release);
     log::info!("[Sys] macOS capture worker exit");
@@ -1112,9 +1076,6 @@ mod tests {
 
     #[test]
     fn system_start_error_categories_map_to_safe_generic_messages() {
-        // The device-start/TCC category must point at the exact System
-        // Settings pane and tell the user to restart Suflyor — without
-        // asserting that permission was definitely denied.
         let device = system_start_error_message(SYS_START_DEVICE);
         assert!(
             device.contains("Screen & System Audio Recording"),
@@ -1140,7 +1101,7 @@ mod tests {
             system_start_error_message(SYS_START_FORMAT),
             system_start_error_message(SYS_START_IO_PROC),
             system_start_error_message(SYS_START_NO_MEMORY),
-            system_start_error_message(99), // unknown -> generic
+            system_start_error_message(99),
         ];
         for msg in all {
             assert!(
@@ -1178,10 +1139,6 @@ mod tests {
 
     #[test]
     fn permission_request_from_an_unbundled_process_answers_restricted() {
-        // The test runner is a bare binary: no bundle identifier, no
-        // Info.plist usage description. Such a process cannot own a
-        // microphone TCC prompt, so the bridge must answer restricted
-        // synchronously instead of forwarding the request.
         let captured = Arc::new(std::sync::Mutex::new(None));
         let slot = captured.clone();
         request_microphone_permission(move |permission| {
@@ -1243,7 +1200,6 @@ mod tests {
 
     #[test]
     fn decimator_oversaturation_clamped() {
-        // f32 input > 1.0 must be clamped, not wrap around to negative.
         let input = vec![2.0_f32, -2.0, 5.5];
         let out = resample_and_quantise(&input, 1.0);
         assert_eq!(out[0], i16::MAX);
@@ -1253,8 +1209,7 @@ mod tests {
 
     #[test]
     fn decimator_preserves_average_amplitude() {
-        // Constant DC signal at 0.5 stays near 0.5 after averaging.
-        let input = vec![0.5f32; 4800]; // 100 ms at 48k
+        let input = vec![0.5f32; 4800];
         let out = resample_and_quantise(&input, 3.0);
         let target_i16 = (0.5 * i16::MAX as f32) as i16;
         for &s in &out {
@@ -1273,7 +1228,7 @@ mod tests {
         let sample_rate = 48_000.0;
         let target_rate = 16_000.0;
         let freq = 1000.0;
-        let n_samples = 9600; // 200 ms
+        let n_samples = 9600;
         let input: Vec<f32> = (0..n_samples)
             .map(|i| (2.0 * std::f32::consts::PI * freq * i as f32 / sample_rate).sin())
             .collect();

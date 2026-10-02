@@ -60,7 +60,7 @@ impl WatchdogState {
 
 #[cfg(test)]
 mod watchdog_tests {
-    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
+    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
     use super::WatchdogState;
     use std::time::{Duration, Instant};
 
@@ -69,7 +69,6 @@ mod watchdog_tests {
 
     #[test]
     fn first_attempt_allowed_immediately() {
-        // No prior attempt → cooled, under cap → attempt.
         assert!(WatchdogState::default().should_restart(Instant::now(), COOLDOWN, MAX));
     }
 
@@ -92,7 +91,6 @@ mod watchdog_tests {
     fn fail_cap_stops_then_reachable_rearms() {
         let t0 = Instant::now();
         let mut wd = WatchdogState::default();
-        // MAX cooled failures in a row.
         for i in 0..MAX {
             let now = t0 + Duration::from_secs(31 * u64::from(i + 1));
             assert!(
@@ -105,7 +103,7 @@ mod watchdog_tests {
             !wd.should_restart(t0 + Duration::from_secs(10_000), COOLDOWN, MAX),
             "hit the fail cap → stop attempting"
         );
-        wd.note_reachable(); // server came back on its own
+        wd.note_reachable();
         assert!(
             wd.should_restart(t0 + Duration::from_secs(10_000), COOLDOWN, MAX),
             "a reachable server re-arms the cap"
@@ -118,7 +116,7 @@ mod watchdog_tests {
         let mut wd = WatchdogState::default();
         wd.note_attempt(t0, false);
         wd.note_attempt(t0, false);
-        wd.note_attempt(t0, true); // a confirmed restart
+        wd.note_attempt(t0, true);
         assert_eq!(wd.consecutive_fails, 0, "Switched resets the counter");
         assert!(wd.should_restart(t0 + Duration::from_secs(31), COOLDOWN, MAX));
     }

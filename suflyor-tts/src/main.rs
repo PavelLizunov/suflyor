@@ -107,7 +107,6 @@ fn parse_cmd(line: &str) -> Option<Cmd> {
     }
     if let Some(rest) = line.strip_prefix("VOICE ") {
         let voice_dir = rest.trim();
-        // Validate directory name to prevent path traversal attempts via command protocol.
         if engine::is_valid_voice_dir(voice_dir) {
             return Some(Cmd::SetVoice(voice_dir.to_string()));
         }
@@ -124,17 +123,11 @@ fn parse_cmd(line: &str) -> Option<Cmd> {
 }
 
 fn main() {
-    // Subcommand dispatch: `diarize <wav> …` runs a one-shot speaker diarization,
-    // prints JSON, and exits (D1). No args → the read-aloud stdin loop below,
-    // byte-identical to before. One exe, two jobs, ALWAYS separate OS processes —
-    // a live read-aloud and a diarize batch never share an address space.
     let args: Vec<String> = std::env::args().collect();
     if args.get(1).map(String::as_str) == Some("diarize") {
         std::process::exit(diar::run_cli(&args[2..]));
     }
 
-    // stdin → Cmd channel. Dropping `tx` on EOF makes the worker's recv() return
-    // Err, which exits the process.
     let (tx, rx) = mpsc::channel::<Message>();
     let worker_tx = tx.clone();
     std::thread::spawn(move || {
@@ -175,11 +168,9 @@ fn worker(rx: mpsc::Receiver<Message>, events: mpsc::Sender<Message>) {
     let mut next_id = 1_u64;
     let mut current: Option<(u64, Playback)> = None;
     let mut pending: VecDeque<String> = VecDeque::new();
-    // Latency diagnostics: time from a SPEAK to its first audio chunk.
     let mut speak_t0: Option<std::time::Instant> = None;
     let mut announced = true;
 
-    // Tell the parent we're alive.
     let mut out = std::io::stdout();
     let _ = writeln!(out, "READY");
     let _ = out.flush();
@@ -307,13 +298,8 @@ fn worker(rx: mpsc::Receiver<Message>, events: mpsc::Sender<Message>) {
                         let speed = engine::rate_to_speed(rate);
                         match e.synth(&chunk, speed, sid) {
                             Ok(mut samples) => {
-                                // Inter-chunk gap: chunks are concatenated with no
-                                // silence between them, so the last word of one and
-                                // the first of the next run together (the tester's
-                                // "слова слепаются" / unnatural pauses). Append a
-                                // short silence — but NOT after the final chunk.
                                 if !pending.is_empty() {
-                                    let gap = (e.sample_rate() as usize) * 15 / 100; // 150 ms
+                                    let gap = (e.sample_rate() as usize) * 15 / 100;
                                     samples.resize(samples.len() + gap, 0.0_f32);
                                 }
                                 pb.feed(samples);
@@ -339,9 +325,6 @@ fn worker(rx: mpsc::Receiver<Message>, events: mpsc::Sender<Message>) {
         }
     }
 
-    // stdin closed (the app exited / was closed): STOP immediately so speech
-    // does not keep playing after the app is gone (the tester hit read-aloud
-    // continuing after closing the app).
     if let Some((_, pb)) = current.take() {
         pb.stop();
     }

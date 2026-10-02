@@ -80,7 +80,6 @@ pub fn check_default() -> Result<DbHealth> {
 /// # Errors
 /// If `backups` can't be created. An unopenable DB is reported in [`DbHealth`].
 pub fn diagnose_and_repair_at(path: &Path, backups: &Path) -> Result<DbHealth> {
-    // (1) Nothing to repair if the file was never created.
     if !path.exists() {
         return Ok(DbHealth {
             healthy: true,
@@ -90,14 +89,10 @@ pub fn diagnose_and_repair_at(path: &Path, backups: &Path) -> Result<DbHealth> {
         });
     }
 
-    // (2) BACKUP FIRST — before ANY write to the live DB.
     std::fs::create_dir_all(backups).context("create backups dir")?;
     let backup_path = backup_before_repair(path, backups);
     prune_backups(backups, 5);
 
-    // (2b) STRICT "backup before the operation" guarantee: if no backup could be
-    // written, do NOT touch the live DB — report instead. The repair ops are
-    // non-destructive anyway, but a guaranteed pre-repair backup is the contract.
     if backup_path.is_none() {
         return Ok(DbHealth {
             healthy: false,
@@ -110,8 +105,6 @@ pub fn diagnose_and_repair_at(path: &Path, backups: &Path) -> Result<DbHealth> {
         });
     }
 
-    // (3) Open the MAIN db (no migrations). If it won't open we can't repair —
-    // but the backup is safe, so report rather than bail.
     let conn = match open_main(path) {
         Ok(c) => c,
         Err(e) => {
@@ -124,15 +117,11 @@ pub fn diagnose_and_repair_at(path: &Path, backups: &Path) -> Result<DbHealth> {
         }
     };
 
-    // (4) CHECK (pre-repair) — result feeds the log only; the FINAL verdict is the
-    // post-repair re-check in (6).
     let _pre = run_checks(&conn);
 
-    // (5) REPAIR — non-destructive ops only, each best-effort.
     let mut actions = Vec::new();
     repair(&conn, &mut actions);
 
-    // (6) RE-CHECK → final verdict.
     let issues = run_checks(&conn);
 
     Ok(DbHealth {
@@ -159,7 +148,6 @@ fn open_main(path: &Path) -> Result<Connection> {
 fn run_checks(conn: &Connection) -> Vec<String> {
     let mut issues = Vec::new();
 
-    // integrity_check(N) returns N rows max; a single "ok" row means clean.
     match conn.prepare("PRAGMA integrity_check(50)") {
         Ok(mut stmt) => match stmt.query_map([], |r| r.get::<_, String>(0)) {
             Ok(rows) => {
@@ -176,15 +164,12 @@ fn run_checks(conn: &Connection) -> Vec<String> {
         Err(e) => issues.push(format!("integrity_check failed: {e}")),
     }
 
-    // foreign_key_check: EACH returned row is a violation (table, rowid, parent,
-    // fkid). No rows = clean.
     match conn.prepare("PRAGMA foreign_key_check") {
         Ok(mut stmt) => {
             let cols = stmt.column_count();
             match stmt.query_map([], move |r| {
                 let mut parts = Vec::with_capacity(cols);
                 for i in 0..cols {
-                    // Columns are TEXT/INTEGER/NULL; render each defensively.
                     let v = r
                         .get::<_, Option<String>>(i)
                         .or_else(|_| r.get::<_, i64>(i).map(|n| Some(n.to_string())))
@@ -213,21 +198,16 @@ fn run_checks(conn: &Connection) -> Vec<String> {
 /// Apply the non-destructive repair ops in order, recording successes in
 /// `actions` and logging (never bailing on) failures. NO DROP / DELETE / CREATE.
 fn repair(conn: &Connection, actions: &mut Vec<String>) {
-    // WAL checkpoint (TRUNCATE) — folds the -wal back into the main file. Returns
-    // a row, so query_row, not execute.
     match conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(())) {
         Ok(()) => actions.push("wal_checkpoint(TRUNCATE)".to_string()),
         Err(e) => log::warn!("maintenance: wal_checkpoint failed: {e}"),
     }
 
-    // REINDEX — rebuild all b-tree indexes from the table data (non-destructive).
     match conn.execute_batch("REINDEX;") {
         Ok(()) => actions.push("reindex".to_string()),
         Err(e) => log::warn!("maintenance: reindex failed: {e}"),
     }
 
-    // Rebuild every FTS5 full-text index from its content (non-destructive: the
-    // 'rebuild' command re-derives the index, it does not touch source rows).
     for tbl in fts5_tables(conn) {
         let quoted = quote_ident(&tbl);
         let sql = format!("INSERT INTO {quoted}({quoted}) VALUES('rebuild');");
@@ -237,8 +217,6 @@ fn repair(conn: &Connection, actions: &mut Vec<String>) {
         }
     }
 
-    // VACUUM — rewrite the DB file, defragmenting and dropping free pages. Moves
-    // no user rows; purely a physical repack.
     match conn.execute_batch("VACUUM;") {
         Ok(()) => actions.push("vacuum".to_string()),
         Err(e) => log::warn!("maintenance: vacuum failed: {e}"),
@@ -279,12 +257,9 @@ fn quote_ident(name: &str) -> String {
 /// path, or `None` if even the raw copy failed (repair still proceeds — the live
 /// DB is untouched by a failed backup).
 fn backup_before_repair(path: &Path, backups: &Path) -> Option<String> {
-    // Only used to make a unique backup filename.
     let millis = crate::journal::now_unix_ms();
     let backup = backups.join(format!("catalog-{millis}.sqlite"));
 
-    // Preferred: VACUUM INTO writes a clean, consistent copy (folds in WAL). Runs
-    // on its own short-lived connection.
     match Connection::open(path) {
         Ok(conn) => {
             let sql = format!("VACUUM INTO {}", quote_string(&backup.to_string_lossy()));
@@ -296,8 +271,6 @@ fn backup_before_repair(path: &Path, backups: &Path) -> Option<String> {
         Err(e) => log::warn!("maintenance: open for VACUUM INTO failed ({e}); raw-copying"),
     }
 
-    // Fallback: raw file copy of the main DB + its WAL/SHM siblings (so the copy
-    // is a complete WAL set even from a DB we couldn't open cleanly).
     match std::fs::copy(path, &backup) {
         Ok(_) => {
             for ext in ["sqlite-wal", "sqlite-shm"] {
@@ -336,8 +309,6 @@ fn prune_backups(backups: &Path, keep: usize) {
     if ours.len() <= keep {
         return;
     }
-    // Newest first by filename — the embedded unix-millis sorts lexicographically
-    // in time order (fixed width until year ~2286).
     ours.sort();
     ours.reverse();
     for old in ours.into_iter().skip(keep) {
@@ -443,13 +414,10 @@ pub fn count_memory_items_default() -> Result<usize> {
 /// Non-whitelisted `table`; the backups dir can't be created; the backup fails
 /// (nothing is deleted); or the DB can't be opened / the DELETE fails.
 fn clear_table_at(path: &Path, backups: &Path, table: &str) -> Result<ClearResult> {
-    // (0) WHITELIST — the ONLY table names that may reach SQL. Reject everything
-    // else up front (sessions/utterances/ai_turns/FTS can never be passed here).
     if !matches!(table, "memory_candidates" | "memory_items") {
         bail!("отказ: очистка разрешена только для таблиц памяти, не «{table}»");
     }
 
-    // (1) Nothing to clear if the DB was never created.
     if !path.exists() {
         return Ok(ClearResult {
             cleared: 0,
@@ -457,7 +425,6 @@ fn clear_table_at(path: &Path, backups: &Path, table: &str) -> Result<ClearResul
         });
     }
 
-    // (2) BACKUP FIRST — before the DELETE. STRICT: no backup ⇒ no delete.
     std::fs::create_dir_all(backups).context("create backups dir")?;
     let backup_path = match backup_before_repair(path, backups) {
         Some(bp) => bp,
@@ -465,7 +432,6 @@ fn clear_table_at(path: &Path, backups: &Path, table: &str) -> Result<ClearResul
     };
     prune_backups(backups, 5);
 
-    // (3) DELETE the ONE whitelisted table's `default` rows — nothing else.
     let conn = open_main(path)?;
     let sql = format!("DELETE FROM {table} WHERE profile_id = ?1");
     let cleared = conn
@@ -567,10 +533,8 @@ mod tests {
             health.issues
         );
         assert!(health.issues.is_empty());
-        // A backup was written and exists on disk.
         let bp = health.backup_path.expect("backup path recorded");
         assert!(Path::new(&bp).exists(), "backup file exists at {bp}");
-        // The repair ops we promise actually ran.
         assert!(
             health.actions.iter().any(|a| a == "vacuum"),
             "actions: {:?}",
@@ -586,7 +550,6 @@ mod tests {
             "actions: {:?}",
             health.actions
         );
-        // NO DATA LOSS — every user row still present after repair.
         assert_eq!(row_count(&db), 3, "repair must not lose any user row");
     }
 
@@ -606,12 +569,10 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let backups = tmp.path().join("backups");
         std::fs::create_dir_all(&backups).unwrap();
-        // 8 backup files with strictly increasing millis-stamped names.
         for i in 0..8 {
             let f = backups.join(format!("catalog-{:013}.sqlite", 1_000_000_000_000u64 + i));
             std::fs::write(&f, b"x").unwrap();
         }
-        // A non-backup file must be left untouched by pruning.
         let keeper = backups.join("catalog.sqlite");
         std::fs::write(&keeper, b"live").unwrap();
 
@@ -625,10 +586,8 @@ mod tests {
             .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
             .collect();
         assert_eq!(remaining.len(), 5, "pruned to newest 5: {remaining:?}");
-        // Kept the newest (highest millis), dropped the oldest.
         assert!(remaining.iter().any(|n| n.contains("1000000000007")));
         assert!(!remaining.iter().any(|n| n.contains("1000000000000")));
-        // The live DB (not a catalog-<digits> file) survived.
         assert!(
             keeper.exists(),
             "prune must never touch the live catalog.sqlite"
@@ -685,7 +644,6 @@ mod tests {
             res.backup_path
         );
         assert_eq!(count_of(&db, "memory_candidates"), 0, "queue emptied");
-        // The OTHER tables are untouched — proves only the queue was cleared.
         assert_eq!(count_of(&db, "memory_items"), 2, "curated items untouched");
         assert_eq!(count_of(&db, "sessions"), 1, "sessions untouched");
     }
@@ -713,14 +671,12 @@ mod tests {
         let backups = tmp.path().join("backups");
         seed_memory_db(&db);
 
-        // A real, populated table — the whitelist, not a missing table, must reject it.
         assert!(
             clear_table_at(&db, &backups, "sessions").is_err(),
             "whitelist must reject any non-memory table"
         );
         assert!(clear_table_at(&db, &backups, "utterances").is_err());
         assert!(clear_table_at(&db, &backups, "memory_candidates; DROP TABLE sessions").is_err());
-        // The rejected attempt deleted nothing.
         assert_eq!(count_of(&db, "sessions"), 1, "reject must not delete");
     }
 
@@ -741,7 +697,6 @@ mod tests {
         seed_memory_db(&db);
         assert_eq!(count_table_at(&db, "memory_candidates").unwrap(), 3);
         assert_eq!(count_table_at(&db, "memory_items").unwrap(), 2);
-        // Missing DB → 0.
         let missing = tmp.path().join("nope.sqlite");
         assert_eq!(count_table_at(&missing, "memory_items").unwrap(), 0);
     }
@@ -749,9 +704,9 @@ mod tests {
     #[test]
     fn is_backup_file_matches_only_our_pattern() {
         assert!(is_backup_file(Path::new("catalog-1700000000000.sqlite")));
-        assert!(!is_backup_file(Path::new("catalog.sqlite"))); // the live DB
-        assert!(!is_backup_file(Path::new("catalog-.sqlite"))); // empty stamp
-        assert!(!is_backup_file(Path::new("catalog-abc.sqlite"))); // non-digit
-        assert!(!is_backup_file(Path::new("catalog-123.bak"))); // wrong ext
+        assert!(!is_backup_file(Path::new("catalog.sqlite")));
+        assert!(!is_backup_file(Path::new("catalog-.sqlite")));
+        assert!(!is_backup_file(Path::new("catalog-abc.sqlite")));
+        assert!(!is_backup_file(Path::new("catalog-123.bak")));
     }
 }

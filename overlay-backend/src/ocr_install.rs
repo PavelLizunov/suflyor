@@ -67,14 +67,6 @@ pub fn install(on: &dyn Fn(OcrProgress)) -> Result<()> {
     }
     let _ = std::fs::remove_file(&tarball);
 
-    // Confirm the extraction actually produced a usable engine AT THE DEST.
-    // We check `dest` directly rather than `is_installed()` because the latter
-    // (via ocr::tesseract_root) prefers an `<exe_dir>\tesseract` copy — so it
-    // could (a) miss a half-extracted %APPDATA% dir if some unrelated exe-dir
-    // copy exists, or (b) pass even though THIS bundle's archive root wasn't
-    // `tesseract/` and the files landed loose in %APPDATA%. Checking the dir we
-    // wrote to keeps the confirm + cleanup honest regardless of the resolver's
-    // search order or a future re-pin's layout.
     if !dest_has_engine(&dest) {
         let _ = std::fs::remove_dir_all(&dest);
         bail!("движок распознавания установлен не полностью");
@@ -109,7 +101,6 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("ocr_dest_test_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(tmp.join("tessdata"))?;
-        // Empty dir / partial extraction → not a usable engine.
         assert!(
             !dest_has_engine(&tmp),
             "empty dest must not count as installed"

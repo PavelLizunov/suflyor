@@ -124,8 +124,6 @@ pub(crate) fn install_streaming_tile(
     // count so an aborted prior stream (which never emits Done/Error)
     // can't leak its Start increment and pin the bar pulse ON forever.
     bridge.reset_ai_in_flight();
-    // Bump the stream generation: any still-running prior stream is now
-    // "stale" and its GenGatedEvents wrapper will drop further emits.
     let generation = bridge.stream_gen.fetch_add(1, Ordering::SeqCst) + 1;
     let new_convo = new_tile.convo_id;
     let mut slot = match bridge.current_streaming.lock() {
@@ -133,8 +131,6 @@ pub(crate) fn install_streaming_tile(
         Err(p) => p.into_inner(),
     };
     if let Some(old) = slot.take() {
-        // Re-enable only a DIFFERENT tile — the new one is intentionally
-        // busy until its own answer completes.
         if old.convo_id != new_convo {
             if let Some(t) = old.weak.upgrade() {
                 t.set_followup_busy(false);
@@ -164,7 +160,6 @@ impl RuntimeEvents for GenGatedEvents {
         if self.my_gen == self.current.load(Ordering::SeqCst) {
             self.inner.emit(channel, payload);
         }
-        // else: stale stream — drop the event.
     }
     fn spawn_tile_full(
         &self,
@@ -223,7 +218,6 @@ impl PttStreamSink {
         prefix: String,
         request_messages: Vec<ai::ChatMessage>,
     ) -> Self {
-        // Seed last_render in the past so the first delta paints immediately.
         let seeded = std::time::Instant::now()
             .checked_sub(std::time::Duration::from_secs(1))
             .unwrap_or_else(std::time::Instant::now);
@@ -298,7 +292,6 @@ impl RuntimeEvents for PttStreamSink {
                         role: "assistant".into(),
                         content: ai::MessageContent::Text(answer.clone()),
                     });
-                    // FIX #8 — bounded insert (caps + half-evicts the map).
                     self.bridge.store_conversation(
                         self.convo_id,
                         ConvoState {
@@ -550,13 +543,10 @@ impl OverlayBarBridge {
                         Err(p) => p.into_inner(),
                     };
                     let Some(stream) = slot.as_mut() else {
-                        return; // No active stream; drop the delta.
+                        return;
                     };
                     stream.accumulated.push_str(&text);
                 }
-                // Throttle the full-answer re-parse to ~50ms. The text is
-                // already accumulated above; a skipped delta just defers its
-                // repaint, and the terminal Done render shows the full answer.
                 {
                     let now = std::time::Instant::now();
                     let mut last = match self.last_tile_render.lock() {
@@ -596,9 +586,6 @@ impl OverlayBarBridge {
             }
             ai::AiEvent::Done { reason } => {
                 self.dec_ai_in_flight();
-                // Take the finished stream out of the slot, then fold its
-                // answer into the tile's conversation so the next follow-up
-                // carries full context.
                 let finished = {
                     let mut slot = match self.current_streaming.lock() {
                         Ok(g) => g,
@@ -607,15 +594,7 @@ impl OverlayBarBridge {
                     slot.take()
                 };
                 if let Some(stream) = finished {
-                    // An EMPTY answer means the model emitted a tool call (e.g. a
-                    // web-search tool the cloud bridge offers) instead of text —
-                    // which this text-stream client can't execute, so the tile
-                    // would otherwise render blank ("найди в интернете…" → nothing).
-                    // Show a generic note (no endpoint/tool internals) and do NOT
-                    // fold an empty assistant turn into the conversation.
                     let answer_empty = stream.accumulated.trim().is_empty();
-                    // Final body — used for the conversation snapshot AND the
-                    // terminal render below (which is never throttled).
                     let final_body = if answer_empty {
                         let note = "_(Модель не вернула текст — вероятно, запросила \
                             инструмент вроде веб-поиска, который в этом режиме не \
@@ -634,7 +613,6 @@ impl OverlayBarBridge {
                             role: "assistant".into(),
                             content: ai::MessageContent::Text(stream.accumulated.clone()),
                         });
-                        // FIX #8 — bounded insert (caps + half-evicts the map).
                         self.store_conversation(
                             stream.convo_id,
                             ConvoState {
@@ -646,9 +624,6 @@ impl OverlayBarBridge {
                     let weak = stream.weak;
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(tile) = weak.upgrade() {
-                            // Terminal render — NOT throttled, so the complete
-                            // answer always shows even if the throttle skipped
-                            // the last Delta repaint.
                             tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(
                                 &final_body,
                             ))));
@@ -705,9 +680,6 @@ impl OverlayBarBridge {
                 }
             }
             ai::AiEvent::Start { .. } => {
-                // Phase E6 v11 — Start fires once per AI call (F9 +
-                // each auto-tile). Bump the in-flight counter and
-                // light the bar's ai-streaming pulse.
                 self.inc_ai_in_flight();
             }
         }
@@ -737,7 +709,6 @@ impl OverlayBarBridge {
             .ai_in_flight
             .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
         if prev <= 1 {
-            // Clamp to 0 to recover from any unpaired Done/Error.
             self.ai_in_flight
                 .store(0, std::sync::atomic::Ordering::SeqCst);
             let weak = self.overlay_weak.clone();
@@ -771,8 +742,6 @@ impl OverlayBarBridge {
 
 impl SlintUiBridge for OverlayBarBridge {
     fn forward_event(&self, channel: String, payload: serde_json::Value) {
-        // ai:event has its own path because it needs mutable access
-        // to current_streaming before scheduling the UI update.
         if channel == "ai:event" {
             self.handle_ai_event(payload);
             return;
@@ -796,7 +765,6 @@ impl SlintUiBridge for OverlayBarBridge {
             }
             *last = now;
         }
-        // Route all cap emitters through one visible, debounced notice.
         if channel == "cost:cap-hit" {
             self.handle_cost_cap_hit(payload);
             return;
@@ -806,16 +774,6 @@ impl SlintUiBridge for OverlayBarBridge {
         // (an aborted stream emits no Done/Error to decrement it).
         if channel == "session:stopped" {
             self.reset_ai_in_flight();
-            // M2 — finalize a tile that was still streaming when the session
-            // stopped. stop_session aborts the ai_task, so NO Done/Error ever
-            // arrives to take the slot or re-enable the tile: the tile would
-            // freeze forever on its partial answer with a disabled follow-up,
-            // until some LATER F9 happened to supersede the slot. Take the slot
-            // here and mark the tile interrupted, preserving whatever streamed
-            // so far. We deliberately do NOT fold the partial answer into the
-            // conversation — a later follow-up should build on the last COMPLETE
-            // turn, not a truncated one (and a never-completed first answer keeps
-            // no convo entry, so its follow-up bails cleanly).
             let interrupted = {
                 let mut slot = match self.current_streaming.lock() {
                     Ok(g) => g,
@@ -856,8 +814,6 @@ impl SlintUiBridge for OverlayBarBridge {
                     o.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
                 }
                 "health:update" => {
-                    // Crude: collapse 3-subsystem state to single
-                    // status color until the bar gets dedicated dots.
                     let st = |k: &str| -> Option<&str> {
                         payload.get(k).and_then(serde_json::Value::as_str)
                     };
@@ -868,47 +824,22 @@ impl SlintUiBridge for OverlayBarBridge {
                     let any_degraded = matches!(st("audio"), Some("degraded"))
                         || matches!(st("stt"), Some("degraded"))
                         || matches!(st("ai"), Some("degraded"));
-                    // v0.8.2 (C1 fix, cont.) — gate the down/degraded COLOR on an
-                    // active session too (mirrors the TEXT guard below). Else a
-                    // stale post-stop {ai:down} tick (queued before the emitter was
-                    // aborted) repaints the idle bar red until the next
-                    // session:started, leaving "idle" text inside a red pill.
                     if o.get_timer_active() {
                         if any_down {
                             o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x4b, 0x4b));
                         } else if any_degraded {
                             o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0xb4, 0x4b));
                         } else {
-                            // All-clear during a session → restore the green
-                            // recording pill. A degraded→ok episode only ever set
-                            // the COLOR (never the AI_DOWN_MARK text), so the
-                            // text-recovery branch below can't restore it and the
-                            // pill would otherwise stay amber until the next
-                            // session start/stop.
                             o.set_status_color(slint::Color::from_rgb_u8(0x2a, 0xc7, 0x60));
                         }
                     }
-                    // V0.8.0 (Поток A) — surface AI-down in the bar TEXT, not just
-                    // color, so the user knows WHY auto-tiles stopped (the
-                    // reported pain). The marker is set/cleared only by this arm,
-                    // so we restore the session pill on recovery without
-                    // clobbering session:started/stopped's own text.
                     const AI_DOWN_MARK: &str = "AI недоступен";
                     let cur = o.get_status_text();
-                    // v0.8.2 (C1 fix) — only SET the mark while a session is
-                    // active (timer_active). Without this guard a stale
-                    // health:update{ai:down} that the aborted emitter queued just
-                    // before stop_session could land AFTER session:stopped set
-                    // "idle"; with the emitter now dead nothing would ever clear
-                    // it, stranding the bar on "AI недоступен" over an idle
-                    // session — exactly when the user stops to go fix the bridge.
-                    // The clear branch stays unguarded so it can still tidy up.
                     if ai_down && o.get_timer_active() {
                         if cur != AI_DOWN_MARK {
                             o.set_status_text(SharedString::from(AI_DOWN_MARK));
                         }
                     } else if cur == AI_DOWN_MARK {
-                        // Recovered — restore the session pill we overwrote.
                         if o.get_timer_active() {
                             o.set_status_text(SharedString::from("recording"));
                             o.set_status_color(slint::Color::from_rgb_u8(0x2a, 0xc7, 0x60));
@@ -917,20 +848,11 @@ impl SlintUiBridge for OverlayBarBridge {
                             o.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
                         }
                     }
-                    // ok / idle leaves the prior color alone
-                    // (set by session:started / session:stopped).
                 }
                 "meeting:ending" => {
-                    // UI-audit 2026-06-13: dropped the 🏁 flag emoji — the rest
-                    // of the chrome is SVG/ASCII; the status pill is English-only
-                    // by design (idle/recording/…), so this matches it.
                     o.set_status_text(SharedString::from("wrapping up"));
                 }
                 "transcript:line" => {
-                    // Phase E6 v11 — surface latest STT on bar.
-                    // (Throttle handled UPSTREAM in forward_event
-                    // before invoke_from_event_loop is scheduled —
-                    // see the early return in forward_event.)
                     let text = payload
                         .get("text")
                         .and_then(|v| v.as_str())
@@ -949,7 +871,6 @@ impl SlintUiBridge for OverlayBarBridge {
                     o.set_last_transcript_line(SharedString::from(truncated));
                     o.set_last_transcript_source(SharedString::from(source));
                 }
-                // These remaining channels have no toast UI yet.
                 "tile:error" | "tile:rate-limited" | "speech:coach" => {
                     eprintln!("[overlay-bridge] {channel}: {payload}");
                 }

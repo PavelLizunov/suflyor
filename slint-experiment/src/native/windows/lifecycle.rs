@@ -42,9 +42,6 @@ pub fn acquire_singleton(wait_ms: u32) -> Result<SingletonGuard, Box<dyn std::er
             return Err("CreateMutexW returned invalid handle".into());
         }
         let wait = WaitForSingleObject(handle, wait_ms);
-        // WAIT_OBJECT_0 = acquired; WAIT_ABANDONED = prior owner died without
-        // releasing (we still own it now — fine for our use). Anything else
-        // (timeout) = another instance is alive: close our ref and fail.
         if wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED {
             Ok(SingletonGuard { handle })
         } else {

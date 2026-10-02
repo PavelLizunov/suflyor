@@ -41,8 +41,6 @@ pub(crate) fn run_migrations(conn: &mut Connection) -> Result<i32> {
         let tx = conn.transaction().context("begin migration tx")?;
         tx.execute_batch(sql)
             .with_context(|| format!("apply migration {version}"))?;
-        // `user_version` takes a literal, not a bound param; `version` is a
-        // trusted in-crate constant, so the format is safe.
         tx.execute_batch(&format!("PRAGMA user_version = {version};"))
             .with_context(|| format!("bump user_version to {version}"))?;
         tx.commit()

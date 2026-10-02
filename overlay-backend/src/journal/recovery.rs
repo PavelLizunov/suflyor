@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 pub(crate) const RECOVERY_LAST_LINES: usize = 8;
-pub(crate) const RECOVERY_MAX_AGE_MS: u64 = 12 * 60 * 60 * 1000; // 12h
-const RECOVERY_MAX_READ_BYTES: u64 = 16 * 1024 * 1024; // 16 MB
+pub(crate) const RECOVERY_MAX_AGE_MS: u64 = 12 * 60 * 60 * 1000;
+const RECOVERY_MAX_READ_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnfinishedSession {

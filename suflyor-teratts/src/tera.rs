@@ -156,7 +156,6 @@ impl TeraEngine {
             .batch(&model_text.duration_text)
             .map_err(|e| anyhow!("invalid-text: {e}"))?;
 
-        // --- text encoder -------------------------------------------------
         let text_len = text_ids.len();
         let text_ids_t = Tensor::from_array(([1, text_len], text_ids.into_boxed_slice()))
             .map_err(|e| anyhow!("synth: {e}"))?;
@@ -179,7 +178,6 @@ impl TeraEngine {
         let (emb_shape, emb_data) = named_output_f32(&encoder_outputs, &self.text_encoder_out)?;
         validate_tensor_shape(&emb_shape, emb_data.len(), "text_emb")?;
 
-        // --- duration predictor --------------------------------------------
         let dur_len = duration_ids.len();
         let duration_ids_t = Tensor::from_array(([1, dur_len], duration_ids.into_boxed_slice()))
             .map_err(|e| anyhow!("synth: {e}"))?;
@@ -216,7 +214,6 @@ impl TeraEngine {
             .max(1.0) as usize;
         let maximum_samples = (duration_seconds * SAMPLE_RATE as f32).round() as usize;
 
-        // --- distilled 8-step sampler ---------------------------------------
         let mut latent = vec![0.0_f32; LATENT_CHANNELS * latent_length];
         Rng::new(seed).fill_normal_f32(&mut latent);
         let initial_latent_t = Tensor::from_array((
@@ -250,11 +247,8 @@ impl TeraEngine {
             started.elapsed().as_millis()
         );
         let (latent_shape, latent_out) = named_output_f32(&sampler_outputs, &self.sampler_out)?;
-        // Validate the exact [1, 144, L] contract BEFORE the vocoder loop
-        // slices `LATENT_CHANNELS * frame` windows out of this buffer.
         validate_latent_output(&latent_shape, latent_out.len(), latent_length)?;
 
-        // --- vocoder: causal overlap-save streaming --------------------------
         let mut chunks: Vec<Vec<f32>> = Vec::new();
         let mut emitted = 0usize;
         let mut start = 0usize;
@@ -280,7 +274,6 @@ impl TeraEngine {
             let (wav_shape, decoded) = named_output_f32(&vocoder_outputs, &self.vocoder_out)?;
             let discard = (start - input_start) * SAMPLES_PER_COMPRESSED_FRAME;
             let new_samples = (end - start) * SAMPLES_PER_COMPRESSED_FRAME;
-            // Validate shape + length BEFORE slicing the overlap-save window.
             validate_vocoder_output(&wav_shape, decoded.len(), discard + new_samples)?;
             let mut chunk = decoded[discard..discard + new_samples].to_vec();
             let remaining = maximum_samples.saturating_sub(emitted);
@@ -385,7 +378,6 @@ fn named_output_f32(
     let (shape, data) = value
         .try_extract_tensor::<f32>()
         .map_err(|e| anyhow!("synth: unexpected output tensor: {e}"))?;
-    // `Shape` derefs to `[i64]`.
     let mut dims = Vec::with_capacity(shape.len());
     for &dim in shape.iter() {
         let dim = usize::try_from(dim)
@@ -473,11 +465,9 @@ mod tests {
         assert!(err.to_string().starts_with("not-installed"), "{err}");
     }
 
-    // ===== Hermetic malformed-output schema tests (no model, no ort run) ===
 
     #[test]
     fn sole_declared_output_rejects_ambiguity() {
-        // Exactly one declared output is the pinned contract.
         assert_eq!(
             sole_declared_output("graph", ["text_emb"]).unwrap(),
             "text_emb"
@@ -498,20 +488,19 @@ mod tests {
     #[test]
     fn tensor_shape_validation_requires_exact_lengths() {
         assert!(validate_tensor_shape(&[1, 3], 3, "x").is_ok());
-        assert!(validate_tensor_shape(&[1, 3], 2, "x").is_err()); // short data
-        assert!(validate_tensor_shape(&[1, 3], 4, "x").is_err()); // long data
-        assert!(validate_tensor_shape(&[], 0, "x").is_err()); // empty shape
-        assert!(validate_tensor_shape(&[1, 0], 0, "x").is_err()); // zero dim
+        assert!(validate_tensor_shape(&[1, 3], 2, "x").is_err());
+        assert!(validate_tensor_shape(&[1, 3], 4, "x").is_err());
+        assert!(validate_tensor_shape(&[], 0, "x").is_err());
+        assert!(validate_tensor_shape(&[1, 0], 0, "x").is_err());
     }
 
     #[test]
     fn latent_output_validation_rejects_malformed_shapes() {
-        // Exact contract: [1, 144, L] with data == 144 * L.
         assert!(validate_latent_output(&[1, LATENT_CHANNELS, 4], 576, 4).is_ok());
-        assert!(validate_latent_output(&[LATENT_CHANNELS, 4], 576, 4).is_err()); // rank
-        assert!(validate_latent_output(&[2, LATENT_CHANNELS, 4], 1152, 4).is_err()); // batch
-        assert!(validate_latent_output(&[1, 96, 4], 384, 4).is_err()); // channels
-        assert!(validate_latent_output(&[1, LATENT_CHANNELS, 5], 720, 4).is_err()); // L
+        assert!(validate_latent_output(&[LATENT_CHANNELS, 4], 576, 4).is_err());
+        assert!(validate_latent_output(&[2, LATENT_CHANNELS, 4], 1152, 4).is_err());
+        assert!(validate_latent_output(&[1, 96, 4], 384, 4).is_err());
+        assert!(validate_latent_output(&[1, LATENT_CHANNELS, 5], 720, 4).is_err());
                                                                                     // The historic panic case: short data must be rejected BEFORE any
                                                                                     // `144 * frame` slice is attempted.
         assert!(validate_latent_output(&[1, LATENT_CHANNELS, 4], 100, 4).is_err());
@@ -521,20 +510,19 @@ mod tests {
     #[test]
     fn vocoder_output_validation_rejects_short_or_misshapen_waveforms() {
         assert!(validate_vocoder_output(&[1, 3072], 3072, 3072).is_ok());
-        assert!(validate_vocoder_output(&[1, 6144], 6144, 3072).is_ok()); // extra ok
-        assert!(validate_vocoder_output(&[1, 100], 100, 3072).is_err()); // too few
-        assert!(validate_vocoder_output(&[1, 3072], 100, 1).is_err()); // shape!=data
-        assert!(validate_vocoder_output(&[2, 3072], 3072, 1).is_err()); // batch
-        assert!(validate_vocoder_output(&[3072], 3072, 1).is_err()); // rank
+        assert!(validate_vocoder_output(&[1, 6144], 6144, 3072).is_ok());
+        assert!(validate_vocoder_output(&[1, 100], 100, 3072).is_err());
+        assert!(validate_vocoder_output(&[1, 3072], 100, 1).is_err());
+        assert!(validate_vocoder_output(&[2, 3072], 3072, 1).is_err());
+        assert!(validate_vocoder_output(&[3072], 3072, 1).is_err());
     }
 
     #[test]
     fn latent_frame_window_preserves_channel_first_layout() {
-        // [1, 3, 4] flattened as three channel rows.
         let latent = vec![
-            10.0, 11.0, 12.0, 13.0, // channel 0
-            20.0, 21.0, 22.0, 23.0, // channel 1
-            30.0, 31.0, 32.0, 33.0, // channel 2
+            10.0, 11.0, 12.0, 13.0,
+            20.0, 21.0, 22.0, 23.0,
+            30.0, 31.0, 32.0, 33.0,
         ];
         assert_eq!(
             slice_latent_frames(&latent, 3, 4, 1, 3).unwrap(),

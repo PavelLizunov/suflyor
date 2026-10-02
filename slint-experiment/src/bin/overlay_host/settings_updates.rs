@@ -112,9 +112,6 @@ pub(crate) fn wire_updates(win: &SettingsWindow) {
                 match res {
                     Ok(path) => match overlay_backend::update::run_installer(&path) {
                         Ok(()) => {
-                            // Installer launched — quit so it can overwrite the
-                            // running binary (its first page is interactive, so
-                            // the app is gone before it reaches the File step).
                             diag!("update: installer launched, quitting app");
                             let _ = slint::invoke_from_event_loop(|| {
                                 let _ = slint::quit_event_loop();

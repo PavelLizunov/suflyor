@@ -42,7 +42,6 @@ fn manifest_keeps_the_production_macos_identity() {
         assert!(has_plist_value(key, value), "invalid plist entry: {key}");
     }
 
-    // Info.plist keeps the exact package version including prerelease suffix so Finder/mdls match.
     let release_version = env!("CARGO_PKG_VERSION");
     let release_value = format!("<string>{release_version}</string>");
     for key in ["CFBundleShortVersionString", "CFBundleVersion"] {
@@ -73,8 +72,6 @@ fn plist_audio_capture_purpose_string_is_non_empty() {
 
 #[test]
 fn plist_microphone_purpose_string_is_non_empty() {
-    // TCC shows this verbatim; an empty value makes the prompt look broken
-    // and Apple rejects it in review, so guard against accidental blanking.
     let key = "<key>NSMicrophoneUsageDescription</key>";
     let (_, rest) = PLIST.split_once(key).expect("missing purpose string key");
     let value = rest

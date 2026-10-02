@@ -86,7 +86,7 @@ fn parse_markdown(source: &str) -> Vec<MarkdownBlock> {
                     HeadingLevel::H1 => kind::H1,
                     HeadingLevel::H2 => kind::H2,
                     HeadingLevel::H3 => kind::H3,
-                    _ => kind::H3, // fold H4-H6 into H3 for the spike
+                    _ => kind::H3,
                 });
             }
             Event::Start(Tag::Paragraph) if list_depth == 0 => {
@@ -129,7 +129,6 @@ fn parse_markdown(source: &str) -> Vec<MarkdownBlock> {
                     &mut current_lang,
                 );
                 current_kind = Some(kind::BULLET);
-                // Indent bullets by 2 spaces per nesting level beyond 1.
                 if list_depth > 1 {
                     current_text.push_str(&"  ".repeat(list_depth - 1));
                 }
@@ -138,8 +137,6 @@ fn parse_markdown(source: &str) -> Vec<MarkdownBlock> {
                 current_text.push_str(&t);
             }
             Event::Code(t) => {
-                // B-inline (ТЗ 2026-07-02): inline code renders plain (backticks
-                // stripped) — kept in sync with markdown.rs::parse.
                 current_text.push_str(&t);
             }
             Event::SoftBreak | Event::HardBreak => {
@@ -166,8 +163,6 @@ fn parse_markdown(source: &str) -> Vec<MarkdownBlock> {
                 out.push(block(kind::HR, String::new(), String::new()));
             }
             _ => {
-                // Tables, footnotes, images, html, links — Phase 4 work.
-                // Spike silently ignores them.
             }
         }
     }
@@ -200,9 +195,6 @@ fn flush(
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Locate the canonical glossary input. The repo root is the
-    // current dir's parent when running via `cargo run` from
-    // slint-experiment/, so try both relative paths.
     let candidates = [
         "../overlay-backend/knowledge/glossary.md",
         "overlay-backend/knowledge/glossary.md",
@@ -212,7 +204,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .find_map(|p| std::fs::read_to_string(p).ok().map(|s| (*p, s)))
         .ok_or("glossary.md not found in either candidate path")?;
 
-    // Take only the first ~80 lines so the spike window isn't endless.
     let excerpt: String = raw.lines().take(80).collect::<Vec<_>>().join("\n");
     let blocks = parse_markdown(&excerpt);
     eprintln!(
@@ -233,7 +224,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     window.set_blocks(ModelRc::new(VecModel::from(blocks)));
     window.set_source_name(SharedString::from(path));
 
-    // Auto-close after 8 s for the smoke script.
     let weak = window.as_weak();
     slint::Timer::single_shot(Duration::from_secs(8), move || {
         if let Some(w) = weak.upgrade() {

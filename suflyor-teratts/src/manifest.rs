@@ -134,9 +134,7 @@ mod tests {
         );
         assert_eq!(manifest.files.len(), 27);
         let total: u64 = manifest.files.iter().map(|f| f.size).sum();
-        // Core TeraTTSv2 contract without the RUAccent NN subtree: ~370 MiB.
         assert!((380_000_000..400_000_000).contains(&total), "total {total}");
-        // Every entry keeps its integrity pin end-to-end.
         for file in &manifest.files {
             assert!(
                 file.sha256.is_some() || file.blob_sha1.is_some(),

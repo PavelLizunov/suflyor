@@ -293,14 +293,10 @@ mod tests {
             );
         }
         assert_eq!(s.transcript.len(), TRANSCRIPT_MAX_LINES);
-        // Newest 80 lines survive — first surviving line should be
-        // "line 5" (the first 5 were evicted).
         let first = &s.transcript.front().expect("non-empty").text;
         assert_eq!(first, "line 5");
         let last = &s.transcript.back().expect("non-empty").text;
         assert_eq!(last, &format!("line {}", TRANSCRIPT_MAX_LINES + 4));
-        // v0.12.0 — the Summary accumulator kept EVERYTHING (85 < 4000)
-        // even though the rolling window evicted the first 5.
         assert_eq!(s.full_transcript.len(), TRANSCRIPT_MAX_LINES + 5);
         assert!(!s.full_transcript_truncated);
         let full_first = &s.full_transcript.front().expect("non-empty").text;
@@ -323,7 +319,6 @@ mod tests {
         }
         assert_eq!(s.full_transcript.len(), FULL_TRANSCRIPT_MAX_LINES);
         assert!(s.full_transcript_truncated);
-        // Oldest dropped — coverage shifted to the recent majority.
         let first = &s.full_transcript.front().expect("non-empty").text;
         assert_eq!(first, "line 5");
     }

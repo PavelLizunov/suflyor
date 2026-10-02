@@ -216,19 +216,9 @@ pub async fn download_installer(url: &str) -> Result<PathBuf> {
             bytes.len()
         );
     }
-    // Reject anything that isn't a Windows PE binary (an HTML error page or a
-    // truncated blob that slipped past the size floor).
     if bytes.len() < 2 || &bytes[..2] != b"MZ" {
         bail!("downloaded installer is not a Windows executable (bad header)");
     }
-    // Verify SHA-256 against GitHub's API digest. Policy (audit P1.6): FAIL-CLOSED
-    // — without a verified hash we refuse to run an installer that will overwrite
-    // the running binary. This repo's releases DO carry an API digest (GitHub
-    // computes it server-side), so the normal path always verifies; the fallback
-    // bails point the user at the GitHub releases page for a manual install,
-    // which the Updates tab keeps the app open to perform. A transient metadata
-    // fetch error is distinguished from a genuinely-absent digest so a network
-    // blip reads as "retry" rather than "this release is unverifiable".
     match expected_sha256_for(&client, url).await {
         Ok(Some(expected)) => {
             let mut hasher = Sha256::new();
@@ -280,14 +270,12 @@ mod tests {
         assert!(version_gt("1.0.0", "0.9.9"));
         assert!(!version_gt("0.2.0", "0.2.0"));
         assert!(!version_gt("0.2.0", "0.2.1"));
-        // leading v + pre-release suffix are ignored on both sides
         assert!(version_gt("v0.2.0", "0.2.0-pre"));
         assert!(!version_gt("0.2.0-pre", "v0.2.0"));
     }
 
     #[test]
     fn untrusted_download_host_rejected() {
-        // Legitimate release and CDN URLs
         assert!(is_trusted_download(
             "https://github.com/PavelLizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
         ));
@@ -297,12 +285,10 @@ mod tests {
         assert!(is_trusted_download(
             "https://release-assets.githubusercontent.com/12345/suflyor-slint-setup.exe"
         ));
-        // Host uppercase normalization test
         assert!(is_trusted_download(
             "https://GITHUB.COM/PavelLizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
         ));
 
-        // Rejections: wrong repo, non-HTTPS, unknown host
         assert!(!is_trusted_download(
             "https://github.com/other/repo/releases/download/v0.2.0/suflyor-slint-setup.exe"
         ));
@@ -311,7 +297,6 @@ mod tests {
             "http://github.com/PavelLizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
         ));
 
-        // Domain-prefix spoofing
         assert!(!is_trusted_download(
             "https://github.com.evil.com/PavelLizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
         ));
@@ -319,7 +304,6 @@ mod tests {
             "https://objects.githubusercontent.com.evil.com/asset.exe"
         ));
 
-        // Userinfo spoofing
         assert!(!is_trusted_download(
             "https://github.com@evil.com/PavelLizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
         ));
@@ -327,17 +311,14 @@ mod tests {
             "https://user:pass@github.com/PavelLizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
         ));
 
-        // Case spoofing in repo path
         assert!(!is_trusted_download(
             "https://github.com/pavellizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
         ));
 
-        // Non-standard port
         assert!(!is_trusted_download(
             "https://github.com:8443/PavelLizunov/suflyor/releases/download/v0.2.0/suflyor-slint-setup.exe"
         ));
 
-        // Invalid URL string
         assert!(!is_trusted_download("not a valid url"));
     }
 
@@ -359,9 +340,6 @@ mod tests {
         ];
         assert_eq!(pick_installer_url(&assets), canonical);
 
-        // A stray/renamed .exe must NOT be picked when the canonical asset is
-        // absent — pre-fix, the `.or_else(... ends_with(".exe"))` fallback would
-        // have returned this and run_installer would have spawned it.
         let stray = vec![GhAsset {
             name: "totally-not-the-installer.exe".to_string(),
             browser_download_url: "https://github.com/x/stray.exe".to_string(),

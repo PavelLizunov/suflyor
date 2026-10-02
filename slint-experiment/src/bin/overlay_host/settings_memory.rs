@@ -33,10 +33,6 @@ const EXTRACT_RECENT_SESSIONS: usize = 12;
 /// N=100 keeps content well under the i16 limit (see the guard test below).
 const MEMORY_TAB_CAP: i64 = 100;
 
-// Баг5 guard (compile-time): keep the un-virtualized lists under the SW renderer's
-// i16 (32767px) coordinate limit. 2 lists · cap · per-row px (120px clamp in
-// settings_panel.slint + headroom) + a generous card allowance must stay under.
-// Raising MEMORY_TAB_CAP without lowering the per-row clamp fails the build.
 const _: () = assert!(MEMORY_TAB_CAP * 2 * 140 + 800 < 32_767);
 
 /// Guards re-entering the (worker-thread) extractor while a run is in flight, so
@@ -149,9 +145,6 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
             });
         });
     }
-    // v0.16.0 — manual "add your own fact" (personal knowledge base). Inserts
-    // straight into the APPROVED items as kind `note` (typing the fact IS the
-    // consent the approve step otherwise provides); empty input is a no-op.
     {
         let weak = win.as_weak();
         win.on_memory_add_fact(move |text| {
@@ -197,9 +190,6 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
                         }
                         match outcome {
                             Ok(()) => {
-                                // Clear only what we actually saved: if the user kept
-                                // typing, leave the newer text alone (a DB failure also
-                                // keeps it — audit Q5).
                                 if w.get_memory_add_text().trim() == submitted.as_str() {
                                     w.set_memory_add_text(SharedString::default());
                                 }
@@ -218,9 +208,6 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
             });
         });
     }
-    // A1 (ТЗ 2026-07-02) — save an inline edit of an approved fact. Empty/whitespace
-    // text = "no change" (keep the original, just leave edit mode); a non-empty edit
-    // goes through the existing update_memory_item_text, then reload + exit edit mode.
     {
         let weak = win.as_weak();
         win.on_memory_edit_save(move |id, text| {
@@ -246,8 +233,6 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
                             reload_memory(&w);
                             return;
                         }
-                        // Leave edit mode only if this row is still the one being
-                        // edited — a newer edit may have moved on.
                         if w.get_memory_editing_id() == id {
                             w.set_memory_editing_id(-1);
                         }
@@ -330,8 +315,6 @@ fn run_extract() -> usize {
     let Ok(mut store) = open_default_store() else {
         return 0;
     };
-    // Existing candidate texts across ALL statuses → never re-suggest one. One
-    // text-only query instead of three unbounded full-row scans (P1-3).
     let mut seen: HashSet<String> = store
         .candidate_texts(PROFILE)
         .unwrap_or_default()
@@ -343,7 +326,6 @@ fn run_extract() -> usize {
     for s in sessions.into_iter().take(EXTRACT_RECENT_SESSIONS) {
         let turns = store.session_ai_turns(&s.id).unwrap_or_default();
         for cand in extract_heuristic(&s.id, &turns) {
-            // Skip a text we've already suggested; otherwise insert + count.
             if seen.insert(cand.text.clone()) && store.insert_candidate(&cand, now).is_ok() {
                 inserted += 1;
             }

@@ -182,9 +182,6 @@ fn canonicalize_tex_math_delimiters(source: &str) -> Cow<'_, str> {
             let Some(ch) = line[index..].chars().next() else {
                 break;
             };
-            // pulldown-cmark's math span cannot cross a physical newline.
-            // TeX display whitespace is insignificant here (matrix rows use
-            // explicit `\\\\`), so keep the whole paired display in one span.
             if math_close.is_some() && matches!(ch, '\r' | '\n') {
                 out.push(' ');
             } else {
@@ -197,7 +194,6 @@ fn canonicalize_tex_math_delimiters(source: &str) -> Cow<'_, str> {
     if changed && math_close.is_none() {
         Cow::Owned(out)
     } else {
-        // Never reinterpret a malformed, unfinished display fragment.
         Cow::Borrowed(source)
     }
 }
@@ -232,10 +228,6 @@ fn parse_single_pass(source: &str) -> Vec<Block> {
     let mut table_rows: Vec<Vec<String>> = Vec::new();
     let mut current_row: Vec<String> = Vec::new();
     let mut current_cell = String::new();
-    // audit/#134 — preserve link destinations. The link TEXT already flows
-    // through as Event::Text; only the URL was dropped (the catch-all arm
-    // swallowed Tag::Link), so AI answers lost every link. Stash on Start(Link),
-    // append " (url)" on End(Link).
     let mut link_url: Option<String> = None;
 
     let mut options = Options::ENABLE_TABLES;
@@ -268,7 +260,6 @@ fn parse_single_pass(source: &str) -> Vec<Block> {
                 current_kind = Some(kind::PARAGRAPH);
             }
             Event::Start(Tag::Paragraph) => {
-                // Inside a list item — text goes into the current bullet.
             }
             Event::Start(Tag::CodeBlock(cb)) => {
                 flush(
@@ -614,8 +605,6 @@ mod tests {
 
     #[test]
     fn link_url_is_preserved_in_text() {
-        // The link TEXT already survived (inner Event::Text); the URL was being
-        // dropped by the catch-all arm. Now it's appended as " (url)".
         let blocks = parse("See the [docs](https://example.com/guide) for more.");
         let para = blocks.iter().find(|b| b.kind == kind::PARAGRAPH).unwrap();
         assert!(
@@ -632,7 +621,6 @@ mod tests {
 
     #[test]
     fn autolink_url_not_duplicated() {
-        // text already == url → must not render "url (url)".
         let blocks = parse("[https://example.com](https://example.com)");
         let para = blocks.iter().find(|b| b.kind == kind::PARAGRAPH).unwrap();
         assert_eq!(
@@ -655,15 +643,11 @@ mod tests {
         let tables: Vec<&Block> = blocks.iter().filter(|b| b.kind == kind::TABLE).collect();
         assert_eq!(tables.len(), 1, "exactly one TABLE block expected");
         let t = &tables[0].text;
-        // Header + body cells survive.
         assert!(t.contains('A') && t.contains('B') && t.contains("333"));
-        // Box-drawing column separator + header underline are present.
         assert!(t.contains('│'), "column separator missing: {t:?}");
         assert!(t.contains('─'), "header underline missing: {t:?}");
         // The raw GFM dashes separator row must NOT leak as content.
         assert!(!t.contains("---"), "raw pipe separator leaked: {t:?}");
-        // Column A is padded so every data line starts at the same width
-        // ("333" is the widest → width 3): the "1" cell becomes "1  ".
         assert!(t.contains("1  "), "column A not padded to width 3: {t:?}");
     }
 
@@ -700,7 +684,6 @@ mod tests {
             .expect("table block")
             .text;
         assert!(t.contains('…'), "long cell should be truncated: {t:?}");
-        // No single line should exceed the cap by much (28 + separators).
         assert!(
             t.lines().all(|l| l.chars().count() <= 40),
             "line exceeded width cap: {t:?}"
@@ -711,7 +694,7 @@ mod tests {
     fn math_display_handles_display_math_but_preserves_code_urls_and_currency() {
         let blocks = parse(
             "Math $$c_{ij} = \\sum_{k=1}^{n} a_{ik}b_{kj}$$. `c_{ij}`. \
-             https://example.test/c_{ij}?q=sum_k=1 costs $100 = 90$.\n\n\
+             https:
              ```text\nc_{ij} = \\sum_{k=1}^{n}\n```",
         );
         let math = blocks
@@ -897,7 +880,7 @@ mod tests {
         // A representative ~5 KB answer: headings, prose, a bullet list, a fenced
         // code block, inline code — the mix a 12B/Sonnet answer produces.
         let unit = "## Section\n\nHere is a paragraph of explanation with some \
-            `inline code` and a [link](https://example.com/page) that the parser \
+            `inline code` and a [link](https:
             must handle.\n\n- first bullet point about the topic\n- second bullet \
             with more detail\n- third\n\n```rust\nfn demo() -> i32 {\n    let x = 42;\n    x + 1\n}\n```\n\n";
         let mut answer = String::new();
@@ -906,14 +889,11 @@ mod tests {
         }
         let answer = &answer[..5000];
 
-        // Simulate a 50ms-throttled stream of a 5000-char answer ≈ 200 renders,
-        // each re-parsing the growing prefix (the current O(n²) behavior).
         const RENDERS: usize = 200;
         let t0 = std::time::Instant::now();
         let mut total_blocks = 0usize;
         for i in 1..=RENDERS {
             let end = (i * answer.len() / RENDERS).min(answer.len());
-            // Slice on a char boundary so parse gets valid UTF-8.
             let end = (0..=end)
                 .rev()
                 .find(|&e| answer.is_char_boundary(e))
@@ -921,7 +901,6 @@ mod tests {
             total_blocks += parse(&answer[..end]).len();
         }
         let elapsed = t0.elapsed();
-        // Also time ONE full parse of the final answer for reference.
         let t1 = std::time::Instant::now();
         let one = parse(answer).len();
         let one_elapsed = t1.elapsed();

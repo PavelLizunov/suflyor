@@ -54,10 +54,10 @@ pub(crate) fn bgra_to_slint_image(bgra: &[u8], w: u32, h: u32) -> slint::Image {
     for (i, px) in bgra.as_chunks::<4>().0.iter().enumerate() {
         let o = i * 4;
         if let Some(slot) = dst.get_mut(o..o + 4) {
-            slot[0] = px[2]; // R
-            slot[1] = px[1]; // G
-            slot[2] = px[0]; // B
-            slot[3] = 255; // A
+            slot[0] = px[2];
+            slot[1] = px[1];
+            slot[2] = px[0];
+            slot[3] = 255;
         }
     }
     slint::Image::from_rgba8(buf)
@@ -149,10 +149,6 @@ pub(crate) fn fire_f8_vision_capture(
     capture_overlay: &Rc<RefCell<Option<CaptureOverlay>>>,
     mode: vision::VisionMode,
 ) {
-    // Second F8 while an overlay is up → dismiss it FIRST (before resolving the
-    // provider), so a stuck overlay can ALWAYS be cleared — even if Vision was
-    // since switched to "off" in Settings. Escape hatch for a drag that lost its
-    // pointer-up.
     {
         let b = capture_overlay.borrow();
         if let Some(win) = b.as_ref() {
@@ -164,9 +160,6 @@ pub(crate) fn fire_f8_vision_capture(
             }
         }
     }
-    // The VLM modes need a configured vision endpoint. OCR uses the platform's
-    // local engine (Tesseract on Windows, Apple Vision on macOS), so it remains
-    // available when the VLM route is off.
     let ocr_ready = matches!(mode, vision::VisionMode::Ocr) && local_ocr_available();
     let (ep, mlx_pending) = {
         let config = cfg.read();
@@ -212,10 +205,6 @@ pub(crate) fn fire_f8_vision_capture(
         }
     }
 
-    // Freeze the virtual desktop for region selection. Windows composes all
-    // monitors; macOS currently captures the display under the cursor. In both
-    // cases the returned global origin can be negative and must position the
-    // overlay rather than assuming (0, 0).
     let hidden = slint_replay::win32::hide_own_windows();
     let frozen = slint_replay::capture::capture_virtual_desktop();
     slint_replay::win32::show_windows(&hidden);
@@ -252,15 +241,9 @@ pub(crate) fn fire_f8_vision_capture(
         return;
     };
     win.set_frozen(img);
-    win.set_dragging(false); // clear any stale selection rect from a prior capture
-                             // Seed the capture overlay's mode: Shift+F8 → translate; plain F8 →
-                             // describe OR test-practice (per the Settings toggle, resolved by the
-                             // caller). The on-overlay tap can still flip to translate before drag.
+    win.set_dragging(false);
     win.set_translate_mode(mode == vision::VisionMode::Translate);
     win.set_practice_mode(mode == vision::VisionMode::TestPractice);
-    // Geometry is set on the still-hidden window, then show() lands it there.
-    // GDI frames use physical pixels; ScreenCaptureKit is configured in macOS
-    // screen points, matching Slint's logical coordinates on Retina displays.
     #[cfg(windows)]
     {
         win.window()
@@ -300,12 +283,7 @@ pub(crate) fn fire_f8_vision_capture(
         let ep_c = ep.clone();
         let cfg_c = cfg.clone();
         win.on_region_selected(move |x1, y1, x2, y2| {
-            // Read the overlay's mode BEFORE hiding it (Shift+F8 seeds it; the
-            // on-overlay Describe/Translate toggle can override before drag).
             let mode = if let Some(w) = weak_self.upgrade() {
-                // OCR (Ctrl+F8 read-aloud) is NOT an on-overlay toggle — the
-                // requested mode wins so a tap can't collapse it to Describe.
-                // Otherwise translate-mode takes precedence (a tap toggles it).
                 let m = if matches!(mode, vision::VisionMode::Ocr) {
                     vision::VisionMode::Ocr
                 } else if w.get_translate_mode() {
@@ -321,17 +299,10 @@ pub(crate) fn fire_f8_vision_capture(
             } else {
                 mode
             };
-            // Windows GDI frames use physical pixels; the macOS frame is
-            // deliberately one image pixel per logical ScreenCaptureKit point.
             let to_px = |v: f32| (v * capture_scale).round().max(0.0) as u32;
             let (px1, py1) = (to_px(x1), to_px(y1));
             let (px2, py2) = (to_px(x2), to_px(y2));
             let (cw, ch) = (px2.saturating_sub(px1), py2.saturating_sub(py1));
-            // Audit (F8 #4): reject a tiny/degenerate region BEFORE crop_bgra — its
-            // `.max(1)` would otherwise coerce it into a 1×1 buffer and launch a
-            // spurious vision request on noise. The .slint already guards with a
-            // 16px-logical minimum + a fresh-drag check; this is the image-pixel
-            // backstop (covers DPI rounding + any future caller of this path).
             const MIN_CAPTURE_PX: u32 = 8;
             if cw < MIN_CAPTURE_PX || ch < MIN_CAPTURE_PX {
                 diag!(
@@ -494,7 +465,6 @@ pub(crate) fn launch_vision_for_bgra(
         let config = cfg.read();
         route_needs_mlx(AskRoute::Vision, &config)
     };
-    // ===== Placeholder vision tile (mirrors the PTT tile setup) =====
     let tile = match TileWindow::new() {
         Ok(t) => t,
         Err(e) => {
@@ -503,21 +473,14 @@ pub(crate) fn launch_vision_for_bgra(
         }
     };
     let seq = TILE_DISPLAY_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
-    // V5 — give the vision tile a real conversation id so its follow-up input
-    // appears + PttStreamSink seeds the conversation (incl. the screenshot) on
-    // done; follow-ups then route to the VISION endpoint (use_vision = true).
     let convo_id = CONVO_SEQ.fetch_add(1, Ordering::Relaxed) as i32;
     tile.set_sequence(seq as i32);
-    // Per-mode tile chrome. The trigger_label doubles as the "Practice" badge
-    // so a test-practice answer is always visibly marked as self-check.
-    // Placeholders are plain text — no hourglass glyph (tofu square on the
-    // skia font fallback; project no-tofu rule).
     let ui_is_ru = cfg.read().ui_is_ru();
     let (title_s, source_s, trigger_s, placeholder_s) = vision_tile_copy(mode, ui_is_ru);
     tile.set_tile_title(SharedString::from(title_s));
     tile.set_source_label(SharedString::from(source_s));
     tile.set_trigger_label(SharedString::from(trigger_s));
-    tile.set_trigger_color(slint::Color::from_rgb_u8(0x22, 0xd3, 0xee)); // cyan
+    tile.set_trigger_color(slint::Color::from_rgb_u8(0x22, 0xd3, 0xee));
     tile.set_convo_id(convo_id);
     tile.set_followup_busy(true);
     wire_tile_drag(&tile);
@@ -534,9 +497,7 @@ pub(crate) fn launch_vision_for_bgra(
     let bridge_for_close = bridge.clone();
     tile.on_close_clicked(move || {
         if let Some(t) = weak_close.upgrade() {
-            // Closing the tile that's being read aloud must silence it.
             super::stop_if_speaking(t.get_convo_id());
-            // FIX #8 — prune this tile's conversation (no-op if none).
             bridge_for_close.drop_conversation(t.get_convo_id());
             let close_hwnd = grab_hwnd(t.window()).ok();
             let _ = t.hide();
@@ -565,9 +526,6 @@ pub(crate) fn launch_vision_for_bgra(
             toggle_tile_maximize(hwnd, &t);
         }
     });
-    // V5 — follow-up: a question typed in the tile continues the dialog ABOUT the
-    // screenshot via the VISION endpoint (use_vision = true). The conversation
-    // PttStreamSink seeds on done already carries the image.
     {
         let weak_fu = tile.as_weak();
         let bridge_fu = bridge.clone();
@@ -588,8 +546,6 @@ pub(crate) fn launch_vision_for_bgra(
             );
         });
     }
-    // V5 — 🔄 regenerate: re-run the screenshot query (vision endpoint) for a
-    // longer / different answer when the first one was too short.
     tile.set_can_regenerate(true);
     {
         let weak_re = tile.as_weak();
@@ -611,15 +567,6 @@ pub(crate) fn launch_vision_for_bgra(
             );
         });
     }
-    // ТЗ 2026-07-06 (B) — 🧠 escalate: re-send the SAME screenshot to the smart
-    // cloud. No stashing needed: the conversation already holds the base64 image
-    // (PttStreamSink seeds it on Done) and `fire_regenerate` re-sends a 1-turn
-    // convo verbatim. One-shot: vision tiles have no shared LiveRoute, so later
-    // follow-ups return to the Vision endpoint. Gate mirrors `wire_escalate` but
-    // on the VISION endpoint: only offer when the answer was local (cloud→cloud
-    // is a no-op) AND a cloud bearer exists (no dead affordance), and never on
-    // the OCR path (platform-local text has no cloud upgrade; also covers the
-    // OCR→VLM fallback, which still enters this fn with mode == Ocr).
     if (mlx_pending || ep.as_ref().is_some_and(|e| e.is_local))
         && !cfg.read().ai_bearer.trim().is_empty()
         && !matches!(mode, vision::VisionMode::Ocr)
@@ -632,7 +579,6 @@ pub(crate) fn launch_vision_for_bgra(
         let slint_rt_es = slint_rt.clone();
         let rt_handle_es = rt_handle.clone();
         tile.on_escalate_clicked(move || {
-            // Cloud badge — parity with the text tile's 🧠 (egress stays legible).
             if let Some(t) = weak_es.upgrade() {
                 t.set_trigger_label(SharedString::from("cloud (escalated)"));
                 t.set_trigger_color(slint::Color::from_rgb_u8(0x38, 0xbd, 0xf8));
@@ -649,9 +595,6 @@ pub(crate) fn launch_vision_for_bgra(
             );
         });
     }
-    // V5 — 🎤 voice follow-up (record → STT → ask via the VISION endpoint, so
-    // the spoken question stays about the screenshot; escalate above is one-shot
-    // and does not re-route this).
     wire_voice_followup(&tile, convo_id, live_route(conversation_route), cfg);
     wire_copy(&tile, convo_id, bridge);
     wire_speak(&tile, convo_id, bridge);
@@ -674,7 +617,6 @@ pub(crate) fn launch_vision_for_bgra(
             let text = match res {
                 Ok(Ok(text)) => Some(text),
                 Ok(Err(e)) => {
-                    // Detail to the local log only; the tile stays generic.
                     diag!("[overlay-host] OCR failed: {e:#}");
                     None
                 }
@@ -786,7 +728,6 @@ pub(crate) fn launch_vision_for_bgra(
         let model = ep.model.clone();
         let is_local = ep.is_unmetered();
         let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
-            // Local vision is free; cloud vision bills.
             let micro = if is_local { 0 } else { micro };
             let mut state = slint_replay::runtime_state::lock(&slint_rt_for_cost);
             state.session_cost_microcents = state.session_cost_microcents.saturating_add(micro);
@@ -802,10 +743,6 @@ pub(crate) fn launch_vision_for_bgra(
         {
             Ok(Ok(u)) => u,
             Ok(Err(e)) => {
-                // Detail to the local log only; the tile message stays generic
-                // for consistency with classify_ai_error (the encode error is
-                // local image data, but this is the one streaming path that
-                // didn't route through a sanitizer).
                 diag!("[overlay-host] F8 encode failed: {e}");
                 ptt_tile_error(
                     weak_for_title.clone(),
@@ -850,8 +787,6 @@ pub(crate) fn launch_vision_for_bgra(
                 vision_context,
             ),
         };
-        // Dedicated per-tile sink (convo_id = -1 → no conversation fold) so a
-        // vision answer streams independently of any live text answer.
         let sink: Arc<dyn RuntimeEvents> = Arc::new(PttStreamSink::new(
             bridge_for_task.clone(),
             events_inner.clone(),
@@ -860,8 +795,6 @@ pub(crate) fn launch_vision_for_bgra(
             user_turn_markdown(&usr_full),
             messages.clone(),
         ));
-        // Audit D1 — the SAME purpose must tag the paired AiResponse that
-        // ask_stream_loop journals (previously hardcoded "live_ask" there).
         let purpose = "vision_ask";
         if let Some(j) = journal_for_loop.as_ref() {
             j.write(&journal::JournalEvent::AiRequest {

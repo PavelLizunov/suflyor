@@ -1,19 +1,15 @@
 /// USD price per 1M tokens for each model. Re-verify on each model launch.
 pub fn pricing_per_million(model: &str) -> (f64, f64) {
-    // (input, output)
     match model {
-        // Official OpenAI pricing, verified 2026-08-09:
-        // https://developers.openai.com/api/docs/models/gpt-5.2
         "gpt-5.2" | "gpt-5.2-chat-latest" => (1.75, 14.0),
         "gpt-5.2-pro" => (21.0, 168.0),
         "claude-haiku-4-5" => (1.0, 5.0),
         "claude-sonnet-4-5" | "claude-sonnet-4-6" => (3.0, 15.0),
-        // Opus 4.6/4.7/4.8 are all $5/$25 — the old (15,75) over-billed 3×.
         "claude-opus-4-5" | "claude-opus-4-6" | "claude-opus-4-7" | "claude-opus-4-8" => {
             (5.0, 25.0)
         }
         "claude-fable-5" | "claude-mythos-5" => (10.0, 50.0),
-        _ => (3.0, 15.0), // safe default for an unknown model
+        _ => (3.0, 15.0),
     }
 }
 

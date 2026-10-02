@@ -34,23 +34,12 @@ pub use hardware_profile::*;
 pub use model_choice::*;
 pub use model_state::*;
 
-// ---- pinned model coordinates (HuggingFace) + exact sizes (integrity) -------
-// RAM-safe fallback: Gemma 4 12B QAT. It is always installed so a machine that
-// does not qualify for the 26B matrix, or whose 26B file disappears, still has
-// a verified local model to launch.
 pub(super) const GEMMA_URL: &str = "https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/980b060c40a8539ac159e0501a3e0f66a6365af3/gemma-4-12B-it-qat-UD-Q4_K_XL.gguf";
 pub(super) const GEMMA_FILE: &str = "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf";
 pub(super) const GEMMA_SIZE: u64 = 6_716_356_800;
 pub(super) const GEMMA_SHA256: &str =
     "90fd44e29e0d7cffeb0fd00dc73cfdab9ed0b0e95306ecf7821ea634c940c370";
 
-// The optional fast 4B profile (also the model the previous release installed).
-// Pinned to an immutable Hugging Face revision with the exact LFS size + SHA-256
-// (read from the revision's LFS pointer) so the on-demand 4B download verifies
-// byte-for-byte and an upgraded install keeps recognising the file. Never
-// resolved from /main. Keep recognising it during an upgrade: replacing its
-// persisted model id with the new 12B filename before the user has downloaded
-// 12B would leave an otherwise working installation with no launchable model.
 pub(super) const LEGACY_GEMMA_URL: &str = "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/bfc15c382204943c3a8fff0c750b94ae2364d7a3/gemma-4-E4B-it-Q4_K_M.gguf";
 pub(super) const LEGACY_GEMMA_FILE: &str = "gemma-4-E4B-it-Q4_K_M.gguf";
 pub(super) const LEGACY_GEMMA_SIZE: u64 = 4_977_171_584;
@@ -62,8 +51,6 @@ pub(super) const LEGACY_GEMMA_SHA256: &str =
 /// upgraded install never corrupt-resumes or re-downloads a working file.
 pub(super) const LEGACY_GEMMA_SIZE_PREV: u64 = 4_977_169_568;
 
-// Owner-approved primary model. The byte size and SHA-256 are independently
-// pinned from the immutable Hugging Face revision c099eb4.
 pub(super) const GEMMA26_URL: &str = "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/c099eb4/gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf";
 pub(super) const GEMMA26_FILE: &str = "gemma-4-26B-A4B-it-UD-Q2_K_XL.gguf";
 pub(super) const GEMMA26_SIZE: u64 = 10_546_934_240;
@@ -76,8 +63,6 @@ pub(super) const MMPROJ26_SIZE: u64 = 1_193_058_784;
 pub(super) const MMPROJ26_SHA256: &str =
     "418a6d8723067cd712235facbbc5cba6c8fbbd413fc1292d2aace5a027d5a42f";
 
-// Vision projector for the 12B fallback. Uses the model's own gemma4uv
-// projector and is only attached on a compatible llama.cpp build.
 pub(super) const MMPROJ_URL: &str =
     "https://huggingface.co/unsloth/gemma-4-12B-it-qat-GGUF/resolve/main/mmproj-F16.gguf";
 pub(super) const MMPROJ_FILE: &str = "mmproj-12b-F16.gguf";
@@ -150,7 +135,6 @@ pub fn blocking_acquire_lifecycle(
 /// the UI can show "Отменено" instead of treating it as a failure.
 pub const CANCEL_SENTINEL: &str = "__cancelled__";
 
-// ---- public API ------------------------------------------------------------
 
 /// Options for an install run.
 #[derive(Debug, Clone)]
@@ -342,14 +326,10 @@ pub fn apply_result(cfg: &mut crate::config::Config, res: &LocalAiResult) {
     cfg.ai_local_custom_gguf.clear();
     cfg.ai_local_prep_model.clear();
     cfg.ai_local_quality = res.ai_local_quality;
-    // Default STT to Whisper (mixed RU+EN); the GigaAM dir is also filled so the
-    // user can switch to GigaAM (best Russian) in Settings without re-installing.
     cfg.stt_provider = "whisper".to_string();
     cfg.stt_whisper_url = WHISPER_BASE_URL.to_string();
     cfg.stt_whisper_model = WHISPER_MODEL_ID.to_string();
     cfg.stt_gigaam_dir = res.stt_gigaam_dir.clone();
-    // Preserve an explicitly configured cloud/separate vision endpoint; only a
-    // route that resolves back to managed :8080 is disabled.
     cfg.ai_local_vision = res.ai_local_vision;
     if cfg.ai_local_vision {
         cfg.vision_provider = "same".to_string();
@@ -381,10 +361,6 @@ pub fn install(
     let mut prefer_quality = hardware_profile.uses_primary_26b();
     on(Progress::Step(hardware_profile_status(hardware_profile)));
 
-    // P1.5 — fail fast on insufficient disk BEFORE pulling gigabytes. Count only
-    // what we'd actually fetch: a model already complete at its dest is skipped
-    // (mirrors reuse_if_available's dest check), and the server binaries add a
-    // flat allowance only when not already installed.
     {
         let mut need: u64 = 0;
         if !opts.skip_llama {
@@ -427,7 +403,6 @@ pub fn install(
     };
     let mut cuda_version: Option<String> = None;
 
-    // ---- llama.cpp + Gemma -------------------------------------------------
     if !opts.skip_llama {
         on(Progress::Step("Installing llama.cpp".to_string()));
         std::fs::create_dir_all(&llama_dir)?;
@@ -447,10 +422,6 @@ pub fn install(
             if let Some(cu) = &pick.cudart_url {
                 download_and_extract(cu, pick.cudart_size, "CUDA runtime", &llama_dir, cancel, on)?;
             }
-            // Stamp the build tag (e.g. "b9626") so the engine-version gate knows
-            // whether this binary can load the 12B's gemma4uv vision projector, and
-            // so the updater can compare installed-vs-latest. Best-effort: a missing
-            // stamp just means 12B vision stays gated off (safe) until next update.
             write_build_stamp(&llama_dir, &rel.tag_name);
         }
         if prefer_quality && !llama_build_supports_26b(&llama_dir) {
@@ -459,8 +430,6 @@ pub fn install(
             )));
             prefer_quality = false;
         }
-        // Reuse an existing Gemma (e.g. a prior manual ~\llama.cpp) instead of
-        // re-downloading 5 GB.
         let gemma_dest = llama_dir.join(GEMMA_FILE);
         if reuse_if_available(
             &gemma_dest,
@@ -474,8 +443,6 @@ pub fn install(
         }
         verify_sha256(&gemma_dest, GEMMA_SHA256, "Gemma model")?;
 
-        // Vision projector (mmproj) — enables image reading on the same model so
-        // F8 screenshots can be analysed locally without any cloud egress.
         let mmproj_dest = llama_dir.join(MMPROJ_FILE);
         if reuse_if_available(
             &mmproj_dest,
@@ -526,7 +493,6 @@ pub fn install(
         }
     }
 
-    // ---- whisper.cpp + Whisper-turbo --------------------------------------
     if !opts.skip_whisper {
         bail_if_cancelled(cancel)?;
         on(Progress::Step("Installing whisper.cpp".to_string()));
@@ -535,8 +501,6 @@ pub fn install(
             && find_exe(&whisper_dir, "server.exe").is_none()
         {
             let assets = github_assets(WHISPER_REPO)?;
-            // whisper.cpp ships CPU + cuBLAS(NVIDIA) builds only — no Vulkan; so GPU
-            // whisper stays NVIDIA-only, AMD/Intel use the CPU whisper build (Баг2).
             let (url, size) = pick_whisper(&assets, gpu != GpuKind::Nvidia)?;
             download_and_extract(&url, size, "whisper.cpp", &whisper_dir, cancel, on)?;
         }
@@ -561,14 +525,6 @@ pub fn install(
         verify_sha256(&whisper_dest, WHISPER_SHA256, "Whisper model")?;
     }
 
-    // ---- GigaAM-v3 (in-process; no server) — OPTIONAL local STT -----------
-    // NON-FATAL (v0.10.2): GigaAM is the *optional* best-Russian STT; the default
-    // STT is Whisper (see `apply_result`) and cloud Whisper also remains. So a
-    // GigaAM hiccup must NOT abort the install before the llama-server (LLM)
-    // launches. Before this, a tester's vocab.txt download (HF served an HTML
-    // error page) aborted the whole install at the `?` → gemma never deployed +
-    // server never started. Now we log + continue; `gigaam_ok` gates the dir we
-    // hand back so STT cleanly stays on Whisper if GigaAM didn't complete.
     let mut gigaam_ok = false;
     if !opts.skip_gigaam {
         bail_if_cancelled(cancel)?;
@@ -588,8 +544,6 @@ pub fn install(
                 )?;
             }
             verify_sha256(&giga_dest, GIGAAM_SHA256, "GigaAM model")?;
-            // vocab.txt — write the BUNDLED copy (no flaky HF download for this
-            // 2 KB file). Fall back to the network only if the embedded write fails.
             let vocab_dest = gigaam_dir.join("vocab.txt");
             if std::fs::write(&vocab_dest, GIGAAM_VOCAB).is_err() {
                 curl_small(GIGAAM_VOCAB_URL, &vocab_dest)?;
@@ -609,7 +563,6 @@ pub fn install(
         }
     }
 
-    // ---- launch servers ----------------------------------------------------
     let mut servers = InstallServerCleanup::default();
     if !opts.skip_llama {
         // The lock may have been recorded while a long model download was in
@@ -620,9 +573,6 @@ pub fn install(
         on(Progress::Step("Starting llama-server :8080".to_string()));
         let exe = find_exe(&llama_dir, "llama-server.exe")
             .context("llama-server.exe not found after install")?;
-        // Free :8080 of OUR stale/projector-less server so the fresh --mmproj
-        // server can bind. Owner-aware: if a DIFFERENT app holds :8080, fail with
-        // a clear conflict instead of killing it (audit P0.1).
         let had_llama = llama_reachable();
         let used_vram = had_llama
             .then(detect_nvidia_memory_mib)
@@ -695,23 +645,14 @@ pub fn install(
         servers.children.push(child);
     }
 
-    // ---- wait for llama readiness + verify GPU offload --------------------
     let mut on_gpu = false;
     let mut effective_gpu = gpu;
     if !opts.skip_llama {
         on(Progress::Step("Waiting for the model to load".to_string()));
-        // The user-facing message (shown as the tile's {e}) must be actionable RU;
-        // the inner detail only reaches the log via {e:#}.
         const NOT_READY_RU: &str =
             "Локальная модель установилась, но не смогла запуститься на этом \
              компьютере (не успела прогреться). Попробуйте переустановить, либо \
              включите облачный AI в Настройках → AI.";
-        // P0.2: fail (or fall back) if the model never loads or can't generate —
-        // don't report success on a wedged server.
-        // A stale listener can answer generic readiness while the child we just
-        // launched has already failed to bind. Require both that exact child to
-        // remain alive and that `/models` advertises the alias it was launched
-        // with before this install can persist its profile.
         let expected_alias = if prefer_quality {
             GEMMA26_FILE
         } else {
@@ -730,10 +671,6 @@ pub fn install(
                 )
             });
         if let Err(e) = ready {
-            // If a GPU launch cannot become ready, restore the always-installed
-            // 12B fallback. A failed 26B first retries 12B with llama.cpp's
-            // automatic GPU fit; a failed 12B (or failed GPU-fit retry) gets one
-            // final CPU launch.
             if gpu != GpuKind::None {
                 log::warn!(
                     "local-ai: selected launch not ready ({e:#}); falling back to Gemma 12B"
@@ -753,9 +690,6 @@ pub fn install(
                     .context(NOT_READY_RU);
                 }
                 if !servers.children.is_empty() {
-                    // Reap the failed llama's handle (its process was already killed
-                    // by the port-free above) so the Child isn't dropped unreaped
-                    // (clippy::zombie_processes). Do NOT touch whisper (servers[1..]).
                     let mut dead = servers.children.remove(0);
                     let _ = dead.wait();
                 }
@@ -846,8 +780,6 @@ pub fn install(
                 on(Progress::Gpu(verdict));
             }
             GpuKind::Other => {
-                // Vulkan offload isn't visible to nvidia-smi; the model loaded +
-                // generated above, so report GPU. The tester confirms the speedup.
                 on_gpu = true;
                 on(Progress::Gpu("GPU (Vulkan)".to_string()));
             }
@@ -855,7 +787,6 @@ pub fn install(
         }
     }
     if !opts.skip_whisper {
-        // P0.2: whisper had no strict readiness check after launch.
         on(Progress::Step("Waiting for whisper-server".to_string()));
         wait_ready(&format!("{WHISPER_BASE_URL}/models"), 60)
             .context("whisper-server did not become ready")?;
@@ -877,9 +808,6 @@ pub fn install(
         ai_local_quality: prefer_quality,
         ai_local_vision,
         hardware_profile,
-        // Only advertise the GigaAM dir if it actually completed — otherwise STT
-        // stays cleanly on Whisper (the default) instead of pointing at a partial
-        // GigaAM that would bail at session start.
         stt_gigaam_dir: if gigaam_ok {
             gigaam_dir.to_string_lossy().to_string()
         } else {
@@ -1181,7 +1109,6 @@ fn listener_pids_on_port<'a>(netstat: &'a str, port: &str) -> Vec<&'a str> {
     let suffix = format!(":{port}");
     let mut pids = Vec::new();
     for line in netstat.lines() {
-        // Columns: Proto  LocalAddr  ForeignAddr  State  PID
         let cols: Vec<&str> = line.split_whitespace().collect();
         if cols.len() >= 5
             && cols[3].eq_ignore_ascii_case("LISTENING")
@@ -1226,7 +1153,6 @@ fn stop_listener_on_port(port: &str, root: &Path) -> bool {
     let mut killed: Vec<String> = Vec::new();
     let mut free_of_strangers = true;
     for line in text.lines() {
-        // Columns: Proto  LocalAddr  ForeignAddr  State  PID
         let cols: Vec<&str> = line.split_whitespace().collect();
         if cols.len() >= 5
             && cols[3].eq_ignore_ascii_case("LISTENING")
@@ -1335,9 +1261,6 @@ pub fn switch_local_model(
         log::info!("local AI: model switch skipped while deep-locked");
         return (ModelSwitch::FailedToStart, Vec::new());
     }
-    // This is a worker-only launch boundary. A UI presence query is deliberately
-    // stat-only, but loading the primary always performs (or reuses) an exact
-    // SHA-256 review before we stop the currently serving fallback.
     if target.is_custom() {
         if valid_custom_choice_path(&target).is_none() {
             return (ModelSwitch::TargetUnavailable, Vec::new());
@@ -1354,7 +1277,6 @@ pub fn switch_local_model(
         .then(detect_nvidia_memory_mib)
         .flatten()
         .map(|(used, _)| used);
-    // A foreign owner we can't kill means the old model stays up — don't lie.
     if !free_llama_port(root) {
         return (ModelSwitch::PortBusy, Vec::new());
     }
@@ -1363,7 +1285,6 @@ pub fn switch_local_model(
         return (ModelSwitch::FailedToStart, Vec::new());
     }
     let baseline_vram = detect_nvidia_memory_mib().map(|(used, _)| used);
-    // Let the OS release the port before the relaunch binds it.
     std::thread::sleep(Duration::from_millis(800));
     let expected = llama_choice_name(root, &target);
     let mut started = ensure_servers(root, true, want_whisper, target.clone());
@@ -1419,7 +1340,6 @@ pub fn ensure_llama_serving(root: &Path, choice: ManagedLlamaChoice) -> (ModelSw
         return (ModelSwitch::FailedToStart, Vec::new());
     }
     if llama_reachable() {
-        // Alive (serving or cold-loading) — do not disturb.
         return (ModelSwitch::Switched, Vec::new());
     }
     restart_llama_server(root, choice)
@@ -1536,7 +1456,6 @@ fn restart_llama_server_for_route_inner(
     }
 }
 
-// ---- engine auto-update (keep llama.cpp fresh) -----------------------------
 
 /// How long between unattended boot-time "is there a newer llama.cpp?" checks.
 /// llama.cpp tags builds almost daily; a weekly cadence keeps the engine current
@@ -1575,7 +1494,7 @@ fn now_unix() -> u64 {
 pub fn should_check_engine_update(root: &Path) -> bool {
     let llama_dir = root.join("llama.cpp");
     if find_exe(&llama_dir, "llama-server.exe").is_none() {
-        return false; // first install is install()'s job, not the updater's.
+        return false;
     }
     match std::fs::read_to_string(llama_dir.join(".update-check"))
         .ok()
@@ -1639,10 +1558,6 @@ pub fn update_llama_engine(
     }
     bail_if_cancelled(cancel)?;
 
-    // Download the matching build into a CLEAN staging dir (never touch the live
-    // binaries until the new ones are proven good). The staging dir is a SIBLING
-    // of `llama.cpp` (NOT inside it) so `find_exe(&llama_dir, …)` — which recurses
-    // — can never pick up the half-downloaded staged binary and launch it on :8080.
     let gpu = detect_gpu();
     let pick = pick_llama(&rel.assets, gpu)?;
     let staging = root.join(".llama-staging-update");
@@ -1662,7 +1577,6 @@ pub fn update_llama_engine(
     }
     bail_if_cancelled(cancel)?;
 
-    // Verify-before-swap: prove the staged engine runs on THIS box.
     on(Progress::Step("Verifying the new engine".into()));
     let staged_exe = match find_exe(&staging, "llama-server.exe") {
         Some(e) => e,
@@ -1709,10 +1623,6 @@ pub fn update_llama_engine(
         result = swap_engine_binaries(&staging, &llama_dir, &backup_dir);
     }
     result.context("swap engine binaries (engine still locked after retries)")?;
-    // P1-2: post-swap sanity — the live engine MUST now exist before we stamp the
-    // build as updated. swap_engine_binaries already bails when the staged build
-    // has no llama-server.exe; this guards any residual "swap returned Ok but the
-    // live exe isn't there" path so the UI never reports a phantom update.
     if find_exe(&llama_dir, "llama-server.exe").is_none() {
         let _ = std::fs::remove_dir_all(&staging);
         return Ok(EngineUpdate::Skipped {
@@ -1721,9 +1631,6 @@ pub fn update_llama_engine(
     }
     let _ = std::fs::remove_dir_all(&staging);
     write_build_stamp(&llama_dir, &rel.tag_name);
-    // fs-audit #1 — verify-before-swap means only the immediately-previous
-    // engine is ever a rollback candidate, so keep just the newest backup; the
-    // rest accumulated unbounded (~150-300 MB each) before this.
     let _ = prune_engine_backups(root, 1);
 
     Ok(EngineUpdate::Updated {
@@ -1747,13 +1654,8 @@ fn verify_engine_runs(
         return false;
     }
     let root = llama_dir.parent().unwrap_or(llama_dir);
-    // Skip the projector: we're verifying the BINARY, not vision, and a
-    // text-only load is lighter on VRAM/time. Prefer the current 12B fallback,
-    // but retain the legacy 4B load check for an in-place upgrade where 12B has
-    // not been installed yet.
     let model = complete_fallback_llama_gguf(llama_dir);
     let Some(model) = model else {
-        // No weights yet — at least prove the image + its DLLs load.
         return run_capture(&staged_exe.to_string_lossy(), &["--version"])
             .map(|o| o.status.success())
             .unwrap_or(false);
@@ -1805,12 +1707,6 @@ fn swap_engine_binaries(staging: &Path, live: &Path, backup: &Path) -> Result<()
             .and_then(|e| e.to_str())
             .is_some_and(|e| e.eq_ignore_ascii_case("exe") || e.eq_ignore_ascii_case("dll"))
     };
-    // RECURSIVELY collect engine files. The llama.cpp / cudart zips sometimes nest
-    // the binaries in a subfolder (or the two zips extract into different subdirs);
-    // a direct-children-only read then copies ZERO files while verify-before-swap
-    // (which finds llama-server.exe recursively) still passes — stamping a phantom
-    // "updated" with the live engine unchanged (P1-2). Reject a duplicate engine
-    // filename across locations rather than guess which copy to install.
     let mut by_name: std::collections::BTreeMap<std::ffi::OsString, PathBuf> = Default::default();
     let mut stack = vec![staging.to_path_buf()];
     while let Some(d) = stack.pop() {
@@ -1833,8 +1729,6 @@ fn swap_engine_binaries(staging: &Path, live: &Path, backup: &Path) -> Result<()
             }
         }
     }
-    // Must install at least the server binary — otherwise this is not a real engine
-    // and we must NOT report success / write the build stamp (P1-2).
     let has_server = by_name.keys().any(|n| {
         n.to_str().is_some_and(|s| {
             let lower = s.to_ascii_lowercase();
@@ -1886,10 +1780,6 @@ fn prune_engine_backups(root: &Path, keep: usize) -> usize {
                 return None;
             }
             let name = p.file_name()?.to_str()?;
-            // Match ONLY the updater's own scheme: `llama.cpp.backup-b<digits>`
-            // (the previous build number) or exactly `llama.cpp.backup-prev`. The
-            // digit check (not a bare `starts_with("…-b")`) means a hand-made
-            // `llama.cpp.backup-baseline` / `-may` snapshot is never pruned.
             let ours = name == "llama.cpp.backup-prev"
                 || name.strip_prefix("llama.cpp.backup-b").is_some_and(|rest| {
                     !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit())
@@ -1904,7 +1794,7 @@ fn prune_engine_backups(root: &Path, keep: usize) -> usize {
     if backups.len() <= keep {
         return 0;
     }
-    backups.sort_by_key(|b| std::cmp::Reverse(b.0)); // newest first
+    backups.sort_by_key(|b| std::cmp::Reverse(b.0));
     let mut removed = 0usize;
     for (_, p) in backups.into_iter().skip(keep) {
         match std::fs::remove_dir_all(&p) {
@@ -1969,16 +1859,7 @@ fn ensure_servers_for_route(
             crate::deep_lock::deep_lock_active(),
             allow_deep_locked_launch,
         );
-    // Any GPU (NVIDIA CUDA or AMD/Intel Vulkan build) → let current llama.cpp
-    // auto-fit layers; CPU-only explicitly disables offload.
     let use_gpu = detect_gpu() != GpuKind::None;
-    // NOTE: deliberately launch-only — do NOT kill+relaunch a server that is
-    // already answering. Live smoke showed that relaunching the (warm) server on
-    // startup defeats the model warm-up (the warm-up then hits a cold-loading
-    // server → HTTP 503) — and an orphan launched WITH --mmproj already has the
-    // projector, so the relaunch is usually needless. The rare projector-less
-    // orphan (old install force-killed) is accepted; install()'s owner-aware
-    // stop_listener_on_port still frees :8080 for a fresh install.
     if want_llama && !is_reachable(&format!("{LLAMA_BASE_URL}/models")) {
         warn_if_nvidia_vram_busy(None);
         let llama_dir = root.join("llama.cpp");
@@ -2138,7 +2019,6 @@ fn llama_server_args(
     args
 }
 
-// ---- GitHub release asset selection ---------------------------------------
 
 #[derive(Debug, Deserialize)]
 struct GhAsset {
@@ -2199,8 +2079,8 @@ fn github_assets(repo: &str) -> Result<Vec<GhAsset>> {
 /// `llama-b9410-bin-win-cuda-13.3-x64.zip` -> (13, 3).
 #[allow(dead_code)]
 fn cuda_version_of(name: &str) -> Option<(u32, u32)> {
-    let after = name.split("-bin-win-cuda-").nth(1)?; // "13.3-x64.zip"
-    let ver = after.strip_suffix("-x64.zip")?; // "13.3"
+    let after = name.split("-bin-win-cuda-").nth(1)?;
+    let ver = after.strip_suffix("-x64.zip")?;
     let mut it = ver.split('.');
     let maj: u32 = it.next()?.parse().ok()?;
     let min: u32 = it.next()?.parse().ok()?;
@@ -2255,7 +2135,6 @@ fn pick_llama(assets: &[GhAsset], _gpu: GpuKind) -> Result<LlamaPick> {
                     version: Some(format!("{maj}.{min}")),
                 });
             }
-            // No CUDA asset in this release → fall through to the CPU build.
         }
         if _gpu == GpuKind::Other {
             if let Some(vk) = assets.iter().find(|a| {
@@ -2269,7 +2148,6 @@ fn pick_llama(assets: &[GhAsset], _gpu: GpuKind) -> Result<LlamaPick> {
                     version: Some("Vulkan".to_string()),
                 });
             }
-            // No Vulkan asset in this release → fall through to the CPU build.
         }
         let cpu = assets
             .iter()
@@ -2288,8 +2166,8 @@ fn pick_llama(assets: &[GhAsset], _gpu: GpuKind) -> Result<LlamaPick> {
 /// Parse the CUDA version from a whisper cuBLAS asset name, e.g.
 /// `whisper-cublas-12.4.0-bin-x64.zip` -> `(12, 4, 0)`.
 fn whisper_cublas_version_of(name: &str) -> Option<(u32, u32, u32)> {
-    let after = name.strip_prefix("whisper-cublas-")?; // "12.4.0-bin-x64.zip"
-    let ver = after.strip_suffix("-bin-x64.zip")?; // "12.4.0"
+    let after = name.strip_prefix("whisper-cublas-")?;
+    let ver = after.strip_suffix("-bin-x64.zip")?;
     let mut it = ver.split('.');
     let maj: u32 = it.next()?.parse().ok()?;
     let min: u32 = it.next()?.parse().ok()?;
@@ -2333,7 +2211,6 @@ fn pick_whisper(assets: &[GhAsset], force_cpu: bool) -> Result<(String, u64)> {
         .ok_or_else(|| anyhow!("no whisper-bin-x64.zip asset"))
 }
 
-// ---- downloads + extraction (curl.exe + tar.exe) ---------------------------
 
 /// Download (resumable) + SHA-verify EXACTLY the requested bundled model into
 /// `root`, on demand from a Settings model button. Mirrors the installer's
@@ -2363,9 +2240,6 @@ pub fn download_managed_model(
     std::fs::create_dir_all(&llama_dir)
         .with_context(|| format!("create llama dir {}", llama_dir.display()))?;
     let dest = llama_dir.join(spec.file);
-    // A previous-release 4B file is complete and launchable at its own size.
-    // Never resume into it (curl -C - would append new-spec bytes and corrupt
-    // it) and never re-download it — treat it as already installed.
     if model == ManagedModel::Legacy4B && file_len(&dest) == LEGACY_GEMMA_SIZE_PREV {
         on(Progress::Step(format!("{}: файл уже загружен", spec.label)));
         return Ok(());
@@ -2490,16 +2364,12 @@ fn archive_entry_is_safe(entry: &str) -> bool {
         return true;
     }
     if e.starts_with('/') {
-        return false; // posix-absolute or (normalised) UNC / leading backslash
+        return false;
     }
     let b = e.as_bytes();
     if b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' {
-        return false; // drive-qualified (C:\...)
+        return false;
     }
-    // Reject any `..` traversal component or traversal aliases. Windows strips
-    // trailing dots and spaces from path components, so components like ".. ",
-    // ".. .", "...", "....", ". ." resolve to traversal aliases or "..".
-    // A bare "." is the harmless current-dir, and tar may emit "./"-prefixed entries.
     !e.split('/').any(|c| {
         let is_dots_spaces = !c.is_empty() && c.chars().all(|ch| ch == '.' || ch == ' ');
         if is_dots_spaces {
@@ -2511,7 +2381,6 @@ fn archive_entry_is_safe(entry: &str) -> bool {
 }
 
 fn extract_zip(zip: &Path, dest_dir: &Path) -> Result<()> {
-    // System32-pinned bsdtar (P1-1) so a `tar.exe` earlier on PATH can't be run.
     let tar = system_tar();
     let tar_s = tar.to_string_lossy().to_string();
     // SECURITY (P1-1): list entries and reject any that would escape dest BEFORE
@@ -2528,7 +2397,6 @@ fn extract_zip(zip: &Path, dest_dir: &Path) -> Result<()> {
             bail!("refusing unsafe archive entry: {entry}");
         }
     }
-    // bsdtar (tar.exe) on Windows 10 1803+ extracts zip archives.
     let status = launch_hidden_wait(
         &tar_s,
         &[
@@ -2656,14 +2524,12 @@ fn curl_small(url: &str, out: &Path) -> Result<()> {
             ],
         )?;
         if status.success() && file_len(out) > 0 {
-            // Reject a CDN/HTTP error page that landed with a 200 body.
             let looks_html = std::fs::read(out).ok().and_then(|b| b.first().copied()) == Some(b'<');
             if !looks_html {
                 return Ok(());
             }
             last_err = format!("download looks like an HTML error page: {}", out.display());
         }
-        // Clean up the partial/bad file before the next attempt (or before bail).
         let _ = std::fs::remove_file(out);
         if attempt < ATTEMPTS {
             std::thread::sleep(std::time::Duration::from_secs(2));
@@ -2672,7 +2538,6 @@ fn curl_small(url: &str, out: &Path) -> Result<()> {
     bail!("{last_err} (after {ATTEMPTS} attempts)");
 }
 
-// ---- GPU verification + readiness ------------------------------------------
 
 /// True if `nvidia-smi`'s compute-apps list mentions `llama-server`.
 fn parse_compute_apps(stdout: &str) -> bool {
@@ -2739,7 +2604,6 @@ fn llama_reply_has_text_content(body: &str) -> bool {
     !content.trim().is_empty()
 }
 
-// ---- process + fs helpers --------------------------------------------------
 
 fn preflight() -> Result<()> {
     if run_capture(curl_exe(), &["--version"]).is_err() {
@@ -2824,7 +2688,6 @@ pub(super) fn cached_pinned_file_matches(
         }
     }
     let matches = pinned_file_matches(path, expected_size, expected_sha256);
-    // Do not cache a result for bytes that changed while they were being read.
     if file_stamp(path).as_ref() != Some(&stamp) {
         return false;
     }
@@ -2884,10 +2747,6 @@ pub(super) fn quality_model_verified(root: &Path) -> bool {
     let path = quality_gguf_path(root);
     let verified = cached_pinned_file_matches(&path, GEMMA26_SIZE, GEMMA26_SHA256);
     if !verified {
-        // Settings deliberately uses a cheap size-only presence check. Once a
-        // worker-side SHA review rejects a same-size file, remove it so that
-        // presence check exposes the normal re-download control. Keeping this
-        // here covers both an explicit profile switch and cold-start fallback.
         discard_rejected_pinned_file(&path, GEMMA26_SIZE);
     }
     verified
@@ -3081,8 +2940,6 @@ fn spawn_hidden(exe: &str, args: &[&str]) -> Result<Child> {
 fn launch_hidden(exe: &Path, args: &[&str]) -> Result<Child> {
     let exe_s = exe.to_string_lossy().to_string();
     let child = spawn_hidden(&exe_s, args)?;
-    // Tie the server's lifetime to ours so a hard exit of THIS process can't
-    // orphan it on :8080 (see `assign_to_lifetime_job`).
     #[cfg(windows)]
     assign_to_lifetime_job(&child);
     Ok(child)

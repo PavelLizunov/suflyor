@@ -39,7 +39,6 @@ pub fn normalize_math_display(input: &str) -> String {
                     continue;
                 }
             } else if looks_like_math(&input[inner_start..]) {
-                // An unfinished math delimiter is safer and more useful verbatim.
                 return input.to_string();
             }
         }
@@ -149,8 +148,6 @@ fn normalize_pmatrices(input: &str) -> Option<String> {
         push_normalized(&mut out, &rest[..begin]);
         out.push('(');
         let body = &rest[body_start..body_end];
-        // Outside a math delimiter CommonMark unescapes TeX's `\\` row
-        // separator to `\ ` before this display-only pass sees it.
         let body = if body.contains("\\\\") {
             body.to_string()
         } else {
@@ -359,7 +356,6 @@ fn push_normalized(out: &mut String, text: &str) {
                         }
                     }
                 }
-                // Malformed or unknown commands remain literal.
                 out.push_str(&text[index..command_end]);
                 index = command_end;
                 continue;

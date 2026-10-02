@@ -223,8 +223,6 @@ fn render_loop(
     let (_def, min_period) = client
         .get_device_period()
         .map_err(|e| anyhow!("device period: {e}"))?;
-    // Declare STEREO and duplicate each mono sample to L+R (the suflyor-tts
-    // fix for one-ear mono upmix on some devices).
     let desired = WaveFormat::new(32, 32, &SampleType::Float, sample_rate as usize, 2, None);
     let mode = StreamMode::EventsShared {
         autoconvert: true,
@@ -319,8 +317,6 @@ fn render_loop(
                 padding,
             ) {
                 EmptyQueueAction::Finish => break,
-                // Do not refill the device after EOS: doing so keeps padding
-                // non-zero forever and prevents DONE from being emitted.
                 EmptyQueueAction::Drain => continue,
                 EmptyQueueAction::WriteSilence => {
                     let _ = render_client.write_to_device(avail, &silence[..avail * 8], None);
@@ -420,7 +416,6 @@ fn fill_output(
         stretcher.get_or_insert_with(|| suflyor_wsola::StreamingWsola::new(sample_rate, speed));
     match active.process(&fresh) {
         Ok(stretched) => output.extend(stretched),
-        // Playback must remain usable if one WSOLA chunk is rejected.
         Err(_) => output.extend(fresh),
     }
 }

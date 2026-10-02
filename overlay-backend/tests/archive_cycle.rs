@@ -35,7 +35,6 @@ fn full_cycle_record_transcribe_journal_index_archive() {
     let tmp = tempfile::tempdir().unwrap();
     let id = "2026-06-11_10-00-00_e2e1";
 
-    // ── 1) ЗАПИСЬ: рекордер пишет настоящие mic.wav / system.wav ──
     let rec_dir = tmp.path().join("recordings").join(id);
     {
         let rec = SessionRecorder::start_in(rec_dir.clone()).unwrap();
@@ -51,9 +50,8 @@ fn full_cycle_record_transcribe_journal_index_archive() {
             timestamp_ms: 10,
         });
         assert_eq!(rec.dropped_chunks(), 0);
-    } // drop → WAV-заголовки финализированы
+    }
 
-    // ── 2) РЕ-ТРАНСКРИБАЦИЯ: тот же загрузчик/валидатор, что у офлайн ре-STT ──
     let mic_pcm = load_wav_pcm(&rec_dir.join("mic.wav")).unwrap();
     assert_eq!(
         mic_pcm.len(),
@@ -61,11 +59,9 @@ fn full_cycle_record_transcribe_journal_index_archive() {
         "записанные сэмплы читаются без потерь"
     );
     assert!(rec_dir.join("system.wav").is_file());
-    // STT-движок подменён готовым текстом; сборка транскрипта — боевая.
     let lines = assemble_lines("привет, это сквозной тест", "ответ собеседника");
     assert_eq!(lines.len(), 2, "оба канала попали в транскрипт");
 
-    // ── 3) ЖУРНАЛ → 4) ИНДЕКС: проекция в каталог (как на stop_session) ──
     let sess_dir = tmp.path().join("sessions");
     std::fs::create_dir_all(&sess_dir).unwrap();
     let jpath = write_journal(
@@ -87,7 +83,6 @@ fn full_cycle_record_transcribe_journal_index_archive() {
     assert_eq!(sess.ai_turns_count, 1, "счётчик AI НЕ «0»");
     assert_eq!(sess.started_at_ms, Some(1_779_580_800_000));
 
-    // ── 5) АРХИВ: ровно те запросы, которыми F7-окно рисует список/тайл ──
     let listed = store.list_sessions().unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].id, id);
@@ -101,8 +96,6 @@ fn full_cycle_record_transcribe_journal_index_archive() {
 
 #[test]
 fn session_finished_in_current_run_becomes_visible_after_stop_index() {
-    // Корневая причина «0 и 0»: launch-реиндекс пропускает ЖИВУЮ сессию
-    // (skip_active) — и до v0.17.2 её никто больше не индексировал.
     let tmp = tempfile::tempdir().unwrap();
     let id = "2026-06-11_11-00-00_e2e2";
     let jpath = write_journal(
@@ -116,7 +109,6 @@ fn session_finished_in_current_run_becomes_visible_after_stop_index() {
     );
     let mut store = Store::open_in_memory().unwrap();
 
-    // Имитация launch-реиндекса, когда сессия ещё активна → пропуск.
     let stats = index_all(&mut store, tmp.path(), Some(id)).unwrap();
     assert_eq!(stats.indexed, 0);
     assert_eq!(stats.skipped, 1);
@@ -125,7 +117,6 @@ fn session_finished_in_current_run_becomes_visible_after_stop_index() {
         "до фикса архив пуст"
     );
 
-    // Точечная индексация на stop_session → сессия видна БЕЗ перезапуска.
     assert!(index_journal_file(&mut store, &jpath).unwrap().is_some());
     let listed = store.list_sessions().unwrap();
     assert_eq!(listed.len(), 1);
@@ -134,9 +125,6 @@ fn session_finished_in_current_run_becomes_visible_after_stop_index() {
 
 #[test]
 fn stop_index_replaces_partial_row_wholesale() {
-    // Архив, открытый ВО ВРЕМЯ звонка (или краш до stop), мог положить в
-    // каталог НЕПОЛНУЮ строку. Повторный index_journal_file того же файла
-    // обязан заменить её целиком (актуальные счётчики, статус), не дублируя.
     let tmp = tempfile::tempdir().unwrap();
     let id = "2026-06-11_12-00-00_e2e3";
     let jpath = write_journal(
@@ -152,7 +140,6 @@ fn stop_index_replaces_partial_row_wholesale() {
     assert_eq!(partial.status, "crashed", "без session_stop строка «сырая»");
     assert_eq!(partial.transcript_lines, 1);
 
-    // Сессия дописалась и закрылась — переиндексация той же самой.
     let jpath2 = write_journal(
         tmp.path(),
         id,
@@ -172,9 +159,6 @@ fn stop_index_replaces_partial_row_wholesale() {
 
 #[test]
 fn missing_recordings_dir_is_a_graceful_error_for_re_stt() {
-    // «Не удалось транскрибировать»: канал без записи должен давать ошибку
-    // на этапе чтения WAV, а не панику. (Полный transcribe_session требует
-    // STT-движок; здесь фиксируем контракт нижнего слоя.)
     let tmp = tempfile::tempdir().unwrap();
     let err = load_wav_pcm(&tmp.path().join("нет-такой-папки").join("mic.wav"));
     assert!(err.is_err(), "отсутствующий WAV → Err, не panic");

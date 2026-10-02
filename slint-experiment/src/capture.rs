@@ -72,7 +72,6 @@ pub fn bgra_to_jpeg_data_url(
     if bgra.len() != expected || expected == 0 {
         return Err(format!("bgra len {} != expected {expected}", bgra.len()).into());
     }
-    // BGRA → RGB (drop alpha, swap B/R).
     let mut rgb: Vec<u8> = Vec::with_capacity((width as usize) * (height as usize) * 3);
     for px in bgra.as_chunks::<4>().0 {
         rgb.push(px[2]);
@@ -81,7 +80,6 @@ pub fn bgra_to_jpeg_data_url(
     }
     let img: image::RgbImage =
         image::RgbImage::from_raw(width, height, rgb).ok_or("rgb buffer size mismatch")?;
-    // Downscale the longest edge to MAX_EDGE.
     let longest = width.max(height);
     let img = if longest > MAX_EDGE {
         let scale = f64::from(MAX_EDGE) / f64::from(longest);
@@ -91,7 +89,6 @@ pub fn bgra_to_jpeg_data_url(
     } else {
         img
     };
-    // Encode JPEG.
     let mut jpeg: Vec<u8> = Vec::new();
     {
         use image::ImageEncoder;
@@ -132,8 +129,6 @@ pub fn capture_virtual_desktop() -> Result<(CapturedBgra, i32, i32), Box<dyn std
 /// The tuple origin is that display's actual global CoreGraphics origin.
 #[cfg(target_os = "macos")]
 pub fn capture_virtual_desktop() -> Result<(CapturedBgra, i32, i32), Box<dyn std::error::Error>> {
-    // macOS intentionally freezes only the display under the cursor for now;
-    // composing mixed-scale displays into one BGRA frame is a separate feature.
     let (bgra, width, height, display) =
         crate::native::screen::capture_display_bgra_with_dimensions()?;
     Ok((
@@ -178,7 +173,6 @@ mod tests {
 
     #[test]
     fn crop_extracts_subrect() {
-        // 2x2 frame; per-pixel B channel = col*10 + row. BGRA = [B,G,R,A].
         let mut src = Vec::new();
         for row in 0..2u8 {
             for col in 0..2u8 {
@@ -190,7 +184,7 @@ mod tests {
             width: 2,
             height: 2,
         };
-        let c = crop_bgra(&frame, 1, 0, 1, 1); // pixel (col=1,row=0) → B=10
+        let c = crop_bgra(&frame, 1, 0, 1, 1);
         assert_eq!((c.width, c.height), (1, 1));
         assert_eq!(c.bgra, vec![10u8, 0, 0, 255]);
     }
@@ -202,14 +196,13 @@ mod tests {
             width: 1,
             height: 1,
         };
-        let c = crop_bgra(&frame, 5, 5, 10, 10); // way out → clamps to 1x1
+        let c = crop_bgra(&frame, 5, 5, 10, 10);
         assert_eq!((c.width, c.height), (1, 1));
         assert_eq!(c.bgra.len(), 4);
     }
 
     #[test]
     fn bgra_to_jpeg_produces_data_uri() {
-        // 2x2 solid red BGRA (B=0, G=0, R=255, A=255).
         let one = [0u8, 0, 255, 255];
         let bgra: Vec<u8> = one.iter().cycle().take(2 * 2 * 4).copied().collect();
         let url = bgra_to_jpeg_data_url(&bgra, 2, 2).unwrap();

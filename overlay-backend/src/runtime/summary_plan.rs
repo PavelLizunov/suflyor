@@ -140,11 +140,10 @@ pub fn truncate_transcript_middle(text: &str, budget_chars: usize, is_ru: bool) 
     } else {
         "[… middle of the meeting omitted — transcript over budget …]"
     };
-    // 1/3 head + 2/3 tail: the end of a meeting carries the decisions.
     let head_budget = budget_chars / 3;
     let tail_budget = budget_chars.saturating_sub(head_budget);
     let lines: Vec<&str> = text.lines().collect();
-    let mut head_count = 0usize; // lines [0, head_count) kept
+    let mut head_count = 0usize;
     let mut used = 0usize;
     for line in &lines {
         let cost = line.chars().count() + 1;
@@ -154,7 +153,7 @@ pub fn truncate_transcript_middle(text: &str, budget_chars: usize, is_ru: bool) 
         used += cost;
         head_count += 1;
     }
-    let mut tail_start = lines.len(); // lines [tail_start, len) kept
+    let mut tail_start = lines.len();
     let mut tail_used = 0usize;
     for i in (head_count..lines.len()).rev() {
         let cost = lines[i].chars().count() + 1;
@@ -165,8 +164,6 @@ pub fn truncate_transcript_middle(text: &str, budget_chars: usize, is_ru: bool) 
         tail_start = i;
     }
     if head_count == 0 && tail_start == lines.len() {
-        // Degenerate input: one giant line, no usable line boundaries —
-        // fall back to a raw char slice so the model still gets head+tail.
         let total = text.chars().count();
         let head_str: String = text.chars().take(head_budget).collect();
         let tail_str: String = text
@@ -238,8 +235,6 @@ pub fn summary_system_prompt(is_ru: bool, truncated: bool) -> String {
          choice status (used now versus only considered). If a new decision cancels an old one, state \
          the old decision, \"cancelled\", and the new one; keep dates, owners, and statuses."
     });
-    // Баг1 — the plain-text markdown view can't render LaTeX; forbid it so the
-    // model writes real symbols (the sanitizer is the guarantee, this the nudge).
     p.push_str(if is_ru {
         " Пиши ОБЫЧНЫМ текстом: без LaTeX/markdown-математики ($...$, \\(...\\), \\rightarrow) — стрелку пиши «→»."
     } else {
@@ -343,7 +338,6 @@ pub fn split_transcript_for_map(formatted: &str, budget_chars: usize) -> Vec<Str
     for line in formatted.lines() {
         let line_chars = line.chars().count();
         if line_chars > budget {
-            // Oversized line: flush what we have, then word-wrap it.
             if !cur.trim().is_empty() {
                 parts.push(std::mem::take(&mut cur));
             } else {

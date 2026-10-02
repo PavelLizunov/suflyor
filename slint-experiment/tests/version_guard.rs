@@ -11,7 +11,7 @@
 //! This test makes the drift a hard failure. If it fails: bump BOTH
 //! `slint-experiment/Cargo.toml` `version` and `scripts/slint-installer.nsi`
 //! `!define PRODUCT_VERSION` to the same value.
-#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
 use std::fs;
 use std::path::Path;
@@ -33,7 +33,6 @@ fn nsi_product_version(nsi: &str) -> Option<String> {
 
 #[test]
 fn cargo_toml_version_matches_nsi_product_version() {
-    // The crate's own compiled-in version IS the Cargo.toml `version` — no parse.
     let cargo_version = env!("CARGO_PKG_VERSION");
 
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));

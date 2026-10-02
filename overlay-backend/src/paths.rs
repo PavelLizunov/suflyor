@@ -31,8 +31,6 @@ pub fn data_root() -> Option<PathBuf> {
 /// Pure resolver (test seam): given the platform config base, pick the data dir.
 fn data_root_in(base: &Path) -> PathBuf {
     let brand = base.join(BRAND_DIR);
-    // Brand wins if it exists (post-migration / fresh install). Use legacy ONLY
-    // when the brand dir is absent and the legacy one is present.
     if !brand.exists() && base.join(LEGACY_DIR).exists() {
         base.join(LEGACY_DIR)
     } else {
@@ -81,7 +79,7 @@ fn migrate_in(base: &Path) -> DataMigration {
     let brand = base.join(BRAND_DIR);
     let legacy = base.join(LEGACY_DIR);
     if brand.exists() {
-        return DataMigration::AlreadyDone; // never write both
+        return DataMigration::AlreadyDone;
     }
     if !legacy.exists() {
         return DataMigration::FreshInstall;
@@ -101,12 +99,9 @@ mod tests {
     fn data_root_in_prefers_brand_then_legacy_then_brand() {
         let tmp = tempfile::tempdir().unwrap();
         let base = tmp.path();
-        // Neither exists yet → brand (a fresh install writes there).
         assert_eq!(data_root_in(base), base.join("suflyor"));
-        // Only legacy exists → fall back to legacy (pre-migration).
         std::fs::create_dir_all(base.join("overlay-mvp")).unwrap();
         assert_eq!(data_root_in(base), base.join("overlay-mvp"));
-        // Brand exists → brand wins even if legacy still lingers.
         std::fs::create_dir_all(base.join("suflyor")).unwrap();
         assert_eq!(data_root_in(base), base.join("suflyor"));
     }
@@ -125,7 +120,6 @@ mod tests {
             "data moved into the brand dir"
         );
 
-        // Second call: brand exists → no-op, never recreates legacy.
         assert_eq!(migrate_in(base), DataMigration::AlreadyDone);
         assert!(!base.join("overlay-mvp").exists());
     }
@@ -143,7 +137,6 @@ mod tests {
         let base = tmp.path();
         std::fs::create_dir_all(base.join("overlay-mvp")).unwrap();
         std::fs::create_dir_all(base.join("suflyor")).unwrap();
-        // Brand present → AlreadyDone; legacy left as-is (we never merge/clobber).
         assert_eq!(migrate_in(base), DataMigration::AlreadyDone);
         assert!(base.join("overlay-mvp").exists());
         assert!(base.join("suflyor").exists());

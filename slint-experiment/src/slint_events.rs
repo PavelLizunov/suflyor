@@ -244,11 +244,8 @@ mod tests {
 
     #[test]
     fn slint_events_is_a_runtime_events_trait_object() {
-        // Type-check: confirms the trait impl signature matches
-        // RuntimeEvents — caught if anyone changes the trait shape.
         let bridge = Arc::new(RecordingBridge::default());
         let events: Arc<dyn RuntimeEvents> = Arc::new(SlintEvents::new(bridge));
-        // If this compiles + runs, the impl is correctly object-safe.
         events.emit("test", serde_json::Value::Null);
     }
 }

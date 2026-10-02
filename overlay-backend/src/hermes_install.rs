@@ -74,7 +74,6 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
         ));
     }
 
-    // 1. Plugin files (overwrite = upgrade path).
     let pdir = home.join("plugins").join("suflyor");
     std::fs::create_dir_all(&pdir).map_err(|e| format!("не создать {}: {e}", pdir.display()))?;
     std::fs::write(pdir.join("plugin.yaml"), PLUGIN_YAML)
@@ -96,7 +95,6 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
         std::fs::write(&env_path, env_new).map_err(|e| format!("запись .env: {e}"))?;
     }
 
-    // 3. config.yaml enable.
     let cfg_path = home.join("config.yaml");
     let cfg_old = if cfg_path.is_file() {
         Some(std::fs::read_to_string(&cfg_path).map_err(|e| format!("чтение config.yaml: {e}"))?)
@@ -175,11 +173,9 @@ pub fn ensure_api_server_text(existing: &str, gen_key: impl Fn() -> String) -> A
         let no_comment = l.split('#').next().unwrap_or("");
         no_comment.trim_end().trim_start() == format!("{name}:")
     };
-    // Top-level `platforms:` (column 0, no inline value, not a comment).
     let platforms_idx = lines
         .iter()
         .position(|l| indent_of(l) == 0 && bare_key_at(l, "platforms"));
-    // A top-level `platforms: {...}` flow form → refuse.
     if platforms_idx.is_none()
         && lines.iter().any(|l| {
             indent_of(l) == 0
@@ -236,7 +232,7 @@ pub fn ensure_api_server_text(existing: &str, gen_key: impl Fn() -> String) -> A
             .skip(pidx + 1)
             .any(|l| l.trim_start().starts_with("api_server:"))
         {
-            return ApiEdit::Unsupported; // flow / inline form
+            return ApiEdit::Unsupported;
         }
         let key = gen_key();
         let pad = " ".repeat(indent_of(lines[pidx]) + 2);
@@ -257,7 +253,6 @@ pub fn ensure_api_server_text(existing: &str, gen_key: impl Fn() -> String) -> A
         }
     }
 
-    // Locate enabled: / extra: inside it (original indices).
     let mut enabled_idx: Option<usize> = None;
     let mut extra_idx: Option<usize> = None;
     for (i, l) in lines.iter().enumerate().take(a_end).skip(aidx + 1) {
@@ -270,7 +265,6 @@ pub fn ensure_api_server_text(existing: &str, gen_key: impl Fn() -> String) -> A
         }
     }
 
-    // Plan edits on ORIGINAL indices; apply bottom-up so nothing shifts.
     let mut replaces: Vec<(usize, String)> = Vec::new();
     let mut inserts: Vec<(usize, Vec<String>)> = Vec::new();
 
@@ -310,7 +304,7 @@ pub fn ensure_api_server_text(existing: &str, gen_key: impl Fn() -> String) -> A
                 .trim()
                 .to_string();
             if !after.is_empty() {
-                return ApiEdit::Unsupported; // extra: {...}
+                return ApiEdit::Unsupported;
             }
             let x_indent = indent_of(lines[xi]);
             let mut x_end = a_end;
@@ -373,7 +367,6 @@ pub fn ensure_api_server_text(existing: &str, gen_key: impl Fn() -> String) -> A
     for (i, text) in replaces {
         out_lines[i] = text;
     }
-    // Bottom-up so earlier insertion points stay valid.
     inserts.sort_by_key(|(i, _)| std::cmp::Reverse(*i));
     for (i, rows) in inserts {
         for (n, row) in rows.into_iter().enumerate() {
@@ -439,8 +432,6 @@ pub fn merge_env_text(existing: &str, url: &str, token: &str) -> String {
             out.push(line.to_string());
         }
     }
-    // Drop a single trailing empty segment (split artifact of a trailing \n)
-    // so appends don't create blank-line drift; re-added by join+push below.
     if out.last().is_some_and(|l| l.is_empty()) {
         out.pop();
     }
@@ -478,13 +469,11 @@ pub fn enable_in_config_text(existing: &str) -> EnableEdit {
     let normalized = existing.replace("\r\n", "\n");
     let lines: Vec<&str> = normalized.split('\n').collect();
 
-    // Locate a TOP-LEVEL `plugins:` key (column 0; ignore comments).
     let plugins_idx = lines.iter().position(|l| {
         let no_comment = l.split('#').next().unwrap_or("");
         indent_of(l) == 0 && no_comment.trim_end() == "plugins:"
     });
 
-    // Top-level `plugins:` with inline content (flow mapping) → refuse.
     let has_flow_plugins = lines.iter().any(|l| {
         indent_of(l) == 0
             && l.trim_start().starts_with("plugins:")
@@ -541,8 +530,6 @@ pub fn enable_in_config_text(existing: &str) -> EnableEdit {
 
     match enabled_idx {
         None => {
-            // `plugins:` exists but no `enabled:` — insert both lines right
-            // after the `plugins:` line.
             out_lines.insert(pidx + 1, "  enabled:".to_string());
             out_lines.insert(pidx + 2, "    - suflyor".to_string());
         }
@@ -565,7 +552,6 @@ pub fn enable_in_config_text(existing: &str) -> EnableEdit {
                 return finish(out_lines.join("\n"), eol);
             }
             if !after_colon.is_empty() {
-                // Non-empty flow list / scalar — refuse to guess.
                 return EnableEdit::Unsupported;
             }
             // Block list: walk items (deeper-indented `- …` lines).
@@ -696,7 +682,6 @@ mod tests {
     fn config_already_enabled_detected() {
         let src = "plugins:\n  enabled:\n    - suflyor\n";
         assert_eq!(enable_in_config_text(src), EnableEdit::AlreadyEnabled);
-        // Quoted form too.
         let src2 = "plugins:\n  enabled:\n    - \"suflyor\"\n";
         assert_eq!(enable_in_config_text(src2), EnableEdit::AlreadyEnabled);
     }
@@ -733,8 +718,6 @@ mod tests {
 
     #[test]
     fn config_block_ends_at_next_top_level_key() {
-        // `enabled:` belongs to ANOTHER top-level key after plugins — the
-        // scan must not cross into it.
         let src = "plugins:\n  disabled: []\nother:\n  enabled:\n    - x\n";
         let EnableEdit::Updated(t) = enable_in_config_text(src) else {
             panic!("expected Updated")
@@ -761,7 +744,7 @@ mod tests {
         assert!(t.ends_with(
             "platforms:\n  api_server:\n    enabled: true\n    extra:\n      key: \"GENKEY\"\n"
         ));
-        assert!(t.contains("#   platforms:")); // comments untouched
+        assert!(t.contains("#   platforms:"));
     }
 
     #[test]

@@ -270,7 +270,6 @@ mod tests {
 
     #[test]
     fn vision_context_prepends_system_turn_only_when_set() {
-        // Empty/blank context → identical to the plain 1-turn request.
         let plain = build_vision_request("data:image/jpeg;base64,AAAA", "прочитай");
         let blank =
             build_vision_request_with_context("data:image/jpeg;base64,AAAA", "прочитай", "");
@@ -280,8 +279,6 @@ mod tests {
         assert_eq!(ws.len(), 1, "whitespace context must not add a system turn");
         assert_eq!(blank[0].role, plain[0].role);
 
-        // Non-empty context → a leading system turn carrying the profile, then
-        // the original user (text+image) turn unchanged.
         let with = build_vision_request_with_context(
             "data:image/jpeg;base64,AAAA",
             "прочитай",
@@ -307,7 +304,6 @@ mod tests {
     #[test]
     fn test_practice_request_is_answer_plus_explanation_and_refuses_to_fabricate() {
         let msgs = build_test_practice_request("data:image/jpeg;base64,AAAA", "ru");
-        // Shape: a system turn (the study instructions) + a user turn (ask + image).
         assert_eq!(
             msgs.len(),
             2,
@@ -315,15 +311,12 @@ mod tests {
         );
         assert_eq!(msgs[0].role, "system");
         assert_eq!(msgs[1].role, "user");
-        // The user turn must still carry the screenshot as an image part.
         assert!(
             matches!(&msgs[1].content, MessageContent::Parts(p)
                 if p.iter().any(|x| matches!(x, ContentPart::ImageUrl { image_url }
                     if image_url.url.as_str() == "data:image/jpeg;base64,AAAA"))),
             "practice request must keep the screenshot image part"
         );
-        // The instruction is NOT answer-only: it mandates the explanation AND the
-        // no-fabrication guard. These two properties are the whole point.
         assert!(
             matches!(&msgs[0].content, MessageContent::Text(_)),
             "practice system turn must be text"
@@ -348,21 +341,17 @@ mod tests {
     fn test_practice_prompt_honors_response_language() {
         assert!(test_practice_prompt("ru").contains("на русском"));
         assert!(test_practice_prompt("en").contains("in English"));
-        // Unknown tag falls back to "language of the question".
         assert!(test_practice_prompt("de").contains("на языке вопроса"));
     }
 
     #[test]
     fn test_practice_prompt_covers_fill_blank_and_multi_answer() {
         let p = test_practice_prompt("ru");
-        // Fill-in-the-blank: must recognise «___» as the slot to fill.
         assert!(p.contains("пропуск"), "must handle fill-in-the-blank");
         assert!(
             p.contains("Несколько верных") || p.contains("перечисли ВСЕ"),
             "must handle multi-answer (more than one correct option)"
         );
-        // The mere absence of A/B/C options must NOT force a refusal — that was
-        // the bug: fill-in-the-blank questions got a wrong «Не уверен».
         assert!(
             p.contains("НЕ причина"),
             "missing A/B/C must not force 'Не уверен'"
@@ -371,19 +360,15 @@ mod tests {
 
     #[test]
     fn translate_prompt_composes_phonetics_suffix() {
-        // OFF: exactly the base translate prompt, no IPA ask.
         let plain = translate_prompt(false);
         assert_eq!(plain, TRANSLATE_VISION_PROMPT);
         assert!(!plain.contains("МФА"), "no phonetics ask when off");
-        // ON: base + suffix; mentions IPA + the schedule example.
         let with = translate_prompt(true);
         assert!(with.starts_with(TRANSLATE_VISION_PROMPT));
         assert!(
             with.contains("МФА") && with.contains("schedule"),
             "phonetics suffix appended when on"
         );
-        // Both must demand Russian-only output (the anti-echo fix — the whole
-        // point of feature #3: no source English in the result).
         assert!(plain.contains("ТОЛЬКО русский") && with.contains("ТОЛЬКО русский"));
         assert!(
             plain.contains("НЕ выводи английский") && with.contains("НЕ выводи английский"),
@@ -393,10 +378,6 @@ mod tests {
 
     #[test]
     fn ocr_prompt_demands_verbatim_and_forbids_translation() {
-        // The OCR/read-aloud prompt is the ANTI-Translate: it must transcribe
-        // the source language verbatim, never translate or describe — otherwise
-        // text-to-speech would read a mangled/translated string. Pin those
-        // properties so a future edit can't silently turn OCR into a summary.
         let p = OCR_VISION_PROMPT;
         assert!(
             p.contains("ДОСЛОВНО"),
@@ -410,8 +391,6 @@ mod tests {
             p.contains("ТОЛЬКО сам текст"),
             "must emit only the text (no description/commentary)"
         );
-        // It round-trips through the plain (profile-free) request builder as a
-        // single text+image user turn — never the context-carrying builder.
         let msgs = build_vision_request("data:image/jpeg;base64,AAAA", OCR_VISION_PROMPT);
         assert_eq!(msgs.len(), 1);
         assert!(matches!(&msgs[0].content, MessageContent::Parts(p) if p.len() == 2));
@@ -445,13 +424,10 @@ mod tests {
                 .all(|c| c.is_ascii_alphanumeric() || c == b'+' || c == b'/' || c == b'='),
             "data URL payload must be valid base64"
         );
-        // Base64 of the 8-byte PNG magic (89 50 4E 47 0D 0A 1A 0A) always starts
-        // the encoded string with this prefix.
         assert!(
             b64.starts_with("iVBORw0KGgo"),
             "payload must be a PNG (magic-byte prefix)"
         );
-        // It round-trips through the request builder as a single 2-part turn.
         let msgs = build_vision_request(SYNTHETIC_TEST_IMAGE_DATA_URL, "Reply with: ok");
         assert_eq!(msgs.len(), 1);
         assert!(matches!(&msgs[0].content, MessageContent::Parts(p) if p.len() == 2));

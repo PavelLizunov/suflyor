@@ -30,7 +30,7 @@ use super::{
 /// opened still honours the saved transparency. Seeded from config at startup,
 /// updated live by the Settings slider.
 static TILE_BODY_OPACITY_BITS: std::sync::atomic::AtomicU32 =
-    std::sync::atomic::AtomicU32::new(0x3F80_0000); // 1.0_f32
+    std::sync::atomic::AtomicU32::new(0x3F80_0000);
 
 /// Place a shared Slint window using the coordinate units returned by the
 /// platform geometry adapter: physical pixels on Windows, logical points on macOS.
@@ -144,9 +144,6 @@ pub(crate) fn apply_bar_stealth(
                      preserved for retry): {e}"
                 );
             }
-            // I2 — the taskbar style follows the EFFECTIVE state; both
-            // directions force the TOOLWINDOW baseline + clear APPWINDOW, so
-            // the bar can never become a taskbar-eligible APPWINDOW.
             if let Err(e) = slint_replay::win32::set_skip_taskbar(hwnd, effective) {
                 diag!("[overlay-host] bar skip-taskbar failed: {e}");
             }
@@ -162,8 +159,6 @@ pub(crate) fn apply_bar_stealth(
     if on && !effective {
         surface_stealth_unavailable(bar);
     } else if bar.get_stealth_fault() {
-        // A previous failure banner is stale — clear the flag and restore the
-        // mic/sys truth on the pill.
         bar.set_stealth_fault(false);
         refresh_status(bar, get_mic_active(state), get_sys_active(state));
     }
@@ -296,9 +291,6 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
     W: slint::ComponentHandle + 'static,
     F: Fn(slint_replay::win32::HWND) + 'static,
 {
-    // G1 — layout-independent Ctrl+C/V/X/A/Z/Y for every editable field on this window
-    // (winit key filter; idempotent). Covers Settings / palette / text_ask / wizard /
-    // help / archive / transcript — all the aux windows funnel through here.
     crate::kbd_shortcuts::install(win.window());
     // Park off-screen BEFORE the first frame (always — see fn doc). The reveal
     // tick decorates + (under stealth) WDAs, then moves it on-screen, so the
@@ -322,7 +314,6 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
         }
         decorate(hwnd);
         if global_stealth() {
-            // I1 — a failed exclusion is logged, never silently swallowed.
             apply_stealth_one(hwnd, true);
         }
         // The off-screen frame is now painted + decorated (+ WDA under stealth):
@@ -405,10 +396,6 @@ pub(crate) fn realize_with_retries<W>(
         if attempt(&w) {
             return;
         }
-        // Retry #1 SOON (80ms, not the full 200ms) — the heavy Settings window
-        // often isn't HWND-realized by the 33ms fast attempt, so the old 200ms
-        // gap was the "Settings opens with a delay" the user saw. Still only
-        // reveals once grab_hwnd succeeds (window painted off-screen → no flash).
         let weak2 = w.as_weak();
         let attempt2 = attempt.clone();
         let fallback2 = fallback.clone();
@@ -417,7 +404,6 @@ pub(crate) fn realize_with_retries<W>(
             if attempt2(&w) {
                 return;
             }
-            // Retry #2 (final) at a longer delay; on a final miss, run the fallback.
             let weak3 = w.as_weak();
             let attempt3 = attempt2.clone();
             let fallback3 = fallback2.clone();
@@ -441,20 +427,11 @@ pub(crate) fn refresh_open_tiles(weak: &slint::Weak<OverlayBarWindow>, tiles: &T
     if let Some(o) = weak.upgrade() {
         o.set_open_tiles(n as i32);
     }
-    // When the screen is cleared, reset the cascade-placement counter so the
-    // NEXT tile starts from the top-right cluster again instead of marching
-    // further left on every close-all -> respawn cycle (stress-test bug).
     if n == 0 {
         super::tile_window::TILE_SLOT_COUNTER.store(0, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
-// `Theme` is a Slint GLOBAL, but globals are scoped to each window-component
-// INSTANCE — every window (bar, settings, each tile, palette) owns its own
-// copy. So switching the scheme means setting it on EVERY live window, and
-// every freshly-created window must be seeded at construction. These tiny
-// per-type helpers centralise the `global::<Theme>().set_scheme(..)` call so
-// the clamp + access pattern lives in one place.
 pub(crate) fn apply_scheme_bar(w: &OverlayBarWindow, scheme: i32) {
     w.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
 }
@@ -537,7 +514,6 @@ impl WindowRegistry {
     /// re-applies + verifies WDA on every show (I4, vision_capture.rs).
     pub(crate) fn apply_stealth(&self, on: bool) {
         let on = on && stealth_supported();
-        // All tiles.
         for t in self.tiles.borrow().iter() {
             if let Ok(hwnd) = grab_hwnd(t.window()) {
                 apply_stealth_one(hwnd, on);
@@ -549,8 +525,6 @@ impl WindowRegistry {
         // global below is already the outcome of the verified apply.
         if let Some(sw) = self.settings.borrow().as_ref() {
             sw.set_stealth_toggle(on);
-            // I1 — the status line follows the verified EFFECTIVE state (the
-            // Slint `@tr` ternary combines it with the toggle intent above).
             let effective = global_stealth_effective();
             sw.set_stealth_effective(effective);
             // The Diagnostics stealth row is otherwise seeded only when
@@ -562,26 +536,22 @@ impl WindowRegistry {
                 apply_stealth_one(hwnd, on);
             }
         }
-        // F4 KB palette.
         if let Some(p) = self.palette.borrow().as_ref() {
             if let Ok(hwnd) = grab_hwnd(p.window()) {
                 apply_stealth_one(hwnd, on);
             }
         }
-        // "✏ Написать" text-input window.
         if let Some(t) = self.text_ask.borrow().as_ref() {
             if let Ok(hwnd) = grab_hwnd(t.window()) {
                 apply_stealth_one(hwnd, on);
             }
         }
-        // First-run wizard — also reflect the new state in its in-window Switch.
         if let Some(wz) = self.wizard.borrow().as_ref() {
             if let Ok(hwnd) = grab_hwnd(wz.window()) {
                 apply_stealth_one(hwnd, on);
             }
             wz.set_stealth_on(on);
         }
-        // 🆘 Help window (FIX #6 — previously dropped from some loops).
         if let Some(h) = self.help.borrow().as_ref() {
             if let Ok(hwnd) = grab_hwnd(h.window()) {
                 apply_stealth_one(hwnd, on);
@@ -593,8 +563,6 @@ impl WindowRegistry {
                 apply_stealth_one(hwnd, on);
             }
         }
-        // ТЗ1 transcript viewer — verbatim meeting transcript, the most sensitive
-        // surface; must never stay captured after an OFF→ON toggle.
         if let Some(t) = self.transcript.borrow().as_ref() {
             if let Ok(hwnd) = grab_hwnd(t.window()) {
                 apply_stealth_one(hwnd, on);
@@ -690,16 +658,15 @@ mod tests {
     #[test]
     fn saved_pos_validation_covers_owner_layout() {
         let mons = owner_monitors();
-        assert!(pos_on_visible_monitor((300, 200), &mons)); // on primary
-        assert!(pos_on_visible_monitor((-800, 1500), &mons)); // portrait at negative x
-        assert!(pos_on_visible_monitor((-4, 0), &mons)); // edge slack (8px)
-        assert!(!pos_on_visible_monitor((2500, 200), &mons)); // right of everything
-        assert!(!pos_on_visible_monitor((300, 1300), &mons)); // below primary, x not on portrait
-                                                              // Monitor unplugged (stale saved pos) → nothing visible → fallback to center.
+        assert!(pos_on_visible_monitor((300, 200), &mons));
+        assert!(pos_on_visible_monitor((-800, 1500), &mons));
+        assert!(pos_on_visible_monitor((-4, 0), &mons));
+        assert!(!pos_on_visible_monitor((2500, 200), &mons));
+        assert!(!pos_on_visible_monitor((300, 1300), &mons));
         assert!(!pos_on_visible_monitor(
             (-800, 1500),
             &owner_monitors()[..1]
         ));
-        assert!(!pos_on_visible_monitor((100, 100), &[])); // no monitors at all
+        assert!(!pos_on_visible_monitor((100, 100), &[]));
     }
 }

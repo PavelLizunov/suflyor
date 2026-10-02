@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 pub const KEEP_LAST_SESSIONS: usize = 100;
-pub const MAX_TOTAL_BYTES: u64 = 500 * 1024 * 1024; // 500 MB
+pub const MAX_TOTAL_BYTES: u64 = 500 * 1024 * 1024;
 
 pub fn prune_old_sessions(dir: &Path, keep: usize) -> Result<usize> {
     prune_old_sessions_with_size_cap(dir, keep, MAX_TOTAL_BYTES)

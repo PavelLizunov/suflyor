@@ -59,7 +59,6 @@ fn canonical_runtime_owns_the_macos_watchdog_timer() {
     assert!(finalizer.contains("events.emit(\"session:stopped\""));
     assert!(finalizer.contains("slint_session::maybe_run_debrief("));
 
-    // Stop policy remains a pure state machine with semantic tests.
     assert!(watchdog.contains("mod tests"));
     assert!(watchdog.contains("fn flowing_stream_then_stall_requests_one_stop()"));
     assert!(watchdog.contains("fn disappeared_flowing_capture_requests_one_stop()"));

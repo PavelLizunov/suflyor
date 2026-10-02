@@ -78,9 +78,6 @@ pub(crate) fn ptt_tile_error(weak: slint::Weak<TileWindow>, msg: &str, is_ru: bo
 /// (3) streams the answer into the tile via the SAME `current_streaming`
 /// slot + `ai:event` path as F9. Mirrors `fire_f9_ask` with a transcribe
 /// step prepended; F9 itself is untouched.
-// Wiring fn: bridge + events + cfg + runtime + tiles + overlay-weak are all
-// distinct shared handles this path needs; bundling them into a struct would
-// add indirection without clarifying anything. #B1 added the overlay weak.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn fire_ptt_ask(
     recording: (audio::AudioSource, Vec<i16>),
@@ -99,17 +96,11 @@ pub(crate) fn fire_ptt_ask(
         audio::AudioSource::System => "sys",
     };
 
-    // Ignore trivially short holds (<~0.3 s @ 16 kHz mono = 4800 samples).
     if pcm.len() < 4800 {
         eprintln!(
             "[overlay-host] PTT: hold too short ({} samples) — skipping",
             pcm.len()
         );
-        // UI-audit 2026-06-13: a SYSTEM hold that came back essentially EMPTY
-        // (loopback returned ~0 samples) used to be silent, so "захватить" read
-        // as broken. It almost always means nothing was playing OR the selected
-        // output device isn't the one currently producing sound. Surface that on
-        // the bar instead of nothing. (A short MIC hold stays silent — fat-finger.)
         if matches!(source, audio::AudioSource::System) && pcm.len() < 1600 {
             if let Some(o) = weak_overlay.upgrade() {
                 o.set_status_text(SharedString::from(if ui_is_ru {
@@ -123,7 +114,6 @@ pub(crate) fn fire_ptt_ask(
         return;
     }
 
-    // ===== 1. Sync placeholder tile =====
     let tile = match TileWindow::new() {
         Ok(t) => t,
         Err(e) => {
@@ -138,12 +128,10 @@ pub(crate) fn fire_ptt_ask(
     tile.set_source_label(SharedString::from(source_label));
     tile.set_trigger_label(SharedString::from(format!("{icon} {trigger}")));
     tile.set_trigger_color(slint::Color::from_rgb_u8(0xef, 0x44, 0x44));
-    // Phase E6 v45 — PTT answers are continuable dialogs too.
     let convo_id = CONVO_SEQ.fetch_add(1, Ordering::Relaxed) as i32;
     tile.set_convo_id(convo_id);
     tile.set_followup_busy(true);
     wire_tile_drag(&tile);
-    // Plain text, no hourglass glyph (tofu on the skia font fallback).
     tile.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
         kind: markdown::kind::PARAGRAPH,
         text: SharedString::from(placeholder),
@@ -157,9 +145,7 @@ pub(crate) fn fire_ptt_ask(
     let bridge_for_close = bridge.clone();
     tile.on_close_clicked(move || {
         if let Some(t) = weak_close.upgrade() {
-            // Closing the tile that's being read aloud must silence it.
             super::stop_if_speaking(t.get_convo_id());
-            // FIX #8 — prune this tile's conversation (no-op if none).
             bridge_for_close.drop_conversation(t.get_convo_id());
             let close_hwnd = grab_hwnd(t.window()).ok();
             let _ = t.hide();
@@ -188,9 +174,7 @@ pub(crate) fn fire_ptt_ask(
             toggle_tile_maximize(hwnd, &t);
         }
     });
-    // V0.8.1 — per-tile live route (sticky-cloud after 🧠). PTT starts Text.
     let live = live_route(AskRoute::Text);
-    // Phase E6 v45 — continue-dialog follow-ups on PTT answer tiles.
     {
         let weak_fu = tile.as_weak();
         let bridge_fu = bridge.clone();
@@ -212,8 +196,6 @@ pub(crate) fn fire_ptt_ask(
             );
         });
     }
-    // V5 — 🔄 regenerate, available on every answer tile (re-runs via the text
-    // endpoint for F9/PTT tiles, vision endpoint for F8 tiles).
     tile.set_can_regenerate(true);
     {
         let weak_re = tile.as_weak();
@@ -236,11 +218,9 @@ pub(crate) fn fire_ptt_ask(
             );
         });
     }
-    // V5 — 🎤 voice follow-up. Reads the live route (sticky-cloud aware).
     wire_voice_followup(&tile, convo_id, live.clone(), cfg);
     wire_copy(&tile, convo_id, bridge);
     wire_speak(&tile, convo_id, bridge);
-    // V0.8.0 (Поток D) — 🧠 escalate to cloud; V0.8.1 — flips `live` to Cloud.
     wire_escalate(
         &tile, convo_id, &live, bridge, events, cfg, slint_rt, rt_handle,
     );
@@ -251,13 +231,7 @@ pub(crate) fn fire_ptt_ask(
     tiles.borrow_mut().push(tile);
     refresh_open_tiles(weak_overlay, tiles);
 
-    // ===== 2. Independent per-tile streaming (NOT the shared F9 slot) =====
-    // Each PTT is a distinct question whose answer must survive a second rapid
-    // PTT, so we stream straight into THIS tile via a PttStreamSink (built in
-    // the task once `messages` exist) instead of the single `current_streaming`
-    // slot. No supersede, no abort — rapid PTTs no longer clobber each other.
 
-    // ===== 3. Snapshot config + rolling transcript (context) =====
     let (meeting_context, response_language, endpoint_hint, needs_mlx) = {
         let c = cfg.read();
         (
@@ -289,8 +263,6 @@ pub(crate) fn fire_ptt_ask(
         (s.journal.clone(), s.health.clone())
     };
 
-    // ===== 5. Spawn transcribe → ask (detached: never stored in ai_task, so a
-    // later F9/PTT/followup can't abort it) =====
     let bridge_for_task = bridge.clone();
     let events_inner = events.clone();
     let cfg_for_task = cfg.clone();
@@ -365,7 +337,6 @@ pub(crate) fn fire_ptt_ask(
         let bearer = endpoint.bearer;
         let model = endpoint.model;
         let reasoning_effort = endpoint.reasoning_effort;
-        // Reflect the recognised question in the tile chrome.
         {
             let q = question.clone();
             let w = weak_for_title.clone();
@@ -378,10 +349,6 @@ pub(crate) fn fire_ptt_ask(
                 }
             });
         }
-        // Audit (prompt-context): the LLM prompt carries approved memory + profile.
-        // The STT (Whisper) prompt above intentionally stays RAW — Whisper's prompt
-        // budget shouldn't hold conversational memory. ТЗ 2026-07-06 (A) — the
-        // recognised spoken question selects the RELEVANT facts.
         let llm_context =
             overlay_backend::memory::context_for_meeting(&meeting_context, Some(&question));
         let messages = ai::build_request(
@@ -391,10 +358,6 @@ pub(crate) fn fire_ptt_ask(
             None,
             Some(&question),
         );
-        // Per-tile sink: streams this answer into THIS PTT tile and, on Done,
-        // folds the turn into its conversation (for follow-ups). Carries the
-        // sent messages so the fold has full context. Replaces the shared-slot
-        // registration — this is what makes rapid PTTs independent.
         let sink: Arc<dyn RuntimeEvents> = Arc::new(PttStreamSink::new(
             bridge_for_task.clone(),
             events_inner.clone(),
@@ -421,8 +384,6 @@ pub(crate) fn fire_ptt_ask(
                 .unwrap_or_default(),
             None => String::new(),
         };
-        // Audit D1 — the SAME purpose must tag the paired AiResponse that
-        // ask_stream_loop journals (previously hardcoded "live_ask" there).
         let purpose = "ptt_ask";
         if let Some(j) = journal_for_loop.as_ref() {
             j.write(&journal::JournalEvent::AiRequest {
@@ -436,7 +397,6 @@ pub(crate) fn fire_ptt_ask(
                     / 4,
             });
         }
-        // PTT matches other manual asks: warn before a billable call, then proceed.
         warn_if_over_cost_cap(
             &events_inner,
             &cfg_for_task,
@@ -444,7 +404,6 @@ pub(crate) fn fire_ptt_ask(
             is_local,
             "ptt_ask",
         );
-        // PTT streams are independent, so each owns its own cost closure.
         let rt_for_cost = slint_rt_for_task.clone();
         let cost_apply: overlay_backend::runtime::CostApplyFn = Box::new(move |micro| {
             let micro = if is_local { 0 } else { micro };

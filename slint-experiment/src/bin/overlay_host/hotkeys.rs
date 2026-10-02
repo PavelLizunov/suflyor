@@ -51,8 +51,6 @@ static HOTKEY_DIAG: std::sync::OnceLock<HotkeyDiag> = std::sync::OnceLock::new()
 pub(crate) fn hotkey_diag_row() -> (i32, String, String) {
     match HOTKEY_DIAG.get() {
         None => (3, String::new(), String::new()),
-        // Manager failed to init → level 4 (error) but EMPTY failed list, so the
-        // UI/report render "unavailable", not a misleading "conflict: all".
         Some(d) if d.manager_missing => (4, String::new(), String::new()),
         Some(d) if d.failed.is_empty() => (0, d.registered.clone(), String::new()),
         Some(d) => (4, d.registered.clone(), d.failed.clone()),
@@ -111,38 +109,21 @@ pub(crate) fn register_hotkeys() -> RegisteredHotkeys {
     };
     let f3_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F3);
     let f4_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F4);
-    // Phase E3 slice 3 — F6 manual spawn from last transcript line
-    // (bypasses auto-detector). Matches src-tauri hotkey table.
     let f6_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F6);
-    // Phase E3 slice 2 — F9 ask (live AI streaming via overlay-backend's
-    // ask_stream_loop). Matches src-tauri/React-side semantic where F9
-    // is the "ask AI with full transcript context" hotkey.
     let f9_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F9);
-    // V0.8.0 (Поток D) — Shift+F9 = one-shot escalate the ask to the smart cloud
-    // model (deeper reasoning) without flipping the persistent provider.
     let sf9_hotkey = global_hotkey::hotkey::HotKey::new(
         Some(global_hotkey::hotkey::Modifiers::SHIFT),
         global_hotkey::hotkey::Code::F9,
     );
-    // V2 — F8 screenshot → vision (captures the monitor under the cursor and
-    // streams a vision model's reading into a tile, via the SEPARATE vision
-    // endpoint so text can stay local).
     let f8_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F8);
-    // Feature #3 — Shift+F8 = the SAME region capture but in TRANSLATE mode
-    // (output only the translation, no screen description). For games/subtitles.
     let sf8_hotkey = global_hotkey::hotkey::HotKey::new(
         Some(global_hotkey::hotkey::Modifiers::SHIFT),
         global_hotkey::hotkey::Code::F8,
     );
-    // Read-aloud feature — Ctrl+F8 = the SAME region capture but in OCR mode:
-    // transcribe the selected text verbatim (later: read it aloud via TTS).
     let cf8_hotkey = global_hotkey::hotkey::HotKey::new(
         Some(global_hotkey::hotkey::Modifiers::CONTROL),
         global_hotkey::hotkey::Code::F8,
     );
-    // Read-aloud one-handed shortcuts: Shift+Alt+1 = read SELECTED text (clipboard),
-    // Shift+Alt+2 = OCR a region + read, Shift+Alt+3 = pause/stop. Digit codes;
-    // bare Shift+Alt is the OS layout-switch chord (no digit) so it doesn't clash.
     let sa1_hotkey = global_hotkey::hotkey::HotKey::new(
         Some(global_hotkey::hotkey::Modifiers::SHIFT | global_hotkey::hotkey::Modifiers::ALT),
         global_hotkey::hotkey::Code::Digit1,
@@ -155,9 +136,7 @@ pub(crate) fn register_hotkeys() -> RegisteredHotkeys {
         Some(global_hotkey::hotkey::Modifiers::SHIFT | global_hotkey::hotkey::Modifiers::ALT),
         global_hotkey::hotkey::Code::Digit3,
     );
-    // V0.8.4 — F1 opens the 🆘 help (toggle, like F4).
     let f1_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F1);
-    // Phase 3a — F7 opens the 🗄 session archive (toggle, like F4/F1).
     let f7_hotkey = global_hotkey::hotkey::HotKey::new(None, global_hotkey::hotkey::Code::F7);
     let f3_id = f3_hotkey.id();
     let f4_id = f4_hotkey.id();
@@ -173,8 +152,6 @@ pub(crate) fn register_hotkeys() -> RegisteredHotkeys {
     let sa2_id = sa2_hotkey.id();
     let sa3_id = sa3_hotkey.id();
     {
-        // P1.2 — capture per-key registration so the Diagnostics tab can name a
-        // conflicting key instead of a blanket "hotkeys disabled" (audit P1.2).
         let mut registered: Vec<&str> = Vec::new();
         let mut failed: Vec<&str> = Vec::new();
         if let Some(m) = hotkey_manager.as_ref() {

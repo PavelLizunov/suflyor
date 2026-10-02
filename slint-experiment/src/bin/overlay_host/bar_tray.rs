@@ -79,8 +79,6 @@ pub(super) fn spawn_relaunch() -> bool {
             return false;
         }
     };
-    // DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP so the child is fully
-    // independent of this (exiting) process and its console/group.
     #[cfg(windows)]
     let res = {
         use std::os::windows::process::CommandExt;
@@ -124,8 +122,6 @@ pub(super) fn apply_bar_size(overlay: &OverlayBarWindow, compact: bool) {
         // overlay_bar.slint's compact min-width (660) + preferred-height (64).
         (680.0_f32, 64.0_f32)
     } else {
-        // 64 (was 86) — matches overlay_bar.slint preferred-height; trims the
-        // empty vertical band around the 22px chip row (design review #1).
         (1280.0_f32, 64.0_f32)
     };
     overlay.window().set_size(slint::LogicalSize::new(w, h));
@@ -329,9 +325,6 @@ pub(super) fn tray_action_dispatch(
 ) {
     use slint_replay::tray::TrayAction;
     if !matches!(action, TrayAction::OpenMenu { .. }) {
-        // Left-click activation and menu rows share one close path. This
-        // prevents an open, stale "Restore" menu from surviving a left-click
-        // restore and toggling the now-visible bar back to hidden.
         dismiss_tray_menu(menu.as_ref(), focus_armed.as_ref());
     }
     match action {
@@ -389,11 +382,6 @@ pub(super) fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_repla
             Ok(()) => eprintln!("[overlay-host] overlay transparency wired"),
             Err(e) => eprintln!("[overlay-host] overlay transparency failed: {e}"),
         }
-        // Surface WHY transparency may look broken: per-pixel alpha needs
-        // DWM composition. If it's off (RDP / a VM without a GPU / very old
-        // driver) the overlay renders OPAQUE no matter the wiring. This is
-        // NOT the Windows "Transparency effects" toggle. Logged so a
-        // tester's "transparency doesn't work" report is diagnosable.
         if slint_replay::win32::composition_enabled() {
             eprintln!("[overlay-host] DWM composition: ON (overlay transparency available)");
         } else {
@@ -421,19 +409,12 @@ pub(super) fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_repla
             None => (60, 24),
         };
         set_platform_window_position(o.window(), x, y);
-        // I3 — success means the bar actually landed on-screen. If BOTH the
-        // computed pin and the hard (60,24) retry fail, report the attempt as
-        // FAILED so realize_with_retries keeps retrying and eventually runs
-        // the Slint fallback below — a parked bar must never stay invisible
-        // at (-32000) behind a claimed success.
         match move_window_pos_only(hwnd, x, y) {
             Ok(()) => {
                 eprintln!("[overlay-host] bar pinned at ({x}, {y})");
                 true
             }
             Err(e) => {
-                // Last resort: even the pin failed — try a hard (60,24) so
-                // a parked bar can't stay invisible at (-32000).
                 eprintln!("[overlay-host] bar pin failed: {e}; retry at (60,24)");
                 set_platform_window_position(o.window(), 60, 24);
                 match move_window_pos_only(hwnd, 60, 24) {
@@ -474,7 +455,5 @@ pub(super) fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_repla
         };
         set_platform_window_position(o.window(), x, y);
     });
-    // The SAME retry/fallback schedule as the aux windows (I3) — fast attempt,
-    // two conservative retries, then the fallback above. No private timer loop.
     realize_with_retries(overlay, attempt, fallback);
 }

@@ -29,9 +29,9 @@ use tokio::sync::mpsc;
 #[cfg(target_os = "macos")]
 const LIVE_CYCLES: usize = 5;
 #[cfg(target_os = "macos")]
-const PCM_CHUNK_SAMPLES: usize = 3200; // 200 ms at 16 kHz, matching production capture.
+const PCM_CHUNK_SAMPLES: usize = 3200;
 #[cfg(target_os = "macos")]
-const SILENCE_CHUNKS: usize = 4; // 800 ms, matching the production VAD hang.
+const SILENCE_CHUNKS: usize = 4;
 #[cfg(target_os = "macos")]
 const PHASE_SETTLE: Duration = Duration::from_millis(1200);
 #[cfg(target_os = "macos")]

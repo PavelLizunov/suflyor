@@ -68,22 +68,15 @@ fn wire_transcript_actions(
     utts: &[Utterance],
     session_start: Option<i64>,
 ) {
-    // Reset transient UI state — the window is reused across sessions, so a fresh
-    // open must not inherit the prior session's "select all" tick or "copied"
-    // flash (the fresh model already starts all-unchecked).
     win.set_all_selected(false);
     win.set_copied(false);
-    // G2b — reset the ⭐-mark editor state (the window is reused across sessions; the
-    // fresh model already starts all-unmarked).
     win.set_marked_count(0);
-    win.set_mark_anchor(-1); // R1.2: fresh open → no stale range anchor
+    win.set_mark_anchor(-1);
     win.set_capture_pending(false);
     win.set_capture_text(slint::SharedString::default());
     win.set_capture_line_index(-1);
     let utts_owned: Vec<Utterance> = utts.to_vec();
 
-    // G2b (2026-07-03) — ⭐ MULTI-mark → save, mirroring the tiles: toggle a line's mark,
-    // recompute the count, seed the edit buffer when EXACTLY one is marked (trim-before-save).
     {
         let m = model.clone();
         let weak = win.as_weak();
@@ -93,8 +86,6 @@ fn wire_transcript_actions(
             if i >= m.row_count() {
                 return;
             }
-            // R1.2: SHIFT+click with a live anchor marks the whole range anchor..=i (adds to the set);
-            // a plain click toggles this line + (re)sets the anchor. Mirrors the tiles' P5 logic.
             let shift_anchor = if shift {
                 usize::try_from(w.get_mark_anchor()).ok()
             } else {
@@ -131,17 +122,13 @@ fn wire_transcript_actions(
                 }
             }
             w.set_marked_count(count);
-            w.set_capture_pending(false); // marking cancels a pending text selection
-                                          // Re-seed the edit buffer ONLY when the SOLE-marked line changes, so an
-                                          // in-progress edit survives marking/unmarking OTHER lines (tile review I-1).
+            w.set_capture_pending(false);
             if count == 1 && single_idx != w.get_capture_line_index() {
                 w.set_capture_text(single);
                 w.set_capture_line_index(single_idx);
             }
         });
     }
-    // «В память (N)»: join every marked line into ONE approved note (N==1 uses the edited
-    // buffer), then clear the marks. Same coherent-memory join as the tiles (G2a).
     {
         let m = model.clone();
         let weak = win.as_weak();
@@ -185,8 +172,6 @@ fn wire_transcript_actions(
         });
     }
 
-    // Right-click text-selection capture (P2): slice the displayed line by the selection's
-    // byte offsets → the SAME editor via `capture-pending` (mirrors the tile selection path).
     {
         let m = model.clone();
         let weak = win.as_weak();
@@ -216,7 +201,6 @@ fn wire_transcript_actions(
         let weak = win.as_weak();
         win.on_save_capture(move || {
             let Some(w) = weak.upgrade() else { return };
-            // Saving is explicit approval: keep the selected text verbatim.
             super::tile_copy::insert_approved_note(w.get_capture_text().as_str());
             w.set_capture_pending(false);
             w.set_capture_text(slint::SharedString::default());
@@ -231,7 +215,6 @@ fn wire_transcript_actions(
         });
     }
 
-    // Toggle one line; keep "select all" in sync (ON iff EVERY row is checked).
     {
         let m = model.clone();
         let weak = win.as_weak();
@@ -250,7 +233,6 @@ fn wire_transcript_actions(
         });
     }
 
-    // Select / deselect every line.
     {
         let m = model.clone();
         let weak = win.as_weak();
@@ -267,7 +249,6 @@ fn wire_transcript_actions(
         });
     }
 
-    // Copy ALL lines (selected = None).
     {
         let utts_c = utts_owned.clone();
         let weak = win.as_weak();
@@ -285,8 +266,6 @@ fn wire_transcript_actions(
         });
     }
 
-    // Copy only the CHECKED lines (no-op when nothing is selected). The model is
-    // built 1:1 with `utts`, so a checked row index is exactly the utterance index.
     {
         let m = model.clone();
         let utts_c = utts_owned;
@@ -350,9 +329,6 @@ fn wire_transcript_player(
     win.set_progress(0.0);
     win.set_time_text(SharedString::default());
     win.set_active_line(-1);
-    // Reused window — reset the speed ComboBox (index 0 = 1×) + volume slider (1×) so
-    // the UI matches the fresh player (reset() above dropped any prior session's
-    // player, which starts at 1×/1×).
     win.set_speed_index(0);
     win.set_volume(1.0);
     if !has_audio {
@@ -389,9 +365,6 @@ fn wire_transcript_player(
         });
     }
     win.on_seek_fraction(transcript_player::seek_fraction);
-    // Speed / volume-boost (owner req 2026-07-05). `ensure` first so a value chosen
-    // before pressing play loads the player (paused) and the setting sticks — the
-    // free fns are no-ops on an unloaded player.
     {
         let id = id.clone();
         win.on_set_speed(move |s| {
@@ -409,7 +382,6 @@ fn wire_transcript_player(
         });
     }
 
-    // 200 ms position poll → seek-bar / time / active-line / play state.
     let weak = win.as_weak();
     let m = model.clone();
     let timer = slint::Timer::default();
@@ -446,8 +418,6 @@ fn wire_transcript_player(
 const TRANSCRIPT_DISPLAY_CAP: usize = 2000;
 
 thread_local! {
-    // The «Определить говорящих» result-poll timer — held so it outlives the run
-    // closure; the timer clears itself on completion (and on window close).
     static DIAR_TIMER: RefCell<Option<slint::Timer>> = const { RefCell::new(None) };
     // The model-INSTALL poll timer (V-1). Kept SEPARATE from DIAR_TIMER so a
     // reopen — which drops DIAR_TIMER to re-attach the result poll — can't abort
@@ -651,7 +621,7 @@ fn start_diar_poll(
                 // the worker unwound. Fail clean (the RAII guard already freed
                 // the latch, so a new job is possible once this clears).
                 if !DIAR_BUSY.load(Ordering::Acquire) {
-                    DIAR_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
+                    DIAR_TIMER.with(|t| *t.borrow_mut() = None);
                     DIAR_JOB.with(|j| *j.borrow_mut() = None);
                     if let Some(w) = weak.upgrade() {
                         w.set_diarizing(false);
@@ -660,11 +630,9 @@ fn start_diar_poll(
                 }
                 return;
             };
-            DIAR_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
+            DIAR_TIMER.with(|t| *t.borrow_mut() = None);
             DIAR_JOB.with(|j| *j.borrow_mut() = None);
             let Some(w) = weak.upgrade() else {
-                // Window closed — nothing to paint; the worker already persisted
-                // the result, and the next open reads it from the catalog.
                 return;
             };
             w.set_diarizing(false);
@@ -682,28 +650,19 @@ fn start_diar_poll(
                     *diar.borrow_mut() = Some(d);
                     w.set_has_diarization(true);
                     w.set_by_voice(true);
-                    // F — a fresh result carries no custom names; clear the guard and the
-                    // confirm that may have triggered this re-run.
                     w.set_has_speaker_names(false);
                     w.set_confirm_rediar(false);
                     w.set_diar_status(SharedString::default());
                 }
                 Ok(_) => {
-                    // The job was for another session (repurposed window): the
-                    // worker persisted it; just drop the busy state here.
                     w.set_diar_status(SharedString::default());
                 }
                 Err(DiarFailure::Run(e)) => {
-                    // I-5: surface the specific, path-safe reason (>3h / no speech)
-                    // instead of a bare generic line.
                     w.set_diar_status(SharedString::from(
                         overlay_backend::diarize::friendly_error(&e),
                     ));
                 }
                 Err(DiarFailure::Save) => {
-                    // suflyor H3 — the result was NOT saved: a generic line (the
-                    // detail chain is in the log and can carry the catalog path),
-                    // and NO voice labels / has-diarization flip.
                     w.set_diar_status(SharedString::from(DIAR_SAVE_FAILED_MSG));
                 }
             }
@@ -732,7 +691,7 @@ fn start_diar_install_poll(weak: slint::Weak<TranscriptWindow>, slot: DiarInstal
                 // Panic backstop (same as the diarization poll): the latch is
                 // free but no outcome was posted — the worker unwound.
                 if !DIAR_INSTALL_BUSY.load(Ordering::Acquire) {
-                    DIAR_INSTALL_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
+                    DIAR_INSTALL_TIMER.with(|t| *t.borrow_mut() = None);
                     DIAR_INSTALL_JOB.with(|j| *j.borrow_mut() = None);
                     if let Some(w) = weak.upgrade() {
                         w.set_installing_diar_models(false);
@@ -741,19 +700,15 @@ fn start_diar_install_poll(weak: slint::Weak<TranscriptWindow>, slot: DiarInstal
                 }
                 return;
             };
-            DIAR_INSTALL_TIMER.with(|t| *t.borrow_mut() = None); // stop + drop self
+            DIAR_INSTALL_TIMER.with(|t| *t.borrow_mut() = None);
             DIAR_INSTALL_JOB.with(|j| *j.borrow_mut() = None);
             let Some(w) = weak.upgrade() else {
-                // Window closed — nothing to paint; the models are on disk and
-                // the next open recomputes readiness from the fs.
                 return;
             };
             w.set_use_nemotron(slot.engine == overlay_backend::diarize::DiarEngine::Nemotron3);
             w.set_installing_diar_models(false);
             match result {
                 Ok(()) => {
-                    // Re-check the fs rather than assume — only enable detect if BOTH
-                    // models really landed (a partial install keeps the prompt up).
                     let engine = if w.get_use_nemotron() {
                         overlay_backend::diarize::DiarEngine::Nemotron3
                     } else {
@@ -825,8 +780,6 @@ fn wire_transcript_search(win: &TranscriptWindow, model: &Rc<VecModel<Transcript
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            // Row texts → the pure (unit-tested) helper computes the ascending hit indices; then
-            // apply `matched` (write only on a flip — the virtualized list repaints just changed rows).
             let texts: Vec<String> = (0..m.row_count())
                 .map(|j| {
                     m.row_data(j)
@@ -868,8 +821,8 @@ fn wire_transcript_search(win: &TranscriptWindow, model: &Rc<VecModel<Transcript
             cursor.set(next);
             let row = list[next as usize] as i32;
             w.set_search_pos(next + 1);
-            w.invoke_scroll_to_line(row); // visual (approximate)
-            w.invoke_play_line(row); // audio — seek to the moment + play (exact)
+            w.invoke_scroll_to_line(row);
+            w.invoke_play_line(row);
         });
     }
 }
@@ -888,22 +841,12 @@ fn wire_transcript_diarization(
     utts_display: &[Utterance],
     model: &Rc<VecModel<TranscriptLine>>,
 ) {
-    // suflyor H2 — a live job (this window's or a closed one's) outlives this
-    // wiring: grab its handles BEFORE dropping the poll timer so the job's poll
-    // is re-attached below (a close+reopen keeps consuming the running job
-    // instead of spawning a second sidecar). No live job → the timer being
-    // dropped is just a stale one from a prior session's reused window.
     let live_job = DIAR_BUSY
         .load(Ordering::Acquire)
         .then(|| DIAR_JOB.with(|j| j.borrow().clone()))
         .flatten();
     let job_busy = live_job.is_some();
     DIAR_TIMER.with(|t| *t.borrow_mut() = None);
-    // V-1 — same for the model install: grab the running download's slot BEFORE
-    // dropping its poll timer so the poll re-attaches below. Latch free + a slot
-    // still present = the install finished while the window was closed: readiness
-    // is recomputed from disk below, so just clear the stale handle — the new
-    // window must not show a busy button over an already-landed download.
     let live_install = DIAR_INSTALL_BUSY
         .load(Ordering::Acquire)
         .then(|| DIAR_INSTALL_JOB.with(|j| j.borrow().clone()))
@@ -917,9 +860,6 @@ fn wire_transcript_diarization(
     let has_sys_audio_ms = utts_display
         .iter()
         .any(|u| u.source == "system" && u.audio_ms.is_some());
-    // Diarizable EXCEPT for the models: a finished session with aligned system audio +
-    // a saved recording. Split out so we can offer to install the models (V-1) rather
-    // than hide the whole feature when they're absent.
     let session_diarizable = session_finished
         && has_sys_audio_ms
         && overlay_backend::session_audio::session_has_recordings(session_id);
@@ -943,7 +883,7 @@ fn wire_transcript_diarization(
     let install_engine = live_install.as_ref().map(|job| job.engine);
     let use_nemotron = install_engine == Some(overlay_backend::diarize::DiarEngine::Nemotron3);
     win.set_nemotron_available(cfg!(windows));
-    win.set_use_nemotron(use_nemotron); // new jobs default to legacy; in-flight installs retain their engine
+    win.set_use_nemotron(use_nemotron);
     let selected_ready = if use_nemotron {
         overlay_backend::diarize::engine_ready(overlay_backend::diarize::DiarEngine::Nemotron3)
     } else {
@@ -951,13 +891,9 @@ fn wire_transcript_diarization(
     };
     win.set_can_diarize(session_diarizable && selected_ready);
     win.set_needs_diar_models(session_diarizable && !selected_ready);
-    // V-1 — honest busy state: a download that outlived the window shows as
-    // downloading on (re)open; the re-attached poll clears it when it lands.
     win.set_installing_diar_models(install_busy);
     win.set_timeline_unreliable(timeline_unreliable);
     win.set_has_diarization(diar.borrow().is_some());
-    // F — arm the re-detect guard iff the stored result already has custom names; reset the
-    // confirm on this REUSED window so it never opens stale on a fresh open (CLAUDE.md gotcha #1).
     win.set_has_speaker_names(
         diar.borrow()
             .as_ref()
@@ -965,10 +901,6 @@ fn wire_transcript_diarization(
     );
     win.set_confirm_rediar(false);
     win.set_by_voice(false);
-    // suflyor H2 — honest busy state: a job still running (from a closed window
-    // or a rep here) shows as running on (re)open; the re-attached poll below
-    // clears it when the job lands. The run callback's latch gate makes a second
-    // sidecar impossible regardless of what this property says.
     win.set_diarizing(job_busy);
     win.set_diar_status(SharedString::from(if job_busy {
         "Определение говорящих…"
@@ -981,14 +913,9 @@ fn wire_transcript_diarization(
         .map(|d| (d.num_speakers.max(1) as i32).clamp(1, 8))
         .unwrap_or(0);
     win.set_speaker_count(default_count);
-    // Reset the rename list too (the window is reused) — masked while by-voice=false,
-    // but defends against a stale prior-session list if the gating ever changes.
     win.set_speakers(ModelRc::from(Rc::new(VecModel::<SpeakerRow>::default())));
     apply_role_labels(model, &utts_rc);
 
-    // suflyor H2 — re-attach the result poll to a job that outlived the window:
-    // the worker persists the result itself, and this poll consumes it for the
-    // UI (painting only if this session is still the one on screen).
     if let Some(handles) = live_job {
         start_diar_poll(
             win.as_weak(),
@@ -1000,13 +927,10 @@ fn wire_transcript_diarization(
             session_id.to_string(),
         );
     }
-    // V-1 — re-attach the install poll to a download that outlived the window
-    // (same lifecycle as above; the worker commits on disk window-independently).
     if let Some(slot) = live_install {
         start_diar_install_poll(win.as_weak(), slot);
     }
 
-    // Per-run engine selection is a visible UI choice, never a silent fallback.
     {
         let weak = win.as_weak();
         let available = session_diarizable;
@@ -1047,7 +971,6 @@ fn wire_transcript_diarization(
         });
     }
 
-    // Toggle role ↔ voice.
     {
         let weak = win.as_weak();
         let model_c = model.clone();
@@ -1069,7 +992,6 @@ fn wire_transcript_diarization(
         });
     }
 
-    // Rename → persist → reload → repaint (stays in voice view).
     {
         let weak = win.as_weak();
         let store_c = store.clone();
@@ -1081,9 +1003,6 @@ fn wire_transcript_diarization(
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            // suflyor H3 — the rename Result is authoritative: on failure the
-            // name was NOT saved, so the transcript is NOT relabelled from a
-            // state that never reached the catalog and no success is painted.
             let renamed = {
                 let slot = lock_store(&store_c);
                 match slot.as_ref() {
@@ -1100,15 +1019,9 @@ fn wire_transcript_diarization(
                 .as_ref()
                 .and_then(|st| st.get_diarization(&sid).ok().flatten());
             if let Some(d) = diar_c.borrow().as_ref() {
-                // F-fix (fable): the rename now commits per-keystroke (`edited`), so do NOT rebuild
-                // the speaker list here — that recreates the focused LineEdit on every keystroke and
-                // makes typing impossible. The field already shows the typed text; relabel the
-                // transcript rows live, and keep the re-detect guard in sync below.
                 apply_voice_labels(&model_c, &utts_c, d);
                 let has_names = d.speaker_names.values().any(|n| !n.trim().is_empty());
                 w.set_has_speaker_names(has_names);
-                // Clear OUR failure text once a keystroke saved again — but never
-                // an in-flight job's progress line (it only re-posts on a new step).
                 if w.get_diar_status().as_str() == DIAR_RENAME_FAILED_MSG {
                     w.set_diar_status(SharedString::default());
                 }
@@ -1137,13 +1050,8 @@ fn wire_transcript_diarization(
                 return;
             };
             let Some(guard) = try_acquire_busy(&DIAR_BUSY) else {
-                // A job from another (possibly closed) window is still running:
-                // honest busy state, NO second sidecar. The running job's poll
-                // (re-attached on reopen) clears this when it lands.
                 w.set_diarizing(true);
                 w.set_diar_status(SharedString::from("Определение говорящих уже выполняется…"));
-                // Dismiss the re-detect confirm (if this run came through it) so
-                // the busy line is visible and the card doesn't linger.
                 w.set_confirm_rediar(false);
                 return;
             };
@@ -1195,9 +1103,6 @@ fn wire_transcript_diarization(
                             Err(DiarFailure::Run("Nemotron canceled".to_string()))
                         }
                         Ok(d) => {
-                            // Persist HERE, off the window: a worker-owned catalog
-                            // handle (the archive window does the same). The poll's
-                            // Ok arm only paints what this write committed.
                             match open_default_store().and_then(|st| st.put_diarization(&d)) {
                                 Ok(()) => Ok(d),
                                 Err(e) => {
@@ -1247,9 +1152,6 @@ fn wire_transcript_diarization(
             };
             let use_nemotron = w.get_use_nemotron();
             let Some(guard) = try_acquire_busy(&DIAR_INSTALL_BUSY) else {
-                // An install from another (possibly closed) window is still
-                // running: honest busy state, NO second worker. The running
-                // install's poll (re-attached on reopen) clears this when it lands.
                 w.set_installing_diar_models(true);
                 w.set_diar_status(SharedString::default());
                 return;
@@ -1274,8 +1176,6 @@ fn wire_transcript_diarization(
                     // leaked and wedge the feature until restart).
                     let guard = guard;
                     let cancel = AtomicBool::new(false);
-                    // ponytail: no per-file progress marshalling — the button's
-                    // "Downloading…" state is enough for a one-time ~30 MB fetch.
                     let r = if use_nemotron {
                         overlay_backend::diar_install::install_nemotron()
                     } else {
@@ -1283,8 +1183,6 @@ fn wire_transcript_diarization(
                     }.map_err(|e| format!("{e:#}"));
                     if let Ok(mut g) = slot_w.lock() {
                         *g = Some(r);
-                        // Keep result publication + latch release ordered for
-                        // the poll (same contract as the diarization worker).
                         drop(guard);
                     }
                 });
@@ -1305,7 +1203,6 @@ pub(in super::super) fn open_transcript(
     store: &StoreSlot,
     rt_handle: &tokio::runtime::Handle,
 ) {
-    // Build the model once — shared by the reuse + first-open paths.
     let session_start = session.and_then(|s| s.started_at_ms).filter(|&ms| ms > 0);
     // D3 — a finished session is a precondition to diarize (a live session's WAV is
     // unfinalized). `crashed`/`active` sessions can't.
@@ -1324,7 +1221,7 @@ pub(in super::super) fn open_transcript(
     let mut indexed: Vec<(Option<i64>, &Utterance)> = utts
         .iter()
         .enumerate()
-        .take(TRANSCRIPT_DISPLAY_CAP) // memory sanity bound (not i16 — ListView virtualizes)
+        .take(TRANSCRIPT_DISPLAY_CAP)
         .map(|(i, u)| {
             (
                 overlay_backend::session_audio::line_start_offset_ms(utts, i, session_start),
@@ -1333,8 +1230,6 @@ pub(in super::super) fn open_transcript(
         })
         .collect();
     indexed.sort_by_key(|(off, _)| off.unwrap_or(0));
-    // The sorted utterances that BACK the rows — pass THESE (not raw `utts`) to the copy/selection
-    // wiring so a checked row index maps to the right utterance.
     let utts_display: Vec<Utterance> = indexed.iter().map(|(_, u)| (*u).clone()).collect();
     let lines: Vec<TranscriptLine> = indexed
         .iter()
@@ -1345,8 +1240,6 @@ pub(in super::super) fn open_transcript(
             } else {
                 "Система"
             }),
-            // Role view uses the theme accent (Slint side); this is only read in the
-            // «По голосам» view, where `rebuild_speaker_labels` overwrites it.
             speaker_color: slint::Color::from_rgb_u8(0, 0, 0),
             text: SharedString::from(overlay_backend::text::collapse_ws(&u.text)),
             display_text: SharedString::from(slint_replay::math_display::normalize_math_display(
@@ -1358,17 +1251,10 @@ pub(in super::super) fn open_transcript(
             matched: false,
         })
         .collect();
-    // Utterances hidden by the display cap — the footer discloses this (Copy all
-    // still exports every line). 0 when the whole transcript fits under the cap.
     let overflow = utts.len().saturating_sub(TRANSCRIPT_DISPLAY_CAP) as i32;
     let session_id = session.map(|s| s.id.clone()).unwrap_or_default();
-    // Drop any prior session's player + poll timer — the window is reused, so a
-    // fresh open must not keep the previous session's audio playing (ТЗ2b).
     transcript_player::reset();
 
-    // Reuse if already open — repopulate (a reused window must show THIS session)
-    // and re-focus via the borrowed strong handle. Slint handles are NOT `Clone`,
-    // so the single strong handle stays in the slot and closures use weak handles.
     if let Some(win) = slot.borrow().as_ref() {
         win.global::<ui::Theme>()
             .set_scheme(clamp_scheme(global_scheme()));
@@ -1396,7 +1282,6 @@ pub(in super::super) fn open_transcript(
         return;
     }
 
-    // First open: create, populate, wire (weak closures), present, then store.
     let win = match TranscriptWindow::new() {
         Ok(w) => w,
         Err(e) => {
@@ -1430,14 +1315,7 @@ pub(in super::super) fn open_transcript(
         let slot_c = slot.clone();
         let weak = win.as_weak();
         win.on_close_requested(move || {
-            transcript_player::reset(); // stop audio + poll timer when the window closes
-                                        // suflyor H2 / V-1 — dropping the polls only stops the cosmetic
-                                        // consumption: a running job holds its process-global latch, lands
-                                        // the outcome window-independently (the diar worker persists from
-                                        // its own catalog handle; the install commits on disk), and a
-                                        // reopen re-attaches a poll via DIAR_JOB / DIAR_INSTALL_JOB — so
-                                        // closing neither loses the result nor frees the latch for a
-                                        // second worker.
+            transcript_player::reset();
             DIAR_TIMER.with(|t| *t.borrow_mut() = None);
             DIAR_INSTALL_TIMER.with(|t| *t.borrow_mut() = None);
             if let Some(w) = weak.upgrade() {
@@ -1526,25 +1404,20 @@ mod tests {
             "Потом про найм",
             "Вернулись к БЮДЖЕТУ и срокам",
         ];
-        // Case-insensitive substring; Cyrillic folds → rows 0 and 2 match «бюджет».
         assert_eq!(transcript_search_hits(&texts, "бюджет"), vec![0, 2]);
-        assert_eq!(transcript_search_hits(&texts, "  НАЙМ  "), vec![1]); // trims + folds case
-        assert_eq!(transcript_search_hits(&texts, "xyz"), Vec::<usize>::new()); // no match
-        assert_eq!(transcript_search_hits(&texts, "   "), Vec::<usize>::new()); // blank → none
+        assert_eq!(transcript_search_hits(&texts, "  НАЙМ  "), vec![1]);
+        assert_eq!(transcript_search_hits(&texts, "xyz"), Vec::<usize>::new());
+        assert_eq!(transcript_search_hits(&texts, "   "), Vec::<usize>::new());
     }
 
     #[test]
     fn next_hit_index_fresh_and_wrap() {
-        // Fresh (cur -1): › → first (0), ‹ → last (n-1) — NOT n-2.
         assert_eq!(next_hit_index(-1, 1, 5), 0);
         assert_eq!(next_hit_index(-1, -1, 5), 4);
-        // Positioned: step forward/back.
         assert_eq!(next_hit_index(0, 1, 5), 1);
         assert_eq!(next_hit_index(2, -1, 5), 1);
-        // Wrap both ends.
         assert_eq!(next_hit_index(4, 1, 5), 0);
         assert_eq!(next_hit_index(0, -1, 5), 4);
-        // Single hit — every move stays on 0.
         assert_eq!(next_hit_index(-1, -1, 1), 0);
         assert_eq!(next_hit_index(0, 1, 1), 0);
     }
@@ -1554,6 +1427,6 @@ mod tests {
         assert_eq!(fmt_offset(0), "00:00");
         assert_eq!(fmt_offset(135_000), "02:15");
         assert_eq!(fmt_offset(3_661_000), "1:01:01");
-        assert_eq!(fmt_offset(-5), "00:00"); // negative clamps
+        assert_eq!(fmt_offset(-5), "00:00");
     }
 }

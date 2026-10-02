@@ -34,7 +34,6 @@ pub(crate) fn populate_diagnostics(
     // Warm the GPU-name cache off-thread now (the Diagnostics tab is opening), so
     // the later "Copy report" click reads it without ever blocking the event loop.
     prime_gpu_cache();
-    // Clear any stale "Собрать логи" path from a previous open (reused window).
     win.set_diag_logs_path(SharedString::from(""));
     let c = cfg.read();
     let r = c.readiness();
@@ -43,16 +42,12 @@ pub(crate) fn populate_diagnostics(
     win.set_diag_ai_detail(SharedString::from(r.ai.detail));
     win.set_diag_stt_level(if r.stt.configured { 0 } else { 2 });
     win.set_diag_stt_detail(SharedString::from(r.stt.detail));
-    // mic/sys: neutral ("—") until "Check all" records a live sample (#133) —
-    // a configured device is NOT proof it actually hears.
     win.set_diag_mic_level(3);
     win.set_diag_mic_detail(SharedString::from(r.mic.detail));
     win.set_diag_sys_level(3);
     win.set_diag_sys_detail(SharedString::from(r.sys.detail));
-    // P1.1 — Vision (F8): 0=ready (configured), 3=neutral "off" (intentional).
     win.set_diag_vision_level(if r.vision.configured { 0 } else { 3 });
     win.set_diag_vision_detail(SharedString::from(r.vision.detail));
-    // P1.2 — global-hotkey registration outcome (per-key conflict surfacing).
     let (hk_level, hk_registered, hk_failed) = hotkey_diag_row();
     win.set_diag_hotkeys_level(hk_level);
     win.set_diag_hotkeys_detail(SharedString::from(hk_registered));
@@ -131,7 +126,6 @@ pub(crate) fn redact_urls(s: &str) -> String {
     } {
         out.push_str(&rest[..pos]);
         let tail = &rest[pos..];
-        // URL ends at the first whitespace — base_url has no spaces.
         let end = tail.find(char::is_whitespace).unwrap_or(tail.len());
         out.push_str(&overlay_backend::config::mask_host(&tail[..end]));
         rest = &tail[end..];
@@ -384,9 +378,6 @@ pub(crate) fn build_diag_report(cfg: &overlay_backend::config::SharedConfig) -> 
 /// the redacted "Copy report" clipboard write and the "Проверить всё" live
 /// AI+STT ping / 3 s mic sample (single-mic guarded) / system-audio self-test.
 pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::config::SharedConfig) {
-    // P1.1 — "Copy report": redacted diagnostics → clipboard with a brief
-    // "copied" confirmation. build_diag_report masks the LAN bridge IP and
-    // carries no bearer / API key / transcript / profile text.
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
@@ -437,9 +428,6 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = done.upgrade() {
                         w.set_db_repair_status(SharedString::from(msg));
-                        // Refresh the Память tab lists so a clear is reflected
-                        // IMMEDIATELY — the deleted rows were lingering in the UI
-                        // until a Settings reopen (bounded 100-row re-read).
                         super::settings_memory::reload_memory(&w);
                     }
                 });
@@ -470,9 +458,6 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = done.upgrade() {
                         w.set_db_repair_status(SharedString::from(msg));
-                        // Refresh the Память tab lists so a clear is reflected
-                        // IMMEDIATELY — the deleted rows were lingering in the UI
-                        // until a Settings reopen (bounded 100-row re-read).
                         super::settings_memory::reload_memory(&w);
                     }
                 });
@@ -497,9 +482,6 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = done.upgrade() {
                         w.set_db_repair_status(SharedString::from(msg));
-                        // Refresh the Память tab lists so a clear is reflected
-                        // IMMEDIATELY — the deleted rows were lingering in the UI
-                        // until a Settings reopen (bounded 100-row re-read).
                         super::settings_memory::reload_memory(&w);
                     }
                 });
@@ -539,7 +521,6 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
             };
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
-                // 1. AI + STT live pings (async, on a throwaway runtime).
                 let (ai_level, ai_msg, stt_level, stt_msg, vis_level, vis_msg): (
                     i32,
                     String,
@@ -573,11 +554,6 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                             Ok(s) => (0, format!("[ok] {s}")),
                             Err(e) => (4, format!("[err] {e:#}").chars().take(80).collect()),
                         };
-                        // P2 — Vision live-check: send a SYNTHETIC image (never the
-                        // user's screen) to the resolved vision endpoint, so a
-                        // "ready" result means the IMAGE path works — not just text
-                        // reachability (the old check only pinged text). Vision off
-                        // → neutral "off" (3), not an error.
                         let (vl, vm): (i32, String) = match vision_ep {
                             None => (3, "off".to_string()),
                             Some(ep) => match rt
@@ -649,10 +625,6 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                         w.set_diag_mic_detail(SharedString::from(mic_msg));
                     }
                 });
-                // 3. System audio — SELF-TEST: play a short test tone through the
-                // default output while capturing the loopback. If the loopback
-                // hears our own tone, the output→loopback path works — the user
-                // doesn't have to play anything.
                 let (sys_level, sys_msg): (i32, String) =
                     match overlay_backend::audio::play_tone_and_capture(sys_device) {
                         Ok(s) => {
@@ -695,12 +667,6 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                 let msg = match collect_redacted_log() {
                     Ok(out) => {
                         reveal_in_explorer(&out);
-                        // Show the FULL path so the tester can find/copy the file
-                        // even if the Explorer reveal misses (AppData is hidden +
-                        // cluttered, which tripped the v0.24.0 tester).
-                        // Mask the username in the shown path (Settings can be
-                        // screen-shared); %USERPROFILE% still resolves if the
-                        // tester pastes it into Explorer's address bar.
                         format!(
                             "Сохранён лог: {}",
                             redact_user_home(&out.display().to_string())
@@ -780,7 +746,6 @@ mod tests {
             "http://<ip>:18902/v1"
         );
         assert_eq!(redact_ipv4("local 127.0.0.1 ok"), "local <ip> ok");
-        // No IPv4 → untouched (model id, app version).
         assert_eq!(redact_ipv4("claude-sonnet-4-6"), "claude-sonnet-4-6");
         assert_eq!(
             redact_ipv4("suflyor diagnostics (v1.16.1)"),
@@ -794,7 +759,6 @@ mod tests {
     // %USERPROFILE% masking holds and is path-safe.
     #[test]
     fn redact_user_home_masks_profile_dir_keeps_rest() {
-        // Canonical: home is a prefix of the STT model dir.
         assert_eq!(
             redact_home_in(
                 "STT: ready — gigaam · C:\\Users\\alice\\suflyor-local-ai\\gigaam-v3",
@@ -808,14 +772,11 @@ mod tests {
             redact_home_in("models at c:\\users\\Alice\\m", "C:\\Users\\alice"),
             "models at %USERPROFILE%\\m"
         );
-        // EVERY occurrence is masked (a future line could embed the home twice).
         assert_eq!(
             redact_home_in("C:\\Users\\bob\\a and C:\\Users\\bob\\b", "C:\\Users\\bob"),
             "%USERPROFILE%\\a and %USERPROFILE%\\b"
         );
-        // A bare / implausibly short home must NOT blanket the whole report.
         assert_eq!(redact_home_in("C:\\x is fine", "C:\\"), "C:\\x is fine");
-        // No home occurrence → untouched (model id, version, device name).
         assert_eq!(
             redact_home_in("GPU: NVIDIA GeForce RTX 5060 Ti", "C:\\Users\\bob"),
             "GPU: NVIDIA GeForce RTX 5060 Ti"
@@ -834,12 +795,10 @@ mod tests {
         );
         assert!(!dbl.to_ascii_lowercase().contains("alice"), "leaked: {dbl}");
         assert!(dbl.contains("%USERPROFILE%"));
-        // Forward-slash paths (std / cargo) are masked too.
         assert_eq!(
             redact_home_all_forms("cache at C:/Users/alice/.cargo", home),
             "cache at %USERPROFILE%/.cargo"
         );
-        // Single-backslash still works (no regression).
         assert_eq!(
             redact_home_all_forms("at C:\\Users\\alice\\x", home),
             "at %USERPROFILE%\\x"
@@ -858,13 +817,10 @@ mod tests {
 
     #[test]
     fn redact_urls_masks_dns_ipv6_and_ipv4_hosts_keeping_scheme_port_path() {
-        // FIX #7 — a DNS bridge host (Tailscale / mDNS / FQDN) must be masked,
-        // not echoed verbatim, while scheme + port + path are kept.
         assert_eq!(
             redact_urls("AI: ready — local llama @ http://bridge.tailnet.ts.net:18902/v1"),
             "AI: ready — local llama @ http://***:18902/v1"
         );
-        // IPv6 literal host is masked too (redact_ipv4 never matched these).
         assert_eq!(
             redact_urls("STT: http://[2001:db8::1]:9000/v1 ok"),
             "STT: http://***:9000/v1 ok"
@@ -874,18 +830,14 @@ mod tests {
             redact_urls("vision @ http://[fd00::abcd]/v1"),
             "vision @ http://***/v1"
         );
-        // Plain IPv4 in a URL — host blanked, port/path kept.
         assert_eq!(
             redact_urls("http://192.168.0.142:18902/v1"),
             "http://***:18902/v1"
         );
-        // https + a DNS host appearing BEFORE an http URL: the earliest match
-        // must be masked first so the leading text can't echo it verbatim.
         assert_eq!(
             redact_urls("a https://api.example.com/v1 b http://10.0.0.5:1234/v1 c"),
             "a https://***/v1 b http://***:1234/v1 c"
         );
-        // No URL → untouched.
         assert_eq!(redact_urls("Hotkeys: ok (F9, F4)"), "Hotkeys: ok (F9, F4)");
     }
 
@@ -909,7 +861,7 @@ mod tests {
         // string shaped like that report keeps the test hermetic (the real
         // `build_diag_report` reads a SharedConfig, which loads live secrets).
         let report = "suflyor diagnostics (v1.16.1)\n\
-             AI: ready — local · http://bridge.tailnet.ts.net:18902/v1 · my-local-gemma\n\
+             AI: ready — local · http:
              STT: ready — groq cloud\n\
              Hotkeys: ok (F9, F4)\n";
         let masked = redact_urls(report);
@@ -921,7 +873,6 @@ mod tests {
             masked.contains("http://***:18902/v1"),
             "masked URL should keep scheme/port/path:\n{masked}"
         );
-        // Non-URL lines are untouched.
         assert!(masked.contains("suflyor diagnostics (v1.16.1)"));
         assert!(masked.contains("STT: ready — groq cloud"));
     }
@@ -946,10 +897,10 @@ mod tests {
     fn is_ipv4_accepts_valid_rejects_ports_and_versions() {
         assert!(is_ipv4("10.0.0.1"));
         assert!(is_ipv4("255.255.255.255"));
-        assert!(!is_ipv4("18902")); // a bare port
-        assert!(!is_ipv4("1.16.1")); // 3 octets (a version)
-        assert!(!is_ipv4("1.2.3.4.5")); // 5 octets
-        assert!(!is_ipv4("256.1.1.1")); // octet > 255
-        assert!(!is_ipv4("")); // empty
+        assert!(!is_ipv4("18902"));
+        assert!(!is_ipv4("1.16.1"));
+        assert!(!is_ipv4("1.2.3.4.5"));
+        assert!(!is_ipv4("256.1.1.1"));
+        assert!(!is_ipv4(""));
     }
 }

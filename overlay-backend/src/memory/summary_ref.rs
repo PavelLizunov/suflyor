@@ -47,7 +47,7 @@ pub fn key_terms(text: &str) -> Vec<String> {
     // marks a token preceded by .!?/newline — its capitalization is sentence
     // case, NOT name-ness (review v0.16.0: «…CRM. Завтра встреча» must not
     // turn «Завтра» into a term that matches every transcript).
-    let mut tokens: Vec<(usize, &str, bool)> = Vec::new(); // (end, tok, sentence_start)
+    let mut tokens: Vec<(usize, &str, bool)> = Vec::new();
     let mut start: Option<usize> = None;
     let mut at_sentence_start = true;
     for (i, ch) in text.char_indices() {
@@ -73,7 +73,7 @@ pub fn key_terms(text: &str) -> Vec<String> {
     let mut seen: HashSet<String> = HashSet::new();
     for (idx, &(end, tok, sentence_start)) in tokens.iter().enumerate() {
         if tok.chars().all(|c| c.is_numeric()) {
-            continue; // bare numbers are never terminology
+            continue;
         }
         let first_upper = tok.chars().next().is_some_and(char::is_uppercase);
         let letters = tok.chars().filter(|c| c.is_alphabetic()).count();
@@ -81,8 +81,6 @@ pub fn key_terms(text: &str) -> Vec<String> {
         let latin_in_cyrillic = has_cyrillic
             && tok.chars().any(|c| c.is_ascii_alphabetic())
             && tok.chars().all(|c| c.is_ascii_alphanumeric());
-        // First word counts only in the definition pattern «Альфа — …» /
-        // "Alpha: …" (otherwise it's just sentence capitalization).
         let first_word_definition = idx == 0 && first_upper && {
             let after = text[end..].trim_start();
             after.starts_with('—')
@@ -217,19 +215,13 @@ mod tests {
         assert!(terms.contains(&"crm".to_string()));
         assert!(terms.contains(&"маша".to_string()));
         assert!(terms.contains(&"петя".to_string()));
-        // «Проект» is the sentence-initial word of a NON-definition opener
-        // («Проект Альфа» — no dash right after) → not a term.
         assert!(!terms.contains(&"проект".to_string()));
-        // Lowercase common words are never terms.
         assert!(!terms.contains(&"внутренняя".to_string()));
         assert!(!terms.contains(&"команда".to_string()));
     }
 
     #[test]
     fn key_terms_skips_capitalized_sentence_starts_inside_multi_sentence_facts() {
-        // «Завтра» opens the SECOND sentence — sentence case, not a name; it
-        // must NOT become a term (else the fact matches every transcript that
-        // says "tomorrow"). A real name mid-sentence («у Маши») still counts.
         let terms = key_terms("Проект Альфа — наша CRM. Завтра встреча у Маши");
         assert!(!terms.contains(&"завтра".to_string()), "{terms:?}");
         assert!(terms.contains(&"альфа".to_string()));
@@ -244,7 +236,6 @@ mod tests {
             "definition first word"
         );
         assert!(terms.contains(&"jira".to_string()), "latin inside cyrillic");
-        // A plain lowercase preference has no terms at all.
         assert!(key_terms("отвечай кратко и по делу").is_empty());
     }
 
@@ -254,7 +245,6 @@ mod tests {
             item("Проект Альфа — внутренняя CRM, команда: Маша, Петя"),
             item("Проект Гамма — биллинг на Go"),
         ];
-        // Transcript mentions «Альфе» (declined!) but never «Гамма».
         let transcript = "Вы: обсудим задачи по Альфе на этой неделе\nСобеседник: давайте";
         let matched = relevant_items(&items, transcript);
         assert_eq!(matched.len(), 1);

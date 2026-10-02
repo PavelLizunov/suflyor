@@ -85,8 +85,6 @@ mod windows_impl {
         }
 
         let result = unsafe { DefSubclassProc(hwnd, message, wparam, lparam) };
-        // Slint handles the pointer event after this native callback returns and
-        // calls SetCursor directly. Restore once after its deferred work runs.
         if restore_arrow_after_message(message) && unsafe { force_arrow_if_stealthed(hwnd) } {
             unsafe {
                 SetTimer(Some(hwnd), STEALTH_CURSOR_TIMER_ID, 1, None);
@@ -197,25 +195,14 @@ mod windows_impl {
         hwnd: HWND,
         click_through: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // A top-level window can reach this shared path with WS_EX_APPWINDOW.
-        // Merely OR-ing TOOLWINDOW leaves both bits set, so Explorer keeps a taskbar button.
-        // This shared transition also performs the required hide/restyle/show refresh.
         set_skip_taskbar(hwnd, true)?;
         let before = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
         let target = transparency_exstyle(before, click_through);
         unsafe {
             SetWindowLongPtrW(hwnd, GWL_EXSTYLE, target);
         }
-        // Phase E6 v7 diagnostic — verify the ex_style actually changed.
-        // Logs the before/after bits so we can confirm WS_EX_TRANSPARENT
-        // (0x20) is cleared for tiles and set for overlay. If Slint
-        // re-applies WS_EX_TRANSPARENT later we'll see it diverge.
         let after = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
         let transparent_bit = WS_EX_TRANSPARENT.0 as isize;
-        // Diagnostic only — gate behind debug builds so normal (release) window
-        // creation isn't spammed with this per-window line (it also bypasses the
-        // timestamped file log). cfg! keeps it compiled, so `after`/`transparent_bit`
-        // stay "used"; the format work is just skipped at runtime in release.
         if cfg!(debug_assertions) {
             eprintln!(
             "[overlay-host] apply_transparency: click_through={} before=0x{:x} target=0x{:x} after=0x{:x} \
@@ -228,24 +215,12 @@ mod windows_impl {
         );
         }
 
-        // V0.8.4 — kill the ghost caption buttons. Slint's `no-frame: true` leaves
-        // WS_CAPTION | WS_SYSMENU | WS_MAXIMIZEBOX | WS_MINIMIZEBOX on the HWND; once
-        // we extend the DWM frame into the client area (below), DWM paints the
-        // caption's close/min/max glyphs faintly in the top-right corner — the
-        // "еле заметный крестик" the user kept reporting on the bar (and it was on
-        // tiles too). Clearing the sys-menu + min/max bits drops those non-client
-        // buttons while leaving WS_CAPTION/WS_THICKFRAME, so the DWM frame extension
-        // is unchanged. Verified live: the × disappears, transparency + rounded
-        // corners stay intact. Alt+F4 also goes away — fine, every overlay window
-        // has its own close affordance (the bar's X chip, the tile's X button).
         unsafe {
             let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
             let no_buttons = style
                 & !(WS_SYSMENU.0 as isize | WS_MAXIMIZEBOX.0 as isize | WS_MINIMIZEBOX.0 as isize);
             if no_buttons != style {
                 SetWindowLongPtrW(hwnd, GWL_STYLE, no_buttons);
-                // SWP_FRAMECHANGED forces a non-client recompute so the removed
-                // buttons stop being drawn immediately (not on the next frame).
                 let _ = SetWindowPos(
                     hwnd,
                     None,
@@ -396,7 +371,6 @@ mod windows_impl {
             let _ = ShowWindow(hwnd, SW_HIDE);
             SetWindowLongPtrW(hwnd, GWL_EXSTYLE, after);
             let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-            // hide/show can drop topmost — re-assert it without stealing focus.
             SetWindowPos(
                 hwnd,
                 Some(HWND_TOPMOST),
@@ -429,7 +403,7 @@ mod windows_impl {
     /// transparent / topmost / …) is preserved.
     #[must_use]
     pub fn skip_taskbar_exstyle(before: isize, skip: bool) -> isize {
-        let _ = skip; // baseline is identical in both directions — see doc
+        let _ = skip;
         let tool = WS_EX_TOOLWINDOW.0 as isize;
         let app = WS_EX_APPWINDOW.0 as isize;
         (before | tool) & !app
@@ -842,7 +816,6 @@ mod windows_impl {
         use windows::Win32::Graphics::Dwm::{
             DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE,
         };
-        // DWMWCP_ROUND = 2 (the standard, larger-radius rounding).
         const DWMWCP_ROUND: u32 = 2;
         unsafe {
             let pref = DWMWCP_ROUND;
@@ -874,10 +847,7 @@ mod windows_impl {
         Some(upgrade.unwrap_or(primary))
     }
 
-    // ===== Read-aloud helpers: copy-the-selection + clipboard text =====
 
-    // Compatibility aliases keep the selection-copy path unchanged while the
-    // clipboard implementation lives behind the native boundary.
     pub use crate::native::clipboard::{
         clear as clipboard_clear, read_text as clipboard_read_text,
         write_text as clipboard_write_text,
@@ -897,7 +867,7 @@ mod windows_impl {
             MapVirtualKeyW, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
             KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, MAPVK_VK_TO_VSC, VIRTUAL_KEY, VK_CONTROL,
         };
-        let vk_c = VIRTUAL_KEY(0x43); // 'C'
+        let vk_c = VIRTUAL_KEY(0x43);
         let ev = |vk: VIRTUAL_KEY, up: bool| {
             let scan = unsafe { MapVirtualKeyW(u32::from(vk.0), MAPVK_VK_TO_VSC) } as u16;
             let flags = if up {
@@ -979,21 +949,15 @@ mod windows_impl {
             let unrelated =
                 WS_EX_LAYERED.0 as isize | WS_EX_TRANSPARENT.0 as isize | WS_EX_TOPMOST.0 as isize;
 
-            // skip on: TOOLWINDOW forced, APPWINDOW cleared, other bits preserved.
             assert_eq!(
                 skip_taskbar_exstyle(unrelated | app, true),
                 unrelated | tool
             );
-            // skip off: SAME baseline — APPWINDOW cleared AND the missing
-            // TOOLWINDOW re-asserted (the old code left TOOLWINDOW absent here).
             let off = skip_taskbar_exstyle(unrelated | app, false);
             assert_eq!(off, unrelated | tool);
             assert_eq!(off & app, 0);
-            // The bare regression input (no TOOLWINDOW, APPWINDOW set) lands the
-            // exact baseline in BOTH directions.
             assert_eq!(skip_taskbar_exstyle(app, true), tool);
             assert_eq!(skip_taskbar_exstyle(app, false), tool);
-            // Idempotent on an already-baseline window (caller skips the hide/show).
             assert_eq!(
                 skip_taskbar_exstyle(unrelated | tool, true),
                 unrelated | tool

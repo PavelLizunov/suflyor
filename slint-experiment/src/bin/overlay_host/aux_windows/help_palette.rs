@@ -27,7 +27,6 @@ pub(in super::super) fn open_help(
     win.global::<ui::Platform>().set_is_macos(true);
     win.global::<ui::Theme>()
         .set_scheme(clamp_scheme(global_scheme()));
-    // Light up the bar's 🆘 chip while help is open (same as ⚙ for Settings).
     if let Some(o) = overlay_weak.upgrade() {
         o.set_help_open(true);
     }
@@ -45,7 +44,6 @@ pub(in super::super) fn open_help(
             }
         });
     }
-    // Frameless drag (cursor-delta, same as Settings) — the header is the handle.
     {
         let weak = win.as_weak();
         win.on_drag_start_requested(move || {
@@ -71,8 +69,6 @@ pub(in super::super) fn open_help(
         // like the bar/tiles — otherwise under stealth they leak an existence
         // entry while open (content is WDA-hidden, but the window button isn't).
         let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
-        // OS-level rounded corners (opaque frameless window can't get them from
-        // an inner border-radius) — same as the archive window.
         slint_replay::win32::set_round_corners(hwnd);
         focus_window(hwnd);
     });
@@ -99,12 +95,8 @@ pub(in super::super) fn open_palette(
             return;
         }
     };
-    // Seed the palette's Theme global from the live scheme (the palette is
-    // ephemeral — spawned per F4 — so it just reads at construction).
     apply_scheme_palette(&win, global_scheme());
 
-    // Phase C — wire palette to real overlay_backend::kb::search.
-    // Initial load: show top 20 entries (popular/first in cache).
     let initial = kb_to_palette_results(&kb::search("", 20));
     win.set_results(slint::ModelRc::new(slint::VecModel::from(initial)));
 
@@ -127,8 +119,6 @@ pub(in super::super) fn open_palette(
         *palette_close.borrow_mut() = None;
     });
 
-    // Frameless drag — the new header owns the grab target; the close button
-    // remains a sibling so pointer events never conflict.
     {
         let weak = win.as_weak();
         win.on_drag_start_requested(move || {
@@ -162,10 +152,6 @@ pub(in super::super) fn open_palette(
             return;
         };
 
-        // Spawn a read-only tile with the result content via the shared helper
-        // (also used by the session archive). Phase C — wire to real kb::get for
-        // the full body; fall back to the preview if the key isn't found
-        // (defensive — the result came from kb::search).
         let body = kb::get(result.key.as_str())
             .map_or_else(|| result.preview.to_string(), |e| e.body.clone());
         let md = format!("# {}\n\n{body}\n", result.heading_or_key());
@@ -177,7 +163,6 @@ pub(in super::super) fn open_palette(
             &s_ref,
             &weak_overlay2,
         );
-        // Close palette after activation.
         if let Some(p) = weak_self.upgrade() {
             let _ = p.hide();
         }
@@ -191,7 +176,6 @@ pub(in super::super) fn open_palette(
         // Keep the palette out of the taskbar/Alt-Tab too (stealth existence
         // leak — same as help/text-ask/wizard above).
         let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
-        // OS-level rounded corners (opaque frameless window) — same as archive.
         slint_replay::win32::set_round_corners(hwnd);
     });
     *slot = Some(win);
@@ -211,7 +195,6 @@ fn kb_to_palette_results(entries: &[kb::KBEntry]) -> Vec<PaletteResult> {
     entries
         .iter()
         .map(|e| {
-            // First sentence (or first 160 chars) of body for preview.
             let preview = e
                 .body
                 .split_terminator(['.', '\n'])

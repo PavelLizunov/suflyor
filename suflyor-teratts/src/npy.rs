@@ -156,7 +156,7 @@ mod tests {
         bytes.extend_from_slice(b"\x93NUMPY");
         bytes.push(1);
         bytes.push(0);
-        let padded = header.len() + 1; // + newline
+        let padded = header.len() + 1;
         bytes.extend_from_slice(&(padded as u16).to_le_bytes());
         bytes.extend_from_slice(header.as_bytes());
         bytes.push(b'\n');

@@ -41,12 +41,7 @@ pub fn capture_rect_bgra(
         }
         let old = SelectObject(mem, HGDIOBJ(bmp.0));
         let blt = BitBlt(mem, 0, 0, w, h, Some(screen), x, y, SRCCOPY);
-        // Deselect the bitmap from the DC BEFORE reading its bits: GetDIBits
-        // requires the bitmap NOT be selected into any DC (documented contract).
         SelectObject(mem, old);
-        // Skip the large (full-virtual-desktop) GetDIBits copy + buffer alloc
-        // entirely when BitBlt failed — but still run the GDI cleanup below on
-        // every path.
         let result: Result<Vec<u8>, Box<dyn std::error::Error>> = if blt.is_err() {
             Err("BitBlt failed".into())
         } else {
@@ -55,7 +50,7 @@ pub fn capture_rect_bgra(
                 bmiHeader: BITMAPINFOHEADER {
                     biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
                     biWidth: w,
-                    biHeight: -h, // negative => top-down rows
+                    biHeight: -h,
                     biPlanes: 1,
                     biBitCount: 32,
                     biCompression: BI_RGB.0,
@@ -78,7 +73,6 @@ pub fn capture_rect_bgra(
                 Ok(buf)
             }
         };
-        // Free the remaining GDI objects on all paths.
         let _ = DeleteObject(HGDIOBJ(bmp.0));
         let _ = DeleteDC(mem);
         let _ = ReleaseDC(None, screen);

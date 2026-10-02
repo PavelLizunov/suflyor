@@ -41,8 +41,6 @@ fn production_macos_window_uses_the_proven_minimal_appkit_bridge() {
     assert!(objc.contains("1UL << 18"));
     assert!(!objc.contains("NSStatusItem"));
     assert!(!objc.contains("Gate 0A"));
-    // The key/front raise reuses the shared view-to-window helper and stays
-    // on plain AppKit: activate the app, then make the window key and front.
     assert!(objc.contains("int32_t suflyor_macos_raise_window_key_front(void *raw_view)"));
     assert!(objc.contains("suflyor_window_for_view(raw_view)"));
     assert!(objc.contains("makeKeyAndOrderFront"));
