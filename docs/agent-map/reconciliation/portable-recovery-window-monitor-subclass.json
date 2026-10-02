@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "tested_commit": "3a7000aa5868fdb05712381e491dfcbe44525ae0",
+  "method": "exact Git archive; source inspection of Win32 monitor selection, tile monitor pin packing, and window subclassing; no physical monitor querying or subclass unhooking",
+  "research_tests": 386,
+  "research_skips": 0,
+  "existing_mocked_hermes_tests": 3,
+  "source_feature_contracts": 26,
+  "source_feature_references": 709,
+  "new_window_monitor_subclass_fixtures": 6,
+  "original_hypothesis_ids_unchanged": [
+    "wave3_worker2_window-C07",
+    "wave3_worker2_window-C10"
+  ],
+  "navigation_ledger": {
+    "selected_files": 298,
+    "some_precise_navigation": 162,
+    "no_precise_navigation": 136,
+    "source_lines": 120858,
+    "reference_line_union": 39935,
+    "semantically_reviewed_lines": "not_established",
+    "validation_errors": [],
+    "regenerated_byte_identical": true,
+    "bytes": 276288,
+    "sha256": "b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2"
+  },
+  "checkpoint_issues": [],
+  "result": "PASS bounded window monitor selection and subclass unhook recovery; original hypotheses unchanged; full research incomplete",
+  "native_window_monitor_acceptance": false,
+  "independent_acceptance": false,
+  "full_project_coverage": false
+}

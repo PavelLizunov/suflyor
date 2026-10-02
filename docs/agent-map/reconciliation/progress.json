@@ -444,5 +444,5 @@
     "wave3_worker2_window-C07",
     "wave3_worker2_window-C10"
   ],
-  "window_monitor_subclass_portable_verification": "pending exact covering commit"
+  "window_monitor_subclass_portable_verification": "PASS exact 3a7000aa5868fdb05712381e491dfcbe44525ae0; six source fixtures; C07 C10 remain hypotheses"
 }
