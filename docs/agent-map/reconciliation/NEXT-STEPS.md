@@ -38,6 +38,7 @@
 - Round-32 memory C01/C02: six pure string fixtures, suite 260; substring filter scope and post-first-line budget bounded. [Limits](hypothesis-memory-budget.md): no Rust test or owner memory; exact `d5de221f` archive passed 260+3 ([receipt](portable-recovery-memory-budget.json)).
 - Round-33 memory C05/C08: six pure fixtures, suite 266; ordered omission, clipping, and full-load boundaries bounded. [Limits](hypothesis-memory-grounding.md): no Rust test or owner memory; exact `d925f1b7` archive passed 266+3 ([receipt](portable-recovery-memory-grounding.json)).
 - Round-34 persistence C13: six temporary SQLite fixtures, suite 272; stale whole-blob speaker rename bounded. [Limits](hypothesis-diarization-rename.md): no Rust race or owner catalog; exact `bf0ac534` archive passed 272+3 ([receipt](portable-recovery-diarization-rename.json)).
+- Round-35 config C05/C07: six temporary dummy-file fixtures, suite 278; symlink open and invalid-JSON reset bounded. [Limits](hypothesis-credential-files.md): no owner credentials or Rust race; exact-SHA repeat pending.
 - WIP GitHub checkpoint on the dedicated task branch; task-owned files only.
 
 ## Not complete
