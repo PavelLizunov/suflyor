@@ -91,6 +91,13 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
 - User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.
 
+## Continuation round 20: original persistence C02/C18 SQLite contention fixtures
+
+- Intent: actual stdlib SQLite WAL fixtures with shipped migrations for deferred snapshot-read→writer-upgrade conflict, write-first lock timeout and reader coexistence/autocheckpoint/checkpoint counterevidence. Source connection pragmas/approval transaction order tied to frozen SHA; Python SQLite engine not bundled rusqlite or native UI reproduction.
+- Only private temporary DBs/dummy data; no owner catalog/logs/backup/indexer or destructive production actions, no Cargo/native/Rust/SDK. Small deterministic engine interleavings, not load/soak/performance benchmark. Short timeout in lock fixture explicitly different from product2000ms; assert engine error code not wallclock claim.
+- Preserve C02/C18 hypotheses and 39/75/5, original register hash/candidate identity in standalone evidence. C02 approval reads before write unlike replace/delete write-first: separate stale snapshot error from lock contention; rollback retry outside source fixture not accepted production fix. C18 default SQLite automatic checkpoints/read snapshot retention require observed bounded state, not claim infinite growth/actual product anomaly.
+- Verify SQL/state/range/source references, six bounded fixtures plus existing suites and exact archive; fresh engine pragmas/version recorded, no claim complete persistence reliability or independent acceptance.
+
 ## Continuation round 19: audio route recovery/settings/metrics/watchdog semantics
 
 - Intended result: Windows COM notification policy→WASAPI reopen/retry/drop queues, Settings clone-save-commit device identity, macOS successful-enqueue metrics→one-shot stall stop, mapped separately from health ages. No device/COM/audio/config/fault/native/Rust/SDK execution or session restarts.

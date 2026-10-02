@@ -14,6 +14,8 @@ This directory contains a historical heuristic index and architectural notes, no
 
 [Navigation gaps and receipt integrity](reconciliation/NAVIGATION-GAPS.md): 162/298 selected source files have precise registered references, 136 none; source-range unions **not semantic/audited lines**. Fourteen historical receipt SHAs/11 artifact hash checks match Git; not a rerun of historical tests. Use this ledger to target genuinely missing evidence, not inflate range percentages.
 
+[SQLite contention fixtures](reconciliation/hypothesis-sqlite-contention.md) add real temporary engine evidence for original C02/C18: stale-read upgrade versus writer lock, WAL reader snapshot/checkpoint counterevidence. Not native rusqlite/UI or unbounded-WAL proof, original statuses retained.
+
 ## Where to start
 
 - [Reconciliation task](../goal-agent-map-reconciliation.md): approved scope, constraints and remaining work.
