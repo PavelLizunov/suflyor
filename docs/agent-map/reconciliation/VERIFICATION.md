@@ -1,9 +1,9 @@
 # Reconciliation verification evidence
 
-## Round 32 — original memory C01/C02 filter and budget (covering SHA pending)
+## Round 32 — original memory C01/C02 filter and budget (exact covering SHA tested)
 
 - [Evidence](hypothesis-memory-budget.md)/[receipt](hypothesis-memory-budget.json): six pure string/source fixtures target 260 research tests. The instruction denylist matches exact lowercase substrings but misses split text and role markers. Summary formatting does not call it.
-- Ask formatting stops only after at least one line is accepted; merge adds base and block without the block budget. No Rust test, owner memory, or prompt was run. C01/C02 remain hypotheses; exact archive repeat pending.
+- Exact **`d5de221fb166c79c127f41d5957416603fe33b17`** archive passed **260 research +3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable budget receipt](portable-recovery-memory-budget.json). C01/C02 remain hypotheses; no Rust test, owner memory, or prompt execution.
 
 ## Round 31 — original memory C04/C07 matching boundaries (exact covering SHA tested)
 
