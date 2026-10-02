@@ -106,8 +106,8 @@
   "source_feature_references": 709,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
-  "portable_recovery_tested_commit": "e5a633c973ad45ffd9609697a339b009213469b7",
-  "portable_recovery_result": "PASS 182+3 zero skips exact archive; 26 contracts/709 refs; ledger valid/byte-identical; no device/config/native action",
+  "portable_recovery_tested_commit": "e9612309c4936f1ebfafd91b03a898f6034b388c",
+  "portable_recovery_result": "PASS 188+3 zero skips exact archive; 26 contracts/709 refs; ledger valid/byte-identical; stdlib SQLite not bundled rusqlite",
   "source_seam_tests_passed": 33,
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
@@ -247,5 +247,5 @@
     "wave1_worker1_persistence-C02",
     "wave1_worker1_persistence-C18"
   ],
-  "sqlite_contention_portable_verification": "pending exact covering commit"
+  "sqlite_contention_portable_verification": "PASS exact e9612309c4936f1ebfafd91b03a898f6034b388c; six temp-DB fixtures; C02 C18 remain hypotheses"
 }

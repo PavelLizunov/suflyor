@@ -1,11 +1,11 @@
 # Reconciliation verification evidence
 
-## Round 20 — original persistence C02/C18 actual SQLite fixtures (covering SHA pending)
+## Round 20 — original persistence C02/C18 actual SQLite fixtures (exact covering SHA tested)
 
 - [Evidence](hypothesis-sqlite-contention.md)/[engine/migration receipt](hypothesis-sqlite-contention.json): stdlib SQLite3.45.1, shipped six migrations, private dummy temp DBs. Six new engine/source fixtures target188 research total; no owner catalog/native rusqlite/UI/indexer/DB repair/SDK/Rust action.
 - Actual engine: stale deferred read→write upgrade after other commit BUSY_SNAPSHOT517, write-first held lock BUSY5, WAL reader old snapshot doesn't block writer. Default autocheckpoint1000 pages; reader-pinned truncate busy, after rollback truncate0/0/0+zero WAL. 20ms fixture timeout explicitly not source2000ms; no benchmark/unbounded-WAL/product fault claim.
 - C02 approve SELECT-before-write versus replace/delete write-first preconditions and C18 automatic checkpoint counterevidence preserved; original register hash/IDs/statuses unchanged39/75/5. Feature registry26/709/navigation unchanged (no interval-credit inflation).
-- Full local/exact archive repeat pending; no native/independent/full objective acceptance.
+- Exact **`e9612309c4936f1ebfafd91b03a898f6034b388c`** archive passed **188 research +3 mocked Hermes, zero skips**, frozen checkpoint issues empty (26/709), navigation validator zero errors and byte-identical ledger SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable SQLite receipt](portable-recovery-sqlite-contention.json); stdlib engine is not bundled rusqlite/native UI/independent/full-objective acceptance.
 
 
 ## Round 19 — audio route/settings/metrics/watchdog (exact covering SHA tested)
