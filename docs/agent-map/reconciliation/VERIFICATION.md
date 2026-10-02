@@ -2,8 +2,7 @@
 
 ## Round 50 — original bridge C02/C08 lock contention and session identity (exact covering SHA tested)
 
-- [Evidence](hypothesis-bridge-contention-identity.md)/[receipt](hypothesis-bridge-contention-identity.json): six source fixtures target 368 research tests. `forward_audio_chunks` locks `rt` twice per chunk; `start_session_inner` clears transcripts, speech windows, and caches under lock; `maybe_spawn_auto_tile` sorts `qa_cache` by age under lock.
-- `maybe_run_debrief` spawns without capturing `session_gen`, so debrief results can surface after a new session start labeled with the old session ID. In contrast, `maybe_spawn_namer` captures and validates `session_gen` before persisting. No lock contention benchmarks were run. C02/C08 remain hypotheses; exact archive verified.
+- Exact **`972f8e2292fb65017f00b2c41ef1e6b4877f9f23`** archive passed **368 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable bridge contention/identity receipt](portable-recovery-bridge-contention-identity.json). C02/C08 remain hypotheses; no multithreaded contention benchmarks run.
 
 ## Round 49 — original bridge C05/C06 single flight and task cleanup (exact covering SHA tested)
 

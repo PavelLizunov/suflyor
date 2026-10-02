@@ -426,5 +426,5 @@
     "wave3_worker1_bridge-C02",
     "wave3_worker1_bridge-C08"
   ],
-  "bridge_contention_identity_portable_verification": "pending exact covering commit"
+  "bridge_contention_identity_portable_verification": "PASS exact 972f8e2292fb65017f00b2c41ef1e6b4877f9f23; six source fixtures; C02 C08 remain hypotheses"
 }
