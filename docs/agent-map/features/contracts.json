@@ -3241,6 +3241,177 @@
       ],
       "native_verification": "not_run",
       "independent_acceptance": false
+    },
+    {
+      "id": "tera-graph-text-and-cancellation",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/tera-graph-text-and-cancellation.md",
+      "review_state": "selected graph/tensor/text/assets/controller source and Rust test intent, no inference",
+      "source_references": [
+        {
+          "path": "suflyor-teratts/src/manifest.rs",
+          "start_line": 34,
+          "end_line": 79
+        },
+        {
+          "path": "suflyor-teratts/src/manifest.rs",
+          "start_line": 114,
+          "end_line": 160
+        },
+        {
+          "path": "overlay-backend/src/teratts_install.rs",
+          "start_line": 44,
+          "end_line": 84
+        },
+        {
+          "path": "overlay-backend/src/teratts_install.rs",
+          "start_line": 325,
+          "end_line": 380
+        },
+        {
+          "path": "suflyor-teratts/src/tera.rs",
+          "start_line": 74,
+          "end_line": 139
+        },
+        {
+          "path": "suflyor-teratts/src/tera.rs",
+          "start_line": 347,
+          "end_line": 354
+        },
+        {
+          "path": "suflyor-teratts/src/tera.rs",
+          "start_line": 361,
+          "end_line": 421
+        },
+        {
+          "path": "suflyor-teratts/NOTICE.md",
+          "start_line": 3,
+          "end_line": 31
+        },
+        {
+          "path": "suflyor-teratts/src/chunk.rs",
+          "start_line": 5,
+          "end_line": 79
+        },
+        {
+          "path": "suflyor-teratts/src/textnorm.rs",
+          "start_line": 22,
+          "end_line": 56
+        },
+        {
+          "path": "suflyor-teratts/src/textnorm.rs",
+          "start_line": 170,
+          "end_line": 249
+        },
+        {
+          "path": "suflyor-teratts/src/textnorm.rs",
+          "start_line": 256,
+          "end_line": 318
+        },
+        {
+          "path": "suflyor-teratts/src/textnorm.rs",
+          "start_line": 321,
+          "end_line": 359
+        },
+        {
+          "path": "suflyor-teratts/src/num2words.rs",
+          "start_line": 7,
+          "end_line": 45
+        },
+        {
+          "path": "suflyor-teratts/src/indexer.rs",
+          "start_line": 16,
+          "end_line": 75
+        },
+        {
+          "path": "suflyor-teratts/src/npy.rs",
+          "start_line": 16,
+          "end_line": 79
+        },
+        {
+          "path": "suflyor-teratts/src/tera.rs",
+          "start_line": 308,
+          "end_line": 318
+        },
+        {
+          "path": "suflyor-teratts/src/tera.rs",
+          "start_line": 143,
+          "end_line": 225
+        },
+        {
+          "path": "suflyor-teratts/src/tera.rs",
+          "start_line": 211,
+          "end_line": 257
+        },
+        {
+          "path": "suflyor-teratts/src/tera.rs",
+          "start_line": 259,
+          "end_line": 305
+        },
+        {
+          "path": "suflyor-teratts/src/tera.rs",
+          "start_line": 321,
+          "end_line": 345
+        },
+        {
+          "path": "suflyor-teratts/src/tera.rs",
+          "start_line": 423,
+          "end_line": 449
+        },
+        {
+          "path": "suflyor-teratts/src/main.rs",
+          "start_line": 210,
+          "end_line": 293
+        },
+        {
+          "path": "suflyor-teratts/src/main.rs",
+          "start_line": 462,
+          "end_line": 501
+        },
+        {
+          "path": "suflyor-teratts/src/main.rs",
+          "start_line": 295,
+          "end_line": 364
+        },
+        {
+          "path": "suflyor-teratts/src/main.rs",
+          "start_line": 575,
+          "end_line": 629
+        },
+        {
+          "path": "suflyor-teratts/src/main.rs",
+          "start_line": 648,
+          "end_line": 663
+        },
+        {
+          "path": "suflyor-teratts/src/tera.rs",
+          "start_line": 476,
+          "end_line": 545
+        },
+        {
+          "path": "suflyor-teratts/src/textnorm.rs",
+          "start_line": 395,
+          "end_line": 479
+        },
+        {
+          "path": "suflyor-teratts/src/main.rs",
+          "start_line": 809,
+          "end_line": 869
+        },
+        {
+          "path": "suflyor-teratts/src/manifest.rs",
+          "start_line": 195,
+          "end_line": 242
+        }
+      ],
+      "limits": [
+        "no ORT/model/Rust/audio/numerical/linguistic/licence acceptance",
+        "runtime marker/size is not digest, installer trust separate",
+        "unbounded duration/header/long-word/nested-tag preconditions source-only",
+        "generation discards stale results not active-inference abort"
+      ],
+      "native_verification": "not_run",
+      "independent_acceptance": false
     }
   ],
   "complete_project_coverage": false

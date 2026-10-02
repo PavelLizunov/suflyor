@@ -91,6 +91,12 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
 - User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.
 
+## Continuation round 16: Tera graph/text/tensor/cancel source semantics
+
+- Intended result: pinned Tera graph load/named-output/shape/window pipeline, text/tag/indexer/NPY and generation caller chain with explicit model/schema/licence/duration/allocation/cancel boundaries. Source-only, no model download/load/ORT inference/Rust/SDK/native/device/benchmark.
+- Add proportional source fixtures, not numerical Python clone accepted as Rust execution. Differentiate full returned SynthOutput chunks from incremental playback streaming; queued generation skip/result discard from in-flight inference abort. Record runtime cheap marker/size versus installer digest; no memory/work bound inferred from 120-char comment/hard_split when long single words allowed.
+- Verify before-index shape checks, checked product vs NPY unchecked product and duration initial allocation, nesting-language span corner preconditions, generic error protocol/source logging only, tests hermetic vs native (unexecuted). Update gap ledger/input hashes, exact-SHA full suite/recovery/deterministic navigation; earlier integrity receipt frozen historical, original status counts unchanged.
+
 ## Continuation round 15: WSOLA streaming/playback algorithm and test-intent chains
 
 - Intended result: manually inspect selected WSOLA correlation/crossfade/output/allocation and StreamingWsola tail/chunk/error behavior, connect four native playback transports and transcript player timing/seek consumers; distinguish actual source algorithm from documented pitch/latency/zero-allocation claims and Rust test intent. No benchmark/listening/model/native audio/Cargo/SDK execution.

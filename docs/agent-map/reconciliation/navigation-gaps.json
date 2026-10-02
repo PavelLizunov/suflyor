@@ -8,7 +8,7 @@
     },
     "features": {
       "path": "docs/agent-map/features/contracts.json",
-      "sha256": "51c84932b3d7cc2e25156ee619d32b0958af5f6db87431cf7127cd2b13030113"
+      "sha256": "0b401b45dc922cdf5b817e5c9dcc191633b96e2caeaf1a044b04dd7574720341"
     },
     "candidates": {
       "path": "docs/agent-map/reconciliation/candidates.json",
@@ -4124,9 +4124,9 @@
       "source_sha256": "213a78cda14ad86cee05c2d7688727ddc260db470e681c20c411b477621f78fb",
       "source_lines": 934,
       "syntax_nodes": 189,
-      "feature_reference_line_union": 146,
+      "feature_reference_line_union": 202,
       "candidate_reference_line_union": 98,
-      "all_reference_line_union": 173,
+      "all_reference_line_union": 229,
       "reference_intervals": [
         [
           38,
@@ -4139,6 +4139,10 @@
         [
           237,
           289
+        ],
+        [
+          325,
+          380
         ]
       ],
       "unreferenced_intervals": [
@@ -4156,11 +4160,16 @@
         ],
         [
           290,
+          324
+        ],
+        [
+          381,
           934
         ]
       ],
       "reference_owners": [
         "read-aloud-and-ocr",
+        "tera-graph-text-and-cancellation",
         "wave4_worker2_installers-C02"
       ],
       "reference_state": "some_precise_navigation",
@@ -9898,18 +9907,29 @@
       "source_sha256": "2a85349ad4cfa116f4c369cefb0cb49446fca66126d43b3c0bd7b17aa8fde9a3",
       "source_lines": 107,
       "syntax_nodes": 19,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 75,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 75,
+      "reference_intervals": [
+        [
+          5,
+          79
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          4
+        ],
+        [
+          80,
           107
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "tera-graph-text-and-cancellation"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -9919,18 +9939,29 @@
       "source_sha256": "959bdb6c544f497c2bfb92a612d2c95ce396f12a97df316bf70c12f6bfe2f122",
       "source_lines": 125,
       "syntax_nodes": 29,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 60,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 60,
+      "reference_intervals": [
+        [
+          16,
+          75
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          15
+        ],
+        [
+          76,
           125
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "tera-graph-text-and-cancellation"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -9940,40 +9971,73 @@
       "source_sha256": "ea893faf41741cc45b21a30fd1fbeeb19386e85bbe9ee51a648929fd028d5fff",
       "source_lines": 1113,
       "syntax_nodes": 214,
-      "feature_reference_line_union": 59,
+      "feature_reference_line_union": 366,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 59,
+      "all_reference_line_union": 366,
       "reference_intervals": [
         [
           1,
           25
         ],
         [
-          499,
+          210,
+          293
+        ],
+        [
+          295,
+          364
+        ],
+        [
+          462,
           516
+        ],
+        [
+          575,
+          629
         ],
         [
           648,
           663
+        ],
+        [
+          809,
+          869
         ]
       ],
       "unreferenced_intervals": [
         [
           26,
-          498
+          209
+        ],
+        [
+          294,
+          294
+        ],
+        [
+          365,
+          461
         ],
         [
           517,
+          574
+        ],
+        [
+          630,
           647
         ],
         [
           664,
+          808
+        ],
+        [
+          870,
           1113
         ]
       ],
       "reference_owners": [
         "credentials-and-managed-process-ownership",
-        "read-aloud-and-ocr"
+        "read-aloud-and-ocr",
+        "tera-graph-text-and-cancellation"
       ],
       "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
@@ -9985,18 +10049,45 @@
       "source_sha256": "2e2e5d809cc51e7a74db8ec781da2b5830f746b065e279101e8ac3e1c6737834",
       "source_lines": 243,
       "syntax_nodes": 52,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 141,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 141,
+      "reference_intervals": [
+        [
+          34,
+          79
+        ],
+        [
+          114,
+          160
+        ],
+        [
+          195,
+          242
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          33
+        ],
+        [
+          80,
+          113
+        ],
+        [
+          161,
+          194
+        ],
+        [
+          243,
           243
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "tera-graph-text-and-cancellation"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -10006,18 +10097,29 @@
       "source_sha256": "0abecd0dd66841513b2cf75289af6c6fac5fef06aa09ecddacbd86291477782f",
       "source_lines": 211,
       "syntax_nodes": 51,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 64,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 64,
+      "reference_intervals": [
+        [
+          16,
+          79
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          15
+        ],
+        [
+          80,
           211
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "tera-graph-text-and-cancellation"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -10027,18 +10129,29 @@
       "source_sha256": "106c51b4c3faff3655bd017581c0dd12149dfbb8937f16e5f54e2143c1d30dcd",
       "source_lines": 424,
       "syntax_nodes": 70,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 39,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 39,
+      "reference_intervals": [
+        [
+          7,
+          45
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          6
+        ],
+        [
+          46,
           424
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "tera-graph-text-and-cancellation"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -10154,18 +10267,93 @@
       "source_sha256": "7828f7fc0a185a0c66dbcec6217e2a02f145c0e05ad950d38eca00a8c173662c",
       "source_lines": 546,
       "syntax_nodes": 136,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 430,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 430,
+      "reference_intervals": [
+        [
+          74,
+          139
+        ],
+        [
+          143,
+          257
+        ],
+        [
+          259,
+          305
+        ],
+        [
+          308,
+          318
+        ],
+        [
+          321,
+          345
+        ],
+        [
+          347,
+          354
+        ],
+        [
+          361,
+          421
+        ],
+        [
+          423,
+          449
+        ],
+        [
+          476,
+          545
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          73
+        ],
+        [
+          140,
+          142
+        ],
+        [
+          258,
+          258
+        ],
+        [
+          306,
+          307
+        ],
+        [
+          319,
+          320
+        ],
+        [
+          346,
+          346
+        ],
+        [
+          355,
+          360
+        ],
+        [
+          422,
+          422
+        ],
+        [
+          450,
+          475
+        ],
+        [
+          546,
           546
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "tera-graph-text-and-cancellation"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -10175,18 +10363,61 @@
       "source_sha256": "3dd42fb7a605fc9c682f1c186ccd7b383b822cad926fb16d8527cb0d142cc47f",
       "source_lines": 480,
       "syntax_nodes": 70,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 302,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 302,
+      "reference_intervals": [
+        [
+          22,
+          56
+        ],
+        [
+          170,
+          249
+        ],
+        [
+          256,
+          318
+        ],
+        [
+          321,
+          359
+        ],
+        [
+          395,
+          479
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          21
+        ],
+        [
+          57,
+          169
+        ],
+        [
+          250,
+          255
+        ],
+        [
+          319,
+          320
+        ],
+        [
+          360,
+          394
+        ],
+        [
+          480,
           480
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "tera-graph-text-and-cancellation"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -10803,13 +11034,14 @@
     "overlay-backend/migrations/0002_fts.sql",
     "overlay-backend/migrations/0003_memory.sql",
     "overlay-backend/migrations/0006_diarization.sql",
-    "slint-experiment/translations/ru/LC_MESSAGES/slint-replay.po"
+    "slint-experiment/translations/ru/LC_MESSAGES/slint-replay.po",
+    "suflyor-teratts/NOTICE.md"
   ],
   "summary": {
-    "files_with_some_precise_navigation": 146,
-    "files_without_precise_navigation": 152,
+    "files_with_some_precise_navigation": 153,
+    "files_without_precise_navigation": 145,
     "selected_source_lines": 120858,
-    "precise_reference_line_union": 35233,
+    "precise_reference_line_union": 36707,
     "semantically_reviewed_line_count": "not_established"
   },
   "limits": [
