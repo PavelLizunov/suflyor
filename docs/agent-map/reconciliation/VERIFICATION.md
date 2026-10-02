@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 54 — original settings C03/C04 model fetching and Codex auto-save (exact covering SHA tested)
+
+- [Evidence](hypothesis-settings-models-codex.md)/[receipt](hypothesis-settings-models-codex.json): six source fixtures target 392 research tests. `fetch_models` updates dropdowns without generation fencing, in contrast to `refresh_codex_account_status` which enforces atomic generation validation.
+- `refresh_codex_account_status` writes configuration via `config::save` on settings window open without an explicit user gesture if fields are empty. No network requests or disk config writes were run. C03/C04 remain hypotheses; exact archive verified.
+
 ## Round 53 — original window C07/C10 monitor selection and subclass unhook (exact covering SHA tested)
 
 - Exact **`3a7000aa5868fdb05712381e491dfcbe44525ae0`** archive passed **386 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable window monitor/subclass receipt](portable-recovery-window-monitor-subclass.json). C07/C10 remain hypotheses; no physical display hardware queried or subclass unhooked.

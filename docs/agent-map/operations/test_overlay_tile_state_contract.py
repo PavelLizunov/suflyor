@@ -75,4 +75,12 @@ class OverlayTileStateSourceFixtures(unittest.TestCase):
         self.assertNotIn('register_tile_stream(',ptt)
 
 
+    def test_original_c01_c03_statuses_remain_hypotheses(self):
+        import json
+        rows = json.loads((ROOT / "docs/agent-map/reconciliation/candidates.json").read_text())
+        found = {row["id"]: row["status"] for row in rows}
+        self.assertEqual(found["wave3_worker3_tile-C01"], "hypothesis")
+        self.assertEqual(found["wave3_worker3_tile-C03"], "hypothesis")
+
+
 if __name__=='__main__':unittest.main()
