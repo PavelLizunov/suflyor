@@ -486,5 +486,5 @@
     "wave1_worker2_memory-C03",
     "wave1_worker2_memory-C06"
   ],
-  "memory_negation_recency_portable_verification": "pending exact covering commit"
+  "memory_negation_recency_portable_verification": "PASS exact fcb9ca2e4af0faf3248e29222500333472484f9b; six source fixtures; C03 C06 remain confirmed"
 }
