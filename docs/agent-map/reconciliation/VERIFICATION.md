@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 33 — original memory C05/C08 grounding and load (covering SHA pending)
+
+- [Evidence](hypothesis-memory-grounding.md)/[receipt](hypothesis-memory-grounding.json): six pure string/source fixtures target 266 research tests. Ordered matching permits omitted intermediate words but rejects reversal. A 240-character clip drops the tail without semantic boundary detection.
+- Context loading requests all active items with limit `-1`; formatting has no fact dedup, and question normalization is whitespace/case only. No Rust test, owner memory, prompt, or performance measurement was run. C05/C08 remain hypotheses; exact archive repeat pending.
+
 ## Round 32 — original memory C01/C02 filter and budget (exact covering SHA tested)
 
 - [Evidence](hypothesis-memory-budget.md)/[receipt](hypothesis-memory-budget.json): six pure string/source fixtures target 260 research tests. The instruction denylist matches exact lowercase substrings but misses split text and role markers. Summary formatting does not call it.
