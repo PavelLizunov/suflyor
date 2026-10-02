@@ -21,7 +21,7 @@
 
 ## Продолжение
 
-1. Проверь актуальный HEAD/remote и последний manifest/progress/verification; коммиты handoff могут быть новее описанных baseline.
+1. Проверь актуальный HEAD/remote и последний manifest/progress/verification; коммиты handoff могут быть новее описанных baseline. Прочитай [SESSION-HANDOFF-SUMMARY.md](SESSION-HANDOFF-SUMMARY.md) для полного обзора выполненной работы.
 2. Собери/прочитай saved syntax index, запусти `python3 -B docs/agent-map/operations/syntax_index.py --validate` и checkpoint verify. Если нужна повторная генерация, сначала прочитай owning outputs и воспроизведи pinned wheel environment без изменения app/runtime.
 3. Все выбранные языки теперь parser-covered; PS canonical AST, прочие CST/Python AST. Не объявляй semantic/caller/compiler/Windows script acceptance по этому факту; macro/cfg/include/indirect callers остаются открыты. Не изобретай regex, который снова объявит zero-symbol full coverage; не считай cfg/macros resolved.
 4. Доделай startup/wizard/components/health/diagnostics, полную config/UI/translation/asset schema и оставшиеся native FFI/call edges. Сверяй callers: комментарии уже неоднократно были устаревшими.
