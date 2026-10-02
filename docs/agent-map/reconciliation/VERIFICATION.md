@@ -1,11 +1,11 @@
 # Reconciliation verification evidence
 
-## Round 16 — Tera graph/text/cancellation source semantics (covering SHA pending)
+## Round 16 — Tera graph/text/cancellation source semantics (exact covering SHA tested)
 
 - [Contract](../features/tera-graph-text-and-cancellation.md) adds 31 ranges: runtime marker/size vs installer digest, graph output name/shape/window, normalizer/tag/indexer/NPY, duration/work bounds, generation/controller and Rust mock/helper test intent. Registry23/635, no model/ORT/Rust/audio/licence/native execution.
 - Six source fixtures; target local research164. Explicit boundaries: SynthOutput accumulates vocoder chunks before worker event; generation checked before job/discards late result, no active ORT abort. Single long word escapes120char target; duration latent alloc and NPY product unchecked; nested spans/normalization preconditions source-only/unreproduced. Runtime size isn't rehash.
 - Navigation updated153 some precise refs/145 none, union36,707 lines **not semantic audited lines**. Original119 statuses39/75/5 unchanged, independent/native/full semantics absent.
-- Exact archive/suite/deterministic ledger repeat pending.
+- Exact **`8a9508ee90eb0a32ac99b30d445951d1890de096`** archive passed **164 research +3 mocked Hermes, zero skips**, frozen checkpoint issues empty (23/635), navigation validator zero errors and byte-identical ledger SHA256 `0a114f90a5af5983efeccc8d2bd143dbc1c2812028b5e0430b9ad0434187e8a0`. [Portable Tera receipt](portable-recovery-tera.json); no ORT/model/Rust/native/independent/full-objective acceptance.
 
 
 ## Round 15 — WSOLA streaming/playback source and test intent (exact covering SHA tested)

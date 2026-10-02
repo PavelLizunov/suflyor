@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "tested_commit": "8a9508ee90eb0a32ac99b30d445951d1890de096",
+  "method": "exact Git archive; pinned parser/runtime supplied separately; Tera source/schema/text/cancel/test-intent only, no model/ORT/Rust/audio",
+  "research_tests": 164,
+  "research_skips": 0,
+  "existing_mocked_hermes_tests": 3,
+  "source_feature_contracts": 23,
+  "source_feature_references": 635,
+  "new_Tera_pipeline_source_assertions": 6,
+  "navigation_ledger": {
+    "selected_files": 298,
+    "some_precise_navigation": 153,
+    "no_precise_navigation": 145,
+    "source_lines": 120858,
+    "reference_line_union": 36707,
+    "semantically_reviewed_lines": "not_established",
+    "validation_errors": [],
+    "regenerated_byte_identical": true,
+    "bytes": 271701,
+    "sha256": "0a114f90a5af5983efeccc8d2bd143dbc1c2812028b5e0430b9ad0434187e8a0"
+  },
+  "checkpoint_issues": [],
+  "result": "PASS bounded Tera pipeline source/recovery; full research incomplete",
+  "model_ORT_Rust_native_execution": false,
+  "native_application_acceptance": false,
+  "independent_acceptance": false,
+  "full_project_coverage": false
+}
