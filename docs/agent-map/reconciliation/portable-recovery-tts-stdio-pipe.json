@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "tested_commit": "0e7ceab15fe6633c7e70952045e4f3dfe77b0243",
+  "method": "exact Git archive; source inspection of TTS host pipe writes, buffer flushing, and sidecar stdout reader threads; no process execution or audio synthesis",
+  "research_tests": 314,
+  "research_skips": 0,
+  "existing_mocked_hermes_tests": 3,
+  "source_feature_contracts": 26,
+  "source_feature_references": 709,
+  "new_tts_stdio_pipe_fixtures": 6,
+  "original_hypothesis_ids_unchanged": [
+    "wave2_worker3_tts-C01",
+    "wave2_worker3_tts-C02"
+  ],
+  "navigation_ledger": {
+    "selected_files": 298,
+    "some_precise_navigation": 162,
+    "no_precise_navigation": 136,
+    "source_lines": 120858,
+    "reference_line_union": 39935,
+    "semantically_reviewed_lines": "not_established",
+    "validation_errors": [],
+    "regenerated_byte_identical": true,
+    "bytes": 276288,
+    "sha256": "b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2"
+  },
+  "checkpoint_issues": [],
+  "result": "PASS bounded TTS stdio buffer and pipe deadlock recovery; original hypotheses unchanged; full research incomplete",
+  "native_tts_acceptance": false,
+  "independent_acceptance": false,
+  "full_project_coverage": false
+}

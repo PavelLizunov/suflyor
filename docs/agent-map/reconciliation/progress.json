@@ -372,5 +372,5 @@
     "wave2_worker3_tts-C01",
     "wave2_worker3_tts-C02"
   ],
-  "tts_stdio_pipe_portable_verification": "pending exact covering commit"
+  "tts_stdio_pipe_portable_verification": "PASS exact 0e7ceab15fe6633c7e70952045e4f3dfe77b0243; six source fixtures; C01 C02 remain hypotheses"
 }

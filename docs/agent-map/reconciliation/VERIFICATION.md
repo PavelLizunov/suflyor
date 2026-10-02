@@ -2,8 +2,7 @@
 
 ## Round 41 — original TTS C01/C02 stdio line buffer and pipe deadlock (exact covering SHA tested)
 
-- [Evidence](hypothesis-tts-stdio-pipe.md)/[receipt](hypothesis-tts-stdio-pipe.json): six source fixtures target 314 research tests. `Tts::speak` base64-encodes entire speech text into a single `SPEAK <b64>` line; sidecar stdin loops read unbounded lines via `BufRead::lines()`.
-- Host spawns a dedicated background stdout reader thread immediately upon sidecar launch, continuously draining stdout lines and preventing pipe deadlocks. No sidecar processes were launched. C01/C02 remain hypotheses; exact archive verified.
+- Exact **`0e7ceab15fe6633c7e70952045e4f3dfe77b0243`** archive passed **314 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable TTS stdio receipt](portable-recovery-tts-stdio-pipe.json). C01/C02 remain hypotheses; no sidecar launch or live audio.
 
 ## Round 40 — original config C06 / audio C05 secret zeroization and macOS recovery (exact covering SHA tested)
 
