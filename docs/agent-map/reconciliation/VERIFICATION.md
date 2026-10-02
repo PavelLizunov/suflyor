@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 55 — original settings C02/C07 install resets and property seeding (exact covering SHA tested)
+
+- [Evidence](hypothesis-settings-reset-seeding.md)/[receipt](hypothesis-settings-reset-seeding.json): six source fixtures target 399 research tests. `populate_token_status` unconditionally resets OCR, Diar, TTS, Tera, and update flags to false on window open, with GigaAM being the only guarded exception.
+- Component install busy index and phase are reset to -1/0, while properties like `ai_local_model_profile_index` and `ai_local_vision_available` are omitted from the seeding pass, relying on Slint defaults. No background installers or UI races were run. C02/C07 remain hypotheses; exact archive verified.
+
 ## Round 54 — original settings C03/C04 model fetching and Codex auto-save (exact covering SHA tested)
 
 - Exact **`45a95a87759b0e8b360bdfb245939840af323e93`** archive passed **393 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable settings models/Codex receipt](portable-recovery-settings-models-codex.json). C03/C04 remain hypotheses; no network calls or disk config writes.
