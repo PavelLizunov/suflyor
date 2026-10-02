@@ -25,6 +25,7 @@ pub async fn complete_with_usage(
         messages,
         max_tokens,
         false,
+        true,
     )
     .await
 }
@@ -65,6 +66,7 @@ pub async fn complete_with_usage_endpoint(
         messages,
         max_tokens,
         false,
+        true,
     )
     .await
 }
@@ -83,6 +85,7 @@ pub async fn complete(
         model,
         messages,
         max_tokens,
+        true,
         true,
     )
     .await
@@ -108,6 +111,7 @@ pub async fn complete_endpoint(
         messages,
         max_tokens,
         true,
+        true,
     )
     .await
     .map(|(text, _)| text)
@@ -121,7 +125,18 @@ pub async fn complete_exclusive(
     max_tokens: u32,
 ) -> Result<String> {
     let _permit = acquire_exclusive_ai().await?;
-    complete(base_url, bearer, model, messages, max_tokens).await
+    complete_with_usage_inner(
+        AiProtocol::OpenAiCompatible,
+        base_url,
+        bearer,
+        model,
+        messages,
+        max_tokens,
+        true,
+        false,
+    )
+    .await
+    .map(|(text, _)| text)
 }
 
 pub(crate) async fn complete_with_usage_inner(
@@ -132,6 +147,7 @@ pub(crate) async fn complete_with_usage_inner(
     messages: Vec<ChatMessage>,
     max_tokens: u32,
     force_no_think: bool,
+    acquire_permit: bool,
 ) -> Result<(String, TokenUsage)> {
     const MAX_ATTEMPTS: usize = 3;
     let mut last_err = None;
@@ -147,7 +163,11 @@ pub(crate) async fn complete_with_usage_inner(
         })
         .await?;
 
-        let _permit = AI_SEMAPHORE.acquire().await.ok();
+        let _permit = if acquire_permit {
+            AI_SEMAPHORE.acquire().await.ok()
+        } else {
+            None
+        };
         match complete_once(
             endpoint.protocol,
             &endpoint.base_url,

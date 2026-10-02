@@ -78,6 +78,24 @@ async fn queued_stream_stops_when_receiver_is_dropped() {
     );
 }
 
+#[tokio::test]
+async fn complete_exclusive_does_not_deadlock_on_semaphore() {
+    let _stream_guard = STREAM_TEST_LOCK.lock().await;
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+
+    let res = tokio::time::timeout(
+        std::time::Duration::from_millis(500),
+        complete_exclusive(&base_url, "", "test-model", Vec::new(), 10),
+    )
+    .await;
+
+    assert!(
+        res.is_ok(),
+        "complete_exclusive deadlocked on AI_SEMAPHORE while holding exclusive permits"
+    );
+}
+
 /// Structuring (`force = true`) must disable local thinking REGARDLESS of the
 /// global `ai_local_thinking` toggle — this is the v0.18.6 fix for the tester
 /// bug where "режим рассуждение" ON broke the meeting summary. The live-answer
