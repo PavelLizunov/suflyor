@@ -402,5 +402,5 @@
     "wave2_worker4_local_ai-C10",
     "wave2_worker4_local_ai-C11"
   ],
-  "local_ai_job_whisper_portable_verification": "pending exact covering commit"
+  "local_ai_job_whisper_portable_verification": "PASS exact 80c543fdfe8bcf3bfd4937775ef338ae606a1680; six source fixtures; C10 C11 remain hypotheses"
 }

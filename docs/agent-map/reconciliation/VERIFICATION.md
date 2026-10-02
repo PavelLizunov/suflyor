@@ -2,8 +2,7 @@
 
 ## Round 46 — original local AI C10/C11 JobObject and Whisper readiness (exact covering SHA tested)
 
-- [Evidence](hypothesis-local-ai-job-whisper.md)/[receipt](hypothesis-local-ai-job-whisper.json): six source fixtures target 344 research tests. `assign_to_lifetime_job` is Windows-only, best-effort on error, and sets `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`.
-- Whisper server readiness uses generic `wait_ready` on `/models` and `is_reachable` without verifying child PID listener ownership or model name identity. No server processes or JobObjects were run. C10/C11 remain hypotheses; exact archive verified.
+- Exact **`80c543fdfe8bcf3bfd4937775ef338ae606a1680`** archive passed **344 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable local AI JobObject/Whisper receipt](portable-recovery-local-ai-job-whisper.json). C10/C11 remain hypotheses; no server process execution or JobObject creation.
 
 ## Round 45 — original local AI C06/C07 download verification and HuggingFace branches (exact covering SHA tested)
 
