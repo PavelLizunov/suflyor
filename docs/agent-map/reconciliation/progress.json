@@ -534,5 +534,5 @@
     "wave3_worker4_settings-C05",
     "wave3_worker4_settings-C06"
   ],
-  "settings_mutate_rollback_portable_verification": "pending exact covering commit"
+  "settings_mutate_rollback_portable_verification": "PASS exact 4a1510101c1cfb4e9f38ee06a7fb1529188d12f9; six source fixtures; C05 C06 remain confirmed"
 }
