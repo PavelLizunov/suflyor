@@ -540,5 +540,5 @@
     "wave4_worker1_privacy-C01",
     "wave4_worker1_privacy-C02"
   ],
-  "privacy_diagnostics_sanitization_portable_verification": "pending exact covering commit"
+  "privacy_diagnostics_sanitization_portable_verification": "PASS exact 9be29fc16486a27f632a75f57874844dd3aea59f; six source fixtures; C01 C02 remain confirmed"
 }

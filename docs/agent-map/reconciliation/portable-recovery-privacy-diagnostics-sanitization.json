@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "tested_commit": "9be29fc16486a27f632a75f57874844dd3aea59f",
+  "method": "exact Git archive; source inspection of redact_home_all_forms, redact_urls, and collect_redacted_log pipeline; no real user log reads or desktop directory writes",
+  "research_tests": 483,
+  "research_skips": 0,
+  "existing_mocked_hermes_tests": 3,
+  "source_feature_contracts": 26,
+  "source_feature_references": 709,
+  "new_privacy_diagnostics_sanitization_fixtures": 6,
+  "original_claim_ids_unchanged": [
+    "wave4_worker1_privacy-C01",
+    "wave4_worker1_privacy-C02"
+  ],
+  "navigation_ledger": {
+    "selected_files": 298,
+    "some_precise_navigation": 162,
+    "no_precise_navigation": 136,
+    "source_lines": 120858,
+    "reference_line_union": 39935,
+    "semantically_reviewed_lines": "not_established",
+    "validation_errors": [],
+    "regenerated_byte_identical": true,
+    "bytes": 276288,
+    "sha256": "b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2"
+  },
+  "checkpoint_issues": [],
+  "result": "PASS bounded privacy home and URL sanitization recovery; original confirmed statuses unchanged; full research incomplete",
+  "native_privacy_acceptance": false,
+  "independent_acceptance": false,
+  "full_project_coverage": false
+}

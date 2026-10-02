@@ -2,8 +2,7 @@
 
 ## Round 69 — original privacy C01/C02 home and URL log sanitization (exact covering SHA tested)
 
-- [Evidence](hypothesis-privacy-diagnostics-sanitization.md)/[receipt](hypothesis-privacy-diagnostics-sanitization.json): six source fixtures target 483 research tests. `redact_home_all_forms` matches literal home strings in three separator forms (raw, `\\`, `/`), leaving 8.3 short names and bare usernames unmasked.
-- `redact_urls` matches only `http://` and `https://` URLs, passing spans to `mask_host` and bypassing non-HTTP schemes; `collect_redacted_log` executes `urls -> ipv4 -> user_home -> secrets`. No real log files were read. C01/C02 remain confirmed mechanisms; exact archive verified.
+- Exact **`9be29fc16486a27f632a75f57874844dd3aea59f`** archive passed **483 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable privacy sanitization receipt](portable-recovery-privacy-diagnostics-sanitization.json). C01/C02 remain confirmed mechanisms; no real user log reads or desktop directory writes.
 
 ## Round 68 — original settings C05/C06 in-memory mutation and optimistic UI (exact covering SHA tested)
 
