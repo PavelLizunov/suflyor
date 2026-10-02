@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 24 — original persistence C14/C15 schema boundaries (covering SHA pending)
+
+- [Evidence](hypothesis-memory-migrations.md)/[receipt](hypothesis-memory-migrations.json): six temporary schema/source fixtures target 212 research tests. Candidate status accepts a non-contract value; one pending snapshot followed by two write/insert pairs mints two items, while rechecking pending blocks the second.
+- Shipped memory SQL has no CHECK or session FK. Session deletion leaves memory intact; utterances and AI turns are the only two session cascades. Migration runner skips older versions and has no downgrade. No Rust runner, concurrent approval, or owner catalog was run. C14/C15 remain hypotheses; exact archive repeat pending.
+
 ## Round 23 — confirmed persistence C10/C12 side tables (exact covering SHA tested)
 
 - [Evidence](hypothesis-catalog-side-tables.md)/[receipt](hypothesis-catalog-side-tables.json): six temporary schema/source fixtures target 206 research tests. Projection replacement cascades utterances but retains diarization and memory; hard delete removes diarization only. Index match handles four journal kinds, leaving other journal variants unprojected.
