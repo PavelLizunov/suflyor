@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 37 — original installers C01/C02 extraction and TOCTOU (exact covering SHA tested)
+
+- [Evidence](hypothesis-installer-security.md)/[receipt](hypothesis-installer-security.json): six source fixtures target 290 research tests. `extract_tar_bz2` runs bsdtar with `-xf ... -C ...` without path filtering/canonicalization; `ocr_install` targets `%APPDATA%\suflyor`.
+- `verify_sha256` operates on a path without keeping an open handle prior to extraction. `download_installer` writes to `%TEMP%` after in-memory verification, and `run_installer` spawns the binary later without re-checking. No tar extraction, network call, or installer spawn was run. C01/C02 remain hypotheses; exact archive verified.
+
 ## Round 36 — original audio C02/C04 clock and route (exact covering SHA tested)
 
 - [Evidence](hypothesis-audio-clock-route.md)/[receipt](hypothesis-audio-clock-route.json): six pure arithmetic/source fixtures target 284 research tests. Non-integer resampling changes output length, and chunk timestamps come from monotonic elapsed time rather than sample position.
