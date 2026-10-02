@@ -2,8 +2,7 @@
 
 ## Round 57 — original privacy C04/C05 capture and clipboard handling (exact covering SHA tested)
 
-- [Evidence](hypothesis-privacy-capture-clipboard.md)/[receipt](hypothesis-privacy-capture-clipboard.json): six source fixtures target 411 research tests. `bgra_to_slint_image` converts pixels in memory without raw disk dumps, and journal AI requests store `attached_screenshot: true` without raw bitmaps.
-- `restore_text_clipboard` restores a single string snapshot without querying clipboard history APIs, while `spawn_text_tile` stores verbatim text in conversations without secret scrubbing. No screen capture or clipboard APIs were run. C04/C05 remain hypotheses; exact archive verified.
+- Exact **`421bcce5da7937cc18ea75b213165519f0dcbf0c`** archive passed **411 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable privacy receipt](portable-recovery-privacy-capture-clipboard.json). C04/C05 remain hypotheses; no live screen capture or clipboard manipulation.
 
 ## Round 56 — original bridge C07 / settings C09 UI blocking and error leak (exact covering SHA tested)
 

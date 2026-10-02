@@ -468,5 +468,5 @@
     "wave4_worker1_privacy-C04",
     "wave4_worker1_privacy-C05"
   ],
-  "privacy_capture_clipboard_portable_verification": "pending exact covering commit"
+  "privacy_capture_clipboard_portable_verification": "PASS exact 421bcce5da7937cc18ea75b213165519f0dcbf0c; six source fixtures; C04 C05 remain hypotheses"
 }
