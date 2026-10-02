@@ -25,27 +25,27 @@ def sanitize_rust_source(source: str) -> tuple[str, dict]:
         "comments_removed": 0,
         "lines_saved": 0
     }
-    
+
     lines = source.splitlines(keepends=True)
     out_lines = []
-    
+
     in_block_comment = False
     block_comment_buffer = []
-    
+
     for line in lines:
         stripped = line.strip()
-        
+
         # Preserve blank lines
         if not stripped:
             out_lines.append(line)
             continue
-            
+
         # Doc comments are always preserved
         if stripped.startswith("///") or stripped.startswith("//!"):
             stats["doc_comments_preserved"] += 1
             out_lines.append(line)
             continue
-            
+
         # Full-line // comment
         if stripped.startswith("//"):
             comment_content = stripped[2:].strip()
@@ -57,7 +57,7 @@ def sanitize_rust_source(source: str) -> tuple[str, dict]:
                 stats["lines_saved"] += 1
                 # Drop narrative comment line
                 continue
-                
+
         # Trailing line comment on code line
         # Use regex to find trailing comment outside string literals
         # Simple scan:
@@ -66,7 +66,7 @@ def sanitize_rust_source(source: str) -> tuple[str, dict]:
         char_lit = False
         escape = False
         cut_pos = None
-        
+
         i = 0
         while i < len(line):
             ch = line[i]
@@ -91,7 +91,7 @@ def sanitize_rust_source(source: str) -> tuple[str, dict]:
                 cut_pos = i
                 break
             i += 1
-            
+
         if cut_pos is not None:
             code_part = line[:cut_pos]
             comment_part = line[cut_pos+2:].strip()
@@ -105,21 +105,21 @@ def sanitize_rust_source(source: str) -> tuple[str, dict]:
                 out_lines.append(code_part.rstrip() + nl)
         else:
             out_lines.append(line)
-            
+
     return "".join(out_lines), stats
 
 
 def dry_run_repo():
     root = Path(".")
     crates = ["overlay-backend", "slint-experiment", "suflyor-tts", "suflyor-teratts", "suflyor-wsola"]
-    
+
     total_stats = {
         "doc_comments_preserved": 0,
         "invariant_comments_preserved": 0,
         "comments_removed": 0,
         "lines_saved": 0
     }
-    
+
     for crate in crates:
         files = list((root / crate).rglob("*.rs"))
         crate_stats = {
@@ -137,7 +137,7 @@ def dry_run_repo():
                 crate_stats[k] += s[k]
                 total_stats[k] += s[k]
         print(f"{crate:18}: removed {crate_stats['comments_removed']:4} noise lines | kept {crate_stats['invariant_comments_preserved']:4} invariant lines | kept {crate_stats['doc_comments_preserved']:4} doc lines")
-        
+
     print(f"\nTOTAL ACROSS 5 CRATES:")
     print(f"  Narrative comments to remove   : {total_stats['comments_removed']} lines")
     print(f"  Safety invariants preserved    : {total_stats['invariant_comments_preserved']} lines")
