@@ -35,6 +35,7 @@
 - Round-29 CI C08/C10: six source fixtures, suite 242; recursive cleanup and gate dependency boundaries bounded. [Limits](hypothesis-ci-cleanup-gate.md): no Actions or deletion; exact `0c9ac32b` archive passed 242+3 ([receipt](portable-recovery-ci-cleanup-gate.json)).
 - Round-30 CI C12/C13: six source fixtures, suite 248; separate security workflow and non-injected version snapshot bounded. [Limits](hypothesis-ci-version-security.md): no Actions or build; exact `9d455462` archive passed 248+3 ([receipt](portable-recovery-ci-version-security.json)).
 - Round-31 memory C04/C07: six pure string fixtures, suite 254; four-character roots and five-character stems bounded. [Limits](hypothesis-memory-matching.md): no Rust test or owner memory; exact `784641ee` archive passed 254+3 ([receipt](portable-recovery-memory-matching.json)).
+- Round-32 memory C01/C02: six pure string fixtures, suite 260; substring filter scope and post-first-line budget bounded. [Limits](hypothesis-memory-budget.md): no Rust test or owner memory; exact-SHA repeat pending.
 - WIP GitHub checkpoint on the dedicated task branch; task-owned files only.
 
 ## Not complete

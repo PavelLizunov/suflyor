@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 32 — original memory C01/C02 filter and budget (covering SHA pending)
+
+- [Evidence](hypothesis-memory-budget.md)/[receipt](hypothesis-memory-budget.json): six pure string/source fixtures target 260 research tests. The instruction denylist matches exact lowercase substrings but misses split text and role markers. Summary formatting does not call it.
+- Ask formatting stops only after at least one line is accepted; merge adds base and block without the block budget. No Rust test, owner memory, or prompt was run. C01/C02 remain hypotheses; exact archive repeat pending.
+
 ## Round 31 — original memory C04/C07 matching boundaries (exact covering SHA tested)
 
 - [Evidence](hypothesis-memory-matching.md)/[receipt](hypothesis-memory-matching.json): six pure string/source fixtures target 254 research tests. A shared prefix of four characters matches `проверили` and `провалили`, while three-character words still require their whole prefix.
