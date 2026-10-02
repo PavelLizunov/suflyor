@@ -106,8 +106,8 @@
   "source_feature_references": 709,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
-  "portable_recovery_tested_commit": "714d4f18235ba4e2f43b22e3abb4071b81691793",
-  "portable_recovery_result": "PASS 206+3 zero skips exact archive; catalog C10/C12 bounded; no rusqlite execution",
+  "portable_recovery_tested_commit": "4719c51725cf6cf40e70b7f916edf5440864f3f0",
+  "portable_recovery_result": "PASS 212+3 zero skips exact archive; memory C14/C15 bounded; no Rust migration execution",
   "source_seam_tests_passed": 33,
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
@@ -271,5 +271,5 @@
     "wave1_worker1_persistence-C14",
     "wave1_worker1_persistence-C15"
   ],
-  "memory_migration_portable_verification": "pending exact covering commit"
+  "memory_migration_portable_verification": "PASS exact 4719c51725cf6cf40e70b7f916edf5440864f3f0; six temporary schema fixtures; C14 C15 remain hypotheses"
 }

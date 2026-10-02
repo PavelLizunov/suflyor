@@ -1,9 +1,9 @@
 # Reconciliation verification evidence
 
-## Round 24 — original persistence C14/C15 schema boundaries (covering SHA pending)
+## Round 24 — original persistence C14/C15 schema boundaries (exact covering SHA tested)
 
 - [Evidence](hypothesis-memory-migrations.md)/[receipt](hypothesis-memory-migrations.json): six temporary schema/source fixtures target 212 research tests. Candidate status accepts a non-contract value; one pending snapshot followed by two write/insert pairs mints two items, while rechecking pending blocks the second.
-- Shipped memory SQL has no CHECK or session FK. Session deletion leaves memory intact; utterances and AI turns are the only two session cascades. Migration runner skips older versions and has no downgrade. No Rust runner, concurrent approval, or owner catalog was run. C14/C15 remain hypotheses; exact archive repeat pending.
+- Exact **`4719c51725cf6cf40e70b7f916edf5440864f3f0`** archive passed **212 research +3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable memory receipt](portable-recovery-memory-migrations.json). C14/C15 remain hypotheses; no Rust runner/concurrency/independent acceptance.
 
 ## Round 23 — confirmed persistence C10/C12 side tables (exact covering SHA tested)
 

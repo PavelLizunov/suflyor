@@ -27,7 +27,7 @@
 - Round-21 journal C05/C06: six temporary JSONL/source fixtures, suite 194; append identity, first-error continuation, torn-line consumption. [Limits](hypothesis-journal-write-identity.md): no Rust writer/ENOSPC/process race; exact `01f91c94` archive passed 194+3 ([receipt](portable-recovery-journal-identity.json)).
 - Round-22 projection C08/C09: six temporary SQLite/source fixtures, suite 200; crashed retry and post-index backfill bounded. [Limits](hypothesis-journal-projection.md): no Rust indexer/live race; exact `1514c984` archive passed 200+3 ([receipt](portable-recovery-journal-projection.json)).
 - Round-23 side tables C10/C12: six temporary schema/source fixtures, suite 206; rebuild retention versus hard-delete and invalid-JSON error bounded. [Limits](hypothesis-catalog-side-tables.md): no rusqlite/owner catalog; exact `714d4f18` archive passed 206+3 ([receipt](portable-recovery-catalog-side-tables.json)).
-- Round-24 schema C14/C15: six temporary schema/source fixtures, suite 212; status/approval fork, absent session FK, and no-downgrade loop bounded. [Limits](hypothesis-memory-migrations.md): no Rust runner/concurrency; exact-SHA repeat pending.
+- Round-24 schema C14/C15: six temporary schema/source fixtures, suite 212; status/approval fork, absent session FK, and no-downgrade loop bounded. [Limits](hypothesis-memory-migrations.md): no Rust runner/concurrency; exact `4719c517` archive passed 212+3 ([receipt](portable-recovery-memory-migrations.json)).
 - WIP GitHub checkpoint on the dedicated task branch; task-owned files only.
 
 ## Not complete
