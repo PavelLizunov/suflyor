@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 38 — original installers C03/C04 protocols and staging (exact covering SHA tested)
+
+- [Evidence](hypothesis-installer-protocols.md)/[receipt](hypothesis-installer-protocols.json): six source fixtures target 296 research tests. `curl_download` checks `https://` prefix but lacks `--proto =https`, `--proto-redir =https`, or redirect ceilings.
+- `update.rs` implements domain allow-listing via `is_trusted_download`, but `reqwest::Client` does not configure a custom redirect policy. `teratts_install` implements staging directory, marker file, and quarantine, whereas `ocr_install` extracts directly into `%APPDATA%\suflyor`. No network calls or downloads were made. C03/C04 remain hypotheses; exact archive verified.
+
 ## Round 37 — original installers C01/C02 extraction and TOCTOU (exact covering SHA tested)
 
 - Exact **`0e5c038af03433f5ab9214524d1950fda7ceb97a`** archive passed **290 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable installer security receipt](portable-recovery-installer-security.json). C01/C02 remain hypotheses; no live download, extraction, or installer spawn.

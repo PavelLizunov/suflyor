@@ -40,8 +40,8 @@
 - Round-33 memory C05/C08: six pure fixtures, suite 266; ordered omission, clipping, and full-load boundaries bounded. [Limits](hypothesis-memory-grounding.md): no Rust test or owner memory; exact `d925f1b7` archive passed 266+3 ([receipt](portable-recovery-memory-grounding.json)).
 - Round-34 persistence C13: six temporary SQLite fixtures, suite 272; stale whole-blob speaker rename bounded. [Limits](hypothesis-diarization-rename.md): no Rust race or owner catalog; exact `bf0ac534` archive passed 272+3 ([receipt](portable-recovery-diarization-rename.json)).
 - Round-35 config C05/C07: six temporary dummy-file fixtures, suite 278; symlink open and invalid-JSON reset bounded. [Limits](hypothesis-credential-files.md): no owner credentials or Rust race; exact `b9f39a36` archive passed 278+3 ([receipt](portable-recovery-credential-files.json)).
-- Round-37 installers C01/C02: six source fixtures, suite 290; archive extraction parameters and verify/spawn TOCTOU windows bounded. [Limits](hypothesis-installer-security.md): no live download or installer spawn; exact `0e5c038a` archive passed 290+3 ([receipt](portable-recovery-installer-security.json)).
-- Round-36 audio C02/C04: six pure fixtures, suite 284; resampling length and console-only route recovery bounded. [Limits](hypothesis-audio-clock-route.md): no devices or Rust; exact `12cc6f3b` archive passed 284+3 ([receipt](portable-recovery-audio-clock-route.json)). Latest checkpoint sealed at `78aeac4b`.
+- Round-38 installers C03/C04: six source fixtures, suite 296; download protocols, redirect policies, and staging/marker contracts bounded. [Limits](hypothesis-installer-protocols.md): no network requests or downloads; exact-SHA repeat complete.
+- Round-37 installers C01/C02: six source fixtures, suite 290; archive extraction parameters and verify/spawn TOCTOU windows bounded. [Limits](hypothesis-installer-security.md): no live download or installer spawn; exact `0e5c038a` archive passed 290+3 ([receipt](portable-recovery-installer-security.json)). Latest checkpoint sealed at `0a49ffbf`.
 - WIP GitHub checkpoint on the dedicated task branch; task-owned files only.
 
 ## Not complete
