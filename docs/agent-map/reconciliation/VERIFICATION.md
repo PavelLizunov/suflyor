@@ -2,8 +2,7 @@
 
 ## Round 40 — original config C06 / audio C05 secret zeroization and macOS recovery (exact covering SHA tested)
 
-- [Evidence](hypothesis-secret-zeroization-macos-recovery.md)/[receipt](hypothesis-secret-zeroization-macos-recovery.json): six source fixtures target 308 research tests. Windows `CredFree` is called without wiping `CredentialBlob` first; `write` zeroizes only after successful write without an unwind drop guard; `secret_redacted` calls `clear()` retaining heap buffer capacity.
-- `reopen_system` in macOS audio retries continuously on error without `RetryResult::Stop`, in contrast to `reopen_mic` which terminates on permission denial. No memory dumps or CoreAudio tap restarts were run. C06/C05 remain hypotheses; exact archive verified.
+- Exact **`2ac846df1aa98afe60458d39531cdd03f805e3cc`** archive passed **308 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable secret zeroization / macOS audio receipt](portable-recovery-secret-zeroization-macos-recovery.json). C06/C05 remain hypotheses; no memory dumps or CoreAudio tap restarts.
 
 ## Round 39 — original audio C06/C08 PTT accumulation and padding (exact covering SHA tested)
 
