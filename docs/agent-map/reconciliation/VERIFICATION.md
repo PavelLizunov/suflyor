@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 31 — original memory C04/C07 matching boundaries (covering SHA pending)
+
+- [Evidence](hypothesis-memory-matching.md)/[receipt](hypothesis-memory-matching.json): six pure string/source fixtures target 254 research tests. A shared prefix of four characters matches `проверили` and `провалили`, while three-character words still require their whole prefix.
+- Terms of at least five characters drop the final character before prefix matching; shorter terms require exact equality. Latin tokens inside Cyrillic text have no separate minimum length. No Rust test, owner memory, or prompt execution was run. C04/C07 remain hypotheses; exact archive repeat pending.
+
 ## Round 30 — original CI C12/C13 security and version boundaries (exact covering SHA tested)
 
 - [Evidence](hypothesis-ci-version-security.md)/[receipt](hypothesis-ci-version-security.json): six source fixtures target 248 research tests. Security scans live in a separate workflow and are not dependencies of the required gate. macOS failure likewise cannot fail that gate.
