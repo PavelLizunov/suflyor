@@ -354,5 +354,5 @@
     "wave4_worker2_installers-C03",
     "wave4_worker2_installers-C04"
   ],
-  "installer_protocol_portable_verification": "pending exact covering commit"
+  "installer_protocol_portable_verification": "PASS exact 09fec629e2240e73140aa03722decc27b1a85de2; six source fixtures; C03 C04 remain hypotheses"
 }
