@@ -3,4 +3,14 @@
 # docs/targeted/full tier and format only affected crates. Enable once per clone:
 #   git config core.hooksPath .githooks
 root="$(git rev-parse --show-toplevel)" || exit 1
-exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/git-gate-native.ps1" commit
+if [ "$(uname -s)" = "Darwin" ]; then
+    exec bash "$root/scripts/git-gate-macos.sh"
+fi
+if command -v powershell.exe >/dev/null 2>&1; then
+    exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/git-gate-native.ps1" commit
+elif command -v pwsh >/dev/null 2>&1; then
+    exec pwsh -NoProfile -ExecutionPolicy Bypass -File "$root/scripts/git-gate-native.ps1" commit
+else
+    # Linux control plane / non-PowerShell environments: run git diff checks directly
+    git diff --cached --check
+fi

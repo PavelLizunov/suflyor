@@ -8,7 +8,7 @@
 
 | ID | Компонент / Файл | Описание проблемы | Статус | Связанный тест / PR |
 |---|---|---|:---:|---|
-| **DEF-01** | `.githooks/pre-commit:3` | Безусловный вызов `powershell.exe` роняет коммит-хук на macOS и Linux воркерах. | **Открыт** | Ветка `codex/fix-crossplatform-hooks` |
+| **DEF-01** | `.githooks/pre-commit:3` | Безусловный вызов `powershell.exe` роняет коммит-хук на macOS и Linux воркерах. | **Исправлен** | `.githooks/pre-commit`, `.githooks/pre-push` |
 | **DEF-02** | `overlay-backend/src/ai.rs:188` | Самоблокировка (self-deadlock) в `complete_exclusive`: повторный захват мьютекса вызывающим потоком. | **Открыт** | Ветка `codex/fix-ai-self-deadlock` |
 | **DEF-03** | `overlay-backend/src/credentials.rs:160` | На POSIX ошибка парсинга JSON сбрасывает файл в пустую карту, уничтожая остальные сохранённые ключи. | **Открыт** | Реестр `wave1_worker3_config-C05` |
 | **DEF-04** | `overlay-backend/src/credentials.rs:140` | `credentials_path()` безусловно создаёт `suflyor/`, отсекая существующую папку данных `overlay-mvp/`. | **Открыт** | Реестр `wave1_worker3_config-C01` |
