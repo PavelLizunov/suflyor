@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 26 — confirmed persistence C01/C16 backup and recovery (covering SHA pending)
+
+- [Evidence](hypothesis-catalog-backup-recovery.md)/[receipt](hypothesis-catalog-backup-recovery.json): six temporary SQLite/JSONL fixtures target 224 research tests. Raw main-file backup leaves no WAL sidecar. Recovery accepts start-only input but rejects stop, summary, and age past 12 hours.
+- Source discards the checkpoint result and copies only the main catalog file. This is not an owner migration or Rust directory scan. C01 and C16 were already confirmed; exact archive repeat pending.
+
 ## Round 25 — persistence C03/C17 retention and UTF-8 (exact covering SHA tested)
 
 - [Evidence](hypothesis-journal-retention-utf8.md)/[receipt](hypothesis-journal-retention-utf8.json): six temporary-file/source fixtures target 218 research tests. Whole-file UTF-8 decoding fails before line parsing; the first valid physical line still parses alone.
