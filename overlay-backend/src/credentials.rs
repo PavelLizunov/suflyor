@@ -138,21 +138,19 @@ mod posix_credentials {
     }
 
     fn credentials_path() -> Result<PathBuf> {
-        let dir = dirs::config_dir()
-            .ok_or_else(|| anyhow!("could not resolve user config dir"))?
-            .join("suflyor");
+        let dir = crate::paths::data_root()
+            .ok_or_else(|| anyhow!("could not resolve user data root"))?;
         ensure_dir_permissions(&dir)?;
         Ok(dir.join("credentials.json"))
     }
 
-    fn read_map() -> HashMap<String, String> {
-        let Ok(path) = credentials_path() else {
-            return HashMap::new();
-        };
-        let Ok(bytes) = fs::read(path) else {
-            return HashMap::new();
-        };
-        serde_json::from_slice(&bytes).unwrap_or_default()
+    fn read_map() -> Result<HashMap<String, String>> {
+        let path = credentials_path()?;
+        if !path.exists() {
+            return Ok(HashMap::new());
+        }
+        let bytes = fs::read(&path)?;
+        serde_json::from_slice(&bytes).map_err(|e| anyhow!("parse credentials.json: {e}"))
     }
 
     pub(super) fn write_to_path(path: &Path, bytes: &[u8]) -> Result<()> {
@@ -200,7 +198,7 @@ mod posix_credentials {
 
     pub fn write(slot: SecretSlot, secret: &str) -> Result<()> {
         let trimmed = secret.trim();
-        let mut map = read_map();
+        let mut map = read_map().unwrap_or_default();
         if trimmed.is_empty() {
             map.remove(slot.target());
         } else {
@@ -210,12 +208,12 @@ mod posix_credentials {
     }
 
     pub fn read(slot: SecretSlot) -> Result<Option<String>> {
-        let map = read_map();
+        let map = read_map()?;
         Ok(map.get(slot.target()).cloned())
     }
 
     pub fn delete(slot: SecretSlot) -> Result<()> {
-        let mut map = read_map();
+        let mut map = read_map()?;
         map.remove(slot.target());
         write_map(&map)
     }
@@ -278,5 +276,17 @@ mod tests {
             std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777,
             0o700
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn posix_credentials_preserves_corrupt_file_on_read_failure() {
+        let temp = tempfile::tempdir().expect("create temp directory");
+        let path = temp.path().join("credentials.json");
+        std::fs::write(&path, b"invalid { json").unwrap();
+
+        let bytes = std::fs::read(&path).unwrap();
+        let parsed: Result<std::collections::HashMap<String, String>, _> = serde_json::from_slice(&bytes);
+        assert!(parsed.is_err());
     }
 }
