@@ -91,6 +91,12 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
 - User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.
 
+## Continuation round 14: evidence integrity and source-reference gap ledger
+
+- Intended result: check all portable tested-SHA/artifact receipts against actual Git objects, and create per-selected-source navigation gaps from precise contract/candidate ranges. Count interval unions separately from source-inspected/semantic acceptance; no assumption a line linked in prose was reviewed exhaustively.
+- Scope: task-owned Python/docs/generated ledgers; read-only Git cat-file/show, frozen source/input hashes and existing syntax/contracts/candidate registers. No native/process/secret actions. Record unchanged original IDs and unknown/missing/invalid references; do not turn directory pointers into whole-file reference coverage.
+- Verification: exact-commit hash/byte/baseline/acceptance checks, duplicate/overlap/invalid/directory boundary fixtures, full selected syntax file census vs references, schema/contract hashes and deterministic archive regeneration. Immutable earlier receipts preserved; any discrepancy would get superseding correction, not silently rewritten. Native/independent semantics remain open.
+
 ## Continuation round 13: backend credential/process storage and lifetime boundaries
 
 - Intended result: direct-provider credential caller/storage contract and long-lived child JobObject/explicit kill/wait/EOF ownership, with bounded original TTS-C03/local_ai-C10 counterevidence. Preserve original statuses; no Credential Manager/file secrets/native spawn/model/termination test, no SDK/compiler/global/production changes.

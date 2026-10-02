@@ -1,5 +1,13 @@
 # Reconciliation verification evidence
 
+## Round 14 — evidence integrity/navigation gaps (covering SHA pending)
+
+- Read-only exact historical commit receipt check: 14 receipts/11 artifact hash+size checks, zero mismatches, four absent legacy boundary flags explicitly retained not accepted. No historical tests rerun by integrity utility; [report](portable-receipt-integrity.json).
+- [Navigation ledger](NAVIGATION-GAPS.md): 298 selected syntax files/120,858 source lines, 137 with some precise registered ranges/161 none, 33,524 reference-line union, 26 unranged/directory pointers zero credit. **No semantically reviewed-line number/percentage established**. Input source/registry hashes and intervals verified.
+- Eight new ledger/receipt bookkeeping fixtures; local research total 152, parser/runtime-dependent full suite verification pending. No production/native/secret/process action, original 39/75/5 statuses unchanged; ledger prioritizes missing real source chains rather than broadening ranges to inflate coverage.
+- Exact archive deterministic ledger and suite repeat pending; independent/native/full-objective acceptance open.
+
+
 ## Round 13 — credentials/backend child ownership (exact covering SHA tested)
 
 - Five frozen backend SDK sources yield 28 imports/17 name-call candidates, no symbol/cfg/type resolution; host inventory unchanged. [Backend census](../native/backend-sdk-name-edges.md)/[storage and child contract](../features/credentials-and-managed-process-ownership.md); registry 21/577 ranges.

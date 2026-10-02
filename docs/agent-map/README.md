@@ -10,6 +10,10 @@ This directory contains a historical heuristic index and architectural notes, no
 
 [CI portable fixtures](reconciliation/hypothesis-ci-portable.md) exercise original C04/C05 Git/source-model mechanisms and NUL-safe GitHub counterevidence, with C06/C12 source-wiring limits. No native/Actions/branch-policy/independent acceptance or original status promotion.
 
+## Honest reference gaps
+
+[Navigation gaps and receipt integrity](reconciliation/NAVIGATION-GAPS.md): 137/298 selected source files have precise registered references, 161 none; source-range unions **not semantic/audited lines**. Fourteen historical receipt SHAs/11 artifact hash checks match Git; not a rerun of historical tests. Use this ledger to target genuinely missing evidence, not inflate range percentages.
+
 ## Where to start
 
 - [Reconciliation task](../goal-agent-map-reconciliation.md): approved scope, constraints and remaining work.

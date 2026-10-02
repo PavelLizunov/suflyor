@@ -1,0 +1,275 @@
+{
+  "schema_version": 1,
+  "method": "read-only Git object/hash/size/baseline and receipt-flag checks; not test rerun",
+  "receipts": [
+    {
+      "receipt": "docs/agent-map/reconciliation/portable-recovery-backend-sdk.json",
+      "receipt_sha256": "3ef7e4afdc51259a2920e839500fea14e350a3063410d2ea95d8d7be276f8efa",
+      "tested_commit": "6853a54cad6f86e9397c7e72de0b75fb98775f2a",
+      "source_baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "artifacts": [
+        {
+          "path": "docs/agent-map/native/backend-sdk-name-edges.json",
+          "actual_sha256": "0dfe1cc03ed6c03fe5a6f2fc8529f6e56876d47f737a7a70db8609927d6cf709",
+          "expected_sha256": "0dfe1cc03ed6c03fe5a6f2fc8529f6e56876d47f737a7a70db8609927d6cf709",
+          "actual_bytes": 20850,
+          "expected_bytes": 20850,
+          "hash_and_size_match": true
+        }
+      ],
+      "errors": [],
+      "historical_absent_acceptance_flags": [],
+      "tests_rerun_by_this_check": false,
+      "native_independent_acceptance": false
+    },
+    {
+      "receipt": "docs/agent-map/reconciliation/portable-recovery-ci-hypotheses.json",
+      "receipt_sha256": "6569e9fcb8c137fc8bf4aa285200dcd69dee4ba0ba2c468ea76cd725cd6e3b90",
+      "tested_commit": "6cbeaf060b6256941e201c1bb383c4b326518401",
+      "source_baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "artifacts": [],
+      "errors": [],
+      "historical_absent_acceptance_flags": [
+        "native_application_acceptance"
+      ],
+      "tests_rerun_by_this_check": false,
+      "native_independent_acceptance": false
+    },
+    {
+      "receipt": "docs/agent-map/reconciliation/portable-recovery-config-ui-edges.json",
+      "receipt_sha256": "1f4e66e62a62e2f7da7aba44e87f188094e77225e82c9dfafe88e1fc5a772340",
+      "tested_commit": "5b27000cd2252c5e41957fe1d6adf629958fa7de",
+      "source_baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "artifacts": [
+        {
+          "path": "docs/agent-map/schema/config-ui-name-edges.json",
+          "actual_sha256": "11b670eda3635708daae5d6f9297c0675c6ebf11c3c590a61bab1bd8555bd26d",
+          "expected_sha256": "11b670eda3635708daae5d6f9297c0675c6ebf11c3c590a61bab1bd8555bd26d",
+          "actual_bytes": 2831173,
+          "expected_bytes": 2831173,
+          "hash_and_size_match": true
+        }
+      ],
+      "errors": [],
+      "historical_absent_acceptance_flags": [],
+      "tests_rerun_by_this_check": false,
+      "native_independent_acceptance": false
+    },
+    {
+      "receipt": "docs/agent-map/reconciliation/portable-recovery-evidence.json",
+      "receipt_sha256": "c731b4a6e2700587bb673c8af68564cf293e78f8a5fcd4c61f0c02e621a98840",
+      "tested_commit": "059a04b1b90017fab032c25fc93d68b2be1f39eb",
+      "source_baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "artifacts": [],
+      "errors": [],
+      "historical_absent_acceptance_flags": [
+        "full_project_coverage"
+      ],
+      "tests_rerun_by_this_check": false,
+      "native_independent_acceptance": false
+    },
+    {
+      "receipt": "docs/agent-map/reconciliation/portable-recovery-native.json",
+      "receipt_sha256": "ae756f5d77fbfd409b79e2fa52f169af64bc9af07faa86bca1d27b43ff83a735",
+      "tested_commit": "acbc312a06b79062ec270b4f4f676198e6117a5e",
+      "source_baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "artifacts": [
+        {
+          "path": "docs/agent-map/native/inventory.json",
+          "actual_sha256": "8e1ee145f1024022d804465accf16a001d92b6a59621561ff2bce1a555338a1e",
+          "expected_sha256": "8e1ee145f1024022d804465accf16a001d92b6a59621561ff2bce1a555338a1e",
+          "actual_bytes": 100027,
+          "expected_bytes": 100027,
+          "hash_and_size_match": true
+        }
+      ],
+      "errors": [],
+      "historical_absent_acceptance_flags": [],
+      "tests_rerun_by_this_check": false,
+      "native_independent_acceptance": false
+    },
+    {
+      "receipt": "docs/agent-map/reconciliation/portable-recovery-nsis.json",
+      "receipt_sha256": "88799ddca5f54000192a9a4b9c5f8e52ae6e2e9d803659226e7d16bcf99afb4c",
+      "tested_commit": "ce14c313570225ba5d93d69df37f4832f9646355",
+      "source_baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "artifacts": [
+        {
+          "path": "docs/agent-map/syntax/files.json",
+          "actual_sha256": "bdb5e7429f41280eb92da3a7766b38b5fff199c93e11fc379e599998a6262373",
+          "expected_sha256": "bdb5e7429f41280eb92da3a7766b38b5fff199c93e11fc379e599998a6262373",
+          "actual_bytes": 430126,
+          "expected_bytes": null,
+          "hash_and_size_match": true
+        },
+        {
+          "path": "docs/agent-map/syntax/declarations.jsonl",
+          "actual_sha256": "72a7ef625c8955b880b8e481ad6325754c2f90694d36d571588be76a1bfcb346",
+          "expected_sha256": "72a7ef625c8955b880b8e481ad6325754c2f90694d36d571588be76a1bfcb346",
+          "actual_bytes": 13430536,
+          "expected_bytes": null,
+          "hash_and_size_match": true
+        }
+      ],
+      "errors": [],
+      "historical_absent_acceptance_flags": [],
+      "tests_rerun_by_this_check": false,
+      "native_independent_acceptance": false
+    },
+    {
+      "receipt": "docs/agent-map/reconciliation/portable-recovery-powershell.json",
+      "receipt_sha256": "4eabd11ba540ec849ebfe2370c781efa0281a36c3fae5872639bac2998ff643c",
+      "tested_commit": "0d1f9e214d418e251e6d8bcd65eae72ab9e5ad95",
+      "source_baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "artifacts": [
+        {
+          "path": "docs/agent-map/syntax/files.json",
+          "actual_sha256": "0a870658a812487780117762b5773daec76d83d34f46d1fc9ee32ddabf202fdf",
+          "expected_sha256": "0a870658a812487780117762b5773daec76d83d34f46d1fc9ee32ddabf202fdf",
+          "actual_bytes": 419791,
+          "expected_bytes": null,
+          "hash_and_size_match": true
+        },
+        {
+          "path": "docs/agent-map/syntax/declarations.jsonl",
+          "actual_sha256": "44732edd94c30f881293490211d62c797a03e57a8c04c05c8bf11f9982d7d7e1",
+          "expected_sha256": "44732edd94c30f881293490211d62c797a03e57a8c04c05c8bf11f9982d7d7e1",
+          "actual_bytes": 13431328,
+          "expected_bytes": null,
+          "hash_and_size_match": true
+        }
+      ],
+      "errors": [],
+      "historical_absent_acceptance_flags": [],
+      "tests_rerun_by_this_check": false,
+      "native_independent_acceptance": false
+    },
+    {
+      "receipt": "docs/agent-map/reconciliation/portable-recovery-round2.json",
+      "receipt_sha256": "7f987b0718bcf7e37aaf8d53d4ce68dc3fd86fcb8781ccd9bc5f0f7c2dafa57d",
+      "tested_commit": "8cd96a8bcbf3a68c9af8bde43bfa842fd34457a6",
+      "source_baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "artifacts": [],
+      "errors": [],
+      "historical_absent_acceptance_flags": [
+        "full_project_coverage"
+      ],
+      "tests_rerun_by_this_check": false,
+      "native_independent_acceptance": false
+    },
+    {
+      "receipt": "docs/agent-map/reconciliation/portable-recovery-round3.json",
+      "receipt_sha256": "37eba5d459152f0f61bfe37c85fa2a714d3454ce1f12b4aabd1924da7370a2ba",
+      "tested_commit": "3188e6b05f36273bd32faebec3ab64dad0301afe",
+      "source_baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "artifacts": [],
+      "errors": [],
+      "historical_absent_acceptance_flags": [
+        "full_project_coverage"
+      ],
+      "tests_rerun_by_this_check": false,
+      "native_independent_acceptance": false
+    },
+    {
+      "receipt": "docs/agent-map/reconciliation/portable-recovery-round4.json",
+      "receipt_sha256": "b00e89e10b5e389f59884a557508abc5cf4e16f0400f3a75ded2bd95a0aca829",
+      "tested_commit": "3bfc15ae5ff7fdc405f46055ab1d60a8c943b3f8",
+      "source_baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "artifacts": [],
+      "errors": [],
+      "historical_absent_acceptance_flags": [],
+      "tests_rerun_by_this_check": false,
+      "native_independent_acceptance": false
+    },
+    {
+      "receipt": "docs/agent-map/reconciliation/portable-recovery-round5.json",
+      "receipt_sha256": "c2da8c99983b3e6fca64a75bf6fc0dc301c6b7d9b8368d841a83e5414f5f5823",
+      "tested_commit": "a8c752534ccba081aecc99040e4f03f54c65f47e",
+      "source_baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "artifacts": [
+        {
+          "path": "docs/agent-map/syntax/files.json",
+          "actual_sha256": "a37c084dc05ccc24a0aaceac12fd633cd053235a0e2af8920af536f83febe31d",
+          "expected_sha256": "a37c084dc05ccc24a0aaceac12fd633cd053235a0e2af8920af536f83febe31d",
+          "actual_bytes": 429980,
+          "expected_bytes": null,
+          "hash_and_size_match": true
+        },
+        {
+          "path": "docs/agent-map/syntax/declarations.jsonl",
+          "actual_sha256": "867f67f07007845d9d060da1dedcb685a7ba6021c3e698ac489c13d83b5d7d12",
+          "expected_sha256": "867f67f07007845d9d060da1dedcb685a7ba6021c3e698ac489c13d83b5d7d12",
+          "actual_bytes": 13423247,
+          "expected_bytes": null,
+          "hash_and_size_match": true
+        }
+      ],
+      "errors": [],
+      "historical_absent_acceptance_flags": [],
+      "tests_rerun_by_this_check": false,
+      "native_independent_acceptance": false
+    },
+    {
+      "receipt": "docs/agent-map/reconciliation/portable-recovery-schema.json",
+      "receipt_sha256": "3c3602596792cadf168e4ceed7739eb741e33bcab5264bab0f4c22c16ffdf3fa",
+      "tested_commit": "f4dd4191ec4920f6b8d3d0b0c66ba6d24f0d13ac",
+      "source_baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "artifacts": [
+        {
+          "path": "docs/agent-map/schema/inventory.json",
+          "actual_sha256": "fe09bf75064de1c7be50613f2a9de6781105cc1af1df7c8a22db3c7bdc8ef482",
+          "expected_sha256": "fe09bf75064de1c7be50613f2a9de6781105cc1af1df7c8a22db3c7bdc8ef482",
+          "actual_bytes": 1545564,
+          "expected_bytes": 1545564,
+          "hash_and_size_match": true
+        }
+      ],
+      "errors": [],
+      "historical_absent_acceptance_flags": [],
+      "tests_rerun_by_this_check": false,
+      "native_independent_acceptance": false
+    },
+    {
+      "receipt": "docs/agent-map/reconciliation/portable-recovery-startup-health.json",
+      "receipt_sha256": "dbc3c3f683410b5eadb1f039f00a654b4b54d126fe2fb5959b3ff9915ff1ba10",
+      "tested_commit": "a9e2a8c4424552e629c9247ec3aa151dbf58b7d2",
+      "source_baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "artifacts": [],
+      "errors": [],
+      "historical_absent_acceptance_flags": [],
+      "tests_rerun_by_this_check": false,
+      "native_independent_acceptance": false
+    },
+    {
+      "receipt": "docs/agent-map/reconciliation/portable-recovery-windows-sdk.json",
+      "receipt_sha256": "3bb8fb9a952ae03d35564246963da1ec5304c34be152c8c0f48bf8b3b5f32227",
+      "tested_commit": "48dbd31238b0c7c4ca123ffbc8e6e30c4f1091f0",
+      "source_baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "artifacts": [
+        {
+          "path": "docs/agent-map/native/windows-sdk-name-edges.json",
+          "actual_sha256": "e869041507a34d705a44f189ad8f6d7f1889891ca63e83a237811cc1e06a0e06",
+          "expected_sha256": "e869041507a34d705a44f189ad8f6d7f1889891ca63e83a237811cc1e06a0e06",
+          "actual_bytes": 133518,
+          "expected_bytes": 133518,
+          "hash_and_size_match": true
+        }
+      ],
+      "errors": [],
+      "historical_absent_acceptance_flags": [],
+      "tests_rerun_by_this_check": false,
+      "native_independent_acceptance": false
+    }
+  ],
+  "receipt_count": 14,
+  "artifact_hash_checks": 11,
+  "error_count": 0,
+  "native_acceptance": false,
+  "independent_acceptance": false,
+  "limits": [
+    "receipt test counts are attestations; this tool does not re-execute them",
+    "no proof every claim/source semantics independently accepted",
+    "historic artifacts remain immutable; Git backing required for receipt integrity"
+  ],
+  "scope": "14 historical receipts through backend-sdk before adding current integrity checkpoint; not self-referential"
+}
