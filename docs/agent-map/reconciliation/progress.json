@@ -378,5 +378,5 @@
     "wave2_worker3_tts-C03",
     "wave2_worker3_tts-C04"
   ],
-  "tts_process_protocol_portable_verification": "pending exact covering commit"
+  "tts_process_protocol_portable_verification": "PASS exact 09bc554fb868ff0f95e87f89685cc3215ebeb802; six source fixtures; C03 C04 remain hypotheses"
 }
