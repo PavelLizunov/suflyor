@@ -147,24 +147,38 @@ pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while !rest.is_empty() {
-        if rest.starts_with("Bearer ") {
-            out.push_str("Bearer <redacted>");
-            rest = &rest[7..];
-            let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
-            rest = &rest[tok_len..];
-        } else if rest.starts_with("gsk_") {
+        let is_word_boundary = !out
+            .chars()
+            .last()
+            .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
+
+        if is_word_boundary && rest.get(..6).is_some_and(|p| p.eq_ignore_ascii_case("bearer")) {
+            let tail = &rest[6..];
+            if let Some(first_non_delim) =
+                tail.find(|c: char| !(c.is_whitespace() || c == ':' || c == '='))
+            {
+                if first_non_delim < tail.len()
+                    && (tail.starts_with(char::is_whitespace)
+                        || tail.starts_with(':')
+                        || tail.starts_with('='))
+                {
+                    out.push_str("Bearer <redacted>");
+                    let tok = &tail[first_non_delim..];
+                    let tok_len = tok.find(char::is_whitespace).unwrap_or(tok.len());
+                    rest = &tok[tok_len..];
+                    continue;
+                }
+            }
+        }
+
+        if is_word_boundary && rest.get(..4).is_some_and(|p| p.eq_ignore_ascii_case("gsk_")) {
             out.push_str("gsk_<redacted>");
             rest = &rest[4..];
             let tok_len = rest
                 .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
                 .unwrap_or(rest.len());
             rest = &rest[tok_len..];
-        } else if rest.starts_with("sk-")
-            && !out
-                .chars()
-                .last()
-                .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
-        {
+        } else if is_word_boundary && rest.get(..3).is_some_and(|p| p.eq_ignore_ascii_case("sk-")) {
             out.push_str("sk-<redacted>");
             rest = &rest[3..];
             let tok_len = rest
@@ -940,6 +954,26 @@ mod tests {
         assert!(redacted.contains("gsk_<redacted>"));
         assert!(redacted.contains("sk-<redacted>"));
         assert!(redacted.contains("desk-1 task-2"));
+    }
+
+    #[test]
+    fn redact_secrets_handles_case_insensitivity_and_delimiters() {
+        let sample = "auth: bearer: secret_tok1\n\
+                      HEADER: BEARER=secret_tok2\n\
+                      KEY: GSK_UPPER_SECRET\n\
+                      KEY2: SK-PROJ-UPPER_SECRET\n";
+        let redacted = redact_secrets(sample);
+        assert!(!redacted.contains("secret_tok1"), "leaked bearer token 1: {redacted}");
+        assert!(!redacted.contains("secret_tok2"), "leaked bearer token 2: {redacted}");
+        assert!(!redacted.contains("GSK_UPPER_SECRET"), "leaked GSK token: {redacted}");
+        assert!(!redacted.contains("SK-PROJ-UPPER_SECRET"), "leaked SK token: {redacted}");
+        assert_eq!(
+            redacted,
+            "auth: Bearer <redacted>\n\
+             HEADER: Bearer <redacted>\n\
+             KEY: gsk_<redacted>\n\
+             KEY2: sk-<redacted>\n"
+        );
     }
 
     #[test]
