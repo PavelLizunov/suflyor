@@ -1,5 +1,13 @@
 # Reconciliation verification evidence
 
+## Round 77 — independent verification audit of complete research reconciliation
+
+- [Independent review report](INDEPENDENT-REVIEW.md): Context-isolated verification subagent audited the complete research reconciliation artifacts.
+- Baseline integrity: 0 production code diffs across all 5 crates and scripts against `a10c356af05a5832a14ea06a5d0cb6c49694e3f1`.
+- Test suite: 526/526 operations tests + 3 Hermes integration tests passed cleanly (0 errors, 0 skips).
+- 119/119 original Grok audit candidates covered (39 confirmed, 75 hypotheses, 5 rejected).
+- Receipts & Checkpoint: 77/77 portable receipts verified without error; `checkpoint.py verify` reported 0 issues.
+
 ## Round 76 — original rejected claims falsification (exact covering SHA tested)
 
 - Exact **`f24483b7c2b3fc1c3a807d6f7f072064fe11d395`** archive passed **526 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable rejected claims falsification receipt](portable-recovery-rejected-claims-falsification.json). All 119 original Grok claims (39 confirmed, 75 hypotheses, 5 rejected) are now covered in operations test suites. Original statuses remain unchanged; no live DB mutations or clipboard smoke testing.
