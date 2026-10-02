@@ -432,5 +432,5 @@
     "wave3_worker2_window-C02",
     "wave3_worker2_window-C04"
   ],
-  "window_stealth_lifecycle_portable_verification": "pending exact covering commit"
+  "window_stealth_lifecycle_portable_verification": "PASS exact eba0e32e3e52666d73a082b916a3151ea72abe4c; six source fixtures; C02 C04 remain hypotheses"
 }

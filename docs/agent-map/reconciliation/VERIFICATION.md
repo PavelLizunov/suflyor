@@ -2,8 +2,7 @@
 
 ## Round 51 — original window C02/C04 stealth parking and registry scope (exact covering SHA tested)
 
-- [Evidence](hypothesis-window-stealth-lifecycle.md)/[receipt](hypothesis-window-stealth-lifecycle.json): six source fixtures target 374 research tests. `present_window_stealth_aware_at` parks windows off-screen at `(-32000, -32000)` before `show()`, and applies `apply_stealth_one` before moving on-screen.
-- If HWND realization fails under stealth, `fallback_reveal` aborts without revealing the window on-screen. `WindowRegistry::apply_stealth` iterates major window handles but excludes `TrayMenuWindow` (which applies stealth upon individual realization). No live DWM windows were created. C02/C04 remain hypotheses; exact archive verified.
+- Exact **`eba0e32e3e52666d73a082b916a3151ea72abe4c`** archive passed **374 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable window stealth receipt](portable-recovery-window-stealth-lifecycle.json). C02/C04 remain hypotheses; no DWM capture or live window creation.
 
 ## Round 50 — original bridge C02/C08 lock contention and session identity (exact covering SHA tested)
 
