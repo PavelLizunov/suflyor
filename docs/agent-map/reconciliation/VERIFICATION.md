@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 74 — original local_ai C01 / window C11 port reachability and effective stealth (exact covering SHA tested)
+
+- [Evidence](hypothesis-local-ai-port-stealth-effective.md)/[receipt](hypothesis-local-ai-port-stealth-effective.json): six source fixtures target 513 research tests. `is_reachable` invokes `curl` without `-f`, allowing foreign HTTP listeners on port 8080 to satisfy reachability and skip managed `llama-server` launching.
+- `stealth_supported` returns hardcoded `true` on Windows without OS build checks; `STEALTH_EFFECTIVE` aggregates WDA outcome for the overlay bar only, leaving tile exclusion failures unaggregated. No live servers were queried. C01/C11 remain confirmed mechanisms; exact archive verified.
+
 ## Round 73 — original persistence C04 / tile C02 journal fsync and streaming markdown parse (exact covering SHA tested)
 
 - Exact **`29d2cef50cef8c70886eced478bdfc6732d1270a`** archive passed **507 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable persistence sync / markdown parse receipt](portable-recovery-persistence-sync-markdown-parse.json). C04/C02 remain confirmed mechanisms; no live power interruption or large-stream UI rendering.
