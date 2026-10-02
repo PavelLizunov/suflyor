@@ -498,5 +498,5 @@
     "wave1_worker3_config-C03",
     "wave1_worker3_config-C04"
   ],
-  "config_diagnostics_backup_portable_verification": "pending exact covering commit"
+  "config_diagnostics_backup_portable_verification": "PASS exact ae8bb4bf6710b9ceb42df6ca56de8ea62c67e2b3; six source fixtures; C03 C04 remain confirmed"
 }
