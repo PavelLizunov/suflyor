@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 64 — original audio C01/C07 resample remainder and format negotiation (exact covering SHA tested)
+
+- [Evidence](hypothesis-audio-resample-format.md)/[receipt](hypothesis-audio-resample-format.json): six source fixtures target 453 research tests. `resample_and_quantise` is stateless and drops fractional residuals (e.g. `len % 3` in 3:1 fast path); `f32_buf` and `byte_q` are cleared every iteration.
+- `capture_thread` and `record_source_until_stop` request `SampleType::Float` with `autoconvert: true` but do not query negotiated format back from WASAPI. No live audio was captured. C01/C07 remain confirmed mechanisms; exact archive verified.
+
 ## Round 63 — original config C08/C09 settings merge and error logging (exact covering SHA tested)
 
 - Exact **`8260866f3b4b4b85dd7679d2b734b4989e8831cb`** archive passed **447 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable config merge/logging receipt](portable-recovery-config-merge-logging.json). C08/C09 remain confirmed mechanisms; no live user config overwriting or filesystem path logging.
