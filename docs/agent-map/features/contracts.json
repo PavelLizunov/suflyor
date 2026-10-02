@@ -3693,6 +3693,141 @@
       ],
       "native_verification": "not_run",
       "independent_acceptance": false
+    },
+    {
+      "id": "audio-route-settings-and-watchdog",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/audio-route-settings-and-watchdog.md",
+      "review_state": "selected route/Settings/metrics/watchdog source and Rust test-intent, no devices",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/audio.rs",
+          "start_line": 88,
+          "end_line": 138
+        },
+        {
+          "path": "overlay-backend/src/audio_route.rs",
+          "start_line": 15,
+          "end_line": 41
+        },
+        {
+          "path": "overlay-backend/src/audio_route.rs",
+          "start_line": 116,
+          "end_line": 170
+        },
+        {
+          "path": "overlay-backend/src/audio_route.rs",
+          "start_line": 189,
+          "end_line": 259
+        },
+        {
+          "path": "overlay-backend/src/audio_route.rs",
+          "start_line": 265,
+          "end_line": 310
+        },
+        {
+          "path": "overlay-backend/src/audio.rs",
+          "start_line": 141,
+          "end_line": 199
+        },
+        {
+          "path": "overlay-backend/src/audio.rs",
+          "start_line": 203,
+          "end_line": 266
+        },
+        {
+          "path": "overlay-backend/src/audio.rs",
+          "start_line": 279,
+          "end_line": 339
+        },
+        {
+          "path": "overlay-backend/src/audio.rs",
+          "start_line": 340,
+          "end_line": 438
+        },
+        {
+          "path": "overlay-backend/src/audio.rs",
+          "start_line": 440,
+          "end_line": 495
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_audio.rs",
+          "start_line": 15,
+          "end_line": 69
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_audio.rs",
+          "start_line": 71,
+          "end_line": 89
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_audio.rs",
+          "start_line": 100,
+          "end_line": 245
+        },
+        {
+          "path": "slint-experiment/ui/settings_panel.slint",
+          "start_line": 1614,
+          "end_line": 1720
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 300,
+          "end_line": 395
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_audio.rs",
+          "start_line": 248,
+          "end_line": 494
+        },
+        {
+          "path": "slint-experiment/tests/audio_settings_guard.rs",
+          "start_line": 7,
+          "end_line": 45
+        },
+        {
+          "path": "overlay-backend/src/audio_metrics.rs",
+          "start_line": 23,
+          "end_line": 117
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "start_line": 797,
+          "end_line": 825
+        },
+        {
+          "path": "overlay-backend/src/audio_macos.rs",
+          "start_line": 940,
+          "end_line": 969
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/capture_watchdog.rs",
+          "start_line": 3,
+          "end_line": 91
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 1743,
+          "end_line": 1868
+        },
+        {
+          "path": "slint-experiment/tests/macos_capture_watchdog_guard.rs",
+          "start_line": 13,
+          "end_line": 81
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/capture_watchdog.rs",
+          "start_line": 94,
+          "end_line": 155
+        }
+      ],
+      "limits": [
+        "no WASAPI COM CoreAudio Rust/live settings/config action",
+        "enqueue metrics not native-acoustic liveness",
+        "retry/timer/default-ID/duplicate-name/driver/concurrency preconditions untested"
+      ],
+      "native_verification": "not_run",
+      "independent_acceptance": false
     }
   ],
   "complete_project_coverage": false

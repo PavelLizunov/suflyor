@@ -1,5 +1,13 @@
 # Reconciliation verification evidence
 
+## Round 19 — audio route/settings/metrics/watchdog (covering SHA pending)
+
+- [Contract](../features/audio-route-settings-and-watchdog.md) adds24 ranges over COM endpoint policy, Windows WASAPI retry/drop/nojoin, Settings clone-save-commit versus nonWindows path, macOS metrics/watchdog stop-intent/lifecycle. Registry26/709; no native device/COM/audio/config/Rust/UI/process restart action.
+- Six source fixtures target182 research total. Names first-match/dedupe not stable endpoint ids; null default-id notifications dropped; retries fixed1s unbounded, event silence waits not restart. Settings persist candidate before in-memory commit. macOS successful-enqueue counter can stall on downstream full queue, never-flowed streams not expected; watchdog one-shot stop~5 ticks, no autorestart. Mutex metrics snapshots not atomic pair/RT callback/health-age synonym.
+- Rust policy/Settings/static guard tests read not executed; original119 statuses39/75/5 unchanged. Navigation162 some pointers/136 none, union39,935 **not audited semantics**.
+- Full suite/exact archive/deterministic navigation repeat pending, native/independent/full objective incomplete.
+
+
 ## Round 18 — archive UI confirmation/snapshot/latch (exact covering SHA tested)
 
 - [Contract](../features/archive-ui-confirmations-and-latches.md) adds24 ranges over Slint row/search/rename/modal/progress keyboard and host async list/sync query/index-confirm/global guard. Registry25/685. Corrected old task-owned archive contract list cap100→actual300, no source mutation.

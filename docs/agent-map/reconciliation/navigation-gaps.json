@@ -8,7 +8,7 @@
     },
     "features": {
       "path": "docs/agent-map/features/contracts.json",
-      "sha256": "ebc08326d09996c4b1cf7988116da8bbd80848613e72475aa478078878424ef7"
+      "sha256": "7d686ed8df53044b2ef9597642caaf9166d0f6c7782a4daa1954712b004e5028"
     },
     "candidates": {
       "path": "docs/agent-map/reconciliation/candidates.json",
@@ -975,24 +975,20 @@
       "source_sha256": "15ae183f2083d18d6ce7463df1b41cbcda9aff18243c5d4821e50886e13d5dd3",
       "source_lines": 962,
       "syntax_nodes": 97,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 390,
       "candidate_reference_line_union": 452,
-      "all_reference_line_union": 452,
+      "all_reference_line_union": 605,
       "reference_intervals": [
         [
-          106,
-          120
-        ],
-        [
-          125,
-          198
+          88,
+          199
         ],
         [
           203,
-          252
+          266
         ],
         [
-          395,
+          279,
           497
         ],
         [
@@ -1015,19 +1011,15 @@
       "unreferenced_intervals": [
         [
           1,
-          105
+          87
         ],
         [
-          121,
-          124
-        ],
-        [
-          199,
+          200,
           202
         ],
         [
-          253,
-          394
+          267,
+          278
         ],
         [
           498,
@@ -1051,6 +1043,7 @@
         ]
       ],
       "reference_owners": [
+        "audio-route-settings-and-watchdog",
         "wave2_worker1_audio-C01",
         "wave2_worker1_audio-C02",
         "wave2_worker1_audio-C03",
@@ -1069,9 +1062,9 @@
       "source_sha256": "09b8b73f4ef504678b1cde4b89cd3a9d36084df998c499f7127127eeaa356015",
       "source_lines": 1302,
       "syntax_nodes": 200,
-      "feature_reference_line_union": 445,
+      "feature_reference_line_union": 474,
       "candidate_reference_line_union": 254,
-      "all_reference_line_union": 581,
+      "all_reference_line_union": 592,
       "reference_intervals": [
         [
           71,
@@ -1099,7 +1092,7 @@
         ],
         [
           783,
-          814
+          825
         ],
         [
           828,
@@ -1136,7 +1129,7 @@
           782
         ],
         [
-          815,
+          826,
           827
         ],
         [
@@ -1145,6 +1138,7 @@
         ]
       ],
       "reference_owners": [
+        "audio-route-settings-and-watchdog",
         "native-macos-ffi-and-ownership",
         "wave2_worker1_audio-C01",
         "wave2_worker1_audio-C02",
@@ -1164,18 +1158,29 @@
       "source_sha256": "4f77e37692bfef724e1ad77a85ec69193d1cd334596695f01c266844cb582c0a",
       "source_lines": 191,
       "syntax_nodes": 44,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 95,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 95,
+      "reference_intervals": [
+        [
+          23,
+          117
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          22
+        ],
+        [
+          118,
           191
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "audio-route-settings-and-watchdog"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -1185,18 +1190,53 @@
       "source_sha256": "d9cc37bafef62f6dca925578aaa817fdf5f85c811e78b15af94e4d18dabf27f4",
       "source_lines": 434,
       "syntax_nodes": 82,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 199,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 199,
+      "reference_intervals": [
+        [
+          15,
+          41
+        ],
+        [
+          116,
+          170
+        ],
+        [
+          189,
+          259
+        ],
+        [
+          265,
+          310
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          14
+        ],
+        [
+          42,
+          115
+        ],
+        [
+          171,
+          188
+        ],
+        [
+          260,
+          264
+        ],
+        [
+          311,
           434
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "audio-route-settings-and-watchdog"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -5766,18 +5806,33 @@
       "source_sha256": "b209835dde350ba332177100105225db2cda36143b4a93f6119249426518cfff",
       "source_lines": 155,
       "syntax_nodes": 44,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 151,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
-      "unreferenced_intervals": [
+      "all_reference_line_union": 151,
+      "reference_intervals": [
         [
-          1,
+          3,
+          91
+        ],
+        [
+          94,
           155
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "unreferenced_intervals": [
+        [
+          1,
+          2
+        ],
+        [
+          92,
+          93
+        ]
+      ],
+      "reference_owners": [
+        "audio-route-settings-and-watchdog"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -6157,18 +6212,49 @@
       "source_sha256": "7acf9b8af33663d0d7df3436541e1987659d037be8a1aae5a603c9d5bbddd21c",
       "source_lines": 494,
       "syntax_nodes": 92,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 467,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
-      "unreferenced_intervals": [
+      "all_reference_line_union": 467,
+      "reference_intervals": [
         [
-          1,
+          15,
+          69
+        ],
+        [
+          71,
+          89
+        ],
+        [
+          100,
+          245
+        ],
+        [
+          248,
           494
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "unreferenced_intervals": [
+        [
+          1,
+          14
+        ],
+        [
+          70,
+          70
+        ],
+        [
+          90,
+          99
+        ],
+        [
+          246,
+          247
+        ]
+      ],
+      "reference_owners": [
+        "audio-route-settings-and-watchdog"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -6178,17 +6264,17 @@
       "source_sha256": "e892387fc7d27f657a0828fd5016f69d3c9641b40d00f19895c50c57ace54143",
       "source_lines": 1979,
       "syntax_nodes": 89,
-      "feature_reference_line_union": 665,
+      "feature_reference_line_union": 750,
       "candidate_reference_line_union": 308,
-      "all_reference_line_union": 721,
+      "all_reference_line_union": 806,
       "reference_intervals": [
         [
           104,
           166
         ],
         [
-          302,
-          312
+          300,
+          395
         ],
         [
           423,
@@ -6230,10 +6316,10 @@
         ],
         [
           167,
-          301
+          299
         ],
         [
-          313,
+          396,
           422
         ],
         [
@@ -6266,6 +6352,7 @@
         ]
       ],
       "reference_owners": [
+        "audio-route-settings-and-watchdog",
         "config-ui-translation-and-assets",
         "credentials-and-managed-process-ownership",
         "settings-and-portable-config",
@@ -7306,9 +7393,9 @@
       "source_sha256": "fba170e1a3fa4fc797f4b4550f99c91e8a4c390683657d8919267280c4521341",
       "source_lines": 4962,
       "syntax_nodes": 243,
-      "feature_reference_line_union": 1128,
+      "feature_reference_line_union": 1142,
       "candidate_reference_line_union": 62,
-      "all_reference_line_union": 1128,
+      "all_reference_line_union": 1142,
       "reference_intervals": [
         [
           474,
@@ -7340,7 +7427,7 @@
         ],
         [
           1741,
-          1854
+          1868
         ],
         [
           1919,
@@ -7425,7 +7512,7 @@
           1740
         ],
         [
-          1855,
+          1869,
           1918
         ],
         [
@@ -7479,6 +7566,7 @@
       ],
       "reference_owners": [
         "ai-and-vision-routing",
+        "audio-route-settings-and-watchdog",
         "config-ui-translation-and-assets",
         "hotkeys-windows-and-capture",
         "live-transcription",
@@ -8562,18 +8650,25 @@
       "source_sha256": "c63f1fe2157ede732b442814cfc10ebf2acd027f57d5c8c109a94c30041d9299",
       "source_lines": 45,
       "syntax_nodes": 16,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 39,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
-      "unreferenced_intervals": [
+      "all_reference_line_union": 39,
+      "reference_intervals": [
         [
-          1,
+          7,
           45
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "unreferenced_intervals": [
+        [
+          1,
+          6
+        ]
+      ],
+      "reference_owners": [
+        "audio-route-settings-and-watchdog"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -8781,18 +8876,29 @@
       "source_sha256": "8d19ff4a487ed78f29b314359bf60f106e699520ca737134d93abee2b75c8888",
       "source_lines": 134,
       "syntax_nodes": 37,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 69,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 69,
+      "reference_intervals": [
+        [
+          13,
+          81
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          12
+        ],
+        [
+          82,
           134
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "audio-route-settings-and-watchdog"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -9669,9 +9775,9 @@
       "source_sha256": "149368fe9e60a62c646cf93607862e83f97884aeeddb2ba470250b683dbf9bf5",
       "source_lines": 4170,
       "syntax_nodes": 569,
-      "feature_reference_line_union": 266,
+      "feature_reference_line_union": 373,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 266,
+      "all_reference_line_union": 373,
       "reference_intervals": [
         [
           356,
@@ -9688,6 +9794,10 @@
         [
           1180,
           1198
+        ],
+        [
+          1614,
+          1720
         ],
         [
           3655,
@@ -9713,6 +9823,10 @@
         ],
         [
           1199,
+          1613
+        ],
+        [
+          1721,
           3654
         ],
         [
@@ -9721,6 +9835,7 @@
         ]
       ],
       "reference_owners": [
+        "audio-route-settings-and-watchdog",
         "live-transcription",
         "ui-setting-consumers-and-save-boundaries"
       ],
@@ -11232,10 +11347,10 @@
     "suflyor-teratts/NOTICE.md"
   ],
   "summary": {
-    "files_with_some_precise_navigation": 156,
-    "files_without_precise_navigation": 142,
+    "files_with_some_precise_navigation": 162,
+    "files_without_precise_navigation": 136,
     "selected_source_lines": 120858,
-    "precise_reference_line_union": 38545,
+    "precise_reference_line_union": 39935,
     "semantically_reviewed_line_count": "not_established"
   },
   "limits": [

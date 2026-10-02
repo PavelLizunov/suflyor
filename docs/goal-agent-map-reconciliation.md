@@ -91,6 +91,12 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
 - User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.
 
+## Continuation round 19: audio route recovery/settings/metrics/watchdog semantics
+
+- Intended result: Windows COM notification policy→WASAPI reopen/retry/drop queues, Settings clone-save-commit device identity, macOS successful-enqueue metrics→one-shot stall stop, mapped separately from health ages. No device/COM/audio/config/fault/native/Rust/SDK execution or session restarts.
+- Source/test-intent only with six proportional assertions, no Python state-machine clone claimed as Rust behavior. Check pinned name identity vs duplicate enum names, default-null notification/role matching, nonbounded retry/endless silent waits, nonjoining Windows capture handle, Settings transactional in-memory save ordering vs filesystem guarantees, macOS never-flowed/bounded timer/queue-full stall preconditions.
+- Read existing Rust guards/tests but don't claim executed headless/native success. Exact source hashes/ranges and ledger regeneration; original hypotheses maintained. Snapshot semantics/race/permission/native fault and independent acceptance open.
+
 ## Continuation round 18: archive UI list/confirmation/latch state
 
 - Intended result: actual Slint row/edit/confirm/progress keyboard bindings to host async initial list, synchronous search/delete and busy-latch lifecycle; correct task-owned earlier 100-row statement to actual300. No destructive archive/user DB/rename/STT/audio/model/live UI/native/Cargo execution.

@@ -1,13 +1,13 @@
 # Navigation gap ledger and evidence integrity
 
-**Result:** all 298 selected source files have accepted bounded parser receipts, but only **156 have any precise feature/candidate source-range pointer**; **142 have none** in the registered ranges. This is reference bookkeeping, **not semantic review coverage**. [Machine ledger](navigation-gaps.json) records line interval unions/gaps per frozen source file; **semantically reviewed line count is not established**.
+**Result:** all 298 selected source files have accepted bounded parser receipts, but only **162 have any precise feature/candidate source-range pointer**; **136 have none** in the registered ranges. This is reference bookkeeping, **not semantic review coverage**. [Machine ledger](navigation-gaps.json) records line interval unions/gaps per frozen source file; **semantically reviewed line count is not established**.
 
 ## What the numbers mean
 
 - Selected syntax files: 298, 120,858 input source lines. This excludes protected/vendor/nonselected data/docs/assets explicitly; no whole-repository line denominator.
-- Feature/candidate source references union: 38,545 lines, overlapping/adjacent intervals deduplicated. **Linked line is not an audited line**. A long function link doesn't mean every branch/caller/line was reviewed. No percentage published.
+- Feature/candidate source references union: 39,935 lines, overlapping/adjacent intervals deduplicated. **Linked line is not an audited line**. A long function link doesn't mean every branch/caller/line was reviewed. No percentage published.
 - 26 directory/unranged pointers preserved with zero line credit; they may be useful navigation, but never converted to entire-file/entire-directory completeness.
-- Feature registry has 25 principal contracts/685 source ranges; original 119 claims source-triaged 39/75/5. Those artifacts represent bounded evidence, not exhaustive semantic acceptance.
+- Feature registry has 26 principal contracts/709 source ranges; original 119 claims source-triaged 39/75/5. Those artifacts represent bounded evidence, not exhaustive semantic acceptance.
 
 ## Prioritized remaining evidence, not mass fixes
 
