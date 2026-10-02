@@ -474,5 +474,5 @@
     "wave3_worker2_window-C08",
     "wave3_worker2_window-C09"
   ],
-  "window_dwm_transparency_portable_verification": "pending exact covering commit"
+  "window_dwm_transparency_portable_verification": "PASS exact b42f68f0d81341ac68af696b65e06063bcd47355; six source fixtures; C08 C09 remain hypotheses"
 }
