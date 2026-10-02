@@ -1,9 +1,9 @@
 # Reconciliation verification evidence
 
-## Round 33 — original memory C05/C08 grounding and load (covering SHA pending)
+## Round 33 — original memory C05/C08 grounding and load (exact covering SHA tested)
 
 - [Evidence](hypothesis-memory-grounding.md)/[receipt](hypothesis-memory-grounding.json): six pure string/source fixtures target 266 research tests. Ordered matching permits omitted intermediate words but rejects reversal. A 240-character clip drops the tail without semantic boundary detection.
-- Context loading requests all active items with limit `-1`; formatting has no fact dedup, and question normalization is whitespace/case only. No Rust test, owner memory, prompt, or performance measurement was run. C05/C08 remain hypotheses; exact archive repeat pending.
+- Exact **`d925f1b7b7bda88492ca5862d85767de3e59ea0f`** archive passed **266 research +3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable grounding receipt](portable-recovery-memory-grounding.json). C05/C08 remain hypotheses; no Rust test, owner memory, prompt, or performance measurement.
 
 ## Round 32 — original memory C01/C02 filter and budget (exact covering SHA tested)
 
