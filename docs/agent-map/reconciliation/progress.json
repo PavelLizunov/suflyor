@@ -510,5 +510,5 @@
     "wave2_worker1_audio-C01",
     "wave2_worker1_audio-C07"
   ],
-  "audio_resample_format_portable_verification": "pending exact covering commit"
+  "audio_resample_format_portable_verification": "PASS exact c50694666d1c81738ba9ffa998d69c7d1d609f9e; six source fixtures; C01 C07 remain confirmed"
 }
