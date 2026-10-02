@@ -528,5 +528,5 @@
     "wave3_worker2_window-C01",
     "wave3_worker2_window-C03"
   ],
-  "window_stealth_reveal_portable_verification": "pending exact covering commit"
+  "window_stealth_reveal_portable_verification": "PASS exact 6e3a075c470f3fb02816c1624d9546eb340854d6; six source fixtures; C01 C03 remain confirmed"
 }
