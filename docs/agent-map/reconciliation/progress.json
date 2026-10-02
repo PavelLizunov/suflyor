@@ -565,5 +565,5 @@
     "wave1_worker1_persistence-C04",
     "wave3_worker3_tile-C02"
   ],
-  "persistence_sync_markdown_parse_portable_verification": "pending exact covering commit"
+  "persistence_sync_markdown_parse_portable_verification": "PASS exact 29d2cef50cef8c70886eced478bdfc6732d1270a; six source fixtures; C04 C02 remain confirmed"
 }
