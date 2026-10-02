@@ -106,8 +106,8 @@
   "source_feature_references": 709,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
-  "portable_recovery_tested_commit": "b9f39a3606696724a2b43c3dc9021646775c45ed",
-  "portable_recovery_result": "PASS 278+3 zero skips exact archive; config C05/C07 bounded; no owner credentials or Rust race",
+  "portable_recovery_tested_commit": "12cc6f3bcbee2df055433e73ab95978b3ba95c7f",
+  "portable_recovery_result": "PASS 284+3 zero skips exact archive; audio C02/C04 bounded; no devices or Rust",
   "source_seam_tests_passed": 33,
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
@@ -342,5 +342,5 @@
     "wave2_worker1_audio-C02",
     "wave2_worker1_audio-C04"
   ],
-  "audio_clock_route_portable_verification": "pending exact covering commit"
+  "audio_clock_route_portable_verification": "PASS exact 12cc6f3bcbee2df055433e73ab95978b3ba95c7f; six pure fixtures; C02 C04 remain hypotheses"
 }
