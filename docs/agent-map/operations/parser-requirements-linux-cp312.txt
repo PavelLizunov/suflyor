@@ -1,4 +1,0 @@
-# Frozen research parsers; Linux x86_64 CPython 3.12 only for this evidence run.
-# Use --only-binary=:all: --no-deps --require-hashes in an isolated target.
-tree-sitter==0.25.2 --hash=sha256:b43a9e4c89d4d0839de27cd4d6902d33396de700e9ff4c5ab7631f277a85ead9
-tree-sitter-rust==0.24.2 --hash=sha256:e033c5a93b57c88e0a835880de39fc802909ff69f57aaff6000211c196ea5190

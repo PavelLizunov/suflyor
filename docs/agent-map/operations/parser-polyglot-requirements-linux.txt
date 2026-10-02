@@ -1,7 +1,0 @@
-# Extension to parser-requirements-linux-cp312.txt; binding remains 0.25.2.
-# Linux x86_64 ABI3 wheels; --only-binary=:all: --no-deps --require-hashes.
-tree-sitter-bash==0.25.1 --hash=sha256:3f484c4bb8796cde7a87ca351e6116f09653edac0eb3c6d238566359dd28b117
-tree-sitter-swift==0.7.3 --hash=sha256:f38feeb4f7350c8b30d567a0dc08bf1eeaa67c241b6888d72a45a8b1a4aa7187
-tree-sitter-objc==3.0.2 --hash=sha256:e71282ac9c096a966bf2fa6a4ecdbea4bd037d3e01ea4aa9bbc64d9a4c0022f6
-tree-sitter-powershell==0.26.4 --hash=sha256:56508e4ac7aad1e3b26f2ef96b8d2b60b149c4efa0c23742e91e809a11db73ee
-tree-sitter-c==0.24.1 --hash=sha256:a6a807705a3978911dc7ee26a7ad36dcfacb6adfc13c190d496660ec9bd66707

@@ -1,4 +1,0 @@
-# PO research reader, isolated target only. CPython 3.12 evidence; Python 3.13 not accepted.
-# --only-binary=:all: --no-deps --require-hashes
-Babel==2.10.3 --hash=sha256:ff56f4892c1c4bf0d814575ea23471c230d544203c7748e8c68f0089478d48eb
-pytz==2024.1 --hash=sha256:328171f4e3623139da4983451950b28e95ac706e13f3f2630a879749e7a8b319
