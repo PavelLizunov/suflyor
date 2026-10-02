@@ -106,8 +106,8 @@
   "source_feature_references": 709,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
-  "portable_recovery_tested_commit": "8426a6b04f4b2643dfd5103cd76effad5115c724",
-  "portable_recovery_result": "PASS 176+3 zero skips exact archive; 25 contracts/685 refs; navigation valid/byte-identical; no destructive/UI/DB execution",
+  "portable_recovery_tested_commit": "e5a633c973ad45ffd9609697a339b009213469b7",
+  "portable_recovery_result": "PASS 182+3 zero skips exact archive; 26 contracts/709 refs; ledger valid/byte-identical; no device/config/native action",
   "source_seam_tests_passed": 33,
   "round2_spotcheck": "bounded Gemini counterevidence collected; coordinator source-checks/rejections recorded",
   "existing_mocked_hermes_tests_passed": 3,
@@ -241,5 +241,5 @@
   "archive_ui_state_fixtures_passed": 6,
   "archive_ui_portable_verification": "PASS exact 8426a6b04f4b2643dfd5103cd76effad5115c724; six source/model fixtures/24 refs; cap prose corrected300",
   "audio_route_source_fixtures_passed": 6,
-  "audio_route_portable_verification": "pending exact covering commit"
+  "audio_route_portable_verification": "PASS exact e5a633c973ad45ffd9609697a339b009213469b7; six source fixtures/24 ranges, no Rust/device/native acceptance"
 }

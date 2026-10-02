@@ -1,11 +1,11 @@
 # Reconciliation verification evidence
 
-## Round 19 — audio route/settings/metrics/watchdog (covering SHA pending)
+## Round 19 — audio route/settings/metrics/watchdog (exact covering SHA tested)
 
 - [Contract](../features/audio-route-settings-and-watchdog.md) adds24 ranges over COM endpoint policy, Windows WASAPI retry/drop/nojoin, Settings clone-save-commit versus nonWindows path, macOS metrics/watchdog stop-intent/lifecycle. Registry26/709; no native device/COM/audio/config/Rust/UI/process restart action.
 - Six source fixtures target182 research total. Names first-match/dedupe not stable endpoint ids; null default-id notifications dropped; retries fixed1s unbounded, event silence waits not restart. Settings persist candidate before in-memory commit. macOS successful-enqueue counter can stall on downstream full queue, never-flowed streams not expected; watchdog one-shot stop~5 ticks, no autorestart. Mutex metrics snapshots not atomic pair/RT callback/health-age synonym.
 - Rust policy/Settings/static guard tests read not executed; original119 statuses39/75/5 unchanged. Navigation162 some pointers/136 none, union39,935 **not audited semantics**.
-- Full suite/exact archive/deterministic navigation repeat pending, native/independent/full objective incomplete.
+- Exact **`e5a633c973ad45ffd9609697a339b009213469b7`** archive passed **182 research +3 mocked Hermes, zero skips**, frozen checkpoint issues empty (26/709), navigation validator zero errors and byte-identical ledger SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable audio-route receipt](portable-recovery-audio-route.json); no device/config/COM/native/Rust/independent/full-objective acceptance.
 
 
 ## Round 18 — archive UI confirmation/snapshot/latch (exact covering SHA tested)
