@@ -10,6 +10,7 @@
 - **[`agent-contract.md`](agent-contract.md)** — операционный контракт для работы агентов (методология VPNRouter).
 - **[`architecture.md`](architecture.md)** — архитектурный обзор приложения (Rust + Slint, 5 крейтов, сайдкары).
 - **[`winbrat-recovery.md`](winbrat-recovery.md)** — регламент обслуживания и восстановления Windows-воркера (WINBRAT).
+- **[`macos-install.md`](macos-install.md)** — руководство по установке и настройке на macOS.
 - **[`read-aloud-status.md`](read-aloud-status.md)** — архитектурные инварианты и статус сайдкаров TTS (Piper) и OCR (Tesseract).
 - **[`memory-architecture.md`](memory-architecture.md)** — архитектура долговременной памяти и схемы SQLite.
 - **[`slint-design-system-and-safe-redesign-plan.md`](slint-design-system-and-safe-redesign-plan.md)** — дизайн-система Slint UI и цветовые токены.
