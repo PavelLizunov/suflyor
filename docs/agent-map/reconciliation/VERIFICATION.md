@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 36 — original audio C02/C04 clock and route (covering SHA pending)
+
+- [Evidence](hypothesis-audio-clock-route.md)/[receipt](hypothesis-audio-clock-route.json): six pure arithmetic/source fixtures target 284 research tests. Non-integer resampling changes output length, and chunk timestamps come from monotonic elapsed time rather than sample position.
+- Default-device recovery requires the console role; communications/multimedia map elsewhere, device-added sends no notification, and pinned selections ignore default changes. Retry has no attempt ceiling. No device, native notification, or Rust execution was run. C02/C04 remain hypotheses; exact archive repeat pending.
+
 ## Round 35 — original config C05/C07 credential files (exact covering SHA tested)
 
 - [Evidence](hypothesis-credential-files.md)/[receipt](hypothesis-credential-files.json): six temporary dummy-file/source fixtures target 278 research tests. A regular open follows a symlink at `credentials.json.tmp`; directory permissions are metadata-then-chmod without `O_NOFOLLOW` or `fchmod`.
