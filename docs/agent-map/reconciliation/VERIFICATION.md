@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 66 — original STT C01/C02 task queueing and retry timeouts (exact covering SHA tested)
+
+- [Evidence](hypothesis-stt-queue-network.md)/[receipt](hypothesis-stt-queue-network.json): six source fixtures target 465 research tests. `stt_semaphore` has 6 permits; `tokio::spawn` precedes `sem.acquire_owned().await` inside tasks, capturing audio samples into task memory without outer loop backpressure.
+- `reqwest::Client` timeout is 30s in live streaming vs 60s in `transcribe_once`; `is_permanent_error` retries 429 and 5xx up to 3 times with exponential delays and no jitter. No live network calls were run. C01/C02 remain confirmed mechanisms; exact archive verified.
+
 ## Round 65 — original audio C03/C09 event loop wait and capture start recovery (exact covering SHA tested)
 
 - Exact **`b5c0278cc5282e64288ad0a9a170479c12529fcd`** archive passed **459 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable audio event loop/recovery receipt](portable-recovery-audio-event-loop-recovery.json). C03/C09 remain confirmed mechanisms; no live audio device disconnection or WASAPI polling.
