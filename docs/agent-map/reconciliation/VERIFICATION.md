@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 75 — original settings C01/C08 window reuse and full-profile import (exact covering SHA tested)
+
+- [Evidence](hypothesis-settings-reuse-profile-import.md)/[receipt](hypothesis-settings-reuse-profile-import.json): seven source fixtures target 520 research tests. Reused `SettingsWindow` skips persistent toggle reseeding (coaching, retention, auto-tiles), and `msg_refresh_after_import` only refreshes token status without updating toggles.
+- Full-profile import replaces live `SharedConfig` without filtering machine-local paths (unlike server settings import), and export success strings format `path.display()` directly. No live config files were overwritten. C01/C08 remain confirmed mechanisms; exact archive verified.
+
 ## Round 74 — original local_ai C01 / window C11 port reachability and effective stealth (exact covering SHA tested)
 
 - Exact **`13071e3c8a9db0dd28f06492ab47170b53e3c889`** archive passed **513 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable local AI port/stealth receipt](portable-recovery-local-ai-port-stealth-effective.json). C01/C11 remain confirmed mechanisms; no port squatting setup or multi-window capture testing.
