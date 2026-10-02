@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 28 — original CI C06/C07 installer boundaries (covering SHA pending)
+
+- [Evidence](hypothesis-installer-boundaries.md)/[receipt](hypothesis-installer-boundaries.json): six source fixtures target 236 research tests. Installer is per-user, exposes a directory page, and has no signature, ACL, or overwrite policy. `$INSTDIR` is interpolated inside the stop command without a NSIS quote escape.
+- The helper compares exact executable paths. Uninstall confirmation precedes recursive removal of three profile/app-data directories. No makensis, installer, process stop, or deletion was run. C06/C07 remain hypotheses; exact archive repeat pending.
+
 ## Round 27 — original CI C04/C05 classification boundaries (exact covering SHA tested)
 
 - [Evidence](hypothesis-gate-classification.md)/[receipt](hypothesis-gate-classification.json): six temporary Git/source fixtures target 230 research tests. Missing `origin/master` narrows the model to `HEAD~1`; that range classifies as docs while the full range sees the preceding Rust file and classifies as targeted.
