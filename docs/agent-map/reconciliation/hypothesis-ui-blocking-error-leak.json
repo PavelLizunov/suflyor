@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+  "original_register_sha256": "ee8e2e9ede99fc829465d4f3b63d7a1233f73d3c8106633d9018fa5d2c0ddfb3",
+  "original_candidates": [
+    {
+      "id": "wave3_worker1_bridge-C07",
+      "status_unchanged": "hypothesis",
+      "native_reproduction": false
+    },
+    {
+      "id": "wave3_worker4_settings-C09",
+      "status_unchanged": "hypothesis",
+      "native_reproduction": false
+    }
+  ],
+  "source_references": [
+    {
+      "path": "slint-experiment/src/slint_session.rs",
+      "start_line": 273,
+      "end_line": 490,
+      "sha256": "1b90d6b66e6cc56c3712e9a37e4b5736d8fb10c4cac11d252fa1d44a0e985fcd"
+    },
+    {
+      "path": "slint-experiment/src/slint_session.rs",
+      "start_line": 1396,
+      "end_line": 1480,
+      "sha256": "1b90d6b66e6cc56c3712e9a37e4b5736d8fb10c4cac11d252fa1d44a0e985fcd"
+    },
+    {
+      "path": "slint-experiment/src/bin/overlay_host/settings_ai.rs",
+      "start_line": 1380,
+      "end_line": 1405,
+      "sha256": "8de546dc1f5a2e438eb73a141c3e32c36d3a0c9fe2d0ea3dce1be36aa7751fc5"
+    },
+    {
+      "path": "slint-experiment/src/bin/overlay_host/settings_stt.rs",
+      "start_line": 209,
+      "end_line": 235,
+      "sha256": "a874f074e27ef66a77ad80dc3a4cb85677d5d6b476bc65e5fce09a7228c5204b"
+    },
+    {
+      "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+      "start_line": 375,
+      "end_line": 395,
+      "sha256": "e892387fc7d27f657a0828fd5016f69d3c9641b40d00f19895c50c57ace54143"
+    }
+  ],
+  "fixtures_passed": 6,
+  "limits": [
+    "source inspection of session start/stop blocking and connection test error formatting only",
+    "no UI thread profiling or network connection execution"
+  ],
+  "native_application_acceptance": false,
+  "independent_acceptance": false,
+  "full_project_coverage": false
+}

@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 56 — original bridge C07 / settings C09 UI blocking and error leak (exact covering SHA tested)
+
+- [Evidence](hypothesis-ui-blocking-error-leak.md)/[receipt](hypothesis-ui-blocking-error-leak.json): six source fixtures target 405 research tests. `start_session_inner` synchronously calls GigaAM directory validation and audio capture start; `stop_session` blocks synchronously on journal shutdown for up to 3s.
+- `on_ai_bridge_test_clicked` and `on_stt_test_clicked` format raw error chains into `[err] {e:#}` truncated to 90 characters, and mic test interpolates `format!("error: {e}")`. No UI thread freezes or network tests were run. C07/C09 remain hypotheses; exact archive verified.
+
 ## Round 55 — original settings C02/C07 install resets and property seeding (exact covering SHA tested)
 
 - Exact **`93a65650b3856d432f4e3717692c5d10928cddde`** archive passed **399 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable settings reset/seeding receipt](portable-recovery-settings-reset-seeding.json). C02/C07 remain hypotheses; no background installer interruption or UI race execution.
