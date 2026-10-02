@@ -8,7 +8,7 @@
     },
     "features": {
       "path": "docs/agent-map/features/contracts.json",
-      "sha256": "d568d758efce8c4229ba2a05745c412fb4c24fd84e0f792facfc74a90799bbf1"
+      "sha256": "51c84932b3d7cc2e25156ee619d32b0958af5f6db87431cf7127cd2b13030113"
     },
     "candidates": {
       "path": "docs/agent-map/reconciliation/candidates.json",
@@ -6956,13 +6956,25 @@
       "source_sha256": "ff4134a0ec1516ae02770fe7f6a7dbec855193e3442d0bedb08a3ca3c2ec8f81",
       "source_lines": 585,
       "syntax_nodes": 82,
-      "feature_reference_line_union": 160,
+      "feature_reference_line_union": 344,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 160,
+      "all_reference_line_union": 344,
       "reference_intervals": [
         [
           22,
-          181
+          189
+        ],
+        [
+          263,
+          320
+        ],
+        [
+          350,
+          415
+        ],
+        [
+          533,
+          584
         ]
       ],
       "unreferenced_intervals": [
@@ -6971,12 +6983,25 @@
           21
         ],
         [
-          182,
+          190,
+          262
+        ],
+        [
+          321,
+          349
+        ],
+        [
+          416,
+          532
+        ],
+        [
+          585,
           585
         ]
       ],
       "reference_owners": [
-        "archive-playback-and-retranscription"
+        "archive-playback-and-retranscription",
+        "wsola-streaming-and-playback"
       ],
       "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
@@ -10023,18 +10048,29 @@
       "source_sha256": "793777a18c3dabac70a412ddca6a214cd811dac38b3c3c3a8033febc09a52100",
       "source_lines": 470,
       "syntax_nodes": 72,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 68,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 68,
+      "reference_intervals": [
+        [
+          358,
+          425
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          357
+        ],
+        [
+          426,
           470
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "wsola-streaming-and-playback"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -10044,18 +10080,29 @@
       "source_sha256": "e5b238741f988e469c769c7c817fc603ef7540e06e455627e06e397ae0bcb96a",
       "source_lines": 513,
       "syntax_nodes": 76,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 128,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 128,
+      "reference_intervals": [
+        [
+          351,
+          478
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          350
+        ],
+        [
+          479,
           513
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "wsola-streaming-and-playback"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -10238,18 +10285,53 @@
       "source_sha256": "f3ebe790dcdcb0ae03d6ce4bf5fca020338e814e1ae7f1b6ed3ff403b247c5d4",
       "source_lines": 472,
       "syntax_nodes": 77,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 291,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 291,
+      "reference_intervals": [
+        [
+          67,
+          129
+        ],
+        [
+          180,
+          203
+        ],
+        [
+          209,
+          344
+        ],
+        [
+          356,
+          423
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          66
+        ],
+        [
+          130,
+          179
+        ],
+        [
+          204,
+          208
+        ],
+        [
+          345,
+          355
+        ],
+        [
+          424,
           472
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "wsola-streaming-and-playback"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -10259,18 +10341,37 @@
       "source_sha256": "eeb268a293d6143902c6a44361e6792a947b777b699e5381cebe0a1053bde124",
       "source_lines": 474,
       "syntax_nodes": 68,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 243,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 243,
+      "reference_intervals": [
+        [
+          195,
+          261
+        ],
+        [
+          264,
+          439
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          194
+        ],
+        [
+          262,
+          263
+        ],
+        [
+          440,
           474
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "wsola-streaming-and-playback"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -10301,18 +10402,29 @@
       "source_sha256": "be04634703f1cfa65df7245f9c7bb273ff6e9ba983ababacecdfbb412385d926",
       "source_lines": 43,
       "syntax_nodes": 17,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 13,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 13,
+      "reference_intervals": [
+        [
+          5,
+          17
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          4
+        ],
+        [
+          18,
           43
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "wsola-streaming-and-playback"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -10322,18 +10434,20 @@
       "source_sha256": "273e8ef7fefd732e847f329cab91bacf5f9d5a0f0ec2236925c0803b83c7c159",
       "source_lines": 14,
       "syntax_nodes": 3,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 14,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
-      "unreferenced_intervals": [
+      "all_reference_line_union": 14,
+      "reference_intervals": [
         [
           1,
           14
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "unreferenced_intervals": [],
+      "reference_owners": [
+        "wsola-streaming-and-playback"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -10343,18 +10457,33 @@
       "source_sha256": "11f440a929388bbda2417b5cc53f5a679bbc7f784efdcf92f4442083350c0098",
       "source_lines": 105,
       "syntax_nodes": 20,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 82,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
-      "unreferenced_intervals": [
+      "all_reference_line_union": 82,
+      "reference_intervals": [
         [
-          1,
+          22,
+          71
+        ],
+        [
+          74,
           105
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "unreferenced_intervals": [
+        [
+          1,
+          21
+        ],
+        [
+          72,
+          73
+        ]
+      ],
+      "reference_owners": [
+        "wsola-streaming-and-playback"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -10364,18 +10493,97 @@
       "source_sha256": "38ca2f723395fc7ff42e0b471be1c366e0293b896048b55846e022458a464176",
       "source_lines": 1018,
       "syntax_nodes": 61,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 647,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
-      "unreferenced_intervals": [
+      "all_reference_line_union": 647,
+      "reference_intervals": [
         [
-          1,
+          78,
+          115
+        ],
+        [
+          156,
+          167
+        ],
+        [
+          169,
+          209
+        ],
+        [
+          212,
+          291
+        ],
+        [
+          293,
+          417
+        ],
+        [
+          439,
+          509
+        ],
+        [
+          512,
+          637
+        ],
+        [
+          659,
+          674
+        ],
+        [
+          710,
+          791
+        ],
+        [
+          963,
           1018
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "unreferenced_intervals": [
+        [
+          1,
+          77
+        ],
+        [
+          116,
+          155
+        ],
+        [
+          168,
+          168
+        ],
+        [
+          210,
+          211
+        ],
+        [
+          292,
+          292
+        ],
+        [
+          418,
+          438
+        ],
+        [
+          510,
+          511
+        ],
+        [
+          638,
+          658
+        ],
+        [
+          675,
+          709
+        ],
+        [
+          792,
+          962
+        ]
+      ],
+      "reference_owners": [
+        "wsola-streaming-and-playback"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -10385,18 +10593,25 @@
       "source_sha256": "7cc15e0be35a34c696218662f5e15b178cba0215fdc3a8b186e95ddb0da55fc5",
       "source_lines": 47,
       "syntax_nodes": 10,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 39,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
-      "unreferenced_intervals": [
+      "all_reference_line_union": 39,
+      "reference_intervals": [
         [
-          1,
+          9,
           47
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "unreferenced_intervals": [
+        [
+          1,
+          8
+        ]
+      ],
+      "reference_owners": [
+        "wsola-streaming-and-playback"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -10591,10 +10806,10 @@
     "slint-experiment/translations/ru/LC_MESSAGES/slint-replay.po"
   ],
   "summary": {
-    "files_with_some_precise_navigation": 137,
-    "files_without_precise_navigation": 161,
+    "files_with_some_precise_navigation": 146,
+    "files_without_precise_navigation": 152,
     "selected_source_lines": 120858,
-    "precise_reference_line_union": 33524,
+    "precise_reference_line_union": 35233,
     "semantically_reviewed_line_count": "not_established"
   },
   "limits": [

@@ -1,13 +1,13 @@
 # Navigation gap ledger and evidence integrity
 
-**Result:** all 298 selected source files have accepted bounded parser receipts, but only **137 have any precise feature/candidate source-range pointer**; **161 have none** in the registered ranges. This is reference bookkeeping, **not semantic review coverage**. [Machine ledger](navigation-gaps.json) records line interval unions/gaps per frozen source file; **semantically reviewed line count is not established**.
+**Result:** all 298 selected source files have accepted bounded parser receipts, but only **146 have any precise feature/candidate source-range pointer**; **152 have none** in the registered ranges. This is reference bookkeeping, **not semantic review coverage**. [Machine ledger](navigation-gaps.json) records line interval unions/gaps per frozen source file; **semantically reviewed line count is not established**.
 
 ## What the numbers mean
 
 - Selected syntax files: 298, 120,858 input source lines. This excludes protected/vendor/nonselected data/docs/assets explicitly; no whole-repository line denominator.
-- Feature/candidate source references union: 33,524 lines, overlapping/adjacent intervals deduplicated. **Linked line is not an audited line**. A long function link doesn't mean every branch/caller/line was reviewed. No percentage published.
+- Feature/candidate source references union: 35,233 lines, overlapping/adjacent intervals deduplicated. **Linked line is not an audited line**. A long function link doesn't mean every branch/caller/line was reviewed. No percentage published.
 - 26 directory/unranged pointers preserved with zero line credit; they may be useful navigation, but never converted to entire-file/entire-directory completeness.
-- Feature registry has 21 principal contracts/577 source ranges; original 119 claims source-triaged 39/75/5. Those artifacts represent bounded evidence, not exhaustive semantic acceptance.
+- Feature registry has 22 principal contracts/604 source ranges; original 119 claims source-triaged 39/75/5. Those artifacts represent bounded evidence, not exhaustive semantic acceptance.
 
 ## Prioritized remaining evidence, not mass fixes
 
@@ -16,7 +16,7 @@ The ledger exposes large unlinked inputs. Some are tests, experimental/support f
 | Slice | Current gap | Required bounded evidence |
 |---|---|---|
 | Overlay bar/tile/archive Slint | Large files have no precise registered range, even though declaration/schema/import indexes exist | Actual states/bindings/translations/callback consumers and error paths, distinguish source from physical UI acceptance |
-| WSOLA playback | 1,018-line algorithm source no precise range | Chunk/seek/overlap/cancellation/resampler/ring invariants, transport call chain and test intent; native audio remains separate |
+| WSOLA playback | [Selected algorithm/stream/transports/clock contract added](../features/wsola-streaming-and-playback.md); no all-DSP numerical acceptance | Remaining exceptional branch/quality/performance/allocation/source finite-input and device/cancel listening tests; native audio remains separate |
 | Tera engine/transports/textnorm | Algorithm/model tensor/overlap graph only partial earlier model contract | Source graph/shape validation, streaming/cancel/style/error branches, separate model-runtime evidence |
 | Test modules | Large config/local-AI/runtime/journal/AI tests lack precise range registration | Describe tested invariants/fixtures versus unexecuted Rust tests; do not equate test lines with production review |
 | UI math/state/audio controllers | Selected untouched/unlinked semantic chains | Formatting/escape/state lifetimes/device permission/routing callers and explicit known unknowns |

@@ -99,11 +99,11 @@
     "wave4_worker3_cicd-C10",
     "wave4_worker3_cicd-C12"
   ],
-  "feature_contracts_source_inspected": 21,
-  "continuation_round": 14,
+  "feature_contracts_source_inspected": 22,
+  "continuation_round": 15,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 152,
-  "source_feature_references": 577,
+  "total_research_tests_passed": 158,
+  "source_feature_references": 604,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
   "portable_recovery_tested_commit": "b8bb920063162585e62a4598cf20719d84660147",
@@ -215,10 +215,10 @@
   "portable_receipt_integrity_fixtures_passed": 4,
   "navigation_reference_counts": {
     "selected_files": 298,
-    "some_precise_reference": 137,
-    "no_precise_reference": 161,
+    "some_precise_reference": 146,
+    "no_precise_reference": 152,
     "source_lines": 120858,
-    "reference_line_union": 33524,
+    "reference_line_union": 35233,
     "semantically_reviewed_lines": "not_established"
   },
   "historical_receipt_integrity": {
@@ -227,5 +227,7 @@
     "errors": 0,
     "tests_rerun": false
   },
-  "navigation_gaps_portable_verification": "PASS exact b8bb920063162585e62a4598cf20719d84660147; 137 some/161 no registered source pointers; no audited-line credit"
+  "navigation_gaps_portable_verification": "PASS exact b8bb920063162585e62a4598cf20719d84660147; 137 some/161 no registered source pointers; no audited-line credit",
+  "wsola_playback_source_fixtures_passed": 6,
+  "wsola_playback_portable_verification": "pending exact covering commit"
 }

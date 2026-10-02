@@ -91,6 +91,12 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
 - User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.
 
+## Continuation round 15: WSOLA streaming/playback algorithm and test-intent chains
+
+- Intended result: manually inspect selected WSOLA correlation/crossfade/output/allocation and StreamingWsola tail/chunk/error behavior, connect four native playback transports and transcript player timing/seek consumers; distinguish actual source algorithm from documented pitch/latency/zero-allocation claims and Rust test intent. No benchmark/listening/model/native audio/Cargo/SDK execution.
+- Add only proportional source assertions (not a Python numerical reimplementation or claimed Rust behavioral pass), new feature contract with bounded references, update navigation ledger deterministically and preserve earlier interval-only receipts. Do not inflate reviewed-line credit; referenced algorithms/native quality remain unaccepted.
+- Verify default inverse speed, chunk tail/finish once, transport checkpoints/reset/error fallback, no-grow buffer versus lazily allocated correlation workspace/plans, tests deterministic-output versus input identity, native clocks/queue/mutex/PCM cases. Exact-SHA 152+new+Hermes source/recovery suite; production/assets/dependencies unchanged.
+
 ## Continuation round 14: evidence integrity and source-reference gap ledger
 
 - Intended result: check all portable tested-SHA/artifact receipts against actual Git objects, and create per-selected-source navigation gaps from precise contract/candidate ranges. Count interval unions separately from source-inspected/semantic acceptance; no assumption a line linked in prose was reviewed exhaustively.

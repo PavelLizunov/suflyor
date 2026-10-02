@@ -1,5 +1,13 @@
 # Reconciliation verification evidence
 
+## Round 15 — WSOLA streaming/playback source and test intent (covering SHA pending)
+
+- [Contract](../features/wsola-streaming-and-playback.md) adds 27 precise source ranges over WSOLA geometry/correlation/output/error/allocation, stream tails, four transport callers and separate transcript adapter; registry 22/604. No Rust/audio/listening/benchmark/model/SDK execution.
+- Narrowed assertions: process_into_no_grow gates main output storage, not FFT/correlation vector/plan growth; actual live wrappers allocate Vec output/chunk tails. Rust ratio1 speech test proves repeat-output determinism/length, not output==input bit identity. Transport error raw-fresh fallback differs from transcript empty-chunk fallback; macOS callback mutex/queue not lock-free acceptance.
+- Six new source tests; total local research target 158, runtime-dependent full repeat pending. Navigation updated 146 some precise references/152 none, line union35,233 remains **not audited semantics**. Original 39/75/5 statuses unchanged.
+- Exact archive/source suite/navigation byte regeneration pending, full numerical/native/independent objective incomplete.
+
+
 ## Round 14 — evidence integrity/navigation gaps (exact covering SHA tested)
 
 - Read-only exact historical commit receipt check: 14 receipts/11 artifact hash+size checks, zero mismatches, four absent legacy boundary flags explicitly retained not accepted. No historical tests rerun by integrity utility; [report](portable-receipt-integrity.json).
