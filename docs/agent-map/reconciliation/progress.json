@@ -559,5 +559,5 @@
     "wave4_worker3_cicd-C09",
     "wave4_worker3_cicd-C11"
   ],
-  "cicd_workflow_flakiness_portable_verification": "pending exact covering commit"
+  "cicd_workflow_flakiness_portable_verification": "PASS exact a7009327ff51199cc8adff6005be381f53c4ab2d; six source fixtures; C09 C11 remain confirmed"
 }

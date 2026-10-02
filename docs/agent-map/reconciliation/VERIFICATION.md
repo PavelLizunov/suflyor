@@ -2,8 +2,7 @@
 
 ## Round 72 — original CI/CD C09/C11 workflow security and flakiness (exact covering SHA tested)
 
-- [Evidence](hypothesis-cicd-workflow-flakiness.md)/[receipt](hypothesis-cicd-workflow-flakiness.json): six source fixtures target 501 research tests. `.github/workflows/ci.yml` uses unpinned action tags and floating `@stable` toolchain tag without a top-level permissions block.
-- The `rust` job omits shipped crates `suflyor-teratts` and `suflyor-wsola`, runs cargo test and clippy unlocked (except for the QA-only `ui-mcp` check), and cancels in-flight builds on new pushes. No CI runners were executed. C09/C11 remain confirmed mechanisms; exact archive verified.
+- Exact **`a7009327ff51199cc8adff6005be381f53c4ab2d`** archive passed **501 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable CI/CD workflow receipt](portable-recovery-cicd-workflow-flakiness.json). C09/C11 remain confirmed mechanisms; no live CI runs or network calls.
 
 ## Round 71 — original CI/CD C01/C02/C03 native gate classification bypasses (exact covering SHA tested)
 
