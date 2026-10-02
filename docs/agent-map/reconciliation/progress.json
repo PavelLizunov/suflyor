@@ -100,9 +100,9 @@
     "wave4_worker3_cicd-C12"
   ],
   "feature_contracts_source_inspected": 26,
-  "continuation_round": 57,
+  "continuation_round": 58,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 411,
+  "total_research_tests_passed": 417,
   "source_feature_references": 709,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
@@ -468,5 +468,11 @@
     "wave4_worker1_privacy-C04",
     "wave4_worker1_privacy-C05"
   ],
-  "privacy_capture_clipboard_portable_verification": "PASS exact 421bcce5da7937cc18ea75b213165519f0dcbf0c; six source fixtures; C04 C05 remain hypotheses"
+  "privacy_capture_clipboard_portable_verification": "PASS exact 421bcce5da7937cc18ea75b213165519f0dcbf0c; six source fixtures; C04 C05 remain hypotheses",
+  "window_dwm_transparency_fixtures_passed": 6,
+  "window_dwm_transparency_hypothesis_ids": [
+    "wave3_worker2_window-C08",
+    "wave3_worker2_window-C09"
+  ],
+  "window_dwm_transparency_portable_verification": "pending exact covering commit"
 }

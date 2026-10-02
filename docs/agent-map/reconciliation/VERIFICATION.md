@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 58 — original window C08/C09 DWM transparency and topmost persistence (exact covering SHA tested)
+
+- [Evidence](hypothesis-window-dwm-transparency.md)/[receipt](hypothesis-window-dwm-transparency.json): six source fixtures target 417 research tests. `apply_transparency` configures `WS_EX_TOOLWINDOW` and toggles `WS_EX_TRANSPARENT` based on `click_through`, strips caption buttons from `GWL_STYLE`, and executes `DwmExtendFrameIntoClientArea` with margins -1 and `DwmEnableBlurBehindWindow`.
+- `set_always_on_top` executes `SetWindowPos` with `HWND_TOPMOST` / `HWND_NOTOPMOST` using `SWP_NOMOVE | SWP_NOSIZE`. No live DWM window rendering races were run. C08/C09 remain hypotheses; exact archive verified.
+
 ## Round 57 — original privacy C04/C05 capture and clipboard handling (exact covering SHA tested)
 
 - Exact **`421bcce5da7937cc18ea75b213165519f0dcbf0c`** archive passed **411 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable privacy receipt](portable-recovery-privacy-capture-clipboard.json). C04/C05 remain hypotheses; no live screen capture or clipboard manipulation.
