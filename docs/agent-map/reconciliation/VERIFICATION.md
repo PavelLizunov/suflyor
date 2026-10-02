@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 73 — original persistence C04 / tile C02 journal fsync and streaming markdown parse (exact covering SHA tested)
+
+- [Evidence](hypothesis-persistence-sync-markdown-parse.md)/[receipt](hypothesis-persistence-sync-markdown-parse.json): six source fixtures target 507 research tests. `finish_writer` and `spawn_writer` execute `file.flush()` without `sync_all` or `sync_data`, acknowledging user-space buffer flushing rather than non-volatile disk durability.
+- `parse_streaming` re-parses the entire prefix via `parse_single_pass` on each emission; table rows accumulate unbounded without limits. No power outages were simulated. C04/C02 remain confirmed mechanisms; exact archive verified.
+
 ## Round 72 — original CI/CD C09/C11 workflow security and flakiness (exact covering SHA tested)
 
 - Exact **`a7009327ff51199cc8adff6005be381f53c4ab2d`** archive passed **501 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable CI/CD workflow receipt](portable-recovery-cicd-workflow-flakiness.json). C09/C11 remain confirmed mechanisms; no live CI runs or network calls.
