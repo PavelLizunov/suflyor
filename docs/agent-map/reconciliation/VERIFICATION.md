@@ -2,8 +2,7 @@
 
 ## Round 37 — original installers C01/C02 extraction and TOCTOU (exact covering SHA tested)
 
-- [Evidence](hypothesis-installer-security.md)/[receipt](hypothesis-installer-security.json): six source fixtures target 290 research tests. `extract_tar_bz2` runs bsdtar with `-xf ... -C ...` without path filtering/canonicalization; `ocr_install` targets `%APPDATA%\suflyor`.
-- `verify_sha256` operates on a path without keeping an open handle prior to extraction. `download_installer` writes to `%TEMP%` after in-memory verification, and `run_installer` spawns the binary later without re-checking. No tar extraction, network call, or installer spawn was run. C01/C02 remain hypotheses; exact archive verified.
+- Exact **`0e5c038af03433f5ab9214524d1950fda7ceb97a`** archive passed **290 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable installer security receipt](portable-recovery-installer-security.json). C01/C02 remain hypotheses; no live download, extraction, or installer spawn.
 
 ## Round 36 — original audio C02/C04 clock and route (exact covering SHA tested)
 
