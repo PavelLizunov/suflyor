@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 67 — original window C01/C03 stealth reveal and bar fallback (exact covering SHA tested)
+
+- [Evidence](hypothesis-window-stealth-reveal.md)/[receipt](hypothesis-window-stealth-reveal.json): six source fixtures target 471 research tests. `present_window_stealth_aware_at` moves windows on-screen unconditionally without gating on `apply_stealth_one` return, whereas `open_tray_menu` aborts and hides the window.
+- The overlay bar realization fallback disables stealth and moves the bar on-screen to prevent lockout, whereas the aux window fallback keeps windows parked off-screen under stealth. No display servers were queried. C01/C03 remain confirmed mechanisms; exact archive verified.
+
 ## Round 66 — original STT C01/C02 task queueing and retry timeouts (exact covering SHA tested)
 
 - Exact **`768093cb9fcf0ad5f5e2becb1e94b1a30e469505`** archive passed **465 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable STT queue/network receipt](portable-recovery-stt-queue-network.json). C01/C02 remain confirmed mechanisms; no live HTTP requests or cloud STT querying.
