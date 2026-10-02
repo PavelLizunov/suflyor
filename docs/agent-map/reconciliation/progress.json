@@ -546,5 +546,5 @@
     "wave4_worker1_privacy-C03",
     "wave3_worker4_settings-C10"
   ],
-  "privacy_secrets_token_clear_portable_verification": "pending exact covering commit"
+  "privacy_secrets_token_clear_portable_verification": "PASS exact 962b3eedf1732ae13d85a96d4cba0d200b2d3c9d; six source fixtures; C03 C10 remain confirmed"
 }
