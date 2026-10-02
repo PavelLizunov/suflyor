@@ -1,11 +1,11 @@
 # Reconciliation verification evidence
 
-## Round 17 — overlay/tile state and stream terminal preconditions (covering SHA pending)
+## Round 17 — overlay/tile state and stream terminal preconditions (exact covering SHA tested)
 
 - [Contract](../features/overlay-tile-state-and-stream-terminals.md) adds26 ranges: actual Slint busy/reset/action bindings, bar pulse, shared-generation check/slot/closure, PTT fixed sink, close/registry/cap and backend EOF. Registry24/661; no Slint UI/native/Rust/provider execution.
 - Six new fixtures target170 research total: source order plus **pure** model old gate-pass→new generation/slot→old handler wrong-slot candidate. Not actual Rust scheduling/race repro; original tile-C01 remains hypothesis. C03 EOF does not synthesize terminal, producer prerequisite still open; explicit terminal/install reset/missing history/MLX clear counterevidence, PTT error no busy clear documented. Original39/75/5 unchanged.
 - Navigation155 some refs/143 none, union37,881 line pointers **not audited semantics**. Default properties/comments not evidence every callback wired/live/UI accepted.
-- Exact archive/suite/ledger regeneration pending; independent/native/full objective open.
+- Exact **`e152dab4dc19fd4430b1e5d1fa57143a72d90961`** archive passed **170 research +3 mocked Hermes, zero skips**, frozen checkpoint issues empty (24/661), navigation validator zero errors and byte-identical ledger SHA256 `44ce61e5d9891e430a1c9d0aa9f4d48e46e3c718014efd8540b172d70a5963e8`. [Portable overlay/tile receipt](portable-recovery-overlay-tile.json); source/model not Slint/native/Rust race/independent/full-objective acceptance.
 
 
 ## Round 16 — Tera graph/text/cancellation source semantics (exact covering SHA tested)
