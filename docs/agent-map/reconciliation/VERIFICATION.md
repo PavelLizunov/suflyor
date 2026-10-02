@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 44 — original local AI C04/C05 netstat parsing and model hash invariants (exact covering SHA tested)
+
+- [Evidence](hypothesis-local-ai-netstat-model-sha.md)/[receipt](hypothesis-local-ai-netstat-model-sha.json): six source fixtures target 332 research tests. `stop_listener_on_port` parses netstat output for `LISTENING` matching port suffixes (including IPv6), and marks `free_of_strangers = false` on unresolvable/foreign PID paths.
+- `selected_llama_gguf` performs SHA-256 hash verification only for 26B, relying on size-only checks for 12B, 4B, and vision projectors. No netstat calls or disk modifications were run. C04/C05 remain hypotheses; exact archive verified.
+
 ## Round 43 — original local AI C02/C03 engine verify and bind race (exact covering SHA tested)
 
 - Exact **`ee58da05d9542c5b5b2b86badb8ca3da3659f76d`** archive passed **326 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable local AI engine port receipt](portable-recovery-local-ai-engine-port.json). C02/C03 remain hypotheses; no local server spawning or port binding.
