@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+  "original_register_sha256": "ee8e2e9ede99fc829465d4f3b63d7a1233f73d3c8106633d9018fa5d2c0ddfb3",
+  "original_candidates": [
+    {
+      "id": "wave4_worker3_cicd-C12",
+      "status_unchanged": "hypothesis",
+      "native_reproduction": false
+    },
+    {
+      "id": "wave4_worker3_cicd-C13",
+      "status_unchanged": "confirmed",
+      "native_reproduction": false
+    }
+  ],
+  "source_references": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "start_line": 146,
+      "end_line": 167,
+      "sha256": "f2b766b54591fc77911f21625b67bbe04ef610ae4324a5f477701bd7fa7505e0"
+    },
+    {
+      "path": ".github/workflows/security.yml",
+      "start_line": 1,
+      "end_line": 40,
+      "sha256": "72fc30ab4d23bc2a52a8ab46c75202651dfad1e805f1d3360fa0efc1da598613"
+    },
+    {
+      "path": "slint-experiment/Cargo.toml",
+      "start_line": 1,
+      "end_line": 10,
+      "sha256": "e1c1389fc7a273cb926a70910b6c3cda3251c6c7fbc57b2f213abf9cb5cd87f4"
+    },
+    {
+      "path": "scripts/slint-installer.nsi",
+      "start_line": 10,
+      "end_line": 23,
+      "sha256": "0e17b58d67cf9d00c52027977c64046ad4ad441208fafe705bbd2a021b460e2c"
+    },
+    {
+      "path": "scripts/build-slint-release.ps1",
+      "start_line": 130,
+      "end_line": 160,
+      "sha256": "b6e1c46a4358301412f30d2a7e649db894360df90c7e75d8ef3af4e2f61149f1"
+    },
+    {
+      "path": "scripts/git-gate-native.ps1",
+      "start_line": 69,
+      "end_line": 170,
+      "sha256": "912e4274522b841b5f5ecdb86dde96832676b4ab9fe8a2762b90c7118d7fab7c"
+    }
+  ],
+  "fixtures_passed": 6,
+  "limits": [
+    "frozen workflow and version source only",
+    "no Actions, Cargo, or NSIS execution"
+  ],
+  "native_application_acceptance": false,
+  "independent_acceptance": false,
+  "full_project_coverage": false
+}

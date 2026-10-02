@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 30 — original CI C12/C13 security and version boundaries (covering SHA pending)
+
+- [Evidence](hypothesis-ci-version-security.md)/[receipt](hypothesis-ci-version-security.json): six source fixtures target 248 research tests. Security scans live in a separate workflow and are not dependencies of the required gate. macOS failure likewise cannot fail that gate.
+- Cargo and NSIS versions currently both read `0.38.1-rc.4`, but the release build does not inject the Cargo version and the native version guard is selected through the Slint manifest. No Actions, Cargo, or NSIS execution was run. C12 remains a hypothesis and C13 remains confirmed; exact archive repeat pending.
+
 ## Round 29 — original CI C08/C10 cleanup and workflow gates (exact covering SHA tested)
 
 - [Evidence](hypothesis-ci-cleanup-gate.md)/[receipt](hypothesis-ci-cleanup-gate.json): six source fixtures target 242 research tests. Recursive uninstall cleanup has no reparse guard. The required `gate` job depends only on `changes` and `rust`; macOS and validate are separate.
