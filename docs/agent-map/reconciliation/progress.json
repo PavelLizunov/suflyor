@@ -553,5 +553,5 @@
     "wave4_worker3_cicd-C02",
     "wave4_worker3_cicd-C03"
   ],
-  "cicd_native_gate_portable_verification": "pending exact covering commit"
+  "cicd_native_gate_portable_verification": "PASS exact 6b513892463974aaef1a9b4951b182cf7e77fab2; six source fixtures; C01 C02 C03 remain confirmed"
 }

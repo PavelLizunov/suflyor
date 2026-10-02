@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "tested_commit": "6b513892463974aaef1a9b4951b182cf7e77fab2",
+  "method": "exact Git archive; source inspection of scripts/git-gate-native.ps1 docs regex, crate list omissions, UI-only hardcoded guards, and kb.rs include_str!; no live PowerShell gate runs or Cargo execution",
+  "research_tests": 495,
+  "research_skips": 0,
+  "existing_mocked_hermes_tests": 3,
+  "source_feature_contracts": 26,
+  "source_feature_references": 709,
+  "new_cicd_native_gate_classification_fixtures": 6,
+  "original_claim_ids_unchanged": [
+    "wave4_worker3_cicd-C01",
+    "wave4_worker3_cicd-C02",
+    "wave4_worker3_cicd-C03"
+  ],
+  "navigation_ledger": {
+    "selected_files": 298,
+    "some_precise_navigation": 162,
+    "no_precise_navigation": 136,
+    "source_lines": 120858,
+    "reference_line_union": 39935,
+    "semantically_reviewed_lines": "not_established",
+    "validation_errors": [],
+    "regenerated_byte_identical": true,
+    "bytes": 276288,
+    "sha256": "b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2"
+  },
+  "checkpoint_issues": [],
+  "result": "PASS bounded CI/CD native gate classification recovery; original confirmed statuses unchanged; full research incomplete",
+  "native_cicd_acceptance": false,
+  "independent_acceptance": false,
+  "full_project_coverage": false
+}

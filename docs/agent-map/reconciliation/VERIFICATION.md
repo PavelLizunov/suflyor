@@ -2,8 +2,7 @@
 
 ## Round 71 — original CI/CD C01/C02/C03 native gate classification bypasses (exact covering SHA tested)
 
-- [Evidence](hypothesis-cicd-native-gate-classification.md)/[receipt](hypothesis-cicd-native-gate-classification.json): six source fixtures target 495 research tests. `git-gate-native.ps1` classifies any `.md` file as docs-only, exiting without Cargo tests, despite `overlay-backend/knowledge/*.md` being compiled via `include_str!` in `kb.rs`.
-- `$crateOrder` omits sidecars like `suflyor-mlx`; `$slintUiOnly` runs only 13 hardcoded guard tests and skips `clippy` entirely. No PowerShell gates were executed. C01, C02, and C03 remain confirmed mechanisms; exact archive verified.
+- Exact **`6b513892463974aaef1a9b4951b182cf7e77fab2`** archive passed **495 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable CI/CD native gate receipt](portable-recovery-cicd-native-gate-classification.json). C01, C02, and C03 remain confirmed mechanisms; no live PowerShell gate runs or Cargo execution.
 
 ## Round 70 — original privacy C03 / settings C10 token redaction and empty token save (exact covering SHA tested)
 
