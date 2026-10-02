@@ -2,8 +2,7 @@
 
 ## Round 43 — original local AI C02/C03 engine verify and bind race (exact covering SHA tested)
 
-- [Evidence](hypothesis-local-ai-engine-port.md)/[receipt](hypothesis-local-ai-engine-port.json): six source fixtures target 326 research tests. `verify_engine_runs` uses port 8077 and generic `wait_ready` without checking listener PID ownership or model identity.
-- `ensure_servers_for_route` pushes newly launched child handles without verifying port ownership or detecting prior port listeners. No local servers were spawned. C02/C03 remain hypotheses; exact archive verified.
+- Exact **`ee58da05d9542c5b5b2b86badb8ca3da3659f76d`** archive passed **326 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable local AI engine port receipt](portable-recovery-local-ai-engine-port.json). C02/C03 remain hypotheses; no local server spawning or port binding.
 
 ## Round 42 — original TTS C03/C04 process cleanup and protocol desynchronization (exact covering SHA tested)
 

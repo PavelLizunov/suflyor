@@ -384,5 +384,5 @@
     "wave2_worker4_local_ai-C02",
     "wave2_worker4_local_ai-C03"
   ],
-  "local_ai_engine_port_portable_verification": "pending exact covering commit"
+  "local_ai_engine_port_portable_verification": "PASS exact ee58da05d9542c5b5b2b86badb8ca3da3659f76d; six source fixtures; C02 C03 remain hypotheses"
 }
