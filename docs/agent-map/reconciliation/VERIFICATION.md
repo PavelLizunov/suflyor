@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 68 — original settings C05/C06 in-memory mutation and optimistic UI (exact covering SHA tested)
+
+- [Evidence](hypothesis-settings-mutate-rollback.md)/[receipt](hypothesis-settings-mutate-rollback.json): six source fixtures target 477 research tests. `on_ai_provider_changed` mutates `cfg_c.write()` without rollback on save failure, contrasting with `update_cloud_model` in STT which explicitly restores previous values.
+- `on_language_selected`, `on_tile_monitor_changed`, and `on_stealth_changed` apply live translation tables, runtime pin globals, and display affinities before disk save completes. No disk write errors were simulated. C05/C06 remain confirmed mechanisms; exact archive verified.
+
 ## Round 67 — original window C01/C03 stealth reveal and bar fallback (exact covering SHA tested)
 
 - Exact **`6e3a075c470f3fb02816c1624d9546eb340854d6`** archive passed **471 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable window stealth reveal receipt](portable-recovery-window-stealth-reveal.json). C01/C03 remain confirmed mechanisms; no live display server or screen capture testing.
