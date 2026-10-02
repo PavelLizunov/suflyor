@@ -1,5 +1,13 @@
 # Reconciliation verification evidence
 
+## Round 18 — archive UI confirmation/snapshot/latch (covering SHA pending)
+
+- [Contract](../features/archive-ui-confirmations-and-latches.md) adds24 ranges over Slint row/search/rename/modal/progress keyboard and host async list/sync query/index-confirm/global guard. Registry25/685. Corrected old task-owned archive contract list cap100→actual300, no source mutation.
+- Six new fixtures target176 research total. Pure row-index refresh model shows potential confirm title/current idx mismatch, not native wrong delete repro; query resets rename only, async initial replacement not modal-generation-gated. Process guard prevents double work but fresh window UI busy false; progress status rendered only while busy, post-completion visibility unclear. Captured active/language/recording/cloud flags versus later job Config documented.
+- No user DB/journal/audio/rename/delete/retranscription/provider/native/Rust action. Original119 statuses39/75/5 unchanged; navigation156 some refs/142 none, union38,545 **not audited semantics**.
+- Exact archive/suite/ledger repetition pending; independent/native/destructive-state acceptance absent.
+
+
 ## Round 17 — overlay/tile state and stream terminal preconditions (exact covering SHA tested)
 
 - [Contract](../features/overlay-tile-state-and-stream-terminals.md) adds26 ranges: actual Slint busy/reset/action bindings, bar pulse, shared-generation check/slot/closure, PTT fixed sink, close/registry/cap and backend EOF. Registry24/661; no Slint UI/native/Rust/provider execution.

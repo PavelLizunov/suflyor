@@ -1,6 +1,6 @@
 # Source-linked feature contracts
 
-These contracts map selected production chains at frozen research baseline `a10c356a`. They are manually inspected navigation/dataflow evidence, not compiler-derived call graphs, every-line/symbol coverage or native acceptance. Twenty-four bounded contracts now cover principal runtime and platform integration chains; structured index records exact reference counts. Counts are navigation scope, not completeness proof.
+These contracts map selected production chains at frozen research baseline `a10c356a`. They are manually inspected navigation/dataflow evidence, not compiler-derived call graphs, every-line/symbol coverage or native acceptance. Twenty-five bounded contracts now cover principal runtime and platform integration chains; structured index records exact reference counts. Counts are navigation scope, not completeness proof.
 
 | Feature | Contract | Key boundary |
 | --- | --- | --- |
@@ -34,6 +34,8 @@ These contracts map selected production chains at frozen research baseline `a10c
 | Tera graph/text/cancellation | [Asset shape/indexer/normalizer/sampler/vocoder/generation source](tera-graph-text-and-cancellation.md) | Returned chunks not active-run streaming/abort; marker size not rehash, text/work/header risks source-only |
 
 | Overlay/tile stream state | [Slint busy/reset/actions/shared gen/fixed PTT/terminal EOF/close](overlay-tile-state-and-stream-terminals.md) | Pure C01 interleaving not Rust race proof; C03 producer EOF precondition open; UI/native unaccepted |
+
+| Archive UI/latches | [List300/search60/index confirmations/snapshots/progress/process guard](archive-ui-confirmations-and-latches.md) | Async model refresh/idx target concern pure model; no destructive/native UI/data repro |
 
 [Structured index](contracts.json) records IDs, baseline, source references and limits. [Original Grok register](../reconciliation/candidates.json) preserves counterevidence; [verification](../reconciliation/VERIFICATION.md) distinguishes executed local checks from unexecuted native behavior.
 

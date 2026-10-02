@@ -99,11 +99,11 @@
     "wave4_worker3_cicd-C10",
     "wave4_worker3_cicd-C12"
   ],
-  "feature_contracts_source_inspected": 24,
-  "continuation_round": 17,
+  "feature_contracts_source_inspected": 25,
+  "continuation_round": 18,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 170,
-  "source_feature_references": 661,
+  "total_research_tests_passed": 176,
+  "source_feature_references": 685,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
   "portable_recovery_tested_commit": "e152dab4dc19fd4430b1e5d1fa57143a72d90961",
@@ -215,10 +215,10 @@
   "portable_receipt_integrity_fixtures_passed": 4,
   "navigation_reference_counts": {
     "selected_files": 298,
-    "some_precise_reference": 155,
-    "no_precise_reference": 143,
+    "some_precise_reference": 156,
+    "no_precise_reference": 142,
     "source_lines": 120858,
-    "reference_line_union": 37881,
+    "reference_line_union": 38545,
     "semantically_reviewed_lines": "not_established"
   },
   "historical_receipt_integrity": {
@@ -237,5 +237,7 @@
     "wave3_worker3_tile-C01",
     "wave3_worker3_tile-C03"
   ],
-  "overlay_tile_portable_verification": "PASS exact e152dab4dc19fd4430b1e5d1fa57143a72d90961; six source/model fixtures/26 refs, C01 C03 still hypotheses"
+  "overlay_tile_portable_verification": "PASS exact e152dab4dc19fd4430b1e5d1fa57143a72d90961; six source/model fixtures/26 refs, C01 C03 still hypotheses",
+  "archive_ui_state_fixtures_passed": 6,
+  "archive_ui_portable_verification": "pending exact covering commit"
 }

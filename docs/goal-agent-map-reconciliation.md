@@ -91,6 +91,12 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
 - User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.
 
+## Continuation round 18: archive UI list/confirmation/latch state
+
+- Intended result: actual Slint row/edit/confirm/progress keyboard bindings to host async initial list, synchronous search/delete and busy-latch lifecycle; correct task-owned earlier 100-row statement to actual300. No destructive archive/user DB/rename/STT/audio/model/live UI/native/Cargo execution.
+- Source and pure index-refresh model only: initial worker list can land while confirmation visible; index-keyed confirm refetch vs title/ID pinning, rename-only reset, captured active session/language/recording metadata and cloud signpost snapshot. Do not claim wrong delete reproduced or every modal race reachable natively.
+- Six proportional tests protect list/search caps/source error distinctions, snapshot→UI replacement/edit-confirm reset scopes, process-latch UI property mismatch/close reopen, saved summary versus AI/reforce caller behavior. Exact baseline refs/hash, deterministic updated navigation and exact committed suite; original119 statuses unchanged, independent/native visual/data mutation acceptance open.
+
 ## Continuation round 17: overlay/tile UI state and original stream hypotheses
 
 - Intended result: precise overlay/tile Slint busy/reset/action bindings to host event/shared slot/PTT/close callers. Bound original tile-C01/C03 claims by source counterevidence and one explicit pure interleaving model (NOT Rust concurrent execution/native UI). Do not rely on comments claiming every callback wired or all generation races closed.

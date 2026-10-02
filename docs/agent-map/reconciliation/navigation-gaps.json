@@ -8,7 +8,7 @@
     },
     "features": {
       "path": "docs/agent-map/features/contracts.json",
-      "sha256": "e23f9802305ab04f7ab8b1e8d15c82e078bde97a559168b534daffcb868c7870"
+      "sha256": "ebc08326d09996c4b1cf7988116da8bbd80848613e72475aa478078878424ef7"
     },
     "candidates": {
       "path": "docs/agent-map/reconciliation/candidates.json",
@@ -3951,7 +3951,8 @@
         ]
       ],
       "reference_owners": [
-        "archive-playback-and-retranscription"
+        "archive-playback-and-retranscription",
+        "archive-ui-confirmations-and-latches"
       ],
       "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
@@ -5480,32 +5481,36 @@
       "source_sha256": "650c082c48537907cc808a2edede7d2ee6e9fc7a8475dd579fa40f9d54d85419",
       "source_lines": 1455,
       "syntax_nodes": 96,
-      "feature_reference_line_union": 864,
+      "feature_reference_line_union": 1085,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 864,
+      "all_reference_line_union": 1085,
       "reference_intervals": [
         [
-          32,
-          162
-        ],
-        [
-          165,
-          210
-        ],
-        [
-          213,
+          3,
           244
         ],
         [
           247,
-          289
+          290
+        ],
+        [
+          295,
+          349
         ],
         [
           351,
-          607
+          653
         ],
         [
-          744,
+          655,
+          716
+        ],
+        [
+          718,
+          739
+        ],
+        [
+          742,
           807
         ],
         [
@@ -5520,27 +5525,31 @@
       "unreferenced_intervals": [
         [
           1,
-          31
-        ],
-        [
-          163,
-          164
-        ],
-        [
-          211,
-          212
+          2
         ],
         [
           245,
           246
         ],
         [
-          290,
+          291,
+          294
+        ],
+        [
+          350,
           350
         ],
         [
-          608,
-          743
+          654,
+          654
+        ],
+        [
+          717,
+          717
+        ],
+        [
+          740,
+          741
         ],
         [
           808,
@@ -5553,6 +5562,7 @@
       ],
       "reference_owners": [
         "archive-playback-and-retranscription",
+        "archive-ui-confirmations-and-latches",
         "kb-and-reference-search"
       ],
       "reference_state": "some_precise_navigation",
@@ -9219,18 +9229,85 @@
       "source_sha256": "1398515b88feef85f5ca77e68613b7599d4c3e2a5877e04406a68e08ee356c10",
       "source_lines": 724,
       "syntax_nodes": 68,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 443,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 443,
+      "reference_intervals": [
+        [
+          16,
+          39
+        ],
+        [
+          68,
+          145
+        ],
+        [
+          155,
+          187
+        ],
+        [
+          256,
+          306
+        ],
+        [
+          351,
+          429
+        ],
+        [
+          534,
+          557
+        ],
+        [
+          566,
+          620
+        ],
+        [
+          623,
+          721
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          15
+        ],
+        [
+          40,
+          67
+        ],
+        [
+          146,
+          154
+        ],
+        [
+          188,
+          255
+        ],
+        [
+          307,
+          350
+        ],
+        [
+          430,
+          533
+        ],
+        [
+          558,
+          565
+        ],
+        [
+          621,
+          622
+        ],
+        [
+          722,
           724
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "archive-ui-confirmations-and-latches"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -11155,10 +11232,10 @@
     "suflyor-teratts/NOTICE.md"
   ],
   "summary": {
-    "files_with_some_precise_navigation": 155,
-    "files_without_precise_navigation": 143,
+    "files_with_some_precise_navigation": 156,
+    "files_without_precise_navigation": 142,
     "selected_source_lines": 120858,
-    "precise_reference_line_union": 37881,
+    "precise_reference_line_union": 38545,
     "semantically_reviewed_line_count": "not_established"
   },
   "limits": [

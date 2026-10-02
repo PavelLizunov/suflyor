@@ -3557,6 +3557,142 @@
       ],
       "native_verification": "not_run",
       "independent_acceptance": false
+    },
+    {
+      "id": "archive-ui-confirmations-and-latches",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/archive-ui-confirmations-and-latches.md",
+      "review_state": "selected archive Slint list/confirmation/latch/host source and pure index-refresh model",
+      "source_references": [
+        {
+          "path": "slint-experiment/ui/archive.slint",
+          "start_line": 16,
+          "end_line": 39
+        },
+        {
+          "path": "slint-experiment/ui/archive.slint",
+          "start_line": 68,
+          "end_line": 145
+        },
+        {
+          "path": "slint-experiment/ui/archive.slint",
+          "start_line": 155,
+          "end_line": 187
+        },
+        {
+          "path": "slint-experiment/ui/archive.slint",
+          "start_line": 256,
+          "end_line": 306
+        },
+        {
+          "path": "slint-experiment/ui/archive.slint",
+          "start_line": 351,
+          "end_line": 429
+        },
+        {
+          "path": "slint-experiment/ui/archive.slint",
+          "start_line": 534,
+          "end_line": 557
+        },
+        {
+          "path": "slint-experiment/ui/archive.slint",
+          "start_line": 566,
+          "end_line": 620
+        },
+        {
+          "path": "slint-experiment/ui/archive.slint",
+          "start_line": 623,
+          "end_line": 721
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 3,
+          "end_line": 81
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 83,
+          "end_line": 139
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 123,
+          "end_line": 144
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 146,
+          "end_line": 212
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 250,
+          "end_line": 290
+        },
+        {
+          "path": "overlay-backend/src/session_names.rs",
+          "start_line": 65,
+          "end_line": 100
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 295,
+          "end_line": 349
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 357,
+          "end_line": 378
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 380,
+          "end_line": 433
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 3,
+          "end_line": 18
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 479,
+          "end_line": 545
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 550,
+          "end_line": 599
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 742,
+          "end_line": 759
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 602,
+          "end_line": 653
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 655,
+          "end_line": 716
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/aux_windows/archive.rs",
+          "start_line": 718,
+          "end_line": 739
+        }
+      ],
+      "limits": [
+        "no live DB/UI/rename/delete/STT/provider/Rust execution",
+        "index-refresh model not native wrong-session deletion repro",
+        "state snapshots cloud language active ids/recordings not current correctness guarantee",
+        "source model cap correction300 not UI performance acceptance"
+      ],
+      "native_verification": "not_run",
+      "independent_acceptance": false
     }
   ],
   "complete_project_coverage": false

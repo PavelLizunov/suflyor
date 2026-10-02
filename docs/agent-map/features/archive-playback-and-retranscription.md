@@ -4,7 +4,7 @@
 
 ## Archive entry and queries
 
-[F7 open_archive](../../../slint-experiment/src/bin/overlay_host/aux_windows/archive.rs#L32-L162) creates/reuses ArchiveWindow, snapshots recording/summary/debrief availability and opens/reindexes catalog on worker. It skips active session ID during reindex and surfaces catalog unavailable on open failure. Initial list caps at 100 UI rows, but [Store::list_sessions](../../../overlay-backend/src/persistence/sqlite_store.rs#L180-L202) loads all rows before cap; display bound is not query allocation bound.
+[F7 open_archive](../../../slint-experiment/src/bin/overlay_host/aux_windows/archive.rs#L32-L162) creates/reuses ArchiveWindow, snapshots recording/summary/debrief availability and opens/reindexes catalog on worker. It skips active session ID during reindex and surfaces catalog unavailable on open failure. Initial list caps at 300 UI rows (ARCHIVE_LIST_CAP; earlier task-owned 100 claim corrected against source), but [Store::list_sessions](../../../overlay-backend/src/persistence/sqlite_store.rs#L180-L202) loads all rows before cap; display bound is not query allocation bound.
 
 [Search-as-you-type](../../../slint-experiment/src/bin/overlay_host/aux_windows/archive.rs#L165-L210) uses existing Store handle and fresh summary/debrief snapshots on UI callback, caps FTS hits 60 and falls back to empty results on query error. [fts_query](../../../slint-experiment/src/bin/overlay_host/aux_windows/archive.rs#L929-L947) splits punctuation and emits prefix tokens. Full list refresh clears index-keyed rename state so stale row index does not rename a different current row.
 
