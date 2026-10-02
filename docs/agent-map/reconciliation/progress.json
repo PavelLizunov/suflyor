@@ -414,5 +414,5 @@
     "wave3_worker1_bridge-C03",
     "wave3_worker1_bridge-C04"
   ],
-  "bridge_generation_fence_portable_verification": "pending exact covering commit"
+  "bridge_generation_fence_portable_verification": "PASS exact fd4b5351ddd73a808cab86421768ea7eb5f47ee5; six source fixtures; C03 C04 remain hypotheses"
 }
