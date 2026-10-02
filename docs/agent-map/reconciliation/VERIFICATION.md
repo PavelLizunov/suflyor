@@ -1,9 +1,9 @@
 # Reconciliation verification evidence
 
-## Round 30 — original CI C12/C13 security and version boundaries (covering SHA pending)
+## Round 30 — original CI C12/C13 security and version boundaries (exact covering SHA tested)
 
 - [Evidence](hypothesis-ci-version-security.md)/[receipt](hypothesis-ci-version-security.json): six source fixtures target 248 research tests. Security scans live in a separate workflow and are not dependencies of the required gate. macOS failure likewise cannot fail that gate.
-- Cargo and NSIS versions currently both read `0.38.1-rc.4`, but the release build does not inject the Cargo version and the native version guard is selected through the Slint manifest. No Actions, Cargo, or NSIS execution was run. C12 remains a hypothesis and C13 remains confirmed; exact archive repeat pending.
+- Exact **`9d455462afc62e8e51d5f72fe10c57cca2211ca5`** archive passed **248 research +3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable version receipt](portable-recovery-ci-version-security.json). C12 remains a hypothesis and C13 remains confirmed; no Actions, Cargo, or NSIS execution.
 
 ## Round 29 — original CI C08/C10 cleanup and workflow gates (exact covering SHA tested)
 

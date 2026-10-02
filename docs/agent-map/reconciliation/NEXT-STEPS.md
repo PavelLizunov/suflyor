@@ -33,7 +33,7 @@
 - Round-27 gate C04/C05: six temporary Git fixtures, suite 230; narrow fallback and quoted-name boundary bounded. [Limits](hypothesis-gate-classification.md): no PowerShell gate or Actions; exact `386392e2` archive passed 230+3 ([receipt](portable-recovery-gate-classification.json)).
 - Round-28 installer C06/C07: six source fixtures, suite 236; per-user install, quoted-path boundary, and recursive cleanup bounded. [Limits](hypothesis-installer-boundaries.md): no makensis or deletion; exact `bc08b392` archive passed 236+3 ([receipt](portable-recovery-installer-boundaries.json)).
 - Round-29 CI C08/C10: six source fixtures, suite 242; recursive cleanup and gate dependency boundaries bounded. [Limits](hypothesis-ci-cleanup-gate.md): no Actions or deletion; exact `0c9ac32b` archive passed 242+3 ([receipt](portable-recovery-ci-cleanup-gate.json)).
-- Round-30 CI C12/C13: six source fixtures, suite 248; separate security workflow and non-injected version snapshot bounded. [Limits](hypothesis-ci-version-security.md): no Actions or build; exact-SHA repeat pending.
+- Round-30 CI C12/C13: six source fixtures, suite 248; separate security workflow and non-injected version snapshot bounded. [Limits](hypothesis-ci-version-security.md): no Actions or build; exact `9d455462` archive passed 248+3 ([receipt](portable-recovery-ci-version-security.json)).
 - WIP GitHub checkpoint on the dedicated task branch; task-owned files only.
 
 ## Not complete
