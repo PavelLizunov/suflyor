@@ -1,11 +1,11 @@
 # Reconciliation verification evidence
 
-## Round 18 — archive UI confirmation/snapshot/latch (covering SHA pending)
+## Round 18 — archive UI confirmation/snapshot/latch (exact covering SHA tested)
 
 - [Contract](../features/archive-ui-confirmations-and-latches.md) adds24 ranges over Slint row/search/rename/modal/progress keyboard and host async list/sync query/index-confirm/global guard. Registry25/685. Corrected old task-owned archive contract list cap100→actual300, no source mutation.
 - Six new fixtures target176 research total. Pure row-index refresh model shows potential confirm title/current idx mismatch, not native wrong delete repro; query resets rename only, async initial replacement not modal-generation-gated. Process guard prevents double work but fresh window UI busy false; progress status rendered only while busy, post-completion visibility unclear. Captured active/language/recording/cloud flags versus later job Config documented.
 - No user DB/journal/audio/rename/delete/retranscription/provider/native/Rust action. Original119 statuses39/75/5 unchanged; navigation156 some refs/142 none, union38,545 **not audited semantics**.
-- Exact archive/suite/ledger repetition pending; independent/native/destructive-state acceptance absent.
+- Exact **`8426a6b04f4b2643dfd5103cd76effad5115c724`** archive passed **176 research +3 mocked Hermes, zero skips**, frozen checkpoint issues empty (25/685), navigation validator zero errors and byte-identical ledger SHA256 `b55baa48437c26427271f0da974c63bc961cf76019c23cb35317c15fcd343d3b`. [Portable archive UI receipt](portable-recovery-archive-ui.json); no DB/destructive/native/live UI/independent/full-objective acceptance.
 
 
 ## Round 17 — overlay/tile state and stream terminal preconditions (exact covering SHA tested)
