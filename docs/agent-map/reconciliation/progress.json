@@ -360,5 +360,5 @@
     "wave2_worker1_audio-C06",
     "wave2_worker1_audio-C08"
   ],
-  "audio_ptt_recorder_portable_verification": "pending exact covering commit"
+  "audio_ptt_recorder_portable_verification": "PASS exact 0516e074e28933a8c94b680e6b9bc29266ae9e03; six source fixtures; C06 C08 remain hypotheses"
 }
