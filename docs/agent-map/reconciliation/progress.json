@@ -396,5 +396,5 @@
     "wave2_worker4_local_ai-C06",
     "wave2_worker4_local_ai-C07"
   ],
-  "local_ai_download_artifacts_portable_verification": "pending exact covering commit"
+  "local_ai_download_artifacts_portable_verification": "PASS exact a24324a1a56c2063d0693329c52eeec836031ea1; six source fixtures; C06 C07 remain hypotheses"
 }
