@@ -1,9 +1,9 @@
 # Reconciliation verification evidence
 
-## Round 31 — original memory C04/C07 matching boundaries (covering SHA pending)
+## Round 31 — original memory C04/C07 matching boundaries (exact covering SHA tested)
 
 - [Evidence](hypothesis-memory-matching.md)/[receipt](hypothesis-memory-matching.json): six pure string/source fixtures target 254 research tests. A shared prefix of four characters matches `проверили` and `провалили`, while three-character words still require their whole prefix.
-- Terms of at least five characters drop the final character before prefix matching; shorter terms require exact equality. Latin tokens inside Cyrillic text have no separate minimum length. No Rust test, owner memory, or prompt execution was run. C04/C07 remain hypotheses; exact archive repeat pending.
+- Exact **`784641eebce8cb05a296b94ed4046c10cbaf40e6`** archive passed **254 research +3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable memory receipt](portable-recovery-memory-matching.json). C04/C07 remain hypotheses; no Rust test, owner memory, or prompt execution.
 
 ## Round 30 — original CI C12/C13 security and version boundaries (exact covering SHA tested)
 
