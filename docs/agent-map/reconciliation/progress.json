@@ -99,11 +99,11 @@
     "wave4_worker3_cicd-C10",
     "wave4_worker3_cicd-C12"
   ],
-  "feature_contracts_source_inspected": 23,
-  "continuation_round": 16,
+  "feature_contracts_source_inspected": 24,
+  "continuation_round": 17,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 164,
-  "source_feature_references": 635,
+  "total_research_tests_passed": 170,
+  "source_feature_references": 661,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
   "portable_recovery_tested_commit": "8a9508ee90eb0a32ac99b30d445951d1890de096",
@@ -215,10 +215,10 @@
   "portable_receipt_integrity_fixtures_passed": 4,
   "navigation_reference_counts": {
     "selected_files": 298,
-    "some_precise_reference": 153,
-    "no_precise_reference": 145,
+    "some_precise_reference": 155,
+    "no_precise_reference": 143,
     "source_lines": 120858,
-    "reference_line_union": 36707,
+    "reference_line_union": 37881,
     "semantically_reviewed_lines": "not_established"
   },
   "historical_receipt_integrity": {
@@ -231,5 +231,11 @@
   "wsola_playback_source_fixtures_passed": 6,
   "wsola_playback_portable_verification": "PASS exact 2b630b649b93a510d80b9b52727e73ce08adea16; six source assertions/27 refs, no Rust DSP/audio acceptance",
   "tera_pipeline_source_fixtures_passed": 6,
-  "tera_pipeline_portable_verification": "PASS exact 8a9508ee90eb0a32ac99b30d445951d1890de096; six source fixtures/31 refs, no inference/native/licence acceptance"
+  "tera_pipeline_portable_verification": "PASS exact 8a9508ee90eb0a32ac99b30d445951d1890de096; six source fixtures/31 refs, no inference/native/licence acceptance",
+  "overlay_tile_state_fixtures_passed": 6,
+  "overlay_tile_original_hypothesis_ids": [
+    "wave3_worker3_tile-C01",
+    "wave3_worker3_tile-C03"
+  ],
+  "overlay_tile_portable_verification": "pending exact covering commit"
 }

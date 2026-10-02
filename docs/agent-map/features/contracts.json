@@ -3412,6 +3412,151 @@
       ],
       "native_verification": "not_run",
       "independent_acceptance": false
+    },
+    {
+      "id": "overlay-tile-state-and-stream-terminals",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/overlay-tile-state-and-stream-terminals.md",
+      "review_state": "selected Slint busy/actions/host stream/caller source plus pure interleaving model, no UI or race repro",
+      "source_references": [
+        {
+          "path": "slint-experiment/ui/overlay_bar.slint",
+          "start_line": 506,
+          "end_line": 639
+        },
+        {
+          "path": "slint-experiment/ui/overlay_bar.slint",
+          "start_line": 641,
+          "end_line": 689
+        },
+        {
+          "path": "slint-experiment/ui/overlay_bar.slint",
+          "start_line": 847,
+          "end_line": 873
+        },
+        {
+          "path": "slint-experiment/ui/overlay_bar.slint",
+          "start_line": 932,
+          "end_line": 980
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
+          "start_line": 709,
+          "end_line": 780
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
+          "start_line": 847,
+          "end_line": 921
+        },
+        {
+          "path": "slint-experiment/ui/tile.slint",
+          "start_line": 167,
+          "end_line": 192
+        },
+        {
+          "path": "slint-experiment/ui/tile.slint",
+          "start_line": 226,
+          "end_line": 244
+        },
+        {
+          "path": "slint-experiment/ui/tile.slint",
+          "start_line": 263,
+          "end_line": 309
+        },
+        {
+          "path": "slint-experiment/ui/tile.slint",
+          "start_line": 1010,
+          "end_line": 1115
+        },
+        {
+          "path": "slint-experiment/ui/tile.slint",
+          "start_line": 574,
+          "end_line": 590
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
+          "start_line": 119,
+          "end_line": 149
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
+          "start_line": 156,
+          "end_line": 190
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
+          "start_line": 537,
+          "end_line": 595
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
+          "start_line": 596,
+          "end_line": 708
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_followup.rs",
+          "start_line": 390,
+          "end_line": 477
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_followup.rs",
+          "start_line": 478,
+          "end_line": 624
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/mlx_lifecycle.rs",
+          "start_line": 141,
+          "end_line": 170
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_ptt.rs",
+          "start_line": 58,
+          "end_line": 78
+        },
+        {
+          "path": "overlay-backend/src/runtime.rs",
+          "start_line": 1810,
+          "end_line": 1905
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_controller.rs",
+          "start_line": 201,
+          "end_line": 370
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_ptt.rs",
+          "start_line": 128,
+          "end_line": 150
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_ptt.rs",
+          "start_line": 254,
+          "end_line": 300
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/tile_window.rs",
+          "start_line": 64,
+          "end_line": 120
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 1919,
+          "end_line": 2027
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host_windows.rs",
+          "start_line": 3358,
+          "end_line": 3387
+        }
+      ],
+      "limits": [
+        "C01 model not actual Rust interleaving/native wrong-slot proof",
+        "C03 receiver EOF requires producer precondition unverified",
+        "PTT/shared abort/queue cap separate; live keyboard/pin/copy/geometry not accepted"
+      ],
+      "native_verification": "not_run",
+      "independent_acceptance": false
     }
   ],
   "complete_project_coverage": false

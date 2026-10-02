@@ -1,5 +1,13 @@
 # Reconciliation verification evidence
 
+## Round 17 — overlay/tile state and stream terminal preconditions (covering SHA pending)
+
+- [Contract](../features/overlay-tile-state-and-stream-terminals.md) adds26 ranges: actual Slint busy/reset/action bindings, bar pulse, shared-generation check/slot/closure, PTT fixed sink, close/registry/cap and backend EOF. Registry24/661; no Slint UI/native/Rust/provider execution.
+- Six new fixtures target170 research total: source order plus **pure** model old gate-pass→new generation/slot→old handler wrong-slot candidate. Not actual Rust scheduling/race repro; original tile-C01 remains hypothesis. C03 EOF does not synthesize terminal, producer prerequisite still open; explicit terminal/install reset/missing history/MLX clear counterevidence, PTT error no busy clear documented. Original39/75/5 unchanged.
+- Navigation155 some refs/143 none, union37,881 line pointers **not audited semantics**. Default properties/comments not evidence every callback wired/live/UI accepted.
+- Exact archive/suite/ledger regeneration pending; independent/native/full objective open.
+
+
 ## Round 16 — Tera graph/text/cancellation source semantics (exact covering SHA tested)
 
 - [Contract](../features/tera-graph-text-and-cancellation.md) adds 31 ranges: runtime marker/size vs installer digest, graph output name/shape/window, normalizer/tag/indexer/NPY, duration/work bounds, generation/controller and Rust mock/helper test intent. Registry23/635, no model/ORT/Rust/audio/licence/native execution.

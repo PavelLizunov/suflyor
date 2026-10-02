@@ -8,7 +8,7 @@
     },
     "features": {
       "path": "docs/agent-map/features/contracts.json",
-      "sha256": "0b401b45dc922cdf5b817e5c9dcc191633b96e2caeaf1a044b04dd7574720341"
+      "sha256": "e23f9802305ab04f7ab8b1e8d15c82e078bde97a559168b534daffcb868c7870"
     },
     "candidates": {
       "path": "docs/agent-map/reconciliation/candidates.json",
@@ -3735,6 +3735,7 @@
       ],
       "reference_owners": [
         "ai-and-vision-routing",
+        "overlay-tile-state-and-stream-terminals",
         "summary-conspect-and-coaching",
         "wave3_worker1_bridge-C08"
       ],
@@ -5946,13 +5947,13 @@
       "source_sha256": "d57f8c879a8e105b04c2ed914ccec899fcb95daccba0bbe0f6793c8d95b783d2",
       "source_lines": 240,
       "syntax_nodes": 23,
-      "feature_reference_line_union": 55,
+      "feature_reference_line_union": 85,
       "candidate_reference_line_union": 23,
-      "all_reference_line_union": 78,
+      "all_reference_line_union": 85,
       "reference_intervals": [
         [
           86,
-          163
+          170
         ]
       ],
       "unreferenced_intervals": [
@@ -5961,12 +5962,13 @@
           85
         ],
         [
-          164,
+          171,
           240
         ]
       ],
       "reference_owners": [
         "managed-local-ai",
+        "overlay-tile-state-and-stream-terminals",
         "wave3_worker3_tile-C03"
       ],
       "reference_state": "some_precise_navigation",
@@ -6653,13 +6655,17 @@
       "source_sha256": "7a1fac60bd910ccb4d13c8e9296cdcf9836e8832f04dfee3f8160d95407792fa",
       "source_lines": 1013,
       "syntax_nodes": 109,
-      "feature_reference_line_union": 305,
+      "feature_reference_line_union": 569,
       "candidate_reference_line_union": 230,
-      "all_reference_line_union": 392,
+      "all_reference_line_union": 647,
       "reference_intervals": [
         [
           119,
-          188
+          190
+        ],
+        [
+          201,
+          370
         ],
         [
           476,
@@ -6667,14 +6673,10 @@
         ],
         [
           537,
-          699
-        ],
-        [
-          772,
           825
         ],
         [
-          858,
+          847,
           921
         ],
         [
@@ -6688,7 +6690,11 @@
           118
         ],
         [
-          189,
+          191,
+          200
+        ],
+        [
+          371,
           475
         ],
         [
@@ -6696,12 +6702,8 @@
           536
         ],
         [
-          700,
-          771
-        ],
-        [
           826,
-          857
+          846
         ],
         [
           922,
@@ -6714,6 +6716,7 @@
       ],
       "reference_owners": [
         "ai-and-vision-routing",
+        "overlay-tile-state-and-stream-terminals",
         "session-lifecycle-and-storage",
         "startup-wizard-health-and-diagnostics",
         "wave3_worker1_bridge-C01",
@@ -6802,34 +6805,27 @@
       "source_sha256": "4f2d12b820678d8a86223c4012aa91d7fe03a788b10667fe46439cca7c52a63e",
       "source_lines": 988,
       "syntax_nodes": 57,
-      "feature_reference_line_union": 13,
+      "feature_reference_line_union": 235,
       "candidate_reference_line_union": 54,
-      "all_reference_line_union": 67,
+      "all_reference_line_union": 235,
       "reference_intervals": [
         [
-          410,
-          463
-        ],
-        [
-          542,
-          554
+          390,
+          624
         ]
       ],
       "unreferenced_intervals": [
         [
           1,
-          409
+          389
         ],
         [
-          464,
-          541
-        ],
-        [
-          555,
+          625,
           988
         ]
       ],
       "reference_owners": [
+        "overlay-tile-state-and-stream-terminals",
         "personal-memory",
         "wave3_worker3_tile-C03"
       ],
@@ -6843,13 +6839,21 @@
       "source_sha256": "012709580bb6190c40511f852ede4f2517885fd38288566bed9e290d868fe4b2",
       "source_lines": 510,
       "syntax_nodes": 18,
-      "feature_reference_line_union": 14,
+      "feature_reference_line_union": 105,
       "candidate_reference_line_union": 21,
-      "all_reference_line_union": 35,
+      "all_reference_line_union": 109,
       "reference_intervals": [
         [
           54,
-          74
+          78
+        ],
+        [
+          128,
+          150
+        ],
+        [
+          254,
+          300
         ],
         [
           379,
@@ -6862,7 +6866,15 @@
           53
         ],
         [
-          75,
+          79,
+          127
+        ],
+        [
+          151,
+          253
+        ],
+        [
+          301,
           378
         ],
         [
@@ -6871,6 +6883,7 @@
         ]
       ],
       "reference_owners": [
+        "overlay-tile-state-and-stream-terminals",
         "personal-memory",
         "wave3_worker3_tile-C03"
       ],
@@ -6920,10 +6933,14 @@
       "source_sha256": "c254a31f89c412d96305225c3ca5250ec4e9d0fabbccb30906a694f88098d17a",
       "source_lines": 450,
       "syntax_nodes": 22,
-      "feature_reference_line_union": 153,
+      "feature_reference_line_union": 210,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 153,
+      "all_reference_line_union": 210,
       "reference_intervals": [
+        [
+          64,
+          120
+        ],
         [
           205,
           220
@@ -6940,6 +6957,10 @@
       "unreferenced_intervals": [
         [
           1,
+          63
+        ],
+        [
+          121,
           204
         ],
         [
@@ -6953,6 +6974,7 @@
       ],
       "reference_owners": [
         "hotkeys-windows-and-capture",
+        "overlay-tile-state-and-stream-terminals",
         "ui-setting-consumers-and-save-boundaries"
       ],
       "reference_state": "some_precise_navigation",
@@ -7274,9 +7296,9 @@
       "source_sha256": "fba170e1a3fa4fc797f4b4550f99c91e8a4c390683657d8919267280c4521341",
       "source_lines": 4962,
       "syntax_nodes": 243,
-      "feature_reference_line_union": 989,
+      "feature_reference_line_union": 1128,
       "candidate_reference_line_union": 62,
-      "all_reference_line_union": 989,
+      "all_reference_line_union": 1128,
       "reference_intervals": [
         [
           474,
@@ -7311,6 +7333,10 @@
           1854
         ],
         [
+          1919,
+          2027
+        ],
+        [
           2094,
           2166
         ],
@@ -7321,6 +7347,10 @@
         [
           2519,
           2819
+        ],
+        [
+          3358,
+          3387
         ],
         [
           3580,
@@ -7386,6 +7416,10 @@
         ],
         [
           1855,
+          1918
+        ],
+        [
+          2028,
           2093
         ],
         [
@@ -7398,6 +7432,10 @@
         ],
         [
           2820,
+          3357
+        ],
+        [
+          3388,
           3579
         ],
         [
@@ -7435,6 +7473,7 @@
         "hotkeys-windows-and-capture",
         "live-transcription",
         "native-macos-ffi-and-ownership",
+        "overlay-tile-state-and-stream-terminals",
         "personal-memory",
         "read-aloud-and-ocr",
         "session-lifecycle-and-storage",
@@ -9371,18 +9410,53 @@
       "source_sha256": "e8a463f37a58c11f03e67dfa527390e41b5b1a8c04cd30a3462febc5b5bc92a7",
       "source_lines": 1504,
       "syntax_nodes": 200,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 259,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 259,
+      "reference_intervals": [
+        [
+          506,
+          639
+        ],
+        [
+          641,
+          689
+        ],
+        [
+          847,
+          873
+        ],
+        [
+          932,
+          980
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          505
+        ],
+        [
+          640,
+          640
+        ],
+        [
+          690,
+          846
+        ],
+        [
+          874,
+          931
+        ],
+        [
+          981,
           1504
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "overlay-tile-state-and-stream-terminals"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -9625,18 +9699,61 @@
       "source_sha256": "f864d7c8aa28c8c8ab2656ba4f4a8b915de200d00281fed2bb29fd17339bf9ab",
       "source_lines": 1116,
       "syntax_nodes": 126,
-      "feature_reference_line_union": 0,
+      "feature_reference_line_union": 215,
       "candidate_reference_line_union": 0,
-      "all_reference_line_union": 0,
-      "reference_intervals": [],
+      "all_reference_line_union": 215,
+      "reference_intervals": [
+        [
+          167,
+          192
+        ],
+        [
+          226,
+          244
+        ],
+        [
+          263,
+          309
+        ],
+        [
+          574,
+          590
+        ],
+        [
+          1010,
+          1115
+        ]
+      ],
       "unreferenced_intervals": [
         [
           1,
+          166
+        ],
+        [
+          193,
+          225
+        ],
+        [
+          245,
+          262
+        ],
+        [
+          310,
+          573
+        ],
+        [
+          591,
+          1009
+        ],
+        [
+          1116,
           1116
         ]
       ],
-      "reference_owners": [],
-      "reference_state": "no_precise_navigation",
+      "reference_owners": [
+        "overlay-tile-state-and-stream-terminals"
+      ],
+      "reference_state": "some_precise_navigation",
       "semantically_reviewed_lines": "not_established",
       "semantic_acceptance": false
     },
@@ -11038,10 +11155,10 @@
     "suflyor-teratts/NOTICE.md"
   ],
   "summary": {
-    "files_with_some_precise_navigation": 153,
-    "files_without_precise_navigation": 145,
+    "files_with_some_precise_navigation": 155,
+    "files_without_precise_navigation": 143,
     "selected_source_lines": 120858,
-    "precise_reference_line_union": 36707,
+    "precise_reference_line_union": 37881,
     "semantically_reviewed_line_count": "not_established"
   },
   "limits": [

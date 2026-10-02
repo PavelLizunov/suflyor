@@ -91,6 +91,12 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
 - User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.
 
+## Continuation round 17: overlay/tile UI state and original stream hypotheses
+
+- Intended result: precise overlay/tile Slint busy/reset/action bindings to host event/shared slot/PTT/close callers. Bound original tile-C01/C03 claims by source counterevidence and one explicit pure interleaving model (NOT Rust concurrent execution/native UI). Do not rely on comments claiming every callback wired or all generation races closed.
+- No .slint/Rust production changes/live Slint screenshots/hotkeys/network/AI/Rust build; no UI acceptance. Inspect gen-check→inner emit→slot lock, late already-scheduled closures, EOF no-terminal behavior, PTT error busy vs MLX clear counterexample, tile abort registry scope and eviction. Explicit original status remains hypothesis.
+- Add proportional fixtures for source order/strings/scopes/action state reset and bounded scheduling-model counterexample; preserve model-versus-actual-Rust semantics. Exact source refs/hashes/new ledger and covering-SHA portable suite. Translate/visual/functional/native/race reachability/independent acceptance still open.
+
 ## Continuation round 16: Tera graph/text/tensor/cancel source semantics
 
 - Intended result: pinned Tera graph load/named-output/shape/window pipeline, text/tag/indexer/NPY and generation caller chain with explicit model/schema/licence/duration/allocation/cancel boundaries. Source-only, no model download/load/ORT inference/Rust/SDK/native/device/benchmark.
