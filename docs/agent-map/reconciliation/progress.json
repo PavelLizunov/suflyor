@@ -390,5 +390,5 @@
     "wave2_worker4_local_ai-C04",
     "wave2_worker4_local_ai-C05"
   ],
-  "local_ai_netstat_model_sha_portable_verification": "pending exact covering commit"
+  "local_ai_netstat_model_sha_portable_verification": "PASS exact 73793bb94fffadd8d51c2f3a6feab67194156bd7; six source fixtures; C04 C05 remain hypotheses"
 }
