@@ -1,5 +1,11 @@
 # Reconciliation verification evidence
 
+## Round 21 — original persistence C05/C06 journal identity (covering SHA pending)
+
+- [Evidence](hypothesis-journal-write-identity.md)/[receipt](hypothesis-journal-write-identity.json): six temporary JSONL/source fixtures target 194 research tests. Writer continues after an error and latches the first one; session open is append, not exclusive; suffix is one-second stamp plus low 24 bits.
+- A torn JSON value consumes the next physical line, so later valid JSON survives but the tear is not two independent skips. Dual append handles preserve both dummy sessions without stable one-line interleaving. No owner journal, Rust writer, ENOSPC, or same-millisecond process race.
+- Original C05/C06 remain hypotheses; 39/75/5 and feature registry 26/709 unchanged. Exact archive repeat pending.
+
 ## Round 20 — original persistence C02/C18 actual SQLite fixtures (exact covering SHA tested)
 
 - [Evidence](hypothesis-sqlite-contention.md)/[engine/migration receipt](hypothesis-sqlite-contention.json): stdlib SQLite3.45.1, shipped six migrations, private dummy temp DBs. Six new engine/source fixtures target188 research total; no owner catalog/native rusqlite/UI/indexer/DB repair/SDK/Rust action.
