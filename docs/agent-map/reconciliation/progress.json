@@ -462,5 +462,5 @@
     "wave3_worker1_bridge-C07",
     "wave3_worker4_settings-C09"
   ],
-  "ui_blocking_error_leak_portable_verification": "pending exact covering commit"
+  "ui_blocking_error_leak_portable_verification": "PASS exact 08750f6aef8f0e8568b893356424bf5364ea10d9; six source fixtures; C07 C09 remain hypotheses"
 }
