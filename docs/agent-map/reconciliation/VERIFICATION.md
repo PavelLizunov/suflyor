@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 62 — original config C03/C04 diagnostics readiness and backup file permissions (exact covering SHA tested)
+
+- [Evidence](hypothesis-config-diagnostics-backup.md)/[receipt](hypothesis-config-diagnostics-backup.json): six source fixtures target 441 research tests. `readiness` embeds unmasked `ep.base_url`, `stt_gigaam_dir`, and `stt_whisper_url`; `preview_server_settings` copies raw URLs and paths directly into preview structures.
+- `save_to_path` writes `.json.bak` without Unix `mode(0o600)`, and `preserve_corrupt_config` renames broken configs to `.broken-<ts>` without secret redaction or retention bounds. No live configuration was modified. C03/C04 remain confirmed mechanisms; exact archive verified.
+
 ## Round 61 — original config C01/C02 data root orphaning and mask_host (exact covering SHA tested)
 
 - Exact **`9ec763522c49f417f50043a788f03035b684aea4`** archive passed **435 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable config credentials/mask_host receipt](portable-recovery-config-credentials-mask-host.json). C01/C02 remain confirmed mechanisms; no live user data mutation or external logging.
