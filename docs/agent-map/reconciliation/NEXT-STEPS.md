@@ -26,7 +26,7 @@
 - Round-20 persistence C02/C18: six real stdlib SQLite temp fixtures/source-order checks, suite188, WAL snapshot/BUSY517-vs5/automatic1000pages/checkpoint-reader counterevidence. [Limits](hypothesis-sqlite-contention.md): no bundled rusqlite/UI/native/disk/load proof, original hypotheses unchanged; exact `e9612309` archive passed 188+3 zero skips and byte-identical ledger ([receipt](portable-recovery-sqlite-contention.json)).
 - Round-21 journal C05/C06: six temporary JSONL/source fixtures, suite 194; append identity, first-error continuation, torn-line consumption. [Limits](hypothesis-journal-write-identity.md): no Rust writer/ENOSPC/process race; exact `01f91c94` archive passed 194+3 ([receipt](portable-recovery-journal-identity.json)).
 - Round-22 projection C08/C09: six temporary SQLite/source fixtures, suite 200; crashed retry and post-index backfill bounded. [Limits](hypothesis-journal-projection.md): no Rust indexer/live race; exact `1514c984` archive passed 200+3 ([receipt](portable-recovery-journal-projection.json)).
-- Round-23 side tables C10/C12: six temporary schema/source fixtures, suite 206; rebuild retention versus hard-delete and invalid-JSON error bounded. [Limits](hypothesis-catalog-side-tables.md): no rusqlite/owner catalog; exact-SHA repeat pending.
+- Round-23 side tables C10/C12: six temporary schema/source fixtures, suite 206; rebuild retention versus hard-delete and invalid-JSON error bounded. [Limits](hypothesis-catalog-side-tables.md): no rusqlite/owner catalog; exact `714d4f18` archive passed 206+3 ([receipt](portable-recovery-catalog-side-tables.json)).
 - WIP GitHub checkpoint on the dedicated task branch; task-owned files only.
 
 ## Not complete

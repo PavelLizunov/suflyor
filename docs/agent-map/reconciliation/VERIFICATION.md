@@ -1,9 +1,9 @@
 # Reconciliation verification evidence
 
-## Round 23 — confirmed persistence C10/C12 side tables (covering SHA pending)
+## Round 23 — confirmed persistence C10/C12 side tables (exact covering SHA tested)
 
 - [Evidence](hypothesis-catalog-side-tables.md)/[receipt](hypothesis-catalog-side-tables.json): six temporary schema/source fixtures target 206 research tests. Projection replacement cascades utterances but retains diarization and memory; hard delete removes diarization only. Index match handles four journal kinds, leaving other journal variants unprojected.
-- `get_diarization` documents `None` for unreadable JSON, while its implementation propagates a parse error. No rusqlite `Store`, owner catalog, or UI was run. Existing confirmed statuses and 39/75/5 remain unchanged; exact archive repeat pending.
+- Exact **`714d4f18235ba4e2f43b22e3abb4071b81691793`** archive passed **206 research +3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable side-table receipt](portable-recovery-catalog-side-tables.json). Existing confirmed statuses remain unchanged; no rusqlite/owner-catalog/independent acceptance.
 
 ## Round 22 — original persistence C08/C09 projection (exact covering SHA tested)
 
