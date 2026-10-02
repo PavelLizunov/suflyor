@@ -2955,6 +2955,142 @@
       ],
       "native_verification": "not_run",
       "independent_acceptance": false
+    },
+    {
+      "id": "credentials-and-managed-process-ownership",
+      "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+      "contract": "docs/agent-map/features/credentials-and-managed-process-ownership.md",
+      "review_state": "selected storage/caller/child lifetime source plus backend SDK name census, no native execution",
+      "source_references": [
+        {
+          "path": "overlay-backend/src/credentials.rs",
+          "start_line": 11,
+          "end_line": 25
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_ai.rs",
+          "start_line": 567,
+          "end_line": 616
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 769,
+          "end_line": 781
+        },
+        {
+          "path": "overlay-backend/src/config.rs",
+          "start_line": 1145,
+          "end_line": 1151
+        },
+        {
+          "path": "slint-experiment/src/bin/overlay_host/settings_controller.rs",
+          "start_line": 1633,
+          "end_line": 1646
+        },
+        {
+          "path": "overlay-backend/src/credentials.rs",
+          "start_line": 32,
+          "end_line": 63
+        },
+        {
+          "path": "overlay-backend/src/credentials.rs",
+          "start_line": 66,
+          "end_line": 99
+        },
+        {
+          "path": "overlay-backend/src/credentials.rs",
+          "start_line": 101,
+          "end_line": 113
+        },
+        {
+          "path": "overlay-backend/src/credentials.rs",
+          "start_line": 115,
+          "end_line": 196
+        },
+        {
+          "path": "overlay-backend/src/credentials.rs",
+          "start_line": 198,
+          "end_line": 225
+        },
+        {
+          "path": "overlay-backend/src/credentials.rs",
+          "start_line": 238,
+          "end_line": 281
+        },
+        {
+          "path": "overlay-backend/src/download.rs",
+          "start_line": 120,
+          "end_line": 130
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 3062,
+          "end_line": 3092
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 3094,
+          "end_line": 3146
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 1063,
+          "end_line": 1101
+        },
+        {
+          "path": "overlay-backend/src/local_ai.rs",
+          "start_line": 1172,
+          "end_line": 1178
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 1581,
+          "end_line": 1603
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 839,
+          "end_line": 940
+        },
+        {
+          "path": "overlay-backend/src/tts.rs",
+          "start_line": 946,
+          "end_line": 965
+        },
+        {
+          "path": "suflyor-tts/src/main.rs",
+          "start_line": 136,
+          "end_line": 150
+        },
+        {
+          "path": "suflyor-teratts/src/main.rs",
+          "start_line": 648,
+          "end_line": 663
+        },
+        {
+          "path": "suflyor-teratts/src/main.rs",
+          "start_line": 499,
+          "end_line": 516
+        },
+        {
+          "path": "overlay-backend/src/nemotron_diar.rs",
+          "start_line": 19,
+          "end_line": 26
+        },
+        {
+          "path": "overlay-backend/src/nemotron_diar.rs",
+          "start_line": 44,
+          "end_line": 107
+        }
+      ],
+      "limits": [
+        "Unix plaintext not encryption; concurrency corrupt read/fsync/symlink faults untested",
+        "JobObject attach best effort no native parent-death proof",
+        "TTS EOF counterevidence not universal child reaping/kill guarantee",
+        "C03 C10 original hypotheses unchanged"
+      ],
+      "native_verification": "not_run",
+      "independent_acceptance": false
     }
   ],
   "complete_project_coverage": false

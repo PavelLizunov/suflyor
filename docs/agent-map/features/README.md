@@ -1,6 +1,6 @@
 # Source-linked feature contracts
 
-These contracts map selected production chains at frozen research baseline `a10c356a`. They are manually inspected navigation/dataflow evidence, not compiler-derived call graphs, every-line/symbol coverage or native acceptance. Twenty bounded contracts now cover principal runtime and platform integration chains; structured index records exact reference counts. Counts are navigation scope, not completeness proof.
+These contracts map selected production chains at frozen research baseline `a10c356a`. They are manually inspected navigation/dataflow evidence, not compiler-derived call graphs, every-line/symbol coverage or native acceptance. Twenty-one bounded contracts now cover principal runtime and platform integration chains; structured index records exact reference counts. Counts are navigation scope, not completeness proof.
 
 | Feature | Contract | Key boundary |
 | --- | --- | --- |
@@ -26,6 +26,8 @@ These contracts map selected production chains at frozen research baseline `a10c
 | Selected UI setting consumers | [Language/scheme/opacity/monitor save/runtime chains](ui-setting-consumers-and-save-boundaries.md) | Name census unresolved; failure branches differ and memory/global/disk can diverge |
 
 | Windows SDK/ownership | [GDI/WDA/window/tray/mutex/input cleanup chains](windows-capture-tray-and-sdk-ownership.md) | Name census not SDK graph; partial image/unchecked allocation/panic/restore/thread faults unaccepted |
+
+| Credentials/managed processes | [Direct provider storage/Unix plaintext/job/kill/wait/EOF boundaries](credentials-and-managed-process-ownership.md) | Protected keys not Config; attach best effort; EOF/explicit ChildGuard/job cleanup differ |
 
 [Structured index](contracts.json) records IDs, baseline, source references and limits. [Original Grok register](../reconciliation/candidates.json) preserves counterevidence; [verification](../reconciliation/VERIFICATION.md) distinguishes executed local checks from unexecuted native behavior.
 

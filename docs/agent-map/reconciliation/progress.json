@@ -99,11 +99,11 @@
     "wave4_worker3_cicd-C10",
     "wave4_worker3_cicd-C12"
   ],
-  "feature_contracts_source_inspected": 20,
-  "continuation_round": 12,
+  "feature_contracts_source_inspected": 21,
+  "continuation_round": 13,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 138,
-  "source_feature_references": 553,
+  "total_research_tests_passed": 144,
+  "source_feature_references": 577,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
   "portable_recovery_tested_commit": "48dbd31238b0c7c4ca123ffbc8e6e30c4f1091f0",
@@ -198,5 +198,17 @@
     "calls": 121,
     "resolved_symbol": false
   },
-  "windows_sdk_portable_verification": "PASS exact 48dbd31238b0c7c4ca123ffbc8e6e30c4f1091f0; four files/180 imports/121 call-name candidates byte-identical"
+  "windows_sdk_portable_verification": "PASS exact 48dbd31238b0c7c4ca123ffbc8e6e30c4f1091f0; four files/180 imports/121 call-name candidates byte-identical",
+  "credentials_process_source_fixtures_passed": 6,
+  "backend_sdk_name_candidates": {
+    "frozen_files": 5,
+    "imports": 28,
+    "calls": 17,
+    "resolved_symbol": false
+  },
+  "credentials_process_portable_verification": "pending exact covering commit",
+  "credentials_process_hypothesis_evidence_ids": [
+    "wave2_worker3_tts-C03",
+    "wave2_worker4_local_ai-C10"
+  ]
 }

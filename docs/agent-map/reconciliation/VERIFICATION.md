@@ -1,5 +1,13 @@
 # Reconciliation verification evidence
 
+## Round 13 — credentials/backend child ownership (covering SHA pending)
+
+- Five frozen backend SDK sources yield 28 imports/17 name-call candidates, no symbol/cfg/type resolution; host inventory unchanged. [Backend census](../native/backend-sdk-name-edges.md)/[storage and child contract](../features/credentials-and-managed-process-ownership.md); registry 21/577 ranges.
+- Six new source assertions; research total 144. Direct keys via credential slot/callback rather than Config; Windows temporary write blob zeroed/CredFree after UTF8 Result, Unix plaintext mode0700/0600/temp-write+flush/no sync_all/rename. No live secrets/read/write tests. Storage concurrency/durability/API errors remain unaccepted.
+- JobObject attach exists but unit-return/best-effort, zero failure cached; limit failure handle not explicitly closed. TTS broken-pipe drops Child without explicit wait/kill; Piper+Tera EOF Shutdown counterevidence, Nemotron ChildGuard kill/wait. Original TTS-C03/local_ai-C10 source hypotheses unchanged, no forced-parent-exit/native process repro.
+- Local/exact-SHA suite/regeneration pending; production/global/credential/process/model changes not performed, original counts 39/75/5 retained.
+
+
 ## Round 12 — selected Windows adapter ownership/SDK candidates (exact covering SHA tested)
 
 - Four frozen adapter files yield 180 SDK import records/121 direct/qualified call syntax candidates, every symbol unresolved; not all SDK/backend/cfg/indirect graph. [Census](../native/windows-sdk-name-edges.md)/[ownership contract](../features/windows-capture-tray-and-sdk-ownership.md); 20 contracts/553 source ranges.

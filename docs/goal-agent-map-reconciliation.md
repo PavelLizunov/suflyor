@@ -91,6 +91,12 @@ The owner approved correction of the partial agent-map, frozen source evidence, 
 - 62 research tests +3 existing mocked Hermes tests passed; source span/hash validation passed. No Rust SDK/production changes. Wheels/site stay ignored, requirements/provenance/index/scripts committed.
 - User requested short new-chat continuation prompt and commit of all task-owned completed work; CONTINUE-PROMPT.md is the portable handoff. Goal incomplete; do not declare completion.
 
+## Continuation round 13: backend credential/process storage and lifetime boundaries
+
+- Intended result: direct-provider credential caller/storage contract and long-lived child JobObject/explicit kill/wait/EOF ownership, with bounded original TTS-C03/local_ai-C10 counterevidence. Preserve original statuses; no Credential Manager/file secrets/native spawn/model/termination test, no SDK/compiler/global/production changes.
+- Reuse selected SDK-name parser for separate five-file backend inventory (credentials/local_ai/tts/nemotron_diar/download), not overwriting host census. Calls/type/cfg/alias remain unresolved; parse all branches without platform/native acceptance.
+- Verification: caller resolver/save/reset separation; Windows CredFree/blob clearing/error paths; Unix mode/temp/rename/read fallback and non-encrypted plaintext (no live secret read/write); JobObject failure best-effort/no-window/explicit scoped ChildGuard and different TTS EOF paths via source fixtures. No synthetic Python storage clone claimed as Rust implementation test. Exact archive regeneration/research suite/hash/reference checks; credentials multithread/crash/symlink/nested-job/forced-parent-exit scenarios unexecuted.
+
 ## Continuation round 12: Windows adapter ownership and SDK name-call candidates
 
 - Intended result: selected Windows screen/lifecycle/tray/win32 SDK import/call navigation plus manual capture/WDA/window/tray ownership chain, not whole Windows product/SDK resolved graph. Preserve qualified imports/call/container source ranges; mark name matching/cfg/alias ambiguity rather than compiler proof.

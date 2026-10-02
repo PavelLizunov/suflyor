@@ -55,14 +55,19 @@ def extract(data,path,parser=None):
     return imports,calls
 
 
-def build(root):
+BACKEND_FILES = ('overlay-backend/src/credentials.rs', 'overlay-backend/src/local_ai.rs',
+                 'overlay-backend/src/tts.rs', 'overlay-backend/src/nemotron_diar.rs',
+                 'overlay-backend/src/download.rs')
+
+
+def build(root, selection='host'):
     snap=json.loads((root/'docs/agent-map/reconciliation/snapshot.json').read_text());frozen={r['path']:r['sha256'] for r in snap['source_files']}
     parser=syntax_index.rust_parser();inputs={};imports=[];calls=[]
-    for path in FILES:
+    for path in BACKEND_FILES if selection == 'backend' else FILES:
         data=syntax_index.safe_source(root,path).read_bytes();h=hashlib.sha256(data).hexdigest()
         if h!=frozen[path]:raise ValueError('source drift: '+path)
         inputs[path]={'sha256':h,'bytes':len(data)};a,b=extract(data,path,parser);imports.extend(a);calls.extend(b)
-    return {'schema_version':1,'source_commit':snap['source_commit'],'inputs':inputs,'imports':imports,'calls':calls,'semantic_acceptance':False,'complete_project_coverage':False,'limits':['selected four adapter files only, not all Windows or backend SDK graph','file-level name candidates, import lexical shadowing/cfg/module scope not resolved','type/constant constructors count as call syntax too','macro token trees not expanded, callbacks/function pointers/aliases/cfg(test)/POSIX stubs not evaluated']}
+    return {'schema_version':1,'source_commit':snap['source_commit'],'inputs':inputs,'imports':imports,'calls':calls,'semantic_acceptance':False,'complete_project_coverage':False,'limits':['selected five credential/process backend files only, not full backend SDK graph' if selection == 'backend' else 'selected four adapter files only, not all Windows or backend SDK graph','file-level name candidates, import lexical shadowing/cfg/module scope not resolved','type/constant constructors count as call syntax too','macro token trees not expanded, callbacks/function pointers/aliases/cfg(test)/POSIX stubs not evaluated']}
 
 
 def validate(root,v):
@@ -81,14 +86,14 @@ def validate(root,v):
 
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--root',type=Path,default=Path(__file__).resolve().parents[3]);p.add_argument('--output',type=Path,required=True);p.add_argument('--worker',action='store_true');p.add_argument('--validate',action='store_true');args=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--root',type=Path,default=Path(__file__).resolve().parents[3]);p.add_argument('--output',type=Path,required=True);p.add_argument('--worker',action='store_true');p.add_argument('--validate',action='store_true');p.add_argument('--selection',choices=['host','backend'],default='host');args=p.parse_args()
     if args.validate:
         errors=validate(args.root.resolve(),json.loads(args.output.read_text()));print(json.dumps({'errors':errors,'resolved_symbol':False}));raise SystemExit(bool(errors))
     if not args.worker:
-        r=subprocess.run([sys.executable,'-B',str(Path(__file__).resolve()),'--worker','--root',str(args.root.resolve()),'--output',str(args.output.resolve())],text=True,capture_output=True,timeout=60)
+        r=subprocess.run([sys.executable,'-B',str(Path(__file__).resolve()),'--worker','--root',str(args.root.resolve()),'--output',str(args.output.resolve()),'--selection',args.selection],text=True,capture_output=True,timeout=60)
         if r.returncode:raise RuntimeError('SDK candidate worker failed: '+str(r.returncode)+' '+r.stderr[-2000:])
         print(r.stdout,end='');return
-    v=build(args.root.resolve());args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(v,ensure_ascii=False,indent=2)+'\n');print(json.dumps({'files':len(v['inputs']),'imports':len(v['imports']),'calls':len(v['calls']),'resolved_symbol':False}))
+    v=build(args.root.resolve(),args.selection);args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(v,ensure_ascii=False,indent=2)+'\n');print(json.dumps({'files':len(v['inputs']),'imports':len(v['imports']),'calls':len(v['calls']),'resolved_symbol':False}))
 
 
 if __name__=='__main__':main()
