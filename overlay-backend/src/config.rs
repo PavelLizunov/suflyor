@@ -968,7 +968,7 @@ impl Config {
             if ep.protocol == AiProtocol::CodexSubscription {
                 format!("{} · {}", provider, ep.model)
             } else {
-                format!("{} · {} · {}", provider, ep.base_url, ep.model)
+                format!("{} · {} · {}", provider, mask_host(&ep.base_url), ep.model)
             }
         } else {
             String::new()
@@ -987,7 +987,7 @@ impl Config {
             "whisper" => {
                 let ok = !self.stt_whisper_url.trim().is_empty();
                 let d = if ok {
-                    format!("whisper · {}", self.stt_whisper_url)
+                    format!("whisper · {}", mask_host(&self.stt_whisper_url))
                 } else {
                     String::new()
                 };
@@ -1550,8 +1550,28 @@ pub(crate) fn save_to_path(path: &std::path::Path, cfg: &Config) -> Result<()> {
             .and_then(|old| serde_json::to_vec_pretty(&secret_redacted(&old)).ok())
         {
             Some(redacted) => {
-                if let Err(e) = std::fs::write(&bak, redacted) {
-                    log::debug!("config .bak snapshot skipped ({e})");
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::OpenOptionsExt;
+                    let write_res = std::fs::OpenOptions::new()
+                        .write(true)
+                        .create(true)
+                        .truncate(true)
+                        .mode(0o600)
+                        .open(&bak)
+                        .and_then(|mut f| {
+                            use std::io::Write;
+                            f.write_all(&redacted)
+                        });
+                    if let Err(e) = write_res {
+                        log::debug!("config .bak snapshot skipped ({e})");
+                    }
+                }
+                #[cfg(not(unix))]
+                {
+                    if let Err(e) = std::fs::write(&bak, redacted) {
+                        log::debug!("config .bak snapshot skipped ({e})");
+                    }
                 }
             }
             None => log::debug!("config .bak snapshot skipped (unreadable/unparseable)"),
@@ -1808,9 +1828,15 @@ pub fn mask_host(url: &str) -> String {
     // delimited by the first '/', '?', or '#' character (or end of string).
     // Using rest.find(['/', '?', '#']) ensures query strings and fragments without
     // a leading slash do not leak into authority parsing or corrupt port detection.
-    let (authority, path) = match rest.find(['/', '?', '#']) {
+    let (authority, path_raw) = match rest.find(['/', '?', '#']) {
         Some(i) => (&rest[..i], &rest[i..]),
         None => (rest, ""),
+    };
+    // SECURITY: Strip query parameters and fragments so sensitive query keys (?api_key=...)
+    // and session fragments (#...) are never echoed in logs or diagnostics.
+    let path = match path_raw.find(['?', '#']) {
+        Some(q) => &path_raw[..q],
+        None => path_raw,
     };
     // SECURITY: strip embedded user credentials (userinfo) before host/port parsing.
     // If a URL contains userinfo (e.g., http://user:password@host/v1), authority.rfind(':')

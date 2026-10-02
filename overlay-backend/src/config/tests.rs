@@ -1646,13 +1646,13 @@ fn mask_host_strips_userinfo_and_redacts_credentials() {
 fn mask_host_handles_query_and_fragment_boundaries() {
     assert_eq!(
         mask_host("http://192.168.0.142:18902?token=secret123"),
-        "http://***:18902?token=secret123"
+        "http://***:18902"
     );
     assert_eq!(
         mask_host("http://user:secret@192.168.0.142:18902#section"),
-        "http://***:18902#section"
+        "http://***:18902"
     );
-    assert_eq!(mask_host("10.0.0.5:9000?query=1"), "***:9000?query=1");
+    assert_eq!(mask_host("10.0.0.5:9000?query=1"), "***:9000");
 }
 // ===== Deep lock (bar lock chip, managed-local only) =====
 

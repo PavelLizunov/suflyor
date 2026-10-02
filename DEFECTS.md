@@ -20,11 +20,11 @@
 
 | ID | Компонент / Файл | Описание проблемы | Статус | Связанный тест / PR |
 |---|---|---|:---:|---|
-| **DEF-06** | `slint-experiment/src/bin/overlay_host/diagnostics.rs:150` | Дефект двойного пробела после `Bearer `: токен не маскируется и утекает в лог экспорта. | **Открыт** | Реестр `wave4_worker1_privacy-C03` |
-| **DEF-07** | `slint-experiment/src/bin/overlay_host/diagnostics.rs:117` | `redact_urls` ищет только `http://` и `https://`, пропуская протоколы `ws://`, `ftp://` и `file://`. | **Открыт** | Реестр `wave4_worker1_privacy-C02` |
-| **DEF-08** | `overlay-backend/src/config.rs:1868` | `mask_host` маскирует узел, но сохраняет query-параметры (`?api_key=...`) и фрагменты URL без санитизации. | **Открыт** | Реестр `wave1_worker3_config-C02` |
-| **DEF-09** | `overlay-backend/src/config.rs:957` | Отчёт `readiness` и предпросмотр настроек включают немаскированные пути и URL серверов. | **Открыт** | Реестр `wave1_worker3_config-C03` |
-| **DEF-10** | `overlay-backend/src/config.rs:1580` | `save_to_path` пишет `.json.bak` без режима `mode(0o600)` на Unix, делая бэкап общедоступным. | **Открыт** | Реестр `wave1_worker3_config-C04` |
+| **DEF-06** | `slint-experiment/src/bin/overlay_host/diagnostics.rs:150` | Дефект двойного пробела после `Bearer `: токен не маскируется и утекает в лог экспорта. | **Исправлен** | `plans/fix-privacy-redaction-and-backups.md` |
+| **DEF-07** | `slint-experiment/src/bin/overlay_host/diagnostics.rs:117` | `redact_urls` ищет только `http://` и `https://`, пропуская протоколы `ws://`, `ftp://` и `file://`. | **Исправлен** | `plans/fix-privacy-redaction-and-backups.md` |
+| **DEF-08** | `overlay-backend/src/config.rs:1868` | `mask_host` маскирует узел, но сохраняет query-параметры (`?api_key=...`) и фрагменты URL без санитизации. | **Исправлен** | `plans/fix-privacy-redaction-and-backups.md` |
+| **DEF-09** | `overlay-backend/src/config.rs:957` | Отчёт `readiness` и предпросмотр настроек включают немаскированные пути и URL серверов. | **Исправлен** | `plans/fix-privacy-redaction-and-backups.md` |
+| **DEF-10** | `overlay-backend/src/config.rs:1580` | `save_to_path` пишет `.json.bak` без режима `mode(0o600)` на Unix, делая бэкап общедоступным. | **Исправлен** | `plans/fix-privacy-redaction-and-backups.md` |
 | **DEF-11** | `overlay-backend/src/config.rs:1390` | `preserve_corrupt_config` сохраняет файлы `json.broken-*` с секретами без маскирования и ротации. | **Открыт** | Реестр `wave1_worker3_config-C04` |
 | **DEF-12** | `overlay-backend/src/config.rs:1696` | `merge_server_settings` и импорт затирают локальный путь `stt_gigaam_dir` чужими путями из файла. | **Открыт** | Реестр `wave1_worker3_config-C08` |
 | **DEF-13** | `slint-experiment/src/bin/overlay_host/settings_controller.rs:700` | Полный импорт профиля замещает всю конфигурацию без фильтрации локальных путей текущего ПК. | **Открыт** | Реестр `wave3_worker4_settings-C08` |

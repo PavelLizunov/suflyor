@@ -119,10 +119,17 @@ pub(crate) fn redact_urls(s: &str) -> String {
     // (e.g. `HTTP://user:secret@host/v1`) from bypassing redaction.
     while let Some(pos) = {
         let hay = rest.to_ascii_lowercase();
-        [hay.find("http://"), hay.find("https://")]
-            .into_iter()
-            .flatten()
-            .min()
+        [
+            hay.find("http://"),
+            hay.find("https://"),
+            hay.find("ws://"),
+            hay.find("wss://"),
+            hay.find("ftp://"),
+            hay.find("file://"),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     } {
         out.push_str(&rest[..pos]);
         let tail = &rest[pos..];
@@ -144,6 +151,8 @@ pub(crate) fn redact_secrets(s: &str) -> String {
         if rest.starts_with("Bearer ") {
             out.push_str("Bearer <redacted>");
             rest = &rest[7..];
+            let non_space = rest.find(|c: char| !c.is_whitespace()).unwrap_or(rest.len());
+            rest = &rest[non_space..];
             let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
             rest = &rest[tok_len..];
         } else if rest.starts_with("gsk_") {
@@ -851,6 +860,14 @@ mod tests {
             redact_urls("STT: Https://admin:pass@bridge.tailnet.ts.net/v1 ok"),
             "STT: Https://***/v1 ok"
         );
+        assert_eq!(
+            redact_urls("stream ws://127.0.0.1:8080/events"),
+            "stream ws://***:8080/events"
+        );
+        assert_eq!(
+            redact_urls("secure wss://remote.server.org/feed"),
+            "secure wss://***/feed"
+        );
     }
 
     #[test]
@@ -891,6 +908,11 @@ mod tests {
         assert!(redacted.contains("gsk_<redacted>"));
         assert!(redacted.contains("sk-<redacted>"));
         assert!(redacted.contains("desk-1 task-2"));
+
+        let double_space = "Auth: Bearer  secret_double_space_token\n";
+        let double_redacted = redact_secrets(double_space);
+        assert!(!double_redacted.contains("secret_double_space_token"), "leaked double space bearer token: {double_redacted}");
+        assert!(double_redacted.contains("Bearer <redacted>"));
     }
 
     #[test]
