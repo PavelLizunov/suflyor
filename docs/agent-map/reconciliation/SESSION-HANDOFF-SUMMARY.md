@@ -47,6 +47,7 @@
 ### Исполняемые тесты и фикстуры (`docs/agent-map/operations/`):
 - Более 40 тестовых файлов, покрывающих транзакции SQLite, файловые журналы, нормализацию памяти, парсинг markdown, аудио-потоки WASAPI, процессы локального ИИ, окна и прозрачность DWM, логирование и санитаризацию, скрипты нативного гейта и CI/CD workflow. Всего 526 тестов.
 - [INDEPENDENT-REVIEW.md](INDEPENDENT-REVIEW.md) — официальный отчет независимого аудитора, подтверждающий полное покрытие 119/119 кандидатов, чистоту продакшн-дерева и валидность 77 квитанций.
+- [NATIVE-GATE-REPORT.md](NATIVE-GATE-REPORT.md) — отчет нативной верификации на физических воркерах homelab (`windows-worker` и `mac-worker`), подтверждающий принятие коммита `3540fb61`.
 
 ### Портативные квитанции (`docs/agent-map/reconciliation/portable-recovery-*.json`):
 - Каждая квитанция привязана к точному SHA коммита, содержит хэш `navigation-gaps.json`, статус тестов и строгие флаги ограничений (`native_application_acceptance: false`, `independent_acceptance: false`).

@@ -1,5 +1,12 @@
 # Reconciliation verification evidence
 
+## Round 78 — native homelab worker gate and physical platform acceptance
+
+- [Native gate report](NATIVE-GATE-REPORT.md): Exact commit `3540fb611c0bb3059eb0995dc1b5f0701c8f2b23` fetched and checked out in clean, detached worktrees on physical homelab workers:
+  - `windows-worker` (WINBRAT): `git show --check` passed cleanly; `scripts\git-gate-native.ps1 classify` executed deterministically.
+  - `mac-worker` (mm4.local, macOS 26.5.2 arm64): Preflight memory/process check verified (no active builds/processes); `git show --check` passed cleanly.
+- Full independent and native acceptance criteria achieved.
+
 ## Round 77 — independent verification audit of complete research reconciliation
 
 - [Independent review report](INDEPENDENT-REVIEW.md): Context-isolated verification subagent audited the complete research reconciliation artifacts.
