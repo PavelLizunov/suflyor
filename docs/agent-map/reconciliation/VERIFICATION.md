@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 34 — original persistence C13 diarization rename (covering SHA pending)
+
+- [Evidence](hypothesis-diarization-rename.md)/[receipt](hypothesis-diarization-rename.json): six temporary SQLite/source fixtures target 272 research tests. Two connections read the same empty names blob, add different speakers, and the later whole-blob replace drops the earlier name.
+- Source reads the row and then uses `INSERT OR REPLACE` without a transaction or `json_set`. Blank removal and missing-row behavior are separate deterministic boundaries. No Rust thread race or owner catalog was run. C13 remains a hypothesis; exact archive repeat pending.
+
 ## Round 33 — original memory C05/C08 grounding and load (exact covering SHA tested)
 
 - [Evidence](hypothesis-memory-grounding.md)/[receipt](hypothesis-memory-grounding.json): six pure string/source fixtures target 266 research tests. Ordered matching permits omitted intermediate words but rejects reversal. A 240-character clip drops the tail without semantic boundary detection.

@@ -37,6 +37,7 @@
 - Round-31 memory C04/C07: six pure string fixtures, suite 254; four-character roots and five-character stems bounded. [Limits](hypothesis-memory-matching.md): no Rust test or owner memory; exact `784641ee` archive passed 254+3 ([receipt](portable-recovery-memory-matching.json)).
 - Round-32 memory C01/C02: six pure string fixtures, suite 260; substring filter scope and post-first-line budget bounded. [Limits](hypothesis-memory-budget.md): no Rust test or owner memory; exact `d5de221f` archive passed 260+3 ([receipt](portable-recovery-memory-budget.json)).
 - Round-33 memory C05/C08: six pure fixtures, suite 266; ordered omission, clipping, and full-load boundaries bounded. [Limits](hypothesis-memory-grounding.md): no Rust test or owner memory; exact `d925f1b7` archive passed 266+3 ([receipt](portable-recovery-memory-grounding.json)).
+- Round-34 persistence C13: six temporary SQLite fixtures, suite 272; stale whole-blob speaker rename bounded. [Limits](hypothesis-diarization-rename.md): no Rust race or owner catalog; exact-SHA repeat pending.
 - WIP GitHub checkpoint on the dedicated task branch; task-owned files only.
 
 ## Not complete

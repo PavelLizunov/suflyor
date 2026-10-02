@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+  "original_register_sha256": "ee8e2e9ede99fc829465d4f3b63d7a1233f73d3c8106633d9018fa5d2c0ddfb3",
+  "original_candidates": [
+    {
+      "id": "wave1_worker1_persistence-C13",
+      "status_unchanged": "hypothesis",
+      "native_reproduction": false
+    }
+  ],
+  "source_references": [
+    {
+      "path": "overlay-backend/src/persistence/sqlite_store.rs",
+      "start_line": 309,
+      "end_line": 320,
+      "sha256": "a846917c7e77a12f3216ee309b0f4ea7a3711f37c2a87c78cb5508ac2313a5b5"
+    },
+    {
+      "path": "overlay-backend/src/persistence/sqlite_store.rs",
+      "start_line": 283,
+      "end_line": 307,
+      "sha256": "a846917c7e77a12f3216ee309b0f4ea7a3711f37c2a87c78cb5508ac2313a5b5"
+    }
+  ],
+  "fixtures_passed": 6,
+  "limits": [
+    "temporary sequential SQLite interleaving only",
+    "no Rust thread race or owner catalog"
+  ],
+  "native_application_acceptance": false,
+  "independent_acceptance": false,
+  "full_project_coverage": false
+}
