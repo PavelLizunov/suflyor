@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 53 — original window C07/C10 monitor selection and subclass unhook (exact covering SHA tested)
+
+- [Evidence](hypothesis-window-monitor-subclass.md)/[receipt](hypothesis-window-monitor-subclass.json): six source fixtures target 386 research tests. `pick_monitor` returns `None` if no monitor is marked primary; `TILE_MONITOR_PIN` sentinel `i64::MIN` collides when `left == i32::MIN` and `top == 0`.
+- Win32 cursor guard invokes `SetWindowSubclass` but never imports or calls `RemoveWindowSubclass`; `WindowRegistry` maintains handles without explicit destruction or unhook methods. No native display hardware was queried. C07/C10 remain hypotheses; exact archive verified.
+
 ## Round 52 — original window C05/C06 taskbar styling and bar centering (exact covering SHA tested)
 
 - Exact **`1e930d948a1cd7baf982ca88a90da4c10b6c4725`** archive passed **380 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable window geometry/taskbar receipt](portable-recovery-window-geometry-taskbar.json). C05/C06 remain hypotheses; no native display modifications or window creation.
