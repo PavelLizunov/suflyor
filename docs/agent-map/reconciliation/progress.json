@@ -456,5 +456,5 @@
     "wave3_worker4_settings-C02",
     "wave3_worker4_settings-C07"
   ],
-  "settings_reset_seeding_portable_verification": "pending exact covering commit"
+  "settings_reset_seeding_portable_verification": "PASS exact 93a65650b3856d432f4e3717692c5d10928cddde; six source fixtures; C02 C07 remain hypotheses"
 }
