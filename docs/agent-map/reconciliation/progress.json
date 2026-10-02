@@ -408,5 +408,5 @@
     "wave2_worker4_local_ai-C08",
     "wave2_worker4_local_ai-C09"
   ],
-  "local_ai_hardware_context_portable_verification": "pending exact covering commit"
+  "local_ai_hardware_context_portable_verification": "PASS exact 2d6d586c666c4906baa4a390e5de813d530f889e; six source fixtures; C08 C09 remain hypotheses"
 }

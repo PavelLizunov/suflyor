@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "tested_commit": "2d6d586c666c4906baa4a390e5de813d530f889e",
+  "method": "exact Git archive; source inspection of hardware profile selection, VRAM normalization, and context token calculation; no GPU querying or server execution",
+  "research_tests": 350,
+  "research_skips": 0,
+  "existing_mocked_hermes_tests": 3,
+  "source_feature_contracts": 26,
+  "source_feature_references": 709,
+  "new_local_ai_hardware_context_fixtures": 6,
+  "original_hypothesis_ids_unchanged": [
+    "wave2_worker4_local_ai-C08",
+    "wave2_worker4_local_ai-C09"
+  ],
+  "navigation_ledger": {
+    "selected_files": 298,
+    "some_precise_navigation": 162,
+    "no_precise_navigation": 136,
+    "source_lines": 120858,
+    "reference_line_union": 39935,
+    "semantically_reviewed_lines": "not_established",
+    "validation_errors": [],
+    "regenerated_byte_identical": true,
+    "bytes": 276288,
+    "sha256": "b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2"
+  },
+  "checkpoint_issues": [],
+  "result": "PASS bounded local AI hardware profile and context recovery; original hypotheses unchanged; full research incomplete",
+  "native_local_ai_acceptance": false,
+  "independent_acceptance": false,
+  "full_project_coverage": false
+}
