@@ -1,9 +1,9 @@
 # Reconciliation verification evidence
 
-## Round 28 — original CI C06/C07 installer boundaries (covering SHA pending)
+## Round 28 — original CI C06/C07 installer boundaries (exact covering SHA tested)
 
 - [Evidence](hypothesis-installer-boundaries.md)/[receipt](hypothesis-installer-boundaries.json): six source fixtures target 236 research tests. Installer is per-user, exposes a directory page, and has no signature, ACL, or overwrite policy. `$INSTDIR` is interpolated inside the stop command without a NSIS quote escape.
-- The helper compares exact executable paths. Uninstall confirmation precedes recursive removal of three profile/app-data directories. No makensis, installer, process stop, or deletion was run. C06/C07 remain hypotheses; exact archive repeat pending.
+- Exact **`bc08b3926e057d08b245cb83b15fb8daee9e7e4b`** archive passed **236 research +3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable installer receipt](portable-recovery-installer-boundaries.json). C06/C07 remain hypotheses; no makensis, process stop, or deletion.
 
 ## Round 27 — original CI C04/C05 classification boundaries (exact covering SHA tested)
 
