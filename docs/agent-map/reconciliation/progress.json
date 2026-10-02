@@ -516,5 +516,5 @@
     "wave2_worker1_audio-C03",
     "wave2_worker1_audio-C09"
   ],
-  "audio_event_loop_recovery_portable_verification": "pending exact covering commit"
+  "audio_event_loop_recovery_portable_verification": "PASS exact b5c0278cc5282e64288ad0a9a170479c12529fcd; six source fixtures; C03 C09 remain confirmed"
 }

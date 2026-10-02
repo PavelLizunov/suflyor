@@ -2,8 +2,7 @@
 
 ## Round 65 — original audio C03/C09 event loop wait and capture start recovery (exact covering SHA tested)
 
-- [Evidence](hypothesis-audio-event-loop-recovery.md)/[receipt](hypothesis-audio-event-loop-recovery.json): six source fixtures target 459 research tests. `wait_for_event` timeout logs heartbeat and continues without triggering device recovery; `capture_with_recovery` loops on errors and always returns `Ok(())`.
-- `start_capture` spawns threads and returns `Ok` immediately without waiting for hardware initialization or verifying initial frame flow. No hardware was disconnected. C03/C09 remain confirmed mechanisms; exact archive verified.
+- Exact **`b5c0278cc5282e64288ad0a9a170479c12529fcd`** archive passed **459 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable audio event loop/recovery receipt](portable-recovery-audio-event-loop-recovery.json). C03/C09 remain confirmed mechanisms; no live audio device disconnection or WASAPI polling.
 
 ## Round 64 — original audio C01/C07 resample remainder and format negotiation (exact covering SHA tested)
 
