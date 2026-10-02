@@ -102,7 +102,7 @@
   "feature_contracts_source_inspected": 26,
   "continuation_round": 59,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 424,
+  "total_research_tests_passed": 423,
   "source_feature_references": 709,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
@@ -480,5 +480,5 @@
     "wave2_worker2_stt-C03",
     "wave2_worker2_stt-C04"
   ],
-  "stt_diarization_runtime_portable_verification": "pending exact covering commit"
+  "stt_diarization_runtime_portable_verification": "PASS exact 833b725439a9ae97a4d0ca8df206d39b47abf82a; six source fixtures; C03 C04 remain hypotheses"
 }

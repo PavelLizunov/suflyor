@@ -2,8 +2,7 @@
 
 ## Round 59 — original STT C03/C04 runtime mutex and diarization coordination (exact covering SHA tested)
 
-- [Evidence](hypothesis-stt-diarization-runtime.md)/[receipt](hypothesis-stt-diarization-runtime.json): six source fixtures target 424 research tests. `GIGAAM_CACHE` is a process-global mutex loaded synchronously by `validate_gigaam_dir`; runtime load failure results in speech chunk drop without cloud fallback.
-- `run_sidecar` executes diarization using `Command::output()` blocking synchronously without timeout; WAV length is capped at 3 hours (`MAX_DIAR_SECS`) and speech windows at 30 seconds (`WINDOW_CAP_MS`). No ONNX runtime crashes were run. C03/C04 remain hypotheses; exact archive verified.
+- Exact **`833b725439a9ae97a4d0ca8df206d39b47abf82a`** archive passed **423 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable STT / diarization runtime receipt](portable-recovery-stt-diarization-runtime.json). C03/C04 remain hypotheses; no ONNX inference or sidecar process execution.
 
 ## Round 58 — original window C08/C09 DWM transparency and topmost persistence (exact covering SHA tested)
 
