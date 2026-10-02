@@ -591,5 +591,5 @@
   "grok_candidates_hypotheses_covered": 75,
   "grok_candidates_rejected_covered": 5,
   "all_119_candidates_covered_in_operations_tests": true,
-  "rejected_claims_portable_verification": "pending exact covering commit"
+  "rejected_claims_portable_verification": "PASS exact f24483b7c2b3fc1c3a807d6f7f072064fe11d395; six source fixtures; all 119 candidates covered"
 }
