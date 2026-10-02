@@ -492,5 +492,5 @@
     "wave1_worker3_config-C01",
     "wave1_worker3_config-C02"
   ],
-  "config_credentials_mask_host_portable_verification": "pending exact covering commit"
+  "config_credentials_mask_host_portable_verification": "PASS exact 9ec763522c49f417f50043a788f03035b684aea4; six source fixtures; C01 C02 remain confirmed"
 }

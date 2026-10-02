@@ -2,8 +2,7 @@
 
 ## Round 61 — original config C01/C02 data root orphaning and mask_host (exact covering SHA tested)
 
-- [Evidence](hypothesis-config-credentials-path-mask-host.md)/[receipt](hypothesis-config-credentials-path-mask-host.json): six source fixtures target 435 research tests. `credentials_path` creates the `suflyor/` brand directory, causing `data_root_in` to orphan an existing `overlay-mvp/` data directory.
-- `mask_host` masks the authority with `***` while preserving ports, path segments, and query/fragment parameters verbatim. No user credentials or network services were used. C01/C02 remain confirmed mechanisms; exact archive verified.
+- Exact **`9ec763522c49f417f50043a788f03035b684aea4`** archive passed **435 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable config credentials/mask_host receipt](portable-recovery-config-credentials-mask-host.json). C01/C02 remain confirmed mechanisms; no live user data mutation or external logging.
 
 ## Round 60 — original memory C03/C06 negation counting and recency fallback (exact covering SHA tested)
 
