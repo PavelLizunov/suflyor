@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 42 — original TTS C03/C04 process cleanup and protocol desynchronization (exact covering SHA tested)
+
+- [Evidence](hypothesis-tts-process-protocol.md)/[receipt](hypothesis-tts-process-protocol.json): six source fixtures target 320 research tests. Windows assigns sidecars to a JobObject, while POSIX lacks death signal / kill-on-drop handling; `Sidecar` has no explicit `Drop` implementation.
+- `PlaybackTracker` maps sidecar utterance IDs to host generations via FIFO queue, and only `invalid-base64` and `invalid-utf8` rejections pop from pending. No child crash loops or live sidecar processes were run. C03/C04 remain hypotheses; exact archive verified.
+
 ## Round 41 — original TTS C01/C02 stdio line buffer and pipe deadlock (exact covering SHA tested)
 
 - Exact **`0e7ceab15fe6633c7e70952045e4f3dfe77b0243`** archive passed **314 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable TTS stdio receipt](portable-recovery-tts-stdio-pipe.json). C01/C02 remain hypotheses; no sidecar launch or live audio.
