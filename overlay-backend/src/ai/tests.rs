@@ -84,8 +84,17 @@ async fn complete_exclusive_does_not_deadlock_on_semaphore() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let base_url = format!("http://{}", listener.local_addr().unwrap());
 
+    std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut request = [0_u8; 4_096];
+        let _ = std::io::Read::read(&mut stream, &mut request);
+        let resp = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 53\r\nConnection: close\r\n\r\n{\"choices\":[{\"message\":{\"content\":\"hello exclusive\"}}]}";
+        std::io::Write::write_all(&mut stream, resp).unwrap();
+        std::io::Write::flush(&mut stream).unwrap();
+    });
+
     let res = tokio::time::timeout(
-        std::time::Duration::from_millis(500),
+        std::time::Duration::from_secs(3),
         complete_exclusive(&base_url, "", "test-model", Vec::new(), 10),
     )
     .await;
@@ -94,6 +103,8 @@ async fn complete_exclusive_does_not_deadlock_on_semaphore() {
         res.is_ok(),
         "complete_exclusive deadlocked on AI_SEMAPHORE while holding exclusive permits"
     );
+    let output = res.unwrap().unwrap();
+    assert_eq!(output, "hello exclusive");
 }
 
 /// Structuring (`force = true`) must disable local thinking REGARDLESS of the
