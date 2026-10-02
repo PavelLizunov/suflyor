@@ -12,7 +12,7 @@
 | **DEF-02** | `overlay-backend/src/ai.rs:188` | Самоблокировка (self-deadlock) в `complete_exclusive`: повторный захват мьютекса вызывающим потоком. | **Исправлен** | `plans/fix-ai-self-deadlock.md` (`complete_exclusive_does_not_deadlock_on_semaphore`) |
 | **DEF-03** | `overlay-backend/src/credentials.rs:160` | На POSIX ошибка парсинга JSON сбрасывает файл в пустую карту, уничтожая остальные сохранённые ключи. | **Исправлен** | `plans/fix-credentials-posix.md` (`read_map` returns `Result`) |
 | **DEF-04** | `overlay-backend/src/credentials.rs:140` | `credentials_path()` безусловно создаёт `suflyor/`, отсекая существующую папку данных `overlay-mvp/`. | **Исправлен** | `plans/fix-credentials-posix.md` (`paths::data_root()`) |
-| **DEF-05** | `overlay-backend/src/local_ai.rs:912` | `is_reachable` использует `curl -s` без `--fail`, считая чужие процессы на порту 8080 живым llama-server. | **Открыт** | Реестр `wave2_worker4_local_ai-C01` |
+| **DEF-05** | `overlay-backend/src/local_ai.rs:840` | `is_reachable` использует `curl -s` без `--fail`, считая чужие процессы на порту 8080 живым llama-server. | **Исправлен** | `plans/fix-local-ai-port-squatting.md` (`is_reachable_requires_http_success_and_rejects_http_errors`) |
 
 ---
 

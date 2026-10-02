@@ -835,12 +835,14 @@ fn dev_null() -> &'static str {
     }
 }
 
-/// One-shot reachability probe: true if the URL answers anything (even a 404),
-/// i.e. a server is listening. A connection failure returns false.
-fn is_reachable(url: &str) -> bool {
+/// One-shot reachability probe: true if the URL answers with HTTP 2xx success,
+/// i.e. a server is listening and healthy. HTTP error statuses (4xx, 5xx) or
+/// connection failures return false to prevent foreign port squatters from
+/// blocking managed server launch.
+pub(crate) fn is_reachable(url: &str) -> bool {
     run_capture(
         curl_exe(),
-        &["-s", "-o", dev_null(), "--max-time", "2", url],
+        &["-f", "-s", "-o", dev_null(), "--max-time", "2", url],
     )
     .map(|o| o.status.success())
     .unwrap_or(false)

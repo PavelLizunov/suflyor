@@ -1882,3 +1882,41 @@ fn old_size_4b_upgrade_compatibility_and_new_spec_integrity() {
     );
     assert_eq!(cfg.ai_local_model, LEGACY_GEMMA_FILE);
 }
+
+#[test]
+fn is_reachable_requires_http_success_and_rejects_http_errors() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut req = [0u8; 1024];
+            let _ = std::io::Read::read(&mut stream, &mut req);
+            let resp = b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok";
+            let _ = std::io::Write::write_all(&mut stream, resp);
+            let _ = std::io::Write::flush(&mut stream);
+        }
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut req = [0u8; 1024];
+            let _ = std::io::Read::read(&mut stream, &mut req);
+            let resp = b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nnot found";
+            let _ = std::io::Write::write_all(&mut stream, resp);
+            let _ = std::io::Write::flush(&mut stream);
+        }
+    });
+
+    assert!(
+        is_reachable(&format!("http://{addr}/models")),
+        "is_reachable must succeed on HTTP 200"
+    );
+
+    assert!(
+        !is_reachable(&format!("http://{addr}/models")),
+        "is_reachable must return false on HTTP 404 to avoid port squatting"
+    );
+
+    assert!(
+        !is_reachable("http://127.0.0.1:1/models"),
+        "is_reachable must return false on connection refused"
+    );
+}
