@@ -100,9 +100,9 @@
     "wave4_worker3_cicd-C12"
   ],
   "feature_contracts_source_inspected": 26,
-  "continuation_round": 39,
+  "continuation_round": 40,
   "sql_contract_tests_passed": 7,
-  "total_research_tests_passed": 302,
+  "total_research_tests_passed": 308,
   "source_feature_references": 709,
   "historical_review_assertions_corrected": 14,
   "feature_spotcheck": "bounded Gemini issues found, coordinator verified/corrected, no independent acceptance",
@@ -360,5 +360,11 @@
     "wave2_worker1_audio-C06",
     "wave2_worker1_audio-C08"
   ],
-  "audio_ptt_recorder_portable_verification": "PASS exact 0516e074e28933a8c94b680e6b9bc29266ae9e03; six source fixtures; C06 C08 remain hypotheses"
+  "audio_ptt_recorder_portable_verification": "PASS exact 0516e074e28933a8c94b680e6b9bc29266ae9e03; six source fixtures; C06 C08 remain hypotheses",
+  "secret_zeroization_macos_recovery_fixtures_passed": 6,
+  "secret_zeroization_macos_recovery_hypothesis_ids": [
+    "wave1_worker3_config-C06",
+    "wave2_worker1_audio-C05"
+  ],
+  "secret_zeroization_macos_recovery_portable_verification": "pending exact covering commit"
 }
