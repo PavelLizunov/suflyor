@@ -1,5 +1,10 @@
 # Reconciliation verification evidence
 
+## Round 45 — original local AI C06/C07 download verification and HuggingFace branches (exact covering SHA tested)
+
+- [Evidence](hypothesis-local-ai-download-artifacts.md)/[receipt](hypothesis-local-ai-download-artifacts.json): six source fixtures target 338 research tests. `download_and_extract` checks the initial download URL against GitHub host allowlists but performs no cryptographic hash or Authenticode verification on the zip or extracted server binaries.
+- Auxiliary models (vision projector, Whisper, GigaAM) reference mutable `/resolve/main/` HuggingFace branch URLs, but the installer verifies them against explicit pinned SHA-256 constants during installation. No downloads or binary extraction were run. C06/C07 remain hypotheses; exact archive verified.
+
 ## Round 44 — original local AI C04/C05 netstat parsing and model hash invariants (exact covering SHA tested)
 
 - Exact **`73793bb94fffadd8d51c2f3a6feab67194156bd7`** archive passed **332 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable local AI netstat/SHA receipt](portable-recovery-local-ai-netstat-model-sha.json). C04/C05 remain hypotheses; no netstat calls or disk tampering.

@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "baseline": "a10c356af05a5832a14ea06a5d0cb6c49694e3f1",
+  "original_register_sha256": "ee8e2e9ede99fc829465d4f3b63d7a1233f73d3c8106633d9018fa5d2c0ddfb3",
+  "original_candidates": [
+    {
+      "id": "wave2_worker4_local_ai-C06",
+      "status_unchanged": "hypothesis",
+      "native_reproduction": false
+    },
+    {
+      "id": "wave2_worker4_local_ai-C07",
+      "status_unchanged": "hypothesis",
+      "native_reproduction": false
+    }
+  ],
+  "source_references": [
+    {
+      "path": "overlay-backend/src/local_ai.rs",
+      "start_line": 2444,
+      "end_line": 2453,
+      "sha256": "657dfcc77d055e5cf03ddb1b9a873635f9b13607fb902266d574305d60d962ba"
+    },
+    {
+      "path": "overlay-backend/src/local_ai.rs",
+      "start_line": 2450,
+      "end_line": 2480,
+      "sha256": "657dfcc77d055e5cf03ddb1b9a873635f9b13607fb902266d574305d60d962ba"
+    },
+    {
+      "path": "overlay-backend/src/local_ai.rs",
+      "start_line": 2563,
+      "end_line": 2620,
+      "sha256": "657dfcc77d055e5cf03ddb1b9a873635f9b13607fb902266d574305d60d962ba"
+    },
+    {
+      "path": "overlay-backend/src/local_ai.rs",
+      "start_line": 81,
+      "end_line": 86,
+      "sha256": "657dfcc77d055e5cf03ddb1b9a873635f9b13607fb902266d574305d60d962ba"
+    },
+    {
+      "path": "overlay-backend/src/local_ai.rs",
+      "start_line": 92,
+      "end_line": 97,
+      "sha256": "657dfcc77d055e5cf03ddb1b9a873635f9b13607fb902266d574305d60d962ba"
+    },
+    {
+      "path": "overlay-backend/src/local_ai.rs",
+      "start_line": 100,
+      "end_line": 105,
+      "sha256": "657dfcc77d055e5cf03ddb1b9a873635f9b13607fb902266d574305d60d962ba"
+    },
+    {
+      "path": "overlay-backend/src/local_ai.rs",
+      "start_line": 363,
+      "end_line": 600,
+      "sha256": "657dfcc77d055e5cf03ddb1b9a873635f9b13607fb902266d574305d60d962ba"
+    }
+  ],
+  "fixtures_passed": 6,
+  "limits": [
+    "source inspection of download_and_extract allowlists and HuggingFace model pins only",
+    "no live downloads, binary execution, or model hashing performed"
+  ],
+  "native_application_acceptance": false,
+  "independent_acceptance": false,
+  "full_project_coverage": false
+}
