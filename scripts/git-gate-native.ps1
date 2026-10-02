@@ -23,7 +23,8 @@ $crateOrder = @(
     'slint-experiment',
     'suflyor-tts',
     'suflyor-teratts',
-    'suflyor-wsola'
+    'suflyor-wsola',
+    'suflyor-mlx'
 )
 
 function Invoke-Git([string[]]$Arguments) {
@@ -72,7 +73,7 @@ $affectedCrates = @($crateOrder | Where-Object {
 })
 
 $docsOnly = @($changed | Where-Object {
-    $_ -notmatch '(^|/)[^/]+\.(md|html|txt)$'
+    ($_ -notmatch '(^|/)[^/]+\.(md|html|txt)$') -or ($_ -match '^overlay-backend/knowledge/.*\.md$')
 }).Count -eq 0
 
 $tier = 'targeted'

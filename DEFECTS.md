@@ -42,11 +42,11 @@
 
 | ID | Компонент / Файл | Описание проблемы | Статус | Связанный тест / PR |
 |---|---|---|:---:|---|
-| **DEF-21** | `scripts/git-gate-native.ps1:74` | Классификатор считает любые `.md` файлы документацией, пропуская компиляцию базы знаний `kb.rs`. | **Открыт** | Реестр `wave4_worker3_cicd-C01` |
-| **DEF-22** | `scripts/git-gate-native.ps1:21` | `$crateOrder` не отслеживает сайдкар `suflyor-mlx` и вспомогательные модули. | **Открыт** | Реестр `wave4_worker3_cicd-C02` |
+| **DEF-21** | `scripts/git-gate-native.ps1:74` | Классификатор считает любые `.md` файлы документацией, пропуская компиляцию базы знаний `kb.rs`. | **Исправлен** | `plans/ci-test-coverage-expansion.md` |
+| **DEF-22** | `scripts/git-gate-native.ps1:21` | `$crateOrder` не отслеживает сайдкар `suflyor-mlx` и вспомогательные модули. | **Исправлен** | `plans/ci-test-coverage-expansion.md` |
 | **DEF-23** | `scripts/git-gate-native.ps1:151` | При UI-диффах в `slint-experiment` полностью пропускается `clippy` и запускаются только 13 тестов. | **Открыт** | Реестр `wave4_worker3_cicd-C03` |
 | **DEF-24** | `.github/workflows/ci.yml:70` | Использование плавающего тега `@stable` компилятора и непривязанных версий GitHub Actions. | **Открыт** | Реестр `wave4_worker3_cicd-C09` |
-| **DEF-25** | `.github/workflows/ci.yml:83` | Тестовое задание Windows пропускает крейты `suflyor-teratts` и `suflyor-wsola`. | **Открыт** | Реестр `wave4_worker3_cicd-C11` |
+| **DEF-25** | `.github/workflows/ci.yml:83` | Тестовое задание Windows пропускает крейты `suflyor-teratts` и `suflyor-wsola`. | **Исправлен** | `plans/ci-test-coverage-expansion.md` |
 | **DEF-26** | `overlay-backend/src/audio.rs:803` | Бессимптомный ресемплинг 3:1 сбрасывает остаточные сэмплы `len % 3` на каждом шаге дециматора. | **Открыт** | Реестр `wave2_worker1_audio-C01` |
 | **DEF-27** | `overlay-backend/src/audio.rs:348` | Формат аудиоклиента WASAPI запрашивается с `autoconvert`, но не считывается обратно из драйвера. | **Открыт** | Реестр `wave2_worker1_audio-C07` |
 | **DEF-28** | `overlay-backend/src/audio.rs:410` | Таймаут ожидания буфера `wait_for_event(250)` логирует heartbeat, но не перезапускает драйвер. | **Открыт** | Реестр `wave2_worker1_audio-C03` |

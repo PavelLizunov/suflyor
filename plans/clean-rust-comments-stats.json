@@ -1,0 +1,14 @@
+{
+  "total_production_files_checked": 148,
+  "narrative_comment_lines_cleaned": 4010,
+  "doc_comments_preserved": 8460,
+  "safety_invariants_preserved": 617,
+  "crates_verified": [
+    "overlay-backend",
+    "slint-experiment",
+    "suflyor-tts",
+    "suflyor-teratts",
+    "suflyor-wsola"
+  ],
+  "commit_sha": "a90f2cf1d797790c4fb2402956d7fbaa61a21c84"
+}
