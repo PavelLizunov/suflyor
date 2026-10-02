@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "tested_commit": "1f2bb2154a47e2d2bc47f5d1fffa21c0c00c4a21",
+  "method": "exact Git archive; temporary SQLite/JSONL files, a Python recovery model, and frozen source order; no owner catalog migration or Rust scan",
+  "research_tests": 224,
+  "research_skips": 0,
+  "existing_mocked_hermes_tests": 3,
+  "source_feature_contracts": 26,
+  "source_feature_references": 709,
+  "new_catalog_backup_recovery_fixtures": 6,
+  "original_claim_ids_unchanged": [
+    "wave1_worker1_persistence-C01",
+    "wave1_worker1_persistence-C16"
+  ],
+  "navigation_ledger": {
+    "selected_files": 298,
+    "some_precise_navigation": 162,
+    "no_precise_navigation": 136,
+    "source_lines": 120858,
+    "reference_line_union": 39935,
+    "semantically_reviewed_lines": "not_established",
+    "validation_errors": [],
+    "regenerated_byte_identical": true,
+    "bytes": 276288,
+    "sha256": "b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2"
+  },
+  "checkpoint_issues": [],
+  "result": "PASS bounded backup/recovery contract; original confirmed statuses unchanged; full research incomplete",
+  "native_catalog_recovery_acceptance": false,
+  "independent_acceptance": false,
+  "full_project_coverage": false
+}
