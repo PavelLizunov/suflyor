@@ -2,8 +2,7 @@
 
 ## Round 63 — original config C08/C09 settings merge and error logging (exact covering SHA tested)
 
-- [Evidence](hypothesis-config-merge-logging.md)/[receipt](hypothesis-config-merge-logging.json): six source fixtures target 447 research tests. `merge_server_settings` and `import_server_settings_from` clobber machine-local `stt_gigaam_dir`, whereas the UI `apply_server_settings` explicitly preserves it.
-- `config_path` formats unredacted filesystem paths including user directories, and `load` falls back to `Config::defaults()` and can save over the existing file if migrations mark it dirty. No live config files were overwritten. C08/C09 remain confirmed mechanisms; exact archive verified.
+- Exact **`8260866f3b4b4b85dd7679d2b734b4989e8831cb`** archive passed **447 research + 3 mocked Hermes, zero skips**, checkpoint issues empty (26/709), navigation ledger byte-identical SHA256 `b7cc3c4bb49cd36218e8c454c9a100b8796ef5c1a0cd7229965a9a17950764b2`. [Portable config merge/logging receipt](portable-recovery-config-merge-logging.json). C08/C09 remain confirmed mechanisms; no live user config overwriting or filesystem path logging.
 
 ## Round 62 — original config C03/C04 diagnostics readiness and backup file permissions (exact covering SHA tested)
 
