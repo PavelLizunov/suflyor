@@ -878,7 +878,7 @@ mod tests {
         // string shaped like that report keeps the test hermetic (the real
         // `build_diag_report` reads a SharedConfig, which loads live secrets).
         let report = "suflyor diagnostics (v1.16.1)\n\
-             AI: ready — local · http:
+             AI: ready — local · http://bridge.tailnet.ts.net:18902/v1 · my-local-gemma\n\
              STT: ready — groq cloud\n\
              Hotkeys: ok (F9, F4)\n";
         let masked = redact_urls(report);
