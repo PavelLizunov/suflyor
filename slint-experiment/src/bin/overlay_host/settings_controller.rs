@@ -119,6 +119,7 @@ pub(crate) fn open_settings(
         {
             let snap = cfg.read();
             refresh_profiles(existing, &snap);
+            reseed_persistent_controls(existing, &snap);
             populate_component_rows(existing, &snap);
         }
         let _ = existing.show();
@@ -165,26 +166,7 @@ pub(crate) fn open_settings(
     {
         let snap = cfg.read();
         refresh_profiles(&win, &snap);
-        win.set_coaching_debrief(snap.post_meeting_debrief_enabled);
-        win.set_coaching_live_tiles(snap.live_coaching_tiles_enabled);
-        win.set_record_audio(snap.record_audio_enabled);
-        win.set_auto_tiles_enabled(snap.auto_tiles_enabled);
-        win.set_suppress_tiles(snap.suppress_tiles);
-        win.set_trigger_keywords_input(SharedString::from(snap.trigger_keywords.as_str()));
-        let (mode, value) = if snap.record_retention_days > 0 {
-            (2, snap.record_retention_days.to_string())
-        } else if snap.record_retention_sessions > 0 {
-            (1, snap.record_retention_sessions.to_string())
-        } else {
-            (0, "10".to_string())
-        };
-        win.set_retention_mode(mode);
-        win.set_retention_value(SharedString::from(value));
-        win.set_journal_keep_value(SharedString::from(
-            snap.journal_retention_sessions.to_string(),
-        ));
-        win.set_journal_mb_value(SharedString::from(snap.journal_max_total_mb.to_string()));
-
+        reseed_persistent_controls(&win, &snap);
         populate_component_rows(&win, &snap);
     }
 
@@ -636,8 +618,18 @@ pub(crate) fn open_settings(
                 None => "import cancelled".to_string(),
                 Some(path) => {
                     let local_deep_lock = cfg_c.read().deep_lock;
+                    let local_gigaam_dir = cfg_c.read().stt_gigaam_dir.clone();
+                    let local_mic = cfg_c.read().mic_device.clone();
+                    let local_sys = cfg_c.read().system_audio_device.clone();
                     match overlay_backend::config::import_from(&path, local_deep_lock) {
-                        Ok(imported) => {
+                        Ok(mut imported) => {
+                            // Preserve local hardware audio devices and local model dir from this machine
+                            if !local_gigaam_dir.is_empty() {
+                                imported.stt_gigaam_dir = local_gigaam_dir;
+                            }
+                            imported.mic_device = local_mic;
+                            imported.system_audio_device = local_sys;
+
                             // Push the freshly-loaded values into the shared
                             // config so the running session sees them, then
                             // refresh the token-status display.
@@ -1191,14 +1183,42 @@ pub(crate) fn open_settings(
     *settings_slot = Some(win);
 }
 
+/// Reseed persistent controls (coaching, audio recording, auto-tiles, keywords, retention)
+/// from the current configuration snapshot so reused windows and post-import states never stay stale.
+pub(crate) fn reseed_persistent_controls(win: &SettingsWindow, snap: &overlay_backend::config::Config) {
+    win.set_coaching_debrief(snap.post_meeting_debrief_enabled);
+    win.set_coaching_live_tiles(snap.live_coaching_tiles_enabled);
+    win.set_record_audio(snap.record_audio_enabled);
+    win.set_auto_tiles_enabled(snap.auto_tiles_enabled);
+    win.set_suppress_tiles(snap.suppress_tiles);
+    win.set_trigger_keywords_input(SharedString::from(snap.trigger_keywords.as_str()));
+    let (mode, value) = if snap.record_retention_days > 0 {
+        (2, snap.record_retention_days.to_string())
+    } else if snap.record_retention_sessions > 0 {
+        (1, snap.record_retention_sessions.to_string())
+    } else {
+        (0, "10".to_string())
+    };
+    win.set_retention_mode(mode);
+    win.set_retention_value(SharedString::from(value));
+    win.set_journal_keep_value(SharedString::from(
+        snap.journal_retention_sessions.to_string(),
+    ));
+    win.set_journal_mb_value(SharedString::from(snap.journal_max_total_mb.to_string()));
+}
+
 /// Phase E6 v28 — after a profile import, refresh the token-status +
-/// mic-opacity display so the user sees the new values, and return a
+/// persistent controls so the user sees the new values, and return a
 /// confirmation string for the result line.
 pub(crate) fn msg_refresh_after_import(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
 ) -> String {
     populate_token_status(win, cfg);
+    let snap = cfg.read();
+    refresh_profiles(win, &snap);
+    reseed_persistent_controls(win, &snap);
+    populate_component_rows(win, &snap);
     "[ok] imported — restart binary for full effect".to_string()
 }
 

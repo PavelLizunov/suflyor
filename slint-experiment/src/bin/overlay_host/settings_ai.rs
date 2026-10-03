@@ -546,10 +546,6 @@ pub(crate) fn wire_ai_settings(
         let weak_for_refresh = win.as_weak();
         win.on_ai_bearer_save(move |new_value| {
             let trimmed = new_value.trim().to_string();
-            if trimmed.is_empty() {
-                eprintln!("[overlay-host] ai_bearer save skipped: empty input");
-                return;
-            }
             {
                 let mut c = cfg_c.write();
                 c.ai_bearer = trimmed;
@@ -617,10 +613,6 @@ pub(crate) fn wire_ai_settings(
         let weak_for_refresh = win.as_weak();
         win.on_groq_api_key_save(move |new_value| {
             let trimmed = new_value.trim().to_string();
-            if trimmed.is_empty() {
-                eprintln!("[overlay-host] groq_api_key save skipped: empty input");
-                return;
-            }
             {
                 let mut c = cfg_c.write();
                 c.groq_api_key = trimmed;
@@ -766,6 +758,7 @@ pub(crate) fn wire_ai_settings(
                 return;
             }
             let mut c = cfg_c.write();
+            let previous = c.clone();
             if provider == "local" && !cfg!(target_os = "macos") {
                 overlay_backend::local_ai::select_local_provider(
                     &mut c,
@@ -797,6 +790,8 @@ pub(crate) fn wire_ai_settings(
             });
             if let Err(e) = overlay_backend::config::save(&c) {
                 eprintln!("[overlay-host] ai_provider save failed: {e:#}");
+                // Roll back in-memory modification on disk save failure
+                *c = previous;
                 return;
             }
             let codex_needed =

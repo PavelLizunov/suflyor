@@ -1722,7 +1722,7 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
 pub fn import_server_settings_from(path: &std::path::Path, current: &Config) -> Result<Config> {
     let bytes = std::fs::read(path).context("read server settings import file")?;
     let imported: Config = parse_config_bytes(&bytes).context("parse server settings JSON")?;
-    let next = merge_server_settings(current, imported);
+    let next = apply_server_settings(current, imported);
     save(&next).context("persist imported server settings")?;
     Ok(next)
 }
