@@ -157,18 +157,11 @@ foreach ($crate in $affectedCrates) {
         Run 'slint UI compile check' {
             & $cargo check --locked --manifest-path $manifest --bin overlay-host
         }
-        $guards = @(
-            'codex_copy_guard', 'i18n_guard', 'icon_guard',
-            'lock_chip_geometry_guard', 'lock_chip_layout_guard',
-            'lock_mode_menu_guard', 'macos_settings_guard',
-            'rc3_regression_guard', 'settings_reset_guard',
-            'tera_tts_layout_guard', 'tile_player_layout_guard',
-            'tray_guard', 'version_guard'
-        )
-        $guardArgs = @('test', '--locked', '--manifest-path', $manifest)
-        foreach ($guard in $guards) { $guardArgs += @('--test', $guard) }
-        Run 'slint static guard tests' {
-            & $cargo @guardArgs
+        Run "$crate clippy" {
+            & $cargo clippy --manifest-path $manifest --bin overlay-host -- -D warnings
+        }
+        Run 'slint guard and unit tests' {
+            & $cargo test --locked --manifest-path $manifest
         }
     }
     else {
