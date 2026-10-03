@@ -45,3 +45,15 @@
 - **Rust unit/integration тесты:** 1 221 тест в кодовой базе (overlay-backend: 827, slint-experiment: 292, suflyor-teratts: 75, suflyor-tts: 22, suflyor-wsola: 5).
 - **Исследовательские тесты аудита (Python):** 526 тестов в архиве ветки `090c8a19` со 100% покрытием всех 119 пунктов Grok.
 - **Интеграция Hermes:** 3 теста в `integrations/hermes-plugin/tests/`.
+
+---
+
+## 4. Релизные артефакты v0.38.1-rc.5 (Шаг 7)
+
+Собраны на `windows-worker` по скрипту `scripts/build-slint-release.ps1 -Installer`:
+- `overlay-host.exe` (69.38 MB, SHA256: `48457E1BACE1215CDCFF8C6FD7A355EF7996B033D7BE30FDD1F7FB6A2FF5F9B6`)
+- `suflyor-tts.exe` (18.84 MB, SHA256: `BD393508CB001869967B5CB228006EEB848C3A46117A1CBDECD759D28E868551`)
+- `suflyor-teratts.exe` (22.00 MB, SHA256: `46DFBB972CF4FB94BB648D11F6F17AF8C62D83ADD58CEF0A9ED7AD14C229EB94`)
+- `DirectML.dll` (17.67 MB, SHA256: `9C9E6D822561C6C41B90E6994B3E8857CF1D66DBFB1E0C4C799C7C89B4E92DA1`)
+- `suflyor-slint-setup.exe` (37.34 MB, SHA256: `1129FE3600B837115644C24C8B528CA14367E1356476F2626166ADA42B6A5BA3`)
+- Подробный отчёт сборки и smoke-прогона: [`RELEASE-EVIDENCE-RC5.md`](RELEASE-EVIDENCE-RC5.md)
