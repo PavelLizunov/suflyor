@@ -1,7 +1,7 @@
 # Текущее состояние репозитория Suflyor (CURRENT_STATE.md)
 **Дата актуализации:** 2026-10-02
 **Активная ветка:** `codex/research-reconciliation`
-**Текущая версия продукта:** `0.38.1-rc.4` (`slint-experiment/Cargo.toml` и `scripts/slint-installer.nsi`)
+**Текущая версия продукта:** `0.38.1-rc.5` (`slint-experiment/Cargo.toml` и `scripts/slint-installer.nsi`)
 **Базовый зафиксированный коммит аудита:** `a10c356af05a5832a14ea06a5d0cb6c49694e3f1`
 **Коммит архива полного исследования (119/119):** `090c8a19a6bdbc97985f6131127426821a46eff3`
 
