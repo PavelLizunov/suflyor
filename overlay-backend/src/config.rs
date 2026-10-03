@@ -1646,9 +1646,32 @@ fn secret_redacted(cfg: &Config) -> Config {
 /// groq_api_key) to an arbitrary path the user picks. Machine-local runtime
 /// state such as `deep_lock` is omitted. Pretty JSON so it's human-editable.
 /// The caller is responsible for warning that the file contains secrets.
+/// SECURITY: Enforce restricted 0o600 owner-only permissions on POSIX systems
+/// when writing files that contain plain-text API keys or bearer tokens.
+fn write_private_file(path: &std::path::Path, bytes: &[u8]) -> Result<()> {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)?;
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        file.write_all(bytes)?;
+    }
+    #[cfg(not(unix))]
+    std::fs::write(path, bytes)?;
+
+    Ok(())
+}
+
 pub fn export_to(path: &std::path::Path, cfg: &Config) -> Result<()> {
     let bytes = portable_config_bytes(cfg).context("serialize config")?;
-    std::fs::write(path, bytes).context("write export")?;
+    write_private_file(path, &bytes).context("write export")?;
     Ok(())
 }
 
@@ -1793,7 +1816,7 @@ pub fn export_server_settings_to(path: &std::path::Path, cfg: &Config) -> Result
     // server ones. Single source of truth for "what is a server field".
     let server_only = merge_server_settings(&Config::defaults(), cfg.clone());
     let bytes = portable_config_bytes(&server_only).context("serialize server settings")?;
-    std::fs::write(path, bytes).context("write server-settings export")?;
+    write_private_file(path, &bytes).context("write server-settings export")?;
     Ok(())
 }
 
