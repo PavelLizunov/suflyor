@@ -1364,7 +1364,29 @@ fn preserve_corrupt_config(path: &std::path::Path) {
         .unwrap_or(0);
     let backup = path.with_extension(format!("json.broken-{ts}"));
     match std::fs::rename(path, &backup) {
-        Ok(()) => log::warn!("preserved corrupt config as {}", backup.display()),
+        Ok(()) => {
+            log::warn!("preserved corrupt config as {}", backup.display());
+            // Prune older broken configs to bound disk accumulation (keep last 5)
+            if let Some(parent) = path.parent() {
+                if let Ok(entries) = std::fs::read_dir(parent) {
+                    let mut broken_files = Vec::new();
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        if let Some(fname) = p.file_name().and_then(|s| s.to_str()) {
+                            if fname.starts_with("config.json.broken-") {
+                                broken_files.push(p);
+                            }
+                        }
+                    }
+                    if broken_files.len() > 5 {
+                        broken_files.sort();
+                        for old_file in broken_files.iter().take(broken_files.len() - 5) {
+                            let _ = std::fs::remove_file(old_file);
+                        }
+                    }
+                }
+            }
+        }
         Err(e) => log::warn!("could not preserve corrupt config ({e})"),
     }
 }

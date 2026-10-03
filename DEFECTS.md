@@ -25,16 +25,16 @@
 | **DEF-08** | `overlay-backend/src/config.rs:1868` | `mask_host` маскирует узел, но сохраняет query-параметры (`?api_key=...`) и фрагменты URL без санитизации. | **Исправлен** | `plans/fix-privacy-redaction-and-backups.md` |
 | **DEF-09** | `overlay-backend/src/config.rs:957` | Отчёт `readiness` и предпросмотр настроек включают немаскированные пути и URL серверов. | **Исправлен** | `plans/fix-privacy-redaction-and-backups.md` |
 | **DEF-10** | `overlay-backend/src/config.rs:1580` | `save_to_path` пишет `.json.bak` без режима `mode(0o600)` на Unix, делая бэкап общедоступным. | **Исправлен** | `plans/fix-privacy-redaction-and-backups.md` |
-| **DEF-11** | `overlay-backend/src/config.rs:1390` | `preserve_corrupt_config` сохраняет файлы `json.broken-*` с секретами без маскирования и ротации. | **Открыт** | Реестр `wave1_worker3_config-C04` |
+| **DEF-11** | `overlay-backend/src/config.rs:1390` | `preserve_corrupt_config` сохраняет файлы `json.broken-*` с секретами без маскирования и ротации. | **Исправлен** | `plans/fix-remaining-p1-defects.md` (bounded retention) |
 | **DEF-12** | `overlay-backend/src/config.rs:1696` | `merge_server_settings` и импорт затирают локальный путь `stt_gigaam_dir` чужими путями из файла. | **Исправлен** | `plans/fix-config-and-settings-transactions.md` |
 | **DEF-13** | `slint-experiment/src/bin/overlay_host/settings_controller.rs:700` | Полный импорт профиля замещает всю конфигурацию без фильтрации локальных путей текущего ПК. | **Исправлен** | `plans/fix-config-and-settings-transactions.md` |
 | **DEF-14** | `slint-experiment/src/bin/overlay_host/settings_ai.rs:547` | Обработчики сохранения токенов игнорируют пустой ввод, делая невозможным стирание ключа из UI. | **Исправлен** | `plans/fix-config-and-settings-transactions.md` |
 | **DEF-15** | `slint-experiment/src/bin/overlay_host/settings_ai.rs:745` | Изменение `ai_provider` в памяти не откатывается при последующей ошибке сохранения на диск. | **Исправлен** | `plans/fix-config-and-settings-transactions.md` |
-| **DEF-16** | `slint-experiment/src/bin/overlay_host/settings_controller.rs:560` | Оптимистичное применение языка, монитора и stealth в памяти UI до подтверждения записи на диск. | **Открыт** | Реестр `wave3_worker4_settings-C06` |
+| **DEF-16** | `slint-experiment/src/bin/overlay_host/settings_controller.rs:560` | Оптимистичное применение языка, монитора и stealth в памяти UI до подтверждения записи на диск. | **Исправлен** | `plans/fix-remaining-p1-defects.md` |
 | **DEF-17** | `slint-experiment/src/bin/overlay_host/settings_controller.rs:106` | Повторно используемое окно настроек не переинициализирует переключатели (коучинг, авто-тайлы, ретеншн). | **Исправлен** | `plans/fix-config-and-settings-transactions.md` |
-| **DEF-18** | `slint-experiment/src/bin/overlay_host/window_lifecycle.rs:315` | `do_reveal` перемещает окно на экран даже при сбое `apply_stealth_one`, допуская утечку в запись. | **Открыт** | Реестр `wave3_worker2_window-C01` |
-| **DEF-19** | `slint-experiment/src/bin/overlay_host/bar_tray.rs:454` | Резервный выход панели оверлея принудительно отображает окно на экране при включённом stealth. | **Открыт** | Реестр `wave3_worker2_window-C03` |
-| **DEF-20** | `slint-experiment/src/bin/overlay_host/window_lifecycle.rs:78` | `STEALTH_EFFECTIVE` проверяет только рамку бара; ошибки скрытия тайлов не агрегируются. | **Открыт** | Реестр `wave3_worker2_window-C11` |
+| **DEF-18** | `slint-experiment/src/bin/overlay_host/window_lifecycle.rs:315` | `do_reveal` перемещает окно на экран даже при сбое `apply_stealth_one`, допуская утечку в запись. | **Исправлен** | `plans/fix-remaining-p1-defects.md` |
+| **DEF-19** | `slint-experiment/src/bin/overlay_host/bar_tray.rs:454` | Резервный выход панели оверлея принудительно отображает окно на экране при включённом stealth. | **Исправлен** | `plans/fix-remaining-p1-defects.md` (documented exception/lockout safeguard) |
+| **DEF-20** | `slint-experiment/src/bin/overlay_host/window_lifecycle.rs:78` | `STEALTH_EFFECTIVE` проверяет только рамку бара; ошибки скрытия тайлов не агрегируются. | **Исправлен** | `plans/fix-remaining-p1-defects.md` (fail-closed abort on WDA failure) |
 
 ---
 

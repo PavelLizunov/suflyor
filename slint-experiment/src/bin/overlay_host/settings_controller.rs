@@ -468,14 +468,15 @@ pub(crate) fn open_settings(
                     .get((idx - 1) as usize)
                     .map(|m| (m.left, m.top))
             };
-            set_global_tile_monitor(pin);
             {
                 let mut c = cfg_m.write();
                 c.tile_monitor_name = pin.map(|(l, t)| format!("{l},{t}"));
                 if let Err(e) = overlay_backend::config::save(&c) {
                     eprintln!("[overlay-host] tile_monitor save failed: {e:#}");
+                    return;
                 }
             }
+            set_global_tile_monitor(pin);
             eprintln!("[overlay-host] tile_monitor -> {pin:?}");
         });
     }
@@ -486,16 +487,17 @@ pub(crate) fn open_settings(
         let overlay_lang = overlay_weak.clone();
         win.on_language_selected(move |idx| {
             let lang = if idx == 1 { "en" } else { "ru" };
-            match slint::select_bundled_translation(lang) {
-                Ok(()) => eprintln!("[overlay-host] UI language -> {lang}"),
-                Err(e) => eprintln!("[overlay-host] language {lang} not available: {e}"),
-            }
             {
                 let mut c = cfg_lang.write();
                 c.ui_language = lang.to_string();
                 if let Err(e) = overlay_backend::config::save(&c) {
                     eprintln!("[overlay-host] ui_language save failed: {e:#}");
+                    return;
                 }
+            }
+            match slint::select_bundled_translation(lang) {
+                Ok(()) => eprintln!("[overlay-host] UI language -> {lang}"),
+                Err(e) => eprintln!("[overlay-host] language {lang} not available: {e}"),
             }
             // The @tr() bindings re-evaluate automatically; the Rust-built
             // strings do NOT — rebuild them in the new language: monitor

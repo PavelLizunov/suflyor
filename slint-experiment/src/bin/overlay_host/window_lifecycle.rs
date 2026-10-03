@@ -167,10 +167,13 @@ pub(crate) fn apply_bar_stealth(
 
 /// Apply WDA to a single registry/realize window, logging (never swallowing)
 /// a failure (I1): a window whose exclusion failed stays capturable, and the
-/// user must be able to diagnose it from the log.
-fn apply_stealth_one(hwnd: slint_replay::win32::HWND, on: bool) {
+/// user must be able to diagnose it from the log. Returns true if successful.
+fn apply_stealth_one(hwnd: slint_replay::win32::HWND, on: bool) -> bool {
     if let Err(e) = set_stealth(hwnd, on) {
         diag!("[overlay-host] stealth apply failed (window stays capturable): {e}");
+        false
+    } else {
+        true
     }
 }
 
@@ -313,8 +316,9 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
             diag!("[overlay-host] macOS floating-window configuration failed: {error}");
         }
         decorate(hwnd);
-        if global_stealth() {
-            apply_stealth_one(hwnd, true);
+        if global_stealth() && !apply_stealth_one(hwnd, true) {
+            diag!("[overlay-host] window reveal aborted: WDA stealth failed (window stays parked off-screen)");
+            return false;
         }
         // The off-screen frame is now painted + decorated (+ WDA under stealth):
         // reveal it at the RESTORED position when one is saved and still visible
