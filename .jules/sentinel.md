@@ -1,3 +1,8 @@
+## 2026-10-04 - Case-Sensitivity Secret Redaction Bypass in Log Exports
+**Vulnerability:** `redact_secrets` in `diagnostics.rs` checked credential prefixes (`Bearer `, `gsk_`, `sk-`) case-sensitively. Uppercase or mixed-case authorization headers or API key prefixes (such as `BEARER <token>`, `GSK_<token>`, or `SK-<token>`) bypassed prefix detection, leaking raw API keys into exported logs (`suflyor-log.txt`) and clipboard diagnostic reports.
+**Learning:** Credential prefix matching in log masking passes must be case-insensitive (`eq_ignore_ascii_case`) and enforce word boundaries (`!out.chars().last().is_some_and(...)`) to prevent non-canonical prefix casing from bypassing redaction.
+**Prevention:** Always perform case-insensitive string comparisons (`eq_ignore_ascii_case`) on token prefixes and verify word boundaries when redacting secrets in diagnostic output streams.
+
 ## 2026-09-08 - Plaintext URL / Credential Leak in reqwest Error Log Formatting
 **Vulnerability:** Logging raw `reqwest::Error` instances via `{e:#}` in STT error handlers printed the full request URL into `overlay-host.log`. For HTTP endpoints with embedded credentials (`http://user:secret@host/v1`) or private LAN hostnames, transport failures leaked secrets into the shareable log file.
 **Learning:** `reqwest::Error`'s `Display` / `Debug` representation (`{e:#}`) embeds the target URL. Formatting `reqwest::Error` directly in log calls bypasses URL/credential redaction rules.
