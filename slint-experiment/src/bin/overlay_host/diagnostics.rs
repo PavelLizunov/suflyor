@@ -140,35 +140,53 @@ pub(crate) fn redact_urls(s: &str) -> String {
     out
 }
 
-/// Redact sensitive credential patterns (`Bearer <token>`, `gsk_<token>`, `sk-<token>`)
-/// from diagnostic outputs and log exports so exported files and reports never leak API keys
-/// or authorization tokens.
+/// Redact sensitive credential patterns (`Bearer <token>`, `gsk_<token>`, `sk-<token>`,
+/// `nvapi-`, `xai-`, `tvly-`) from diagnostic outputs and log exports so exported
+/// files and reports never leak API keys or authorization tokens. UTF-8 safe.
 pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while !rest.is_empty() {
-        if rest.starts_with("Bearer ") {
+        // Match "bearer" case-insensitively when followed by space, tab, colon, or equals (UTF-8 safe)
+        let is_bearer = rest.as_bytes().get(..6).is_some_and(|b| b.eq_ignore_ascii_case(b"bearer"))
+            && (rest.len() == 6
+                || rest.as_bytes().get(6).is_some_and(|&b| matches!(b, b' ' | b'\t' | b':' | b'=')));
+        if is_bearer {
             out.push_str("Bearer <redacted>");
-            rest = &rest[7..];
+            rest = &rest[6..];
+            // Skip trailing whitespace or delimiters (:, =) after bearer
+            let skip = rest
+                .find(|c: char| c != ' ' && c != '\t' && c != ':' && c != '=')
+                .unwrap_or(rest.len());
+            rest = &rest[skip..];
             let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
             rest = &rest[tok_len..];
-        } else if rest.starts_with("gsk_") {
-            out.push_str("gsk_<redacted>");
-            rest = &rest[4..];
-            let tok_len = rest
-                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
-                .unwrap_or(rest.len());
-            rest = &rest[tok_len..];
-        } else if rest.starts_with("sk-")
-            && !out
-                .chars()
-                .last()
-                .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
+        } else if rest.starts_with("gsk_")
+            || (rest.starts_with("sk-")
+                && !out
+                    .chars()
+                    .last()
+                    .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_'))
+            || rest.starts_with("nvapi-")
+            || rest.starts_with("xai-")
+            || rest.starts_with("tvly-")
         {
-            out.push_str("sk-<redacted>");
-            rest = &rest[3..];
+            let prefix_len = if rest.starts_with("gsk_") {
+                4
+            } else if rest.starts_with("nvapi-") {
+                6
+            } else if rest.starts_with("xai-") || rest.starts_with("tvly-") {
+                4
+            } else {
+                3 // "sk-"
+            };
+            let prefix = &rest[..prefix_len];
+            out.push_str(prefix);
+            out.push_str("<redacted>");
+            rest = &rest[prefix_len..];
+            // Include dots in token length so project/OR/JWT keys are fully masked
             let tok_len = rest
-                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.'))
                 .unwrap_or(rest.len());
             rest = &rest[tok_len..];
         } else if let Some(next_char) = rest.chars().next() {
@@ -939,6 +957,32 @@ mod tests {
         assert!(redacted.contains("Bearer <redacted>"));
         assert!(redacted.contains("gsk_<redacted>"));
         assert!(redacted.contains("sk-<redacted>"));
+        assert!(redacted.contains("desk-1 task-2"));
+    }
+
+    #[test]
+    fn redact_secrets_masks_case_insensitive_bearer_and_dot_keys() {
+        let sample = "Header1: bearer: lower_secret_token_123\n\
+                      Header2: BEARER  multi_space_token_456\n\
+                      Header3: Bearer=equals_token_789\n\
+                      OpenAI Proj: sk-proj-secret_key_abc.def.xyz\n\
+                      Nvidia: nvapi-secret_nvidia_key_999\n\
+                      xAI: xai-secret_xai_key_888\n\
+                      Tavily: tvly-secret_tavily_key_777\n\
+                      Unicode & Emoji: 🦀🦀 bearer secret_emoji_token\n\
+                      Cyrillic: Привет bearer secret_cyrillic_token\n\
+                      Normal: desk-1 task-2\n";
+        let redacted = redact_secrets(sample);
+        assert!(!redacted.contains("lower_secret_token_123"), "leaked bearer lower: {redacted}");
+        assert!(!redacted.contains("multi_space_token_456"), "leaked bearer multi-space: {redacted}");
+        assert!(!redacted.contains("equals_token_789"), "leaked bearer equals: {redacted}");
+        assert!(!redacted.contains("secret_key_abc"), "leaked sk-proj: {redacted}");
+        assert!(!redacted.contains("def"), "leaked sk-proj dot segment: {redacted}");
+        assert!(!redacted.contains("secret_nvidia_key_999"), "leaked nvapi key: {redacted}");
+        assert!(!redacted.contains("secret_xai_key_888"), "leaked xai key: {redacted}");
+        assert!(!redacted.contains("secret_tavily_key_777"), "leaked tvly key: {redacted}");
+        assert!(!redacted.contains("secret_emoji_token"), "leaked emoji bearer: {redacted}");
+        assert!(!redacted.contains("secret_cyrillic_token"), "leaked cyrillic bearer: {redacted}");
         assert!(redacted.contains("desk-1 task-2"));
     }
 

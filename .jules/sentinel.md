@@ -1,3 +1,8 @@
+## 2026-10-15 - Multiple Whitespace and Substring Truncation Redaction Bypass
+**Vulnerability:** `redact_secrets` in `diagnostics.rs` matched `Bearer ` with exact casing and single space, causing multiple spaces (`Bearer  token`) or lower/upper case `bearer:` to bypass redaction and leak secrets. Additionally, `sk-` token length parsing stopped at dots (`.`), leaking trailing segments of dot-separated keys like `sk-proj-123.456`.
+**Learning:** Naive substring matching for header prefixes fails on non-canonical spacing, delimiters (`:`, `=`), or case variations, and token delimiter character sets must include dots (`.`) for modern project/JWT API keys.
+**Prevention:** Always use ASCII case-insensitive byte matching with delimiter skipping, and include `.` in token character class checks for API key redaction.
+
 ## 2026-09-08 - Plaintext URL / Credential Leak in reqwest Error Log Formatting
 **Vulnerability:** Logging raw `reqwest::Error` instances via `{e:#}` in STT error handlers printed the full request URL into `overlay-host.log`. For HTTP endpoints with embedded credentials (`http://user:secret@host/v1`) or private LAN hostnames, transport failures leaked secrets into the shareable log file.
 **Learning:** `reqwest::Error`'s `Display` / `Debug` representation (`{e:#}`) embeds the target URL. Formatting `reqwest::Error` directly in log calls bypasses URL/credential redaction rules.
