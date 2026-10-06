@@ -216,7 +216,7 @@ pub(crate) fn redact_secrets(s: &str) -> String {
 
 #[inline]
 fn starts_with_ascii_ci(s: &str, prefix: &str) -> bool {
-    s.as_bytes().len() >= prefix.len()
+    s.len() >= prefix.len()
         && s.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
 }
 
