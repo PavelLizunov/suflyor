@@ -19,6 +19,7 @@ regexes = [
   '''<current access token>''',
   '''nvapi-test''',
   '''xai-test''',
+  '''nvapi-secret''',
 ]
 # Generated tester checklists (docs/*.html) embed a `localStorage` progress-KEY
 # whose 23-char value trips gitleaks' generic high-entropy rule — but it is a
