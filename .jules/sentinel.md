@@ -27,3 +27,8 @@
 **Vulnerability:** `save()` in `config.rs` saved `config.json` via default `std::fs::write`, which on Unix/POSIX targets created files subject to default umask permissions (`0644`/`0664`), leaving plain-text secrets and bearer tokens in `config.json` readable by other local system users.
 **Learning:** While `credentials.json` had explicit `0o600` permissions on POSIX, `config.json` also holds sensitive API keys and tokens (`ai_bearer`, `groq_api_key`, `hermes_bridge_token`) but relied on default file creation options.
 **Prevention:** Always enforce owner-only permissions (`0o600`) when creating temporary files before atomic renames for any file containing sensitive API keys or credentials on POSIX platforms.
+
+## 2026-10-15 - Case Sensitivity and Alternative Delimiters Bypass in Secret Redaction
+**Vulnerability:** `redact_secrets` in `diagnostics.rs` searched for `"Bearer "` case-sensitively and only matched space delimiters after `Bearer`. Lowercase/mixed-case authorization headers (`bearer token`), header colons (`Bearer: token`), or key-value pairs (`bearer=token`), as well as uppercase provider keys (`GSK_`, `SK-`), bypassed redaction and leaked API keys into exported log files (`suflyor-log.txt`) and copied diagnostic reports.
+**Learning:** Hardcoded string prefix matching in log/diagnostic sanitizers fails when transport headers or error logs format credentials with case variations or alternative delimiters (`:`, `=`, quotes).
+**Prevention:** Always perform case-insensitive prefix matching and strip separator characters (`:`, `=`, quotes, whitespace) when redacting bearer tokens and API keys. Use byte-level prefix checks (`starts_with_ascii_ci`) to ensure panic-safety with multi-byte UTF-8 inputs.

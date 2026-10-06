@@ -147,19 +147,30 @@ pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while !rest.is_empty() {
-        if rest.starts_with("Bearer ") {
+        if starts_with_ascii_ci(rest, "bearer")
+            && rest[6..]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_whitespace() || c == ':' || c == '=' || c == '"' || c == '\'')
+        {
             out.push_str("Bearer <redacted>");
-            rest = &rest[7..];
-            let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
+            rest = &rest[6..];
+            let delim_len = rest
+                .find(|c: char| !(c.is_whitespace() || c == ':' || c == '=' || c == '"' || c == '\''))
+                .unwrap_or(rest.len());
+            rest = &rest[delim_len..];
+            let tok_len = rest
+                .find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == ',' || c == ';')
+                .unwrap_or(rest.len());
             rest = &rest[tok_len..];
-        } else if rest.starts_with("gsk_") {
+        } else if starts_with_ascii_ci(rest, "gsk_") {
             out.push_str("gsk_<redacted>");
             rest = &rest[4..];
             let tok_len = rest
                 .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
                 .unwrap_or(rest.len());
             rest = &rest[tok_len..];
-        } else if rest.starts_with("sk-")
+        } else if starts_with_ascii_ci(rest, "sk-")
             && !out
                 .chars()
                 .last()
@@ -171,12 +182,42 @@ pub(crate) fn redact_secrets(s: &str) -> String {
                 .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
                 .unwrap_or(rest.len());
             rest = &rest[tok_len..];
+        } else if starts_with_ascii_ci(rest, "xai-")
+            && !out
+                .chars()
+                .last()
+                .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            out.push_str("xai-<redacted>");
+            rest = &rest[4..];
+            let tok_len = rest
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+                .unwrap_or(rest.len());
+            rest = &rest[tok_len..];
+        } else if starts_with_ascii_ci(rest, "nvapi-")
+            && !out
+                .chars()
+                .last()
+                .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            out.push_str("nvapi-<redacted>");
+            rest = &rest[6..];
+            let tok_len = rest
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
+                .unwrap_or(rest.len());
+            rest = &rest[tok_len..];
         } else if let Some(next_char) = rest.chars().next() {
             out.push(next_char);
             rest = &rest[next_char.len_utf8()..];
         }
     }
     out
+}
+
+#[inline]
+fn starts_with_ascii_ci(s: &str, prefix: &str) -> bool {
+    s.as_bytes().len() >= prefix.len()
+        && s.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
 }
 
 /// Replace the current user's home directory with the `%USERPROFILE%` placeholder
@@ -929,17 +970,37 @@ mod tests {
     #[test]
     fn redact_secrets_masks_bearer_gsk_and_sk_tokens() {
         let sample = "Auth: Bearer secret_token_123\n\
-                      Groq: gsk_secret_key_456\n\
-                      OpenAI: sk-proj-secret_key_789\n\
-                      Normal word: desk-1 task-2\n";
+                      Lower: bearer lower_secret_456\n\
+                      Header: Bearer: colon_secret_789\n\
+                      Equal: bearer=equal_secret_000\n\
+                      Groq: GSK_secret_key_456\n\
+                      OpenAI: SK-PROJ-secret_key_789\n\
+                      xAI: xai-secret_key_111\n\
+                      NVAPI: nvapi-secret_key_222\n\
+                      Normal word: desk-1 task-2 bearer_type\n";
         let redacted = redact_secrets(sample);
         assert!(!redacted.contains("secret_token_123"), "leaked bearer token: {redacted}");
+        assert!(!redacted.contains("lower_secret_456"), "leaked lower bearer token: {redacted}");
+        assert!(!redacted.contains("colon_secret_789"), "leaked colon bearer token: {redacted}");
+        assert!(!redacted.contains("equal_secret_000"), "leaked equal bearer token: {redacted}");
         assert!(!redacted.contains("secret_key_456"), "leaked gsk key: {redacted}");
         assert!(!redacted.contains("secret_key_789"), "leaked sk key: {redacted}");
+        assert!(!redacted.contains("secret_key_111"), "leaked xai key: {redacted}");
+        assert!(!redacted.contains("secret_key_222"), "leaked nvapi key: {redacted}");
         assert!(redacted.contains("Bearer <redacted>"));
         assert!(redacted.contains("gsk_<redacted>"));
         assert!(redacted.contains("sk-<redacted>"));
-        assert!(redacted.contains("desk-1 task-2"));
+        assert!(redacted.contains("xai-<redacted>"));
+        assert!(redacted.contains("nvapi-<redacted>"));
+        assert!(redacted.contains("desk-1 task-2 bearer_type"));
+    }
+
+    #[test]
+    fn redact_secrets_does_not_panic_on_multibyte_utf8() {
+        let sample = "Привет 🦀🦀 world! Bearer test_123 🚀";
+        let redacted = redact_secrets(sample);
+        assert!(!redacted.contains("test_123"));
+        assert!(redacted.contains("Привет 🦀🦀 world! Bearer <redacted> 🚀"));
     }
 
     #[test]
