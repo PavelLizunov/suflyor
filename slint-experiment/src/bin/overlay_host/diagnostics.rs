@@ -975,8 +975,8 @@ mod tests {
                       Equal: bearer=equal_secret_000\n\
                       Groq: GSK_secret_key_456\n\
                       OpenAI: SK-PROJ-secret_key_789\n\
-                      xAI: xai-secret_key_111\n\
-                      NVAPI: nvapi-secret_key_222\n\
+                      xAI: xai-test_key_111\n\
+                      NVAPI: nvapi-test_key_222\n\
                       Normal word: desk-1 task-2 bearer_type\n";
         let redacted = redact_secrets(sample);
         assert!(!redacted.contains("secret_token_123"), "leaked bearer token: {redacted}");
@@ -985,8 +985,8 @@ mod tests {
         assert!(!redacted.contains("equal_secret_000"), "leaked equal bearer token: {redacted}");
         assert!(!redacted.contains("secret_key_456"), "leaked gsk key: {redacted}");
         assert!(!redacted.contains("secret_key_789"), "leaked sk key: {redacted}");
-        assert!(!redacted.contains("secret_key_111"), "leaked xai key: {redacted}");
-        assert!(!redacted.contains("secret_key_222"), "leaked nvapi key: {redacted}");
+        assert!(!redacted.contains("test_key_111"), "leaked xai key: {redacted}");
+        assert!(!redacted.contains("test_key_222"), "leaked nvapi key: {redacted}");
         assert!(redacted.contains("Bearer <redacted>"));
         assert!(redacted.contains("gsk_<redacted>"));
         assert!(redacted.contains("sk-<redacted>"));
