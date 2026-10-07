@@ -1909,3 +1909,38 @@ fn config_save_sets_unix_mode_0600() {
         "config.json should be saved with 0600 mode permissions"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn config_exports_set_unix_mode_0600() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().expect("create temp directory");
+    let export_path = temp.path().join("exported_config.json");
+    let server_export_path = temp.path().join("exported_server.json");
+    let cfg = Config::defaults();
+
+    export_to(&export_path, &cfg).expect("export_to should succeed");
+    export_server_settings_to(&server_export_path, &cfg)
+        .expect("export_server_settings_to should succeed");
+
+    let mode_cfg = std::fs::metadata(&export_path)
+        .expect("read metadata")
+        .permissions()
+        .mode();
+    assert_eq!(
+        mode_cfg & 0o777,
+        0o600,
+        "export_to file should have mode 0600"
+    );
+
+    let mode_server = std::fs::metadata(&server_export_path)
+        .expect("read metadata")
+        .permissions()
+        .mode();
+    assert_eq!(
+        mode_server & 0o777,
+        0o600,
+        "export_server_settings_to file should have mode 0600"
+    );
+}
