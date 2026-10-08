@@ -134,12 +134,21 @@ pub async fn test_connection(api_key: String) -> Result<String> {
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .context("build reqwest client")?;
-    let resp = client
+    let resp = match client
         .get(GROQ_MODELS_URL)
         .bearer_auth(&api_key)
         .send()
         .await
-        .context("GET groq models")?;
+    {
+        Ok(r) => r,
+        Err(e) => {
+            log::warn!(
+                "STT Groq models GET failed ({})",
+                crate::ai::control::transport_failure_kind(&e)
+            );
+            anyhow::bail!("Groq API unreachable");
+        }
+    };
     let status = resp.status();
     if status.is_success() {
         Ok(format!("HTTP {} — key valid", status.as_u16()))
@@ -1384,6 +1393,17 @@ mod tests {
             kind,
             "connect" | "timeout" | "request" | "transport"
         ));
+    }
+
+    #[tokio::test]
+    async fn stt_test_connection_redacts_transport_failures() {
+        let err = test_connection("dummy_key_123".to_string())
+            .await
+            .unwrap_err();
+        let err_msg = format!("{err:#}");
+        assert!(!err_msg.contains("https://"));
+        assert!(!err_msg.contains("api.groq.com"));
+        assert_eq!(err_msg, "Groq API unreachable");
     }
 
     // ── build_whisper_prompt ──
