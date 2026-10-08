@@ -95,3 +95,10 @@ Scenario: CI tests on Windows and macOS only. These three tests never run, so th
 Found by: a script count of test attributes at 8a38bac (1241 test functions; the 21 Windows-only, 9 macOS-only and 3 Unix-only ones do have a job that runs them).
 Fix plan: decide whether the off-platform fallbacks are still wanted (Linux is not a product target); if not, remove them with their tests.
 Closed by:
+
+### D-013 The targeted gate cannot run backend tests on the Windows worker   Severity: P2   Status: Open
+Evidence: scripts/git-gate-native.ps1:176 - `& $cargo test --manifest-path $manifest` (no step stages `DirectML.dll`; scripts/ci.ps1:102-113 has the step "stage DirectML for backend tests")
+Scenario: on Winbrat (Windows 10 Enterprise LTSC, build 17763) the system `DirectML.dll` is version 10.0.17763 and lacks an export that the `ort` build (DirectML 1.15.4) needs. The Full gate copies the matching DLL next to the test executables; the targeted gate, which `AGENTS.md` prescribes for every normal change, does not. `scripts\git-gate-native.ps1 push` then fails at "overlay-backend test": the test executable exits with 0xc0000138 (STATUS_ORDINAL_NOT_FOUND) before a single test runs. GitHub's Windows image has a newer system DLL, so CI does not show it.
+Found by: the first targeted gate run on windows-worker at 2d55575248c5ea1c7e3008554325b98edbf13002 on 2026-10-08 (exit 1 after 2.1 minutes; the same at five other commits).
+Fix plan: move the staging step of ci.ps1 into a function both gates call, for overlay-backend and slint-experiment.
+Closed by:
