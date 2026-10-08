@@ -152,8 +152,9 @@ log is not visual or functional acceptance.
   their ONNX runtimes with each other or with in-process STT.
 - Version metadata lives in both `slint-experiment/Cargo.toml` and
   `scripts/slint-installer.nsi` (`PRODUCT_VERSION`). Keep them synchronized.
-- Committed lockfiles: `slint-experiment/Cargo.lock` and
-  `suflyor-tts/Cargo.lock`. `overlay-backend/Cargo.lock` is ignored.
+- Committed lockfiles: `slint-experiment/Cargo.lock`, `suflyor-tts/Cargo.lock`,
+  `suflyor-teratts/Cargo.lock`, `suflyor-wsola/Cargo.lock` and the two under
+  `experiments/`. `overlay-backend/Cargo.lock` is ignored.
 
 ## Security and privacy
 
