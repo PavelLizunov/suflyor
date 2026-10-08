@@ -942,6 +942,74 @@ mod tests {
         assert!(redacted.contains("desk-1 task-2"));
     }
 
+    // The cases below leaked through the case-sensitive, single-space `Bearer ` matcher.
+    #[test]
+    fn redact_secrets_masks_bearer_in_any_ascii_case() {
+        for scheme in ["bearer", "BEARER", "bEaReR"] {
+            let redacted = redact_secrets(&format!("Authorization: {scheme} secret_token_123\n"));
+            assert!(!redacted.contains("secret_token_123"), "leaked for {scheme}: {redacted}");
+        }
+    }
+
+    #[test]
+    fn redact_secrets_masks_bearer_after_any_delimiter_run() {
+        for sample in [
+            "Bearer  secret_token_123",
+            "Bearer\tsecret_token_123",
+            "Bearer: secret_token_123",
+            "Bearer=secret_token_123",
+            "bearer:\"secret_token_123\"",
+        ] {
+            let redacted = redact_secrets(sample);
+            assert!(!redacted.contains("secret_token_123"), "leaked from {sample:?}: {redacted}");
+        }
+    }
+
+    #[test]
+    fn redact_secrets_stops_bearer_token_at_a_quote() {
+        let json = "{\"authorization\":\"bearer secret_token_123\",\"n\":1}";
+        assert_eq!(redact_secrets(json), "{\"authorization\":\"Bearer <redacted>\",\"n\":1}");
+    }
+
+    #[test]
+    fn redact_secrets_masks_x_api_key_header_value() {
+        for sample in [
+            "x-api-key: secret_value_123",
+            "X-API-Key:secret_value_123",
+        ] {
+            let redacted = redact_secrets(sample);
+            assert!(!redacted.contains("secret_value_123"), "leaked from {sample:?}: {redacted}");
+        }
+    }
+
+    #[test]
+    fn redact_secrets_masks_xai_and_nvapi_keys() {
+        let redacted = redact_secrets("xai-secret_key_123 nvapi-secret_key_456 maxai-1");
+        assert!(!redacted.contains("secret_key_123"), "leaked xai key: {redacted}");
+        assert!(!redacted.contains("secret_key_456"), "leaked nvapi key: {redacted}");
+        assert!(redacted.contains("maxai-1"), "over-redacted a plain word: {redacted}");
+    }
+
+    #[test]
+    fn redact_secrets_is_utf8_safe_next_to_a_match() {
+        let redacted = redact_secrets("aпривет bearer secret_token_123 конец");
+        assert_eq!(redacted, "aпривет Bearer <redacted> конец");
+    }
+
+    // Guards the other direction: a label inside an identifier, or with no value, is log text.
+    #[test]
+    fn redact_secrets_leaves_bearer_without_a_value_alone() {
+        for sample in [
+            "[overlay-host] ai_bearer save failed: timeout",
+            "stt_whisper_bearer saved",
+            "token type: bearer",
+            "bearer\nnext line",
+            "Bearer \nnext line",
+        ] {
+            assert_eq!(redact_secrets(sample), sample);
+        }
+    }
+
     #[test]
     fn is_ipv4_accepts_valid_rejects_ports_and_versions() {
         assert!(is_ipv4("10.0.0.1"));
