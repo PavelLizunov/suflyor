@@ -1568,23 +1568,7 @@ pub(crate) fn save_to_path(path: &std::path::Path, cfg: &Config) -> Result<()> {
     // (wiping the user's live keys / profiles / devices / hotkeys). On Windows
     // std::fs::rename overwrites the destination (MoveFileEx replace-existing).
     let tmp = path.with_extension("json.tmp");
-    #[cfg(unix)]
-    {
-        use std::io::Write;
-        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(&tmp)
-            .context("write config (tmp)")?;
-        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
-        file.write_all(&bytes).context("write config (tmp)")?;
-    }
-    #[cfg(not(unix))]
-    std::fs::write(&tmp, &bytes).context("write config (tmp)")?;
+    crate::paths::write_private(&tmp, &bytes).context("write config (tmp)")?;
 
     // Keep ONE generation of the previous on-disk config as config.json.bak
     // before we replace it. Atomic-save already guarantees we never see a torn
@@ -1608,7 +1592,7 @@ pub(crate) fn save_to_path(path: &std::path::Path, cfg: &Config) -> Result<()> {
             .and_then(|old| serde_json::to_vec_pretty(&secret_redacted(&old)).ok())
         {
             Some(redacted) => {
-                if let Err(e) = std::fs::write(&bak, redacted) {
+                if let Err(e) = crate::paths::write_private(&bak, &redacted) {
                     log::debug!("config .bak snapshot skipped ({e})");
                 }
             }
@@ -1648,7 +1632,7 @@ fn secret_redacted(cfg: &Config) -> Config {
 /// The caller is responsible for warning that the file contains secrets.
 pub fn export_to(path: &std::path::Path, cfg: &Config) -> Result<()> {
     let bytes = portable_config_bytes(cfg).context("serialize config")?;
-    std::fs::write(path, bytes).context("write export")?;
+    crate::paths::write_private(path, &bytes).context("write export")?;
     Ok(())
 }
 
@@ -1793,7 +1777,7 @@ pub fn export_server_settings_to(path: &std::path::Path, cfg: &Config) -> Result
     // server ones. Single source of truth for "what is a server field".
     let server_only = merge_server_settings(&Config::defaults(), cfg.clone());
     let bytes = portable_config_bytes(&server_only).context("serialize server settings")?;
-    std::fs::write(path, bytes).context("write server-settings export")?;
+    crate::paths::write_private(path, &bytes).context("write server-settings export")?;
     Ok(())
 }
 

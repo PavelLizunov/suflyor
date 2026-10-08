@@ -63,9 +63,9 @@ pub fn bridge_url_for_env(bind_host: &str, port: u16) -> String {
     format!("http://{host}:{port}")
 }
 
-/// Write the Hermes `.env`, which holds the bridge token.
+/// Write the Hermes `.env`, which holds the bridge token: owner-only on Unix.
 fn write_env(path: &std::path::Path, text: &str) -> std::io::Result<()> {
-    std::fs::write(path, text)
+    crate::paths::write_private(path, text.as_bytes())
 }
 
 /// Install the plugin into the local Hermes: files + `.env` + `config.yaml`.

@@ -40,6 +40,51 @@ fn data_root_in(base: &Path) -> PathBuf {
     }
 }
 
+/// Write `bytes` to `path` so that only the owner can read the file on Unix (mode 0600),
+/// whether it is new or already exists with a wider mode. Elsewhere this is `std::fs::write`.
+pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true).mode(0o600);
+        let mut file = options.open(path)?;
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        file.write_all(bytes)?;
+    }
+    #[cfg(not(unix))]
+    std::fs::write(path, bytes)?;
+    Ok(())
+}
+
+/// Open `path` for appending; a file created here is owner-only on Unix (mode 0600).
+pub(crate) fn open_private_append(path: &Path) -> std::io::Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)
+}
+
+/// Create `dir` and, on Unix, restrict it to its owner (mode 0700). A filesystem that cannot
+/// change the mode is logged and tolerated: losing the journal would be worse.
+pub(crate) fn ensure_private_dir(dir: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Err(e) = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)) {
+            log::warn!("could not restrict {} to its owner: {e}", dir.display());
+        }
+    }
+    Ok(())
+}
+
 /// Outcome of [`migrate_data_root`], for one-line logging at startup.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataMigration {
