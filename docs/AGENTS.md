@@ -78,8 +78,8 @@ Documentation, plans, and non-executable markdown/HTML text files use the **Docs
 An audit report records a past run. It is not kept in the working tree. It stays in git at a recorded revision, and that revision is how it is read. This follows the pattern of the VPNRouter repository.
 
 1. While an audit runs, its report may sit in `docs/audit-YYYY-MM-DD-<task>/`.
-2. When the audit closes, the task removes the folder in its own commit and adds one row to `docs/HISTORY-INDEX.md`: the path, the revision that still holds it (the commit before the removal), and the commit that removed it.
-3. Read a removed report with `git show <revision>:<path>`. List a removed folder with `git ls-tree -r --name-only <revision> <folder>/`. Use the full revision SHA, not a short one.
+2. When the audit closes, the task removes the folder in its own commit and adds one row to `docs/HISTORY-INDEX.md`: the path and the revision that still holds it. That revision is the last commit before the removal that is reachable from master or a pushed branch.
+3. Read a removed report with `git show <revision>:<path>`. List a removed folder with `git ls-tree -r --name-only <revision> <folder>/`. Find the removing commit with `git log --diff-filter=D --oneline -- <path>`. Use the full revision SHA, not a short one.
 4. A revision must stay reachable: it must be on a pushed branch, a tag, or master. Do not rewrite history to hide an audit.
 5. Removing a report from the tree does not remove it from git. Sensitive content in an audit is handled under section 4, not by this rule.
 6. Screenshots, clips and other files inside an audit folder follow the same rule.
