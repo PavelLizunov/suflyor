@@ -1,6 +1,6 @@
 # Codex handoff — master
 
-Updated 2026-09-01. Read `AGENTS.md` before acting.
+Updated 2026-10-08 (open-work section only; the rest dates from 2026-09-01). Read `AGENTS.md` before acting.
 
 ## Current operational state — master
 
@@ -17,6 +17,28 @@ Operational note: Windows jobs follow
 [`docs/winbrat-recovery.md`](winbrat-recovery.md). Never start a duplicate job
 because SSH or a terminal disconnected. macOS builds and live QA run only on
 `mm4`; Windows compilation and the repository gate run only on `winbrat`.
+
+## Open work — hygiene pass of 2026-10-08 (draft pull requests, nothing merged)
+
+Written 2026-10-08 on branch `claude/defect-ledger`. Check `gh pr list` first: this list
+goes stale as soon as the owner merges or closes something.
+
+Merge order matters, because the branches are stacked:
+
+1. `hygiene/2026-10-08` (#220), then `claude/history-wave-2` (#224), then
+   `claude/defect-ledger` (#228): docs only.
+2. `claude/deps-wasapi-0.25` (#222) before any of the code branches below. Until it is
+   on master, `cargo-deny` is red for every code change (ledger D-003).
+3. Independent of each other, each on top of #222: `claude/redaction-hardening` (#221),
+   `claude/file-permissions` (#223), `claude/dead-code` (#225),
+   `claude/t5-math-notation` (#226), `claude/t6-tray-menu` (#227).
+
+Waiting for the owner: closing the old pull requests that #221, #222 and #223 supersede;
+a Windows build of `suflyor-teratts` for #222; the screenshot for T5 and the right-click
+check for T6; the items listed as kept in #224. The Windows worker was unreachable on
+2026-10-08, so nothing in these branches was built or run outside GitHub CI.
+
+Findings are in [`docs/DEFECT-LEDGER.md`](DEFECT-LEDGER.md).
 
 ## Historical macOS MLX runtime handoff state (superseded) — 2026-08-20
 
