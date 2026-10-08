@@ -4,7 +4,7 @@ Completed history removed from the working tree: audit reports, retest checklist
 
 Read a removed report with `git show <revision>:<path>`. List a removed folder with `git ls-tree -r --name-only <revision> <folder>/`. Find the removing commit with `git log --diff-filter=D --oneline -- <path>`. Use the full revision SHA.
 
-The revision used here is the master commit 8a38baccc38ec317693be4dde376e958e8f3c242. The removal commits are on the local branch hygiene/2026-10-08 and are not pushed yet. Until they are pushed, master is the only reachable copy that holds these files.
+Every row below names the master commit 8a38baccc38ec317693be4dde376e958e8f3c242, the last master commit that holds these files. The "Removed in" column names the batch of the 2026-10-08 hygiene pass; the removing commit is found with the `git log` command above.
 
 | Path before removal | Revision that holds it | Removed in |
 |---|---|---|

@@ -18,7 +18,7 @@ These files have specific ownership; verify their scope and date before relying 
 - `docs/REVIEW_AGENT_PROMPT.md`: standard prompt for independent review.
 
 ### Historical provenance and milestone context
-Historical planning, release evidence, and migration blueprints are evidence. Preserve completed artifacts; correct an active document only when the task owns it. Audit reports are not kept in the working tree; see section 6:
+Historical planning and migration blueprints are evidence. Preserve completed artifacts; correct an active document only when the task owns it. Completed audit reports, retest checklists, release notes, release evidence and archive pages are not kept in the working tree; see section 6:
 - `docs/goal-*.md`: Task charters and goal specifications for past or scoped deliverables (e.g., `goal-teratts-rc17.md`, `goal-quality-2026-07-10.md`).
 - `docs/retest-*.html` & `docs/archive-*.html`: Golden-rule tester checklists and acceptance evidence for published releases. Past ones are removed from the tree under section 6; the latest stable and the prerelease line in progress stay.
 - `docs/release-notes-v*.md` & `docs/release-evidence-v*/`: Release notes and visual acceptance artifacts for past releases. Past ones are removed from the tree under section 6; the latest stable and the prerelease line in progress stay.
@@ -32,12 +32,12 @@ Historical planning, release evidence, and migration blueprints are evidence. Pr
 |------------------|----------|--------|------------------|
 | `CODEX_HANDOFF.md` | Live state file | Live | Update when the task owns the branch or worktree it names. Verify against Git. |
 | `state-and-plan.md` | Context-recovery history | Historical | Not updated. Live state is in `CODEX_HANDOFF.md`. |
-| `HISTORY-INDEX.md` | Index of removed audit reports | Live index | One row per removed audit report (section 6). |
+| `HISTORY-INDEX.md` | Index of completed history removed from the tree | Live index | One row per removed item (section 6). |
 | `AGENT_TASKS.md` | Agent Task Queue | **Authoritative** | Claim open tasks `[~]` and mark finished items `[x]`. |
 | `goal-*.md` | Deliverable Charter | Living (active) / Historical (done) | Create for multi-step feature/refactor charters; state scope & done criteria. |
-| `retest-*.html` | Tester Checklist | Historical Evidence | Copy `retest-template.html` to `retest-v<version>-<topic>.html` prior to release. |
+| `retest-*.html` | Tester Checklist | Historical Evidence | Copy `retest-template.html` to `retest-v<version>-<topic>.html` prior to release. Past ones leave the tree (section 6). |
 | `audit-YYYY-MM-DD-*/` | Audit evidence (working copy during a task) | Not kept in the tree after the task | Create the folder for the run; remove it from the tree when the task closes and index it (section 6). |
-| `release-notes-v*.md` | Release Notes | Historical Record | Create when preparing release publications. |
+| `release-notes-v*.md` | Release Notes | Historical Record | Create when preparing release publications. Past ones leave the tree (section 6). |
 | `architecture.md` / `*-architecture.md` | System / subsystem reference | Current or proposed as labelled | Keep current overviews in sync; never present a proposed phase as implemented. |
 | `PHASE-*.md` / `PLAN-*.md` / `MIGRATION-*.md` | Blueprint / Migration Plan | Historical Record | Do not edit past plans; write a new plan document for new architectural phases. |
 | `ADR-*.md` | Architecture Decision Record | Historical Record | Append new decision records sequentially; do not edit accepted past ADRs. |
