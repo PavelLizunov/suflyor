@@ -65,7 +65,7 @@ project's Qwen/Claude worker rules.
 
 The product is **pure Rust + Slint** (Phase 7 cut, 2026-05-28 removed the
 old React/Tauri/WebView2 surface). No browser engine, no Node, no
-TypeScript. **THREE** standalone crates, NO root workspace:
+TypeScript. **FIVE** standalone crates, NO root workspace:
 
 - **`slint-experiment/`** — the `overlay-host` binary. UI in `ui/*.slint`
   (compiled into the binary at build time via `build.rs` + `slint-build`);
@@ -76,11 +76,9 @@ TypeScript. **THREE** standalone crates, NO root workspace:
   `src/bin/overlay_host/` (`hotkeys`, `settings_*`, `tile_*`, `aux_windows`,
   `vision_capture`, `recovery`, `wizard`, `diagnostics`, …). Grep the directory,
   not just the file.
-- **`overlay-backend/`** — the no-UI shared crate. `lib.rs` exports 24 modules:
-  ai, audio, components, config, conspect, events, health, journal, kb,
-  local_ai, memory, ocr, ocr_install, paths, persistence, re_transcribe,
-  recorder, runtime, session_names, stt, tts, tts_install, update, vision.
-  `slint-experiment` depends on it via a path dep.
+- **`overlay-backend/`** — the no-UI shared crate. `lib.rs` declares 43 modules
+  (41 distinct names; `audio` is declared under cfg gates). The list lives in
+  `lib.rs`, not here. `slint-experiment` depends on it via a path dep.
 - **`suflyor-tts/`** — the Piper neural read-aloud + diarization SIDECAR
   (`suflyor-tts.exe`, shipped beside overlay-host in the installer). Links
   sherpa-onnx (TTS) ONLY and MUST stay a separate process: two onnxruntimes in
@@ -94,6 +92,8 @@ TypeScript. **THREE** standalone crates, NO root workspace:
   `suflyor-teratts/manifest/teratts-v2.json` and downloads on demand — never
   bundle weights in the installer; `suflyor-teratts/NOTICE.md` carries the
   upstream licensing release gate (upstream has NO LICENSE file).
+- **`suflyor-wsola/`** — pitch-preserving WSOLA time-stretch library crate used
+  by playback (its own AGENTS.md: a library crate, not a sidecar process).
 
 Run/build from `slint-experiment/`:
 ```pwsh
@@ -372,9 +372,8 @@ Backend: `tts.rs` (SAPI live fallback) + `tts_install.rs` + `ocr.rs` +
 - **Single process, no IPC command surface.** Unlike the old Tauri build,
   there are no "commands" a tile window can `invoke`. Tile / palette /
   settings are Slint windows constructed by `overlay_host.rs`; they render
-  only what they're handed and never read `config.json` themselves. So the
-  old `assert_overlay` caller-guard is moot — secrets simply never reach a
-  tile's scope.
+  only what they're handed and never read `config.json` themselves. Secrets
+  simply never reach a tile's scope.
 - **AI endpoint:** resolve via `cfg.ai_endpoint(false)` (picks local vs cloud
   by `ai_provider`); the raw `ai_base_url` field is ALWAYS the cloud bridge.
 - **AI error tiles** must use a GENERIC message (no error chain) so the
