@@ -41,7 +41,9 @@ fn data_root_in(base: &Path) -> PathBuf {
 }
 
 /// Write `bytes` to `path` so that only the owner can read the file on Unix (mode 0600),
-/// whether it is new or already exists with a wider mode. Elsewhere this is `std::fs::write`.
+/// whether it is new or already exists with a wider mode. An existing file is emptied only
+/// after its mode was restricted, so a failure to restrict it leaves its content intact.
+/// Elsewhere this is `std::fs::write`.
 pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     #[cfg(unix)]
     {
@@ -49,13 +51,26 @@ pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
         let mut options = std::fs::OpenOptions::new();
-        options.write(true).create(true).truncate(true).mode(0o600);
+        options.write(true).create(true).truncate(false).mode(0o600);
         let mut file = options.open(path)?;
         file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+        file.set_len(0)?;
         file.write_all(bytes)?;
     }
     #[cfg(not(unix))]
     std::fs::write(path, bytes)?;
+    Ok(())
+}
+
+/// Restrict an existing file to its owner on Unix (mode 0600). Does nothing elsewhere.
+pub(crate) fn restrict_to_owner(path: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
+    #[cfg(not(unix))]
+    let _ = path;
     Ok(())
 }
 
@@ -141,6 +156,23 @@ fn migrate_in(base: &Path) -> DataMigration {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn write_private_replaces_a_longer_wide_file_with_an_owner_only_one() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("export.json");
+        std::fs::write(&path, "a much longer previous content").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        write_private(&path, b"new").unwrap();
+
+        assert_eq!(std::fs::read(&path).unwrap(), b"new");
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+    }
 
     #[test]
     fn data_root_in_prefers_brand_then_legacy_then_brand() {

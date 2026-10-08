@@ -1943,14 +1943,20 @@ fn config_exports_are_owner_only_on_unix() {
 #[cfg(unix)]
 #[test]
 fn config_backup_is_owner_only_on_unix() {
+    use std::os::unix::fs::PermissionsExt;
+
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("config.json");
     let cfg = Config::defaults();
 
+    // A backup left wide by an older version: independent of the process umask.
+    let bak = path.with_extension("json.bak");
     save_to_path(&path, &cfg).unwrap();
+    std::fs::write(&bak, "{}").unwrap();
+    std::fs::set_permissions(&bak, std::fs::Permissions::from_mode(0o644)).unwrap();
     save_to_path(&path, &cfg).unwrap();
 
-    let bak = path.with_extension("json.bak");
-    assert!(bak.exists(), "the second save must leave a backup");
+    let size = std::fs::metadata(&bak).unwrap().len();
+    assert!(size > 2, "the save must rewrite the backup");
     assert_eq!(unix_mode(&bak), 0o600, "the backup holds profiles");
 }

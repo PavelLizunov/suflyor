@@ -1082,6 +1082,9 @@ fn session_journal_and_its_directory_are_owner_only_on_unix() {
 
     let temp = tempfile::tempdir().unwrap();
     let dir = temp.path().join("sessions");
+    // A directory left wide by an older version: independent of the process umask.
+    std::fs::create_dir(&dir).unwrap();
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
     let journal = Journal::open_in(&dir, 10, 1 << 20).unwrap();
     let file = journal.current_path().unwrap();
     journal.close();
