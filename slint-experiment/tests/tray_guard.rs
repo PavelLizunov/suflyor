@@ -224,8 +224,8 @@ fn tray_module_never_persists_state() {
         "legacy and v4 Explorer context events must share one menu path"
     );
     assert!(
-        tray.contains("arm_menu_request(&TRAY_MENU_REQUEST_PENDING)"),
-        "duplicate legacy + v4 callbacks must arm only one async menu"
+        tray.contains("is_duplicate_menu_request(previous, tray_clock_ms())"),
+        "duplicate legacy + v4 callbacks of one click must open only one menu"
     );
     assert!(
         tray.contains("GetCursorPos(&mut point)"),
