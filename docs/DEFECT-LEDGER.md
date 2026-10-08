@@ -90,3 +90,10 @@ Scenario: the dependency cannot be updated without a code change in the diarizat
 Found by: the dependabot report at 8a38bac.
 Fix plan: add the two fields with their upstream defaults in a pull request that also carries the bump, then listen to read-aloud and run a diarization.
 Closed by:
+
+### D-012 Three tests are compiled out on every platform that CI runs   Severity: P3   Status: Open
+Evidence: overlay-backend/src/stt.rs:1618 - `#[cfg(not(any(windows, target_os = "macos")))]` on `gigaam_shim_load_unsupported_off_windows`, and the same attribute on `validate_gigaam_dir_unsupported_off_windows` and `configure_gigaam_accelerator_honest_noop_off_windows`
+Scenario: CI tests on Windows and macOS only. These three tests never run, so the "unsupported platform" fallbacks they describe are untested in practice.
+Found by: a script count of test attributes at 8a38bac (1241 test functions; the 21 Windows-only, 9 macOS-only and 3 Unix-only ones do have a job that runs them).
+Fix plan: decide whether the off-platform fallbacks are still wanted (Linux is not a product target); if not, remove them with their tests.
+Closed by:
