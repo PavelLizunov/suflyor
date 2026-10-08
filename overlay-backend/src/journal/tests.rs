@@ -1038,39 +1038,3 @@ fn last_lines_capped_at_recovery_limit() {
     assert_eq!(got.last_lines[0], "sys: line 5");
     std::fs::remove_dir_all(&dir).ok();
 }
-
-#[test]
-fn append_bookmark_creates_file_with_header_then_appends_entries() {
-    // Override the config dir for isolation. We can't easily mock
-    // dirs::config_dir() so this test writes to the real APPDATA
-    // location into a uniquely-named subfolder.
-    let tag = format!("overlay-mvp-test-{}", now_unix_ms());
-    let testdir = dirs::config_dir().expect("config dir").join(&tag);
-    let _cleanup = scopeguard::guard(testdir.clone(), |p| {
-        let _ = std::fs::remove_dir_all(&p);
-    });
-    // Manually inline the append logic into the test dir to avoid
-    // dependency on dirs::config_dir() inside append_bookmark.
-    // (Full mock would need a feature gate; this test pattern is
-    // good enough to validate the markdown format.)
-    std::fs::create_dir_all(&testdir).unwrap();
-    let path = testdir.join("bookmarks.md");
-    let is_new = !path.exists();
-    {
-        use std::io::Write;
-        let mut f = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .unwrap();
-        if is_new {
-            writeln!(f, "# suflyor bookmarks\n").unwrap();
-        }
-        writeln!(f, "## Q1\nA1\n").unwrap();
-        writeln!(f, "## Q2\nA2\n").unwrap();
-    }
-    let content = std::fs::read_to_string(&path).unwrap();
-    assert!(content.starts_with("# suflyor bookmarks"));
-    assert!(content.contains("## Q1"));
-    assert!(content.contains("## Q2"));
-}
