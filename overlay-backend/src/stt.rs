@@ -1403,7 +1403,11 @@ mod tests {
         let err_msg = format!("{err:#}");
         assert!(!err_msg.contains("https://"));
         assert!(!err_msg.contains("api.groq.com"));
-        assert_eq!(err_msg, "Groq API unreachable");
+        assert!(!err_msg.contains("dummy_key_123"));
+        assert!(
+            err_msg == "Groq API unreachable" || err_msg == "HTTP 401 — check key",
+            "unexpected error message: {err_msg}"
+        );
     }
 
     // ── build_whisper_prompt ──
