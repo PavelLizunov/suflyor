@@ -75,13 +75,11 @@ Found by: design of the fix for D-001. No such log line was found by grep of the
 Fix plan: none until confirmed.
 Closed by:
 
-### D-010 `cargo fmt --check` may not see the host modules
-UNVERIFIED IMPORTED HYPOTHESIS. Status: Open
+### D-010 `cargo fmt --check` never reads the host modules   Severity: P3   Status: Open
 Evidence: slint-experiment/src/bin/overlay_host.rs:19 - `include!("overlay_host_windows.rs");`
-Scenario: rustfmt follows `mod` declarations but not `include!`. The 36 files under `src/bin/overlay_host/` are declared inside the included file, so the format check of the required job may never read them. `diagnostics.rs` holds lines in a layout that rustfmt rewrites elsewhere in the repository.
-What would confirm it: `cargo fmt --check -- --verbose` listing the files it visits, on a machine with the toolchain.
-Found by: preparing changes in `diagnostics.rs` at 8a38bac. Not run: no Rust toolchain is used on the control machine.
-Fix plan: if confirmed, pass the files to rustfmt explicitly or replace the include.
+Scenario: rustfmt follows `mod` declarations but not `include!`. `overlay_host_windows.rs` and the 40 files under `src/bin/overlay_host/` (28134 lines, most of the host) are declared inside the included file, so the format check of the required CI job passes whatever their layout is. Formatting drift there is never reported.
+Found by: preparing changes in `diagnostics.rs` at 8a38bac; confirmed on windows-worker at 2d55575248c5ea1c7e3008554325b98edbf13002: `cargo fmt --manifest-path slint-experiment\Cargo.toml --all -- --check -v` exits 0 and lists 155 files, among them `src\bin\overlay_host.rs` and none under `src\bin\overlay_host\`.
+Fix plan: pass those files to rustfmt explicitly in the gate, or replace the include with a module declaration. The first run will report existing drift, so it needs its own formatting-only pull request.
 Closed by:
 
 ### D-011 The sherpa-onnx patch bump does not compile   Severity: P3   Status: Open
