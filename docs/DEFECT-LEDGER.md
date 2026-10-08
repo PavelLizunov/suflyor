@@ -97,8 +97,15 @@ Fix plan: decide whether the off-platform fallbacks are still wanted (Linux is n
 Closed by:
 
 ### D-013 The targeted gate cannot run backend tests on the Windows worker   Severity: P2   Status: Open
-Evidence: scripts/git-gate-native.ps1:176 - `& $cargo test --manifest-path $manifest` (no step stages `DirectML.dll`; scripts/ci.ps1:102-113 has the step "stage DirectML for backend tests")
+Evidence: scripts/git-gate-native.ps1:178 - `& $cargo test --manifest-path $manifest` (no step stages `DirectML.dll`; scripts/ci.ps1:102-113 has the step "stage DirectML for backend tests")
 Scenario: on Winbrat (Windows 10 Enterprise LTSC, build 17763) the system `DirectML.dll` is version 10.0.17763 and lacks an export that the `ort` build (DirectML 1.15.4) needs. The Full gate copies the matching DLL next to the test executables; the targeted gate, which `AGENTS.md` prescribes for every normal change, does not. `scripts\git-gate-native.ps1 push` then fails at "overlay-backend test": the test executable exits with 0xc0000138 (STATUS_ORDINAL_NOT_FOUND) before a single test runs. GitHub's Windows image has a newer system DLL, so CI does not show it.
 Found by: the first targeted gate run on windows-worker at 2d55575248c5ea1c7e3008554325b98edbf13002 on 2026-10-08 (exit 1 after 2.1 minutes; the same at five other commits).
 Fix plan: move the staging step of ci.ps1 into a function both gates call, for overlay-backend and slint-experiment.
+Closed by:
+
+### D-014 A backend test passes alone and fails inside the full suite on the Windows worker   Severity: P3   Status: Open
+Evidence: overlay-backend/src/ai/tests.rs:75 - `"a queued stream kept a permit after its receiver was dropped"` (test `ai::tests::queued_stream_stops_when_receiver_is_dropped`; it takes two permits of the process-wide `AI_SEMAPHORE` and waits at most five seconds to get them back)
+Scenario: on windows-worker, `cargo test --manifest-path overlay-backend\Cargo.toml` with four test threads fails this one test on every run (six runs at three commits, 726 or 724 others passing), while the same test alone with one thread passes five times out of five. GitHub CI passes it. The semaphore is shared by every test in the binary, so the outcome depends on what else runs beside it and how fast the machine is. The code under test may be correct; the test cannot tell.
+Found by: the first backend test run on windows-worker at 2d55575248c5ea1c7e3008554325b98edbf13002 on 2026-10-08. Not investigated further.
+Fix plan: give the test its own semaphore, or hold the lock that serialises the tests which use the shared one.
 Closed by:
