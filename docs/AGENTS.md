@@ -19,10 +19,10 @@ These files have specific ownership; verify their scope and date before relying 
 
 ### Historical provenance and milestone context
 Historical planning and migration blueprints are evidence. Preserve completed artifacts; correct an active document only when the task owns it. Completed audit reports, retest checklists, release notes, release evidence and archive pages are not kept in the working tree; see section 6:
-- `docs/goal-*.md`: Task charters and goal specifications for past or scoped deliverables (e.g., `goal-teratts-rc17.md`, `goal-quality-2026-07-10.md`).
+- `docs/goal-*.md`: Task charters and goal specifications for scoped deliverables. A charter whose release has shipped is completed history (section 6).
 - `docs/retest-*.html` & `docs/archive-*.html`: Golden-rule tester checklists and acceptance evidence for published releases. Section 6 decides which ones stay in the tree.
 - `docs/release-notes-v*.md` & `docs/release-evidence-v*/`: Release notes and visual acceptance artifacts for releases. Section 6 decides which ones stay in the tree.
-- `docs/PHASE-*.md`, `docs/PLAN-*.md`, `docs/MIGRATION-*.md`, `docs/ADR-*.md`: Historical design records, architecture decision records, and migration cut plans (e.g., Phase 7 Tauri-to-Slint cut).
+- `docs/PHASE-*.md`, `docs/PLAN-*.md`, `docs/MIGRATION-*.md`, `docs/ADR-*.md`: Design records, architecture decision records, and migration cut plans (e.g., Phase 7 Tauri-to-Slint cut). Section 6 decides which completed ones stay in the tree.
 
 ---
 
@@ -75,7 +75,7 @@ Documentation, plans, and non-executable markdown/HTML text files use the **Docs
 
 ## 6. Completed history lives in git
 
-Completed history is evidence of a past run: audit reports, retest checklists, release notes, release evidence and archive pages. It is not kept in the working tree. Each item stays in git at a recorded revision, and that revision is how it is read. This follows the pattern of the VPNRouter repository.
+Completed history is evidence of a past run: audit reports, retest checklists, release notes, release evidence, archive pages, and goal charters, plans, post-mortems and dated reviews whose work has shipped. It is not kept in the working tree. Each item stays in git at a recorded revision, and that revision is how it is read. This follows the pattern of the VPNRouter repository.
 
 Kept in the tree, even when finished:
 
@@ -92,4 +92,4 @@ Rules for moved items:
 5. Removing an item from the tree does not remove it from git. Sensitive content is handled under section 4, not by this rule.
 6. Screenshots, clips and other files inside a folder follow the same rule.
 
-Goal charters, plans, ADRs and migration blueprints are not covered by this section; section 3 still applies to them.
+A goal charter or plan is completed when the release it targets has shipped and it has no unchecked item. An active charter, a plan not yet carried out and an ADR that is still in force stay; section 3 applies to them.
