@@ -142,8 +142,8 @@ pub(crate) fn redact_urls(s: &str) -> String {
 
 /// Redact credentials from diagnostic outputs and log exports so exported files and reports
 /// never leak API keys or authorization tokens: a labelled value (`Bearer <token>` in any ASCII
-/// case and after any run of spaces, tabs, `:`, `=` or quotes; an `x-api-key` header) and a
-/// provider key recognised by its prefix (`gsk_`, `sk-`, `xai-`, `nvapi-`).
+/// case and after any run of spaces, tabs, `:` or `=`, quoted or not; an `x-api-key` header)
+/// and a provider key recognised by its prefix (`gsk_`, `sk-`, `xai-`, `nvapi-`).
 pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
@@ -196,15 +196,19 @@ fn labelled_secret(rest: &str, mid_word: bool) -> Option<(&'static str, usize)> 
     Some(("x-api-key: <redacted>", len))
 }
 
-/// Byte length of `label`, the delimiter run after it and the value that follows. `None` when
-/// `rest` does not start with the label, no delimiter follows it, or the value is empty (the
-/// word at the end of a line is not a credential). The value ends at whitespace or a quote.
+/// Byte length of `label`, what separates it from its value, and the value. Between the two
+/// may stand the label's own closing quote (`"bearer": ...`), a run of spaces, tabs, `:` and
+/// `=`, and the value's opening quote. `None` when `rest` does not start with the label,
+/// nothing separates it from what follows, or the value is empty (`key=""`, or the word at
+/// the end of a line). The value ends at whitespace or a quote.
 fn labelled_secret_len(rest: &str, label: &str) -> Option<usize> {
     if !starts_with_ascii_ci(rest, label) {
         return None;
     }
     let after = rest.get(label.len()..)?;
-    let value = after.trim_start_matches([' ', '\t', ':', '=', '"', '\'']);
+    let unquoted = after.strip_prefix(['"', '\'']).unwrap_or(after);
+    let separated = unquoted.trim_start_matches([' ', '\t', ':', '=']);
+    let value = separated.strip_prefix(['"', '\'']).unwrap_or(separated);
     if value.len() == after.len() {
         return None;
     }
@@ -1009,6 +1013,7 @@ mod tests {
             "Bearer: secret_token_123",
             "Bearer=secret_token_123",
             "bearer:\"secret_token_123\"",
+            "\"bearer\": \"secret_token_123\"",
         ] {
             let redacted = redact_secrets(sample);
             assert!(!redacted.contains("secret_token_123"), "leaked from {sample:?}: {redacted}");
@@ -1055,6 +1060,8 @@ mod tests {
             "token type: bearer",
             "bearer\nnext line",
             "Bearer \nnext line",
+            "x-api-key=\"\" status=ok",
+            "Bearer \"\" next",
         ] {
             assert_eq!(redact_secrets(sample), sample);
         }
