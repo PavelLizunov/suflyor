@@ -20,8 +20,8 @@ These files have specific ownership; verify their scope and date before relying 
 ### Historical provenance and milestone context
 Historical planning, release evidence, and migration blueprints are evidence. Preserve completed artifacts; correct an active document only when the task owns it. Audit reports are not kept in the working tree; see section 6:
 - `docs/goal-*.md`: Task charters and goal specifications for past or scoped deliverables (e.g., `goal-teratts-rc17.md`, `goal-quality-2026-07-10.md`).
-- `docs/retest-*.html` & `docs/archive-*.html`: Golden-rule tester checklists and acceptance evidence for published releases.
-- `docs/release-notes-v*.md` & `docs/release-evidence-v*/`: Release notes and visual acceptance artifacts for past releases.
+- `docs/retest-*.html` & `docs/archive-*.html`: Golden-rule tester checklists and acceptance evidence for published releases. Past ones are removed from the tree under section 6; the latest stable and the prerelease line in progress stay.
+- `docs/release-notes-v*.md` & `docs/release-evidence-v*/`: Release notes and visual acceptance artifacts for past releases. Past ones are removed from the tree under section 6; the latest stable and the prerelease line in progress stay.
 - `docs/PHASE-*.md`, `docs/PLAN-*.md`, `docs/MIGRATION-*.md`, `docs/ADR-*.md`: Historical design records, architecture decision records, and migration cut plans (e.g., Phase 7 Tauri-to-Slint cut).
 
 ---
