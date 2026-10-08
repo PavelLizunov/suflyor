@@ -20,8 +20,8 @@ These files have specific ownership; verify their scope and date before relying 
 ### Historical provenance and milestone context
 Historical planning and migration blueprints are evidence. Preserve completed artifacts; correct an active document only when the task owns it. Completed audit reports, retest checklists, release notes, release evidence and archive pages are not kept in the working tree; see section 6:
 - `docs/goal-*.md`: Task charters and goal specifications for past or scoped deliverables (e.g., `goal-teratts-rc17.md`, `goal-quality-2026-07-10.md`).
-- `docs/retest-*.html` & `docs/archive-*.html`: Golden-rule tester checklists and acceptance evidence for published releases. Past ones are removed from the tree under section 6; the latest stable and the prerelease line in progress stay.
-- `docs/release-notes-v*.md` & `docs/release-evidence-v*/`: Release notes and visual acceptance artifacts for past releases. Past ones are removed from the tree under section 6; the latest stable and the prerelease line in progress stay.
+- `docs/retest-*.html` & `docs/archive-*.html`: Golden-rule tester checklists and acceptance evidence for published releases. Section 6 decides which ones stay in the tree.
+- `docs/release-notes-v*.md` & `docs/release-evidence-v*/`: Release notes and visual acceptance artifacts for releases. Section 6 decides which ones stay in the tree.
 - `docs/PHASE-*.md`, `docs/PLAN-*.md`, `docs/MIGRATION-*.md`, `docs/ADR-*.md`: Historical design records, architecture decision records, and migration cut plans (e.g., Phase 7 Tauri-to-Slint cut).
 
 ---
@@ -49,7 +49,7 @@ Historical planning and migration blueprints are evidence. Preserve completed ar
 1. **Session Entry:** Inspect Git first. Read `docs/CODEX_HANDOFF.md` when the current task resumes the branch/worktree named there.
 2. **Work Completion:** Update `docs/CODEX_HANDOFF.md` only when the task owns the branch or worktree it names. Do not overwrite another active worktree's handoff with unrelated branch information.
 3. **Task Scope & Charters:** Reference or write a `docs/goal-<name>.md` charter for multi-step tasks. Keep scope strictly bounded to the charter.
-4. **Release Verification:** Create a release retest checklist (`docs/retest-v<version>-<topic>.html`) from `docs/retest-template.html` before publishing.
+4. **Release Verification:** Before publishing, create a release retest checklist (`docs/retest-v<version>-<topic>.html`) from `docs/retest-template.html` and fill in its per-change items.
 5. **Preservation of History:** Completed history leaves the working tree only under section 6, and is never rewritten in place. Active goal charters may be corrected by the task that owns them; prefer a superseding document for material historical changes.
 
 ---
@@ -79,9 +79,9 @@ Completed history is evidence of a past run: audit reports, retest checklists, r
 
 Kept in the tree, even when finished:
 
-- the latest stable release's retest and release notes, and the prerelease line in progress, so the release gate can find the retest it needs;
+- the retest checklists, release notes and release evidence of the latest stable release and of the prerelease line in progress, so the release gate can find the retest it needs;
 - the retest template;
-- anything a tracked file still refers to: code, comments, tests, scripts, workflows or other documents.
+- anything a tracked file other than `docs/HISTORY-INDEX.md` still refers to: code, comments, tests, scripts, workflows or other documents.
 
 Rules for moved items:
 
