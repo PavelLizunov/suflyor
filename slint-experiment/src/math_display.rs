@@ -139,10 +139,12 @@ const MATRIX_ENVIRONMENTS: [(&str, &str, &str); 4] = [
     ("matrix", "", ""),
 ];
 
-/// The first matrix environment in `text`: where it begins, where its body begins, and its
-/// name and brackets.
-fn next_matrix(text: &str) -> Option<(usize, usize, &'static str, &'static str, &'static str)> {
-    let mut first = None;
+/// Where a matrix environment begins, where its body begins, and its name and brackets.
+type MatrixStart = (usize, usize, &'static str, &'static str, &'static str);
+
+/// The first matrix environment in `text`.
+fn next_matrix(text: &str) -> Option<MatrixStart> {
+    let mut first: Option<MatrixStart> = None;
     for (name, open, close) in MATRIX_ENVIRONMENTS {
         let marker = format!("\\begin{{{name}}}");
         let Some(begin) = text.find(&marker) else {
