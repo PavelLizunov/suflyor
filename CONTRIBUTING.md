@@ -5,7 +5,7 @@ Single-user pet project, but if you fork or want to send a PR — here's the lay
 ## Setup
 
 **Prerequisites:**
-- Windows 10/11 (only OS supported — uses WASAPI + Win32 native APIs)
+- Windows 10/11 for the Windows product (WASAPI + Win32 native APIs). The macOS port builds on Apple Silicon; see the macOS block below.
 - Rust + cargo via rustup, **MSVC toolchain** (not GNU): `rustup default stable-msvc`
 - Visual Studio Build Tools 2022 with the C++ workload (for the MSVC linker)
 
@@ -29,6 +29,17 @@ cargo run --bin overlay-host          # builds + launches the overlay
 scripts\build-slint-release.ps1 -Installer
 # → slint-experiment\target\release\bundle\suflyor-slint-setup.exe (NSIS)
 ```
+
+**Build the macOS package** (Apple Silicon, macOS 14.2+, Xcode command-line tools, Rust):
+```bash
+./slint-experiment/scripts/build-macos-dmg.sh
+# → slint-experiment/target/bundle/Suflyor-<version>-macos-arm64.dmg
+
+# Optional personal-build identity from the login Keychain (exact SHA-1):
+SUFLYOR_MACOS_SIGN_IDENTITY="<40-hex certificate SHA-1>" \
+  ./slint-experiment/scripts/build-macos-dmg.sh
+```
+The identity must already exist as a code-signing identity in the login Keychain. Its private key is never stored in this repository.
 
 ## Tests / gates
 
