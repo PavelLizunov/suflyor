@@ -130,3 +130,9 @@ Every row below names the master commit 8a38baccc38ec317693be4dde376e958e8f3c242
 | docs/retest-v0.36.1-rc.16.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
 | docs/retest-v0.37.0-rc.1.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
 | docs/retest-v0.38.0-rc.2-macos-settings.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+
+## Reduced in place
+
+These files stay in the tree but lost their historical part. The full earlier text is read the same way.
+
+- `UPGRADING.md`: per-version migration notes for v0.0.1 to v0.1.1 (the retired Tauri/React build), 2233 lines. Revision 8a38baccc38ec317693be4dde376e958e8f3c242.
