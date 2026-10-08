@@ -215,10 +215,6 @@ impl Journal {
         outcome.map_err(anyhow::Error::msg)
     }
 
-    pub fn shutdown_blocking(&self, timeout: std::time::Duration) -> Result<(), String> {
-        self.shutdown(timeout).map_err(|e| e.to_string())
-    }
-
     pub fn emit_summary_and_stop(&self) {
         if let Some(c) = &self.counters {
             let c = c.lock().clone();
