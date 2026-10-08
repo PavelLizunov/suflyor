@@ -40,40 +40,6 @@ pub fn diagnose_and_repair_default() -> Result<DbHealth> {
     diagnose_and_repair_at(&path, &backups)
 }
 
-/// Diagnose ONLY the default catalog (no backup, no repair) — a read-only health
-/// probe for a status display.
-///
-/// # Errors
-/// If the data root can't be resolved.
-pub fn check_default() -> Result<DbHealth> {
-    let path = default_catalog_path()?;
-    if !path.exists() {
-        return Ok(DbHealth {
-            healthy: true,
-            issues: Vec::new(),
-            actions: vec!["база ещё не создана".to_string()],
-            backup_path: None,
-        });
-    }
-    match open_main(&path) {
-        Ok(conn) => {
-            let issues = run_checks(&conn);
-            Ok(DbHealth {
-                healthy: issues.is_empty(),
-                issues,
-                actions: Vec::new(),
-                backup_path: None,
-            })
-        }
-        Err(e) => Ok(DbHealth {
-            healthy: false,
-            issues: vec![format!("база не открывается: {e}")],
-            actions: Vec::new(),
-            backup_path: None,
-        }),
-    }
-}
-
 /// The testable core: back up `path` into `backups`, check, non-destructively
 /// repair, re-check. Parameterized over paths so tests need no `data_root`.
 ///
