@@ -540,7 +540,9 @@ fn is_duplicate_menu_request(previous_ms: u64, now_ms: u64) -> bool {
 fn tray_clock_ms() -> u64 {
     static START: OnceLock<Instant> = OnceLock::new();
     let elapsed = START.get_or_init(Instant::now).elapsed();
-    u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX).max(1)
+    u64::try_from(elapsed.as_millis())
+        .unwrap_or(u64::MAX)
+        .max(1)
 }
 
 #[cfg(test)]
