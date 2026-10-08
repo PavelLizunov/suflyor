@@ -179,3 +179,23 @@ and `scripts/slint-installer.nsi` (`!define PRODUCT_VERSION`).
 - **Telemetry**: explicit non-goal.
 - **Phase 7 Tauri-to-Slint Cut**: completed historical refactor (2026-05-28, see `docs/PHASE-7-CUT-PLAN.md`).
 - **overlay_host.rs split**: completed historical refactor (entrypoint is now thin, delegating to `overlay_host_windows.rs` and the `overlay_host/` module directory).
+
+## Product notes moved from CLAUDE.md
+
+Moved here on 2026-10-08 (phase 2b of the hygiene pass). The entry count of the knowledge base is disputed: this text said about 1600, a comment in overlay-backend/src/kb.rs says about 2000. Not measured yet.
+
+### Knowledge base
+
+Embedded reference in `overlay-backend/src/kb.rs` (~1600 glossary / commands /
+patterns entries, pre-lowercased). Accessed directly via `kb::search` /
+`kb::get` (no IPC layer). The overlay's **F4** palette is the inline search
+surface. Hyphenated keys (`kubectl-debug`) match via token-set check.
+`kb::search` clamps the query to 200 chars (DoS guard).
+
+### Voice coach (live + retrospective)
+
+- **Live pill** in the overlay bar: WPM + filler density over a rolling 60s
+  mic-only window.
+- **Post-meeting debrief**: opt-in. On `stop_session`, the mic transcript + a
+  3-point ask → a tile labeled "🎯 Debrief". Skip conditions: <30s session,
+  <5 mic lines, empty AI bearer.

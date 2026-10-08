@@ -316,22 +316,6 @@ Adding a user-facing string: wrap it in `@tr("English…")`, append the
 are separate Slint windows in the same process; they get their text from
 `overlay_host.rs` at construction, so there's no per-window config fetch.
 
-## Knowledge base
-
-Embedded reference in `overlay-backend/src/kb.rs` (~1600 glossary / commands /
-patterns entries, pre-lowercased). Accessed directly via `kb::search` /
-`kb::get` (no IPC layer). The overlay's **F4** palette is the inline search
-surface. Hyphenated keys (`kubectl-debug`) match via token-set check.
-`kb::search` clamps the query to 200 chars (DoS guard).
-
-## Voice coach (live + retrospective)
-
-- **Live pill** in the overlay bar: WPM + filler density over a rolling 60s
-  mic-only window.
-- **Post-meeting debrief**: opt-in. On `stop_session`, the mic transcript + a
-  3-point ask → a tile labeled "🎯 Debrief". Skip conditions: <30s session,
-  <5 mic lines, empty AI bearer.
-
 ## Hotkeys (global — `src/bin/overlay_host/hotkeys.rs` is the source of truth)
 
 | Key | Action |
