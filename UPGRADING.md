@@ -12,8 +12,9 @@ next launch, and a field an older version does not know is ignored.
 | macOS | `~/Library/Application Support/suflyor/` |
 
 It holds `config.json`, `sessions/`, `recordings/`, `catalog.sqlite` and
-`overlay-host.log`. The installer does not own this directory: installing,
-updating or uninstalling the app leaves it untouched.
+`overlay-host.log`. Installing and updating leave this directory untouched. The
+Windows uninstaller asks whether to delete it together with the downloaded AI
+models; answer No to keep your data.
 
 Builds from before the rename kept their data in `%APPDATA%\overlay-mvp\`. The
 app renames that directory to `suflyor` once, at startup. If the rename fails

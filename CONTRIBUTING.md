@@ -43,16 +43,19 @@ The identity must already exist as a code-signing identity in the login Keychain
 
 ## Tests / gates
 
-All three crates must pass before any commit. Run the same full gate as CI:
+The gate depends on the change; `AGENTS.md`, "Verification routing", owns the
+rule. `scripts/git-gate-native.ps1 manual` classifies the diff as docs (a
+whitespace check, no build) or targeted (fmt, clippy and tests of the affected
+crate). The full gate is for a stable release:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci.ps1
 ```
 
-It runs fmt, clippy with warnings denied, full tests for `overlay-backend`,
-`slint-experiment`, and `suflyor-tts`, plus the i18n guard and a compile
-check for the `ui-mcp` QA feature. Do not replace it with `cargo test --lib`;
-that skips integration guard tests.
+It runs fmt, clippy with warnings denied and the full tests of all five crates,
+plus the i18n guard and a compile check for the `ui-mcp` QA feature. Do not
+replace a crate's tests with `cargo test --lib`; that skips integration guard
+tests.
 
 Visible UI changes also require the repository's Slint MCP audit against the
 exact binary being reviewed. Keep matching before/after screenshots for every

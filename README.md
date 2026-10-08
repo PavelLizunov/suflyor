@@ -36,8 +36,8 @@ More screenshots: [docs/showcase/](docs/showcase/).
 - **Meeting summary.** One click; long sessions are processed in chunks.
 - **Recording and archive (F7).** Microphone and system audio as separate WAV
   files, full-text search over past sessions, a player with click-to-seek.
-- **Personal memory.** Your terms and names are injected into answers after a
-  manual review.
+- **Personal memory.** Your terms and names are injected into answers.
+  Candidates found in sessions wait for your review.
 - **Vision (F8).** Analyse, translate or read aloud a screen region.
 - **Read-aloud and speaker diarization** in a separate sidecar process.
 - **Knowledge base (F4).** A built-in glossary, commands and patterns; no AI
@@ -75,8 +75,9 @@ asks for confirmation.
 
 **Settings, AI bridge, Install / complete local AI** downloads llama.cpp,
 whisper.cpp and the models, detects a CUDA GPU, starts the servers and writes
-the settings. On Apple Silicon choose **Managed MLX**. A standalone script
-does the same on Windows; see [scripts/README.md](scripts/README.md).
+the settings, with a choice of model size. On Apple Silicon choose **Managed
+MLX**. A standalone Windows script installs the lightest profile; see
+[scripts/README.md](scripts/README.md).
 
 ## First five minutes
 
