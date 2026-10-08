@@ -142,6 +142,7 @@ log is not visual or functional acceptance.
 - User-facing `.slint` strings are English `@tr("...")` source strings with an
   exact Russian `msgid`/`msgstr` pair in
   `slint-experiment/translations/ru/LC_MESSAGES/slint-replay.po`.
+- A hardcoded Cyrillic literal without `@tr()` does not translate. Treat it as a bug.
 - Avoid rare Unicode/emoji in UI text because Skia may render tofu. Use ASCII or
   the SVG icon set. New stroke icons use a 16x16 viewBox and stroke width 1.6.
 - The Settings window is reused. Every transient `*-status`/`*-result` property
@@ -158,6 +159,10 @@ log is not visual or functional acceptance.
 
 - Never print or commit `%APPDATA%\suflyor\config.json`, credentials, tokens,
   private transcripts, personal prep notes, or `nini-context-backup.txt`.
+- `config.json` holds live `groq_api_key` and `ai_bearer` values. Never write them
+  into journal entries, logs or chat.
+- Resolve the AI endpoint with `cfg.ai_endpoint(false)`, which picks local or cloud
+  by the provider setting. The raw `ai_base_url` field is always the cloud bridge.
 - Keep screenshot-visible errors generic. Redact local paths, usernames, URLs,
   hostnames, and LAN addresses from logs, diagnostics, docs, and evidence.
 - Do not bypass SSH host-key checking or weaken platform security/TCC controls.
