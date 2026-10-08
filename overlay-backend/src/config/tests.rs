@@ -1909,3 +1909,48 @@ fn config_save_sets_unix_mode_0600() {
         "config.json should be saved with 0600 mode permissions"
     );
 }
+
+#[cfg(unix)]
+fn unix_mode(path: &std::path::Path) -> u32 {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+}
+
+#[cfg(unix)]
+#[test]
+fn config_exports_are_owner_only_on_unix() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().unwrap();
+    let cfg = Config::defaults();
+
+    let full = temp.path().join("export.json");
+    export_to(&full, &cfg).unwrap();
+    assert_eq!(unix_mode(&full), 0o600, "a full export holds the API keys");
+
+    let server = temp.path().join("server.json");
+    export_server_settings_to(&server, &cfg).unwrap();
+    assert_eq!(unix_mode(&server), 0o600, "a server export holds bearers");
+
+    // Exporting over a file that already exists with a wider mode tightens it.
+    let wide = temp.path().join("wide.json");
+    std::fs::write(&wide, "{}").unwrap();
+    std::fs::set_permissions(&wide, std::fs::Permissions::from_mode(0o644)).unwrap();
+    export_to(&wide, &cfg).unwrap();
+    assert_eq!(unix_mode(&wide), 0o600, "an existing export is tightened");
+}
+
+#[cfg(unix)]
+#[test]
+fn config_backup_is_owner_only_on_unix() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("config.json");
+    let cfg = Config::defaults();
+
+    save_to_path(&path, &cfg).unwrap();
+    save_to_path(&path, &cfg).unwrap();
+
+    let bak = path.with_extension("json.bak");
+    assert!(bak.exists(), "the second save must leave a backup");
+    assert_eq!(unix_mode(&bak), 0o600, "the backup holds profiles");
+}

@@ -63,6 +63,11 @@ pub fn bridge_url_for_env(bind_host: &str, port: u16) -> String {
     format!("http://{host}:{port}")
 }
 
+/// Write the Hermes `.env`, which holds the bridge token.
+fn write_env(path: &std::path::Path, text: &str) -> std::io::Result<()> {
+    std::fs::write(path, text)
+}
+
 /// Install the plugin into the local Hermes: files + `.env` + `config.yaml`.
 /// Returns an RU status line for the Settings label (no secrets).
 pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
@@ -93,7 +98,7 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
     };
     let env_new = merge_env_text(&env_old, bridge_url, token);
     if env_new != env_old {
-        std::fs::write(&env_path, env_new).map_err(|e| format!("запись .env: {e}"))?;
+        write_env(&env_path, &env_new).map_err(|e| format!("запись .env: {e}"))?;
     }
 
     // 3. config.yaml enable.
@@ -610,8 +615,34 @@ fn finish(text: String, eol: &str) -> EnableEdit {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::panic)]
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
+
+    #[cfg(unix)]
+    fn unix_mode(path: &std::path::Path) -> u32 {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn env_file_is_owner_only_on_unix() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let fresh = temp.path().join("fresh.env");
+        write_env(&fresh, "SUFLYOR_BRIDGE_TOKEN=a\n").unwrap();
+        assert_eq!(unix_mode(&fresh), 0o600, "a new .env must be owner-only");
+
+        // A file that already exists with a wider mode is tightened, not just rewritten.
+        let wide = temp.path().join("wide.env");
+        std::fs::write(&wide, "OLD=1\n").unwrap();
+        std::fs::set_permissions(&wide, std::fs::Permissions::from_mode(0o644)).unwrap();
+        write_env(&wide, "SUFLYOR_BRIDGE_TOKEN=b\n").unwrap();
+        assert_eq!(unix_mode(&wide), 0o600, "an existing .env is tightened");
+        let text = std::fs::read_to_string(&wide).unwrap();
+        assert_eq!(text, "SUFLYOR_BRIDGE_TOKEN=b\n");
+    }
 
     #[test]
     fn embedded_plugin_files_nonempty() {
