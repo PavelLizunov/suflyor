@@ -16,6 +16,7 @@ These files have specific ownership; verify their scope and date before relying 
 - `docs/read-aloud-status.md`: subsystem status/reference for TTS and OCR.
 - `docs/winbrat-recovery.md`: mandatory operational guide for Windows worker build/test recovery.
 - `docs/REVIEW_AGENT_PROMPT.md`: standard prompt for independent review.
+- `docs/DEFECT-LEDGER.md`: the one defect ledger. A finding of any audit or review is recorded there before it is fixed or deferred; an undemonstrated suspicion is marked as a hypothesis and carries no severity.
 
 ### Historical provenance and milestone context
 Historical planning and migration blueprints are evidence. Preserve completed artifacts; correct an active document only when the task owns it. Completed audit reports, retest checklists, release notes, release evidence and archive pages are not kept in the working tree; see section 6:
@@ -34,6 +35,7 @@ Historical planning and migration blueprints are evidence. Preserve completed ar
 | `state-and-plan.md` | Context-recovery history | Historical | Not updated. Live state is in `CODEX_HANDOFF.md`. |
 | `HISTORY-INDEX.md` | Index of completed history removed from the tree | Live index | One row per removed item (section 6). |
 | `AGENT_TASKS.md` | Agent Task Queue | **Authoritative** | Claim open tasks `[~]` and mark finished items `[x]`. |
+| `DEFECT-LEDGER.md` | Defect ledger | Live | One entry per finding, with evidence, severity and status. Close an entry with the merged PR number. |
 | `goal-*.md` | Deliverable Charter | Living (active) / Historical (done) | Create for multi-step feature/refactor charters; state scope & done criteria. |
 | `retest-*.html` | Tester Checklist | Historical Evidence | Copy `retest-template.html` to `retest-v<version>-<topic>.html` prior to release. Past ones leave the tree (section 6). |
 | `audit-YYYY-MM-DD-*/` | Audit evidence (working copy during a task) | Not kept in the tree after the task | Create the folder for the run; remove it from the tree when the task closes and index it (section 6). |
