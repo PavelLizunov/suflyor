@@ -209,20 +209,7 @@ self-gate, with no human visual acceptance. See memory `[[release-protocol]]`.
    for explicit owner authorization for that version. Release != push.
 2. **Accumulate** changes into one verified release — release is an event, not
    a per-task default. (hardening of `[[no-marathon-releases]]`.)
-3. **Every UI diff passes THREE checks before the user is shown:**
-   - **(a) screenshots + UI checklist** — `CopyFromScreen` the key windows in
-     the RELEVANT states (Settings/bar/tile) + a written checklist: every
-     string in `@tr` AND in the `.po`; no emoji where an SVG belongs; button
-     states (enabled/disabled/active-marker) are logical; **status text matches
-     real state** (no "Готово" when not done); signs/punctuation/spacing.
-   - **(b) UI-review agent** on the `.slint` + wiring diff (the category that
-     slips through static gates).
-   - **(c) Slint-MCP** — this is now a QA-only build, not the shipped release
-     binary. You **MUST** build with `--features ui-mcp`; environment variables
-     alone do not enable the server. Then
-     `SLINT_EMIT_DEBUG_INFO=1 SLINT_MCP_PORT=N` binds
-     `http://127.0.0.1:N/mcp`. Drive/read the UI tree programmatically —
-     reliable, unlike computer-use clicks on the floating gear.
+3. Every UI diff passes the three checks in the slint-mcp-ui-audit skill (screenshots and checklist, UI-review agent, Slint MCP) before the user is shown.
 4. Present to the user as EVIDENCE ("here are the screenshots + checklist
    results, look at X"), never "all green, releasing".
 5. Publishing is complete only after
@@ -283,22 +270,7 @@ The "illogical UI" class is invisible to clippy/test. Run these on any UI diff:
      forever (palette `recent-chips: ["kubernetes",…]` had no `set_recent_chips`
      → always shown). Grep for `set_<prop>`; if absent, the default IS the
      production value.
-  4. **emoji where the chrome standard is SVG** / **@tr↔.po drift after a string edit**.
-
-### Lessons learned (the "we got burned" list)
-
-1. **Don't skip a layer.** Every skip during the marathon reached the user.
-2. **Don't run "fix waves"** when something's broken. Roll back to the last
-   known-good state FIRST, then fix with the full layer cake.
-3. **Static checks are necessary, not sufficient.** clippy + cargo test can
-   all pass while the overlay renders wrong. Treat them as a sanity gate.
-4. **The user has 1 portrait secondary** (1200×1920 at x=-1200) + 1 landscape
-   primary (1920×1080). Any default that depends on monitor orientation needs
-   both orientations live-tested. The bar pins to the PRIMARY at startup
-   (`apply_overlay_hwnd`) for exactly this reason; tiles use
-   `win32::pick_monitor` (primary unless a non-primary is landscape AND ≥
-   primary width).
-5. **Transparency is paint-sensitive** on Windows DWM — tile/bar backgrounds
+  **Transparency is paint-sensitive** on Windows DWM — tile/bar backgrounds
    stay opaque-ish, never fully transparent, to avoid "created but invisible".
 6. **No marathons.** Fewer, better-verified releases. See `[[no-marathon-releases]]`.
 

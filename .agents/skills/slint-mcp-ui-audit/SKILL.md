@@ -101,3 +101,37 @@ Do not say a UI change is done until:
 - the summary names the windows/tabs checked and any unverified state.
 
 Leave the normal non-MCP release binary running for the user's final visual acceptance. RC prereleases follow the standing authorization in `AGENTS.md`; a stable release still requires the user's explicit `релизь`.
+
+## Three checks for every UI diff (moved from CLAUDE.md)
+
+Every UI diff passes these three checks before the user is shown. Present the results as evidence, not as a verdict.
+
+   - **(a) screenshots + UI checklist** — `CopyFromScreen` the key windows in
+     the RELEVANT states (Settings/bar/tile) + a written checklist: every
+     string in `@tr` AND in the `.po`; no emoji where an SVG belongs; button
+     states (enabled/disabled/active-marker) are logical; **status text matches
+     real state** (no "Готово" when not done); signs/punctuation/spacing.
+   - **(b) UI-review agent** on the `.slint` + wiring diff (the category that
+     slips through static gates).
+   - **(c) Slint-MCP** — this is now a QA-only build, not the shipped release
+     binary. You **MUST** build with `--features ui-mcp`; environment variables
+     alone do not enable the server. Then
+     `SLINT_EMIT_DEBUG_INFO=1 SLINT_MCP_PORT=N` binds
+     `http://127.0.0.1:N/mcp`. Drive/read the UI tree programmatically —
+     reliable, unlike computer-use clicks on the floating gear.
+
+## Recurring UI bug shapes (moved from CLAUDE.md)
+
+- **The recurring UI bug shapes** (check the .rs side, not just .slint):
+  1. **Stale status on a REUSED window** — the Settings window is reused, so
+     every transient `*_status`/`*_result` string survives the next open unless
+     `populate_token_status` clears it. (Caused the user's lingering
+     "Готово: умная модель (12B)".)
+  2. **Optimistic state-flip before an async result** — writing config + UI to
+     the new value *before* the operation confirms; on failure the UI lies.
+     Commit only on the confirmed-success branch.
+  3. **A `.slint` default property with NO Rust setter** — renders fake data
+     forever (palette `recent-chips: ["kubernetes",…]` had no `set_recent_chips`
+     → always shown). Grep for `set_<prop>`; if absent, the default IS the
+     production value.
+  4. **emoji where the chrome standard is SVG** / **@tr↔.po drift after a string edit**.
