@@ -168,12 +168,6 @@ The agent-agnostic `.githooks/pre-commit` and `.githooks/pre-push` hooks are the
 source of truth. Enable them once per clone with
 `git config core.hooksPath .githooks`; both invoke
 `scripts/git-gate-native.ps1` and enforce the selected tier.
-- **Retest evidence (2026-07-01):** before publishing, require a matching
-  `docs/retest-*X.Y.Z*.html` golden-rule tester checklist. Copy
-  `docs/retest-template.html` to `docs/retest-v<version>-fixes.html` and fill
-  the per-change items.
-- `--no-verify` is allowed only when the cargo gate is deliberately moved to
-  Winbrat or required GitHub CI; preserve that evidence before merging.
 
 **Hotfix-only short-circuit** (review-agent skippable ONLY if ALL THREE):
 - impl ≤ 5 lines
@@ -318,8 +312,7 @@ switches live; `ui_language` in `%APPDATA%\suflyor\config.json` persists
 it (en falls back to the msgid = English).
 
 Adding a user-facing string: wrap it in `@tr("English…")`, append the
-`msgid`/`msgstr` pair to `slint-replay.po`, rebuild. A **hardcoded Cyrillic
-literal (no `@tr()`) won't translate** — that's a bug. Tiles/palette/settings
+`msgid`/`msgstr` pair to `slint-replay.po`, rebuild. Tiles/palette/settings
 are separate Slint windows in the same process; they get their text from
 `overlay_host.rs` at construction, so there's no per-window config fetch.
 
@@ -356,17 +349,6 @@ Each registration logs `"<label> hotkey registered"` at boot (the cheapest smoke
 signal). Dropping the `GlobalHotKeyManager` unregisters everything — `main` keeps
 it alive for the process lifetime.
 
-## Read-aloud (TTS + OCR) — since v0.20.0
-
-On-screen / selected text → speech. Neural TTS (Piper Irina/Ruslan via
-sherpa-onnx) runs in the **`suflyor-tts.exe` SIDECAR**, NOT in-process (see Stack
-— two onnxruntimes crash in one binary). Tesseract OCR (a separate engine) reads
-a screen region. Both engines install via buttons in **Settings → AI**
-(SHA-pinned downloads). Hotkeys: **Shift+Alt+1** read selection, **+2**
-OCR-region, **+3** pause; built-in anti-feedback so it never reads its own output.
-Backend: `tts.rs` (SAPI live fallback) + `tts_install.rs` + `ocr.rs` +
-`ocr_install.rs`. Full state in `docs/read-aloud-status.md`.
-
 ## Security boundaries
 
 - **Single process, no IPC command surface.** Unlike the old Tauri build,
@@ -374,21 +356,11 @@ Backend: `tts.rs` (SAPI live fallback) + `tts_install.rs` + `ocr.rs` +
   settings are Slint windows constructed by `overlay_host.rs`; they render
   only what they're handed and never read `config.json` themselves. Secrets
   simply never reach a tile's scope.
-- **AI endpoint:** resolve via `cfg.ai_endpoint(false)` (picks local vs cloud
-  by `ai_provider`); the raw `ai_base_url` field is ALWAYS the cloud bridge.
 - **AI error tiles** must use a GENERIC message (no error chain) so the
   `base_url` / LAN IP can't leak into a screenshot.
 - **Stealth** (hide from screen capture) = Win32 `SetWindowDisplayAffinity`
   (`WDA_EXCLUDEFROMCAPTURE`), applied to the bar + tiles + the F4 palette +
   Settings when stealth is on.
-
-## Security reminders
-
-- `config.json` at `%APPDATA%\suflyor\config.json` contains live
-  `groq_api_key` + `ai_bearer`. NEVER print these to chat or logs, and never
-  include them in journal entries.
-- `nini-context-backup.txt` (repo root) is the user's personal interview-prep
-  notes — gitignored; never commit it.
 
 ## Reference
 
