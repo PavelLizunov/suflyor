@@ -50,7 +50,9 @@ Treat live visual verification as mandatory for UI changes. Compilation and test
 - Before the first edit, create `docs/audit-YYYY-MM-DD-<task>/` and capture the
   baseline. Keep each before/after pair at the same window size, DPI, theme,
   language, query/data state and scroll position. Record those conditions in
-  the directory's `README.md`; an after-only image is not evidence.
+  the directory's `README.md`; an after-only image is not evidence. When the
+  task closes, remove the folder from the tree and index it in
+  `docs/HISTORY-INDEX.md` (`docs/AGENTS.md` section 6).
 - For a local component change, capture every affected state before and after
   the change. For list/search surfaces use the smallest state matrix that can
   expose the defect: empty, one/few rows, enough rows to show the scrollbar,

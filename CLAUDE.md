@@ -2,6 +2,8 @@
 
 ## Autonomous mode protocol
 
+> Disputed (owner decision, 2026-10-08): this section is not changed until a separate decision.
+
 This project ships with hook-enforced autonomous rules. When the file
 `.claude/autonomous_active` exists and contains a future ISO deadline:
 
@@ -29,18 +31,23 @@ on the owner's workstation as though it were the test VM.
 
 ## State files (single source of truth)
 
-- `NIGHT_RUN_PLAN.md` — current backlog, work log, decision journal.
-  Sections you maintain: `## Backlog`, `## In progress`, `## Done log`,
-  `## Findings`, `## Decisions`. Update every ~30 min during autonomous.
-- `docs/state-and-plan.md` — living state/plan snapshot for interactive
-  work (survives context compaction). Keep it current when you finish a
-  chunk of work.
+- `docs/CODEX_HANDOFF.md` — the live state file (owner decision, 2026-10-08).
+  Keep it current for the branch or worktree it names.
+- `NIGHT_RUN_PLAN.md` — historical, not a live file (owner decision,
+  2026-10-08). Disputed: its autonomous-mode use is not changed (see the note
+  under the autonomous section). Sections you maintain: `## Backlog`,
+  `## In progress`, `## Done log`, `## Findings`, `## Decisions`. Update every
+  ~30 min during autonomous.
+- `docs/state-and-plan.md` — historical; no longer updated (owner decision,
+  2026-10-08).
 - `.claude/autonomous_active` — ISO 8601 deadline. Presence = mode armed.
   Do NOT delete this file from inside an autonomous run (that defeats
   the whole point).
 - `.claude/_progress_counter` — internal, managed by hooks. Don't touch.
 
 ## OpenCode Go worker
+
+> Disputed (owner decision, 2026-10-08): this section is not changed until a separate decision.
 
 For small, bounded tasks, the project may use OpenCode Go with
 `opencode-go/deepseek-v4-flash`:
@@ -388,6 +395,6 @@ Backend: `tts.rs` (SAPI live fallback) + `tts_install.rs` + `ocr.rs` +
 
 - **Methodology source:** memory `[[vpnctl-methodology]]`.
 - **Project state:** memory `[[project-overlay-mvp-history]]`,
-  `docs/state-and-plan.md`.
+  `docs/CODEX_HANDOFF.md`.
 - **Visual verification:** memory `[[overlay-host-visual-verification]]`.
 - **User setup:** memory `[[user-setup-monitors]]`.
