@@ -1,6 +1,6 @@
 # History index
 
-Audit reports removed from the working tree. The rule is in `docs/AGENTS.md`, section 6.
+Completed history removed from the working tree: audit reports, retest checklists, release notes, release evidence and archive pages. The rule is in `docs/AGENTS.md`, section 6.
 
 Read a removed report with `git show <revision>:<path>`. List a removed folder with `git ls-tree -r --name-only <revision> <folder>/`. Find the removing commit with `git log --diff-filter=D --oneline -- <path>`. Use the full revision SHA.
 

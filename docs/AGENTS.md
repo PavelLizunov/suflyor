@@ -50,7 +50,7 @@ Historical planning, release evidence, and migration blueprints are evidence. Pr
 2. **Work Completion:** Update `docs/CODEX_HANDOFF.md` only when the task owns the branch or worktree it names. Do not overwrite another active worktree's handoff with unrelated branch information.
 3. **Task Scope & Charters:** Reference or write a `docs/goal-<name>.md` charter for multi-step tasks. Keep scope strictly bounded to the charter.
 4. **Release Verification:** Create a release retest checklist (`docs/retest-v<version>-<topic>.html`) from `docs/retest-template.html` before publishing.
-5. **Preservation of History:** Do not rewrite or delete completed retest or release evidence. Completed audit reports leave the tree under section 6. Active goal charters may be corrected by the task that owns them; prefer a superseding document for material historical changes.
+5. **Preservation of History:** Completed history leaves the working tree only under section 6, and is never rewritten in place. Active goal charters may be corrected by the task that owns them; prefer a superseding document for material historical changes.
 
 ---
 
@@ -73,15 +73,23 @@ Documentation, plans, and non-executable markdown/HTML text files use the **Docs
 
 ---
 
-## 6. Audit reports live in git
+## 6. Completed history lives in git
 
-An audit report records a past run. It is not kept in the working tree. It stays in git at a recorded revision, and that revision is how it is read. This follows the pattern of the VPNRouter repository.
+Completed history is evidence of a past run: audit reports, retest checklists, release notes, release evidence and archive pages. It is not kept in the working tree. Each item stays in git at a recorded revision, and that revision is how it is read. This follows the pattern of the VPNRouter repository.
 
-1. While an audit runs, its report may sit in `docs/audit-YYYY-MM-DD-<task>/`.
-2. When the audit closes, the task removes the folder in its own commit and adds one row to `docs/HISTORY-INDEX.md`: the path and the revision that still holds it. That revision is the last commit before the removal that is reachable from master or a pushed branch.
-3. Read a removed report with `git show <revision>:<path>`. List a removed folder with `git ls-tree -r --name-only <revision> <folder>/`. Find the removing commit with `git log --diff-filter=D --oneline -- <path>`. Use the full revision SHA, not a short one.
-4. A revision must stay reachable: it must be on a pushed branch, a tag, or master. Do not rewrite history to hide an audit.
-5. Removing a report from the tree does not remove it from git. Sensitive content in an audit is handled under section 4, not by this rule.
-6. Screenshots, clips and other files inside an audit folder follow the same rule.
+Kept in the tree, even when finished:
 
-Retest checklists and release evidence are not covered by this section. Section 3, item 5 still applies to them.
+- the latest stable release's retest and release notes, and the prerelease line in progress, so the release gate can find the retest it needs;
+- the retest template;
+- anything a tracked file still refers to: code, comments, tests, scripts, workflows or other documents.
+
+Rules for moved items:
+
+1. While a task runs, its evidence may sit in its folder or file (for example `docs/audit-YYYY-MM-DD-<task>/`).
+2. When the task closes, the task removes the item in its own commit and adds one row to `docs/HISTORY-INDEX.md`: the path and the revision that still holds it. That revision is the last commit before the removal that is reachable from master or a pushed branch.
+3. Read a removed item with `git show <revision>:<path>`. List a removed folder with `git ls-tree -r --name-only <revision> <folder>/`. Find the removing commit with `git log --diff-filter=D --oneline -- <path>`. Use the full revision SHA, not a short one.
+4. A revision must stay reachable: it must be on a pushed branch, a tag, or master. Do not rewrite history to hide evidence.
+5. Removing an item from the tree does not remove it from git. Sensitive content is handled under section 4, not by this rule.
+6. Screenshots, clips and other files inside a folder follow the same rule.
+
+Goal charters, plans, ADRs and migration blueprints are not covered by this section; section 3 still applies to them.
