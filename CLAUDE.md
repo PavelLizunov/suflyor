@@ -72,13 +72,13 @@ TypeScript. **FIVE** standalone crates, NO root workspace:
   Win32 HWND helpers in `src/win32.rs`; session/event/state glue in
   `src/{slint_session,slint_events,runtime_state,app_state,session_namer,
   markdown,logging}.rs`. **NOTE:** `src/bin/overlay_host.rs` is a THIN
-  entrypoint — the real host logic is a ~25-module DIRECTORY
+  entrypoint — the real host logic is a ~36-module DIRECTORY
   `src/bin/overlay_host/` (`hotkeys`, `settings_*`, `tile_*`, `aux_windows`,
   `vision_capture`, `recovery`, `wizard`, `diagnostics`, …). Grep the directory,
   not just the file.
-- **`overlay-backend/`** — the no-UI shared crate. `lib.rs` declares 43 modules
-  (41 distinct names; `audio` is declared under cfg gates). The list lives in
-  `lib.rs`, not here. `slint-experiment` depends on it via a path dep.
+- **`overlay-backend/`** — the no-UI shared crate. `lib.rs` declares 44 modules
+  (41 `pub`, 3 `pub(crate)`; `audio` is declared three times under cfg gates).
+  The list lives in `lib.rs`, not here. `slint-experiment` depends on it via a path dep.
 - **`suflyor-tts/`** — the Piper neural read-aloud + diarization SIDECAR
   (`suflyor-tts.exe`, shipped beside overlay-host in the installer). Links
   sherpa-onnx (TTS) ONLY and MUST stay a separate process: two onnxruntimes in
@@ -258,19 +258,24 @@ The "illogical UI" class is invisible to clippy/test. Run these on any UI diff:
   tree=`elementHandle`, descendants=`findAll` (no `maxElements`). Drive curl from
   a Python helper written to an ABSOLUTE path (Git-bash resets cwd between calls,
   so inline heredocs lose `/tmp` files).
-- **The recurring UI bug shapes** (check the .rs side, not just .slint):
-  1. **Stale status on a REUSED window** — the Settings window is reused, so
-     every transient `*_status`/`*_result` string survives the next open unless
-     `populate_token_status` clears it. (Caused the user's lingering
-     "Готово: умная модель (12B)".)
-  2. **Optimistic state-flip before an async result** — writing config + UI to
-     the new value *before* the operation confirms; on failure the UI lies.
-     Commit only on the confirmed-success branch.
-  3. **A `.slint` default property with NO Rust setter** — renders fake data
-     forever (palette `recent-chips: ["kubernetes",…]` had no `set_recent_chips`
-     → always shown). Grep for `set_<prop>`; if absent, the default IS the
-     production value.
-  **Transparency is paint-sensitive** on Windows DWM — tile/bar backgrounds
+- **The recurring UI bug shapes** (stale status on a reused window, optimistic
+  state-flip, a `.slint` default with no Rust setter, emoji or `.po` drift) are
+  listed in the slint-mcp-ui-audit skill, which owns them.
+
+### Lessons learned (the "we got burned" list)
+
+1. **Don't skip a layer.** Every skip during the marathon reached the user.
+2. **Don't run "fix waves"** when something's broken. Roll back to the last
+   known-good state FIRST, then fix with the full layer cake.
+3. **Static checks are necessary, not sufficient.** clippy + cargo test can
+   all pass while the overlay renders wrong. Treat them as a sanity gate.
+4. **The user has 1 portrait secondary** (1200×1920 at x=-1200) + 1 landscape
+   primary (1920×1080). Any default that depends on monitor orientation needs
+   both orientations live-tested. The bar pins to the PRIMARY at startup
+   (`apply_overlay_hwnd`) for exactly this reason; tiles use
+   `win32::pick_monitor` (primary unless a non-primary is landscape AND ≥
+   primary width).
+5. **Transparency is paint-sensitive** on Windows DWM — tile/bar backgrounds
    stay opaque-ish, never fully transparent, to avoid "created but invisible".
 6. **No marathons.** Fewer, better-verified releases. See `[[no-marathon-releases]]`.
 
