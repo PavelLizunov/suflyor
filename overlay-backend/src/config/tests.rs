@@ -1760,7 +1760,7 @@ fn mask_host_drops_query_and_fragment_values() {
         "http://***:18902/v1?***"
     );
     assert_eq!(
-        mask_host("http://127.0.0.1/v1#bearer=abc"),
+        mask_host("http://127.0.0.1/v1#bearer=abcdef"),
         "http://***/v1#***"
     );
     assert_eq!(
@@ -1768,7 +1768,7 @@ fn mask_host_drops_query_and_fragment_values() {
         "http://***:18902/v1?***"
     );
     // No query and no fragment: the path is kept as before.
-    assert_eq!(mask_host("http://10.0.0.1:18902/v1"), "http://***:18902/v1");
+    assert_eq!(mask_host("http://10.0.0.1:80/v1"), "http://***:80/v1");
 }
 
 #[test]
