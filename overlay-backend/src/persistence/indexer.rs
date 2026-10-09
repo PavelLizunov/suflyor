@@ -42,8 +42,7 @@ pub fn index_journal_file(store: &mut Store, path: &Path) -> Result<Option<Sessi
     // such line must not hide every valid event of the session. A damaged line
     // that is no longer JSON is skipped below like any other corrupt line; one
     // that is still JSON keeps its text with U+FFFD in place of the bad bytes.
-    let bytes = std::fs::read(path)
-        .with_context(|| format!("read journal {}", path.display()))?;
+    let bytes = std::fs::read(path).with_context(|| format!("read journal {}", path.display()))?;
     let content = String::from_utf8_lossy(&bytes);
 
     let mut started_at_ms = None;
