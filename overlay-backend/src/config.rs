@@ -1871,10 +1871,17 @@ pub fn mask_host(url: &str) -> String {
     if url.is_empty() {
         return String::new();
     }
-    // Split off scheme:// if present.
+    // Split off scheme:// if present. Only a real scheme counts (letters, digits,
+    // '+', '-', '.'): a "://" further in, for example in a query value of a URL
+    // that has no scheme of its own, must not move the boundary past the host.
+    let is_scheme = |s: &str| {
+        !s.is_empty()
+            && s.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.'))
+    };
     let (scheme, rest) = match url.find("://") {
-        Some(i) => (&url[..i + 3], &url[i + 3..]),
-        None => ("", url),
+        Some(i) if is_scheme(&url[..i]) => (&url[..i + 3], &url[i + 3..]),
+        _ => ("", url),
     };
     // SECURITY: Per RFC 3986 URI generic syntax, the authority component is
     // delimited by the first '/', '?', or '#' character (or end of string).
