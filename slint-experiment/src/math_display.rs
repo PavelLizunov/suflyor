@@ -368,6 +368,16 @@ fn push_normalized(out: &mut String, text: &str) {
                         index = end;
                         continue;
                     }
+                } else if command == "vec" {
+                    // The combining arrow (U+20D7) is blank in the app font, so a vector is
+                    // written as a function, like `√(x)`.
+                    if let Some((base, end)) = tex_argument_at(text, command_end) {
+                        out.push_str("vec(");
+                        push_normalized(out, base);
+                        out.push(')');
+                        index = end;
+                        continue;
+                    }
                 } else if matches!(
                     command,
                     "operatorname" | "mathrm" | "mathbf" | "mathit" | "text"
@@ -439,7 +449,6 @@ fn accent_mark(command: &str) -> Option<char> {
         "tilde" | "widetilde" => '\u{0303}',
         "dot" => '\u{0307}',
         "ddot" => '\u{0308}',
-        "vec" => '\u{20D7}',
         _ => return None,
     })
 }
@@ -771,7 +780,7 @@ mod tests {
         assert!(mean.starts_with("x\u{0304} = (1)/(n)∑"), "{mean}");
         assert_eq!(
             normalize_math_display(r"$\overline{AB} + \hat{y} + \vec{v}$"),
-            "A\u{0305}B\u{0305} + y\u{0302} + v\u{20D7}"
+            "A\u{0305}B\u{0305} + y\u{0302} + vec(v)"
         );
         assert_eq!(normalize_math_display(r"$\bar{\alpha}$"), "α\u{0304}");
     }
