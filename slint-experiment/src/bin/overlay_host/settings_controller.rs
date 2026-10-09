@@ -581,6 +581,13 @@ pub(crate) fn open_settings(
                 populate_tile_monitors(&w, &snap);
                 populate_component_rows(&w, &snap);
                 populate_tts_voices(&w, &snap);
+                w.set_hermes_bridge_status(SharedString::from(
+                    crate::settings_hermes::current_bridge_status(
+                        &snap.hermes_bridge_host,
+                        snap.hermes_bridge_port,
+                        snap.ui_language == "ru",
+                    ),
+                ));
                 #[cfg(windows)]
                 settings_audio::refresh(&w, &cfg_lang);
                 w.set_tts_install_label(SharedString::from(
@@ -1687,7 +1694,11 @@ pub(crate) fn populate_token_status(
     win.set_hermes_profile_status(SharedString::default());
     win.set_hermes_plugin_install_status(SharedString::default());
     win.set_hermes_bridge_status(SharedString::from(
-        crate::settings_hermes::current_bridge_status(&c.hermes_bridge_host, c.hermes_bridge_port),
+        crate::settings_hermes::current_bridge_status(
+            &c.hermes_bridge_host,
+            c.hermes_bridge_port,
+            c.ui_language == "ru",
+        ),
     ));
     win.set_hermes_bridge_remote(!overlay_backend::bridge::is_loopback_host(
         &c.hermes_bridge_host,

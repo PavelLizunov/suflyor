@@ -61,6 +61,16 @@ pub(crate) fn message_text(content: &ai::MessageContent) -> String {
     }
 }
 
+/// Shared channel labels for transcript rows, clipboard text, and archive markdown.
+pub(crate) fn transcript_role_label(mic: bool, ru: bool) -> &'static str {
+    match (mic, ru) {
+        (true, true) => "Микрофон",
+        (true, false) => "Microphone",
+        (false, true) => "Система",
+        (false, false) => "System",
+    }
+}
+
 /// Build the clipboard text for the transcript "Copy all / Copy selected" (ТЗ1,
 /// decision #7). One reply per line as `Спикер: текст`; with `with_timecodes`,
 /// prefixed `[mm:ss] ` (session-relative, derived from `session_start_ms` — only
@@ -77,17 +87,14 @@ pub(crate) fn format_transcript_for_copy(
     session_start_ms: Option<i64>,
     selected: Option<&std::collections::HashSet<usize>>,
     with_timecodes: bool,
+    ru: bool,
 ) -> String {
     let mut out = String::new();
     for (i, u) in utts.iter().enumerate() {
         if selected.is_some_and(|sel| !sel.contains(&i)) {
             continue;
         }
-        let label = if u.source == "mic" {
-            "Микрофон"
-        } else {
-            "Система"
-        };
+        let label = transcript_role_label(u.source == "mic", ru);
         let text = overlay_backend::text::collapse_ws(&u.text);
         // F1: timecode = the line's START (previous line's timestamp; first = origin),
         // matching the on-screen transcript + the player seek.
@@ -1050,32 +1057,63 @@ mod copy_tests {
         ];
         // Default: "Спикер: текст", no timecodes, all lines, no trailing newline.
         assert_eq!(
-            format_transcript_for_copy(&utts, Some(start), None, false),
+            format_transcript_for_copy(&utts, Some(start), None, false, true),
             "Система: привет мир\nМикрофон: да"
         );
         // With timecodes — F1: a line's START = the PREVIOUS line's timestamp; the
         // FIRST line is 00:00 (NOT its own finalize time 00:29), so line 2 starts
         // where line 1 ended (00:29).
         assert_eq!(
-            format_transcript_for_copy(&utts, Some(start), None, true),
+            format_transcript_for_copy(&utts, Some(start), None, true, true),
             "[00:00] Система: привет мир\n[00:29] Микрофон: да"
         );
         // Selected subset (only row 1), chronological order.
         let mut sel = std::collections::HashSet::new();
         sel.insert(1_usize);
         assert_eq!(
-            format_transcript_for_copy(&utts, Some(start), Some(&sel), false),
+            format_transcript_for_copy(&utts, Some(start), Some(&sel), false, true),
             "Микрофон: да"
         );
         // Empty transcript → empty string.
         assert_eq!(
-            format_transcript_for_copy(&[], Some(start), None, false),
+            format_transcript_for_copy(&[], Some(start), None, false, true),
             ""
         );
         // with_timecodes but no session start → no prefix.
         assert_eq!(
-            format_transcript_for_copy(&utts[..1], None, None, true),
+            format_transcript_for_copy(&utts[..1], None, None, true, true),
             "Система: привет мир"
+        );
+    }
+
+    #[test]
+    fn transcript_copy_follows_ui_language() {
+        let utts: Vec<_> = ["mic", "system"]
+            .into_iter()
+            .map(|source| overlay_backend::persistence::Utterance {
+                session_id: "s".into(),
+                unix_ms: 1000,
+                source: source.into(),
+                text: "hello".into(),
+                audio_ms: Some(0),
+            })
+            .collect();
+        assert_eq!(
+            format_transcript_for_copy(&utts, Some(1000), None, false, true),
+            "Микрофон: hello\nСистема: hello"
+        );
+        assert_eq!(
+            format_transcript_for_copy(&utts, Some(1000), None, false, false),
+            "Microphone: hello\nSystem: hello"
+        );
+        assert_eq!(
+            format_transcript_for_copy(&utts, Some(1000), None, true, false),
+            "[00:00] Microphone: hello\n[00:00] System: hello"
+        );
+        let selected = std::collections::HashSet::from([1]);
+        assert_eq!(
+            format_transcript_for_copy(&utts, Some(1000), Some(&selected), false, false),
+            "System: hello"
         );
     }
 

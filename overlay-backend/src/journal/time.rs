@@ -23,10 +23,11 @@ pub const MSK_OFFSET_SECS: u64 = 3 * 3600;
 /// Moscow wall-clock label for the archive UI: `"11.06.2026 14:30:12 (МСК)"`
 /// from unix MILLISECONDS (the `started_at_ms` the indexer stores).
 #[must_use]
-pub fn format_msk_label(unix_ms: i64) -> String {
+pub fn format_msk_label(unix_ms: i64, ru: bool) -> String {
     let secs = (unix_ms.max(0) as u64) / 1000 + MSK_OFFSET_SECS;
     let (year, month, day, h, m, s) = unix_to_ymdhms(secs);
-    format!("{day:02}.{month:02}.{year:04} {h:02}:{m:02}:{s:02} (МСК)")
+    let suffix = if ru { "(МСК)" } else { "(MSK)" };
+    format!("{day:02}.{month:02}.{year:04} {h:02}:{m:02}:{s:02} {suffix}")
 }
 
 /// Parse a session-id stamp prefix `"YYYY-MM-DD_HH-MM-SS…"` back to unix seconds.
