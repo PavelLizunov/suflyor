@@ -1859,6 +1859,10 @@ pub struct ServerSettingsPreview {
     pub gigaam_dir_incoming: String,
 }
 
+fn is_scheme_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.')
+}
+
 /// Mask the host of a URL for a COPYABLE / loggable string, keeping the scheme,
 /// port and path so it's still recognisable without leaking the private LAN IP
 /// or hostname. `http://192.168.0.142:18902/v1` -> `http://***:18902/v1`. A query
@@ -1874,13 +1878,8 @@ pub fn mask_host(url: &str) -> String {
     // Split off scheme:// if present. Only a real scheme counts (letters, digits,
     // '+', '-', '.'): a "://" further in, for example in a query value of a URL
     // that has no scheme of its own, must not move the boundary past the host.
-    let is_scheme = |s: &str| {
-        !s.is_empty()
-            && s.bytes()
-                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.'))
-    };
     let (scheme, rest) = match url.find("://") {
-        Some(i) if is_scheme(&url[..i]) => (&url[..i + 3], &url[i + 3..]),
+        Some(i) if i > 0 && url[..i].bytes().all(is_scheme_byte) => (&url[..i + 3], &url[i + 3..]),
         _ => ("", url),
     };
     // SECURITY: Per RFC 3986 URI generic syntax, the authority component is

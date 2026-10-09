@@ -1782,7 +1782,10 @@ fn mask_host_masks_the_host_behind_extra_slashes() {
         mask_host("//user:secret@private.example/v1?token=T&next=https://public.example"),
         "//***/v1?***"
     );
-    assert_eq!(mask_host("10.0.0.5:9000/v1?next=http://a.example"), "***:9000/v1?***");
+    assert_eq!(
+        mask_host("10.0.0.5:9000/v1?next=http://a.example"),
+        "***:9000/v1?***"
+    );
 }
 // ===== Deep lock (bar lock chip, managed-local only) =====
 
