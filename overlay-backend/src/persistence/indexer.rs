@@ -311,6 +311,23 @@ mod tests {
     }
 
     #[test]
+    fn invalid_utf8_line_does_not_hide_the_session() {
+        // A torn write can leave bytes that are not UTF-8. The valid lines around
+        // them must still be indexed, as with a line that is not JSON.
+        let mut store = Store::open_in_memory().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sess.jsonl");
+        let good = br#"{"kind":"transcript_line","unix_ms":1,"source":"mic","text":"hi"}"#;
+        let torn = b"{\"kind\":\"transcript_line\",\"text\":\"\xff\xfe";
+        let stop = br#"{"kind":"session_stop","unix_ms":2}"#;
+        let bytes = [&good[..], &torn[..], &stop[..]].join(&b'\n');
+        std::fs::write(&path, bytes).unwrap();
+        let s = index_journal_file(&mut store, &path).unwrap().unwrap();
+        assert_eq!(s.transcript_lines, 1);
+        assert_eq!(s.status, "completed");
+    }
+
+    #[test]
     fn index_all_skips_already_indexed_and_active() {
         let mut store = Store::open_in_memory().unwrap();
         let dir = tempfile::tempdir().unwrap();
