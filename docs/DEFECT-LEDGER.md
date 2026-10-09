@@ -62,7 +62,7 @@ UNVERIFIED IMPORTED HYPOTHESIS. Status: Open
 Evidence: slint-experiment/src/tray.rs:180 - `static TRAY_MENU_REQUEST_PENDING: AtomicBool = AtomicBool::new(false);` (set by the first context event, cleared only by `return_focus()` or `hide_icon()`)
 Scenario: the styled menu is dismissed only after it gained focus and lost it, on Escape, or on an action. If it is shown but never receives focus, nothing clears the flag and every later right click is ignored until restart. This matches task T6 ("right-clicking the tray icon can produce no menu").
 What would confirm it: on the affected installation, the log line `tray menu shown` followed by right clicks that produce no further `tray menu` line.
-Found by: reading the code for task T6 at 8a38bac. Not reproduced: no Windows machine was reachable.
+Found by: reading the code for task T6 at 8a38bac. Not reproduced on windows-worker on 2026-10-09: with the tray callback messages injected as Explorer sends them (twin events, a second click with the menu still open, five more clicks), the build of master plus the wasapi bump (2d55575) and the build with the change (8cf4904) both opened seven menus for seven clicks. The stuck state needs a menu that never receives focus, which did not happen there.
 Fix plan: tell the twin events of one click apart by time instead of a completion flag.
 Closed by: (open; change proposed in pull request #227)
 
@@ -108,4 +108,32 @@ Evidence: overlay-backend/src/ai/tests.rs:75 - `"a queued stream kept a permit a
 Scenario: on windows-worker, `cargo test --manifest-path overlay-backend\Cargo.toml` with four test threads fails this one test on every run (six runs at three commits, 726 or 724 others passing), while the same test alone with one thread passes five times out of five. GitHub CI passes it. The semaphore is shared by every test in the binary, so the outcome depends on what else runs beside it and how fast the machine is. The code under test may be correct; the test cannot tell.
 Found by: the first backend test run on windows-worker at 2d55575248c5ea1c7e3008554325b98edbf13002 on 2026-10-08. Not investigated further.
 Fix plan: give the test its own semaphore, or hold the lock that serialises the tests which use the shared one.
+Closed by:
+
+### D-015 Russian text appears in the English interface   Severity: P3   Status: Open
+Evidence: slint-experiment/src/bin/overlay_host/settings_hermes.rs:38 - `"выключен".to_string()` (Settings, Hermes: "Status: выключен"); slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs:1256 - `"Микрофон"` (speaker labels "Микрофон" and "Система" in the transcript window); overlay-backend/src/journal/time.rs:29 - the `(МСК)` suffix of every session date in the archive
+Scenario: with the interface language set to English these strings stay Russian. `AGENTS.md` calls a hardcoded Cyrillic literal without `@tr()` a bug; these three are built in Rust, where the `.slint` i18n guard does not look.
+Found by: the Slint MCP audit on windows-worker on 2026-10-09 (builds of 8cf4904 and 77ad476, English interface): element labels read through MCP and screenshots.
+Fix plan: route the three strings through the translation table the Rust side already uses for other labels.
+Closed by:
+
+### D-016 Settings shows a hard-coded knowledge-base size that differs from the parser's count   Severity: P3   Status: Open
+Evidence: slint-experiment/ui/settings_panel.slint:1997 - `Embedded knowledge base — 1,696 entries`
+Scenario: the number is a literal in the UI text. A replica of `kb::parse` over the three knowledge files at 8a38bac counts 1652 entries. Whichever is right, the literal goes stale with every edit of the knowledge files.
+Found by: the Slint MCP audit of the Settings tabs on 2026-10-09 against the count made for docs/architecture.md. The exact figure was not taken from a run of the Rust code.
+Fix plan: show `kb::all().len()`.
+Closed by:
+
+### D-017 Several controls are not exposed as controls to accessibility and to the MCP audit   Severity: P3   Status: Open
+Evidence: slint-experiment/ui/settings_panel.slint (the 16 navigation entries), slint-experiment/ui/archive.slint (the "Cancel" and "Delete" choices of the delete confirmation), slint-experiment/ui/overlay_bar.slint (toggle chips)
+Scenario: read through Slint MCP, the Settings navigation entries and the two buttons of the delete confirmation are plain `Text` elements with no role, and the bar's toggle chips (stealth, auto-tile, lock, audio) report no checked state. A screen reader cannot tell them from labels, and an automated audit can click them only by position and cannot read whether a toggle is on.
+Found by: the Slint MCP audit on windows-worker on 2026-10-09: element roles per window (the bar exposes 19 buttons; a Settings page exposes only its content controls and "Close").
+Fix plan: give the entries `accessible-role: button` or `tab`, and the chips `accessible-checked`.
+Closed by:
+
+### D-018 The app exits at startup on a machine without OpenGL   Severity: P2   Status: Open
+Evidence: slint-experiment/src/bin/overlay_host_windows.rs:722 - `let _ = slint::BackendSelector::new()` with `.backend_name("winit".into())` and no renderer fallback
+Scenario: on Winbrat (a virtual machine without a GL driver) `overlay-host.exe` logs its startup, registers hotkeys and then ends with "Error: Failed to initialize OpenGL driver: Could not locate glCreateShader symbol". No window appears and nothing tells the user why. With the environment variable `SLINT_BACKEND=winit-software` the same binary starts and works. A user on a virtual desktop or with a broken GPU driver gets a program that silently does not open.
+Found by: the first start of the QA build of 8cf4904 on windows-worker on 2026-10-09; the software renderer was confirmed as the workaround in the same session.
+Fix plan: on that error, retry with the software renderer and log the fallback.
 Closed by:
