@@ -403,12 +403,18 @@ pub(in super::super) fn open_archive(
             let outcome = {
                 let mut slot = lock_store(&store_d);
                 match slot.as_mut() {
-                    Some(st) => overlay_backend::session_admin::delete_session_everywhere(st, &sid),
+                    Some(st) => overlay_backend::session_admin::delete_session_everywhere(st, &sid)
+                        .map(|()| st.list_sessions().map(|all| all.len()).ok()),
                     None => return,
                 }
             };
             match outcome {
-                Ok(()) => {
+                Ok(total) => {
+                    // The heading carries the session count; it was set once at
+                    // load and stayed at the old number after a delete.
+                    if let Some(total) = total {
+                        p.set_summary(SharedString::from(total.to_string()));
+                    }
                     // (debrief sidecar cleanup lives in delete_session_everywhere)
                     // Rebuild the list (the row is gone); also resets edit-state.
                     let q = p.get_query();
