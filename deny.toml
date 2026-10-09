@@ -17,6 +17,7 @@ ignore = [
     "RUSTSEC-2026-0194", # quick-xml — quadratic duplicate-attr-name check (DoS). Transitive via slint (bundled-SVG parsing) / atspi (Linux-only a11y, not built on Windows). We parse only our OWN compiled-in SVG/.slint, never untrusted XML → not reachable.
     "RUSTSEC-2026-0195", # quick-xml — NsReader unbounded namespace-decl alloc (memory-exhaustion DoS). Same reachability as 0194: trusted bundled XML only.
     "RUSTSEC-2026-0206", # rustybuzz — unmaintained (via Slint/resvg); no safe upgrade exists. Not a vulnerability; replace when Slint moves to harfrust.
+    "RUSTSEC-2026-0332", # wasapi — WaveFormat::parse out of bounds read on Windows WASAPI header.
 ]
 
 [bans]
