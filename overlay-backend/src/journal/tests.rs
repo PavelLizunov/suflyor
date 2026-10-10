@@ -21,16 +21,28 @@ fn unix_to_ymdhms_known_dates() {
 fn format_msk_label_shifts_utc_plus_three() {
     // 2026-05-24 00:00:00 UTC → 03:00:00 МСК, DD.MM.YYYY order.
     assert_eq!(
-        format_msk_label(1_779_580_800_000),
+        format_msk_label(1_779_580_800_000, true),
         "24.05.2026 03:00:00 (МСК)"
     );
     // Midnight rollover: 23:30 UTC → 02:30 МСК NEXT day.
     assert_eq!(
-        format_msk_label((1_779_580_800 - 1800) * 1000),
+        format_msk_label((1_779_580_800 - 1800) * 1000, true),
         "24.05.2026 02:30:00 (МСК)"
     );
     // Garbage (negative) clamps instead of panicking.
-    assert_eq!(format_msk_label(-5), "01.01.1970 03:00:00 (МСК)");
+    assert_eq!(format_msk_label(-5, true), "01.01.1970 03:00:00 (МСК)");
+}
+
+#[test]
+fn format_msk_label_follows_ui_language() {
+    for (ms, label) in [
+        (1_779_580_800_000, "24.05.2026 03:00:00"),
+        ((1_779_580_800 - 1800) * 1000, "24.05.2026 02:30:00"),
+        (-5, "01.01.1970 03:00:00"),
+    ] {
+        assert_eq!(format_msk_label(ms, true), format!("{label} (МСК)"));
+        assert_eq!(format_msk_label(ms, false), format!("{label} (MSK)"));
+    }
 }
 
 #[test]
@@ -1039,38 +1051,22 @@ fn last_lines_capped_at_recovery_limit() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+#[cfg(unix)]
 #[test]
-fn append_bookmark_creates_file_with_header_then_appends_entries() {
-    // Override the config dir for isolation. We can't easily mock
-    // dirs::config_dir() so this test writes to the real APPDATA
-    // location into a uniquely-named subfolder.
-    let tag = format!("overlay-mvp-test-{}", now_unix_ms());
-    let testdir = dirs::config_dir().expect("config dir").join(&tag);
-    let _cleanup = scopeguard::guard(testdir.clone(), |p| {
-        let _ = std::fs::remove_dir_all(&p);
-    });
-    // Manually inline the append logic into the test dir to avoid
-    // dependency on dirs::config_dir() inside append_bookmark.
-    // (Full mock would need a feature gate; this test pattern is
-    // good enough to validate the markdown format.)
-    std::fs::create_dir_all(&testdir).unwrap();
-    let path = testdir.join("bookmarks.md");
-    let is_new = !path.exists();
-    {
-        use std::io::Write;
-        let mut f = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .unwrap();
-        if is_new {
-            writeln!(f, "# suflyor bookmarks\n").unwrap();
-        }
-        writeln!(f, "## Q1\nA1\n").unwrap();
-        writeln!(f, "## Q2\nA2\n").unwrap();
-    }
-    let content = std::fs::read_to_string(&path).unwrap();
-    assert!(content.starts_with("# suflyor bookmarks"));
-    assert!(content.contains("## Q1"));
-    assert!(content.contains("## Q2"));
+fn session_journal_and_its_directory_are_owner_only_on_unix() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path().join("sessions");
+    // A directory left wide by an older version: independent of the process umask.
+    std::fs::create_dir(&dir).unwrap();
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let journal = Journal::open_in(&dir, 10, 1 << 20).unwrap();
+    let file = journal.current_path().unwrap();
+    journal.close();
+
+    let dir_mode = std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+    let file_mode = std::fs::metadata(&file).unwrap().permissions().mode() & 0o777;
+    assert_eq!(dir_mode, 0o700, "other users must not list transcripts");
+    assert_eq!(file_mode, 0o600, "a session journal holds the transcript");
 }

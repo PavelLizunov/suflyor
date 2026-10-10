@@ -50,7 +50,9 @@ Treat live visual verification as mandatory for UI changes. Compilation and test
 - Before the first edit, create `docs/audit-YYYY-MM-DD-<task>/` and capture the
   baseline. Keep each before/after pair at the same window size, DPI, theme,
   language, query/data state and scroll position. Record those conditions in
-  the directory's `README.md`; an after-only image is not evidence.
+  the directory's `README.md`; an after-only image is not evidence. When the
+  task closes, remove the folder from the tree and index it in
+  `docs/HISTORY-INDEX.md` (`docs/AGENTS.md` section 6).
 - For a local component change, capture every affected state before and after
   the change. For list/search surfaces use the smallest state matrix that can
   expose the defect: empty, one/few rows, enough rows to show the scrollbar,
@@ -99,3 +101,37 @@ Do not say a UI change is done until:
 - the summary names the windows/tabs checked and any unverified state.
 
 Leave the normal non-MCP release binary running for the user's final visual acceptance. RC prereleases follow the standing authorization in `AGENTS.md`; a stable release still requires the user's explicit `релизь`.
+
+## Three checks for every UI diff
+
+Every UI diff passes these three checks before the user is shown. Present the results as evidence, not as a verdict.
+
+- **(a) Screenshots and a written UI checklist.** Capture the key windows in
+  the relevant states (Settings, bar, tile) as "Run the audit" describes, and
+  write the checklist: every string is in `@tr` and in the `.po`; no emoji
+  where an SVG belongs; button states (enabled, disabled, active marker) are
+  logical; status text matches the real state (no "Готово" when not done);
+  signs, punctuation and spacing.
+- **(b) UI-review agent** on the `.slint` and wiring diff. This is the category
+  that slips through static gates.
+- **(c) Slint MCP** on the `ui-mcp` QA build from "Run the audit", not on the
+  shipped release binary. Where element handles exist, read real control text
+  and state through MCP instead of trusting pixels alone; step 5 above covers
+  the root-only tree.
+
+## Recurring UI bug shapes
+
+Check the `.rs` side, not just `.slint`:
+
+1. **Stale status on a REUSED window** — the Settings window is reused, so
+   every transient `*_status`/`*_result` string survives the next open unless
+   `populate_token_status` clears it. (Caused the user's lingering
+   "Готово: умная модель (12B)".)
+2. **Optimistic state-flip before an async result** — writing config + UI to
+   the new value *before* the operation confirms; on failure the UI lies.
+   Commit only on the confirmed-success branch.
+3. **A `.slint` default property with NO Rust setter** — renders fake data
+   forever (palette `recent-chips: ["kubernetes",…]` had no `set_recent_chips`
+   → always shown). Grep for `set_<prop>`; if absent, the default IS the
+   production value.
+4. **emoji where the chrome standard is SVG** / **@tr↔.po drift after a string edit**.

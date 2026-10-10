@@ -23,25 +23,45 @@ thread_local! {
     static BRIDGE: RefCell<Option<BridgeHandle>> = const { RefCell::new(None) };
 }
 
-/// RU status line reflecting the LIVE bridge state (thread-local handle), for the
+/// Localized status line reflecting the LIVE bridge state (thread-local handle), for the
 /// Settings label. Used by `populate_token_status` on every (re)open so the label
 /// is never stale, and by the seed in `wire_hermes_settings`.
-pub(crate) fn current_bridge_status(host: &str, port: u16) -> String {
-    if BRIDGE.with(|b| b.borrow().is_some()) {
+pub(crate) fn current_bridge_status(host: &str, port: u16, ru: bool) -> String {
+    bridge_status_label(BRIDGE.with(|b| b.borrow().is_some()), host, port, ru)
+}
+
+fn bridge_status_label(running: bool, host: &str, port: u16, ru: bool) -> String {
+    if running {
         let h = if host.trim().is_empty() {
             "127.0.0.1"
         } else {
             host.trim()
         };
-        format!("включён · {h}:{port}")
-    } else {
+        let on = if ru { "включён" } else { "on" };
+        format!("{on} · {h}:{port}")
+    } else if ru {
         "выключен".to_string()
+    } else {
+        "off".to_string()
+    }
+}
+
+fn bridge_error_label(error: &str, ru: bool) -> String {
+    let prefix = if ru { "ошибка" } else { "error" };
+    format!("{prefix}: {error}")
+}
+
+fn bridge_port_error_label(ru: bool) -> &'static str {
+    if ru {
+        "порт: нужно число 1–65535"
+    } else {
+        "port: enter a number 1–65535"
     }
 }
 
 /// Start or stop the bridge to match `cfg.hermes_bridge_enabled`. Idempotent:
 /// stops any running instance first, then (re)starts when enabled. Returns a
-/// short RU status line for the Settings label (safe to show; no secrets).
+/// short localized status line for the Settings label (safe to show; no secrets).
 /// Call at boot and whenever the toggle / port / token changes.
 pub(crate) fn apply_bridge_state(cfg: &overlay_backend::config::SharedConfig) -> String {
     // Always stop the current one first (so a port/token edit re-binds cleanly).
@@ -50,9 +70,12 @@ pub(crate) fn apply_bridge_state(cfg: &overlay_backend::config::SharedConfig) ->
             h.stop();
         }
     });
-    let enabled = cfg.read().hermes_bridge_enabled;
+    let (enabled, ru) = {
+        let c = cfg.read();
+        (c.hermes_bridge_enabled, c.ui_language == "ru")
+    };
     if !enabled {
-        return "выключен".to_string();
+        return bridge_status_label(false, "", 0, ru);
     }
     match bridge::start(cfg.clone()) {
         Ok(handle) => {
@@ -61,9 +84,9 @@ pub(crate) fn apply_bridge_state(cfg: &overlay_backend::config::SharedConfig) ->
                 (c.hermes_bridge_host.clone(), c.hermes_bridge_port)
             };
             BRIDGE.with(|b| *b.borrow_mut() = Some(handle));
-            current_bridge_status(&host, port)
+            current_bridge_status(&host, port, ru)
         }
-        Err(e) => format!("ошибка: {e}"),
+        Err(e) => bridge_error_label(&e, ru),
     }
 }
 
@@ -86,11 +109,15 @@ pub(crate) fn wire_hermes_settings(
         win.set_hermes_api_key(SharedString::from(c.hermes_api_key.clone()));
     }
     // Reflect the CURRENT live state (boot may have started it already).
-    let (host, port) = {
+    let (host, port, ru) = {
         let c = cfg.read();
-        (c.hermes_bridge_host.clone(), c.hermes_bridge_port)
+        (
+            c.hermes_bridge_host.clone(),
+            c.hermes_bridge_port,
+            c.ui_language == "ru",
+        )
     };
-    win.set_hermes_bridge_status(SharedString::from(current_bridge_status(&host, port)));
+    win.set_hermes_bridge_status(SharedString::from(current_bridge_status(&host, port, ru)));
 
     // -- toggle: persist + start/stop live --
     {
@@ -124,7 +151,9 @@ pub(crate) fn wire_hermes_settings(
         win.on_hermes_bridge_port_save(move |txt| {
             let Ok(port) = txt.trim().parse::<u16>() else {
                 if let Some(w) = weak.upgrade() {
-                    w.set_hermes_bridge_status(SharedString::from("порт: нужно число 1–65535"));
+                    w.set_hermes_bridge_status(SharedString::from(bridge_port_error_label(
+                        cfg_c.read().ui_language == "ru",
+                    )));
                 }
                 return;
             };
@@ -429,7 +458,52 @@ fn profile_name_from_seed(seed: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::profile_name_from_seed;
+    use super::{
+        bridge_error_label, bridge_port_error_label, bridge_status_label, current_bridge_status,
+        profile_name_from_seed,
+    };
+
+    #[test]
+    fn bridge_status_follows_ui_language() {
+        assert_eq!(
+            bridge_status_label(true, "localhost", 9123, true),
+            "включён · localhost:9123"
+        );
+        assert_eq!(
+            bridge_status_label(true, "localhost", 9123, false),
+            "on · localhost:9123"
+        );
+        assert_eq!(
+            bridge_status_label(false, "localhost", 9123, true),
+            "выключен"
+        );
+        assert_eq!(bridge_status_label(false, "localhost", 9123, false), "off");
+        assert_eq!(
+            bridge_status_label(true, "  ", 9123, true),
+            "включён · 127.0.0.1:9123"
+        );
+        assert_eq!(
+            bridge_status_label(true, "  ", 9123, false),
+            "on · 127.0.0.1:9123"
+        );
+        assert_eq!(
+            bridge_status_label(true, " localhost ", 9123, false),
+            "on · localhost:9123"
+        );
+        assert_eq!(current_bridge_status("localhost", 9123, true), "выключен");
+        assert_eq!(current_bridge_status("localhost", 9123, false), "off");
+    }
+
+    #[test]
+    fn bridge_errors_have_both_ui_languages() {
+        assert_eq!(bridge_error_label("test", true), "ошибка: test");
+        assert_eq!(bridge_error_label("test", false), "error: test");
+        assert_eq!(bridge_port_error_label(true), "порт: нужно число 1–65535");
+        assert_eq!(
+            bridge_port_error_label(false),
+            "port: enter a number 1–65535"
+        );
+    }
 
     #[test]
     fn profile_name_derivation() {

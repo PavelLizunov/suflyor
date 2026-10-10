@@ -2391,7 +2391,6 @@ fn main() -> Result<(), slint::PlatformError> {
     // and the bar's active-stack readout shows what's actually live.
 
     // (#E10.2) The ⭐ bookmark chip was removed (no use-case found).
-    // journal::append_bookmark stays available for a future re-add.
 
     // KB palette — opened via the F4 global hotkey (registered below).
     // (The 💡 tips chip was removed; F4 is the sole entry point.)

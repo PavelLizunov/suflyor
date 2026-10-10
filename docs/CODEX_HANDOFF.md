@@ -1,6 +1,6 @@
 # Codex handoff — master
 
-Updated 2026-09-01. Read `AGENTS.md` before acting.
+Updated 2026-10-10 (open-work section only; the rest dates from 2026-09-01). Read `AGENTS.md` before acting.
 
 ## Current operational state — master
 
@@ -17,6 +17,37 @@ Operational note: Windows jobs follow
 [`docs/winbrat-recovery.md`](winbrat-recovery.md). Never start a duplicate job
 because SSH or a terminal disconnected. macOS builds and live QA run only on
 `mm4`; Windows compilation and the repository gate run only on `winbrat`.
+
+## Open work — hygiene pass of 2026-10-08 to 2026-10-10 (draft pull requests, nothing merged)
+
+Written 2026-10-10 on branch `claude/defect-ledger`. Check `gh pr list` first: this list
+goes stale as soon as the owner merges or closes something.
+
+Merge order matters, because the branches are stacked:
+
+1. `hygiene/2026-10-08` (#220), then `claude/history-wave-2` (#224), then
+   `claude/defect-ledger` (#228): docs only.
+2. `claude/deps-wasapi-0.25` (#222) before any of the code branches below. Until it is
+   on master, `cargo-deny` is red for every code change (ledger D-003).
+3. Independent of each other, each on top of #222:
+   - from 2026-10-08: `claude/redaction-hardening` (#221), `claude/file-permissions`
+     (#223), `claude/dead-code` (#225), `claude/t5-math-notation` (#226),
+     `claude/t6-tray-menu` (#227);
+   - from 2026-10-10: `claude/ledger-small-fixes` (#232, D-006 and D-016),
+     `claude/mask-host-query` (#233, D-019), `claude/gate-directml` (#234, D-013),
+     `claude/journal-invalid-utf8` (#235), `claude/i18n-rust-strings` (#236, D-015),
+     `claude/d014-test-deadline` (#237, D-014), `claude/archive-count` (D-020).
+
+The Windows worker was used on 2026-10-08, 2026-10-09 and 2026-10-10: gate runs,
+`ui-mcp` builds and Slint MCP checks at exact commits are recorded in each pull request.
+
+Waiting for the owner: merging; closing the old Sentinel and dependabot pull requests
+that #221, #222 and #223 supersede (and #231, which repeats part of #223); whether the
+audit reports under `docs/audit-grok/` stay in the tree; ledger D-004 and D-012, whose
+fix plans need a decision; the items listed as kept in #224.
+
+Findings are in [`docs/DEFECT-LEDGER.md`](DEFECT-LEDGER.md), including the 42 findings
+of the Grok audit that were confirmed in source.
 
 ## Historical macOS MLX runtime handoff state (superseded) — 2026-08-20
 

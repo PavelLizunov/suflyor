@@ -122,27 +122,45 @@ impl BridgeHandle {
     }
 }
 
+fn start_error_copy(ru: bool) -> (&'static str, &'static str, &'static str) {
+    if ru {
+        (
+            "токен пуст — сгенерируйте токен",
+            "занят или недоступен",
+            "не удалось запустить поток моста",
+        )
+    } else {
+        (
+            "token is empty — generate a token",
+            "is busy or unavailable",
+            "could not start the bridge thread",
+        )
+    }
+}
+
 /// Start the bridge on `127.0.0.1:<hermes_bridge_port>`. Fails (rather than
 /// serving unauthenticated) when the configured token is blank, and on a busy
 /// port. The error string is safe to show in Settings.
 pub fn start(cfg: SharedConfig) -> Result<BridgeHandle, String> {
-    let (host, port, token) = {
+    let (host, port, token, ru) = {
         let c = cfg.read();
         (
             bind_host(&c.hermes_bridge_host),
             c.hermes_bridge_port,
             c.hermes_bridge_token.trim().to_string(),
+            c.ui_language == "ru",
         )
     };
+    let (empty_token, bind_failed, thread_failed) = start_error_copy(ru);
     if token.is_empty() {
-        return Err("токен пуст — сгенерируйте токен".to_string());
+        return Err(empty_token.to_string());
     }
     // Bind to the configured host: `127.0.0.1` (default; loopback-only) or, for a
     // REMOTE Hermes over Tailscale, the machine's Tailscale IP / `0.0.0.0`. A
     // non-loopback bind exposes the (token-gated, read-mostly) API on that
     // interface — Settings warns when the host isn't loopback.
     let server = tiny_http::Server::http((host.as_str(), port))
-        .map_err(|_| format!("{host}:{port} занят или недоступен"))?;
+        .map_err(|_| format!("{host}:{port} {bind_failed}"))?;
     let stop = Arc::new(AtomicBool::new(false));
     let stop_c = stop.clone();
     let thread = std::thread::Builder::new()
@@ -161,7 +179,7 @@ pub fn start(cfg: SharedConfig) -> Result<BridgeHandle, String> {
             }
             log::info!("[bridge] stopped");
         })
-        .map_err(|_| "не удалось запустить поток моста".to_string())?;
+        .map_err(|_| thread_failed.to_string())?;
     Ok(BridgeHandle {
         stop,
         thread: Some(thread),
@@ -570,6 +588,36 @@ mod tests {
     ) -> (u16, serde_json::Value, bool) {
         let (path, query) = split_query(url);
         dispatch(method, path, &query, &body, store, cfg)
+    }
+
+    #[test]
+    fn bridge_start_errors_have_both_ui_languages() {
+        assert_eq!(
+            start_error_copy(true),
+            (
+                "токен пуст — сгенерируйте токен",
+                "занят или недоступен",
+                "не удалось запустить поток моста",
+            )
+        );
+        assert_eq!(
+            start_error_copy(false),
+            (
+                "token is empty — generate a token",
+                "is busy or unavailable",
+                "could not start the bridge thread",
+            )
+        );
+        for (language, expected) in [
+            ("ru", "токен пуст — сгенерируйте токен"),
+            ("en", "token is empty — generate a token"),
+        ] {
+            let mut c = Config::defaults();
+            c.ui_language = language.into();
+            c.hermes_bridge_token.clear();
+            let cfg = Arc::new(RwLock::new(c));
+            assert_eq!(start(cfg).err(), Some(expected.to_string()));
+        }
     }
 
     #[test]

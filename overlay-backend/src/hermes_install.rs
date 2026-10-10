@@ -63,6 +63,18 @@ pub fn bridge_url_for_env(bind_host: &str, port: u16) -> String {
     format!("http://{host}:{port}")
 }
 
+/// Bring the Hermes `.env`, which holds the bridge token, from `old` to `new`: owner-only
+/// on Unix. An unchanged file is not rewritten, only restricted.
+fn sync_env(path: &std::path::Path, old: &str, new: &str) -> std::io::Result<()> {
+    if new != old {
+        return crate::paths::write_private(path, new.as_bytes());
+    }
+    if path.exists() {
+        crate::paths::restrict_to_owner(path)?;
+    }
+    Ok(())
+}
+
 /// Install the plugin into the local Hermes: files + `.env` + `config.yaml`.
 /// Returns an RU status line for the Settings label (no secrets).
 pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
@@ -92,9 +104,7 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
         Err(e) => return Err(format!("чтение .env: {e}")),
     };
     let env_new = merge_env_text(&env_old, bridge_url, token);
-    if env_new != env_old {
-        std::fs::write(&env_path, env_new).map_err(|e| format!("запись .env: {e}"))?;
-    }
+    sync_env(&env_path, &env_old, &env_new).map_err(|e| format!("запись .env: {e}"))?;
 
     // 3. config.yaml enable.
     let cfg_path = home.join("config.yaml");
@@ -610,8 +620,41 @@ fn finish(text: String, eol: &str) -> EnableEdit {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::panic)]
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
+
+    #[cfg(unix)]
+    fn unix_mode(path: &std::path::Path) -> u32 {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn env_file_is_owner_only_on_unix() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let fresh = temp.path().join("fresh.env");
+        sync_env(&fresh, "", "SUFLYOR_BRIDGE_TOKEN=a\n").unwrap();
+        assert_eq!(unix_mode(&fresh), 0o600, "a new .env must be owner-only");
+
+        // A file that already exists with a wider mode is tightened, not just rewritten.
+        let wide = temp.path().join("wide.env");
+        std::fs::write(&wide, "OLD=1\n").unwrap();
+        std::fs::set_permissions(&wide, std::fs::Permissions::from_mode(0o644)).unwrap();
+        sync_env(&wide, "OLD=1\n", "SUFLYOR_BRIDGE_TOKEN=b\n").unwrap();
+        assert_eq!(unix_mode(&wide), 0o600, "an existing .env is tightened");
+        let text = std::fs::read_to_string(&wide).unwrap();
+        assert_eq!(text, "SUFLYOR_BRIDGE_TOKEN=b\n");
+
+        // An install that changes nothing still restricts a file left wide by an old version.
+        std::fs::set_permissions(&wide, std::fs::Permissions::from_mode(0o644)).unwrap();
+        sync_env(&wide, &text, &text).unwrap();
+        assert_eq!(unix_mode(&wide), 0o600, "an unchanged .env is tightened");
+        // Nothing to restrict when the file does not exist and nothing is to be written.
+        sync_env(&temp.path().join("absent.env"), "", "").unwrap();
+    }
 
     #[test]
     fn embedded_plugin_files_nonempty() {

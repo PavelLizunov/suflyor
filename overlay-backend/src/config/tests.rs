@@ -1742,13 +1742,50 @@ fn mask_host_handles_query_and_fragment_boundaries() {
     // RFC 3986: authority is delimited by '/', '?', or '#' without requiring a trailing slash.
     assert_eq!(
         mask_host("http://192.168.0.142:18902?token=secret123"),
-        "http://***:18902?token=secret123"
+        "http://***:18902?***"
     );
     assert_eq!(
         mask_host("http://user:secret@192.168.0.142:18902#section"),
-        "http://***:18902#section"
+        "http://***:18902#***"
     );
-    assert_eq!(mask_host("10.0.0.5:9000?query=1"), "***:9000?query=1");
+    assert_eq!(mask_host("10.0.0.5:9000?query=1"), "***:9000?***");
+}
+
+#[test]
+fn mask_host_drops_query_and_fragment_values() {
+    // A bridge token or key passed in the query string or the fragment must not
+    // survive into a copyable or exported string.
+    assert_eq!(
+        mask_host("http://192.168.0.142:18902/v1?token=BRIDGE_SECRET&x=1"),
+        "http://***:18902/v1?***"
+    );
+    assert_eq!(
+        mask_host("http://127.0.0.1/v1#bearer=abcdef"),
+        "http://***/v1#***"
+    );
+    assert_eq!(
+        mask_host("http://u:p@10.0.0.1:18902/v1?api_key=k#frag"),
+        "http://***:18902/v1?***"
+    );
+    // No query and no fragment: the path is kept as before.
+    assert_eq!(mask_host("http://10.0.0.1:80/v1"), "http://***:80/v1");
+}
+
+#[test]
+fn mask_host_masks_the_host_behind_extra_slashes() {
+    // A scheme-relative URL and a URL with an empty authority used to put the
+    // host into the part that is kept verbatim.
+    assert_eq!(mask_host("//192.168.0.142:18902/v1"), "//***:18902/v1");
+    assert_eq!(mask_host("http:///192.168.0.142/v1"), "http:///***/v1");
+    // A "://" inside a query value is not the scheme boundary.
+    assert_eq!(
+        mask_host("//user:secret@private.example/v1?token=T&next=https://public.example"),
+        "//***/v1?***"
+    );
+    assert_eq!(
+        mask_host("10.0.0.5:9000/v1?next=http://a.example"),
+        "***:9000/v1?***"
+    );
 }
 // ===== Deep lock (bar lock chip, managed-local only) =====
 
@@ -1908,4 +1945,55 @@ fn config_save_sets_unix_mode_0600() {
         0o600,
         "config.json should be saved with 0600 mode permissions"
     );
+}
+
+#[cfg(unix)]
+fn unix_mode(path: &std::path::Path) -> u32 {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+}
+
+#[cfg(unix)]
+#[test]
+fn config_exports_are_owner_only_on_unix() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().unwrap();
+    let cfg = Config::defaults();
+
+    let full = temp.path().join("export.json");
+    export_to(&full, &cfg).unwrap();
+    assert_eq!(unix_mode(&full), 0o600, "a full export holds the API keys");
+
+    let server = temp.path().join("server.json");
+    export_server_settings_to(&server, &cfg).unwrap();
+    assert_eq!(unix_mode(&server), 0o600, "a server export holds bearers");
+
+    // Exporting over a file that already exists with a wider mode tightens it.
+    let wide = temp.path().join("wide.json");
+    std::fs::write(&wide, "{}").unwrap();
+    std::fs::set_permissions(&wide, std::fs::Permissions::from_mode(0o644)).unwrap();
+    export_to(&wide, &cfg).unwrap();
+    assert_eq!(unix_mode(&wide), 0o600, "an existing export is tightened");
+}
+
+#[cfg(unix)]
+#[test]
+fn config_backup_is_owner_only_on_unix() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("config.json");
+    let cfg = Config::defaults();
+
+    // A backup left wide by an older version: independent of the process umask.
+    let bak = path.with_extension("json.bak");
+    save_to_path(&path, &cfg).unwrap();
+    std::fs::write(&bak, "{}").unwrap();
+    std::fs::set_permissions(&bak, std::fs::Permissions::from_mode(0o644)).unwrap();
+    save_to_path(&path, &cfg).unwrap();
+
+    let size = std::fs::metadata(&bak).unwrap().len();
+    assert!(size > 2, "the save must rewrite the backup");
+    assert_eq!(unix_mode(&bak), 0o600, "the backup holds profiles");
 }

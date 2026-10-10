@@ -21,6 +21,7 @@ All scripts in `scripts/` are classified below by domain, inspection/execution m
 |---|---|---|---|---|
 | `git-gate-native.ps1` | Native selective gate (docs/targeted; explicit stable full) | `classify`, `-ListOnly` stage modes | `commit`, `push`, `manual` stage modes | Low (Inspection) / Medium (Gate Execution) |
 | `ci.ps1` | Stable-release full CI across all 5 crates | None (explicit stable publication only) | Full execution (`powershell scripts/ci.ps1`) | Medium-High (Heavy Cargo build, RAM/Disk impact) |
+| `stage-directml.ps1` | Copies ort's matching `DirectML.dll` beside a crate's test executables; called by both gates | None | Called by `ci.ps1` and `git-gate-native.ps1` after the test build | Low (one file copy inside `target/`) |
 | `git-gate-macos.sh` | macOS arm64 compile-seam gate | None | Bash script execution | Medium (Cargo/Swift compile & test) |
 | `build-slint-release.ps1` | Release build for host + sidecars + DirectML DLL + NSIS | Standard build (no `-Installer`) | `-Installer` flag (runs `makensis.exe`) | High (Release compilation & installer generation) |
 | `slint-installer.nsi` | NSIS installer definition script | `makensis /V2` dry compile | Execution of resulting installer EXE | High (Modifies `%LOCALAPPDATA%` & Windows Registry) |

@@ -2,6 +2,8 @@
 
 ## Autonomous mode protocol
 
+> Disputed (owner decision, 2026-10-08): this section is not changed until a separate decision.
+
 This project ships with hook-enforced autonomous rules. When the file
 `.claude/autonomous_active` exists and contains a future ISO deadline:
 
@@ -29,18 +31,23 @@ on the owner's workstation as though it were the test VM.
 
 ## State files (single source of truth)
 
-- `NIGHT_RUN_PLAN.md` — current backlog, work log, decision journal.
-  Sections you maintain: `## Backlog`, `## In progress`, `## Done log`,
-  `## Findings`, `## Decisions`. Update every ~30 min during autonomous.
-- `docs/state-and-plan.md` — living state/plan snapshot for interactive
-  work (survives context compaction). Keep it current when you finish a
-  chunk of work.
+- `docs/CODEX_HANDOFF.md` — the live state file (owner decision, 2026-10-08).
+  Keep it current for the branch or worktree it names.
+- `NIGHT_RUN_PLAN.md` — historical, not a live file (owner decision,
+  2026-10-08). Disputed: its autonomous-mode use is not changed (see the note
+  under the autonomous section). Sections you maintain: `## Backlog`,
+  `## In progress`, `## Done log`, `## Findings`, `## Decisions`. Update every
+  ~30 min during autonomous.
+- `docs/state-and-plan.md` — historical; no longer updated (owner decision,
+  2026-10-08).
 - `.claude/autonomous_active` — ISO 8601 deadline. Presence = mode armed.
   Do NOT delete this file from inside an autonomous run (that defeats
   the whole point).
 - `.claude/_progress_counter` — internal, managed by hooks. Don't touch.
 
 ## OpenCode Go worker
+
+> Disputed (owner decision, 2026-10-08): this section is not changed until a separate decision.
 
 For small, bounded tasks, the project may use OpenCode Go with
 `opencode-go/deepseek-v4-flash`:
@@ -58,22 +65,20 @@ project's Qwen/Claude worker rules.
 
 The product is **pure Rust + Slint** (Phase 7 cut, 2026-05-28 removed the
 old React/Tauri/WebView2 surface). No browser engine, no Node, no
-TypeScript. **THREE** standalone crates, NO root workspace:
+TypeScript. **FIVE** standalone crates, NO root workspace:
 
 - **`slint-experiment/`** — the `overlay-host` binary. UI in `ui/*.slint`
   (compiled into the binary at build time via `build.rs` + `slint-build`);
   Win32 HWND helpers in `src/win32.rs`; session/event/state glue in
   `src/{slint_session,slint_events,runtime_state,app_state,session_namer,
   markdown,logging}.rs`. **NOTE:** `src/bin/overlay_host.rs` is a THIN
-  entrypoint — the real host logic is a ~25-module DIRECTORY
+  entrypoint — the real host logic is a ~36-module DIRECTORY
   `src/bin/overlay_host/` (`hotkeys`, `settings_*`, `tile_*`, `aux_windows`,
   `vision_capture`, `recovery`, `wizard`, `diagnostics`, …). Grep the directory,
   not just the file.
-- **`overlay-backend/`** — the no-UI shared crate. `lib.rs` exports 24 modules:
-  ai, audio, components, config, conspect, events, health, journal, kb,
-  local_ai, memory, ocr, ocr_install, paths, persistence, re_transcribe,
-  recorder, runtime, session_names, stt, tts, tts_install, update, vision.
-  `slint-experiment` depends on it via a path dep.
+- **`overlay-backend/`** — the no-UI shared crate. `lib.rs` declares 44 modules
+  (41 `pub`, 3 `pub(crate)`; `audio` is declared three times under cfg gates).
+  The list lives in `lib.rs`, not here. `slint-experiment` depends on it via a path dep.
 - **`suflyor-tts/`** — the Piper neural read-aloud + diarization SIDECAR
   (`suflyor-tts.exe`, shipped beside overlay-host in the installer). Links
   sherpa-onnx (TTS) ONLY and MUST stay a separate process: two onnxruntimes in
@@ -87,6 +92,8 @@ TypeScript. **THREE** standalone crates, NO root workspace:
   `suflyor-teratts/manifest/teratts-v2.json` and downloads on demand — never
   bundle weights in the installer; `suflyor-teratts/NOTICE.md` carries the
   upstream licensing release gate (upstream has NO LICENSE file).
+- **`suflyor-wsola/`** — pitch-preserving WSOLA time-stretch library crate used
+  by playback (its own AGENTS.md: a library crate, not a sidecar process).
 
 Run/build from `slint-experiment/`:
 ```pwsh
@@ -161,12 +168,6 @@ The agent-agnostic `.githooks/pre-commit` and `.githooks/pre-push` hooks are the
 source of truth. Enable them once per clone with
 `git config core.hooksPath .githooks`; both invoke
 `scripts/git-gate-native.ps1` and enforce the selected tier.
-- **Retest evidence (2026-07-01):** before publishing, require a matching
-  `docs/retest-*X.Y.Z*.html` golden-rule tester checklist. Copy
-  `docs/retest-template.html` to `docs/retest-v<version>-fixes.html` and fill
-  the per-change items.
-- `--no-verify` is allowed only when the cargo gate is deliberately moved to
-  Winbrat or required GitHub CI; preserve that evidence before merging.
 
 **Hotfix-only short-circuit** (review-agent skippable ONLY if ALL THREE):
 - impl ≤ 5 lines
@@ -208,20 +209,7 @@ self-gate, with no human visual acceptance. See memory `[[release-protocol]]`.
    for explicit owner authorization for that version. Release != push.
 2. **Accumulate** changes into one verified release — release is an event, not
    a per-task default. (hardening of `[[no-marathon-releases]]`.)
-3. **Every UI diff passes THREE checks before the user is shown:**
-   - **(a) screenshots + UI checklist** — `CopyFromScreen` the key windows in
-     the RELEVANT states (Settings/bar/tile) + a written checklist: every
-     string in `@tr` AND in the `.po`; no emoji where an SVG belongs; button
-     states (enabled/disabled/active-marker) are logical; **status text matches
-     real state** (no "Готово" when not done); signs/punctuation/spacing.
-   - **(b) UI-review agent** on the `.slint` + wiring diff (the category that
-     slips through static gates).
-   - **(c) Slint-MCP** — this is now a QA-only build, not the shipped release
-     binary. You **MUST** build with `--features ui-mcp`; environment variables
-     alone do not enable the server. Then
-     `SLINT_EMIT_DEBUG_INFO=1 SLINT_MCP_PORT=N` binds
-     `http://127.0.0.1:N/mcp`. Drive/read the UI tree programmatically —
-     reliable, unlike computer-use clicks on the floating gear.
+3. Every UI diff passes the three checks in the slint-mcp-ui-audit skill (screenshots and checklist, UI-review agent, Slint MCP) before the user is shown.
 4. Present to the user as EVIDENCE ("here are the screenshots + checklist
    results, look at X"), never "all green, releasing".
 5. Publishing is complete only after
@@ -270,19 +258,9 @@ The "illogical UI" class is invisible to clippy/test. Run these on any UI diff:
   tree=`elementHandle`, descendants=`findAll` (no `maxElements`). Drive curl from
   a Python helper written to an ABSOLUTE path (Git-bash resets cwd between calls,
   so inline heredocs lose `/tmp` files).
-- **The recurring UI bug shapes** (check the .rs side, not just .slint):
-  1. **Stale status on a REUSED window** — the Settings window is reused, so
-     every transient `*_status`/`*_result` string survives the next open unless
-     `populate_token_status` clears it. (Caused the user's lingering
-     "Готово: умная модель (12B)".)
-  2. **Optimistic state-flip before an async result** — writing config + UI to
-     the new value *before* the operation confirms; on failure the UI lies.
-     Commit only on the confirmed-success branch.
-  3. **A `.slint` default property with NO Rust setter** — renders fake data
-     forever (palette `recent-chips: ["kubernetes",…]` had no `set_recent_chips`
-     → always shown). Grep for `set_<prop>`; if absent, the default IS the
-     production value.
-  4. **emoji where the chrome standard is SVG** / **@tr↔.po drift after a string edit**.
+- **The recurring UI bug shapes** (stale status on a reused window, optimistic
+  state-flip, a `.slint` default with no Rust setter, emoji or `.po` drift) are
+  listed in the slint-mcp-ui-audit skill, which owns them.
 
 ### Lessons learned (the "we got burned" list)
 
@@ -311,26 +289,9 @@ switches live; `ui_language` in `%APPDATA%\suflyor\config.json` persists
 it (en falls back to the msgid = English).
 
 Adding a user-facing string: wrap it in `@tr("English…")`, append the
-`msgid`/`msgstr` pair to `slint-replay.po`, rebuild. A **hardcoded Cyrillic
-literal (no `@tr()`) won't translate** — that's a bug. Tiles/palette/settings
+`msgid`/`msgstr` pair to `slint-replay.po`, rebuild. Tiles/palette/settings
 are separate Slint windows in the same process; they get their text from
 `overlay_host.rs` at construction, so there's no per-window config fetch.
-
-## Knowledge base
-
-Embedded reference in `overlay-backend/src/kb.rs` (~1600 glossary / commands /
-patterns entries, pre-lowercased). Accessed directly via `kb::search` /
-`kb::get` (no IPC layer). The overlay's **F4** palette is the inline search
-surface. Hyphenated keys (`kubectl-debug`) match via token-set check.
-`kb::search` clamps the query to 200 chars (DoS guard).
-
-## Voice coach (live + retrospective)
-
-- **Live pill** in the overlay bar: WPM + filler density over a rolling 60s
-  mic-only window.
-- **Post-meeting debrief**: opt-in. On `stop_session`, the mic transcript + a
-  3-point ask → a tile labeled "🎯 Debrief". Skip conditions: <30s session,
-  <5 mic lines, empty AI bearer.
 
 ## Hotkeys (global — `src/bin/overlay_host/hotkeys.rs` is the source of truth)
 
@@ -349,45 +310,23 @@ Each registration logs `"<label> hotkey registered"` at boot (the cheapest smoke
 signal). Dropping the `GlobalHotKeyManager` unregisters everything — `main` keeps
 it alive for the process lifetime.
 
-## Read-aloud (TTS + OCR) — since v0.20.0
-
-On-screen / selected text → speech. Neural TTS (Piper Irina/Ruslan via
-sherpa-onnx) runs in the **`suflyor-tts.exe` SIDECAR**, NOT in-process (see Stack
-— two onnxruntimes crash in one binary). Tesseract OCR (a separate engine) reads
-a screen region. Both engines install via buttons in **Settings → AI**
-(SHA-pinned downloads). Hotkeys: **Shift+Alt+1** read selection, **+2**
-OCR-region, **+3** pause; built-in anti-feedback so it never reads its own output.
-Backend: `tts.rs` (SAPI live fallback) + `tts_install.rs` + `ocr.rs` +
-`ocr_install.rs`. Full state in `docs/read-aloud-status.md`.
-
 ## Security boundaries
 
 - **Single process, no IPC command surface.** Unlike the old Tauri build,
   there are no "commands" a tile window can `invoke`. Tile / palette /
   settings are Slint windows constructed by `overlay_host.rs`; they render
-  only what they're handed and never read `config.json` themselves. So the
-  old `assert_overlay` caller-guard is moot — secrets simply never reach a
-  tile's scope.
-- **AI endpoint:** resolve via `cfg.ai_endpoint(false)` (picks local vs cloud
-  by `ai_provider`); the raw `ai_base_url` field is ALWAYS the cloud bridge.
+  only what they're handed and never read `config.json` themselves. Secrets
+  simply never reach a tile's scope.
 - **AI error tiles** must use a GENERIC message (no error chain) so the
   `base_url` / LAN IP can't leak into a screenshot.
 - **Stealth** (hide from screen capture) = Win32 `SetWindowDisplayAffinity`
   (`WDA_EXCLUDEFROMCAPTURE`), applied to the bar + tiles + the F4 palette +
   Settings when stealth is on.
 
-## Security reminders
-
-- `config.json` at `%APPDATA%\suflyor\config.json` contains live
-  `groq_api_key` + `ai_bearer`. NEVER print these to chat or logs, and never
-  include them in journal entries.
-- `nini-context-backup.txt` (repo root) is the user's personal interview-prep
-  notes — gitignored; never commit it.
-
 ## Reference
 
 - **Methodology source:** memory `[[vpnctl-methodology]]`.
 - **Project state:** memory `[[project-overlay-mvp-history]]`,
-  `docs/state-and-plan.md`.
+  `docs/CODEX_HANDOFF.md`.
 - **Visual verification:** memory `[[overlay-host-visual-verification]]`.
 - **User setup:** memory `[[user-setup-monitors]]`.

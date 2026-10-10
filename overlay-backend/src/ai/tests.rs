@@ -57,9 +57,14 @@ async fn queued_stream_stops_when_receiver_is_dropped() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     drop(permits);
 
+    // The semaphore is process-wide: other tests in this binary queue behind the
+    // two permits held above and may then hold one for several seconds (a
+    // refused local connection costs about two seconds per attempt on Windows).
+    // The deadline covers that; a permit leaked by the dropped stream is never
+    // returned, so the assertion still fails for the defect it guards.
     let start = std::time::Instant::now();
     let mut reacquired = false;
-    while start.elapsed() < std::time::Duration::from_secs(5) {
+    while start.elapsed() < std::time::Duration::from_secs(30) {
         if let Ok(Ok(p)) = tokio::time::timeout(
             std::time::Duration::from_millis(200),
             AI_SEMAPHORE.acquire_many(2),

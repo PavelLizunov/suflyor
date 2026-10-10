@@ -49,3 +49,17 @@ one affected component, or full CI for cross-cutting/high-risk work. Visual UI
 evidence remains mandatory independently of cargo scope. Releases also finish
 with `post-release-cleanup.ps1`, so merged branches, obsolete prereleases,
 completed worktrees, and rebuildable caches do not accumulate again.
+
+## Local AI without the app
+
+`setup-local-ai.ps1` installs the same local stack as **Settings, AI bridge, Install / complete local AI**, into `%USERPROFILE%\suflyor-local-ai`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup-local-ai.ps1
+```
+
+- llama.cpp with the Gemma 4B profile: LLM at `http://127.0.0.1:8080/v1`
+- whisper.cpp with Whisper large-v3-turbo: mixed Russian and English STT at `http://127.0.0.1:8081/v1`
+- GigaAM-v3: Russian STT, in-process, no server
+
+Flags: `-Cpu` (force CPU), `-NoLaunch` (download only), `-SkipLlama`, `-SkipWhisper`, `-SkipGigaam`. Re-running resumes partial downloads and skips completed components.

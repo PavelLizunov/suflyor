@@ -40,40 +40,6 @@ pub fn diagnose_and_repair_default() -> Result<DbHealth> {
     diagnose_and_repair_at(&path, &backups)
 }
 
-/// Diagnose ONLY the default catalog (no backup, no repair) — a read-only health
-/// probe for a status display.
-///
-/// # Errors
-/// If the data root can't be resolved.
-pub fn check_default() -> Result<DbHealth> {
-    let path = default_catalog_path()?;
-    if !path.exists() {
-        return Ok(DbHealth {
-            healthy: true,
-            issues: Vec::new(),
-            actions: vec!["база ещё не создана".to_string()],
-            backup_path: None,
-        });
-    }
-    match open_main(&path) {
-        Ok(conn) => {
-            let issues = run_checks(&conn);
-            Ok(DbHealth {
-                healthy: issues.is_empty(),
-                issues,
-                actions: Vec::new(),
-                backup_path: None,
-            })
-        }
-        Err(e) => Ok(DbHealth {
-            healthy: false,
-            issues: vec![format!("база не открывается: {e}")],
-            actions: Vec::new(),
-            backup_path: None,
-        }),
-    }
-}
-
 /// The testable core: back up `path` into `backups`, check, non-destructively
 /// repair, re-check. Parameterized over paths so tests need no `data_root`.
 ///
@@ -416,24 +382,6 @@ pub fn clear_memory_items_default() -> Result<ClearResult> {
     clear_table_at(&default_catalog_path()?, &backups_dir()?, "memory_items")
 }
 
-/// Read-only count of the `default` "Suggestions" queue, for a confirm prompt.
-/// Returns 0 if the DB doesn't exist yet.
-///
-/// # Errors
-/// If the catalog path can't be resolved, or the count query fails.
-pub fn count_memory_candidates_default() -> Result<usize> {
-    count_table_at(&default_catalog_path()?, "memory_candidates")
-}
-
-/// Read-only count of `default` curated memory items, for a confirm prompt.
-/// Returns 0 if the DB doesn't exist yet.
-///
-/// # Errors
-/// As [`count_memory_candidates_default`].
-pub fn count_memory_items_default() -> Result<usize> {
-    count_table_at(&default_catalog_path()?, "memory_items")
-}
-
 /// Testable core of the targeted clear. `table` MUST be one of the two memory
 /// tables — any other value bails BEFORE any I/O, so no arbitrary name is ever
 /// interpolated into SQL. Sequence: whitelist → (no DB → no-op) → BACKUP FIRST
@@ -476,26 +424,6 @@ fn clear_table_at(path: &Path, backups: &Path, table: &str) -> Result<ClearResul
         cleared,
         backup_path,
     })
-}
-
-/// Read-only `COUNT(*)` of a whitelisted memory table's `default` rows. Missing
-/// DB → 0.
-///
-/// # Errors
-/// Non-whitelisted `table`, or the count query fails.
-fn count_table_at(path: &Path, table: &str) -> Result<usize> {
-    if !matches!(table, "memory_candidates" | "memory_items") {
-        bail!("отказ: подсчёт разрешён только для таблиц памяти, не «{table}»");
-    }
-    if !path.exists() {
-        return Ok(0);
-    }
-    let conn = open_main(path)?;
-    let sql = format!("SELECT COUNT(*) FROM {table} WHERE profile_id = 'default'");
-    let n: i64 = conn
-        .query_row(&sql, [], |r| r.get(0))
-        .with_context(|| format!("count {table}"))?;
-    Ok(usize::try_from(n).unwrap_or(0))
 }
 
 /// Resolve the default catalog path via `Store::default_path`, erroring if the OS
@@ -732,18 +660,6 @@ mod tests {
         let res = clear_table_at(&db, &backups, "memory_candidates").unwrap();
         assert_eq!(res.cleared, 0);
         assert!(res.backup_path.is_empty(), "no backup for a missing DB");
-    }
-
-    #[test]
-    fn count_reads_default_rows() {
-        let tmp = tempfile::tempdir().unwrap();
-        let db = tmp.path().join("catalog.sqlite");
-        seed_memory_db(&db);
-        assert_eq!(count_table_at(&db, "memory_candidates").unwrap(), 3);
-        assert_eq!(count_table_at(&db, "memory_items").unwrap(), 2);
-        // Missing DB → 0.
-        let missing = tmp.path().join("nope.sqlite");
-        assert_eq!(count_table_at(&missing, "memory_items").unwrap(), 0);
     }
 
     #[test]

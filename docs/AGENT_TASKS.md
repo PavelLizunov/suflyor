@@ -12,7 +12,10 @@ Status legend: [ ] open · [~] claimed (write your agent/branch) · [x] done.
 
 ---
 
-## [ ] T5 — finish common mathematical notation rendering
+## [~] T5 — finish common mathematical notation rendering
+
+**Claimed:** Claude Code, branch `claude/t5-math-notation`. Parser tests are in the
+PR; the owner screenshot and the streaming check are still open.
 
 **Priority:** backlog after the macOS port.
 **Problem:** v0.37.0 renders the main matrix/fraction/root cases, but some
@@ -24,7 +27,10 @@ rendering stack. Preserve stable streaming layout and ordinary prose/code.
 and mixed prose; the full gate is green; an owner screenshot contains no raw
 supported TeX commands and no streaming text jumps.
 
-## [ ] T6 — restore the custom tray context menu on owner Windows
+## [~] T6 — restore the custom tray context menu on owner Windows
+
+**Claimed:** Claude Code, branch `claude/t6-tray-menu`. Event-routing coverage is
+in the PR; owner verification on the affected installation is still open.
 
 **Priority:** backlog after the macOS port.
 **Problem:** left-click restore works in v0.37.0, but right-clicking the tray

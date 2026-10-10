@@ -128,10 +128,10 @@ by a Slint `Timer`):
 | `overlay-backend/src/config.rs` | Config struct + serde defaults + `ai_endpoint` resolver + default snippets |
 | `overlay-backend/src/runtime.rs` | Session lifecycle, transcript forwarder, AI ask flows, debrief, manual spawn |
 | `overlay-backend/src/stt.rs` | STT dispatch (Groq / whisper.cpp / GigaAM), VAD, prompt budgeting, retry |
-| `overlay-backend/src/journal.rs` | JSONL writer, prune (count + size cap), session summary |
+| `overlay-backend/src/journal/` | JSONL writer (`writer.rs`), prune by count and size cap (`retention.rs`), crash recovery (`recovery.rs`), event types and session counters (`types.rs`) |
 | `overlay-backend/src/local_ai.rs` | Local llama.cpp + GigaAM model management |
 | `overlay-backend/src/audio.rs` | WASAPI loopback + Core Audio tap & mic capture, resampling, push-to-talk |
-| `overlay-backend/src/ai.rs` | OpenAI-compat client (stream + non-stream + retry + cost) |
+| `overlay-backend/src/ai/` | OpenAI-compatible client: requests (`completion.rs`), streaming (`stream.rs`), provider auth headers (`provider.rs`), cost (`pricing.rs`), prompts (`prompt.rs`) |
 | `overlay-backend/src/kb.rs` | Embedded KB search (pre-lowercased) |
 | `overlay-backend/src/events.rs` | `RuntimeEvents` trait (emit / spawn_tile / spawn_tile_full) |
 | `slint-experiment/src/slint_session.rs` | Slint-side session orchestrator + STT pipeline |
@@ -179,3 +179,22 @@ and `scripts/slint-installer.nsi` (`!define PRODUCT_VERSION`).
 - **Telemetry**: explicit non-goal.
 - **Phase 7 Tauri-to-Slint Cut**: completed historical refactor (2026-05-28, see `docs/PHASE-7-CUT-PLAN.md`).
 - **overlay_host.rs split**: completed historical refactor (entrypoint is now thin, delegating to `overlay_host_windows.rs` and the `overlay_host/` module directory).
+
+## Product notes
+
+### Knowledge base
+
+Embedded reference in `overlay-backend/src/kb.rs`: 1652 pre-lowercased entries on
+2026-10-08 (1297 glossary, 114 commands, 241 patterns), counted the way `kb::parse`
+splits `overlay-backend/knowledge/*.md`. Accessed directly via `kb::search` /
+`kb::get` (no IPC layer). The overlay's **F4** palette is the inline search
+surface. Hyphenated keys (`kubectl-debug`) match via token-set check.
+`kb::search` clamps the query to 200 chars (DoS guard).
+
+### Voice coach (live + retrospective)
+
+- **Live pill** in the overlay bar: WPM + filler density over a rolling 60s
+  mic-only window.
+- **Post-meeting debrief**: opt-in. On `stop_session`, the mic transcript + a
+  3-point ask → a tile labeled "🎯 Debrief". Skip conditions: <30s session,
+  <5 mic lines, empty AI bearer.

@@ -55,7 +55,7 @@ pub fn normalize_math_display(input: &str) -> String {
 /// Normalize a fragment already known to be math (for pulldown-cmark math events).
 #[must_use]
 pub(crate) fn normalize_math_fragment(input: &str) -> String {
-    if let Some(matrix) = normalize_pmatrices(input) {
+    if let Some(matrix) = normalize_matrices(input) {
         return matrix;
     }
     let restored_case_rows = (input.contains("\\begin{cases}") && !input.contains("\\\\"))
@@ -131,23 +131,47 @@ fn restore_case_rows(input: &str) -> String {
     restored
 }
 
-fn normalize_pmatrices(input: &str) -> Option<String> {
-    const BEGIN: &str = "\\begin{pmatrix}";
-    const END: &str = "\\end{pmatrix}";
+/// Matrix environments and the brackets shown in their place. `vmatrix` is a determinant.
+const MATRIX_ENVIRONMENTS: [(&str, &str, &str); 4] = [
+    ("pmatrix", "(", ")"),
+    ("bmatrix", "[", "]"),
+    ("vmatrix", "|", "|"),
+    ("matrix", "", ""),
+];
+
+/// Where a matrix environment begins, where its body begins, and its name and brackets.
+type MatrixStart = (usize, usize, &'static str, &'static str, &'static str);
+
+/// The first matrix environment in `text`.
+fn next_matrix(text: &str) -> Option<MatrixStart> {
+    let mut first: Option<MatrixStart> = None;
+    for (name, open, close) in MATRIX_ENVIRONMENTS {
+        let marker = format!("\\begin{{{name}}}");
+        let Some(begin) = text.find(&marker) else {
+            continue;
+        };
+        if first.is_none_or(|(found, ..)| begin < found) {
+            first = Some((begin, begin + marker.len(), name, open, close));
+        }
+    }
+    first
+}
+
+fn normalize_matrices(input: &str) -> Option<String> {
     let mut out = String::with_capacity(input.len());
     let mut rest = input;
     let mut found = false;
 
-    while let Some(begin) = rest.find(BEGIN) {
-        let body_start = begin + BEGIN.len();
-        let Some(relative_end) = rest[body_start..].find(END) else {
+    while let Some((begin, body_start, name, open, close)) = next_matrix(rest) {
+        let end_marker = format!("\\end{{{name}}}");
+        let Some(relative_end) = rest[body_start..].find(&end_marker) else {
             break;
         };
         let body_end = body_start + relative_end;
 
         found = true;
         push_normalized(&mut out, &rest[..begin]);
-        out.push('(');
+        out.push_str(open);
         let body = &rest[body_start..body_end];
         // Outside a math delimiter CommonMark unescapes TeX's `\\` row
         // separator to `\ ` before this display-only pass sees it.
@@ -168,8 +192,8 @@ fn normalize_pmatrices(input: &str) -> Option<String> {
                 push_normalized(&mut out, cell.trim());
             }
         }
-        out.push(')');
-        rest = &rest[body_end + END.len()..];
+        out.push_str(close);
+        rest = &rest[body_end + end_marker.len()..];
     }
 
     if found {
@@ -338,6 +362,34 @@ fn push_normalized(out: &mut String, text: &str) {
                         index = end;
                         continue;
                     }
+                } else if let Some(mark) = accent_mark(command) {
+                    if let Some((base, end)) = tex_argument_at(text, command_end) {
+                        push_accented(out, base, mark);
+                        index = end;
+                        continue;
+                    }
+                } else if command == "vec" {
+                    // The combining arrow (U+20D7) is blank in the app font, so a vector is
+                    // written as a function, like `√(x)`.
+                    if let Some((base, end)) = tex_argument_at(text, command_end) {
+                        out.push_str("vec(");
+                        push_normalized(out, base);
+                        out.push(')');
+                        index = end;
+                        continue;
+                    }
+                } else if matches!(
+                    command,
+                    "operatorname" | "mathrm" | "mathbf" | "mathit" | "text"
+                ) {
+                    // `\operatorname*{argmax}`: the star belongs to the command.
+                    let starred = text[command_end..].starts_with('*');
+                    let argument_start = command_end + usize::from(starred);
+                    if let Some((name, end)) = braced_group_at(text, argument_start) {
+                        push_normalized(out, name);
+                        index = end;
+                        continue;
+                    }
                 } else if matches!(
                     command,
                     "left" | "right" | "big" | "bigl" | "bigr" | "Big" | "Bigl" | "Bigr"
@@ -385,6 +437,31 @@ fn push_normalized(out: &mut String, text: &str) {
         }
         out.push(ch);
         index += ch.len_utf8();
+    }
+}
+
+/// The combining mark that stands for a TeX accent command.
+fn accent_mark(command: &str) -> Option<char> {
+    Some(match command {
+        "bar" => '\u{0304}',
+        "overline" => '\u{0305}',
+        "hat" | "widehat" => '\u{0302}',
+        "tilde" | "widetilde" => '\u{0303}',
+        "dot" => '\u{0307}',
+        "ddot" => '\u{0308}',
+        _ => return None,
+    })
+}
+
+/// Normalize `base` and put `mark` after each of its letters and digits.
+fn push_accented(out: &mut String, base: &str, mark: char) {
+    let mut shown = String::with_capacity(base.len());
+    push_normalized(&mut shown, base);
+    for ch in shown.chars() {
+        out.push(ch);
+        if ch.is_alphabetic() || ch.is_ascii_digit() {
+            out.push(mark);
+        }
     }
 }
 
@@ -550,6 +627,47 @@ fn named_symbol(command: &str) -> Option<&'static str> {
         "tau" => "τ",
         "phi" => "φ",
         "omega" => "ω",
+        "eta" => "η",
+        "kappa" => "κ",
+        "nu" => "ν",
+        "xi" => "ξ",
+        "chi" => "χ",
+        "psi" => "ψ",
+        "varepsilon" => "ε",
+        "Delta" => "Δ",
+        "Sigma" => "Σ",
+        "Omega" => "Ω",
+        "ne" => "≠",
+        "in" => "∈",
+        "notin" => "∉",
+        "cup" => "∪",
+        "cap" => "∩",
+        "forall" => "∀",
+        "exists" => "∃",
+        "partial" => "∂",
+        "nabla" => "∇",
+        "int" => "∫",
+        "rightarrow" => "→",
+        "leftarrow" => "←",
+        "Rightarrow" => "⇒",
+        "Leftrightarrow" => "⇔",
+        "ldots" | "dots" | "cdots" => "…",
+        "mid" | "lvert" | "rvert" | "vert" => "|",
+        // Operator names are upright words in TeX; here they are plain words.
+        "det" => "det",
+        "sin" => "sin",
+        "cos" => "cos",
+        "tan" => "tan",
+        "log" => "log",
+        "ln" => "ln",
+        "exp" => "exp",
+        "lim" => "lim",
+        "max" => "max",
+        "min" => "min",
+        "gcd" => "gcd",
+        "dim" => "dim",
+        "ker" => "ker",
+        "arg" => "arg",
         _ => return None,
     })
 }
@@ -638,6 +756,63 @@ mod tests {
         assert!(!shown.contains("\\frac"));
         assert!(!shown.contains("\\sqrt"));
         assert!(!shown.contains("\\quad"));
+    }
+
+    #[test]
+    fn renders_operator_names_as_plain_words() {
+        assert_eq!(
+            normalize_math_display(r"$\operatorname{rank}(A) = 2$"),
+            "rank(A) = 2"
+        );
+        assert_eq!(
+            normalize_math_display(r"$\operatorname*{argmax}_x f(x)$"),
+            "argmaxₓ f(x)"
+        );
+        assert_eq!(
+            normalize_math_display(r"$\det(A) = \sin\theta + \mathrm{tr}(B)$"),
+            "det(A) = sinθ + tr(B)"
+        );
+    }
+
+    #[test]
+    fn renders_accents_as_combining_marks() {
+        let mean = normalize_math_display(r"$\bar{x} = \frac{1}{n}\sum_{i=1}^{n} x_i$");
+        assert!(mean.starts_with("x\u{0304} = (1)/(n)∑"), "{mean}");
+        assert_eq!(
+            normalize_math_display(r"$\overline{AB} + \hat{y} + \vec{v}$"),
+            "A\u{0305}B\u{0305} + y\u{0302} + vec(v)"
+        );
+        assert_eq!(normalize_math_display(r"$\bar{\alpha}$"), "α\u{0304}");
+    }
+
+    #[test]
+    fn renders_determinants_and_bracket_matrices() {
+        let raw = r"\det A = \begin{vmatrix} a & b \\ c & d \end{vmatrix} = ad - bc";
+        assert_eq!(
+            normalize_math_display(raw),
+            "det A = |a  b\n  c  d| = ad - bc"
+        );
+        let mixed = concat!(
+            r"\begin{bmatrix} 1 & 0 \\ 0 & 1 \end{bmatrix} ",
+            r"\begin{pmatrix} x \\ y \end{pmatrix}"
+        );
+        assert_eq!(
+            super::normalize_math_fragment(mixed),
+            "[1  0\n  0  1] (x\n  y)"
+        );
+    }
+
+    #[test]
+    fn mixed_prose_keeps_ordinary_text_and_unknown_commands() {
+        let raw = r"Среднее $\bar{x}$ растёт, ранг $\operatorname{rank}(A)$ нет; file_name, x^ray.";
+        assert_eq!(
+            normalize_math_display(raw),
+            "Среднее x\u{0304} растёт, ранг rank(A) нет; file_name, x^ray."
+        );
+        assert_eq!(
+            normalize_math_display(r"$\foo{x} + \operatorname{rank}$"),
+            r"\foo{x} + rank"
+        );
     }
 
     #[test]

@@ -67,6 +67,7 @@ fn wire_transcript_actions(
     model: &Rc<VecModel<TranscriptLine>>,
     utts: &[Utterance],
     session_start: Option<i64>,
+    ru: bool,
 ) {
     // Reset transient UI state — the window is reused across sessions, so a fresh
     // open must not inherit the prior session's "select all" tick or "copied"
@@ -279,8 +280,13 @@ fn wire_transcript_actions(
                 return;
             }
             let with_tc = w.get_with_timecodes();
-            let text =
-                super::tile_copy::format_transcript_for_copy(&utts_c, session_start, None, with_tc);
+            let text = super::tile_copy::format_transcript_for_copy(
+                &utts_c,
+                session_start,
+                None,
+                with_tc,
+                ru,
+            );
             copy_to_clipboard_and_flash(&w, &text);
         });
     }
@@ -310,6 +316,7 @@ fn wire_transcript_actions(
                 session_start,
                 Some(&sel),
                 with_tc,
+                ru,
             );
             copy_to_clipboard_and_flash(&w, &text);
         });
@@ -537,17 +544,13 @@ fn speaker_label(id: i32, names: &std::collections::BTreeMap<i32, String>) -> St
 
 /// Reset every row to the role view («Микрофон»/«Система»); the Slint side uses the
 /// theme accent for the colour in role view, so `speaker_color` is left as-is.
-fn apply_role_labels(model: &Rc<VecModel<TranscriptLine>>, utts: &[Utterance]) {
+fn apply_role_labels(model: &Rc<VecModel<TranscriptLine>>, utts: &[Utterance], ru: bool) {
     for i in 0..model.row_count() {
         let Some(mut row) = model.row_data(i) else {
             continue;
         };
         let mic = utts.get(i).map(|u| u.source == "mic").unwrap_or(false);
-        row.speaker = SharedString::from(if mic {
-            "Микрофон"
-        } else {
-            "Система"
-        });
+        row.speaker = SharedString::from(super::tile_copy::transcript_role_label(mic, ru));
         model.set_row_data(i, row);
     }
 }
@@ -559,6 +562,7 @@ fn apply_voice_labels(
     model: &Rc<VecModel<TranscriptLine>>,
     utts: &[Utterance],
     diar: &Diarization,
+    ru: bool,
 ) {
     let align = overlay_backend::diarize::align_all_speakers(utts, &diar.segments);
     for i in 0..model.row_count() {
@@ -581,7 +585,7 @@ fn apply_voice_labels(
                 neutral_speaker_color()
             };
         } else {
-            row.speaker = SharedString::from("Система");
+            row.speaker = SharedString::from(super::tile_copy::transcript_role_label(false, ru));
             row.speaker_color = neutral_speaker_color();
         }
         model.set_row_data(i, row);
@@ -617,6 +621,7 @@ fn set_speaker_list(win: &TranscriptWindow, diar: &Diarization, utts: &[Utteranc
 /// busy state instead of mislabelling another session's lines. Panic backstop:
 /// a worker that freed the latch without posting an outcome (it unwound) fails
 /// the UI clean instead of a forever-busy button.
+#[allow(clippy::too_many_arguments)]
 fn start_diar_poll(
     weak: slint::Weak<TranscriptWindow>,
     store: StoreSlot,
@@ -625,6 +630,7 @@ fn start_diar_poll(
     utts: Rc<Vec<Utterance>>,
     handles: DiarJobHandles,
     paint_session_id: String,
+    ru: bool,
 ) {
     let poll = slint::Timer::default();
     let slot = handles.slot;
@@ -671,7 +677,7 @@ fn start_diar_poll(
                         .as_ref()
                         .and_then(|st| st.get_diarization(&job_sid).ok().flatten())
                         .unwrap_or(d);
-                    apply_voice_labels(&model, &utts, &d);
+                    apply_voice_labels(&model, &utts, &d, ru);
                     set_speaker_list(&w, &d, &utts);
                     *diar.borrow_mut() = Some(d);
                     w.set_has_diarization(true);
@@ -875,6 +881,7 @@ fn wire_transcript_diarization(
     session_finished: bool,
     utts_display: &[Utterance],
     model: &Rc<VecModel<TranscriptLine>>,
+    ru: bool,
 ) {
     // suflyor H2 — a live job (this window's or a closed one's) outlives this
     // wiring: grab its handles BEFORE dropping the poll timer so the job's poll
@@ -965,7 +972,7 @@ fn wire_transcript_diarization(
     // Reset the rename list too (the window is reused) — masked while by-voice=false,
     // but defends against a stale prior-session list if the gating ever changes.
     win.set_speakers(ModelRc::from(Rc::new(VecModel::<SpeakerRow>::default())));
-    apply_role_labels(model, &utts_rc);
+    apply_role_labels(model, &utts_rc, ru);
 
     // suflyor H2 — re-attach the result poll to a job that outlived the window:
     // the worker persists the result itself, and this poll consumes it for the
@@ -979,6 +986,7 @@ fn wire_transcript_diarization(
             utts_rc.clone(),
             handles,
             session_id.to_string(),
+            ru,
         );
     }
     // V-1 — re-attach the install poll to a download that outlived the window
@@ -999,11 +1007,11 @@ fn wire_transcript_diarization(
             };
             if v {
                 if let Some(d) = diar_c.borrow().as_ref() {
-                    apply_voice_labels(&model_c, &utts_c, d);
+                    apply_voice_labels(&model_c, &utts_c, d, ru);
                     set_speaker_list(&w, d, &utts_c);
                 }
             } else {
-                apply_role_labels(&model_c, &utts_c);
+                apply_role_labels(&model_c, &utts_c, ru);
             }
             w.set_by_voice(v);
         });
@@ -1044,7 +1052,7 @@ fn wire_transcript_diarization(
                 // the speaker list here — that recreates the focused LineEdit on every keystroke and
                 // makes typing impossible. The field already shows the typed text; relabel the
                 // transcript rows live, and keep the re-detect guard in sync below.
-                apply_voice_labels(&model_c, &utts_c, d);
+                apply_voice_labels(&model_c, &utts_c, d, ru);
                 let has_names = d.speaker_names.values().any(|n| !n.trim().is_empty());
                 w.set_has_speaker_names(has_names);
                 // Clear OUR failure text once a keystroke saved again — but never
@@ -1151,6 +1159,7 @@ fn wire_transcript_diarization(
                 utts_c.clone(),
                 handles,
                 sid.clone(),
+                ru,
             );
         });
     }
@@ -1216,6 +1225,7 @@ pub(in super::super) fn open_transcript(
     utts: &[Utterance],
     store: &StoreSlot,
     rt_handle: &tokio::runtime::Handle,
+    ru: bool,
 ) {
     // Build the model once — shared by the reuse + first-open paths.
     let session_start = session.and_then(|s| s.started_at_ms).filter(|&ms| ms > 0);
@@ -1223,7 +1233,7 @@ pub(in super::super) fn open_transcript(
     // unfinalized). `crashed`/`active` sessions can't.
     let session_finished = session.map(|s| s.status == "completed").unwrap_or(false);
     let heading = session
-        .map(|s| session_title(s.started_at_ms, &s.id))
+        .map(|s| session_title(s.started_at_ms, &s.id, ru))
         .unwrap_or_default();
     // C1/P2 — compute each utterance's display offset in ORIGINAL order (the F1 fallback reads the
     // PREVIOUS utterance), THEN sort utterances + rows TOGETHER by the displayed clock (audio start).
@@ -1252,11 +1262,10 @@ pub(in super::super) fn open_transcript(
         .iter()
         .map(|(off, u)| TranscriptLine {
             offset_label: off.map(fmt_offset).unwrap_or_default().into(),
-            speaker: SharedString::from(if u.source == "mic" {
-                "Микрофон"
-            } else {
-                "Система"
-            }),
+            speaker: SharedString::from(super::tile_copy::transcript_role_label(
+                u.source == "mic",
+                ru,
+            )),
             // Role view uses the theme accent (Slint side); this is only read in the
             // «По голосам» view, where `rebuild_speaker_labels` overwrites it.
             speaker_color: slint::Color::from_rgb_u8(0, 0, 0),
@@ -1289,7 +1298,7 @@ pub(in super::super) fn open_transcript(
         let model = Rc::new(VecModel::from(lines));
         win.set_lines(ModelRc::from(model.clone()));
         win.set_overflow_count(overflow);
-        wire_transcript_actions(win, &model, &utts_display, session_start);
+        wire_transcript_actions(win, &model, &utts_display, session_start, ru);
         wire_transcript_player(win, &session_id, &model);
         wire_transcript_search(win, &model);
         wire_transcript_diarization(
@@ -1300,6 +1309,7 @@ pub(in super::super) fn open_transcript(
             session_finished,
             &utts_display,
             &model,
+            ru,
         );
         let _ = win.show();
         if let Ok(hwnd) = grab_hwnd(win.window()) {
@@ -1325,7 +1335,7 @@ pub(in super::super) fn open_transcript(
     let model = Rc::new(VecModel::from(lines));
     win.set_lines(ModelRc::from(model.clone()));
     win.set_overflow_count(overflow);
-    wire_transcript_actions(&win, &model, &utts_display, session_start);
+    wire_transcript_actions(&win, &model, &utts_display, session_start, ru);
     wire_transcript_player(&win, &session_id, &model);
     wire_transcript_search(&win, &model);
     wire_transcript_diarization(
@@ -1336,6 +1346,7 @@ pub(in super::super) fn open_transcript(
         session_finished,
         &utts_display,
         &model,
+        ru,
     );
 
     {
@@ -1392,6 +1403,53 @@ pub(in super::super) fn open_transcript(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+
+    #[test]
+    fn transcript_role_labels_follow_ui_language() {
+        let label = super::tile_copy::transcript_role_label;
+        assert_eq!(label(true, true), "Микрофон");
+        assert_eq!(label(false, true), "Система");
+        assert_eq!(label(true, false), "Microphone");
+        assert_eq!(label(false, false), "System");
+
+        let utts: Vec<_> = ["mic", "system"]
+            .into_iter()
+            .map(|source| Utterance {
+                session_id: "s".into(),
+                unix_ms: 1000,
+                source: source.into(),
+                text: "hello".into(),
+                audio_ms: Some(0),
+            })
+            .collect();
+        let model = Rc::new(VecModel::from(vec![
+            TranscriptLine::default(),
+            TranscriptLine::default(),
+        ]));
+        let diar = Diarization {
+            session_id: "s".into(),
+            created_at_ms: 0,
+            num_speakers: 0,
+            model_id: "test".into(),
+            segments: Vec::new(),
+            speaker_names: std::collections::BTreeMap::new(),
+        };
+        for ru in [true, false] {
+            apply_role_labels(&model, &utts, ru);
+            assert_eq!(model.row_data(0).unwrap().speaker.as_str(), label(true, ru));
+            assert_eq!(
+                model.row_data(1).unwrap().speaker.as_str(),
+                label(false, ru)
+            );
+            apply_voice_labels(&model, &utts, &diar, ru);
+            assert_eq!(
+                model.row_data(1).unwrap().speaker.as_str(),
+                label(false, ru)
+            );
+            apply_role_labels(&model, &utts, ru);
+            assert_eq!(model.row_data(0).unwrap().speaker.as_str(), label(true, ru));
+        }
+    }
 
     /// Pins the one-job contract on a private atomic, so parallel tests never
     /// touch either process-global latch.

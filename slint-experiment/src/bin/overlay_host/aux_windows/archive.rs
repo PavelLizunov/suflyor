@@ -238,8 +238,8 @@ pub(in super::super) fn open_archive(
                     st.session_ai_turns(&sid).unwrap_or_default(),
                 )
             };
-            let title = session_title(session.as_ref().and_then(|s| s.started_at_ms), &sid);
-            let md = build_session_markdown(session.as_ref(), &utts, &turns);
+            let title = session_title(session.as_ref().and_then(|s| s.started_at_ms), &sid, ru);
+            let md = build_session_markdown(session.as_ref(), &utts, &turns, ru);
             spawn_content_tile(&title, "archive", &md, &tiles_c, &state_c, &wov);
         });
     }
@@ -403,12 +403,18 @@ pub(in super::super) fn open_archive(
             let outcome = {
                 let mut slot = lock_store(&store_d);
                 match slot.as_mut() {
-                    Some(st) => overlay_backend::session_admin::delete_session_everywhere(st, &sid),
+                    Some(st) => overlay_backend::session_admin::delete_session_everywhere(st, &sid)
+                        .map(|()| st.list_sessions().map(|all| all.len()).ok()),
                     None => return,
                 }
             };
             match outcome {
-                Ok(()) => {
+                Ok(total) => {
+                    // The heading carries the session count; it was set once at
+                    // load and stayed at the old number after a delete.
+                    if let Some(total) = total {
+                        p.set_summary(SharedString::from(total.to_string()));
+                    }
                     // (debrief sidecar cleanup lives in delete_session_everywhere)
                     // Rebuild the list (the row is gone); also resets edit-state.
                     let q = p.get_query();
@@ -462,7 +468,7 @@ pub(in super::super) fn open_archive(
                     st.session_utterances(&sid).unwrap_or_default(),
                 )
             };
-            open_transcript(&tslot, session.as_ref(), &utts, &store_t, &rt_t);
+            open_transcript(&tslot, session.as_ref(), &utts, &store_t, &rt_t, ru);
         });
     }
 
@@ -922,12 +928,12 @@ fn pretty_session_label(id: &str) -> String {
 /// fall back to parsing the id stamp (old rows, FTS hits — which carry only
 /// the id). Both paths convert at DISPLAY time, so ALREADY-RECORDED sessions
 /// show МСК retroactively; ids/dirs stay UTC (opaque join keys).
-fn archive_time_label(started_at_ms: Option<i64>, id: &str) -> String {
+fn archive_time_label(started_at_ms: Option<i64>, id: &str, ru: bool) -> String {
     if let Some(ms) = started_at_ms.filter(|ms| *ms > 0) {
-        return overlay_backend::journal::format_msk_label(ms);
+        return overlay_backend::journal::format_msk_label(ms, ru);
     }
     match overlay_backend::journal::stamp_to_unix_secs(id) {
-        Some(secs) => overlay_backend::journal::format_msk_label((secs as i64) * 1000),
+        Some(secs) => overlay_backend::journal::format_msk_label((secs as i64) * 1000, ru),
         // Not a stamp-shaped id — show it as before rather than guessing.
         None => pretty_session_label(id),
     }
@@ -978,8 +984,9 @@ fn recording_ids_snapshot() -> std::collections::HashSet<String> {
 
 /// The archive display title for a session: the persisted session NAME (v0.22.0
 /// `session_names` sidecar) if any, else the МСК time label.
-pub(super) fn session_title(started_at_ms: Option<i64>, id: &str) -> String {
-    overlay_backend::session_names::get(id).unwrap_or_else(|| archive_time_label(started_at_ms, id))
+pub(super) fn session_title(started_at_ms: Option<i64>, id: &str, ru: bool) -> String {
+    overlay_backend::session_names::get(id)
+        .unwrap_or_else(|| archive_time_label(started_at_ms, id, ru))
 }
 
 /// Map an indexed [`Session`] to an archive list row. Counts + status use
@@ -995,7 +1002,7 @@ fn session_to_row(
     debriefs: &std::collections::HashSet<String>,
     ru: bool,
 ) -> ArchiveRow {
-    let time = archive_time_label(s.started_at_ms, &s.id);
+    let time = archive_time_label(s.started_at_ms, &s.id, ru);
     let name = overlay_backend::session_names::get(&s.id);
     // Prefer the session NAME (v0.22.0) as the row title; fall back to the
     // time. The title carries NO status prefix — an abnormal state is flagged
@@ -1065,7 +1072,7 @@ fn hit_to_row(
     let name = overlay_backend::session_names::get(&h.session_id);
     let label = name
         .clone()
-        .unwrap_or_else(|| archive_time_label(None, &h.session_id));
+        .unwrap_or_else(|| archive_time_label(None, &h.session_id, ru));
     let kind_word = match h.kind.as_str() {
         "question" => {
             if ru {
@@ -1120,10 +1127,14 @@ fn build_session_markdown(
     session: Option<&Session>,
     utterances: &[Utterance],
     ai_turns: &[AiTurn],
+    ru: bool,
 ) -> String {
     let mut out = String::new();
     if let Some(s) = session {
-        out.push_str(&format!("# {}\n\n", session_title(s.started_at_ms, &s.id)));
+        out.push_str(&format!(
+            "# {}\n\n",
+            session_title(s.started_at_ms, &s.id, ru)
+        ));
         // The SAME human wording as the archive rows (the body is Russian,
         // like the rest of this markdown) — no code-like `lines N · ai N`
         // metadata and no "—" dash for an unknown model.
@@ -1149,11 +1160,7 @@ fn build_session_markdown(
         out.push_str("_Транскрипт не сохранён_\n\n");
     } else {
         for (i, u) in utterances.iter().enumerate() {
-            let label = if u.source == "mic" {
-                "Микрофон"
-            } else {
-                "Система"
-            };
+            let label = super::tile_copy::transcript_role_label(u.source == "mic", ru);
             // Collapse internal whitespace/newlines so one utterance = one line.
             let text = overlay_backend::text::collapse_ws(&u.text);
             // F1: start = previous line's timestamp (first = origin); see session_audio.
@@ -1204,21 +1211,42 @@ mod tests {
     fn archive_time_label_prefers_started_at_then_id_then_raw() {
         // Real start time wins (UTC ms → МСК).
         assert_eq!(
-            archive_time_label(Some(1_779_580_800_000), "2026-06-04_09-30-00_zz"),
+            archive_time_label(Some(1_779_580_800_000), "2026-06-04_09-30-00_zz", true),
             "24.05.2026 03:00:00 (МСК)"
         );
         // No indexed time (old rows / FTS hits) → parse the UTC id stamp.
         assert_eq!(
-            archive_time_label(None, "2026-06-04_09-30-00_zz"),
+            archive_time_label(None, "2026-06-04_09-30-00_zz", true),
             "04.06.2026 12:30:00 (МСК)"
         );
         // Zero/garbage started_at_ms falls through to the id.
         assert_eq!(
-            archive_time_label(Some(0), "2026-06-04_09-30-00_zz"),
+            archive_time_label(Some(0), "2026-06-04_09-30-00_zz", true),
             "04.06.2026 12:30:00 (МСК)"
         );
         // Non-stamp id → raw, as before.
-        assert_eq!(archive_time_label(None, "weird"), "weird");
+        assert_eq!(archive_time_label(None, "weird", true), "weird");
+    }
+
+    #[test]
+    fn archive_time_label_follows_ui_language() {
+        let id = "2026-06-04_09-30-00_zz";
+        for (started_at_ms, label) in [
+            (Some(1_779_580_800_000), "24.05.2026 03:00:00"),
+            (None, "04.06.2026 12:30:00"),
+            (Some(0), "04.06.2026 12:30:00"),
+        ] {
+            assert_eq!(
+                archive_time_label(started_at_ms, id, true),
+                format!("{label} (МСК)")
+            );
+            assert_eq!(
+                archive_time_label(started_at_ms, id, false),
+                format!("{label} (MSK)")
+            );
+        }
+        assert_eq!(archive_time_label(None, "weird", true), "weird");
+        assert_eq!(archive_time_label(None, "weird", false), "weird");
     }
 
     #[test]
@@ -1280,6 +1308,7 @@ mod tests {
             &no_recordings(),
             false,
         );
+        assert!(en.title.as_str().starts_with("24.05.2026 03:00:00 (MSK)"));
         assert!(en.subtitle.as_str().contains("Transcript: 12"));
         assert!(en.subtitle.as_str().contains("AI: 3"));
     }
@@ -1388,7 +1417,7 @@ mod tests {
         assert!(
             en.title
                 .as_str()
-                .starts_with("Search: 04.06.2026 12:30:00 (МСК)"),
+                .starts_with("Search: 04.06.2026 12:30:00 (MSK)"),
             "got {:?}",
             en.title
         );
@@ -1414,14 +1443,14 @@ mod tests {
             latency_ms: None,
             attached_screenshot: false,
         }];
-        let md = build_session_markdown(None, &utts, &turns);
+        let md = build_session_markdown(None, &utts, &turns, true);
         assert!(md.contains("Микрофон: hello there")); // session None → no timecode
         assert!(md.contains("Question: **what is it?**"));
         assert!(md.contains("Answer: an answer."));
     }
 
     #[test]
-    fn session_markdown_transcript_has_timecodes_and_ru_labels() {
+    fn session_markdown_transcript_follows_ui_language() {
         let s = sample_session(); // started_at_ms = Some(1_779_580_800_000)
         let start = 1_779_580_800_000_i64;
         let utts = vec![
@@ -1440,16 +1469,19 @@ mod tests {
                 audio_ms: None,
             },
         ];
-        let md = build_session_markdown(Some(&s), &utts, &[]);
+        let md = build_session_markdown(Some(&s), &utts, &[], true);
         // F1: a line's START = the PREVIOUS line's timestamp; the FIRST line is 00:00
         // (NOT its own finalize time 00:29), so line 2 starts where line 1 ended (00:29).
         assert!(md.contains("[00:00] Система: привет"), "got: {md}");
         assert!(md.contains("[00:29] Микрофон: да слышу"), "got: {md}");
+        let en = build_session_markdown(Some(&s), &utts, &[], false);
+        assert!(en.contains("[00:00] System: привет"), "got: {en}");
+        assert!(en.contains("[00:29] Microphone: да слышу"), "got: {en}");
     }
 
     #[test]
     fn session_markdown_empty_shows_not_saved_notice() {
-        let md = build_session_markdown(None, &[], &[]);
+        let md = build_session_markdown(None, &[], &[], true);
         assert!(md.contains("Транскрипт не сохранён"), "got: {md}");
     }
 }

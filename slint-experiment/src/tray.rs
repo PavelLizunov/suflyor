@@ -17,7 +17,9 @@
 //! `windows` crate (Win32_UI_Shell + Win32_UI_WindowsAndMessaging).
 
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, AtomicU64, Ordering};
+use std::sync::OnceLock;
+use std::time::Instant;
 
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{
@@ -175,9 +177,15 @@ static TASKBAR_CREATED_MESSAGE: AtomicU32 = AtomicU32::new(0);
 static TRAY_HWND: AtomicIsize = AtomicIsize::new(0);
 static TRAY_ICON_VISIBLE: AtomicBool = AtomicBool::new(false);
 /// Explorer versions disagree on whether a right click arrives as the v4
-/// `WM_CONTEXTMENU`, legacy `WM_RBUTTONUP`, or both. Arm once until the themed
-/// menu finishes so every variant opens exactly one menu.
-static TRAY_MENU_REQUEST_PENDING: AtomicBool = AtomicBool::new(false);
+/// `WM_CONTEXTMENU`, legacy `WM_RBUTTONUP`, or both. The time of the last
+/// handled request (0 = none yet) tells the twin event of one click from a new
+/// click, so every variant opens exactly one menu.
+static TRAY_MENU_LAST_REQUEST_MS: AtomicU64 = AtomicU64::new(0);
+/// Twin events of one click are queued together and handled back to back.
+/// Anything later is a new click and must open the menu again: a menu that
+/// never reported completion (shown without focus, for example) must not
+/// swallow every later right click.
+const MENU_REQUEST_DEBOUNCE_MS: u64 = 250;
 
 fn claim_install_slot(slot: &AtomicBool) -> Result<(), String> {
     slot.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -335,7 +343,6 @@ pub fn show_icon() -> Result<(), String> {
 /// Remove the notification icon once the bar is visible again. The hidden
 /// message window stays alive so a later explicit hide can add the icon anew.
 pub fn hide_icon() {
-    TRAY_MENU_REQUEST_PENDING.store(false, Ordering::Release);
     if !TRAY_ICON_VISIBLE.swap(false, Ordering::SeqCst) {
         return;
     }
@@ -359,7 +366,6 @@ pub fn hide_icon() {
 /// custom tray menu has completed. Windows explicitly requires NIM_SETFOCUS
 /// after the UI operation, not while the styled Slint menu is opening.
 pub fn return_focus() {
-    TRAY_MENU_REQUEST_PENDING.store(false, Ordering::Release);
     if !TRAY_ICON_VISIBLE.load(Ordering::SeqCst) {
         return;
     }
@@ -508,22 +514,35 @@ fn publish_availability(available: bool) {
 }
 
 fn request_tray_menu() {
-    if !arm_menu_request(&TRAY_MENU_REQUEST_PENDING) {
+    let previous = TRAY_MENU_LAST_REQUEST_MS.load(Ordering::Acquire);
+    if is_duplicate_menu_request(previous, tray_clock_ms()) {
         return;
     }
     let mut point = POINT::default();
     if unsafe { GetCursorPos(&mut point) }.is_err() {
-        TRAY_MENU_REQUEST_PENDING.store(false, Ordering::Release);
         return;
     }
     dispatch_from_ctx(TrayAction::OpenMenu {
         x: point.x,
         y: point.y,
     });
+    // Stamp after the menu was built: the twin event is already queued and is
+    // handled right after this returns, however long the build took.
+    TRAY_MENU_LAST_REQUEST_MS.store(tray_clock_ms(), Ordering::Release);
 }
 
-fn arm_menu_request(pending: &AtomicBool) -> bool {
-    !pending.swap(true, Ordering::AcqRel)
+fn is_duplicate_menu_request(previous_ms: u64, now_ms: u64) -> bool {
+    previous_ms != 0 && now_ms.saturating_sub(previous_ms) < MENU_REQUEST_DEBOUNCE_MS
+}
+
+/// Milliseconds since the first tray request of this process; never 0, which
+/// `TRAY_MENU_LAST_REQUEST_MS` reserves for "no request yet".
+fn tray_clock_ms() -> u64 {
+    static START: OnceLock<Instant> = OnceLock::new();
+    let elapsed = START.get_or_init(Instant::now).elapsed();
+    u64::try_from(elapsed.as_millis())
+        .unwrap_or(u64::MAX)
+        .max(1)
 }
 
 #[cfg(test)]
@@ -541,12 +560,26 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_context_events_arm_only_one_menu() {
-        let pending = AtomicBool::new(false);
-        assert!(arm_menu_request(&pending));
-        assert!(!arm_menu_request(&pending));
-        pending.store(false, Ordering::Release);
-        assert!(arm_menu_request(&pending));
+    fn twin_context_events_of_one_click_open_one_menu() {
+        assert!(!is_duplicate_menu_request(0, 1), "the first request opens");
+        assert!(is_duplicate_menu_request(1_000, 1_000));
+        let last_twin = 1_000 + MENU_REQUEST_DEBOUNCE_MS - 1;
+        assert!(is_duplicate_menu_request(1_000, last_twin));
+    }
+
+    #[test]
+    fn a_later_click_always_opens_the_menu_again() {
+        // Nothing has to report that the earlier menu finished.
+        let next_click = 1_000 + MENU_REQUEST_DEBOUNCE_MS;
+        assert!(!is_duplicate_menu_request(1_000, next_click));
+        assert!(!is_duplicate_menu_request(1_000, 60_000));
+        // A clock that went backwards reads as a twin, never as an underflow.
+        assert!(is_duplicate_menu_request(1_000, 999));
+    }
+
+    #[test]
+    fn tray_clock_never_returns_the_reserved_zero() {
+        assert!(tray_clock_ms() >= 1);
     }
 
     #[test]
