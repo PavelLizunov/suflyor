@@ -214,41 +214,6 @@ impl Journal {
         writer.lock().shutdown = Some(ShutdownState::Done(outcome.clone()));
         outcome.map_err(anyhow::Error::msg)
     }
-
-    pub fn shutdown_blocking(&self, timeout: std::time::Duration) -> Result<(), String> {
-        self.shutdown(timeout).map_err(|e| e.to_string())
-    }
-
-    pub fn emit_summary_and_stop(&self) {
-        if let Some(c) = &self.counters {
-            let c = c.lock().clone();
-            let now = now_unix_ms();
-            let duration_ms = if c.start_unix_ms > 0 && now >= c.start_unix_ms {
-                now - c.start_unix_ms
-            } else {
-                0
-            };
-            self.write(&JournalEvent::SessionSummary {
-                unix_ms: now,
-                duration_ms,
-                transcript_lines: c.transcript_mic.saturating_add(c.transcript_system),
-                transcript_mic: c.transcript_mic,
-                transcript_system: c.transcript_system,
-                detector_triggered: c.detector_triggered,
-                detector_skipped: c.detector_skipped,
-                ai_requests_total: c.ai_requests_total,
-                ai_responses_ok: c.ai_responses_ok,
-                ai_errors: c.ai_errors,
-                tiles_spawned: c.tiles_spawned,
-                rate_limited: c.rate_limited,
-                total_cost_microcents: c.total_cost_microcents,
-            });
-        }
-        self.write(&JournalEvent::SessionStop {
-            unix_ms: now_unix_ms(),
-        });
-        self.close();
-    }
 }
 
 pub(crate) fn note_write_error(first_error: &mut Option<String>, e: std::io::Error) {

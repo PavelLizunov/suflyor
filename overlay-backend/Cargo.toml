@@ -124,8 +124,6 @@ cc = "1"
 
 [dev-dependencies]
 tempfile = "3"
-# Drop-guard for test cleanup (bookmark_tests in journal.rs).
-scopeguard = "1"
 
 [lints.clippy]
 # Tier 3 lint baseline — mirrors slint-experiment. These restriction lints are
