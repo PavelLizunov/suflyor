@@ -775,7 +775,7 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     overlay.set_status_text(SharedString::from("idle"));
-    overlay.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
+    overlay.set_status_tone(crate::ui::StatusTone::Neutral);
     overlay.set_active_stack(SharedString::from(active_stack_label(&cfg.read())));
 
     // Poll request latency + process footprints into the footer (~1.5s). The
@@ -837,7 +837,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                     } else {
                                         "system audio: starting..."
                                     }));
-                                    o.set_status_color(slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24));
+                                    o.set_status_tone(crate::ui::StatusTone::Warning);
                                 }
                                 3 => {
                                     o.set_status_text(SharedString::from(if is_ru {
@@ -845,7 +845,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                     } else {
                                         "system audio unavailable"
                                     }));
-                                    o.set_status_color(slint::Color::from_rgb_u8(0xf8, 0x71, 0x71));
+                                    o.set_status_tone(crate::ui::StatusTone::Danger);
                                 }
                                 0 | 2 => refresh_status(
                                     &o,
@@ -905,7 +905,7 @@ fn main() -> Result<(), slint::PlatformError> {
                             };
                             if let Some(o) = weak_prewarm.upgrade() {
                                 o.set_status_text(SharedString::from(unavailable));
-                                o.set_status_color(slint::Color::from_rgb_u8(0xf8, 0x71, 0x71));
+                                o.set_status_tone(crate::ui::StatusTone::Danger);
                             }
                             let weak_restore = weak_prewarm.clone();
                             let state_restore = state_prewarm.clone();
@@ -1365,7 +1365,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 o.set_mic_muted(muted);
                 if muted {
                     o.set_status_text(SharedString::from("mic muted"));
-                    o.set_status_color(slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24));
+                    o.set_status_tone(crate::ui::StatusTone::Warning);
                 } else {
                     refresh_status(&o, true, get_sys_active(&s));
                 }
@@ -1435,7 +1435,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     Err(poisoned) => poisoned.into_inner().sys_probe_in_flight = false,
                 }
                 o.set_status_text(SharedString::from("sys test failed"));
-                o.set_status_color(slint::Color::from_rgb_u8(0xf8, 0x71, 0x71));
+                o.set_status_tone(crate::ui::StatusTone::Danger);
                 return;
             }
             let sys_device = cfg_sys.read().system_audio_device.clone();
@@ -1496,21 +1496,21 @@ fn main() -> Result<(), slint::PlatformError> {
                         );
                         return;
                     }
-                    let (label, color) = match peak_dbfs {
+                    let (label, tone) = match peak_dbfs {
                         Some(db) if db.is_finite() && db >= -40.0 => {
-                            ("sys ok", slint::Color::from_rgb_u8(0x6c, 0xcf, 0xff))
+                            ("sys ok", crate::ui::StatusTone::Info)
                         }
                         Some(db) if db.is_finite() => {
-                            ("sys quiet", slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24))
+                            ("sys quiet", crate::ui::StatusTone::Warning)
                         }
-                        Some(_) => ("sys silent", slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24)),
+                        Some(_) => ("sys silent", crate::ui::StatusTone::Warning),
                         None => (
                             "sys test failed",
-                            slint::Color::from_rgb_u8(0xf8, 0x71, 0x71),
+                            crate::ui::StatusTone::Danger,
                         ),
                     };
                     o.set_status_text(SharedString::from(label));
-                    o.set_status_color(color);
+                    o.set_status_tone(tone);
                     eprintln!(
                         "[overlay-host] sys test result: {} dBFS ({label})",
                         peak_dbfs.map_or_else(|| "?".into(), |d| format!("{d:.2}"))
@@ -1565,7 +1565,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 o.set_session_paused(paused);
                 if paused {
                     o.set_status_text(SharedString::from("paused"));
-                    o.set_status_color(slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24));
+                    o.set_status_tone(crate::ui::StatusTone::Warning);
                 } else {
                     refresh_status(&o, get_mic_active(&s), get_sys_active(&s));
                 }
@@ -1644,7 +1644,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     // Clear any "paused"/"recording" status back to idle so a
                     // Stop-while-paused doesn't leave a stale pill.
                     o.set_status_text(SharedString::from("idle"));
-                    o.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
+                    o.set_status_tone(crate::ui::StatusTone::Neutral);
                 }
             }
 
@@ -1690,7 +1690,7 @@ fn main() -> Result<(), slint::PlatformError> {
                             if let Some(o) = weak_revert.upgrade() {
                                 o.set_timer_active(false);
                                 o.set_status_text(SharedString::from("start failed"));
-                                o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x4b, 0x4b));
+                                o.set_status_tone(crate::ui::StatusTone::Danger);
                             }
                         });
                     }
@@ -1814,7 +1814,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     overlay.set_timer_label(SharedString::from("00:00"));
                     overlay.set_session_name(SharedString::from(""));
                     overlay.set_status_text(SharedString::from(status));
-                    overlay.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x4b, 0x4b));
+                    overlay.set_status_tone(crate::ui::StatusTone::Danger);
                 }
 
                 let runtime = runtime.clone();
@@ -1854,7 +1854,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(overlay) = weak_overlay_after_stop.upgrade() {
                             overlay.set_status_text(SharedString::from(status));
-                            overlay.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x4b, 0x4b));
+                            overlay.set_status_tone(crate::ui::StatusTone::Danger);
                         }
                     });
                     if session_events
@@ -2856,7 +2856,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 // the sys-probe result does.
                 if let Some(o) = weak.upgrade() {
                     o.set_status_text(SharedString::from(mic_busy_status(cfg_p.read().ui_is_ru())));
-                    o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x9b, 0x2b));
+                    o.set_status_tone(crate::ui::StatusTone::Warning);
                 }
                 let weak_revert = weak.clone();
                 let state_revert = state_busy.clone();

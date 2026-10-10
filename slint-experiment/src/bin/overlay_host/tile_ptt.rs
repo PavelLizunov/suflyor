@@ -117,7 +117,7 @@ pub(crate) fn fire_ptt_ask(
                 } else {
                     "system audio not captured"
                 }));
-                o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x9b, 0x2b));
+                o.set_status_tone(crate::ui::StatusTone::Warning);
             }
         }
         return;

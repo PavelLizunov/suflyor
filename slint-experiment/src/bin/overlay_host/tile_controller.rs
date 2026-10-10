@@ -848,12 +848,12 @@ impl SlintUiBridge for OverlayBarBridge {
                 "session:started" => {
                     o.set_timer_active(true);
                     o.set_status_text(SharedString::from("recording"));
-                    o.set_status_color(slint::Color::from_rgb_u8(0x2a, 0xc7, 0x60));
+                    o.set_status_tone(crate::ui::StatusTone::Ok);
                 }
                 "session:stopped" => {
                     o.set_timer_active(false);
                     o.set_status_text(SharedString::from("idle"));
-                    o.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
+                    o.set_status_tone(crate::ui::StatusTone::Neutral);
                 }
                 "health:update" => {
                     // Crude: collapse 3-subsystem state to single
@@ -875,9 +875,9 @@ impl SlintUiBridge for OverlayBarBridge {
                     // session:started, leaving "idle" text inside a red pill.
                     if o.get_timer_active() {
                         if any_down {
-                            o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x4b, 0x4b));
+                            o.set_status_tone(crate::ui::StatusTone::Danger);
                         } else if any_degraded {
-                            o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0xb4, 0x4b));
+                            o.set_status_tone(crate::ui::StatusTone::Warning);
                         } else {
                             // All-clear during a session → restore the green
                             // recording pill. A degraded→ok episode only ever set
@@ -885,7 +885,7 @@ impl SlintUiBridge for OverlayBarBridge {
                             // text-recovery branch below can't restore it and the
                             // pill would otherwise stay amber until the next
                             // session start/stop.
-                            o.set_status_color(slint::Color::from_rgb_u8(0x2a, 0xc7, 0x60));
+                            o.set_status_tone(crate::ui::StatusTone::Ok);
                         }
                     }
                     // V0.8.0 (Поток A) — surface AI-down in the bar TEXT, not just
@@ -911,10 +911,10 @@ impl SlintUiBridge for OverlayBarBridge {
                         // Recovered — restore the session pill we overwrote.
                         if o.get_timer_active() {
                             o.set_status_text(SharedString::from("recording"));
-                            o.set_status_color(slint::Color::from_rgb_u8(0x2a, 0xc7, 0x60));
+                            o.set_status_tone(crate::ui::StatusTone::Ok);
                         } else {
                             o.set_status_text(SharedString::from("idle"));
-                            o.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
+                            o.set_status_tone(crate::ui::StatusTone::Neutral);
                         }
                     }
                     // ok / idle leaves the prior color alone

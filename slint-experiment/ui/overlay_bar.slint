@@ -462,6 +462,10 @@ component VDivider inherits Rectangle {
 
 // ===== Main overlay bar =====
 
+// What the status pill is saying, named by the host. The bar turns it into a
+// theme colour (see `status-color`).
+export enum StatusTone { neutral, ok, warning, danger, info }
+
 export component OverlayBarWindow inherits Window {
     // Phase 4 — keep std-widgets (Button etc.) dark with the active scheme
     // instead of Slint's light fluent default. See settings_panel for detail.
@@ -511,7 +515,14 @@ export component OverlayBarWindow inherits Window {
 
     // Status pill text (idle / recording / etc).
     in-out property <string> status-text: "idle";
-    in-out property <color> status-color: Theme.text-muted;
+    // The host names the tone; the colour comes from the theme, so the pill
+    // stays readable in every scheme.
+    in-out property <StatusTone> status-tone: StatusTone.neutral;
+    property <color> status-color: root.status-tone == StatusTone.ok ? Theme.success
+        : root.status-tone == StatusTone.warning ? Theme.warning
+        : root.status-tone == StatusTone.danger ? Theme.danger
+        : root.status-tone == StatusTone.info ? Theme.accent
+        : Theme.text-muted;
 
     // Live capture flags.
     in-out property <bool> mic-active: false;
