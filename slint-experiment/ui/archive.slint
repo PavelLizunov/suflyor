@@ -352,12 +352,12 @@ export component ArchiveWindow inherits Window {
                                         }
                                         if root.renaming-index == i : RowIcon {
                                             icon: @image-url("../assets/icons/check.svg");
-                                            a11y: "Save name";
+                                            a11y: @tr("Save name");
                                             clicked => { root.rename-confirmed(i); }
                                         }
                                         if root.renaming-index == i : RowIcon {
                                             icon: @image-url("../assets/icons/x.svg");
-                                            a11y: "Cancel rename";
+                                            a11y: @tr("Cancel rename");
                                             clicked => { root.rename-cancelled(); }
                                         }
                                         // ── Normal: title + meta + ✎ rename ──
@@ -378,22 +378,22 @@ export component ArchiveWindow inherits Window {
                                         }
                                         if root.renaming-index != i : RowIcon {
                                             icon: @image-url("../assets/icons/pencil.svg");
-                                            a11y: "Rename session";
+                                            a11y: @tr("Rename session");
                                             clicked => { root.rename-requested(i, row.name); }
                                         }
                                         if root.renaming-index != i : RowIcon {
                                             icon: @image-url("../assets/icons/ai.svg");
-                                            a11y: "Regenerate name from transcript";
+                                            a11y: @tr("Regenerate name from transcript");
                                             clicked => { root.regen-name-requested(i); }
                                         }
                                         if root.renaming-index != i : RowIcon {
                                             icon: @image-url("../assets/icons/trash.svg");
-                                            a11y: "Delete session";
+                                            a11y: @tr("Delete session");
                                             clicked => { root.delete-requested(i); }
                                         }
                                         if root.renaming-index != i : RowIcon {
                                             icon: @image-url("../assets/icons/bubble.svg");
-                                            a11y: "View transcript";
+                                            a11y: @tr("View transcript");
                                             clicked => { root.transcript-requested(i); }
                                         }
                                     }
