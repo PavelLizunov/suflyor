@@ -2406,21 +2406,3 @@ msgstr "тест звука не прошёл"
 
 msgid "AI unavailable"
 msgstr "AI недоступен"
-
-msgid "Save name"
-msgstr "Сохранить название"
-
-msgid "Cancel rename"
-msgstr "Отменить переименование"
-
-msgid "Rename session"
-msgstr "Переименовать сессию"
-
-msgid "Regenerate name from transcript"
-msgstr "Придумать название по расшифровке"
-
-msgid "Delete session"
-msgstr "Удалить сессию"
-
-msgid "View transcript"
-msgstr "Открыть расшифровку"

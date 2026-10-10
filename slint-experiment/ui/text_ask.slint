@@ -12,7 +12,7 @@
 // avoid the documented Windows DWM "created-but-invisible" pitfall for new
 // frameless windows; present_window_stealth_aware doesn't wire DWM blur-behind.
 
-import { LineEdit, Button, Palette } from "std-widgets.slint";
+import { LineEdit, Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { CloseButton, DragGrip } from "controls.slint";
 import { Metrics } from "metrics.slint";
@@ -38,10 +38,6 @@ component IconSlot inherits Rectangle {
 }
 
 export component TextAskWindow inherits Window {
-    // std-widgets follow the active colour scheme instead of the light default.
-    property <bool> widgets-light: Theme.is-light;
-    init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
-    changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     no-frame: true;
     always-on-top: true;
     title: @tr("suflyor text ask (Slint)");
@@ -146,7 +142,7 @@ export component TextAskWindow inherits Window {
                         Text {
                             text: root.active-profile;
                             color: Theme.text-muted;
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             vertical-alignment: center;
                             horizontal-alignment: right;
                             horizontal-stretch: 1;

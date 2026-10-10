@@ -65,9 +65,9 @@ component TileMenuRow inherits Rectangle {
     border-radius: 6px;
     background: rowta.has-hover ? Theme.bg-elevated : transparent;
     HorizontalLayout {
-        padding-left: Metrics.space-sm;
-        padding-right: Metrics.space-md;
-        spacing: Metrics.space-sm;
+        padding-left: 8px;
+        padding-right: 12px;
+        spacing: 8px;
         alignment: start;
         VerticalLayout {
             alignment: center;
@@ -81,7 +81,7 @@ component TileMenuRow inherits Rectangle {
         }
         Text {
             text: root.label;
-            font-size: Metrics.font-label;
+            font-size: 11px;
             color: Theme.text-secondary;
             vertical-alignment: center;
         }
@@ -128,15 +128,12 @@ component TilePlayerButton inherits Rectangle {
     if root.label != "" : Text {
         text: root.label;
         color: root.icon-color;
-        font-size: Metrics.font-caption;
+        font-size: 10px;
         font-weight: 600;
         horizontal-alignment: center;
         vertical-alignment: center;
     }
 }
-
-// What a tile's trigger badge marks, named by the host (see `trigger-color`).
-export enum TileTone { accent, violet, sky, green, cyan, red, orange }
 
 export component TileWindow inherits Window {
     // Phase 4 — keep std-widgets (follow-up LineEdit, ScrollView) dark with
@@ -163,15 +160,7 @@ export component TileWindow inherits Window {
     in-out property <string> source-label: "—";
     // Phase E6 v12 — trigger badge.
     in-out property <string> trigger-label: "";
-    // The host names the badge category; the hue comes from the theme.
-    in-out property <TileTone> trigger-tone: TileTone.accent;
-    property <color> trigger-color: root.trigger-tone == TileTone.violet ? Theme.cat-violet
-        : root.trigger-tone == TileTone.sky ? Theme.cat-sky
-        : root.trigger-tone == TileTone.green ? Theme.cat-green
-        : root.trigger-tone == TileTone.cyan ? Theme.cat-cyan
-        : root.trigger-tone == TileTone.red ? Theme.cat-red
-        : root.trigger-tone == TileTone.orange ? Theme.cat-orange
-        : Theme.accent;
+    in-out property <color> trigger-color: Theme.accent;
     // Phase E6 v17 — pinned bool: changes pin button visual; Rust
     // toggles on click. Maximize bool: Rust resizes window via Win32.
     in-out property <bool> pinned: false;
@@ -381,7 +370,7 @@ export component TileWindow inherits Window {
                     background: transparent;
                     border-color: Theme.border-strong;
                     border-width: 1px;
-                    border-radius: Metrics.radius-field;
+                    border-radius: 8px;
                     height: 20px;
                     horizontal-stretch: 0;
                     // Cap + elide: a long source-label (e.g. a full local-model .gguf path)
@@ -393,7 +382,7 @@ export component TileWindow inherits Window {
                         padding-right: 6px;
                         Text {
                             text: root.source-label;
-                            font-size: Metrics.font-caption;
+                            font-size: 10px;
                             color: Theme.text-muted;
                             vertical-alignment: center;
                             overflow: elide;
@@ -479,9 +468,9 @@ export component TileWindow inherits Window {
                             background: Theme.bg-elevated;
                             border-color: Theme.border-strong;
                             border-width: 1px;
-                            border-radius: Metrics.radius-field;
+                            border-radius: 8px;
                             VerticalLayout {
-                                padding: Metrics.space-xs;
+                                padding: 4px;
                                 spacing: 2px;
                                 // R1 (retest v0.28.0) — toggle whole-answer «Выделить текст» mode.
                                 TileMenuRow {
@@ -608,7 +597,7 @@ export component TileWindow inherits Window {
 
             if root.speak-error : Text {
                 text: @tr("Read-aloud is unavailable. Check the installed voice and try again.");
-                font-size: Metrics.font-label;
+                font-size: 11px;
                 color: Theme.danger;
                 wrap: word-wrap;
             }
@@ -624,20 +613,20 @@ export component TileWindow inherits Window {
                 HorizontalLayout {
                     alignment: start;
                     Rectangle {
-                        background: Theme.tint(root.trigger-color);
-                        border-color: Theme.on-tint(root.trigger-color);
+                        background: root.trigger-color.with-alpha(0.18);
+                        border-color: root.trigger-color;
                         border-width: 1px;
                         border-radius: 9px;
                         height: 20px;
                         horizontal-stretch: 0;
                         HorizontalLayout {
-                            padding-left: Metrics.space-sm;
-                            padding-right: Metrics.space-sm;
+                            padding-left: 8px;
+                            padding-right: 8px;
                             Text {
                                 text: root.trigger-label;
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 font-weight: 700;
-                                color: Theme.on-tint(root.trigger-color);
+                                color: root.trigger-color;
                                 vertical-alignment: center;
                             }
                         }
@@ -704,7 +693,7 @@ export component TileWindow inherits Window {
                         }
                         // Paragraph (+ A2 star gutter on the right)
                         if block.kind == 0 : HorizontalLayout {
-                            spacing: Metrics.space-xs;
+                            spacing: 4px;
                             SelectableText {
                                 text: block.display-text;
                                 source-text: block.text;
@@ -721,7 +710,7 @@ export component TileWindow inherits Window {
                         }
                         // Bullet
                         if block.kind == 4 : HorizontalLayout {
-                            padding-left: Metrics.space-md;
+                            padding-left: 12px;
                             spacing: Metrics.space-sm;
                             Text {
                                 text: "•";
@@ -755,10 +744,10 @@ export component TileWindow inherits Window {
                             border-color: Theme.accent.with-alpha(0.55);
                             user-layout := VerticalLayout {
                                 padding: Metrics.space-sm;
-                                spacing: Metrics.space-xs;
+                                spacing: 4px;
                                 Text {
                                     text: @tr("You");
-                                    font-size: Metrics.font-caption;
+                                    font-size: 10px;
                                     font-weight: 700;
                                     color: Theme.accent;
                                 }
@@ -827,7 +816,7 @@ export component TileWindow inherits Window {
                                 SelectableText {
                                     text: block.display-text;
                                     source-text: block.text;
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     text-color: Theme.code-text;
                                     mono-family: Theme.font-mono;
                                     wrap: no-wrap;
@@ -854,7 +843,7 @@ export component TileWindow inherits Window {
                                 SelectableText {
                                     text: block.display-text;
                                     source-text: block.text;
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     text-color: Theme.code-text;
                                     mono-family: Theme.font-mono;
                                     wrap: no-wrap;
@@ -943,15 +932,15 @@ export component TileWindow inherits Window {
                 border-width: 1px;
                 border-radius: 7px;
                 VerticalLayout {
-                    padding-top: Metrics.space-sm;
-                    padding-bottom: Metrics.space-sm;
-                    padding-left: Metrics.space-sm;
-                    padding-right: Metrics.space-sm;
+                    padding-top: 8px;
+                    padding-bottom: 8px;
+                    padding-left: 8px;
+                    padding-right: 8px;
                     spacing: 3px;
                     Text {
                         text: root.speak-loading ? @tr("Preparing voice...") : @tr("Reading aloud");
                         color: root.speak-loading ? Theme.accent : Theme.text-muted;
-                        font-size: Metrics.font-caption;
+                        font-size: 10px;
                         overflow: elide;
                         vertical-alignment: center;
                         height: 11px;
@@ -960,7 +949,7 @@ export component TileWindow inherits Window {
                         height: 30px;
                         transport := HorizontalLayout {
                             horizontal-stretch: 0;
-                            spacing: Metrics.space-xs;
+                            spacing: 4px;
                             TilePlayerButton {
                                 label: "-10";
                                 quiet: true;
@@ -1004,7 +993,7 @@ export component TileWindow inherits Window {
                                 Text {
                                     text: root.speak-speed-label;
                                     color: Theme.text-secondary;
-                                    font-size: Metrics.font-caption;
+                                    font-size: 10px;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
                                 }

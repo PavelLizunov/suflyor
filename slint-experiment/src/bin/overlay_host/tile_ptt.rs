@@ -117,7 +117,7 @@ pub(crate) fn fire_ptt_ask(
                 } else {
                     "system audio not captured"
                 }));
-                o.set_status_tone(crate::ui::StatusTone::Warning);
+                o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x9b, 0x2b));
             }
         }
         return;
@@ -137,7 +137,7 @@ pub(crate) fn fire_ptt_ask(
     tile.set_tile_title(SharedString::from(format!("{icon} {title}")));
     tile.set_source_label(SharedString::from(source_label));
     tile.set_trigger_label(SharedString::from(format!("{icon} {trigger}")));
-    tile.set_trigger_tone(crate::ui::TileTone::Red);
+    tile.set_trigger_color(slint::Color::from_rgb_u8(0xef, 0x44, 0x44));
     // Phase E6 v45 — PTT answers are continuable dialogs too.
     let convo_id = CONVO_SEQ.fetch_add(1, Ordering::Relaxed) as i32;
     tile.set_convo_id(convo_id);
@@ -374,7 +374,7 @@ pub(crate) fn fire_ptt_ask(
                     t.set_tile_title(SharedString::from(
                         slint_replay::app_state::tile_title_line(&q),
                     ));
-                    t.set_source_label(SharedString::from(crate::tile_text::asking_label(ui_is_ru)));
+                    t.set_source_label(SharedString::from("ai · asking…"));
                 }
             });
         }

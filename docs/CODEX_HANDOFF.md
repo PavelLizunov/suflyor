@@ -1,12 +1,12 @@
 # Codex handoff — master
 
-Updated 2026-10-11 (open-work section only; the rest dates from 2026-09-01). Read `AGENTS.md` before acting.
+Updated 2026-10-10 (open-work section only; the rest dates from 2026-09-01). Read `AGENTS.md` before acting.
 
 ## Current operational state — master
 
 - Branch: `master`
 - Latest published stable release: `v0.38.0`
-- Latest published prerelease: `v0.38.1-rc.5`
+- Latest published prerelease: `v0.38.1-rc.4`
 - Active master handoff: none
 - Post-release maintenance may be newer than the stable tag; inspect Git before acting.
 
@@ -47,44 +47,15 @@ tabs, the bar, F1, F4, F7), one press of each of the 13 global hotkeys, and a si
 the built installer. Not checked there: a tile with a streamed answer (no AI endpoint on the
 worker) and audio capture (no audio device).
 
-The prerelease `v0.38.1-rc.5` (pull request #249, merge commit `1161c72`) starts the design work
-and fixes what the first live check of answer tiles found. Design D-1: the host names a tone
-(`StatusTone`, `TileTone`) and `theme.slint` picks the colour; `Theme.tint` / `Theme.on-tint`
-define a tinted pill that keeps 4.5:1 in the four schemes. Design D-2: 342 literals that equalled
-a `Metrics` token use the token (55 of 56 captures identical before and after; the other one
-differs by a caret). `slint-experiment/tests/design_guard.rs` holds the rules: a window with
-std-widgets binds their palette to the theme, the host builds no colours in Rust, and the counts
-of literals outside the tokens may only go down. Fixes: F3 after an F9 answer (D-026), the
-std-widgets palette in five windows (D-027), tile text in the UI language (D-025), a timeout
-reported as a timeout (D-029), a silent uninstall that keeps the data and ends (D-024).
-
-Checked on the Windows worker at the released tree: the targeted gate for overlay-backend and
-slint-experiment, a Slint MCP pass of eight cells (English and Russian in the four colour
-schemes: bar, 16 Settings tabs, F1, F4, F7, and answer tiles against a stand-in OpenAI-compatible
-endpoint), one press of each of the 13 global hotkeys, and a silent install and uninstall of the
-built installer. Not checked there: audio capture (no audio device), a voice question, a
-screenshot question, macOS (CI compiles it).
-
-How answer tiles are checked without an AI provider: a small OpenAI-compatible server on the
-orchestrating workstation, reached from the worker through `ssh -R`, with `ai_provider` set to
-`local` and `ai_local_base_url` pointing at the forwarded port. The app config of the test
-profile is backed up before and restored after.
-
-The design work continues in phases, one pull request each, with captures before and after:
-the scale for the values outside the tokens, button roles, the Settings page frame, the form
-row, state shown by the UI instead of `[ok]` / `[err]` text, splitting `settings_panel.slint`,
-the bar, one vocabulary. From the scale phase on the look changes; the owner was asked whether
-to keep the Glacier look, how to lay out the bar, and which words to keep.
-
 Open, check `gh pr list` first:
 
-- #205 (Nemotron diarization; its branch uses the version 0.38.1-rc.4, which is now taken twice over), #217 and #199
+- #205 (Nemotron diarization; its branch also uses the version 0.38.1-rc.4), #217 and #199
   (dependabot; #199 does not compile).
 - `docs/audit-grok/` stays in the tree while `docs/goal-grok-codebase-audit.md` is an
   active charter that refers to it. Its 119 findings were checked against the source; the
   42 confirmed ones are in `docs/DEFECT-LEDGER.md` and 41 of them are not fixed.
-- Ledger D-004 and D-012 need a product decision; D-005, D-009, D-010, D-011, D-012, D-030,
-  D-031 and D-032 are open.
+- Ledger D-004 and D-012 need a product decision; D-005, D-009, D-010, D-011, D-012, D-024,
+  D-025 are open.
 - Comments: a census with the Rust lexer exists (15023 comment lines, 477 of them history
   or provenance); nothing was deleted.
 - Design: a full design audit is the next piece of work. A source scan counts 284 font sizes,

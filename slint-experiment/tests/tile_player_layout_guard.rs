@@ -18,8 +18,8 @@ fn active_player_keeps_status_transport_and_secondary_controls_separate() {
     let player = &tile[start..end];
 
     assert!(player.contains("height: 60px;"));
-    assert!(player.contains("padding-top: Metrics.space-sm;"));
-    assert!(player.contains("padding-bottom: Metrics.space-sm;"));
+    assert!(player.contains("padding-top: 8px;"));
+    assert!(player.contains("padding-bottom: 8px;"));
     let status = player.find("Preparing voice...").expect("status row");
     let transport = player
         .find("transport := HorizontalLayout")

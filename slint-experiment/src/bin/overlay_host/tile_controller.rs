@@ -138,9 +138,7 @@ pub(crate) fn install_streaming_tile(
         if old.convo_id != new_convo {
             if let Some(t) = old.weak.upgrade() {
                 t.set_followup_busy(false);
-                t.set_source_label(SharedString::from(crate::tile_text::superseded_label(
-                    bridge.cfg.read().ui_is_ru(),
-                )));
+                t.set_source_label(SharedString::from("ai · superseded"));
             }
         }
     }
@@ -312,9 +310,8 @@ impl RuntimeEvents for PttStreamSink {
                 // A zero-token Done (some vision servers do this on an
                 // unsupported image, or a content filter) would replace the
                 // placeholder with an empty body — show a note, not a blank tile.
-                let ru = self.bridge.cfg.read().ui_is_ru();
                 let final_body = if answer.trim().is_empty() {
-                    format!("{prefix}{}", crate::tile_text::empty_answer_note(ru))
+                    format!("{prefix}_(модель не вернула ответ)_")
                 } else {
                     rendered
                 };
@@ -322,9 +319,7 @@ impl RuntimeEvents for PttStreamSink {
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(t) = weak.upgrade() {
                         t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&final_body))));
-                        t.set_source_label(SharedString::from(crate::tile_text::done_label(
-                            &reason, ru,
-                        )));
+                        t.set_source_label(SharedString::from(format!("ai · done ({reason})")));
                         t.set_followup_busy(false);
                     }
                 });
@@ -339,22 +334,22 @@ impl RuntimeEvents for PttStreamSink {
                 // regenerate + push-to-talk asks. A deep-locked managed server
                 // gets the specific localized notice.
                 let blocked = overlay_backend::deep_lock::is_blocked_error(&message);
-                let ru = self.bridge.cfg.read().ui_is_ru();
                 let safe = if blocked {
+                    let ru = self.bridge.cfg.read().ui_is_ru();
                     overlay_backend::deep_lock::blocked_notice(ru)
                 } else {
-                    slint_replay::app_state::ai_error_text(classify_ai_error(&message), ru)
+                    classify_ai_error(&message)
                 };
                 let body = if blocked {
                     safe.to_string()
                 } else {
-                    crate::tile_text::error_body(safe, ru)
+                    format!("AI error: {safe}")
                 };
                 let weak = self.tile.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(t) = weak.upgrade() {
                         t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&body))));
-                        t.set_source_label(SharedString::from(crate::tile_text::error_label(ru)));
+                        t.set_source_label(SharedString::from("error"));
                         t.set_followup_busy(false);
                     }
                 });
@@ -618,20 +613,13 @@ impl OverlayBarBridge {
                     // would otherwise render blank ("найди в интернете…" → nothing).
                     // Show a generic note (no endpoint/tool internals) and do NOT
                     // fold an empty assistant turn into the conversation.
-                    let ru = self.cfg.read().ui_is_ru();
                     let answer_empty = stream.accumulated.trim().is_empty();
                     // Final body — used for the conversation snapshot AND the
                     // terminal render below (which is never throttled).
                     let final_body = if answer_empty {
-                        let note = if ru {
-                            "_(Модель не вернула текст — вероятно, запросила \
+                        let note = "_(Модель не вернула текст — вероятно, запросила \
                             инструмент вроде веб-поиска, который в этом режиме не \
-                            поддерживается. Переформулируй вопрос без «найди/загугли».)_"
-                        } else {
-                            "_(The model returned no text. It probably asked for a tool \
-                            such as web search, which this mode does not support. \
-                            Rephrase the question without asking it to search.)_"
-                        };
+                            поддерживается. Переформулируй вопрос без «найди/загугли».)_";
                         if stream.prefix.is_empty() {
                             note.to_string()
                         } else {
@@ -664,9 +652,9 @@ impl OverlayBarBridge {
                             tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(
                                 &final_body,
                             ))));
-                            tile.set_source_label(SharedString::from(
-                                crate::tile_text::done_label(&reason, ru),
-                            ));
+                            tile.set_source_label(SharedString::from(format!(
+                                "ai · done ({reason})"
+                            )));
                             tile.set_followup_busy(false);
                         }
                     });
@@ -689,18 +677,18 @@ impl OverlayBarBridge {
                     // voice follow-up (🎤). classify_ai_error → generic message;
                     // a deep-locked managed server gets the localized notice.
                     let blocked = overlay_backend::deep_lock::is_blocked_error(&message);
-                    let ru = self.cfg.read().ui_is_ru();
                     let safe = if blocked {
+                        let ru = self.cfg.read().ui_is_ru();
                         overlay_backend::deep_lock::blocked_notice(ru)
                     } else {
-                        slint_replay::app_state::ai_error_text(classify_ai_error(&message), ru)
+                        classify_ai_error(&message)
                     };
                     // Keep any prior thread; append the error below it so a
                     // follow-up failure doesn't wipe the conversation.
                     let err_line = if blocked {
                         safe.to_string()
                     } else {
-                        crate::tile_text::error_body(safe, ru)
+                        format!("AI error: {safe}")
                     };
                     let body = if stream.prefix.is_empty() {
                         err_line
@@ -710,9 +698,7 @@ impl OverlayBarBridge {
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(tile) = weak.upgrade() {
                             tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&body))));
-                            tile.set_source_label(SharedString::from(
-                                crate::tile_text::error_label(ru),
-                            ));
+                            tile.set_source_label(SharedString::from("error"));
                             tile.set_followup_busy(false);
                         }
                     });
@@ -862,12 +848,12 @@ impl SlintUiBridge for OverlayBarBridge {
                 "session:started" => {
                     o.set_timer_active(true);
                     o.set_status_text(SharedString::from("recording"));
-                    o.set_status_tone(crate::ui::StatusTone::Ok);
+                    o.set_status_color(slint::Color::from_rgb_u8(0x2a, 0xc7, 0x60));
                 }
                 "session:stopped" => {
                     o.set_timer_active(false);
                     o.set_status_text(SharedString::from("idle"));
-                    o.set_status_tone(crate::ui::StatusTone::Neutral);
+                    o.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
                 }
                 "health:update" => {
                     // Crude: collapse 3-subsystem state to single
@@ -889,9 +875,9 @@ impl SlintUiBridge for OverlayBarBridge {
                     // session:started, leaving "idle" text inside a red pill.
                     if o.get_timer_active() {
                         if any_down {
-                            o.set_status_tone(crate::ui::StatusTone::Danger);
+                            o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x4b, 0x4b));
                         } else if any_degraded {
-                            o.set_status_tone(crate::ui::StatusTone::Warning);
+                            o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0xb4, 0x4b));
                         } else {
                             // All-clear during a session → restore the green
                             // recording pill. A degraded→ok episode only ever set
@@ -899,7 +885,7 @@ impl SlintUiBridge for OverlayBarBridge {
                             // text-recovery branch below can't restore it and the
                             // pill would otherwise stay amber until the next
                             // session start/stop.
-                            o.set_status_tone(crate::ui::StatusTone::Ok);
+                            o.set_status_color(slint::Color::from_rgb_u8(0x2a, 0xc7, 0x60));
                         }
                     }
                     // V0.8.0 (Поток A) — surface AI-down in the bar TEXT, not just
@@ -925,10 +911,10 @@ impl SlintUiBridge for OverlayBarBridge {
                         // Recovered — restore the session pill we overwrote.
                         if o.get_timer_active() {
                             o.set_status_text(SharedString::from("recording"));
-                            o.set_status_tone(crate::ui::StatusTone::Ok);
+                            o.set_status_color(slint::Color::from_rgb_u8(0x2a, 0xc7, 0x60));
                         } else {
                             o.set_status_text(SharedString::from("idle"));
-                            o.set_status_tone(crate::ui::StatusTone::Neutral);
+                            o.set_status_color(slint::Color::from_rgb_u8(0x88, 0x88, 0x8c));
                         }
                     }
                     // ok / idle leaves the prior color alone

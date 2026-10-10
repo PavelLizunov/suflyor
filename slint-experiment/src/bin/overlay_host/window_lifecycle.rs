@@ -108,7 +108,7 @@ pub(crate) fn global_stealth_effective() -> bool {
 /// verifies, restoring the mic/sys truth.
 pub(crate) fn surface_stealth_unavailable(bar: &OverlayBarWindow) {
     bar.set_stealth_fault(true);
-    bar.set_status_tone(crate::ui::StatusTone::Warning);
+    bar.set_status_color(slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24));
 }
 
 /// Apply a stealth toggle to the BAR — the one window outside the

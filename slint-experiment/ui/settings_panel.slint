@@ -793,7 +793,7 @@ export component SettingsWindow inherits Window {
                     border-width: Metrics.border-thin;
                     border-color: closeta.has-hover ? Theme.danger.with-alpha(0.55) : Theme.border-strong;
                     background: closeta.has-hover ? Theme.danger.with-alpha(0.13) : transparent;
-                    animate background, border-color { duration: Metrics.motion-fast; }
+                    animate background, border-color { duration: 120ms; }
                     HorizontalLayout {
                         alignment: center;
                         spacing: 7px;
@@ -869,7 +869,7 @@ export component SettingsWindow inherits Window {
                                 text: Platform.is-macos
                                     ? @tr("macOS has no public API that can hide the overlay from other screen-sharing apps. Suflyor only excludes its own windows from its own screenshots.")
                                     : @tr("Stealth mode hides the overlay window from screen capture (Print Screen, Teams/Meet, OBS). Uses WDA_EXCLUDEFROMCAPTURE on Windows 10/11.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -892,7 +892,7 @@ export component SettingsWindow inherits Window {
                                     : root.stealth-toggle
                                         ? @tr("[!] stealth unavailable")
                                         : @tr("[--] off");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
@@ -902,12 +902,12 @@ export component SettingsWindow inherits Window {
                             // Phase E6 v20 — tile opacity slider.
                             Text {
                                 text: @tr("Tile opacity ({}%)", Math.round(root.tile-body-opacity * 100));
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                             }
                             Text {
                                 text: @tr("Lower values let you see the meeting through tiles. 100% = opaque, 50% = half-transparent.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -925,7 +925,7 @@ export component SettingsWindow inherits Window {
                             title: @tr("Coaching");
                             Text {
                                 text: @tr("Post-meeting debrief: AI critique of pacing, filler density, key points. Opt-in.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -938,7 +938,7 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: @tr("Live speech mode phrases the on-screen tile hints as ready-to-read-aloud lines (no filler, confident, short). Independent of the debrief.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -959,7 +959,7 @@ export component SettingsWindow inherits Window {
                             // GlobalHotKeyManager registrations in overlay_host.rs).
                             Text {
                                 text: @tr("Global hotkeys (work anywhere, even when the app isn't focused):");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -979,8 +979,8 @@ export component SettingsWindow inherits Window {
                                 ["F1",  @tr("Help (open / close)")],
                                 ["F7",  @tr("Session archive (open / close)")],
                             ] : HorizontalLayout {
-                                padding: Metrics.space-xs;
-                                spacing: Metrics.space-md;
+                                padding: 4px;
+                                spacing: 12px;
                                 Text {
                                     text: Platform.is-macos ? (
                                         entry[0] == "Ctrl+F8" ? @tr("Control+F8") :
@@ -988,14 +988,14 @@ export component SettingsWindow inherits Window {
                                         entry[0] == "Shift+Alt+2" ? @tr("Shift+Option+2") :
                                         entry[0] == "Shift+Alt+3" ? @tr("Shift+Option+3") : entry[0]
                                     ) : entry[0];
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     font-weight: 700;
                                     color: Theme.accent;
                                     width: 92px;
                                 }
                                 Text {
                                     text: entry[1];
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     color: Theme.text-secondary;
                                     wrap: word-wrap;
                                 }
@@ -1014,7 +1014,7 @@ export component SettingsWindow inherits Window {
                         }
                         Text {
                             text: root.diag-summary;
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
@@ -1030,11 +1030,11 @@ export component SettingsWindow inherits Window {
                             { label: @tr("Stealth"), level: 3, detail: root.diag-stealth-on ? @tr("on — verify with a screen-share preview") : @tr("off") },
                         ] : HorizontalLayout {
                             min-height: detail-text.preferred-height + 8px;
-                            padding: Metrics.space-xs;
+                            padding: 4px;
                             spacing: 10px;
                             Text {
                                 text: row.label;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 font-weight: 600;
                                 color: Theme.text-primary;
                                 width: 150px;
@@ -1046,7 +1046,7 @@ export component SettingsWindow inherits Window {
                                     : row.level == 2 ? @tr("Not configured")
                                     : row.level == 4 ? @tr("Error")
                                     : "—";
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 font-weight: 700;
                                 width: 100px;
                                 color: row.level == 0 ? Theme.success
@@ -1056,7 +1056,7 @@ export component SettingsWindow inherits Window {
                             }
                             detail-text := Text {
                                 text: row.detail;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                                 horizontal-stretch: 1;
@@ -1065,7 +1065,7 @@ export component SettingsWindow inherits Window {
                         Rectangle { height: 4px; }
                         HorizontalLayout {
                             alignment: start;
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             Button {
                                 text: @tr("Check all");
                                 clicked => { root.diagnostics-check-all-clicked(); }
@@ -1080,7 +1080,7 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: root.diag-copied ? @tr("copied") : "";
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 font-weight: 700;
                                 color: Theme.success;
                                 vertical-alignment: center;
@@ -1092,7 +1092,7 @@ export component SettingsWindow inherits Window {
                         Rectangle { height: 6px; }
                         Text {
                             text: @tr("Database");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             font-weight: 700;
                             color: Theme.text-muted;
                         }
@@ -1140,7 +1140,7 @@ export component SettingsWindow inherits Window {
                         // tester can read the saved backup location.
                         if root.db-repair-status != "" : Text {
                             text: root.db-repair-status;
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
@@ -1148,13 +1148,13 @@ export component SettingsWindow inherits Window {
                         // the tester can read/copy it (the reveal is best-effort).
                         if root.diag-logs-path != "" : Text {
                             text: root.diag-logs-path;
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.success;
                             wrap: word-wrap;
                         }
                         Text {
                             text: @tr("“Check all” pings AI + STT, records the mic, and plays a test tone to verify system-audio capture. Speak during the check to see the mic level — you don't need to play anything yourself.");
-                            font-size: Metrics.font-caption;
+                            font-size: 10px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
@@ -1166,15 +1166,15 @@ export component SettingsWindow inherits Window {
                             title: @tr("Language");
                             Text {
                                 text: @tr("Interface language — switches all UI text on the fly.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
                             HorizontalLayout {
-                                spacing: Metrics.space-sm;
+                                spacing: 8px;
                                 Text {
                                     text: @tr("Language:");
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     color: Theme.text-secondary;
                                     vertical-alignment: center;
                                 }
@@ -1202,7 +1202,7 @@ export component SettingsWindow inherits Window {
                             title: @tr("Tile placement");
                             Text {
                                 text: @tr("Which monitor new answer tiles appear on.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -1221,15 +1221,15 @@ export component SettingsWindow inherits Window {
                             // pick the contrast they like.
                             Text {
                                 text: @tr("Colour scheme — recolours the whole app instantly.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
                             HorizontalLayout {
-                                spacing: Metrics.space-sm;
+                                spacing: 8px;
                                 Text {
                                     text: @tr("Scheme:");
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     color: Theme.text-secondary;
                                     vertical-alignment: center;
                                 }
@@ -1250,7 +1250,7 @@ export component SettingsWindow inherits Window {
                             // First-run setup wizard — relaunchable any time.
                             Text {
                                 text: @tr("Re-run the guided first-time setup.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -1271,7 +1271,7 @@ export component SettingsWindow inherits Window {
                             text: Platform.is-macos
                                 ? @tr("Read selected text (Shift+Option+1) or a screen region (Shift+Option+2) aloud. Pause or resume with Shift+Option+3.")
                                 : @tr("Read selected text (Shift+Alt+1) or a screen region (Shift+Alt+2) aloud. Pause or resume with Shift+Alt+3.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
@@ -1279,11 +1279,11 @@ export component SettingsWindow inherits Window {
                         // experimental Tera sidecar. Piper stays the automatic
                         // fallback whenever Tera is unavailable.
                         HorizontalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             height: 32px;
                             Text {
                                 text: @tr("Engine:");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
@@ -1297,11 +1297,11 @@ export component SettingsWindow inherits Window {
                             spacing: 6px;
                         // Voice chooser — only when at least one voice is installed.
                         if root.tts-available : HorizontalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             height: 32px;
                             Text {
                                 text: @tr("Voice:");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
@@ -1319,7 +1319,7 @@ export component SettingsWindow inherits Window {
                             vertical-stretch: 0;
                             Text {
                                 text: @tr("Neural voices aren't installed yet — download them (Irina + Ruslan, ~130 MB).");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -1343,7 +1343,7 @@ export component SettingsWindow inherits Window {
                                 : root.tts-install-phase == 7 ? @tr("Installed partially; failed: {}", root.tts-install-label)
                                 : root.tts-install-phase == 9 ? @tr("{} — download failed (retry later)", root.tts-install-label)
                                 : @tr("Couldn't install the voices — check the connection and retry.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
@@ -1364,22 +1364,22 @@ export component SettingsWindow inherits Window {
                                 : (root.tera-install-phase != 0 ? 128px : 108px);
                         Text {
                             text: @tr("EXPERIMENTAL: TeraTTSv2 neural engine (44.1 kHz, RU+EN). Downloads ~370 MB of ONNX graphs on demand. Read-aloud falls back to Piper while Tera is not installed or unavailable; speaker separation always uses Piper.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         Text {
                             text: root.tera-model-status;
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
                         if root.tts-available : HorizontalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             height: 32px;
                             Text {
                                 text: @tr("Voice:");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
@@ -1392,7 +1392,7 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             alignment: start;
                             height: 32px;
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             Button {
                                 text: root.tera-installing ? @tr("Installing…") : @tr("Install model");
                                 enabled: !root.tera-installing && !root.tts-available;
@@ -1412,18 +1412,18 @@ export component SettingsWindow inherits Window {
                                 : root.tera-install-phase == 6 ? @tr("Model installed")
                                 : root.tera-install-phase == 8 ? @tr("Install cancelled")
                                 : @tr("Couldn't install the model — check the connection and retry.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
                         }
                         // Speed preset (multipliers are language-neutral, untranslated).
                         HorizontalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             height: 32px;
                             Text {
                                 text: @tr("Speed:");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
@@ -1445,7 +1445,7 @@ export component SettingsWindow inherits Window {
                         }
                         if root.tts-test-status != "" : Text {
                             text: root.tts-test-status;
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.danger;
                             wrap: word-wrap;
                         }
@@ -1457,7 +1457,7 @@ export component SettingsWindow inherits Window {
                             title: @tr("Updates");
                         Text {
                             text: @tr("Check GitHub for a newer release. If one is found you can download + install it in one click (the app restarts).");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
@@ -1484,7 +1484,7 @@ export component SettingsWindow inherits Window {
                         // Result line: "up to date" / "vX available" / errors.
                         if root.update-status != "" : Text {
                             text: root.update-status;
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: root.update-available ? Theme.success : Theme.text-muted;
                             wrap: word-wrap;
                         }
@@ -1494,7 +1494,7 @@ export component SettingsWindow inherits Window {
                             title: @tr("Backup / transfer settings");
                         Text {
                             text: @tr("Version: {} (suflyor / Slint)", root.app-version);
-                            font-size: Metrics.font-caption;
+                            font-size: 10px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
@@ -1502,7 +1502,7 @@ export component SettingsWindow inherits Window {
                         // (duplicate heading removed — the SettingsCard title already shows it)
                         Text {
                             text: @tr("Exports the WHOLE config to a .json file you choose — INCLUDING the Claude bearer + Groq API key. Keep the file private. Import overwrites current settings (restart to apply).");
-                            font-size: Metrics.font-caption;
+                            font-size: 10px;
                             color: Theme.warning;
                             wrap: word-wrap;
                         }
@@ -1526,7 +1526,7 @@ export component SettingsWindow inherits Window {
                             text: Platform.is-macos
                                 ? @tr("Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in this user's local credentials file. Local UI, profiles, devices and snippets stay unchanged.")
                                 : @tr("Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in Windows Credential Manager on this PC. Local UI, profiles, devices and snippets stay unchanged.");
-                            font-size: Metrics.font-caption;
+                            font-size: 10px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
@@ -1550,42 +1550,42 @@ export component SettingsWindow inherits Window {
                             border-color: Theme.border;
                             background: #ffffff08;
                             VerticalLayout {
-                                padding: Metrics.space-sm;
-                                spacing: Metrics.space-xs;
+                                padding: 8px;
+                                spacing: 4px;
                                 Text {
                                     text: @tr("Review changes before applying (keys shown as set/— only, never the value):");
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     font-weight: 700;
                                     color: Theme.text-primary;
                                     wrap: word-wrap;
                                 }
                                 Text {
                                     text: root.server-preview-cloud;
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     color: Theme.text-primary;
                                     wrap: word-wrap;
                                 }
                                 Text {
                                     text: root.server-preview-local;
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     color: Theme.text-primary;
                                     wrap: word-wrap;
                                 }
                                 Text {
                                     text: root.server-preview-vision;
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     color: Theme.text-primary;
                                     wrap: word-wrap;
                                 }
                                 Text {
                                     text: root.server-preview-stt;
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     color: Theme.text-primary;
                                     wrap: word-wrap;
                                 }
                                 Text {
                                     text: root.server-preview-gigaam;
-                                    font-size: Metrics.font-caption;
+                                    font-size: 10px;
                                     color: Theme.warning;
                                     wrap: word-wrap;
                                 }
@@ -1606,7 +1606,7 @@ export component SettingsWindow inherits Window {
                         }
                         if root.profile-io-result != "" : Text {
                             text: root.profile-io-result;
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.accent;
                             wrap: word-wrap;
                         }
@@ -1623,13 +1623,13 @@ export component SettingsWindow inherits Window {
                             }
                             if root.audio-devices-failed : Text {
                                 text: @tr("Could not load audio devices. Your saved choices are unchanged. Try Refresh devices.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.warning;
                                 wrap: word-wrap;
                             }
                             Text {
                                 text: @tr("Device changes apply to the next capture. Stop and start an active session to use the new choice.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
@@ -1637,7 +1637,7 @@ export component SettingsWindow inherits Window {
                                 text: root.audio-save-state == 1
                                     ? @tr("Saved for the next capture.")
                                     : @tr("Could not save the device. The previous choice is unchanged.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: root.audio-save-state == 1 ? Theme.accent : Theme.warning;
                                 wrap: word-wrap;
                             }
@@ -1648,7 +1648,7 @@ export component SettingsWindow inherits Window {
                             text: Platform.is-macos
                                 ? @tr("Microphone device selection. The list comes from the audio devices available to macOS.")
                                 : @tr("Microphone device selection. List is live from WASAPI capture endpoints.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
@@ -1669,13 +1669,13 @@ export component SettingsWindow inherits Window {
                         }
                         if !Platform.is-macos && !root.audio-devices-loading && !root.audio-devices-failed && root.mic-device-missing : Text {
                             text: @tr("Saved device is unavailable. Choose another device or Windows default.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.warning;
                             wrap: word-wrap;
                         }
                         if !Platform.is-macos && !root.audio-devices-loading && !root.audio-devices-failed && root.mic-devices-empty : Text {
                             text: @tr("No microphone devices found.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
@@ -1686,7 +1686,7 @@ export component SettingsWindow inherits Window {
                         }
                         if root.mic-test-result != "" : Text {
                             text: root.mic-test-result;
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.accent;
                             wrap: word-wrap;
                         }
@@ -1695,7 +1695,7 @@ export component SettingsWindow inherits Window {
                             title: @tr("System audio - headphones / speakers");
                             Text {
                                 text: @tr("Capture sound played through this device. Capture inputs also include headset mixes such as A50 Stream Out. This does not change Windows or read-aloud playback.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
@@ -1708,13 +1708,13 @@ export component SettingsWindow inherits Window {
                             }
                             if !root.audio-devices-loading && !root.audio-devices-failed && root.system-device-missing : Text {
                                 text: @tr("Saved device is unavailable. Choose another device or Windows default.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.warning;
                                 wrap: word-wrap;
                             }
                             if !root.audio-devices-loading && !root.audio-devices-failed && root.system-devices-empty : Text {
                                 text: @tr("No system audio devices found.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
@@ -1731,17 +1731,17 @@ export component SettingsWindow inherits Window {
                         }
                         Text {
                             text: @tr("Saved locally as separate mic + system WAVs per session — nothing is uploaded. ~230 MB/hour. Used by the archive's re-Summary.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         // v0.15.0 — recordings retention policy (was a fixed
                         // "last 10 sessions"). Applied at the next session start.
                         HorizontalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             Text {
                                 text: @tr("Keep recordings:");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
@@ -1761,7 +1761,7 @@ export component SettingsWindow inherits Window {
                         }
                         if root.retention-mode == 0 : Text {
                             text: @tr("Unlimited recordings can take tens of GB per month with daily calls.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.warning;
                             wrap: word-wrap;
                         }
@@ -1778,15 +1778,15 @@ export component SettingsWindow inherits Window {
                         // user lost archive history after ~2 weeks.
                         Text {
                             text: @tr("Session journals — the transcripts + AI answers behind the archive (F7). When the disk cap is exceeded, the oldest journals are deleted even if the count limit is not reached:");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         HorizontalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             Text {
                                 text: @tr("Journals to keep (0 = unlimited):");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
@@ -1798,10 +1798,10 @@ export component SettingsWindow inherits Window {
                             }
                         }
                         HorizontalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             Text {
                                 text: @tr("Journal disk cap, MB (0 = unlimited):");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
@@ -1814,7 +1814,7 @@ export component SettingsWindow inherits Window {
                         }
                         Text {
                             text: @tr("Retention changes apply at the next session start.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
@@ -1827,13 +1827,13 @@ export component SettingsWindow inherits Window {
                             title: @tr("Components");
                         Text {
                             text: @tr("What's installed for offline AI — one place to see what's ready. Each piece is downloaded on demand from its own tab (shown below each item).");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         for row[idx] in root.component-rows : Rectangle {
                             background: Theme.bg-surface;
-                            border-radius: Metrics.radius-field;
+                            border-radius: 8px;
                             border-width: 1px;
                             border-color: Theme.border;
                             // min-height (not fixed) so a long where-to-install
@@ -1842,10 +1842,10 @@ export component SettingsWindow inherits Window {
                             // wrapped text off the borders.
                             min-height: 50px;
                             HorizontalLayout {
-                                padding-left: Metrics.space-md;
-                                padding-right: Metrics.space-md;
-                                padding-top: Metrics.space-sm;
-                                padding-bottom: Metrics.space-sm;
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                padding-top: 8px;
+                                padding-bottom: 8px;
                                 spacing: 10px;
                                 Rectangle {
                                     width: 10px;
@@ -1859,7 +1859,7 @@ export component SettingsWindow inherits Window {
                                     horizontal-stretch: 1;
                                     Text {
                                         text: row.name;
-                                        font-size: Metrics.font-body;
+                                        font-size: 12px;
                                         font-weight: 600;
                                         color: Theme.text-primary;
                                         wrap: word-wrap;
@@ -1868,7 +1868,7 @@ export component SettingsWindow inherits Window {
                                         text: row.installed
                                             ? (row.detail != "" ? row.detail : @tr("installed"))
                                             : row.hint;
-                                        font-size: Metrics.font-caption;
+                                        font-size: 10px;
                                         color: Theme.text-muted;
                                         wrap: word-wrap;
                                     }
@@ -1892,7 +1892,7 @@ export component SettingsWindow inherits Window {
                                         : root.component-busy-phase == 13 ? @tr("Text recognition already installed")
                                         : root.component-busy-phase == 14 ? @tr("Text recognition installed")
                                         : @tr("Couldn't install — check the connection and retry.");
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     color: Theme.accent;
                                     vertical-alignment: center;
                                     horizontal-stretch: 0;
@@ -1930,7 +1930,7 @@ export component SettingsWindow inherits Window {
                                     && !(row.installable && !row.installed)
                                     && !(row.jump-tab >= 0 && !row.installed) : Text {
                                     text: row.installed ? @tr("installed") : @tr("not installed");
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     font-weight: 600;
                                     color: row.installed ? Theme.success : Theme.text-muted;
                                     vertical-alignment: center;
@@ -1946,7 +1946,7 @@ export component SettingsWindow inherits Window {
                             title: @tr("Auto-tiles");
                             Text {
                                 text: @tr("Auto-tile triggers — when transcript contains these keywords, spawn an answer tile automatically.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -1966,13 +1966,13 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: @tr("Mutes auto-detected AI tiles so you can record and just listen. Manual asks (F6/F9), the knowledge base, and summaries still appear.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
                             Text {
                                 text: @tr("Trigger keywords (space-separated). A sentence ending in '?' also triggers.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -1996,7 +1996,7 @@ export component SettingsWindow inherits Window {
                             title: @tr("Knowledge base");
                             Text {
                                 text: @tr("Embedded knowledge base (glossary / commands / patterns), compiled into the binary.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -2006,7 +2006,7 @@ export component SettingsWindow inherits Window {
                             // shipping a non-functional second search box.
                             Text {
                                 text: @tr("Press F4 anywhere to search the knowledge base and spawn a tile from any entry.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.accent;
                                 wrap: word-wrap;
                             }
@@ -2018,7 +2018,7 @@ export component SettingsWindow inherits Window {
                             title: @tr("Profile + context");
                         Text {
                             text: @tr("Persistent context sent with every AI request — your role, focus areas, vocabulary. Saved to config; applied to new AI calls immediately.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
@@ -2030,7 +2030,7 @@ export component SettingsWindow inherits Window {
                             vertical-stretch: 0;
                             Text {
                                 text: @tr("Profile:");
-                                font-size: Metrics.font-body;
+                                font-size: 12px;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
                             }
@@ -2045,7 +2045,7 @@ export component SettingsWindow inherits Window {
                             }
                             if root.profile-names.length == 0 : Text {
                                 text: @tr("none yet — name one and Add");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 vertical-alignment: center;
                             }
@@ -2092,7 +2092,7 @@ export component SettingsWindow inherits Window {
                             placeholder-text: @tr("e.g. I'm a Senior SRE interviewing for a platform role. Answer concisely, prefer Kubernetes/AWS examples, Russian output.");
                         }
                         HorizontalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             alignment: start;
                             vertical-stretch: 0;
                             height: 32px;
@@ -2118,7 +2118,7 @@ export component SettingsWindow inherits Window {
                         }
                         if root.meeting-context-result != "" : Text {
                             text: root.meeting-context-result;
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.accent;
                             wrap: word-wrap;
                         }
@@ -2130,7 +2130,7 @@ export component SettingsWindow inherits Window {
                             title: @tr("AI providers");
                         Text {
                             text: @tr("Where do live answers come from? Pick a type, then configure it.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
@@ -2157,7 +2157,7 @@ export component SettingsWindow inherits Window {
                         }
                         if Platform.is-macos && root.ai-provider-index < 0 : Text {
                             text: @tr("The saved Codex provider is unavailable on macOS. Choose a supported provider.");
-                            font-size: Metrics.font-caption;
+                            font-size: 10px;
                             color: Theme.warning;
                             wrap: word-wrap;
                         }
@@ -2165,7 +2165,7 @@ export component SettingsWindow inherits Window {
                             title: @tr("Managed MLX text model");
                             Text {
                                 text: @tr("MLX runs locally on Apple-silicon Macs only. Models are downloaded only when you ask.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -2184,7 +2184,7 @@ export component SettingsWindow inherits Window {
                                 text: root.mlx-text-model-index == 1
                                     ? @tr("Download size: 9.48 GiB (VLM: Text + Vision).")
                                     : @tr("Download size: 4.52 GiB.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
@@ -2192,7 +2192,7 @@ export component SettingsWindow inherits Window {
                                 text: root.mlx-text-model-index == 1
                                     ? @tr("Apache-2.0. Gemma 4 26B-A4B VLM (4B active) with MSQ 2.6-bit mixed-precision quantization. Supports vision/screenshot tasks under 'Same as text model'.")
                                     : @tr("[!] LFM Open License v1.0 has commercial-use conditions. Review the license before commercial use. Russian response quality is not guaranteed.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: root.mlx-text-model-index == 1 ? Theme.text-secondary : Theme.warning;
                                 wrap: word-wrap;
                             }
@@ -2204,13 +2204,13 @@ export component SettingsWindow inherits Window {
                                     : root.mlx-text-failed ? @tr("Download or activation failed. Retry when ready.")
                                     : root.mlx-text-cancelled ? @tr("Download cancelled. Resume keeps verified files.")
                                     : @tr("Not installed");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: root.mlx-text-failed ? Theme.danger : (root.mlx-text-active ? Theme.success : Theme.text-secondary);
                                 wrap: word-wrap;
                             }
                             if root.mlx-text-busy : Text {
                                 text: @tr("{} / {} MB downloaded", root.mlx-text-done, root.mlx-text-total);
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                             }
                             if root.mlx-text-busy : Rectangle {
@@ -2248,17 +2248,17 @@ export component SettingsWindow inherits Window {
 
                         // ============================ CLOUD ============================
                         if root.ai-provider-index == 0 : VerticalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             vertical-stretch: 0;
                             Text {
                                 text: @tr("Cloud bridge");
-                                font-size: Metrics.font-body;
+                                font-size: 12px;
                                 font-weight: 700;
                                 color: Theme.text-primary;
                             }
                             Text {
                                 text: @tr("Bearer token:") + " " + root.ai-bearer-status;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
@@ -2280,7 +2280,7 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: @tr("Base URL (Claude bridge endpoint):");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
@@ -2300,7 +2300,7 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: @tr("AI model (Claude full ID):");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
@@ -2324,7 +2324,7 @@ export component SettingsWindow inherits Window {
                             }
                             if root.ai-models.length == 0 : Text {
                                 text: @tr("No models found — check the bridge URL/token, then press refresh.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -2336,7 +2336,7 @@ export component SettingsWindow inherits Window {
                                 }
                                 if root.ai-bridge-test-result != "" : Text {
                                     text: root.ai-bridge-test-result;
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     color: Theme.accent;
                                     vertical-alignment: center;
                                 }
@@ -2348,7 +2348,7 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: @tr("Marks the system prompt as cacheable for faster repeat asks. If your bridge rejects it (AI stops answering), turn this back off.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -2356,10 +2356,10 @@ export component SettingsWindow inherits Window {
 
                         // ============================ OPENAI ============================
                         if root.ai-provider-index == 2 : VerticalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             vertical-stretch: 0;
-                            Text { text: @tr("OpenAI Responses API"); font-size: Metrics.font-body; font-weight: 700; color: Theme.text-primary; }
-                            Text { text: @tr("API key:") + " " + root.openai-key-status; font-size: Metrics.font-label; color: Theme.text-secondary; }
+                            Text { text: @tr("OpenAI Responses API"); font-size: 12px; font-weight: 700; color: Theme.text-primary; }
+                            Text { text: @tr("API key:") + " " + root.openai-key-status; font-size: 11px; color: Theme.text-secondary; }
                             HorizontalLayout {
                                 spacing: 6px;
                                 SettingsLineEdit { placeholder-text: @tr("paste OpenAI API key"); text <=> root.openai-key-input; input-type: password; horizontal-stretch: 1; }
@@ -2367,7 +2367,7 @@ export component SettingsWindow inherits Window {
                             }
                             Text { text: Platform.is-macos
                                 ? @tr("Stored in a user-only local credentials file and excluded from configuration exports.")
-                                : @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                : @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: 10px; color: Theme.text-muted; wrap: word-wrap; }
                             HorizontalLayout {
                                 spacing: 6px;
                                 SettingsLineEdit { placeholder-text: "https://api.openai.com/v1"; text <=> root.openai-base-url-input; horizontal-stretch: 1; }
@@ -2381,16 +2381,16 @@ export component SettingsWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 6px;
                                 Button { text: @tr("Test OpenAI connection"); clicked => { root.ai-bridge-test-clicked(); } }
-                                if root.ai-bridge-test-result != "" : Text { text: root.ai-bridge-test-result; font-size: Metrics.font-label; color: Theme.accent; vertical-alignment: center; }
+                                if root.ai-bridge-test-result != "" : Text { text: root.ai-bridge-test-result; font-size: 11px; color: Theme.accent; vertical-alignment: center; }
                             }
                         }
 
                         // ============================ ANTHROPIC ============================
                         if root.ai-provider-index == 3 : VerticalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             vertical-stretch: 0;
-                            Text { text: @tr("Anthropic Messages API"); font-size: Metrics.font-body; font-weight: 700; color: Theme.text-primary; }
-                            Text { text: @tr("API key:") + " " + root.anthropic-key-status; font-size: Metrics.font-label; color: Theme.text-secondary; }
+                            Text { text: @tr("Anthropic Messages API"); font-size: 12px; font-weight: 700; color: Theme.text-primary; }
+                            Text { text: @tr("API key:") + " " + root.anthropic-key-status; font-size: 11px; color: Theme.text-secondary; }
                             HorizontalLayout {
                                 spacing: 6px;
                                 SettingsLineEdit { placeholder-text: @tr("paste Anthropic API key"); text <=> root.anthropic-key-input; input-type: password; horizontal-stretch: 1; }
@@ -2398,7 +2398,7 @@ export component SettingsWindow inherits Window {
                             }
                             Text { text: Platform.is-macos
                                 ? @tr("Stored in a user-only local credentials file and excluded from configuration exports.")
-                                : @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                : @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: 10px; color: Theme.text-muted; wrap: word-wrap; }
                             HorizontalLayout {
                                 spacing: 6px;
                                 SettingsLineEdit { placeholder-text: "https://api.anthropic.com/v1"; text <=> root.anthropic-base-url-input; horizontal-stretch: 1; }
@@ -2412,7 +2412,7 @@ export component SettingsWindow inherits Window {
                             HorizontalLayout {
                                 spacing: 6px;
                                 Button { text: @tr("Test Anthropic connection"); clicked => { root.ai-bridge-test-clicked(); } }
-                                if root.ai-bridge-test-result != "" : Text { text: root.ai-bridge-test-result; font-size: Metrics.font-label; color: Theme.accent; vertical-alignment: center; }
+                                if root.ai-bridge-test-result != "" : Text { text: root.ai-bridge-test-result; font-size: 11px; color: Theme.accent; vertical-alignment: center; }
                             }
                             DarkCheck {
                                 text: @tr("Prompt caching");
@@ -2423,16 +2423,16 @@ export component SettingsWindow inherits Window {
 
                         // ============================ CODEX SUBSCRIPTION ============================
                         if !Platform.is-macos && root.ai-provider-index == 4 : VerticalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             vertical-stretch: 0;
-                            Text { text: @tr("Codex safe models (ChatGPT subscription)"); font-size: Metrics.font-body; font-weight: 700; color: Theme.text-primary; }
+                            Text { text: @tr("Codex safe models (ChatGPT subscription)"); font-size: 12px; font-weight: 700; color: Theme.text-primary; }
                             Text {
                                 text: @tr("Uses the official local Codex app-server. Codex owns the ChatGPT login and stores tokens; suflyor never reads them.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
-                            Text { text: root.codex-auth-status; font-size: Metrics.font-label; color: Theme.text-secondary; wrap: word-wrap; }
+                            Text { text: root.codex-auth-status; font-size: 11px; color: Theme.text-secondary; wrap: word-wrap; }
                             HorizontalLayout {
                                 spacing: 6px;
                                 Button {
@@ -2447,7 +2447,7 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: @tr("Account model:");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                             }
                             HorizontalLayout {
@@ -2470,7 +2470,7 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: @tr("Reasoning effort:");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                             }
                             SettingsComboBox {
@@ -2484,18 +2484,18 @@ export component SettingsWindow inherits Window {
                             }
                             if root.codex-models-busy : Text {
                                 text: @tr("Loading account models...");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                             }
                             if !root.codex-models-busy && root.codex-model-labels.length == 0 : Text {
                                 text: @tr("No account models are available. Sign in or refresh.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
                             if root.codex-rate-status != "" : Text {
                                 text: root.codex-rate-status;
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -2507,7 +2507,7 @@ export component SettingsWindow inherits Window {
                                 }
                                 Text {
                                     text: @tr("Code:") + " " + root.codex-user-code;
-                                    font-size: Metrics.font-body;
+                                    font-size: 12px;
                                     font-weight: 700;
                                     color: Theme.accent;
                                     vertical-alignment: center;
@@ -2521,12 +2521,12 @@ export component SettingsWindow inherits Window {
                             }
                             if root.codex-copy-status != "" : Text {
                                 text: root.codex-copy-status;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                             }
                             Text {
                                 text: @tr("Experimental safe mode: the model is pinned; model-command file and network access are denied, and unexpected tools are stopped.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.warning;
                                 wrap: word-wrap;
                                 // Conditional wrapped rows can under-report their
@@ -2536,7 +2536,7 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: @tr("OpenCode or Qwen belong under Custom OpenAI-compatible bridge only when they expose a compatible inference endpoint.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                                 height: 36px;
@@ -2545,11 +2545,11 @@ export component SettingsWindow inherits Window {
 
                         // ============================ LOCAL ============================
                         if root.ai-provider-index == 1 : VerticalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             vertical-stretch: 0;
                             Text {
                                 text: @tr("Local model");
-                                font-size: Metrics.font-body;
+                                font-size: 12px;
                                 font-weight: 700;
                                 color: Theme.text-primary;
                             }
@@ -2587,7 +2587,7 @@ export component SettingsWindow inherits Window {
                             }
                             if root.ai-local-models.length == 0 : Text {
                                 text: @tr("No models found — start the local server, then press refresh.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -2617,7 +2617,7 @@ export component SettingsWindow inherits Window {
                             }
                             if !Platform.is-macos && root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index != 2 : Text {
                                 text: @tr("Local Vision requires the installed 12B model and its projector. Use the separate Vision section below for cloud or another server.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.warning;
                                 wrap: word-wrap;
                             }
@@ -2625,7 +2625,7 @@ export component SettingsWindow inherits Window {
                                 text: root.quality-vision-supported
                                     ? @tr("Vision for 26B requires its matching ~1.1 GiB projector.")
                                     : @tr("Update the local engine before installing Vision for 26B.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.warning;
                                 wrap: word-wrap;
                             }
@@ -2652,7 +2652,7 @@ export component SettingsWindow inherits Window {
                             }
                             if !Platform.is-macos && root.vision12b-status != "" : Text {
                                 text: root.vision12b-status;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.accent;
                                 wrap: word-wrap;
                             }
@@ -2669,7 +2669,7 @@ export component SettingsWindow inherits Window {
                             Rectangle { background: Theme.border; height: 1px; }
                             Text {
                                 text: @tr("Choose the local model explicitly. Estimated total VRAM at Auto (model + context + runtime): 4B ~6 GiB, 12B ~9.5 GiB, 26B ~12 GiB.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -2723,7 +2723,7 @@ export component SettingsWindow inherits Window {
                             }
                             if !root.quality-selection-allowed && root.managed-local-server : Text {
                                 text: @tr("Hardware not in the confirmed matrix. The model may exceed VRAM, spill into system RAM, run very slowly, or fail. You accept this risk.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.warning;
                                 wrap: word-wrap;
                             }
@@ -2740,7 +2740,7 @@ export component SettingsWindow inherits Window {
                             Rectangle { background: Theme.border; height: 1px; }
                             Text {
                                 text: @tr("Your GGUF model");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 font-weight: 700;
                                 color: Theme.text-primary;
                             }
@@ -2748,7 +2748,7 @@ export component SettingsWindow inherits Window {
                                 text: root.ai-local-custom-active
                                     ? @tr("Active: {}", root.ai-local-custom-model-name)
                                     : @tr("No user model selected");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: root.ai-local-custom-active ? Theme.accent : Theme.text-muted;
                                 overflow: elide;
                             }
@@ -2774,13 +2774,13 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: @tr("Choose a trusted local GGUF file. User models run text-only; memory requirements are unknown.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
                             if !root.managed-local-server : Text {
                                 text: @tr("Bundled 4B/12B/26B controls manage only Suflyor's own llama.cpp endpoint.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -2789,7 +2789,7 @@ export component SettingsWindow inherits Window {
                                 vertical-stretch: 0;
                                 Text {
                                     text: @tr("Context window");
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     font-weight: 700;
                                     color: Theme.text-primary;
                                 }
@@ -2859,13 +2859,13 @@ export component SettingsWindow inherits Window {
                                             root.ai-local-context-preview-index == 2 ? 16 :
                                             root.ai-local-context-preview-index == 3 ? 32 :
                                             root.ai-local-context-preview-index == 4 ? 64 : 96);
-                                    font-size: Metrics.font-caption;
+                                    font-size: 10px;
                                     color: Theme.text-muted;
                                     wrap: word-wrap;
                                 }
                                 Text {
                                     text: root.ai-local-context-vram-hint;
-                                    font-size: Metrics.font-caption;
+                                    font-size: 10px;
                                     color: Theme.text-muted;
                                     wrap: word-wrap;
                                 }
@@ -2880,13 +2880,13 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: root.local-model-resource-warning;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.warning;
                                 wrap: word-wrap;
                             }
                             if root.quality-status != "" : Text {
                                 text: root.quality-status;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.accent;
                                 wrap: word-wrap;
                             }
@@ -2920,7 +2920,7 @@ export component SettingsWindow inherits Window {
                             // "Loading model" body) stretched the whole window.
                             if root.ai-local-test-result != "" : Text {
                                 text: root.ai-local-test-result;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.accent;
                                 wrap: word-wrap;
                             }
@@ -2930,7 +2930,7 @@ export component SettingsWindow inherits Window {
                                 Rectangle { background: Theme.border; height: 1px; }
                                 Text {
                                     text: @tr("Installs or completes the local stack: llama.cpp, the 12B fallback, speech components, and 26B on supported hardware. Complete verified files are reused; partial downloads resume. The optional 4B profile is kept when already present.");
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     color: Theme.text-muted;
                                     wrap: word-wrap;
                                 }
@@ -2952,7 +2952,7 @@ export component SettingsWindow inherits Window {
                                     }
                                     if root.local-ai-gpu != "" : Text {
                                         text: root.local-ai-gpu;
-                                        font-size: Metrics.font-label;
+                                        font-size: 11px;
                                         color: root.local-ai-on-gpu ? Theme.success : Theme.warning;
                                         vertical-alignment: center;
                                         wrap: word-wrap;
@@ -2961,7 +2961,7 @@ export component SettingsWindow inherits Window {
                                 }
                                 if root.local-ai-status != "" : Text {
                                     text: root.local-ai-status;
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     color: Theme.accent;
                                     wrap: word-wrap;
                                 }
@@ -2988,7 +2988,7 @@ export component SettingsWindow inherits Window {
                             title: @tr("Engine (llama.cpp)");
                             Text {
                                 text: @tr("The app checks it weekly and verifies a new build before replacing the current one.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -3003,14 +3003,14 @@ export component SettingsWindow inherits Window {
                                 }
                                 if root.engine-build != "" : Text {
                                     text: @tr("Installed: {}", root.engine-build);
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     color: Theme.text-muted;
                                     vertical-alignment: center;
                                 }
                             }
                             if root.engine-update-status != "" : Text {
                                 text: root.engine-update-status;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.accent;
                                 wrap: word-wrap;
                             }
@@ -3025,7 +3025,7 @@ export component SettingsWindow inherits Window {
                         // word-wrap finally kicks in.
                         Text {
                             text: @tr("Tip: Save writes to suflyor/config.json in application configuration folder. Restart binary to re-load.");
-                            font-size: Metrics.font-caption;
+                            font-size: 10px;
                             color: Theme.accent;
                             wrap: word-wrap;
                             TouchArea {
@@ -3038,19 +3038,19 @@ export component SettingsWindow inherits Window {
                         Rectangle { background: Theme.border; height: 2px; }
                         Text {
                             text: @tr("Vision (screenshots · F8)");
-                            font-size: Metrics.font-body;
+                            font-size: 12px;
                             font-weight: 700;
                             color: Theme.text-primary;
                         }
                         Text {
                             text: @tr("Where F8 screenshots are analysed. SEPARATE from the text model above — a local text model can keep answering while images go to a vision-capable model.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         if Platform.is-macos : Text {
                             text: @tr("Text recognition (OCR) - Apple Vision is built into macOS; no download is required.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
@@ -3061,7 +3061,7 @@ export component SettingsWindow inherits Window {
                             // bundled in the app installer.
                             Text {
                                 text: @tr("Text recognition (OCR) — Shift+Alt+2 reads on-screen text aloud / copies it via a local engine. Without it, OCR falls back to the slower vision model.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -3075,7 +3075,7 @@ export component SettingsWindow inherits Window {
                             }
                             if root.ocr-installed && root.ocr-install-phase == 0 : Text {
                                 text: @tr("Text recognition is installed.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                             }
                             if root.ocr-install-phase != 0 : Text {
@@ -3086,7 +3086,7 @@ export component SettingsWindow inherits Window {
                                     : root.ocr-install-phase == 5 ? @tr("Text recognition already installed")
                                     : root.ocr-install-phase == 6 ? @tr("Text recognition installed")
                                     : @tr("Couldn't install text recognition — check the connection and retry.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
@@ -3095,7 +3095,7 @@ export component SettingsWindow inherits Window {
                         Rectangle { background: Theme.border; height: 1px; }
                         Text {
                             text: @tr("Speaker detection separates who spoke in the call's system audio (the «Determine speakers» button in the transcript window). Needs two models (~32 MB).");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
@@ -3109,12 +3109,12 @@ export component SettingsWindow inherits Window {
                         }
                         if root.diar-models-installed && root.diar-install-status == "" : Text {
                             text: @tr("Speaker models are installed.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-secondary;
                         }
                         if root.diar-install-status != "" : Text {
                             text: root.diar-install-status;
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
@@ -3149,7 +3149,7 @@ export component SettingsWindow inherits Window {
                         }
                         if Platform.is-macos && root.vision-provider-index < 0 : Text {
                             text: @tr("The saved Codex Vision provider is unavailable on macOS. Choose another Vision provider.");
-                            font-size: Metrics.font-caption;
+                            font-size: 10px;
                             color: Theme.warning;
                             wrap: word-wrap;
                         }
@@ -3157,7 +3157,7 @@ export component SettingsWindow inherits Window {
                             title: @tr("Managed MLX Vision model");
                             Text {
                                 text: @tr("Separate image-capable model for screenshots. MLX runs locally on Apple-silicon Macs only.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -3176,13 +3176,13 @@ export component SettingsWindow inherits Window {
                                 text: root.mlx-vision-model-index == 1
                                     ? @tr("Download size: 9.48 GiB. Supports text and image input. License: Apache-2.0.")
                                     : @tr("Download size: 1.63 GiB. Supports image input. License: Apache-2.0.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
                             Text {
                                 text: @tr("One managed MLX model stays active at a time. The app switches between the selected text and Vision models when a request needs the other one.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.warning;
                                 wrap: word-wrap;
                             }
@@ -3194,13 +3194,13 @@ export component SettingsWindow inherits Window {
                                     : root.mlx-vision-failed ? @tr("Download or activation failed. Retry when ready.")
                                     : root.mlx-vision-cancelled ? @tr("Download cancelled. Resume keeps verified files.")
                                     : @tr("Not installed");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: root.mlx-vision-failed ? Theme.danger : (root.mlx-vision-active ? Theme.success : Theme.text-secondary);
                                 wrap: word-wrap;
                             }
                             if root.mlx-vision-busy : Text {
                                 text: @tr("{} / {} MB downloaded", root.mlx-vision-done, root.mlx-vision-total);
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                             }
                             if root.mlx-vision-busy : Rectangle {
@@ -3236,15 +3236,15 @@ export component SettingsWindow inherits Window {
                         }
                         if !root.vision-same-available : Text {
                             text: @tr("Same as text model is unavailable because the selected text model does not declare image input. Choose another Vision provider or model.");
-                            font-size: Metrics.font-caption;
+                            font-size: 10px;
                             color: Theme.warning;
                             wrap: word-wrap;
                         }
                         if root.vision-provider-index == 2 : VerticalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             Text {
                                 text: @tr("Screenshots are sent to the cloud. Leave a field blank to reuse the text bridge's value.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.warning;
                                 wrap: word-wrap;
                             }
@@ -3278,10 +3278,10 @@ export component SettingsWindow inherits Window {
                             }
                         }
                         if root.vision-provider-index == 3 : VerticalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             Text {
                                 text: @tr("A 2nd local OpenAI-compatible server running a vision model (e.g. Qwen2-VL). Blank = reuse the text-local server.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -3316,25 +3316,25 @@ export component SettingsWindow inherits Window {
                         }
                         if root.vision-provider-index == 4 : Text {
                             text: @tr("Vision uses the OpenAI API connection and model configured in AI providers above. Text and vision selections remain independent.");
-                            font-size: Metrics.font-caption;
+                            font-size: 10px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         if root.vision-provider-index == 5 : Text {
                             text: @tr("Vision uses the Anthropic API connection and model configured in AI providers above. Text and vision selections remain independent.");
-                            font-size: Metrics.font-caption;
+                            font-size: 10px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         if !Platform.is-macos && root.vision-provider-index == 6 : VerticalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             Text {
                                 text: @tr("Choose a separate Codex model for screenshots. Only account models that advertise image input are shown.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
-                            Text { text: root.codex-auth-status; font-size: Metrics.font-label; color: Theme.text-secondary; wrap: word-wrap; }
+                            Text { text: root.codex-auth-status; font-size: 11px; color: Theme.text-secondary; wrap: word-wrap; }
                             HorizontalLayout {
                                 spacing: 6px;
                                 Button {
@@ -3355,7 +3355,7 @@ export component SettingsWindow inherits Window {
                                 }
                                 Text {
                                     text: @tr("Code:") + " " + root.codex-user-code;
-                                    font-size: Metrics.font-body;
+                                    font-size: 12px;
                                     font-weight: 700;
                                     color: Theme.accent;
                                     vertical-alignment: center;
@@ -3369,7 +3369,7 @@ export component SettingsWindow inherits Window {
                             }
                             if root.codex-copy-status != "" : Text {
                                 text: root.codex-copy-status;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                             }
                             HorizontalLayout {
@@ -3392,7 +3392,7 @@ export component SettingsWindow inherits Window {
                             }
                             if !root.codex-models-busy && root.codex-vision-model-labels.length == 0 : Text {
                                 text: @tr("No image-capable Codex account models are available. Sign in or refresh.");
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -3402,7 +3402,7 @@ export component SettingsWindow inherits Window {
                             Button { text: @tr("Test vision connection"); clicked => { root.vision-test-clicked(); } }
                             if root.vision-test-result != "" : Text {
                                 text: root.vision-test-result;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.accent;
                                 vertical-alignment: center;
                             }
@@ -3434,13 +3434,13 @@ export component SettingsWindow inherits Window {
                             title: @tr("What you get after setup");
                             Text {
                                 text: @tr("1) Ask your Hermes agent about your calls in ITS chat, in plain words: \"what was my last call about?\", \"search my calls for the salary talk\", \"suggest to suflyor memory that Timur is the team lead\", \"prepare a call profile for an interview at Acme and set it active\".");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
                             Text {
                                 text: @tr("2) Right here below: type a brief into «Prepare a call profile» — the agent researches it and activates the profile, and live answers on the call will use it.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
@@ -3449,7 +3449,7 @@ export component SettingsWindow inherits Window {
                             title: @tr("Hermes — bridge (agent reads suflyor)");
                             Text {
                                 text: @tr("Let a LOCAL Hermes agent read your calls, memory and profiles over a loopback API. Off by default; localhost-only; needs the token below.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -3460,13 +3460,13 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: @tr("Status:") + " " + root.hermes-bridge-status;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
                             Text {
                                 text: @tr("Bind host — leave 127.0.0.1 for a Hermes on THIS machine; for a REMOTE Hermes over Tailscale set this machine's Tailscale IP (100.x) or 0.0.0.0:");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
@@ -3484,13 +3484,13 @@ export component SettingsWindow inherits Window {
                             }
                             if root.hermes-bridge-remote : Text {
                                 text: @tr("[!] Bridge is reachable off this machine — keep it on a trusted network (Tailscale) only; the token is required.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.warning;
                                 wrap: word-wrap;
                             }
                             Text {
                                 text: @tr("Port:");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                             }
                             HorizontalLayout {
@@ -3507,7 +3507,7 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: @tr("Token (the install button below writes it into Hermes automatically):");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
@@ -3525,7 +3525,7 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: @tr("One click installs the agent plugin into the Hermes on THIS machine (files + token + enable). Then restart Hermes.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -3540,7 +3540,7 @@ export component SettingsWindow inherits Window {
                             }
                             if root.hermes-plugin-install-status != "" : Text {
                                 text: root.hermes-plugin-install-status;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
@@ -3549,13 +3549,13 @@ export component SettingsWindow inherits Window {
                             title: @tr("Hermes — API (suflyor asks the agent)");
                             Text {
                                 text: @tr("Point at the local Hermes API server to prepare a call profile with the agent (it can research). Slow, agentic — never used for live answers.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
                             Text {
                                 text: @tr("Hermes API URL:");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                             }
                             HorizontalLayout {
@@ -3572,7 +3572,7 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: @tr("Hermes API key (API_SERVER_KEY):");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                             }
                             HorizontalLayout {
@@ -3594,13 +3594,13 @@ export component SettingsWindow inherits Window {
                             }
                             if root.hermes-api-test-result != "" : Text {
                                 text: root.hermes-api-test-result;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
                             Text {
                                 text: @tr("Don't know the key? For a Hermes on THIS machine the button below enables its API server, creates the key and fills it in here. Then restart Hermes.");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
@@ -3614,7 +3614,7 @@ export component SettingsWindow inherits Window {
                             }
                             if root.hermes-api-setup-status != "" : Text {
                                 text: root.hermes-api-setup-status;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
@@ -3623,7 +3623,7 @@ export component SettingsWindow inherits Window {
                             title: @tr("Prepare a call profile");
                             Text {
                                 text: @tr("Prepare a call profile — describe the call, the agent researches it into an active profile:");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
@@ -3641,7 +3641,7 @@ export component SettingsWindow inherits Window {
                             }
                             if root.hermes-profile-status != "" : Text {
                                 text: root.hermes-profile-status;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
@@ -3655,7 +3655,7 @@ export component SettingsWindow inherits Window {
                         // ===== STT engine (Phase E10) =====
                         Text {
                             text: @tr("Speech-to-text engine. Local options run on this PC (no cloud, no Groq key needed).");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
@@ -3677,13 +3677,13 @@ export component SettingsWindow inherits Window {
                         // privacy / language / setup for the selected engine.
                         if root.stt-provider-index == 0 : Text {
                             text: @tr("Cloud: audio is sent to Groq's API for recognition. Requires a Groq API key. Supports many languages.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
                         if root.stt-provider-index == 1 : Text {
                             text: @tr("Local: runs entirely on this PC, no cloud. Russian only. Requires the GigaAM model folder set below.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
@@ -3691,7 +3691,7 @@ export component SettingsWindow inherits Window {
                             text: Platform.is-macos
                                 ? @tr("External: sends audio to the whisper-server URL below. Multilingual; no Groq key required.")
                                 : @tr("Local: runs on your whisper-server. Multilingual. Configure the server URL and model below.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
@@ -3699,7 +3699,7 @@ export component SettingsWindow inherits Window {
                         // transcribed as, by default.
                         Text {
                             text: @tr("Recognition language — Auto detects per phrase (Whisper/Groq). GigaAM is Russian-only.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
@@ -3714,7 +3714,7 @@ export component SettingsWindow inherits Window {
                         // Cloud recognition model — only relevant for the Groq engine.
                         if root.stt-provider-index == 0 : Text {
                             text: @tr("Cloud recognition model");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
@@ -3748,14 +3748,14 @@ export component SettingsWindow inherits Window {
                                     : root.stt-gigaam-install-failed ? @tr("Download or activation failed. Retry when ready.")
                                     : root.stt-gigaam-install-cancelled ? @tr("Download cancelled. Resume keeps verified files.")
                                     : @tr("Not installed");
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: root.stt-gigaam-install-failed ? Theme.danger
                                     : root.stt-gigaam-installed ? Theme.success
                                     : Theme.text-secondary;
                             }
                             if root.stt-gigaam-installing : Text {
                                 text: @tr("{} / {} MB downloaded", root.stt-gigaam-install-done, root.stt-gigaam-install-total);
-                                font-size: Metrics.font-caption;
+                                font-size: 10px;
                                 color: Theme.text-muted;
                             }
                             if root.stt-gigaam-installing : Rectangle {
@@ -3846,7 +3846,7 @@ export component SettingsWindow inherits Window {
 
                         Text {
                             text: @tr("Groq STT (Whisper) — API key + model. Used only when the engine above is Cloud.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
@@ -3854,7 +3854,7 @@ export component SettingsWindow inherits Window {
                         // ----- groq_api_key -----
                         Text {
                             text: @tr("Groq API key:") + " " + root.groq-api-key-status;
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
@@ -3894,7 +3894,7 @@ export component SettingsWindow inherits Window {
                         }
                         if root.stt-test-result != "" : Text {
                             text: root.stt-test-result;
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.accent;
                             wrap: word-wrap;
                         }
@@ -3907,7 +3907,7 @@ export component SettingsWindow inherits Window {
                         // word-wrap finally kicks in.
                         Text {
                             text: @tr("Tip: Save writes to suflyor/config.json in application configuration folder. Restart binary to re-load.");
-                            font-size: Metrics.font-caption;
+                            font-size: 10px;
                             color: Theme.accent;
                             wrap: word-wrap;
                             TouchArea {
@@ -3925,7 +3925,7 @@ export component SettingsWindow inherits Window {
                             title: @tr("Personal memory");
                         Text {
                             text: @tr("Personal memory is stored locally. Approved items are added to new AI requests and may be sent to your configured AI provider.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
@@ -3933,7 +3933,7 @@ export component SettingsWindow inherits Window {
                         // (internal project, term, names). Lands directly in the
                         // approved list below.
                         HorizontalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             SettingsLineEdit {
                                 placeholder-text: @tr("Your fact: project, term, names…");
                                 text <=> root.memory-add-text;
@@ -3947,19 +3947,19 @@ export component SettingsWindow inherits Window {
                         }
                         Text {
                             text: @tr("Facts also reach the meeting Summary — but only when their terms come up in the conversation.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         HorizontalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             Button {
                                 text: @tr("Extract from recent sessions");
                                 clicked => { root.memory-extract(); }
                             }
                             if root.memory-status != "" : Text {
                                 text: root.memory-status;
-                                font-size: Metrics.font-label;
+                                font-size: 11px;
                                 color: Theme.accent;
                                 vertical-alignment: center;
                             }
@@ -3967,13 +3967,13 @@ export component SettingsWindow inherits Window {
 
                         Text {
                             text: @tr("Suggestions ({})", root.memory-candidates.length);
-                            font-size: Metrics.font-body;
+                            font-size: 12px;
                             font-weight: 700;
                             color: Theme.text-primary;
                         }
                         if root.memory-candidates.length == 0 : Text {
                             text: @tr("No suggestions yet — click Extract after a session.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
@@ -3988,13 +3988,13 @@ export component SettingsWindow inherits Window {
                             max-height: 120px;
                             clip: true;
                             VerticalLayout {
-                                padding: Metrics.space-sm;
-                                spacing: Metrics.space-xs;
+                                padding: 8px;
+                                spacing: 4px;
                                 HorizontalLayout {
                                     spacing: 6px;
                                     Text {
                                         text: c.kind + "  " + c.reason;
-                                        font-size: Metrics.font-caption;
+                                        font-size: 10px;
                                         color: Theme.text-muted;
                                         vertical-alignment: center;
                                         horizontal-stretch: 1;
@@ -4010,7 +4010,7 @@ export component SettingsWindow inherits Window {
                                 }
                                 Text {
                                     text: c.text;
-                                    font-size: Metrics.font-label;
+                                    font-size: 11px;
                                     color: Theme.text-secondary;
                                     wrap: word-wrap;
                                 }
@@ -4019,13 +4019,13 @@ export component SettingsWindow inherits Window {
 
                         Text {
                             text: @tr("Approved memory ({})", root.memory-items.length);
-                            font-size: Metrics.font-body;
+                            font-size: 12px;
                             font-weight: 700;
                             color: Theme.text-primary;
                         }
                         if root.memory-items.length == 0 : Text {
                             text: @tr("No approved memory yet.");
-                            font-size: Metrics.font-label;
+                            font-size: 11px;
                             color: Theme.text-muted;
                         }
                         for m in root.memory-items : Rectangle {
@@ -4045,14 +4045,14 @@ export component SettingsWindow inherits Window {
                             VerticalLayout {
                             // A1 — display mode: fact text + Edit + Delete.
                             if root.memory-editing-id != m.id : HorizontalLayout {
-                                padding: Metrics.space-sm;
+                                padding: 8px;
                                 spacing: 6px;
                                 VerticalLayout {
                                     horizontal-stretch: 1;
                                     spacing: 2px;
                                     Text {
                                         text: m.kind + "  " + m.text;
-                                        font-size: Metrics.font-label;
+                                        font-size: 11px;
                                         color: Theme.text-secondary;
                                         wrap: word-wrap;
                                     }
@@ -4063,7 +4063,7 @@ export component SettingsWindow inherits Window {
                                     // Their verbatim capture can be restored explicitly below.
                                     if m.norm-status == "pending" && m.source-text != "" && m.source-text != m.text : Text {
                                         text: @tr("Original available");
-                                        font-size: Metrics.font-caption;
+                                        font-size: 10px;
                                         color: Theme.text-muted;
                                     }
                                     // Heuristic only (AI declined / not configured): show «почищено»
@@ -4071,13 +4071,13 @@ export component SettingsWindow inherits Window {
                                     // about a no-op clean.
                                     if m.norm-status == "heuristic" && m.text != m.source-text : Text {
                                         text: @tr("cleaned");
-                                        font-size: Metrics.font-caption;
+                                        font-size: 10px;
                                         color: Theme.text-muted;
                                     }
                                     // AI-condensed: the raw genuinely differs → show before→after.
                                     if m.norm-status == "llm" : Text {
                                         text: @tr("cleaned by AI") + (m.source-text != "" ? @tr(" · was: {}", m.source-text) : "");
-                                        font-size: Metrics.font-caption;
+                                        font-size: 10px;
                                         color: Theme.text-muted;
                                         wrap: word-wrap;
                                     }
@@ -4105,7 +4105,7 @@ export component SettingsWindow inherits Window {
                             // LineEdit + Save + Cancel. Only one row is ever in edit
                             // mode, so the shared edit buffer is unambiguous.
                             if root.memory-editing-id == m.id : HorizontalLayout {
-                                padding: Metrics.space-sm;
+                                padding: 8px;
                                 spacing: 6px;
                                 SettingsLineEdit {
                                     text <=> root.memory-edit-text;

@@ -6,16 +6,12 @@
 // field immediately (on every Save attempt and on Cancel). The status words
 // live HERE (@tr) so Rust only sets a code.
 
-import { LineEdit, Button, Palette } from "std-widgets.slint";
+import { LineEdit, Button } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Metrics } from "metrics.slint";
 import { CloseButton, DragGrip } from "controls.slint";
 
 export component MacAiSetupWindow inherits Window {
-    // std-widgets follow the active colour scheme instead of the light default.
-    property <bool> widgets-light: Theme.is-light;
-    init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
-    changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     no-frame: true;
     always-on-top: true;
     title: @tr("AI bridge setup");

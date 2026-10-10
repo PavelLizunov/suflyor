@@ -244,11 +244,11 @@ pub(crate) async fn complete_once(
     {
         Ok(r) => r,
         Err(error) => {
-            // The kind (timeout, connect, ...) carries no address, so the tile
-            // can tell "did not answer in time" from "could not connect".
-            let kind = transport_failure_kind(&error);
-            log::warn!("AI complete transport error ({kind})");
-            return Err(anyhow!("AI connection error ({kind})"));
+            log::warn!(
+                "AI complete transport error ({})",
+                transport_failure_kind(&error)
+            );
+            return Err(anyhow!("AI connection error"));
         }
     };
     if !resp.status().is_success() {

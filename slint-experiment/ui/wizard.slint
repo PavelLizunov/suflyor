@@ -15,7 +15,7 @@
 // (open_wizard / wire_wizard_steps / refill_wizard_summary) is untouched.
 // Per-step checks reuse the existing Diagnostics backend fns; an error warns
 // (level 4) but never blocks Next.
-import { Button, Switch, Palette } from "std-widgets.slint";
+import { Button, Switch } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Metrics } from "metrics.slint";
 import { BrandHeaderMark, CloseButton, DragGrip } from "controls.slint";
@@ -28,7 +28,7 @@ component RailStep inherits Rectangle {
     height: 30px;
     border-radius: 4px;
     background: root.state == 1 ? Theme.accent-subtle : transparent;
-    animate background { duration: Metrics.motion-fast; }
+    animate background { duration: 120ms; }
     // active left-accent bar (same idiom as the Settings NavItem)
     if root.state == 1: Rectangle {
         x: 0;
@@ -40,7 +40,7 @@ component RailStep inherits Rectangle {
     }
     HorizontalLayout {
         padding-left: 10px;
-        padding-right: Metrics.space-sm;
+        padding-right: 8px;
         spacing: 9px;
         // numbered badge → turns into a ✓ once the step is behind us
         Rectangle {
@@ -64,7 +64,7 @@ component RailStep inherits Rectangle {
             }
             if root.state != 2: Text {
                 text: root.num;
-                font-size: Metrics.font-caption;
+                font-size: 10px;
                 font-weight: 700;
                 color: root.state == 0 ? Theme.text-muted : Theme.accent;
                 x: (parent.width - self.width) / 2;
@@ -73,7 +73,7 @@ component RailStep inherits Rectangle {
         }
         Text {
             text: root.label;
-            font-size: Metrics.font-body;
+            font-size: 12px;
             color: root.state == 1 ? Theme.accent : (root.state == 2 ? Theme.text-secondary : Theme.text-muted);
             vertical-alignment: center;
             overflow: elide;
@@ -89,11 +89,11 @@ component ModeOption inherits Rectangle {
     in property <string> desc;
     in property <bool> selected;
     callback chosen();
-    border-radius: Metrics.radius-field;
+    border-radius: 8px;
     border-width: 1px;
     border-color: root.selected ? Theme.accent : Theme.border;
     background: root.selected ? Theme.accent-subtle : Theme.bg-surface;
-    animate border-color, background { duration: Metrics.motion-fast; }
+    animate border-color, background { duration: 120ms; }
     VerticalLayout {
         padding: 10px;
         spacing: 3px;
@@ -105,7 +105,7 @@ component ModeOption inherits Rectangle {
         }
         Text {
             text: root.desc;
-            font-size: Metrics.font-label;
+            font-size: 11px;
             color: Theme.text-secondary;
             wrap: word-wrap;
         }
@@ -117,10 +117,6 @@ component ModeOption inherits Rectangle {
 }
 
 export component WizardWindow inherits Window {
-    // std-widgets follow the active colour scheme instead of the light default.
-    property <bool> widgets-light: Theme.is-light;
-    init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
-    changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     no-frame: true;
     always-on-top: true;
     title: @tr("Setup wizard");
@@ -194,11 +190,11 @@ export component WizardWindow inherits Window {
                     background: Theme.border;
                 }
                 VerticalLayout {
-                    padding: Metrics.space-lg;
+                    padding: 16px;
                     spacing: 3px;
                     Text {
                         text: @tr("Setup");
-                        font-size: Metrics.font-caption;
+                        font-size: 10px;
                         font-weight: 700;
                         color: Theme.text-muted;
                     }
@@ -263,17 +259,17 @@ export component WizardWindow inherits Window {
                 Rectangle {
                     vertical-stretch: 1;
                     background: Theme.bg-elevated;
-                    border-radius: Metrics.radius-control;
+                    border-radius: 10px;
                     border-width: 1px;
                     border-color: Theme.border;
                     clip: true;
                     VerticalLayout {
-                        padding: Metrics.space-lg;
+                        padding: 16px;
                         spacing: 10px;
 
                         // Step 1 — mode
                         if root.step == 0: VerticalLayout {
-                            spacing: Metrics.space-sm;
+                            spacing: 8px;
                             Text {
                                 text: @tr("Choose how suflyor runs");
                                 font-size: Metrics.font-heading;

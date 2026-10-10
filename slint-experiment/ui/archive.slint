@@ -352,12 +352,12 @@ export component ArchiveWindow inherits Window {
                                         }
                                         if root.renaming-index == i : RowIcon {
                                             icon: @image-url("../assets/icons/check.svg");
-                                            a11y: @tr("Save name");
+                                            a11y: "Save name";
                                             clicked => { root.rename-confirmed(i); }
                                         }
                                         if root.renaming-index == i : RowIcon {
                                             icon: @image-url("../assets/icons/x.svg");
-                                            a11y: @tr("Cancel rename");
+                                            a11y: "Cancel rename";
                                             clicked => { root.rename-cancelled(); }
                                         }
                                         // ── Normal: title + meta + ✎ rename ──
@@ -378,22 +378,22 @@ export component ArchiveWindow inherits Window {
                                         }
                                         if root.renaming-index != i : RowIcon {
                                             icon: @image-url("../assets/icons/pencil.svg");
-                                            a11y: @tr("Rename session");
+                                            a11y: "Rename session";
                                             clicked => { root.rename-requested(i, row.name); }
                                         }
                                         if root.renaming-index != i : RowIcon {
                                             icon: @image-url("../assets/icons/ai.svg");
-                                            a11y: @tr("Regenerate name from transcript");
+                                            a11y: "Regenerate name from transcript";
                                             clicked => { root.regen-name-requested(i); }
                                         }
                                         if root.renaming-index != i : RowIcon {
                                             icon: @image-url("../assets/icons/trash.svg");
-                                            a11y: @tr("Delete session");
+                                            a11y: "Delete session";
                                             clicked => { root.delete-requested(i); }
                                         }
                                         if root.renaming-index != i : RowIcon {
                                             icon: @image-url("../assets/icons/bubble.svg");
-                                            a11y: @tr("View transcript");
+                                            a11y: "View transcript";
                                             clicked => { root.transcript-requested(i); }
                                         }
                                     }
@@ -420,7 +420,7 @@ export component ArchiveWindow inherits Window {
                                     alignment: center;
                                     horizontal-stretch: 0;
                                     HorizontalLayout {
-                                        spacing: Metrics.space-xs;
+                                        spacing: 4px;
                                     Rectangle {
                                         width: 96px;
                                         height: 26px;
@@ -496,8 +496,8 @@ export component ArchiveWindow inherits Window {
                                         border-color: Theme.border;
                                         background: debrief-ta.has-hover ? Theme.accent.with-alpha(0.18) : transparent;
                                         HorizontalLayout {
-                                            padding-left: Metrics.space-sm;
-                                            padding-right: Metrics.space-sm;
+                                            padding-left: 8px;
+                                            padding-right: 8px;
                                             alignment: center;
                                             Text {
                                                 text: @tr("Coaching");

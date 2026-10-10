@@ -47,28 +47,6 @@ export global Theme {
     out property <color> warning: scheme == 1 ? #E6B53C : scheme == 2 ? #E3B341 : scheme == 3 ? #8A5A00 : #E3B341;
     out property <color> danger: scheme == 1 ? #F26157 : scheme == 2 ? #F0596B : scheme == 3 ? #C7362F : #F85149;
 
-    // ---- Categories (what kind of thing a badge marks; not a status) ----
-    // One hue per category, the same in the three dark schemes, darkened for
-    // the light one. Use them through `tint` / `on-tint` below.
-    out property <color> cat-violet: scheme == 3 ? #5D4D8B : #A78BFA;
-    out property <color> cat-sky: scheme == 3 ? #1F698A : #38BDF8;
-    out property <color> cat-green: scheme == 3 ? #1D7555 : #34D399;
-    out property <color> cat-cyan: scheme == 3 ? #137584 : #22D3EE;
-    out property <color> cat-red: scheme == 3 ? #8A3F3F : #F87171;
-    out property <color> cat-orange: scheme == 3 ? #8B5121 : #FB923C;
-    out property <color> cat-indigo: scheme == 3 ? #484E8A : #818CF8;
-
-    // ---- A pill tinted with its own colour ----
-    // `tint(c)` is the fill, `on-tint(c)` the text and the border. The pair
-    // keeps 4.5:1 for every status, accent and category colour in every scheme
-    // (checked against bg-surface).
-    public pure function tint(c: color) -> color {
-        return c.with-alpha(0.10);
-    }
-    public pure function on-tint(c: color) -> color {
-        return root.is-light ? c.darker(0.2) : c;
-    }
-
     // ---- Borders ----
     out property <color> border: scheme == 1 ? #2E2A25 : scheme == 2 ? #24273A : scheme == 3 ? #D4DAE1 : #283039;
     out property <color> border-strong: scheme == 1 ? #423D36 : scheme == 2 ? #353953 : scheme == 3 ? #B7C0CA : #3A4552;

@@ -6,7 +6,6 @@
 // `region-selected` with the rect in LOGICAL px (the host multiplies by the
 // window scale-factor to get image pixels and crops the frozen buffer). Esc or
 // right-click or a too-small drag cancels.
-import { Metrics } from "metrics.slint";
 
 export component CaptureOverlay inherits Window {
     title: @tr("suflyor — capture");
@@ -118,7 +117,7 @@ export component CaptureOverlay inherits Window {
         Text {
             text: round(root.rw / 1px) + " × " + round(root.rh / 1px) + " px";
             color: #e8e8ec;
-            font-size: Metrics.font-label;
+            font-size: 11px;
             horizontal-alignment: center;
             vertical-alignment: center;
         }
@@ -135,7 +134,7 @@ export component CaptureOverlay inherits Window {
         hint := Text {
             text: @tr("Drag to select a region · Esc / right-click to cancel");
             color: #e8e8ec;
-            font-size: Metrics.font-body;
+            font-size: 12px;
             horizontal-alignment: center;
             vertical-alignment: center;
         }
@@ -211,7 +210,7 @@ export component CaptureOverlay inherits Window {
             text: root.translate-mode ? @tr("Translate — tap to Describe")
                 : (root.practice-mode ? @tr("Test Practice (self-check)") : @tr("Describe — tap to Translate"));
             color: #e8e8ec;
-            font-size: Metrics.font-body;
+            font-size: 12px;
             horizontal-alignment: center;
             vertical-alignment: center;
         }

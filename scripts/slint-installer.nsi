@@ -10,7 +10,7 @@
 ;   slint-experiment/target/release/bundle/suflyor-slint-setup.exe
 
 !define PRODUCT_NAME "suflyor"
-!define PRODUCT_VERSION "0.38.1-rc.5"
+!define PRODUCT_VERSION "0.38.1-rc.4"
 !define PRODUCT_PUBLISHER "x3d_mutant"
 !define PRODUCT_EXE "overlay-host.exe"
 !define PRODUCT_INSTALL_DIR "$LOCALAPPDATA\suflyor-slint"
@@ -122,9 +122,7 @@ Section "Uninstall"
   ; are per-user (RequestExecutionLevel user), so no elevation is needed. Covers
   ; the brand data dir AND the legacy "overlay-mvp" name (in case the build was
   ; uninstalled before ever launching the renamed version), plus the model tree.
-  ; "No" is the default button and the silent answer (/SD): a silent uninstall
-  ; keeps the data and never waits on this box.
-  MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Удалить также ваши данные (настройки, история сессий, записи) и скачанные модели ИИ?$\n$\nДа — стереть всё с диска. Нет — оставить данные (на случай переустановки)." /SD IDNO IDNO uninst_keep_data
+  MessageBox MB_YESNO|MB_ICONQUESTION "Удалить также ваши данные (настройки, история сессий, записи) и скачанные модели ИИ?$\n$\nДа — стереть всё с диска. Нет — оставить данные (на случай переустановки)." IDNO uninst_keep_data
     RMDir /r "$APPDATA\suflyor"
     RMDir /r "$APPDATA\overlay-mvp"
     RMDir /r "$PROFILE\suflyor-local-ai"

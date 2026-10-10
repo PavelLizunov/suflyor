@@ -65,7 +65,7 @@ export component DarkCheck inherits Rectangle {
             Rectangle {
                 width: 16px;
                 height: 16px;
-                border-radius: Metrics.radius-field;
+                border-radius: 8px;
                 y: (parent.height - self.height) / 2;
                 x: root.checked ? parent.width - self.width - 3px : 3px;
                 background: !root.enabled ? Theme.text-muted.with-alpha(0.45) : root.checked ? Theme.accent : Theme.text-muted;
@@ -130,10 +130,10 @@ export component NavGroupHeader inherits Rectangle {
     height: 22px;
     HorizontalLayout {
         padding-left: 9px;
-        padding-top: Metrics.space-sm;
+        padding-top: 8px;
         Text {
             text: root.label;
-            font-size: Metrics.font-caption;
+            font-size: 10px;
             font-weight: 700;
             color: Theme.text-muted;
             vertical-alignment: bottom;
@@ -157,7 +157,7 @@ export component NavItem inherits Rectangle {
     background: root.active
         ? Theme.accent-subtle
         : (ta.has-hover ? Theme.bg-elevated : transparent);
-    animate background { duration: Metrics.motion-fast; }
+    animate background { duration: 120ms; }
     if root.active: Rectangle {
         x: 0px;
         y: 6px;
@@ -181,7 +181,7 @@ export component NavItem inherits Rectangle {
             font-size: Metrics.font-body;
             color: root.active ? Theme.accent : Theme.text-secondary;
             vertical-alignment: center;
-            animate color { duration: Metrics.motion-fast; }
+            animate color { duration: 120ms; }
         }
     }
     ta := TouchArea {

@@ -323,7 +323,7 @@ pub(crate) fn open_recover_offer(
                         if let Some(o) = ow_revert.upgrade() {
                             o.set_timer_active(false);
                             o.set_status_text(SharedString::from("start failed"));
-                            o.set_status_tone(crate::ui::StatusTone::Danger);
+                            o.set_status_color(slint::Color::from_rgb_u8(0xe5, 0x4b, 0x4b));
                         }
                     });
                 }

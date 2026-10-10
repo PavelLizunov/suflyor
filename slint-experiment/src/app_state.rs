@@ -267,36 +267,6 @@ pub fn classify_ai_error(msg: &str) -> &'static str {
     }
 }
 
-/// The category from [`classify_ai_error`] in the UI language. A string that
-/// is not a known category is returned unchanged.
-#[must_use]
-pub fn ai_error_text(category: &'static str, is_ru: bool) -> &'static str {
-    if !is_ru {
-        return category;
-    }
-    match category {
-        "Codex security policy stopped this answer" => {
-            "Политика безопасности Codex остановила этот ответ"
-        }
-        "Codex did not honor the selected model" => "Codex не использовал выбранную модель",
-        "This Codex version cannot provide the required safe mode" => {
-            "Эта версия Codex не поддерживает нужный безопасный режим"
-        }
-        "AI bridge timed out" => "AI не ответил вовремя",
-        "AI bridge unreachable (connection refused)" => "AI недоступен (соединение не установлено)",
-        "AI bridge rejected request (auth failure)" => "AI отклонил запрос (ошибка авторизации)",
-        "AI bridge endpoint not found (URL or model wrong)" => {
-            "Адрес AI не найден (проверьте URL или модель)"
-        }
-        "AI bridge rate-limited" => "AI ограничил частоту запросов",
-        "AI bridge returned server error" => "Сервер AI вернул ошибку",
-        "AI bridge call failed (see overlay-host.log for diagnostic)" => {
-            "Запрос к AI не удался (подробности в overlay-host.log)"
-        }
-        other => other,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -484,11 +454,6 @@ mod tests {
                 "tcp connect: Connection refused (os error 10061)",
                 "AI bridge unreachable (connection refused)",
             ),
-            ("AI connection error (timeout)", "AI bridge timed out"),
-            (
-                "AI connection error (connect)",
-                "AI bridge unreachable (connection refused)",
-            ),
             (
                 "HTTP 401 Unauthorized from http://192.168.0.142:18902",
                 "AI bridge rejected request (auth failure)",
@@ -524,14 +489,6 @@ mod tests {
         ];
         for (input, expected_category) in cases {
             let got = classify_ai_error(input);
-            // Every category has a Russian text, and English stays as it is.
-            assert_eq!(ai_error_text(got, false), got);
-            assert!(
-                ai_error_text(got, true)
-                    .chars()
-                    .any(|c| ('а'..='я').contains(&c)),
-                "no Russian text for {got:?}"
-            );
             assert_eq!(
                 got, *expected_category,
                 "classify_ai_error({input:?}) returned {got:?}, expected {expected_category:?}"

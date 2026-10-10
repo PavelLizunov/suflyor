@@ -66,7 +66,7 @@ pub(super) fn spawn_text_tile(
     tile.set_tile_title(SharedString::from(title));
     tile.set_source_label(SharedString::from("read-aloud"));
     tile.set_trigger_label(SharedString::from(trigger));
-    tile.set_trigger_tone(crate::ui::TileTone::Cyan);
+    tile.set_trigger_color(slint::Color::from_rgb_u8(0x22, 0xd3, 0xee));
     tile.set_convo_id(convo_id);
     let rendered = user_turn_markdown(text);
     tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&rendered))));

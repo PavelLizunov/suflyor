@@ -365,8 +365,8 @@ pub(crate) fn wire_escalate(
         // answer now came off-box — parity with the Shift+F9 🧠 badge. Egress is
         // a conscious action (the user clicked 🧠); this just makes it legible.
         if let Some(t) = weak.upgrade() {
-            t.set_trigger_label(SharedString::from(crate::tile_text::escalated_badge(cfg_c.read().ui_is_ru())));
-            t.set_trigger_tone(crate::ui::TileTone::Sky);
+            t.set_trigger_label(SharedString::from("cloud (escalated)"));
+            t.set_trigger_color(slint::Color::from_rgb_u8(0x38, 0xbd, 0xf8));
         }
         fire_regenerate(
             convo_id,
@@ -461,7 +461,7 @@ pub(crate) fn fire_followup_ask(
     // ai:event deltas land in this tile.
     if let Some(tile) = tile_weak.upgrade() {
         tile.set_followup_busy(true);
-        tile.set_source_label(SharedString::from(crate::tile_text::asking_label(cfg.read().ui_is_ru())));
+        tile.set_source_label(SharedString::from("ai · asking…"));
         // Plain ellipsis — no hourglass glyph (tofu on the skia font fallback).
         let shown = format!("{prefix}…");
         tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&shown))));
