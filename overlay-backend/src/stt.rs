@@ -127,6 +127,10 @@ pub fn configure_gigaam_accelerator(use_gpu: bool) {
 /// Groq models list with the bearer; HTTP 2xx means the key is valid +
 /// the endpoint is reachable. 10s timeout. Does NOT log the key.
 pub async fn test_connection(api_key: String) -> Result<String> {
+    test_connection_at(GROQ_MODELS_URL, api_key).await
+}
+
+async fn test_connection_at(models_url: &str, api_key: String) -> Result<String> {
     if api_key.trim().is_empty() {
         return Err(anyhow::anyhow!("no Groq API key set"));
     }
@@ -134,12 +138,19 @@ pub async fn test_connection(api_key: String) -> Result<String> {
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .context("build reqwest client")?;
-    let resp = client
-        .get(GROQ_MODELS_URL)
-        .bearer_auth(&api_key)
-        .send()
-        .await
-        .context("GET groq models")?;
+    // Generic on transport failure, like the whisper-server branch below: the
+    // error chain of reqwest names the request URL and, behind a proxy, the
+    // proxy host. The Settings status line shows this text.
+    let resp = match client.get(models_url).bearer_auth(&api_key).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            log::warn!(
+                "STT Groq models GET failed ({})",
+                crate::ai::control::transport_failure_kind(&e)
+            );
+            anyhow::bail!("Groq API unreachable");
+        }
+    };
     let status = resp.status();
     if status.is_success() {
         Ok(format!("HTTP {} — key valid", status.as_u16()))
@@ -1384,6 +1395,14 @@ mod tests {
             kind,
             "connect" | "timeout" | "request" | "transport"
         ));
+    }
+
+    #[tokio::test]
+    async fn cloud_connection_test_reports_a_transport_failure_without_the_url() {
+        let err = test_connection_at("http://127.0.0.1:1/models", "dummy_key_123".to_string())
+            .await
+            .unwrap_err();
+        assert_eq!(format!("{err:#}"), "Groq API unreachable");
     }
 
     // ── build_whisper_prompt ──
