@@ -2332,3 +2332,41 @@ msgstr "Gemma 4 26B-A4B VLM 2.6-бит (Vision)"
 msgid "Download size: 9.48 GiB. Supports text and image input. License: Apache-2.0."
 msgstr "Размер загрузки: 9,48 ГиБ. Поддерживает текст и изображения. Лицензия: Apache-2.0."
 
+msgid "Mic muted (click to unmute)"
+msgstr "Микрофон выключен (нажмите, чтобы включить)"
+
+msgid "Mic live (click to mute)"
+msgstr "Микрофон включён (нажмите, чтобы выключить)"
+
+msgid "System audio capture"
+msgstr "Захват системного звука"
+
+msgid "Resume the session"
+msgstr "Продолжить сессию"
+
+msgid "Pause the session"
+msgstr "Приостановить сессию"
+
+msgid "Stealth (hide from capture)"
+msgstr "Скрытность (не показывать при захвате экрана)"
+
+msgid "Aggressive auto-tile"
+msgstr "Агрессивные авто-тайлы"
+
+msgid "Meeting summary"
+msgstr "Итог встречи"
+
+msgid "Write a question"
+msgstr "Написать вопрос"
+
+msgid "Screenshot to vision"
+msgstr "Скриншот в vision"
+
+msgid "Emergency restart"
+msgstr "Аварийный перезапуск"
+
+msgid "Compact reader mode"
+msgstr "Компактный режим чтения"
+
+msgid "Expand the bar"
+msgstr "Развернуть бар"
