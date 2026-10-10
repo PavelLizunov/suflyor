@@ -16,6 +16,7 @@
 // full-width action at the bottom of the nav, not a corner). Those two stay in
 // their own contexts but share the same x.svg + danger-hover language.
 import { Theme } from "theme.slint";
+import { Metrics } from "metrics.slint";
 
 export component CloseButton inherits Rectangle {
     in property <length> box: 30px;
@@ -35,7 +36,7 @@ export component CloseButton inherits Rectangle {
     border-width: 1px;
     border-color: cbta.has-hover ? Theme.danger.with-alpha(0.55) : Theme.border-strong;
     background: cbta.has-hover ? Theme.danger.with-alpha(0.16) : transparent;
-    animate background, border-color { duration: 120ms; }
+    animate background, border-color { duration: Metrics.motion-fast; }
 
     Image {
         source: @image-url("../assets/icons/x.svg");
@@ -119,7 +120,7 @@ export component SelectableText inherits Rectangle {
     // When display text differs from source text, show it without a selectable
     // TextInput so clipboard/memory can never receive the display-only rewrite.
     in property <string> source-text: root.text;
-    in property <length> font-size: 12px;
+    in property <length> font-size: Metrics.font-body;
     in property <int> font-weight: 400;
     in property <brush> text-color;
     in property <TextWrap> wrap: word-wrap;

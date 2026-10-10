@@ -42,7 +42,7 @@ component TableHeader inherits Rectangle {
             Text {
                 text: root.left;
                 font-family: Theme.font-mono;
-                font-size: 10px;
+                font-size: Metrics.font-caption;
                 font-weight: 700;
                 color: Theme.text-muted;
                 horizontal-alignment: center;
@@ -58,7 +58,7 @@ component TableHeader inherits Rectangle {
         Text {
             text: root.right;
             font-family: Theme.font-mono;
-            font-size: 10px;
+            font-size: Metrics.font-caption;
             font-weight: 700;
             color: Theme.text-muted;
             vertical-alignment: center;
@@ -123,7 +123,7 @@ component TableRow inherits Rectangle {
         }
         Text {
             text: root.desc;
-            font-size: 12px;
+            font-size: Metrics.font-body;
             color: Theme.text-secondary;
             wrap: word-wrap;
             vertical-alignment: center;

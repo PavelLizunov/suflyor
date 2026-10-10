@@ -420,7 +420,7 @@ export component ArchiveWindow inherits Window {
                                     alignment: center;
                                     horizontal-stretch: 0;
                                     HorizontalLayout {
-                                        spacing: 4px;
+                                        spacing: Metrics.space-xs;
                                     Rectangle {
                                         width: 96px;
                                         height: 26px;
@@ -496,8 +496,8 @@ export component ArchiveWindow inherits Window {
                                         border-color: Theme.border;
                                         background: debrief-ta.has-hover ? Theme.accent.with-alpha(0.18) : transparent;
                                         HorizontalLayout {
-                                            padding-left: 8px;
-                                            padding-right: 8px;
+                                            padding-left: Metrics.space-sm;
+                                            padding-right: Metrics.space-sm;
                                             alignment: center;
                                             Text {
                                                 text: @tr("Coaching");
