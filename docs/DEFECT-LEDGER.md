@@ -171,6 +171,20 @@ Found by: independent review of pull request #233 (pi, gpt-sol-latest) on 2026-1
 Fix plan: end a URL at the characters that cannot belong to it (comma, semicolon, quotes, angle brackets), or scan the remainder for a further scheme.
 Closed by:
 
+### D-022 Settings opens on the thirteenth tab   Severity: P3   Status: Open
+Evidence: slint-experiment/ui/settings_panel.slint:92 - `in-out property <int> active-tab: 0;` (and line 764: `label: @tr("Stealth"); ... tab-index: 0;`)
+Scenario: the default tab index is 0 and index 0 belongs to "Stealth", the thirteenth entry of the navigation list. A first open of Settings lands on Stealth instead of the first entry, "Profile + context".
+Found by: the Slint MCP check of the combined build on windows-worker on 2026-10-10 (the checked navigation entry right after opening Settings); then read in source. It may be deliberate; no comment says so.
+Fix plan: decide the intended first tab, then set the default to its index.
+Closed by:
+
+### D-023 The bar's state word stays English in the Russian interface   Severity: P3   Status: Open
+Evidence: slint-experiment/src/bin/overlay_host/tile_controller.rs:850 - `o.set_status_text(SharedString::from("recording"));` (also "idle" at lines 855 and 916, and overlay_host_windows.rs:777)
+Scenario: with the interface in Russian the first pill of the bar reads "recording" or "idle" while its neighbours read "спросить", "захватить", "старт". Same class as D-015: text built in Rust.
+Found by: screenshots of the Russian bar on windows-worker on 2026-10-10.
+Fix plan: check first whether the word is also used as a key (the tray uses the same word for its state); if so, translate at the point of display only.
+Closed by:
+
 ## Imported from the Grok audit (docs/audit-grok/, master 37c1230)
 
 The 14 reports hold 119 numbered findings. Each was checked against the source at 37c1230 on 2026-10-10 by a second model (pi, gpt-sol-latest, read-only tools, one run per report) with the instruction to quote the line it read; a script then checked that each quoted line exists at the cited path (91 of the first 115 rows matched on both citations, 21 on one, 2 on none, 1 had no citation). Result: 42 confirmed, 64 partial (the code is as described, the consequence is overstated or mitigated), 8 refuted, 5 need a run of the program.
