@@ -5,7 +5,7 @@ Single-user pet project, but if you fork or want to send a PR — here's the lay
 ## Setup
 
 **Prerequisites:**
-- Windows 10/11 (only OS supported — uses WASAPI + Win32 native APIs)
+- Windows 10/11 for the Windows product (WASAPI + Win32 native APIs). The macOS port builds on Apple Silicon; see the macOS block below.
 - Rust + cargo via rustup, **MSVC toolchain** (not GNU): `rustup default stable-msvc`
 - Visual Studio Build Tools 2022 with the C++ workload (for the MSVC linker)
 
@@ -30,18 +30,32 @@ scripts\build-slint-release.ps1 -Installer
 # → slint-experiment\target\release\bundle\suflyor-slint-setup.exe (NSIS)
 ```
 
+**Build the macOS package** (Apple Silicon, macOS 14.2+, Xcode command-line tools, Rust):
+```bash
+./slint-experiment/scripts/build-macos-dmg.sh
+# → slint-experiment/target/bundle/Suflyor-<version>-macos-arm64.dmg
+
+# Optional personal-build identity from the login Keychain (exact SHA-1):
+SUFLYOR_MACOS_SIGN_IDENTITY="<40-hex certificate SHA-1>" \
+  ./slint-experiment/scripts/build-macos-dmg.sh
+```
+The identity must already exist as a code-signing identity in the login Keychain. Its private key is never stored in this repository.
+
 ## Tests / gates
 
-All three crates must pass before any commit. Run the same full gate as CI:
+The gate depends on the change; `AGENTS.md`, "Verification routing", owns the
+rule. `scripts/git-gate-native.ps1 manual` classifies the diff as docs (a
+whitespace check, no build) or targeted (fmt, clippy and tests of the affected
+crate). The full gate is for a stable release:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci.ps1
 ```
 
-It runs fmt, clippy with warnings denied, full tests for `overlay-backend`,
-`slint-experiment`, and `suflyor-tts`, plus the i18n guard and a compile
-check for the `ui-mcp` QA feature. Do not replace it with `cargo test --lib`;
-that skips integration guard tests.
+It runs fmt, clippy with warnings denied and the full tests of all five crates,
+plus the i18n guard and a compile check for the `ui-mcp` QA feature. Do not
+replace a crate's tests with `cargo test --lib`; that skips integration guard
+tests.
 
 Visible UI changes also require the repository's Slint MCP audit against the
 exact binary being reviewed. Keep matching before/after screenshots for every

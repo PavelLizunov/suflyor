@@ -1,10 +1,10 @@
 # History index
 
-Completed history removed from the working tree: audit reports, retest checklists, release notes, release evidence and archive pages. The rule is in `docs/AGENTS.md`, section 6.
+Completed history removed from the working tree: audit reports, retest checklists, release notes, release evidence, archive pages, and completed goal charters, plans and dated reviews. The rule is in `docs/AGENTS.md`, section 6.
 
 Read a removed report with `git show <revision>:<path>`. List a removed folder with `git ls-tree -r --name-only <revision> <folder>/`. Find the removing commit with `git log --diff-filter=D --oneline -- <path>`. Use the full revision SHA.
 
-Every row below names the master commit 8a38baccc38ec317693be4dde376e958e8f3c242, the last master commit that holds these files. The "Removed in" column names the batch of the 2026-10-08 hygiene pass; the removing commit is found with the `git log` command above.
+Every row below names the master commit 8a38baccc38ec317693be4dde376e958e8f3c242, the last master commit that holds these files. The "Removed in" column names the batch or wave of the 2026-10-08 hygiene pass; the removing commit is found with the `git log` command above.
 
 | Path before removal | Revision that holds it | Removed in |
 |---|---|---|
@@ -94,3 +94,45 @@ Every row below names the master commit 8a38baccc38ec317693be4dde376e958e8f3c242
 | docs/retest-v0.37.0.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | batch 2 |
 | docs/retest-v0.38.0-rc.1-stt.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | batch 2 |
 | docs/retest-v0.38.0-rc.3-macos-audio.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | batch 2 |
+| POST_MORTEM_v0034.md | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/MIGRATION-COMPLETION-PLAN.md | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/PLAN-resilience-v0.8.0.md | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/archive-retest-v0.23.0.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/audit-2026-08-04-release-0360/ | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/audit-2026-08-15-math-player-tray/ | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/audit-2026-08-29-stt-macos/ | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/audit-2026-08-30-macos-settings-rc2/ | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/audit-2026-08-30-stt-mlx-tts-concurrency/ | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/dependency-review-2026-07-09.md | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/fable-brief-2026-07-04.md | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/fable-plan-2026-07-04.md | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/goal-codex-real-provider-rc16.md | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/goal-deps-updates-2026-07-09.md | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/goal-fable-plan-2026-07-04.md | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/goal-hermes-inapp-install-2026-07-10.md | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/goal-quality-2026-07-10.md | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/goal-suflyor-followups-2026-07-03.md | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/goal-teratts-codex-rc2.md | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/goal-teratts-rc17.md | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/goal-tester-tz-2026-07-06.md | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/goal-v0.30-plan-2026-07-05.md | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/retest-quality-q1-tts.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/retest-quality-q2-diarization.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/retest-quality-q3-icons.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/retest-quality-q4-ui.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/retest-quality-q5-player.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/retest-tile-lock-normalization.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/retest-v0.28.0-fixes.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/retest-v0.28.0-round2.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/retest-v0.30-I.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/retest-v0.30-player-audiofix.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/retest-v0.31.0-tz.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/retest-v0.36.1-rc.16.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/retest-v0.37.0-rc.1.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+| docs/retest-v0.38.0-rc.2-macos-settings.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
+
+## Reduced in place
+
+These files stay in the tree but lost their historical part. The full earlier text is read the same way.
+
+- `UPGRADING.md`: per-version migration notes for v0.0.1 to v0.1.1 (the retired Tauri/React build), 2233 lines. Revision 8a38baccc38ec317693be4dde376e958e8f3c242.
