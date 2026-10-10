@@ -1784,6 +1784,22 @@ msgstr "Заданные вами имена говорящих будут сб�
 msgid "Re-detect"
 msgstr "Определить заново"
 
+# Windows RC: optional Nemotron speaker engine.
+msgid "Speaker engine:"
+msgstr "Движок определения голосов:"
+
+msgid "Legacy"
+msgstr "Прежний"
+
+msgid "Nemotron 3"
+msgstr "Nemotron 3"
+
+msgid "Speakers: automatic (up to 8)"
+msgstr "Говорящие: автоматически (до 8)"
+
+msgid "Nemotron requires a one-time model download (~102 MB)."
+msgstr "Для Nemotron нужно один раз скачать модель (~102 МБ)."
+
 # V-1 — diarization model install prompt (shown when models are absent)
 msgid "Speaker detection needs a one-time model download (~30 MB)."
 msgstr "Для определения говорящих нужно один раз скачать модели (~30 МБ)."
