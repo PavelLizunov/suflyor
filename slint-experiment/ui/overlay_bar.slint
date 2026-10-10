@@ -576,7 +576,24 @@ export component OverlayBarWindow inherits Window {
     in-out property <bool> stealth-fault: false;
     property <string> presented-status: root.stealth-fault
         ? @tr("[!] stealth unavailable")
-        : root.status-text;
+        : root.localized-status(root.status-text);
+    // Rust sets these state words in English and compares against them, so
+    // they are translated here, at the point of display. Any other text
+    // (already localized by Rust) passes through unchanged.
+    pure function localized-status(s: string) -> string {
+        return s == "idle" ? @tr("idle") :
+               s == "recording" ? @tr("recording") :
+               s == "mic only" ? @tr("mic only") :
+               s == "mic muted" ? @tr("mic muted") :
+               s == "paused" ? @tr("paused") :
+               s == "wrapping up" ? @tr("wrapping up") :
+               s == "start failed" ? @tr("start failed") :
+               s == "sys ok" ? @tr("sys ok") :
+               s == "sys quiet" ? @tr("sys quiet") :
+               s == "sys silent" ? @tr("sys silent") :
+               s == "sys test failed" ? @tr("sys test failed") :
+               s == "AI unavailable" ? @tr("AI unavailable") : s;
+    }
 
     // Phase E6 v11 — live status indicators. `last-transcript-line`
     // shows the most recent STT output (truncated by Rust to ~120
