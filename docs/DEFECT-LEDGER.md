@@ -185,17 +185,65 @@ Found by: screenshots of the Russian bar on windows-worker on 2026-10-10.
 Fix plan: check first whether the word is also used as a key (the tray uses the same word for its state); if so, translate at the point of display only.
 Closed by: #246, master 449054081e700b730426d5cb24b685c7d27d5d48, released in v0.38.1-rc.4
 
-### D-024 A silent uninstall waits forever on a question whose default answer deletes the user's data   Severity: P2   Status: Open
+### D-024 A silent uninstall waits forever on a question whose default answer deletes the user's data   Severity: P2   Status: Closed
 Evidence: scripts/slint-installer.nsi:125 - `MessageBox MB_YESNO|MB_ICONQUESTION "Удалить также ваши данные (настройки, история сессий, записи) и скачанные модели ИИ?...` (no `/SD`)
 Scenario: `uninstall.exe /S` removes the program files, then shows this box although it runs silent, because the box has no silent default. A script or a package manager that uninstalls silently hangs with the registry key still present. The default button is Yes, which removes `%APPDATA%\suflyor` and the downloaded models.
 Found by: the install smoke of v0.38.1-rc.4 on windows-worker on 2026-10-10: the uninstaller was still running after five minutes; it was ended without an answer and the data was intact.
 Fix plan: `/SD IDNO` on the box, and `MB_DEFBUTTON2` so that Enter keeps the data.
+Closed by: #249, master 1161c72e96bd37ab276585325b9bd919e6ead89f, released in v0.38.1-rc.5. Checked on windows-worker: the silent uninstall of the built installer ended by itself and left the user data in place.
 
-### D-025 Texts that stay English in the Russian interface   Severity: P3   Status: Open
+### D-025 Texts that stay English in the Russian interface   Severity: P3   Status: Closed
 Evidence: slint-experiment/ui/archive.slint:381 - `a11y: "Rename session";` (also "Regenerate name from transcript", "Delete session", "View transcript" at lines 386 to 396); slint-experiment/src/bin/overlay_host/tile_ask.rs:296 - `"F9 ask · live"` and :311 `"F9 manual ask"`; slint-experiment/src/app_state.rs:266 - `"AI bridge call failed (see overlay-host.log for diagnostic)"`
 Scenario: with the interface in Russian the four row buttons of the archive announce English names, a tile opened with F9 has an English title, badge and state word ("error"), and its error text is English. Same class as D-015 and D-023: text that does not go through `@tr`, so the i18n guard does not see it.
 Found by: the Slint MCP pass of v0.38.1-rc.4 in Russian on windows-worker on 2026-10-10 (rule "untranslated" of the audit script, then read in source).
 Fix plan: `@tr` for the four archive names; the tile title, badge and error text through the language-aware helpers that the bar status already uses.
+Closed by: #249, master 1161c72e96bd37ab276585325b9bd919e6ead89f, released in v0.38.1-rc.5, for the texts named here. The wider class (text built in Rust in one language) is D-030.
+
+### D-026 F3 does nothing after an answer to F9 or to a typed question   Severity: P2   Status: Closed
+Evidence: slint-experiment/src/bin/overlay_host/tile_ask.rs:119 - `s.last_question = Some(out.display_question);` (line numbers of master 03fc755; the only writers of `last_question` were the auto-tile path, F6 and F3 itself; the streaming ask of F9 never wrote it)
+Scenario: the user presses F9, reads the answer, presses F3 to refine it. The log says `tile:error: {"message":"Reask: no previous Q/A yet — ask AI first."}` and nothing appears, because `tile:error` has no UI.
+Found by: live run against a stand-in AI endpoint on windows-worker on 2026-10-11 (first run of an answered tile on the worker), then read in source.
+Fix plan: remember a finished manual ask; show a notice tile when there is nothing to re-ask.
+Closed by: #249, master 1161c72e96bd37ab276585325b9bd919e6ead89f, released in v0.38.1-rc.5
+
+### D-027 Five windows show std-widgets in the light default on a dark window   Severity: P3   Status: Closed
+Evidence: slint-experiment/ui/text_ask.slint:15 - `import { LineEdit, Button } from "std-widgets.slint";` with no `Palette.color-scheme` in the file (also wizard.slint, recover_offer.slint, help.slint, macos_ai_setup.slint; master 03fc755)
+Scenario: the "write a question" window has a white field and a saturated blue button in the three dark schemes; the wizard has light grey buttons. Every other window sets the palette from `Theme.is-light`.
+Found by: captures of the question window and of the seven wizard steps on windows-worker on 2026-10-11.
+Fix plan: the same `widgets-light` lines as the other windows, and a test that requires them.
+Closed by: #249, master 1161c72e96bd37ab276585325b9bd919e6ead89f, released in v0.38.1-rc.5
+
+### D-028 A tinted pill fails the contrast rule against its own tint   Severity: P2   Status: Closed
+Evidence: slint-experiment/ui/tile.slint:616 - `background: root.trigger-color.with-alpha(0.18);` with the text in the same colour (master 03fc755); the colour came from Rust as an RGB literal (bar_tray.rs:45, tile_ask.rs:306 and 37 more)
+Scenario: light scheme: the bar's state word measured 1.60:1, the tile badge "F9 manual ask" 2.22:1, "AI streaming" 2.26:1. Dark schemes: danger, accent and muted on their own 18 percent tint compute to 4.0 to 4.4:1.
+Found by: measured contrast in the capture matrix of v0.38.1-rc.4 (2026-10-10) and of the tile captures (2026-10-11); the dark values are computed from the theme tokens.
+Fix plan: the host names a tone, the theme owns the colours, and one pair `tint` / `on-tint` defines a tinted pill.
+Closed by: #249, master 1161c72e96bd37ab276585325b9bd919e6ead89f, released in v0.38.1-rc.5
+
+### D-029 A request that the server never answers is reported as a refused connection   Severity: P3   Status: Closed
+Evidence: overlay-backend/src/ai/stream.rs:212 - `return Err(anyhow!("AI connection error"));` (master 03fc755), which `classify_ai_error` reads as "AI bridge unreachable (connection refused)"
+Scenario: the endpoint accepts the request and sends nothing. The tile shows "Asking AI…" for 120 seconds and then says the connection was refused, while the log says `transport error (timeout)`.
+Found by: live run against the stand-in endpoint in its "never answer" mode on windows-worker on 2026-10-11.
+Fix plan: keep the failure kind, which has no address in it, in the message.
+Closed by: #249, master 1161c72e96bd37ab276585325b9bd919e6ead89f, released in v0.38.1-rc.5
+
+### D-030 Text that the host builds in Rust exists in one language only   Severity: P3   Status: Open
+Evidence: slint-experiment/src/bin/overlay_host/settings_updates.rs:47 - `set_update_status` with `"Проверка GitHub…"`; slint-experiment/src/bin/overlay_host/settings_import_export.rs:103 - `"import cancelled"` (a script lists 62 Russian and 44 English literals passed straight to a Slint setter; ~/.hygiene/sufloyr/design/static-s7/rust-strings.tsv)
+Scenario: the English interface shows Russian status lines in Updates, local AI, Hermes, diagnostics, memory and the transcript window; the Russian interface shows English ones in the connection tests, import and export, and the wizard (`[err] no Groq API key set`). A comment in transcript.rs says Rust-built Russian is allowed, so part of this is a recorded choice, not an oversight.
+Found by: script over the sources on 2026-10-11; the wizard and tile cases were also seen live.
+Fix plan: one helper per module in the style of `status_copy.rs` and `tile_text.rs`, and a guard test that fails on a literal with letters passed to a setter. The same pass can replace the 118 `[ok]` / `[err]` / `[--]` markers by a state the UI draws.
+
+### D-031 Shift+Alt+1 with no selected text does nothing visible   Severity: P3   Status: Open
+Evidence: log of the run: `Shift+Alt+1 — read selection (clipboard)` then `sa1: copied 0 chars from selection`; no window, no status change
+Scenario: the user presses the read-aloud key with nothing selected (or in an application that does not answer Ctrl+C) and cannot tell whether the key works.
+Found by: the 13-key pass on windows-worker on 2026-10-11.
+Fix plan: a short status on the bar, as the other keys that cannot act already do.
+
+### D-032 `cargo fmt --check` does not see the modules of `overlay_host/`   Severity: P3   Status: Open
+Evidence: slint-experiment/src/bin/overlay_host/status_copy.rs:196 - a 109-character function signature, `pub(super) fn manual_tile_placeholder(deep_locked: bool, has_transcript: bool, is_ru: bool) -> &'static str {`, which rustfmt would wrap; slint-experiment/src/bin/overlay_host.rs:19 - `include!("overlay_host_windows.rs");`
+Scenario: the host's modules are declared with `#[path]` inside a file that is pulled in with `include!`, and rustfmt does not follow `include!`. The format step of the gate therefore passes whatever those 36 files look like.
+Found by: the worker's `cargo fmt` on 2026-10-11 changed nothing in a new file with an over-long line under `overlay_host/`, while it reformatted files outside it.
+Fix plan: a gate step that runs `rustfmt --check --edition 2021` on the files under `src/bin/overlay_host/`, after one formatting commit.
 
 ## Imported from the Grok audit (docs/audit-grok/, master 37c1230)
 
