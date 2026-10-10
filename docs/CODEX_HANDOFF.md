@@ -18,36 +18,39 @@ Operational note: Windows jobs follow
 because SSH or a terminal disconnected. macOS builds and live QA run only on
 `mm4`; Windows compilation and the repository gate run only on `winbrat`.
 
-## Open work — hygiene pass of 2026-10-08 to 2026-10-10 (draft pull requests, nothing merged)
+## State of master after the hygiene pass (2026-10-10)
 
-Written 2026-10-10 on branch `claude/defect-ledger`. Check `gh pr list` first: this list
-goes stale as soon as the owner merges or closes something.
+The sixteen pull requests of the 2026-10-08 to 2026-10-10 pass are on master through the
+integration pull request #239 (merge commit `f2122d0`): the documentation cleanup, wasapi
+0.25, the redaction and file-permission fixes, the dead-code removal, math notation, the
+tray menu fix, and the fixes for ledger D-006, D-013, D-014, D-015, D-016, D-019, D-020.
+#239 was green in CI, passed the Full gate `scripts/ci.ps1` on the Windows worker at the
+same commit and a live Slint MCP smoke. The 24 Sentinel and dependabot pull requests those
+changes replace are closed with a pointer to their replacement.
 
-Merge order matters, because the branches are stacked:
+The ruleset on master requires a branch to be up to date and green. Several pull requests
+that are ready together are merged into one integration branch and checked once, rather
+than updated and checked one after another.
 
-1. `hygiene/2026-10-08` (#220), then `claude/history-wave-2` (#224), then
-   `claude/defect-ledger` (#228): docs only.
-2. `claude/deps-wasapi-0.25` (#222) before any of the code branches below. Until it is
-   on master, `cargo-deny` is red for every code change (ledger D-003).
-3. Independent of each other, each on top of #222:
-   - from 2026-10-08: `claude/redaction-hardening` (#221), `claude/file-permissions`
-     (#223), `claude/dead-code` (#225), `claude/t5-math-notation` (#226),
-     `claude/t6-tray-menu` (#227);
-   - from 2026-10-10: `claude/ledger-small-fixes` (#232, D-006 and D-016),
-     `claude/mask-host-query` (#233, D-019), `claude/gate-directml` (#234, D-013),
-     `claude/journal-invalid-utf8` (#235), `claude/i18n-rust-strings` (#236, D-015),
-     `claude/d014-test-deadline` (#237, D-014), `claude/archive-count` (D-020).
+Also on master, through the second integration pull request #243 (merge commit `4fc4fe2`):
+Slint 1.18.1 (#241, fixes the start without OpenGL, D-018), accessibility state for the bar
+chips and the Settings navigation (#240, D-017) and the MCP client `scripts/slint_mcp.py`
+(#242). Checked the same way: CI, the host crate gate and a live Slint MCP check on the
+Windows worker.
 
-The Windows worker was used on 2026-10-08, 2026-10-09 and 2026-10-10: gate runs,
-`ui-mcp` builds and Slint MCP checks at exact commits are recorded in each pull request.
+Open, check `gh pr list` first:
 
-Waiting for the owner: merging; closing the old Sentinel and dependabot pull requests
-that #221, #222 and #223 supersede (and #231, which repeats part of #223); whether the
-audit reports under `docs/audit-grok/` stay in the tree; ledger D-004 and D-012, whose
-fix plans need a decision; the items listed as kept in #224.
+- #229 (Sentinel: STT connection test error text), #205 (Nemotron diarization), #217 and
+  #199 (dependabot; #199 does not compile).
+- `docs/audit-grok/` stays in the tree while `docs/goal-grok-codebase-audit.md` is an
+  active charter that refers to it. Its 119 findings were checked against the source; the
+  42 confirmed ones are in `docs/DEFECT-LEDGER.md` and 41 of them are not fixed.
+- Ledger D-004 and D-012 need a product decision; D-005, D-009, D-010, D-011, D-012,
+  D-021 are open.
+- Comments: a census with the Rust lexer exists (15023 comment lines, 477 of them history
+  or provenance); nothing was deleted.
 
-Findings are in [`docs/DEFECT-LEDGER.md`](DEFECT-LEDGER.md), including the 42 findings
-of the Grok audit that were confirmed in source.
+Findings are in [`docs/DEFECT-LEDGER.md`](DEFECT-LEDGER.md).
 
 ## Historical macOS MLX runtime handoff state (superseded) — 2026-08-20
 

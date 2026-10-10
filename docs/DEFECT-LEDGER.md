@@ -8,26 +8,26 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
-### D-001 Secret redaction of diagnostics and log exports is bypassed by case and delimiters   Severity: **P1**   Status: Open
+### D-001 Secret redaction of diagnostics and log exports is bypassed by case and delimiters   Severity: **P1**   Status: Closed
 Evidence: slint-experiment/src/bin/overlay_host/diagnostics.rs:150 - `if rest.starts_with("Bearer ") {`
 Scenario: a log line holding `authorization: bearer <token>`, `Bearer<tab><token>`, `Bearer  <token>` (two spaces), `Bearer: <token>`, an `x-api-key: <value>` header, or an `xai-` or `nvapi-` key is copied into the "Copy report" clipboard text and the "Collect logs" export with the credential intact.
 Found by: review of the 14 open Sentinel pull requests at 8a38bac; confirmed by seven failing tests in the Windows CI job at 530881781c552a569444df4e854a21300281e230 (121 passed, 7 failed).
 Fix plan: match the label in any ASCII case after any run of spaces, tabs, `:`, `=` or quotes; add the header and the two prefixes; keep a word boundary so the app's own `ai_bearer ...` log lines stay readable.
-Closed by: (open; fix proposed in pull request #221)
+Closed by: #221, merged through #239, master f2122d087e43ddeaea3f5df78d846ce73d883780
 
-### D-002 Private files are created readable by every local user on macOS and Linux   Severity: **P2**   Status: Open
+### D-002 Private files are created readable by every local user on macOS and Linux   Severity: **P2**   Status: Closed
 Evidence: overlay-backend/src/config.rs:1651 - `std::fs::write(path, bytes).context("write export")?;` (also the server-settings export at :1796, `config.json.bak` at :1611, the session journal at journal/writer.rs:77-81, the Hermes `.env` at hermes_install.rs:96)
 Scenario: with the default umask, a full settings export (API keys and bearers), the config backup, every session journal (transcripts, prompts, answers) and the Hermes `.env` (bridge token) get mode 0644, and the sessions directory 0755. Windows is not affected: access there follows the profile directory ACL.
 Found by: review of the 8 open Sentinel permission pull requests at 8a38bac; confirmed by four failing tests in the macOS CI job at 719f80c86753b6135ffe71cf6794a6e4f894b25e (modes 0644 and 0755 observed).
 Fix plan: one set of helpers that creates such files 0600 and the directory 0700 on Unix.
-Closed by: (open; fix proposed in pull request #223)
+Closed by: #223, merged through #239, master f2122d087e43ddeaea3f5df78d846ce73d883780
 
-### D-003 cargo-deny fails on every code change: wasapi 0.23 has an unsound advisory   Severity: **P2**   Status: Open
+### D-003 cargo-deny fails on every code change: wasapi 0.23 has an unsound advisory   Severity: **P2**   Status: Closed
 Evidence: overlay-backend/Cargo.toml:72 - `wasapi = "0.23"` (also suflyor-tts/Cargo.toml:30 and suflyor-teratts/Cargo.toml:30, and three committed lockfiles)
 Scenario: RUSTSEC-2026-0332 (`WaveFormat::parse` reads past the end of a `WAVEFORMATEX`, fixed in 0.25.0) makes the `cargo-deny` jobs fail for overlay-backend and suflyor-tts on any pull request that is not docs-only. No call to `WaveFormat::parse` exists in this repository, so the unsound function is not reached by project code; the damage is a red security check that hides real results. Open pull request #219 silences it by adding the advisory to the ignore list.
 Found by: the first run of the security workflow on pull request #221; confirmed in the job log and against the advisory text.
 Fix plan: bump the three manifests and the three lockfiles to 0.25.0, whose dependency requirements are identical.
-Closed by: (open; fix proposed in pull request #222)
+Closed by: #222, merged through #239, master f2122d087e43ddeaea3f5df78d846ce73d883780
 
 ### D-004 The Hermes `config.yaml` that receives a generated API key is written with default permissions   Severity: P2   Status: Open
 Evidence: overlay-backend/src/hermes_install.rs:145 - `std::fs::write(&cfg_path, text).map_err(|e| format!("запись config.yaml: {e}"))?;`
@@ -43,20 +43,20 @@ Found by: reading the workflows at 8a38bac.
 Fix plan: add both crates to the Windows job and to the cargo-deny matrix. This changes CI and needs the owner's decision.
 Closed by:
 
-### D-006 The packaging workflow names its artifact after an old version   Severity: P3   Status: Open
+### D-006 The packaging workflow names its artifact after an old version   Severity: P3   Status: Closed
 Evidence: .github/workflows/package-windows.yml:45 - `name: suflyor-v0.38.0-windows-${{ github.sha }}`
 Scenario: the version in `slint-experiment/Cargo.toml` is 0.38.1-rc.3; an installer built today is uploaded under a 0.38.0 name.
 Found by: reading the workflows at 8a38bac.
 Fix plan: read the version from `Cargo.toml` in the workflow.
 Fix proposed: pull request #232 (commit 041bb97): the workflow reads the version from `slint-experiment/Cargo.toml`. The workflow is manual and was not dispatched.
-Closed by:
+Closed by: #232, merged through #239, master f2122d087e43ddeaea3f5df78d846ce73d883780
 
-### D-007 A test of `append_bookmark` tests a copy of the code, and the function has no caller   Severity: P3   Status: Open
+### D-007 A test of `append_bookmark` tests a copy of the code, and the function has no caller   Severity: P3   Status: Closed
 Evidence: overlay-backend/src/journal/tests.rs:1043 - `fn append_bookmark_creates_file_with_header_then_appends_entries() {` (its body re-implements the append logic inline and never calls `append_bookmark`)
 Scenario: the test stays green whatever happens to the function. The function itself has had no caller since the bookmark chip was removed.
 Found by: the dead-code scan and a read of the test at 8a38bac.
 Fix plan: remove the function and the stand-in test.
-Closed by: (open; removal proposed in pull request #225, together with four other unused functions)
+Closed by: #225, merged through #239, master f2122d087e43ddeaea3f5df78d846ce73d883780
 
 ### D-008 A tray right click can be dropped forever after one menu fails to report completion
 UNVERIFIED IMPORTED HYPOTHESIS. Status: Open
@@ -65,6 +65,7 @@ Scenario: the styled menu is dismissed only after it gained focus and lost it, o
 What would confirm it: on the affected installation, the log line `tray menu shown` followed by right clicks that produce no further `tray menu` line.
 Found by: reading the code for task T6 at 8a38bac. Not reproduced on windows-worker on 2026-10-09: with the tray callback messages injected as Explorer sends them (twin events, a second click with the menu still open, five more clicks), the build of master plus the wasapi bump (2d55575) and the build with the change (8cf4904) both opened seven menus for seven clicks. The stuck state needs a menu that never receives focus, which did not happen there.
 Fix plan: tell the twin events of one click apart by time instead of a completion flag.
+Status note 2026-10-10: the change of #227 is on master through #239. The entry stays open: the reported stuck state was never reproduced, so the fix is not confirmed.
 Closed by: (open; change proposed in pull request #227)
 
 ### D-009 A secret stored under a JSON key is not redacted unless it carries a known prefix
@@ -98,13 +99,13 @@ Found by: a script count of test attributes at 8a38bac (1241 test functions; the
 Fix plan: decide whether the off-platform fallbacks are still wanted (Linux is not a product target); if not, remove them with their tests.
 Closed by:
 
-### D-013 The targeted gate cannot run backend tests on the Windows worker   Severity: P2   Status: Open
+### D-013 The targeted gate cannot run backend tests on the Windows worker   Severity: P2   Status: Closed
 Evidence: scripts/git-gate-native.ps1:178 - `& $cargo test --manifest-path $manifest` (no step stages `DirectML.dll`; scripts/ci.ps1:102-113 has the step "stage DirectML for backend tests")
 Scenario: on Winbrat (Windows 10 Enterprise LTSC, build 17763) the system `DirectML.dll` is version 10.0.17763 and lacks an export that the `ort` build (DirectML 1.15.4) needs. The Full gate copies the matching DLL next to the test executables; the targeted gate, which `AGENTS.md` prescribes for every normal change, does not. `scripts\git-gate-native.ps1 push` then fails at "overlay-backend test": the test executable exits with 0xc0000138 (STATUS_ORDINAL_NOT_FOUND) before a single test runs. GitHub's Windows image has a newer system DLL, so CI does not show it.
 Found by: the first targeted gate run on windows-worker at 2d55575248c5ea1c7e3008554325b98edbf13002 on 2026-10-08 (exit 1 after 2.1 minutes; the same at five other commits).
 Fix plan: move the staging step of ci.ps1 into a function both gates call, for overlay-backend and slint-experiment.
 Fix proposed: pull request #234 (commit 0e16f620ce433f5c4e0c04b4e37a33715b2f1900). Verified on windows-worker at that commit on 2026-10-10: `scripts\git-gate-native.ps1 push -Base origin/master` now runs the backend tests (726 passed, 1 failed: the test of D-014) where it exited with 0xc0000138 before.
-Closed by:
+Closed by: #234, merged through #239, master f2122d087e43ddeaea3f5df78d846ce73d883780
 
 ### D-014 A backend test passes alone and fails inside the full suite on the Windows worker   Severity: P3   Status: Open
 Evidence: overlay-backend/src/ai/tests.rs:75 - `"a queued stream kept a permit after its receiver was dropped"` (test `ai::tests::queued_stream_stops_when_receiver_is_dropped`; it takes two permits of the process-wide `AI_SEMAPHORE` and waits at most five seconds to get them back)
@@ -113,23 +114,24 @@ Found by: the first backend test run on windows-worker at 2d55575248c5ea1c7e3008
 Fix plan: give the test its own semaphore, or hold the lock that serialises the tests which use the shared one.
 Investigated on windows-worker at 0e16f620 on 2026-10-10: the lib suite with four test threads fails this test in five runs out of five (726 passed, about 11 seconds); with one test thread 727 pass; the test passes alone, with the whole `ai` module, and paired with each of the other 43 test modules one at a time. No single module is the cause.
 Fix proposed: pull request #237 (commit a67564b1e59e6c43a8e5445d9458893e42f94060): the deadline of the test becomes thirty seconds. Verified on windows-worker at that commit: five runs of the lib suite with four test threads, 727 passed each time. The test still shares the semaphore with its neighbours.
+Status note 2026-10-10: #237 is on master through #239 and the test passes on windows-worker. The entry stays open: the test still shares the process-wide semaphore with its neighbours.
 Closed by:
 
-### D-015 Russian text appears in the English interface   Severity: P3   Status: Open
+### D-015 Russian text appears in the English interface   Severity: P3   Status: Closed
 Evidence: slint-experiment/src/bin/overlay_host/settings_hermes.rs:38 - `"выключен".to_string()` (Settings, Hermes: "Status: выключен"); slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs:1256 - `"Микрофон"` (speaker labels "Микрофон" and "Система" in the transcript window); overlay-backend/src/journal/time.rs:29 - the `(МСК)` suffix of every session date in the archive
 Scenario: with the interface language set to English these strings stay Russian. `AGENTS.md` calls a hardcoded Cyrillic literal without `@tr()` a bug; these three are built in Rust, where the `.slint` i18n guard does not look.
 Found by: the Slint MCP audit on windows-worker on 2026-10-09 (builds of 8cf4904 and 77ad476, English interface): element labels read through MCP and screenshots.
 Fix plan: route the three strings through the translation table the Rust side already uses for other labels.
 Fix proposed: pull request #236 (commit 7262b9f993b11a859e78da151d27ee6fe13212ed) for the three places named above and the bridge error texts. Verified live on windows-worker at that commit in both languages ("Status: off", "Microphone", "System", "(MSK)"; Russian unchanged). Still Russian after it: `"Удаление не удалось (файл занят?) — повторите"` in aux_windows/archive.rs, and the class is wider (a script counts 829 lines with Cyrillic in the host Rust sources, comments included).
-Closed by:
+Closed by: #236 (the places named in the entry; the wider class stays open as noted), merged through #239, master f2122d087e43ddeaea3f5df78d846ce73d883780
 
-### D-016 Settings shows a hard-coded knowledge-base size that differs from the parser's count   Severity: P3   Status: Open
+### D-016 Settings shows a hard-coded knowledge-base size that differs from the parser's count   Severity: P3   Status: Closed
 Evidence: slint-experiment/ui/settings_panel.slint:1997 - `Embedded knowledge base — 1,696 entries`
 Scenario: the number is a literal in the UI text. A replica of `kb::parse` over the three knowledge files at 8a38bac counts 1652 entries. Whichever is right, the literal goes stale with every edit of the knowledge files.
 Found by: the Slint MCP audit of the Settings tabs on 2026-10-09 against the count made for docs/architecture.md. The exact figure was not taken from a run of the Rust code.
 Fix plan: show `kb::all().len()`.
 Fix proposed: pull request #232 (commit 4ea3f2d): both labels lose the number. The literal was 1643 knowledge entries plus 53 snippets in June 2026.
-Closed by:
+Closed by: #232, merged through #239, master f2122d087e43ddeaea3f5df78d846ce73d883780
 
 ### D-017 Several controls are not exposed as controls to accessibility and to the MCP audit   Severity: P3   Status: Open
 Evidence: slint-experiment/ui/settings_panel.slint (the 16 navigation entries), slint-experiment/ui/archive.slint (the "Cancel" and "Delete" choices of the delete confirmation), slint-experiment/ui/overlay_bar.slint (toggle chips)
@@ -137,34 +139,50 @@ Scenario: read through Slint MCP, the Settings navigation entries and the two bu
 Found by: the Slint MCP audit on windows-worker on 2026-10-09: element roles per window (the bar exposes 19 buttons; a Settings page exposes only its content controls and "Close").
 Fix plan: give the entries `accessible-role: button` or `tab`, and the chips `accessible-checked`.
 Addition 2026-10-10: in the Russian interface the bar's accessibility labels are English ("Session archive", "Settings", "Help"): slint-experiment/ui/overlay_bar.slint uses plain strings for `a11y:`, not `@tr()`. The Settings language combobox does not react to an MCP click, an accessibility action or a set value on its list item.
+Partly fixed by pull request #240, on master through #243 (checkable state for the toggle chips, a role and state for the Settings navigation entries, the bar labels through `@tr`). The delete confirmation buttons of the archive are not covered.
 Closed by:
 
-### D-018 The app exits at startup on a machine without OpenGL   Severity: P2   Status: Open
+### D-018 The app exits at startup on a machine without OpenGL   Severity: P2   Status: Closed
 Evidence: slint-experiment/src/bin/overlay_host_windows.rs:722 - `let _ = slint::BackendSelector::new()` with `.backend_name("winit".into())` and no renderer fallback
 Scenario: on Winbrat (a virtual machine without a GL driver) `overlay-host.exe` logs its startup, registers hotkeys and then ends with "Error: Failed to initialize OpenGL driver: Could not locate glCreateShader symbol". No window appears and nothing tells the user why. With the environment variable `SLINT_BACKEND=winit-software` the same binary starts and works. A user on a virtual desktop or with a broken GPU driver gets a program that silently does not open.
 Found by: the first start of the QA build of 8cf4904 on windows-worker on 2026-10-09; the software renderer was confirmed as the workaround in the same session.
 Fix plan: on that error, retry with the software renderer and log the fallback.
-Closed by:
+Fixed by pull request #241 (Slint 1.18.1). Seen on windows-worker: the 1.18.1 build starts without `SLINT_BACKEND=winit-software`, where the 1.17.1 build exits.
+Closed by: #241, merged through #243, master 4fc4fe286ce531525f4ccdf0ec5b48a856e56f83
 
-### D-019 `mask_host` keeps query values, fragments and a host behind extra slashes   Severity: P2   Status: Open
+### D-019 `mask_host` keeps query values, fragments and a host behind extra slashes   Severity: P2   Status: Closed
 Evidence: overlay-backend/src/config.rs:1927 - `format!("{scheme}***{port}{path}")` (and overlay-backend/src/config/tests.rs:1744 - a test that expects `"http://***:18902?token=secret123"`)
 Scenario: the function blanks the host and returns the rest of the URL unchanged. It is used for the server-settings import preview and by the diagnostics redactor, so `http://host:18902/v1?token=SECRET` keeps its token, and `//192.168.0.142:18902/v1` or `http:///192.168.0.142/v1` keep the address. It needs a base URL that carries a token in its query string, or a malformed URL, to matter.
 Found by: the Grok audit on master 37c1230 (docs/audit-grok/wave1_worker3_config.md finding 2 and wave4_worker1_privacy.md finding 2); confirmed in source by the lead and demonstrated by three failing tests in CI at da058978a30acba39336851e9c4185c1273a0e46.
 Fix proposed: pull request #233 (commit 612a770a08ae72b7bff49fb6795ca23d42ef41ce): query and fragment become `?***` and `#***`, leading slashes are kept and the host behind them is masked.
-Closed by:
+Closed by: #233, merged through #239, master f2122d087e43ddeaea3f5df78d846ce73d883780
 
-### D-020 The archive heading keeps the old session count after a delete   Severity: P3   Status: Open
+### D-020 The archive heading keeps the old session count after a delete   Severity: P3   Status: Closed
 Evidence: slint-experiment/src/bin/overlay_host/aux_windows/archive.rs:158 - `p.set_summary(SharedString::from(total.to_string()));` (the only place that sets the count; the delete handler rebuilds the rows only)
 Scenario: open the archive with four sessions, delete one: the heading still reads "Session archive (4)" above three rows until the window is opened again.
 Found by: the Slint MCP audit on windows-worker on 2026-10-10 (build of 7262b9f, a synthetic session deleted with the archive's own button); then read in source.
-Fix proposed: branch `claude/archive-count` (commit a0c8edf9bae5a71acf106d5483ea057580934182): the delete handler re-reads the count.
-Closed by:
+Fixed by pull request #238 (commit a0c8edf9bae5a71acf106d5483ea057580934182): the delete handler re-reads the count.
+Closed by: #238, merged through #239, master f2122d087e43ddeaea3f5df78d846ce73d883780
 
 ### D-021 `redact_urls` passes several URLs to `mask_host` as one when they are not separated by whitespace   Severity: P3   Status: Open
 Evidence: slint-experiment/src/bin/overlay_host/diagnostics.rs:134 - `let end = tail.find(char::is_whitespace).unwrap_or(tail.len());`
 Scenario: a log line such as `http://first.internal/v1,http://user:secret@second.internal/v1` is cut only at whitespace, so the second URL is treated as part of the first one's path and stays as it is. It needs two URLs joined by punctuation in a log line or a report.
 Found by: independent review of pull request #233 (pi, gpt-sol-latest) on 2026-10-10; read in source by the lead. Not demonstrated by a test.
 Fix plan: end a URL at the characters that cannot belong to it (comma, semicolon, quotes, angle brackets), or scan the remainder for a further scheme.
+Closed by:
+
+### D-022 Settings opens on the thirteenth tab   Severity: P3   Status: Open
+Evidence: slint-experiment/ui/settings_panel.slint:92 - `in-out property <int> active-tab: 0;` (and line 764: `label: @tr("Stealth"); ... tab-index: 0;`)
+Scenario: the default tab index is 0 and index 0 belongs to "Stealth", the thirteenth entry of the navigation list. A first open of Settings lands on Stealth instead of the first entry, "Profile + context".
+Found by: the Slint MCP check of the combined build on windows-worker on 2026-10-10 (the checked navigation entry right after opening Settings); then read in source. It may be deliberate; no comment says so.
+Fix plan: decide the intended first tab, then set the default to its index.
+Closed by:
+
+### D-023 The bar's state word stays English in the Russian interface   Severity: P3   Status: Open
+Evidence: slint-experiment/src/bin/overlay_host/tile_controller.rs:850 - `o.set_status_text(SharedString::from("recording"));` (also "idle" at lines 855 and 916, and overlay_host_windows.rs:777)
+Scenario: with the interface in Russian the first pill of the bar reads "recording" or "idle" while its neighbours read "спросить", "захватить", "старт". Same class as D-015: text built in Rust.
+Found by: screenshots of the Russian bar on windows-worker on 2026-10-10.
+Fix plan: check first whether the word is also used as a key (the tray uses the same word for its state); if so, translate at the point of display only.
 Closed by:
 
 ## Imported from the Grok audit (docs/audit-grok/, master 37c1230)
