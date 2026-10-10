@@ -188,11 +188,13 @@ pub fn save(c: &Conspect) -> bool {
 fn save_in(dir: &Path, c: &Conspect) -> anyhow::Result<()> {
     let stem =
         safe_stem(&c.session_id).ok_or_else(|| anyhow::anyhow!("unsafe conspect session id"))?;
-    std::fs::create_dir_all(dir)?;
+    // SECURITY: Enforce owner-only permissions (0o700) on sidecar directory on POSIX/Unix.
+    crate::paths::ensure_private_dir(dir)?;
     let path = dir.join(format!("{stem}.json"));
     let tmp = dir.join(format!("{stem}.json.tmp"));
     let bytes = serde_json::to_vec_pretty(c)?;
-    std::fs::write(&tmp, &bytes)?;
+    // SECURITY: Enforce owner-only permissions (0o600) on temporary sidecar file on POSIX/Unix.
+    crate::paths::write_private(&tmp, &bytes)?;
     // Atomic replace — same proven pattern as config::save (MoveFileEx replace).
     std::fs::rename(&tmp, &path)?;
     prune_in(dir, KEEP_NEWEST, "json");
@@ -367,10 +369,12 @@ pub fn save_debrief(session_id: &str, text: &str) -> bool {
 
 fn save_debrief_in(dir: &Path, session_id: &str, text: &str) -> anyhow::Result<()> {
     let stem = safe_stem(session_id).ok_or_else(|| anyhow::anyhow!("unsafe debrief session id"))?;
-    std::fs::create_dir_all(dir)?;
+    // SECURITY: Enforce owner-only permissions (0o700) on sidecar directory on POSIX/Unix.
+    crate::paths::ensure_private_dir(dir)?;
     let path = dir.join(format!("{stem}.txt"));
     let tmp = dir.join(format!("{stem}.txt.tmp"));
-    std::fs::write(&tmp, text.as_bytes())?;
+    // SECURITY: Enforce owner-only permissions (0o600) on temporary sidecar file on POSIX/Unix.
+    crate::paths::write_private(&tmp, text.as_bytes())?;
     std::fs::rename(&tmp, &path)?;
     // Bound the dir to the newest N, same policy as the conspect store (a debrief
     // is written once per session, so mtime == creation order).
@@ -756,6 +760,46 @@ mod tests {
                 .summary
                 .as_deref(),
             Some("now mapped")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn posix_sidecars_and_directories_have_mode_0600_and_0700() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("conspects");
+
+        let c = sample("s_perm");
+        save_in(&dir, &c).unwrap();
+
+        let dir_mode = std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(dir_mode, 0o700, "conspects dir must have mode 0o700");
+
+        let file_path = dir.join("s_perm.json");
+        let file_mode = std::fs::metadata(&file_path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(file_mode, 0o600, "conspect file must have mode 0o600");
+
+        let debrief_dir = tmp.path().join("debriefs");
+        save_debrief_in(&debrief_dir, "s_perm", "debrief text").unwrap();
+
+        let debrief_dir_mode = std::fs::metadata(&debrief_dir)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(debrief_dir_mode, 0o700, "debriefs dir must have mode 0o700");
+
+        let debrief_file_path = debrief_dir.join("s_perm.txt");
+        let debrief_file_mode = std::fs::metadata(&debrief_file_path)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(
+            debrief_file_mode, 0o600,
+            "debrief file must have mode 0o600"
         );
     }
 }
