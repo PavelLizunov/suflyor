@@ -133,8 +133,19 @@ pub(crate) fn redact_urls(s: &str) -> String {
         let tail = &rest[pos..];
         // URL ends at the first whitespace — base_url has no spaces.
         let end = tail.find(char::is_whitespace).unwrap_or(tail.len());
-        let end = next_scheme_before_query(&tail[..end]).unwrap_or(end);
-        out.push_str(&overlay_backend::config::mask_host(&tail[..end]));
+        let joined = next_scheme_before_query(&tail[..end]);
+        let end = joined.unwrap_or(end);
+        let url = &tail[..end];
+        let authority_at = url.find("://").map_or(0, |i| i + 3);
+        if joined.is_some() && !url[authority_at..].contains('/') {
+            // The next URL starts inside this one's authority
+            // (`http://alice:1234http://b/v1`): nothing after the scheme can be
+            // told apart from a credential, so none of it is kept.
+            out.push_str(&url[..authority_at]);
+            out.push_str("***");
+        } else {
+            out.push_str(&overlay_backend::config::mask_host(url));
+        }
         rest = &tail[end..];
     }
     out.push_str(rest);
@@ -970,6 +981,15 @@ mod tests {
         assert_eq!(
             redact_urls("a=HTTPS://one.internal/v1;Http://10.0.0.5:1234/v1"),
             "a=HTTPS://***/v1;Http://***:1234/v1"
+        );
+        // Cut inside the authority: a password must not be read as a port.
+        assert_eq!(
+            redact_urls("http://alice:1234http://second.internal/v1"),
+            "http://***http://***/v1"
+        );
+        assert_eq!(
+            redact_urls("http://first.internal:8080,http://user:secret@second.internal/v1"),
+            "http://***http://***/v1"
         );
         // A URL inside a query stays hidden together with the query.
         assert_eq!(

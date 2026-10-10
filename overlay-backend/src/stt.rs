@@ -1399,9 +1399,15 @@ mod tests {
 
     #[tokio::test]
     async fn cloud_connection_test_reports_a_transport_failure_without_the_url() {
-        let err = test_connection_at("http://127.0.0.1:1/models", "dummy_key_123".to_string())
+        // A local listener that accepts one connection and closes it without an
+        // HTTP answer: a transport failure that does not depend on a free port.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/models", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || drop(listener.accept()));
+        let err = test_connection_at(&url, "dummy_key_123".to_string())
             .await
             .unwrap_err();
+        server.join().unwrap();
         assert_eq!(format!("{err:#}"), "Groq API unreachable");
     }
 
