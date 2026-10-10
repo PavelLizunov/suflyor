@@ -74,6 +74,19 @@ fn hex_colours(code: &str) -> usize {
         .count()
 }
 
+/// The two lines every such window carries: the palette follows the theme at
+/// start and again when the scheme changes.
+const PALETTE_AT_START: &str =
+    "init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }";
+const PALETTE_ON_CHANGE: &str = "changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }";
+const WIDGETS_LIGHT: &str = "property <bool> widgets-light: Theme.is-light;";
+
+/// True when the uncommented source binds the std-widgets palette to the theme.
+fn palette_follows_theme(src: &str) -> bool {
+    let has = |needle: &str| src.lines().any(|line| code(line).trim() == needle);
+    has(WIDGETS_LIGHT) && has(PALETTE_AT_START) && has(PALETTE_ON_CHANGE)
+}
+
 #[test]
 fn a_window_with_std_widgets_takes_their_palette_from_the_theme() {
     let mut missing = Vec::new();
@@ -85,14 +98,24 @@ fn a_window_with_std_widgets_takes_their_palette_from_the_theme() {
         let src = fs::read_to_string(&path).expect("read ui file");
         let is_window = src.contains(" inherits Window {");
         let uses_widgets = src.contains("\"std-widgets.slint\"");
-        if is_window && uses_widgets && !src.contains("Palette.color-scheme") {
+        if is_window && uses_widgets && !palette_follows_theme(&src) {
             missing.push(file);
         }
     }
     assert!(
         missing.is_empty(),
-        "these windows use std-widgets and do not set Palette.color-scheme from Theme.is-light: {missing:?}"
+        "these windows use std-widgets and do not bind Palette.color-scheme to Theme.is-light: {missing:?}"
     );
+}
+
+#[test]
+fn the_palette_rule_rejects_a_fixed_palette_and_a_commented_one() {
+    let good = format!("    {WIDGETS_LIGHT}\n    {PALETTE_AT_START}\n    {PALETTE_ON_CHANGE}\n");
+    assert!(palette_follows_theme(&good));
+    let fixed = "    init => { Palette.color-scheme = ColorScheme.light; }\n";
+    assert!(!palette_follows_theme(fixed));
+    let commented = good.replace("    init", "    // init");
+    assert!(!palette_follows_theme(&commented));
 }
 
 #[test]

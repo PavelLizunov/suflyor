@@ -242,7 +242,9 @@ fn fallback_question(is_ru: bool) -> &'static str {
 
 /// Stores a finished manual ask as the last question and answer, so F3 has
 /// something to re-ask. Sits inside the generation gate: a superseded stream
-/// is dropped before it reaches this sink.
+/// is dropped before it reaches this sink. An answer that finished just before
+/// a newer ask replaced it may still be stored; it is a complete answer, and
+/// the newer ask overwrites it when it finishes.
 struct RememberAnswer {
     inner: Arc<dyn RuntimeEvents>,
     rt: SharedSlintRuntime,
@@ -599,7 +601,7 @@ pub(crate) fn fire_f9_ask(
         );
     }
 
-    let (transcript_lines, screenshot) = {
+    let (transcript_lines, screenshot, last_line) = {
         let mut s = slint_replay::runtime_state::lock(slint_rt);
         let lines: Vec<String> = s
             .transcript
@@ -607,16 +609,15 @@ pub(crate) fn fire_f9_ask(
             .map(|l| format!("[{:?}] {}", l.source, l.text))
             .collect();
         let shot = s.last_screenshot.take();
-        (lines, shot)
+        // Taken under the same lock as the lines the request is built from.
+        let last_line = s.transcript.back().map(|l| l.text.clone());
+        (lines, shot, last_line)
     };
     // What F3 re-asks after this answer: the typed text, or the line the ask is about.
-    let remembered_question = typed_question.clone().unwrap_or_else(|| {
-        let s = slint_replay::runtime_state::lock(slint_rt);
-        s.transcript.back().map_or_else(
-            || fallback_question(ui_is_ru).to_string(),
-            |l| l.text.clone(),
-        )
-    });
+    let remembered_question = typed_question
+        .clone()
+        .or(last_line)
+        .unwrap_or_else(|| fallback_question(ui_is_ru).to_string());
     // A local TEXT model can't accept an image_url part — drop the
     // screenshot unless the user flagged the local model as vision-capable.
     let screenshot = if matches!(endpoint_hint.protocol, ai::AiProtocol::CodexSubscription)
