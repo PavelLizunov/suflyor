@@ -139,16 +139,16 @@ Scenario: read through Slint MCP, the Settings navigation entries and the two bu
 Found by: the Slint MCP audit on windows-worker on 2026-10-09: element roles per window (the bar exposes 19 buttons; a Settings page exposes only its content controls and "Close").
 Fix plan: give the entries `accessible-role: button` or `tab`, and the chips `accessible-checked`.
 Addition 2026-10-10: in the Russian interface the bar's accessibility labels are English ("Session archive", "Settings", "Help"): slint-experiment/ui/overlay_bar.slint uses plain strings for `a11y:`, not `@tr()`. The Settings language combobox does not react to an MCP click, an accessibility action or a set value on its list item.
-Fix proposed: pull request #240 (checkable state for the toggle chips, a role and state for the Settings navigation entries, the bar labels through `@tr`). The delete confirmation buttons of the archive are not covered.
+Partly fixed by pull request #240, on master through #243 (checkable state for the toggle chips, a role and state for the Settings navigation entries, the bar labels through `@tr`). The delete confirmation buttons of the archive are not covered.
 Closed by:
 
-### D-018 The app exits at startup on a machine without OpenGL   Severity: P2   Status: Open
+### D-018 The app exits at startup on a machine without OpenGL   Severity: P2   Status: Closed
 Evidence: slint-experiment/src/bin/overlay_host_windows.rs:722 - `let _ = slint::BackendSelector::new()` with `.backend_name("winit".into())` and no renderer fallback
 Scenario: on Winbrat (a virtual machine without a GL driver) `overlay-host.exe` logs its startup, registers hotkeys and then ends with "Error: Failed to initialize OpenGL driver: Could not locate glCreateShader symbol". No window appears and nothing tells the user why. With the environment variable `SLINT_BACKEND=winit-software` the same binary starts and works. A user on a virtual desktop or with a broken GPU driver gets a program that silently does not open.
 Found by: the first start of the QA build of 8cf4904 on windows-worker on 2026-10-09; the software renderer was confirmed as the workaround in the same session.
 Fix plan: on that error, retry with the software renderer and log the fallback.
-Fix proposed: pull request #241 (Slint 1.18.1). Seen on windows-worker: the 1.18.1 build starts without `SLINT_BACKEND=winit-software`, where the 1.17.1 build exits.
-Closed by:
+Fixed by pull request #241 (Slint 1.18.1). Seen on windows-worker: the 1.18.1 build starts without `SLINT_BACKEND=winit-software`, where the 1.17.1 build exits.
+Closed by: #241, merged through #243, master 4fc4fe286ce531525f4ccdf0ec5b48a856e56f83
 
 ### D-019 `mask_host` keeps query values, fragments and a host behind extra slashes   Severity: P2   Status: Closed
 Evidence: overlay-backend/src/config.rs:1927 - `format!("{scheme}***{port}{path}")` (and overlay-backend/src/config/tests.rs:1744 - a test that expects `"http://***:18902?token=secret123"`)

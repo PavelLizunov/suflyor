@@ -32,10 +32,14 @@ The ruleset on master requires a branch to be up to date and green. Several pull
 that are ready together are merged into one integration branch and checked once, rather
 than updated and checked one after another.
 
+Also on master, through the second integration pull request #243 (merge commit `4fc4fe2`):
+Slint 1.18.1 (#241, fixes the start without OpenGL, D-018), accessibility state for the bar
+chips and the Settings navigation (#240, D-017) and the MCP client `scripts/slint_mcp.py`
+(#242). Checked the same way: CI, the host crate gate and a live Slint MCP check on the
+Windows worker.
+
 Open, check `gh pr list` first:
 
-- #240 (accessibility state, D-017), #241 (Slint 1.18.1, D-018), #242 (the MCP client
-  `scripts/slint_mcp.py`), combined in the integration pull request #243.
 - #229 (Sentinel: STT connection test error text), #205 (Nemotron diarization), #217 and
   #199 (dependabot; #199 does not compile).
 - `docs/audit-grok/` stays in the tree while `docs/goal-grok-codebase-audit.md` is an
