@@ -484,6 +484,11 @@ mod tests {
                 "tcp connect: Connection refused (os error 10061)",
                 "AI bridge unreachable (connection refused)",
             ),
+            ("AI connection error (timeout)", "AI bridge timed out"),
+            (
+                "AI connection error (connect)",
+                "AI bridge unreachable (connection refused)",
+            ),
             (
                 "HTTP 401 Unauthorized from http://192.168.0.142:18902",
                 "AI bridge rejected request (auth failure)",
