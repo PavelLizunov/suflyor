@@ -88,6 +88,35 @@ pub(crate) fn fire_f3_reask(
             health: s.health.clone(),
         }
     };
+    // The key must visibly react: with nothing to re-ask, say so in a notice
+    // tile instead of doing nothing.
+    if inputs.last_question.is_none() || inputs.last_answer.is_none() {
+        let (is_ru, stealth, preferred_monitor) = {
+            let c = cfg.read();
+            (c.ui_is_ru(), c.stealth_enabled, c.tile_monitor_name.clone())
+        };
+        let (title, msg) = nothing_to_reask_copy(is_ru);
+        let hint = match preferred_monitor.as_deref() {
+            Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
+            _ => MonitorHint::Auto,
+        };
+        if let Err(e) = events.spawn_tile_full(
+            TileSpec {
+                question: title.to_string(),
+                answer: msg.to_string(),
+                source: "reask".into(),
+                is_translation: false,
+                highlights: vec![],
+                summary_session: None,
+            },
+            hint,
+            stealth,
+            TileKind::Error,
+        ) {
+            eprintln!("[overlay-host] F3 notice tile spawn failed: {e}");
+        }
+        return;
+    }
     let events_c = events.clone();
     let cfg_c = cfg.clone();
     let rt_c = slint_rt.clone();
@@ -186,6 +215,82 @@ pub(crate) fn fire_f6_manual_spawn(
             events_c.emit("cost:update", serde_json::json!({ "session_usd": total }));
         }
     });
+}
+
+fn nothing_to_reask_copy(is_ru: bool) -> (&'static str, &'static str) {
+    if is_ru {
+        (
+            "Повторный вопрос (F3)",
+            "Пока нечего переспрашивать. Сначала задайте вопрос (F9) и дождитесь ответа — F3 уточнит его.",
+        )
+    } else {
+        (
+            "Re-ask (F3)",
+            "Nothing to re-ask yet. Ask a question first (F9) and wait for the answer; F3 then refines it.",
+        )
+    }
+}
+
+/// The question F3 re-asks when an F9 answer had no transcript line to name.
+fn fallback_question(is_ru: bool) -> &'static str {
+    if is_ru {
+        "Вопрос по встрече"
+    } else {
+        "Meeting question"
+    }
+}
+
+/// Stores a finished manual ask as the last question and answer, so F3 has
+/// something to re-ask. Sits inside the generation gate: a superseded stream
+/// is dropped before it reaches this sink. An answer that finished just before
+/// a newer ask replaced it may still be stored; it is a complete answer, and
+/// the newer ask overwrites it when it finishes.
+struct RememberAnswer {
+    inner: Arc<dyn RuntimeEvents>,
+    rt: SharedSlintRuntime,
+    question: String,
+    answer: std::sync::Mutex<String>,
+}
+
+impl RuntimeEvents for RememberAnswer {
+    fn emit(&self, channel: &str, payload: serde_json::Value) {
+        if channel == "ai:event" {
+            match payload.get("type").and_then(serde_json::Value::as_str) {
+                Some("delta") => {
+                    if let Some(text) = payload.get("text").and_then(serde_json::Value::as_str) {
+                        self.answer
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .push_str(text);
+                    }
+                }
+                Some("done") => {
+                    let answer = self
+                        .answer
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .trim()
+                        .to_string();
+                    if !answer.is_empty() {
+                        let mut s = slint_replay::runtime_state::lock(&self.rt);
+                        s.last_question = Some(self.question.clone());
+                        s.last_answer = Some(answer);
+                    }
+                }
+                _ => {}
+            }
+        }
+        self.inner.emit(channel, payload);
+    }
+    fn spawn_tile_full(
+        &self,
+        spec: TileSpec,
+        monitor: MonitorHint,
+        stealth: bool,
+        kind: TileKind,
+    ) -> Result<String, String> {
+        self.inner.spawn_tile_full(spec, monitor, stealth, kind)
+    }
 }
 
 fn missing_cloud_auth_copy(is_ru: bool) -> (&'static str, &'static str) {
@@ -290,26 +395,27 @@ pub(crate) fn fire_f9_ask(
     // spawn tiles (previously stuck at #0).
     let seq = TILE_DISPLAY_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
     tile.set_sequence(seq as i32);
-    tile.set_tile_title(SharedString::from(if is_text {
-        "text · live"
-    } else {
-        "F9 ask · live"
-    }));
-    tile.set_source_label(SharedString::from("ai · asking…"));
+    let tile_is_ru = cfg.read().ui_is_ru();
+    tile.set_tile_title(SharedString::from(crate::tile_text::ask_title(
+        is_text, tile_is_ru,
+    )));
+    tile.set_source_label(SharedString::from(crate::tile_text::asking_label(
+        tile_is_ru,
+    )));
     // Phase E6 v12 — purple trigger badge for manual F9 ask so user
     // sees which tile came from a hotkey vs auto-detector. V0.8.0 (Поток D):
     // a CLOUD-escalated ask (Shift+F9) gets a distinct 🧠 cloud badge so the
     // user sees THIS answer came from the cloud model (egress is visible).
     // V0.8.3 — a typed "✏ Написать" ask gets its own green badge.
     if is_text {
-        tile.set_trigger_label(SharedString::from("text ask"));
-        tile.set_trigger_color(slint::Color::from_rgb_u8(0x34, 0xd3, 0x99));
+        tile.set_trigger_label(SharedString::from(crate::tile_text::text_ask_badge(tile_is_ru)));
+        tile.set_trigger_tone(crate::ui::TileTone::Green);
     } else if route == AskRoute::Cloud {
-        tile.set_trigger_label(SharedString::from("cloud (Shift+F9)"));
-        tile.set_trigger_color(slint::Color::from_rgb_u8(0x38, 0xbd, 0xf8));
+        tile.set_trigger_label(SharedString::from(crate::tile_text::cloud_ask_badge(tile_is_ru)));
+        tile.set_trigger_tone(crate::ui::TileTone::Sky);
     } else {
-        tile.set_trigger_label(SharedString::from("F9 manual ask"));
-        tile.set_trigger_color(slint::Color::from_rgb_u8(0xa7, 0x8b, 0xfa));
+        tile.set_trigger_label(SharedString::from(crate::tile_text::f9_ask_badge(tile_is_ru)));
+        tile.set_trigger_tone(crate::ui::TileTone::Violet);
     }
     // Phase E6 v45 — this tile carries a conversation, so it shows the
     // continue-dialog input. busy=true until the first answer completes.
@@ -323,7 +429,8 @@ pub(crate) fn fire_f9_ask(
         .map(user_turn_markdown)
         .unwrap_or_default();
     tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&format!(
-        "{initial_prefix}Asking AI…"
+        "{initial_prefix}{}",
+        crate::tile_text::asking_body(tile_is_ru)
     )))));
     let weak_close = tile.as_weak();
     let vec_for_close = tiles.clone();
@@ -494,7 +601,7 @@ pub(crate) fn fire_f9_ask(
         );
     }
 
-    let (transcript_lines, screenshot) = {
+    let (transcript_lines, screenshot, last_line) = {
         let mut s = slint_replay::runtime_state::lock(slint_rt);
         let lines: Vec<String> = s
             .transcript
@@ -502,8 +609,15 @@ pub(crate) fn fire_f9_ask(
             .map(|l| format!("[{:?}] {}", l.source, l.text))
             .collect();
         let shot = s.last_screenshot.take();
-        (lines, shot)
+        // Taken under the same lock as the lines the request is built from.
+        let last_line = s.transcript.back().map(|l| l.text.clone());
+        (lines, shot, last_line)
     };
+    // What F3 re-asks after this answer: the typed text, or the line the ask is about.
+    let remembered_question = typed_question
+        .clone()
+        .or(last_line)
+        .unwrap_or_else(|| fallback_question(ui_is_ru).to_string());
     // A local TEXT model can't accept an image_url part — drop the
     // screenshot unless the user flagged the local model as vision-capable.
     let screenshot = if matches!(endpoint_hint.protocol, ai::AiProtocol::CodexSubscription)
@@ -633,8 +747,16 @@ pub(crate) fn fire_f9_ask(
                 overlay_backend::ai::microcents_to_usd(s.session_cost_microcents)
             });
             let t0 = std::time::Instant::now();
-            let events_for_task =
-                gated_events(&bridge_for_work, events_for_work.clone(), generation);
+            let events_for_task = gated_events(
+                &bridge_for_work,
+                Arc::new(RememberAnswer {
+                    inner: events_for_work.clone(),
+                    rt: slint_rt_for_work.clone(),
+                    question: remembered_question,
+                    answer: std::sync::Mutex::new(String::new()),
+                }),
+                generation,
+            );
             // CRITICAL: `ai::stream_chat` internally calls `tokio::spawn`, which
             // panics with "there is no reactor running" off a tokio thread; the
             // rt_handle.spawn future provides the runtime context.
@@ -673,7 +795,49 @@ pub(crate) fn fire_f9_ask(
 
 #[cfg(test)]
 mod tests {
-    use super::missing_cloud_auth_copy;
+    use super::{missing_cloud_auth_copy, nothing_to_reask_copy, RememberAnswer, RuntimeEvents};
+    use std::sync::Arc;
+
+    fn remember(question: &str) -> (RememberAnswer, slint_replay::runtime_state::SharedSlintRuntime) {
+        let rt = slint_replay::runtime_state::shared_runtime();
+        let sink = RememberAnswer {
+            inner: Arc::new(overlay_backend::events::Noop),
+            rt: rt.clone(),
+            question: question.to_string(),
+            answer: std::sync::Mutex::new(String::new()),
+        };
+        (sink, rt)
+    }
+
+    #[test]
+    fn the_f3_notice_has_both_ui_languages() {
+        assert_eq!(nothing_to_reask_copy(false).0, "Re-ask (F3)");
+        assert!(nothing_to_reask_copy(true).1.starts_with("Пока нечего"));
+    }
+
+    #[test]
+    fn a_finished_ask_becomes_the_last_question_and_answer() {
+        let (sink, rt) = remember("What is an index?");
+        sink.emit("ai:event", serde_json::json!({ "type": "start", "id": "1" }));
+        sink.emit("ai:event", serde_json::json!({ "type": "delta", "text": " An index " }));
+        sink.emit("ai:event", serde_json::json!({ "type": "delta", "text": "speeds up reads.\n" }));
+        assert!(slint_replay::runtime_state::lock(&rt).last_answer.is_none());
+        sink.emit("ai:event", serde_json::json!({ "type": "done", "reason": "stop" }));
+        let s = slint_replay::runtime_state::lock(&rt);
+        assert_eq!(s.last_question.as_deref(), Some("What is an index?"));
+        assert_eq!(s.last_answer.as_deref(), Some("An index speeds up reads."));
+    }
+
+    #[test]
+    fn a_failed_or_empty_ask_is_not_remembered() {
+        let (sink, rt) = remember("q");
+        sink.emit("ai:event", serde_json::json!({ "type": "delta", "text": "partial" }));
+        sink.emit("ai:event", serde_json::json!({ "type": "error", "message": "x" }));
+        assert!(slint_replay::runtime_state::lock(&rt).last_question.is_none());
+        let (sink, rt) = remember("q");
+        sink.emit("ai:event", serde_json::json!({ "type": "done", "reason": "stop" }));
+        assert!(slint_replay::runtime_state::lock(&rt).last_answer.is_none());
+    }
 
     #[test]
     fn cloud_auth_notice_has_both_ui_languages() {
