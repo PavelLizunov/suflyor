@@ -164,26 +164,38 @@ Found by: the Slint MCP audit on windows-worker on 2026-10-10 (build of 7262b9f,
 Fixed by pull request #238 (commit a0c8edf9bae5a71acf106d5483ea057580934182): the delete handler re-reads the count.
 Closed by: #238, merged through #239, master f2122d087e43ddeaea3f5df78d846ce73d883780
 
-### D-021 `redact_urls` passes several URLs to `mask_host` as one when they are not separated by whitespace   Severity: P3   Status: Open
+### D-021 `redact_urls` passes several URLs to `mask_host` as one when they are not separated by whitespace   Severity: P3   Status: Closed
 Evidence: slint-experiment/src/bin/overlay_host/diagnostics.rs:134 - `let end = tail.find(char::is_whitespace).unwrap_or(tail.len());`
 Scenario: a log line such as `http://first.internal/v1,http://user:secret@second.internal/v1` is cut only at whitespace, so the second URL is treated as part of the first one's path and stays as it is. It needs two URLs joined by punctuation in a log line or a report.
 Found by: independent review of pull request #233 (pi, gpt-sol-latest) on 2026-10-10; read in source by the lead. Not demonstrated by a test.
 Fix plan: end a URL at the characters that cannot belong to it (comma, semicolon, quotes, angle brackets), or scan the remainder for a further scheme.
-Closed by:
+Closed by: #246, master 449054081e700b730426d5cb24b685c7d27d5d48, released in v0.38.1-rc.4
 
-### D-022 Settings opens on the thirteenth tab   Severity: P3   Status: Open
+### D-022 Settings opens on the thirteenth tab   Severity: P3   Status: Closed
 Evidence: slint-experiment/ui/settings_panel.slint:92 - `in-out property <int> active-tab: 0;` (and line 764: `label: @tr("Stealth"); ... tab-index: 0;`)
 Scenario: the default tab index is 0 and index 0 belongs to "Stealth", the thirteenth entry of the navigation list. A first open of Settings lands on Stealth instead of the first entry, "Profile + context".
 Found by: the Slint MCP check of the combined build on windows-worker on 2026-10-10 (the checked navigation entry right after opening Settings); then read in source. It may be deliberate; no comment says so.
 Fix plan: decide the intended first tab, then set the default to its index.
-Closed by:
+Closed by: #246, master 449054081e700b730426d5cb24b685c7d27d5d48, released in v0.38.1-rc.4
 
-### D-023 The bar's state word stays English in the Russian interface   Severity: P3   Status: Open
+### D-023 The bar's state word stays English in the Russian interface   Severity: P3   Status: Closed
 Evidence: slint-experiment/src/bin/overlay_host/tile_controller.rs:850 - `o.set_status_text(SharedString::from("recording"));` (also "idle" at lines 855 and 916, and overlay_host_windows.rs:777)
 Scenario: with the interface in Russian the first pill of the bar reads "recording" or "idle" while its neighbours read "спросить", "захватить", "старт". Same class as D-015: text built in Rust.
 Found by: screenshots of the Russian bar on windows-worker on 2026-10-10.
 Fix plan: check first whether the word is also used as a key (the tray uses the same word for its state); if so, translate at the point of display only.
-Closed by:
+Closed by: #246, master 449054081e700b730426d5cb24b685c7d27d5d48, released in v0.38.1-rc.4
+
+### D-024 A silent uninstall waits forever on a question whose default answer deletes the user's data   Severity: P2   Status: Open
+Evidence: scripts/slint-installer.nsi:125 - `MessageBox MB_YESNO|MB_ICONQUESTION "Удалить также ваши данные (настройки, история сессий, записи) и скачанные модели ИИ?...` (no `/SD`)
+Scenario: `uninstall.exe /S` removes the program files, then shows this box although it runs silent, because the box has no silent default. A script or a package manager that uninstalls silently hangs with the registry key still present. The default button is Yes, which removes `%APPDATA%\suflyor` and the downloaded models.
+Found by: the install smoke of v0.38.1-rc.4 on windows-worker on 2026-10-10: the uninstaller was still running after five minutes; it was ended without an answer and the data was intact.
+Fix plan: `/SD IDNO` on the box, and `MB_DEFBUTTON2` so that Enter keeps the data.
+
+### D-025 Texts that stay English in the Russian interface   Severity: P3   Status: Open
+Evidence: slint-experiment/ui/archive.slint:381 - `a11y: "Rename session";` (also "Regenerate name from transcript", "Delete session", "View transcript" at lines 386 to 396); slint-experiment/src/bin/overlay_host/tile_ask.rs:296 - `"F9 ask · live"` and :311 `"F9 manual ask"`; slint-experiment/src/app_state.rs:266 - `"AI bridge call failed (see overlay-host.log for diagnostic)"`
+Scenario: with the interface in Russian the four row buttons of the archive announce English names, a tile opened with F9 has an English title, badge and state word ("error"), and its error text is English. Same class as D-015 and D-023: text that does not go through `@tr`, so the i18n guard does not see it.
+Found by: the Slint MCP pass of v0.38.1-rc.4 in Russian on windows-worker on 2026-10-10 (rule "untranslated" of the audit script, then read in source).
+Fix plan: `@tr` for the four archive names; the tile title, badge and error text through the language-aware helpers that the bar status already uses.
 
 ## Imported from the Grok audit (docs/audit-grok/, master 37c1230)
 
