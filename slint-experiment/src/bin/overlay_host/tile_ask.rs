@@ -303,13 +303,13 @@ pub(crate) fn fire_f9_ask(
     // V0.8.3 — a typed "✏ Написать" ask gets its own green badge.
     if is_text {
         tile.set_trigger_label(SharedString::from("text ask"));
-        tile.set_trigger_color(slint::Color::from_rgb_u8(0x34, 0xd3, 0x99));
+        tile.set_trigger_tone(crate::ui::TileTone::Green);
     } else if route == AskRoute::Cloud {
         tile.set_trigger_label(SharedString::from("cloud (Shift+F9)"));
-        tile.set_trigger_color(slint::Color::from_rgb_u8(0x38, 0xbd, 0xf8));
+        tile.set_trigger_tone(crate::ui::TileTone::Sky);
     } else {
         tile.set_trigger_label(SharedString::from("F9 manual ask"));
-        tile.set_trigger_color(slint::Color::from_rgb_u8(0xa7, 0x8b, 0xfa));
+        tile.set_trigger_tone(crate::ui::TileTone::Violet);
     }
     // Phase E6 v45 — this tile carries a conversation, so it shows the
     // continue-dialog input. busy=true until the first answer completes.

@@ -523,6 +523,8 @@ export component OverlayBarWindow inherits Window {
         : root.status-tone == StatusTone.danger ? Theme.danger
         : root.status-tone == StatusTone.info ? Theme.accent
         : Theme.text-muted;
+    // A verified stealth failure overrides the tone with the warning colour.
+    property <color> pill-color: root.stealth-fault ? Theme.warning : root.status-color;
 
     // Live capture flags.
     in-out property <bool> mic-active: false;
@@ -757,8 +759,8 @@ export component OverlayBarWindow inherits Window {
             // TouchArea here is safe: its bbox is only the pill, so
             // it can't shadow the sibling chips' TouchAreas.
             Rectangle {
-                background: (root.stealth-fault ? Theme.warning : root.status-color).with-alpha(0.18);
-                border-color: root.stealth-fault ? Theme.warning : root.status-color;
+                background: Theme.tint(root.pill-color);
+                border-color: Theme.on-tint(root.pill-color);
                 border-width: 1px;
                 border-radius: Metrics.radius-control;
                 height: 22px;
@@ -803,7 +805,7 @@ export component OverlayBarWindow inherits Window {
                         text: root.presented-status;
                         font-size: Metrics.font-label;
                         font-weight: 600;
-                        color: root.stealth-fault ? Theme.warning : root.status-color;
+                        color: Theme.on-tint(root.pill-color);
                         vertical-alignment: center;
                     }
                 }
@@ -1192,8 +1194,8 @@ export component OverlayBarWindow inherits Window {
                 width: root.ai-streaming ? 80px : 0px;
                 height: 18px;
                 y: (parent.height - self.height) / 2;
-                background: root.ai-streaming ? #818cf8.with-alpha(0.22) : transparent;
-                border-color: #818cf8;
+                background: root.ai-streaming ? Theme.tint(Theme.cat-indigo) : transparent;
+                border-color: Theme.on-tint(Theme.cat-indigo);
                 border-width: root.ai-streaming ? 1px : 0px;
                 border-radius: 9px;
                 horizontal-stretch: 0;
@@ -1204,7 +1206,7 @@ export component OverlayBarWindow inherits Window {
                     padding-right: 6px;
                     Image {
                         source: @image-url("../assets/icons/brain.svg");
-                        colorize: #818cf8;
+                        colorize: Theme.on-tint(Theme.cat-indigo);
                         width: 12px;
                         height: 12px;
                         image-fit: contain;
@@ -1213,7 +1215,7 @@ export component OverlayBarWindow inherits Window {
                     Text {
                         text: @tr("AI streaming");
                         font-size: Metrics.font-caption;
-                        color: #818cf8;
+                        color: Theme.on-tint(Theme.cat-indigo);
                         vertical-alignment: center;
                     }
                 }
@@ -1244,8 +1246,8 @@ export component OverlayBarWindow inherits Window {
                 // bar: only the pill is the drag zone, so it can't shadow the
                 // sibling buttons' TouchAreas). Tinted by the live session state.
                 Rectangle {
-                    background: (root.stealth-fault ? Theme.warning : root.status-color).with-alpha(0.18);
-                    border-color: root.stealth-fault ? Theme.warning : root.status-color;
+                    background: Theme.tint(root.pill-color);
+                    border-color: Theme.on-tint(root.pill-color);
                     border-width: 1px;
                     border-radius: Metrics.radius-control;
                     height: 22px;
@@ -1305,7 +1307,7 @@ export component OverlayBarWindow inherits Window {
                             text: root.presented-status;
                             font-size: Metrics.font-label;
                             font-weight: 600;
-                            color: root.stealth-fault ? Theme.warning : root.status-color;
+                            color: Theme.on-tint(root.pill-color);
                             vertical-alignment: center;
                             // Elide a long status within the capped pill so it can
                             // never overflow the narrow compact window. Short

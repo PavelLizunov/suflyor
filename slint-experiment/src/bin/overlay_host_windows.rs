@@ -1972,10 +1972,10 @@ fn main() -> Result<(), slint::PlatformError> {
             if let Some(first) = req.spec.highlights.first() {
                 tile.set_trigger_label(SharedString::from(first.clone()));
                 let is_keyword = first.starts_with("keyword");
-                tile.set_trigger_color(if is_keyword {
-                    slint::Color::from_rgb_u8(0xfb, 0x92, 0x3c) // orange
+                tile.set_trigger_tone(if is_keyword {
+                    crate::ui::TileTone::Orange
                 } else {
-                    slint::Color::from_rgb_u8(0x6c, 0xcf, 0xff) // cyan
+                    crate::ui::TileTone::Sky
                 });
             }
             // Render answer markdown via the spike adapter

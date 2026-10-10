@@ -517,7 +517,7 @@ pub(crate) fn launch_vision_for_bgra(
     tile.set_tile_title(SharedString::from(title_s));
     tile.set_source_label(SharedString::from(source_s));
     tile.set_trigger_label(SharedString::from(trigger_s));
-    tile.set_trigger_color(slint::Color::from_rgb_u8(0x22, 0xd3, 0xee)); // cyan
+    tile.set_trigger_tone(crate::ui::TileTone::Cyan);
     tile.set_convo_id(convo_id);
     tile.set_followup_busy(true);
     wire_tile_drag(&tile);
@@ -635,7 +635,7 @@ pub(crate) fn launch_vision_for_bgra(
             // Cloud badge — parity with the text tile's 🧠 (egress stays legible).
             if let Some(t) = weak_es.upgrade() {
                 t.set_trigger_label(SharedString::from("cloud (escalated)"));
-                t.set_trigger_color(slint::Color::from_rgb_u8(0x38, 0xbd, 0xf8));
+                t.set_trigger_tone(crate::ui::TileTone::Sky);
             }
             fire_regenerate(
                 convo_id,

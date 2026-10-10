@@ -137,7 +137,7 @@ pub(crate) fn fire_ptt_ask(
     tile.set_tile_title(SharedString::from(format!("{icon} {title}")));
     tile.set_source_label(SharedString::from(source_label));
     tile.set_trigger_label(SharedString::from(format!("{icon} {trigger}")));
-    tile.set_trigger_color(slint::Color::from_rgb_u8(0xef, 0x44, 0x44));
+    tile.set_trigger_tone(crate::ui::TileTone::Red);
     // Phase E6 v45 — PTT answers are continuable dialogs too.
     let convo_id = CONVO_SEQ.fetch_add(1, Ordering::Relaxed) as i32;
     tile.set_convo_id(convo_id);

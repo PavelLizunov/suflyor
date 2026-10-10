@@ -135,6 +135,9 @@ component TilePlayerButton inherits Rectangle {
     }
 }
 
+// What a tile's trigger badge marks, named by the host (see `trigger-color`).
+export enum TileTone { accent, violet, sky, green, cyan, red, orange }
+
 export component TileWindow inherits Window {
     // Phase 4 — keep std-widgets (follow-up LineEdit, ScrollView) dark with
     // the active scheme instead of Slint's light fluent default.
@@ -160,7 +163,15 @@ export component TileWindow inherits Window {
     in-out property <string> source-label: "—";
     // Phase E6 v12 — trigger badge.
     in-out property <string> trigger-label: "";
-    in-out property <color> trigger-color: Theme.accent;
+    // The host names the badge category; the hue comes from the theme.
+    in-out property <TileTone> trigger-tone: TileTone.accent;
+    property <color> trigger-color: root.trigger-tone == TileTone.violet ? Theme.cat-violet
+        : root.trigger-tone == TileTone.sky ? Theme.cat-sky
+        : root.trigger-tone == TileTone.green ? Theme.cat-green
+        : root.trigger-tone == TileTone.cyan ? Theme.cat-cyan
+        : root.trigger-tone == TileTone.red ? Theme.cat-red
+        : root.trigger-tone == TileTone.orange ? Theme.cat-orange
+        : Theme.accent;
     // Phase E6 v17 — pinned bool: changes pin button visual; Rust
     // toggles on click. Maximize bool: Rust resizes window via Win32.
     in-out property <bool> pinned: false;
@@ -613,8 +624,8 @@ export component TileWindow inherits Window {
                 HorizontalLayout {
                     alignment: start;
                     Rectangle {
-                        background: root.trigger-color.with-alpha(0.18);
-                        border-color: root.trigger-color;
+                        background: Theme.tint(root.trigger-color);
+                        border-color: Theme.on-tint(root.trigger-color);
                         border-width: 1px;
                         border-radius: 9px;
                         height: 20px;
@@ -626,7 +637,7 @@ export component TileWindow inherits Window {
                                 text: root.trigger-label;
                                 font-size: Metrics.font-caption;
                                 font-weight: 700;
-                                color: root.trigger-color;
+                                color: Theme.on-tint(root.trigger-color);
                                 vertical-alignment: center;
                             }
                         }

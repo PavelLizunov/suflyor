@@ -366,7 +366,7 @@ pub(crate) fn wire_escalate(
         // a conscious action (the user clicked 🧠); this just makes it legible.
         if let Some(t) = weak.upgrade() {
             t.set_trigger_label(SharedString::from("cloud (escalated)"));
-            t.set_trigger_color(slint::Color::from_rgb_u8(0x38, 0xbd, 0xf8));
+            t.set_trigger_tone(crate::ui::TileTone::Sky);
         }
         fire_regenerate(
             convo_id,
