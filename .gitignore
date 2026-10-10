@@ -56,3 +56,7 @@ fix-bom.ps1
 enable-debrief.ps1
 reset-snippets.ps1
 check-state.ps1
+
+# Python bytecode caches (scripts/*.py)
+__pycache__/
+*.pyc
