@@ -6,6 +6,7 @@ Updated 2026-10-10 (open-work section only; the rest dates from 2026-09-01). Rea
 
 - Branch: `master`
 - Latest published stable release: `v0.38.0`
+- Latest published prerelease: `v0.38.1-rc.4`
 - Active master handoff: none
 - Post-release maintenance may be newer than the stable tag; inspect Git before acting.
 
@@ -38,17 +39,28 @@ chips and the Settings navigation (#240, D-017) and the MCP client `scripts/slin
 (#242). Checked the same way: CI, the host crate gate and a live Slint MCP check on the
 Windows worker.
 
+The prerelease `v0.38.1-rc.4` (pull request #246, merge commit `4490540`) carries all of the above
+plus the fixes for ledger D-021, D-022 and D-023 and a generic text for a failed cloud STT
+connection test. Checked on the Windows worker at the released tree: the targeted gate for
+overlay-backend and slint-experiment, a live Slint MCP pass in English and Russian (16 Settings
+tabs, the bar, F1, F4, F7), one press of each of the 13 global hotkeys, and a silent install of
+the built installer. Not checked there: a tile with a streamed answer (no AI endpoint on the
+worker) and audio capture (no audio device).
+
 Open, check `gh pr list` first:
 
-- #229 (Sentinel: STT connection test error text), #205 (Nemotron diarization), #217 and
-  #199 (dependabot; #199 does not compile).
+- #205 (Nemotron diarization; its branch also uses the version 0.38.1-rc.4), #217 and #199
+  (dependabot; #199 does not compile).
 - `docs/audit-grok/` stays in the tree while `docs/goal-grok-codebase-audit.md` is an
   active charter that refers to it. Its 119 findings were checked against the source; the
   42 confirmed ones are in `docs/DEFECT-LEDGER.md` and 41 of them are not fixed.
-- Ledger D-004 and D-012 need a product decision; D-005, D-009, D-010, D-011, D-012,
-  D-021 are open.
+- Ledger D-004 and D-012 need a product decision; D-005, D-009, D-010, D-011, D-012, D-024,
+  D-025 are open.
 - Comments: a census with the Rust lexer exists (15023 comment lines, 477 of them history
   or provenance); nothing was deleted.
+- Design: a full design audit is the next piece of work. A source scan counts 284 font sizes,
+  83 radii and 264 spacings written as numbers instead of tokens of `ui/metrics.slint`, and 88
+  colours outside `ui/theme.slint`.
 
 Findings are in [`docs/DEFECT-LEDGER.md`](DEFECT-LEDGER.md).
 
