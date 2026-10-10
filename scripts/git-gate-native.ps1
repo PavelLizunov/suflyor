@@ -166,6 +166,12 @@ foreach ($crate in $affectedCrates) {
         )
         $guardArgs = @('test', '--locked', '--manifest-path', $manifest)
         foreach ($guard in $guards) { $guardArgs += @('--test', $guard) }
+        Run 'slint static guard tests build' {
+            & $cargo @guardArgs --no-run
+        }
+        Run 'slint stage DirectML' {
+            & (Join-Path $PSScriptRoot 'stage-directml.ps1') -CrateDir (Join-Path $root $crate)
+        }
         Run 'slint static guard tests' {
             & $cargo @guardArgs
         }
@@ -173,6 +179,14 @@ foreach ($crate in $affectedCrates) {
     else {
         Run "$crate clippy" {
             & $cargo clippy --manifest-path $manifest --all-targets -- -D warnings
+        }
+        # Build first: DirectML.dll appears in target\debug only after the
+        # build, and the test executables need it beside them.
+        Run "$crate test build" {
+            & $cargo test --manifest-path $manifest --no-run
+        }
+        Run "$crate stage DirectML" {
+            & (Join-Path $PSScriptRoot 'stage-directml.ps1') -CrateDir (Join-Path $root $crate)
         }
         Run "$crate test" {
             & $cargo test --manifest-path $manifest

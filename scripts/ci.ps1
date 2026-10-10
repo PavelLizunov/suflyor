@@ -65,22 +65,10 @@ Run-Step "slint fmt --check" {
 Run-Step "slint clippy -D warnings" {
     & $cargoExe clippy --manifest-path slint-experiment/Cargo.toml --all-targets -- -D warnings
 }
-# Rust test executables live under target/debug/deps. The statically linked
-# DirectML provider imports DMLCreateDevice1 before main; older Windows builds
-# have a system DirectML.dll without that export, so stage ort's matching
-# redistributable beside the test executables just like the release build does.
+# Stage ort's matching DirectML.dll beside the test executables (see
+# scripts/stage-directml.ps1) just like the release build does.
 Run-Step "stage DirectML for slint tests" {
-    $dmlSource = Join-Path $projectRoot "slint-experiment\target\debug\DirectML.dll"
-    if (-not (Test-Path $dmlSource)) {
-        throw "matching DirectML.dll not found after the Slint build"
-    }
-    $dmlDestination = Join-Path $projectRoot "slint-experiment\target\debug\deps\DirectML.dll"
-    $alreadyMatching = (Test-Path $dmlDestination) -and
-        ((Get-FileHash -LiteralPath $dmlSource -Algorithm SHA256).Hash -eq
-         (Get-FileHash -LiteralPath $dmlDestination -Algorithm SHA256).Hash)
-    if (-not $alreadyMatching) {
-        Copy-Item -LiteralPath $dmlSource -Destination $dmlDestination -Force
-    }
+    & (Join-Path $PSScriptRoot 'stage-directml.ps1') -CrateDir (Join-Path $projectRoot 'slint-experiment') -Required
 }
 # NOT --lib: it skips tests/ (i18n_guard + any guard test). Run the full suite.
 Run-Step "slint test" {
@@ -100,17 +88,7 @@ Run-Step "backend clippy -D warnings" {
     & $cargoExe clippy --manifest-path overlay-backend/Cargo.toml --all-targets -- -D warnings
 }
 Run-Step "stage DirectML for backend tests" {
-    $dmlSource = Join-Path $projectRoot "overlay-backend\target\debug\DirectML.dll"
-    if (-not (Test-Path $dmlSource)) {
-        throw "matching DirectML.dll not found after the backend build"
-    }
-    $dmlDestination = Join-Path $projectRoot "overlay-backend\target\debug\deps\DirectML.dll"
-    $alreadyMatching = (Test-Path $dmlDestination) -and
-        ((Get-FileHash -LiteralPath $dmlSource -Algorithm SHA256).Hash -eq
-         (Get-FileHash -LiteralPath $dmlDestination -Algorithm SHA256).Hash)
-    if (-not $alreadyMatching) {
-        Copy-Item -LiteralPath $dmlSource -Destination $dmlDestination -Force
-    }
+    & (Join-Path $PSScriptRoot 'stage-directml.ps1') -CrateDir (Join-Path $projectRoot 'overlay-backend') -Required
 }
 Run-Step "backend test" {
     & $cargoExe test --manifest-path overlay-backend/Cargo.toml --quiet
