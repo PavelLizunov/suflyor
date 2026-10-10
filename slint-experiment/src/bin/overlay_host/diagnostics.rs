@@ -133,11 +133,29 @@ pub(crate) fn redact_urls(s: &str) -> String {
         let tail = &rest[pos..];
         // URL ends at the first whitespace — base_url has no spaces.
         let end = tail.find(char::is_whitespace).unwrap_or(tail.len());
+        let end = next_scheme_before_query(&tail[..end]).unwrap_or(end);
         out.push_str(&overlay_backend::config::mask_host(&tail[..end]));
         rest = &tail[end..];
     }
     out.push_str(rest);
     out
+}
+
+/// Offset of a second `http(s)://` inside one URL token, when two URLs are joined
+/// by punctuation (`http://a/v1,http://user:secret@b/v1`), so that each is masked
+/// on its own. Only the part before `?` or `#` is searched: `mask_host` hides a
+/// query or a fragment as a whole, and a URL inside one must stay hidden with it.
+fn next_scheme_before_query(token: &str) -> Option<usize> {
+    let visible = token.find(['?', '#']).unwrap_or(token.len());
+    let hay = token[..visible].to_ascii_lowercase();
+    // Skip the token's own scheme: both needles start with "http".
+    let from = "http".len();
+    let later = hay.get(from..)?;
+    [later.find("http://"), later.find("https://")]
+        .into_iter()
+        .flatten()
+        .min()
+        .map(|i| i + from)
 }
 
 /// Redact credentials from diagnostic outputs and log exports so exported files and reports
@@ -941,6 +959,23 @@ mod tests {
         );
         // No URL → untouched.
         assert_eq!(redact_urls("Hotkeys: ok (F9, F4)"), "Hotkeys: ok (F9, F4)");
+    }
+
+    #[test]
+    fn redact_urls_masks_each_of_two_urls_joined_by_punctuation() {
+        assert_eq!(
+            redact_urls("http://first.internal/v1,http://user:secret@second.internal:8080/v1 ok"),
+            "http://***/v1,http://***:8080/v1 ok"
+        );
+        assert_eq!(
+            redact_urls("a=HTTPS://one.internal/v1;Http://10.0.0.5:1234/v1"),
+            "a=HTTPS://***/v1;Http://***:1234/v1"
+        );
+        // A URL inside a query stays hidden together with the query.
+        assert_eq!(
+            redact_urls("http://a.internal/cb?next=http://b.internal/token"),
+            "http://***/cb?***"
+        );
     }
 
     #[test]
