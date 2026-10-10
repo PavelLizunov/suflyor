@@ -2370,3 +2370,39 @@ msgstr "Компактный режим чтения"
 
 msgid "Expand the bar"
 msgstr "Развернуть бар"
+
+msgid "idle"
+msgstr "ожидание"
+
+msgid "recording"
+msgstr "запись"
+
+msgid "mic only"
+msgstr "только микрофон"
+
+msgid "mic muted"
+msgstr "микрофон выключен"
+
+msgid "paused"
+msgstr "пауза"
+
+msgid "wrapping up"
+msgstr "завершение"
+
+msgid "start failed"
+msgstr "ошибка запуска"
+
+msgid "sys ok"
+msgstr "системный звук: есть"
+
+msgid "sys quiet"
+msgstr "системный звук: тихо"
+
+msgid "sys silent"
+msgstr "системный звук: тишина"
+
+msgid "sys test failed"
+msgstr "тест звука не прошёл"
+
+msgid "AI unavailable"
+msgstr "AI недоступен"

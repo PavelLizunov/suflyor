@@ -893,7 +893,7 @@ impl SlintUiBridge for OverlayBarBridge {
                     // reported pain). The marker is set/cleared only by this arm,
                     // so we restore the session pill on recovery without
                     // clobbering session:started/stopped's own text.
-                    const AI_DOWN_MARK: &str = "AI недоступен";
+                    const AI_DOWN_MARK: &str = "AI unavailable";
                     let cur = o.get_status_text();
                     // v0.8.2 (C1 fix) — only SET the mark while a session is
                     // active (timer_active). Without this guard a stale
@@ -922,8 +922,8 @@ impl SlintUiBridge for OverlayBarBridge {
                 }
                 "meeting:ending" => {
                     // UI-audit 2026-06-13: dropped the 🏁 flag emoji — the rest
-                    // of the chrome is SVG/ASCII; the status pill is English-only
-                    // by design (idle/recording/…), so this matches it.
+                    // of the chrome is SVG/ASCII. The bar translates this state
+                    // word at display (`localized-status` in overlay_bar.slint).
                     o.set_status_text(SharedString::from("wrapping up"));
                 }
                 "transcript:line" => {
