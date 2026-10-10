@@ -21,16 +21,28 @@ fn unix_to_ymdhms_known_dates() {
 fn format_msk_label_shifts_utc_plus_three() {
     // 2026-05-24 00:00:00 UTC → 03:00:00 МСК, DD.MM.YYYY order.
     assert_eq!(
-        format_msk_label(1_779_580_800_000),
+        format_msk_label(1_779_580_800_000, true),
         "24.05.2026 03:00:00 (МСК)"
     );
     // Midnight rollover: 23:30 UTC → 02:30 МСК NEXT day.
     assert_eq!(
-        format_msk_label((1_779_580_800 - 1800) * 1000),
+        format_msk_label((1_779_580_800 - 1800) * 1000, true),
         "24.05.2026 02:30:00 (МСК)"
     );
     // Garbage (negative) clamps instead of panicking.
-    assert_eq!(format_msk_label(-5), "01.01.1970 03:00:00 (МСК)");
+    assert_eq!(format_msk_label(-5, true), "01.01.1970 03:00:00 (МСК)");
+}
+
+#[test]
+fn format_msk_label_follows_ui_language() {
+    for (ms, label) in [
+        (1_779_580_800_000, "24.05.2026 03:00:00"),
+        ((1_779_580_800 - 1800) * 1000, "24.05.2026 02:30:00"),
+        (-5, "01.01.1970 03:00:00"),
+    ] {
+        assert_eq!(format_msk_label(ms, true), format!("{label} (МСК)"));
+        assert_eq!(format_msk_label(ms, false), format!("{label} (MSK)"));
+    }
 }
 
 #[test]
