@@ -12,7 +12,10 @@ Status legend: [ ] open · [~] claimed (write your agent/branch) · [x] done.
 
 ---
 
-## [ ] T5 — finish common mathematical notation rendering
+## [~] T5 — finish common mathematical notation rendering
+
+**Claimed:** Claude Code, branch `claude/t5-math-notation`. Parser tests are in the
+PR; the owner screenshot and the streaming check are still open.
 
 **Priority:** backlog after the macOS port.
 **Problem:** v0.37.0 renders the main matrix/fraction/root cases, but some
