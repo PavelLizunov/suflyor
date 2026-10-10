@@ -1167,10 +1167,7 @@ async fn reask_last_ai_error_returns_none_without_panic() {
 #[test]
 fn reask_title_is_translated_and_does_not_stack() {
     assert_eq!(reask_title("What is X?", false), "Re-ask: What is X?");
-    assert_eq!(
-        reask_title("Что такое X?", true),
-        "Уточнение: Что такое X?"
-    );
+    assert_eq!(reask_title("Что такое X?", true), "Уточнение: Что такое X?");
     assert_eq!(
         reask_title("Уточнение: Что такое X?", true),
         "Уточнение: Что такое X?"

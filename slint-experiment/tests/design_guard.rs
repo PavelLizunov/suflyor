@@ -21,7 +21,11 @@ const RADIUS_LITERALS: usize = 71;
 const HEX_COLOURS: usize = 47;
 
 /// Not part of the shipped overlay: two layout spikes and the replay viewer.
-const NOT_SHIPPED: &[&str] = &["markdown_spike.slint", "overlay_spike.slint", "replay.slint"];
+const NOT_SHIPPED: &[&str] = &[
+    "markdown_spike.slint",
+    "overlay_spike.slint",
+    "replay.slint",
+];
 
 fn ui_files() -> Vec<PathBuf> {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("ui");
@@ -103,7 +107,9 @@ fn the_host_does_not_build_colours_in_rust() {
             }
         }
     }
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("bin");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("bin");
     let mut files = Vec::new();
     walk(&root.join("overlay_host"), &mut files);
     files.push(root.join("overlay_host_windows.rs"));
@@ -132,7 +138,8 @@ fn literals_that_bypass_the_tokens_do_not_grow() {
     let (mut font, mut radius, mut hex) = (0, 0, 0);
     for path in ui_files() {
         let file = name(&path);
-        if file == "theme.slint" || file == "metrics.slint" || NOT_SHIPPED.contains(&file.as_str()) {
+        if file == "theme.slint" || file == "metrics.slint" || NOT_SHIPPED.contains(&file.as_str())
+        {
             continue;
         }
         let src = fs::read_to_string(&path).expect("read ui file");

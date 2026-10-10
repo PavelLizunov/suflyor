@@ -1188,7 +1188,11 @@ pub struct ReaskOutcome {
 /// that is already a re-ask keeps its title, so repeated F3 does not stack the
 /// prefix.
 fn reask_title(last_q: &str, is_ru: bool) -> String {
-    let prefix = if is_ru { "Уточнение: " } else { "Re-ask: " };
+    let prefix = if is_ru {
+        "Уточнение: "
+    } else {
+        "Re-ask: "
+    };
     if last_q.starts_with(prefix) {
         last_q.to_string()
     } else {
