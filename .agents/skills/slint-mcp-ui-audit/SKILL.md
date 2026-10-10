@@ -33,9 +33,17 @@ Treat live visual verification as mandatory for UI changes. Compilation and test
    $env:SLINT_MCP_PORT='9123'
    ```
 
-3. Connect to `http://127.0.0.1:9123/mcp` using JSON-RPC:
-   `initialize` → `notifications/initialized` → `tools/call`.
-4. Call `list_windows`, identify windows by `get_window_properties`, then use `take_screenshot`.
+3. Drive the server with `scripts/slint_mcp.py` (standard-library Python; run
+   `python scripts/slint_mcp.py --help`). It does the JSON-RPC handshake
+   (`initialize` → `notifications/initialized` → `tools/call`) against
+   `http://127.0.0.1:9123/mcp`, or against `--url` / `SLINT_MCP_URL` when the
+   app runs on another machine behind a forwarded port.
+4. `slint_mcp.py windows` lists the windows; `shot <window> out.png` captures
+   one (`bar`, `settings`, `palette`, `archive`, `transcript`, `help`, or a
+   handle). To judge a single control, use `shot-element <window> <query>
+   out.png`; `shot-elements <window> <dir>` writes one PNG per labelled or
+   interactive element plus `index.tsv` with role, label, value and box, so
+   every element of a window can be reviewed one by one.
 5. Open surfaces and interact through Slint MCP when element handles exist. The accessibility tree may contain only the root; this is a known limitation, not a passed audit.
 6. When Settings cannot be opened through the tree, take a bar screenshot, combine its gear position with the returned window position, and use the existing `scripts/sim_click.ps1`. Never guess coordinates without a fresh screenshot and window properties.
 7. Inspect the screenshots visually. Scroll long pages and capture the continuation.
