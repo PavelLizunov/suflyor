@@ -6,7 +6,7 @@
 > и может не существовать в текущем нативном приложении на Rust + Slint
 > (например, упоминаемые ниже F1/F2/F7/F10/F11/Ctrl+Alt+W в текущей сборке
 > **не зарегистрированы**). Актуальные хоткеи — в таблице «Хоткеи» в `README.md`
-> и в окне **Настройки → ⌨ Hotkeys**. Текущее состояние — `docs/state-and-plan.md`.
+> и в окне **Настройки → ⌨ Hotkeys**. Текущее состояние — `docs/CODEX_HANDOFF.md`.
 
 This is a personal-use Windows app — no config migration tool, but
 your `%APPDATA%\overlay-mvp\config.json` is **forward compatible** via
