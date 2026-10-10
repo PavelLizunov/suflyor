@@ -77,10 +77,17 @@ component Chip inherits Rectangle {
     // the ticking digits don't shift width frame to frame.
     in property <bool> mono: false;
 
+    // Toggle chips set this so assistive technology and the MCP audit can read
+    // the state (`active`) instead of guessing it from the colour.
+    in property <bool> checkable: false;
+
     callback clicked();
 
     accessible-role: button;
     accessible-label: a11y != "" ? a11y : label;
+    accessible-checkable: checkable;
+    accessible-checked: checkable && active;
+    accessible-action-default => { root.clicked(); }
 
     // Hover + press feedback so a click is visibly registered. Action chips
     // (Stop / Expand / X …) had NO feedback at all — only the persistent
@@ -789,7 +796,7 @@ export component OverlayBarWindow inherits Window {
                     ? @image-url("../assets/icons/micslash.svg")
                     : @image-url("../assets/icons/mic.svg");
                 has-icon: true;
-                a11y: root.mic-muted ? "Mic muted (click to unmute)" : "Mic live (click to mute)";
+                a11y: root.mic-muted ? @tr("Mic muted (click to unmute)") : @tr("Mic live (click to mute)");
                 active: !root.mic-muted;
                 accent: root.mic-muted ? Theme.text-muted : Theme.success;
                 clicked => { root.mic-toggle-clicked(); }
@@ -797,7 +804,7 @@ export component OverlayBarWindow inherits Window {
             LiveChip {
                 icon: @image-url("../assets/icons/system-audio.svg");
                 has-icon: true;
-                a11y: "System audio capture";
+                a11y: @tr("System audio capture");
                 active: root.sys-active;
                 accent: Theme.accent;
                 clicked => { root.sys-toggle-clicked(); }
@@ -836,6 +843,7 @@ export component OverlayBarWindow inherits Window {
                 has-icon: true;
                 label: root.timer-active ? root.timer-label : @tr("start");
                 active: root.timer-active;
+                checkable: true;
                 accent: #fbbf24;
                 mono: true;
                 clicked => { root.timer-toggle-clicked(); }
@@ -849,8 +857,9 @@ export component OverlayBarWindow inherits Window {
                     ? @image-url("../assets/icons/play.svg")
                     : @image-url("../assets/icons/pause.svg");
                 has-icon: true;
-                a11y: root.session-paused ? "Resume the session" : "Pause the session";
+                a11y: root.session-paused ? @tr("Resume the session") : @tr("Pause the session");
                 active: root.session-paused;
+                checkable: true;
                 accent: #fbbf24;
                 clicked => { root.pause-toggle-clicked(); }
             }
@@ -861,16 +870,18 @@ export component OverlayBarWindow inherits Window {
             Chip {
                 icon: @image-url("../assets/icons/stealth.svg");
                 has-icon: true;
-                a11y: "Stealth (hide from capture)";
+                a11y: @tr("Stealth (hide from capture)");
                 active: root.stealth-active;
+                checkable: true;
                 accent: #ec4899;
                 clicked => { root.stealth-toggle-clicked(); }
             }
             Chip {
                 icon: @image-url("../assets/icons/flame.svg");
                 has-icon: true;
-                a11y: "Aggressive auto-tile";
+                a11y: @tr("Aggressive auto-tile");
                 active: root.aggressive-active;
+                checkable: true;
                 accent: #fb923c;
                 clicked => { root.aggressive-toggle-clicked(); }
             }
@@ -895,8 +906,9 @@ export component OverlayBarWindow inherits Window {
             Chip {
                 icon: @image-url("../assets/icons/archive.svg");
                 has-icon: true;
-                a11y: "Session archive";
+                a11y: @tr("Session archive");
                 active: root.archive-open;
+                checkable: true;
                 accent: #a78bfa;
                 clicked => { root.archive-clicked(); }
             }
@@ -907,7 +919,7 @@ export component OverlayBarWindow inherits Window {
             Chip {
                 icon: @image-url("../assets/icons/summary.svg");
                 has-icon: true;
-                a11y: "Meeting summary";
+                a11y: @tr("Meeting summary");
                 active: root.summary-busy;
                 accent: #38bdf8;
                 clicked => { root.summary-clicked(); }
@@ -938,7 +950,7 @@ export component OverlayBarWindow inherits Window {
             if !root.confirming : Chip {
                 icon: @image-url("../assets/icons/pencil.svg");
                 has-icon: true;
-                a11y: "Write a question";
+                a11y: @tr("Write a question");
                 accent: #34d399;
                 clicked => { root.text-ask-clicked(); }
             }
@@ -951,15 +963,16 @@ export component OverlayBarWindow inherits Window {
             if !root.confirming : Chip {
                 icon: @image-url("../assets/icons/camera.svg");
                 has-icon: true;
-                a11y: "Screenshot to vision";
+                a11y: @tr("Screenshot to vision");
                 accent: #22d3ee;
                 clicked => { root.capture-clicked(); }
             }
             if !root.confirming : Chip {
                 icon: @image-url("../assets/icons/gear.svg");
                 has-icon: true;
-                a11y: "Settings";
+                a11y: @tr("Settings");
                 active: root.settings-open;
+                checkable: true;
                 accent: Theme.text-muted;
                 clicked => { root.open-settings-clicked(); }
             }
@@ -968,8 +981,9 @@ export component OverlayBarWindow inherits Window {
             if !root.confirming : Chip {
                 icon: @image-url("../assets/icons/sos.svg");
                 has-icon: true;
-                a11y: "Help";
+                a11y: @tr("Help");
                 active: root.help-open;
+                checkable: true;
                 accent: #60a5fa;
                 clicked => { root.help-clicked(); }
             }
@@ -982,7 +996,7 @@ export component OverlayBarWindow inherits Window {
             if !root.restart-armed : Chip {
                 icon: @image-url("../assets/icons/restart.svg");
                 has-icon: true;
-                a11y: "Emergency restart";
+                a11y: @tr("Emergency restart");
                 accent: #38bdf8;
                 clicked => { root.restart-clicked(); }
             }
@@ -1014,8 +1028,9 @@ export component OverlayBarWindow inherits Window {
             if !root.confirming : Chip {
                 icon: @image-url("../assets/icons/minimize.svg");
                 has-icon: true;
-                a11y: "Compact reader mode";
+                a11y: @tr("Compact reader mode");
                 active: root.compact-bar;
+                checkable: true;
                 accent: #38bdf8;
                 clicked => { root.compact-toggle-clicked(); }
             }
@@ -1036,7 +1051,7 @@ export component OverlayBarWindow inherits Window {
             if !root.quit-armed : Chip {
                 icon: @image-url("../assets/icons/x.svg");
                 has-icon: true;
-                a11y: "Quit";
+                a11y: @tr("Quit");
                 accent: Theme.danger;
                 clicked => { root.quit-clicked(); }
             }
@@ -1302,6 +1317,7 @@ export component OverlayBarWindow inherits Window {
                     has-icon: true;
                     label: root.timer-active ? root.timer-label : @tr("start");
                     active: root.timer-active;
+                    checkable: true;
                     accent: #fbbf24;
                     mono: true;
                     clicked => { root.timer-toggle-clicked(); }
@@ -1312,8 +1328,9 @@ export component OverlayBarWindow inherits Window {
                         ? @image-url("../assets/icons/play.svg")
                         : @image-url("../assets/icons/pause.svg");
                     has-icon: true;
-                    a11y: root.session-paused ? "Resume the session" : "Pause the session";
+                    a11y: root.session-paused ? @tr("Resume the session") : @tr("Pause the session");
                     active: root.session-paused;
+                    checkable: true;
                     accent: #fbbf24;
                     clicked => { root.pause-toggle-clicked(); }
                 }
@@ -1347,7 +1364,7 @@ export component OverlayBarWindow inherits Window {
                 Chip {
                     icon: @image-url("../assets/icons/maximize.svg");
                     has-icon: true;
-                    a11y: "Expand the bar";
+                    a11y: @tr("Expand the bar");
                     accent: #38bdf8;
                     clicked => { root.compact-toggle-clicked(); }
                 }
