@@ -140,43 +140,97 @@ pub(crate) fn redact_urls(s: &str) -> String {
     out
 }
 
-/// Redact sensitive credential patterns (`Bearer <token>`, `gsk_<token>`, `sk-<token>`)
-/// from diagnostic outputs and log exports so exported files and reports never leak API keys
-/// or authorization tokens.
+/// Redact credentials from diagnostic outputs and log exports so exported files and reports
+/// never leak API keys or authorization tokens: a labelled value (`Bearer <token>` in any ASCII
+/// case and after any run of spaces, tabs, `:` or `=`, quoted or not; an `x-api-key` header)
+/// and a provider key recognised by its prefix (`gsk_`, `sk-`, `xai-`, `nvapi-`).
 pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while !rest.is_empty() {
-        if rest.starts_with("Bearer ") {
-            out.push_str("Bearer <redacted>");
-            rest = &rest[7..];
-            let tok_len = rest.find(char::is_whitespace).unwrap_or(rest.len());
-            rest = &rest[tok_len..];
-        } else if rest.starts_with("gsk_") {
-            out.push_str("gsk_<redacted>");
-            rest = &rest[4..];
-            let tok_len = rest
-                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
-                .unwrap_or(rest.len());
-            rest = &rest[tok_len..];
-        } else if rest.starts_with("sk-")
-            && !out
-                .chars()
-                .last()
-                .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
-        {
-            out.push_str("sk-<redacted>");
-            rest = &rest[3..];
-            let tok_len = rest
-                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-'))
-                .unwrap_or(rest.len());
-            rest = &rest[tok_len..];
+        let mid_word = ends_in_word(&out);
+        if let Some((mask, len)) = labelled_secret(rest, mid_word) {
+            out.push_str(mask);
+            rest = rest.get(len..).unwrap_or("");
+        } else if let Some(prefix) = key_prefix(rest, mid_word) {
+            out.push_str(prefix);
+            out.push_str("<redacted>");
+            let tail = rest.get(prefix.len()..).unwrap_or("");
+            let key_end = tail.find(|c: char| !is_key_char(c));
+            rest = tail.get(key_end.unwrap_or(tail.len())..).unwrap_or("");
         } else if let Some(next_char) = rest.chars().next() {
             out.push(next_char);
             rest = &rest[next_char.len_utf8()..];
         }
     }
     out
+}
+
+/// True when the text emitted so far ends inside an identifier, so `rest` starts mid-word
+/// (`ai_bearer save failed`, `desk-1`) and is log text, not a credential label.
+fn ends_in_word(out: &str) -> bool {
+    let last = out.chars().last();
+    last.is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+fn is_key_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_' || c == '-'
+}
+
+/// ASCII-case-insensitive `starts_with`. `prefix` must be ASCII: a byte-wise match then also
+/// proves that `prefix.len()` is a char boundary of `s`, so callers may slice there.
+fn starts_with_ascii_ci(s: &str, prefix: &str) -> bool {
+    let head = s.as_bytes().get(..prefix.len());
+    head.is_some_and(|bytes| bytes.eq_ignore_ascii_case(prefix.as_bytes()))
+}
+
+/// A labelled credential at the start of `rest`: its mask and the byte length to drop.
+fn labelled_secret(rest: &str, mid_word: bool) -> Option<(&'static str, usize)> {
+    if mid_word {
+        return None;
+    }
+    if let Some(len) = labelled_secret_len(rest, "bearer") {
+        return Some(("Bearer <redacted>", len));
+    }
+    let len = labelled_secret_len(rest, "x-api-key")?;
+    Some(("x-api-key: <redacted>", len))
+}
+
+/// Byte length of `label`, what separates it from its value, and the value. Between the two
+/// may stand the label's own closing quote (`"bearer": ...`), a run of spaces, tabs, `:` and
+/// `=`, and the value's opening quote. `None` when `rest` does not start with the label,
+/// nothing separates it from what follows, or the value is empty (`key=""`, or the word at
+/// the end of a line). The value ends at whitespace or a quote.
+fn labelled_secret_len(rest: &str, label: &str) -> Option<usize> {
+    if !starts_with_ascii_ci(rest, label) {
+        return None;
+    }
+    let after = rest.get(label.len()..)?;
+    let unquoted = after.strip_prefix(['"', '\'']).unwrap_or(after);
+    let separated = unquoted.trim_start_matches([' ', '\t', ':', '=']);
+    let value = separated.strip_prefix(['"', '\'']).unwrap_or(separated);
+    if value.len() == after.len() {
+        return None;
+    }
+    let value_end = value.find(|c: char| c.is_whitespace() || c == '"' || c == '\'');
+    let value_len = value_end.unwrap_or(value.len());
+    if value_len == 0 {
+        return None;
+    }
+    Some(rest.len() - value.len() + value_len)
+}
+
+/// The provider key prefix `rest` starts with. `gsk_` matches anywhere; the short
+/// dash prefixes need a word boundary so `desk-1` or `maxai-1` stay readable.
+fn key_prefix(rest: &str, mid_word: bool) -> Option<&'static str> {
+    if rest.starts_with("gsk_") {
+        return Some("gsk_");
+    }
+    if mid_word {
+        return None;
+    }
+    let mut dashed = ["sk-", "xai-", "nvapi-"].into_iter();
+    dashed.find(|p| rest.starts_with(*p))
 }
 
 /// Replace the current user's home directory with the `%USERPROFILE%` placeholder
@@ -940,6 +994,77 @@ mod tests {
         assert!(redacted.contains("gsk_<redacted>"));
         assert!(redacted.contains("sk-<redacted>"));
         assert!(redacted.contains("desk-1 task-2"));
+    }
+
+    // The cases below leaked through the case-sensitive, single-space `Bearer ` matcher.
+    #[test]
+    fn redact_secrets_masks_bearer_in_any_ascii_case() {
+        for scheme in ["bearer", "BEARER", "bEaReR"] {
+            let redacted = redact_secrets(&format!("Authorization: {scheme} secret_token_123\n"));
+            assert!(!redacted.contains("secret_token_123"), "leaked for {scheme}: {redacted}");
+        }
+    }
+
+    #[test]
+    fn redact_secrets_masks_bearer_after_any_delimiter_run() {
+        for sample in [
+            "Bearer  secret_token_123",
+            "Bearer\tsecret_token_123",
+            "Bearer: secret_token_123",
+            "Bearer=secret_token_123",
+            "bearer:\"secret_token_123\"",
+            "\"bearer\": \"secret_token_123\"",
+        ] {
+            let redacted = redact_secrets(sample);
+            assert!(!redacted.contains("secret_token_123"), "leaked from {sample:?}: {redacted}");
+        }
+    }
+
+    #[test]
+    fn redact_secrets_stops_bearer_token_at_a_quote() {
+        let json = "{\"authorization\":\"bearer secret_token_123\",\"n\":1}";
+        assert_eq!(redact_secrets(json), "{\"authorization\":\"Bearer <redacted>\",\"n\":1}");
+    }
+
+    #[test]
+    fn redact_secrets_masks_x_api_key_header_value() {
+        for sample in [
+            "x-api-key: secret_value_123",
+            "X-API-Key:secret_value_123",
+        ] {
+            let redacted = redact_secrets(sample);
+            assert!(!redacted.contains("secret_value_123"), "leaked from {sample:?}: {redacted}");
+        }
+    }
+
+    #[test]
+    fn redact_secrets_masks_xai_and_nvapi_keys() {
+        let redacted = redact_secrets("xai-secret_key_123 nvapi-secret_key_456 maxai-1");
+        assert!(!redacted.contains("secret_key_123"), "leaked xai key: {redacted}");
+        assert!(!redacted.contains("secret_key_456"), "leaked nvapi key: {redacted}");
+        assert!(redacted.contains("maxai-1"), "over-redacted a plain word: {redacted}");
+    }
+
+    #[test]
+    fn redact_secrets_is_utf8_safe_next_to_a_match() {
+        let redacted = redact_secrets("aпривет bearer secret_token_123 конец");
+        assert_eq!(redacted, "aпривет Bearer <redacted> конец");
+    }
+
+    // Guards the other direction: a label inside an identifier, or with no value, is log text.
+    #[test]
+    fn redact_secrets_leaves_bearer_without_a_value_alone() {
+        for sample in [
+            "[overlay-host] ai_bearer save failed: timeout",
+            "stt_whisper_bearer saved",
+            "token type: bearer",
+            "bearer\nnext line",
+            "Bearer \nnext line",
+            "x-api-key=\"\" status=ok",
+            "Bearer \"\" next",
+        ] {
+            assert_eq!(redact_secrets(sample), sample);
+        }
     }
 
     #[test]
