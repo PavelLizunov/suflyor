@@ -46,6 +46,34 @@ pub(crate) fn escalated_badge(is_ru: bool) -> &'static str {
     }
 }
 
+/// Label of a tile the backend asked for: what kind of tile it is, plus a
+/// mark when it is hidden from screen capture. A tile of the error kind is
+/// mostly a notice ("nothing to summarise yet"), so it is labelled as one.
+pub(crate) fn kind_label(
+    kind: overlay_backend::events::TileKind,
+    stealth: bool,
+    is_ru: bool,
+) -> String {
+    use overlay_backend::events::TileKind;
+    let name = match (kind, is_ru) {
+        (TileKind::Error, true) => "сообщение",
+        (TileKind::Error, false) => "notice",
+        (TileKind::Ai, true) => "AI",
+        (TileKind::Kb, true) => "база знаний",
+        (TileKind::Summary, true) => "сводка",
+        (TileKind::Debrief, true) => "разбор",
+        (TileKind::Translate, true) => "перевод",
+        (TileKind::Snippet, true) => "заготовка",
+        (TileKind::Bookmark, true) => "закладка",
+        (other, _) => other.as_journal_tag(),
+    };
+    match (stealth, is_ru) {
+        (false, _) => name.to_string(),
+        (true, true) => format!("{name} · скрыт от захвата"),
+        (true, false) => format!("{name} · stealth"),
+    }
+}
+
 /// State label while the request is in flight.
 pub(crate) fn asking_label(is_ru: bool) -> &'static str {
     if is_ru {
@@ -121,6 +149,17 @@ mod tests {
         assert_eq!(done_label("", true), "AI · готово");
         assert_eq!(done_label("length", false), "ai · done (length)");
         assert_eq!(done_label("length", true), "AI · готово (length)");
+    }
+
+    #[test]
+    fn a_tile_kind_label_has_no_dangling_separator() {
+        use overlay_backend::events::TileKind;
+        assert_eq!(kind_label(TileKind::Ai, false, false), "ai");
+        assert_eq!(kind_label(TileKind::Ai, true, false), "ai · stealth");
+        assert_eq!(kind_label(TileKind::Error, false, false), "notice");
+        assert_eq!(kind_label(TileKind::Error, false, true), "сообщение");
+        assert_eq!(kind_label(TileKind::Summary, true, true), "сводка · скрыт от захвата");
+        assert_eq!(kind_label(TileKind::Manual, false, true), "manual");
     }
 
     #[test]

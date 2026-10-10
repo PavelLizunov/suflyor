@@ -1150,7 +1150,7 @@ fn spawn_summary_error_tile(
 pub struct ReaskInputs {
     /// Last AI question shown to the user. Raw on first F3 of a
     /// session (set by ask/manual_ask/maybe_spawn_tile);
-    /// "🔁 reask: …" form on subsequent F3s (set by this port's
+    /// "Re-ask: …" form on subsequent F3s (set by this port's
     /// own writeback). Required — port short-circuits with
     /// `tile:error` if absent.
     pub last_question: Option<String>,
@@ -1182,6 +1182,18 @@ pub struct ReaskOutcome {
     /// add on the shim side). Zero only if the model returned
     /// zero-token usage (degenerate).
     pub cost_microcents_delta: u64,
+}
+
+/// Title of a re-ask tile, also stored as the new last question. A question
+/// that is already a re-ask keeps its title, so repeated F3 does not stack the
+/// prefix.
+fn reask_title(last_q: &str, is_ru: bool) -> String {
+    let prefix = if is_ru { "Уточнение: " } else { "Re-ask: " };
+    if last_q.starts_with(prefix) {
+        last_q.to_string()
+    } else {
+        format!("{prefix}{last_q}")
+    }
 }
 
 /// F3 Reask: builds a fresh AI call using the LAST question + previous
@@ -1402,7 +1414,7 @@ pub async fn reask_last(
     // tile chrome is preserved. (Per port #1 review-agent note,
     // a future polish round will give the adapter real per-kind
     // branches.)
-    let display_q = format!("🔁 reask: {last_q}");
+    let display_q = reask_title(&last_q, ui_is_ru);
     let answer_trimmed = answer.trim().to_string();
     if let Err(e) = events.spawn_tile_full(
         TileSpec {

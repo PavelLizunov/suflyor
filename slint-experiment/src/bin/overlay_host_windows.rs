@@ -1962,11 +1962,11 @@ fn main() -> Result<(), slint::PlatformError> {
             let seq = TILE_DISPLAY_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
             tile.set_sequence(seq as i32);
             wire_tile_drag(&tile);
-            tile.set_source_label(SharedString::from(if req.stealth {
-                format!("{} · stealth", req.kind.as_journal_tag())
-            } else {
-                req.kind.as_journal_tag().to_string()
-            }));
+            tile.set_source_label(SharedString::from(tile_text::kind_label(
+                req.kind,
+                req.stealth,
+                cfg_for_poll.read().ui_is_ru(),
+            )));
             // Phase E6 v12 — first highlight (if any) becomes the
             // trigger badge. Backend's trigger_highlights() already
             // formats it as "keyword ..." or "question ...".

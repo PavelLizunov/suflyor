@@ -1,4 +1,4 @@
-import { ScrollView } from "std-widgets.slint";
+import { ScrollView, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Platform } from "platform.slint";
 import { BrandHeaderMark, CloseButton, DragGrip } from "controls.slint";
@@ -133,6 +133,10 @@ component TableRow inherits Rectangle {
 }
 
 export component HelpWindow inherits Window {
+    // std-widgets follow the active colour scheme instead of the light default.
+    property <bool> widgets-light: Theme.is-light;
+    init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
+    changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     no-frame: true;
     always-on-top: true;
     title: @tr("Help");

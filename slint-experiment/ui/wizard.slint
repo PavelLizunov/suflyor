@@ -15,7 +15,7 @@
 // (open_wizard / wire_wizard_steps / refill_wizard_summary) is untouched.
 // Per-step checks reuse the existing Diagnostics backend fns; an error warns
 // (level 4) but never blocks Next.
-import { Button, Switch } from "std-widgets.slint";
+import { Button, Switch, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Metrics } from "metrics.slint";
 import { BrandHeaderMark, CloseButton, DragGrip } from "controls.slint";
@@ -117,6 +117,10 @@ component ModeOption inherits Rectangle {
 }
 
 export component WizardWindow inherits Window {
+    // std-widgets follow the active colour scheme instead of the light default.
+    property <bool> widgets-light: Theme.is-light;
+    init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
+    changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     no-frame: true;
     always-on-top: true;
     title: @tr("Setup wizard");
