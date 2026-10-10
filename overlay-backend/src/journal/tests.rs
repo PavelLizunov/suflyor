@@ -1074,3 +1074,23 @@ fn append_bookmark_creates_file_with_header_then_appends_entries() {
     assert!(content.contains("## Q1"));
     assert!(content.contains("## Q2"));
 }
+
+#[cfg(unix)]
+#[test]
+fn session_journal_and_its_directory_are_owner_only_on_unix() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path().join("sessions");
+    // A directory left wide by an older version: independent of the process umask.
+    std::fs::create_dir(&dir).unwrap();
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let journal = Journal::open_in(&dir, 10, 1 << 20).unwrap();
+    let file = journal.current_path().unwrap();
+    journal.close();
+
+    let dir_mode = std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+    let file_mode = std::fs::metadata(&file).unwrap().permissions().mode() & 0o777;
+    assert_eq!(dir_mode, 0o700, "other users must not list transcripts");
+    assert_eq!(file_mode, 0o600, "a session journal holds the transcript");
+}

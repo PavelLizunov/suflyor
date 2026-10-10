@@ -3,7 +3,6 @@ use super::time::{chrono_like_stamp, now_unix_ms};
 use super::types::{JournalEvent, SessionCounters};
 use anyhow::{Context, Result};
 use parking_lot::Mutex;
-use std::fs::OpenOptions;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -69,16 +68,17 @@ impl Journal {
 
     pub fn open_new_session_with_limits(keep_sessions: usize, max_bytes: u64) -> Result<Self> {
         let dir = sessions_dir()?;
-        std::fs::create_dir_all(&dir).context("create sessions dir")?;
+        Self::open_in(&dir, keep_sessions, max_bytes)
+    }
+
+    /// `open_new_session_with_limits` with the sessions directory as a parameter (test seam).
+    pub(crate) fn open_in(dir: &Path, keep_sessions: usize, max_bytes: u64) -> Result<Self> {
+        crate::paths::ensure_private_dir(dir).context("create sessions dir")?;
         let stamp = chrono_like_stamp();
         let rand: u32 = (now_unix_ms() & 0xFFFFFF) as u32;
         let path = dir.join(format!("{stamp}_{rand:06x}.jsonl"));
 
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .context("open journal file")?;
+        let file = crate::paths::open_private_append(&path).context("open journal file")?;
         log::info!("journal opened: {}", path.display());
 
         let keep = if keep_sessions == 0 {
@@ -86,7 +86,7 @@ impl Journal {
         } else {
             keep_sessions
         };
-        match prune_old_sessions_with_size_cap(&dir, keep, max_bytes) {
+        match prune_old_sessions_with_size_cap(dir, keep, max_bytes) {
             Ok(n) if n > 0 => log::info!("journal pruned {n} old session(s)"),
             Ok(_) => {}
             Err(e) => log::warn!("journal prune failed (non-fatal): {e:#}"),
