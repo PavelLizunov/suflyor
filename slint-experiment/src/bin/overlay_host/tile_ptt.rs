@@ -374,7 +374,7 @@ pub(crate) fn fire_ptt_ask(
                     t.set_tile_title(SharedString::from(
                         slint_replay::app_state::tile_title_line(&q),
                     ));
-                    t.set_source_label(SharedString::from("ai · asking…"));
+                    t.set_source_label(SharedString::from(crate::tile_text::asking_label(ui_is_ru)));
                 }
             });
         }

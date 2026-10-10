@@ -634,7 +634,7 @@ pub(crate) fn launch_vision_for_bgra(
         tile.on_escalate_clicked(move || {
             // Cloud badge — parity with the text tile's 🧠 (egress stays legible).
             if let Some(t) = weak_es.upgrade() {
-                t.set_trigger_label(SharedString::from("cloud (escalated)"));
+                t.set_trigger_label(SharedString::from(crate::tile_text::escalated_badge(cfg_es.read().ui_is_ru())));
                 t.set_trigger_tone(crate::ui::TileTone::Sky);
             }
             fire_regenerate(

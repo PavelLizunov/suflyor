@@ -358,6 +358,8 @@ use local_watchdog::*;
 #[path = "overlay_host/status_copy.rs"]
 mod status_copy;
 use status_copy::*;
+#[path = "overlay_host/tile_text.rs"]
+mod tile_text;
 
 pub(crate) type TileWindows = Rc<RefCell<Vec<TileWindow>>>;
 
@@ -1960,11 +1962,11 @@ fn main() -> Result<(), slint::PlatformError> {
             let seq = TILE_DISPLAY_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
             tile.set_sequence(seq as i32);
             wire_tile_drag(&tile);
-            tile.set_source_label(SharedString::from(format!(
-                "{} · {}",
-                req.kind.as_journal_tag(),
-                if req.stealth { "stealth" } else { "" }
-            )));
+            tile.set_source_label(SharedString::from(if req.stealth {
+                format!("{} · stealth", req.kind.as_journal_tag())
+            } else {
+                req.kind.as_journal_tag().to_string()
+            }));
             // Phase E6 v12 — first highlight (if any) becomes the
             // trigger badge. Backend's trigger_highlights() already
             // formats it as "keyword ..." or "question ...".
@@ -3333,7 +3335,7 @@ fn main() -> Result<(), slint::PlatformError> {
             tile.set_sequence(display_seq as i32);
             tile.set_tile_id(tile_id);
             tile.set_tile_title(SharedString::from(heading));
-            tile.set_source_label(SharedString::from("ai · asking…"));
+            tile.set_source_label(SharedString::from(tile_text::asking_label(is_ru)));
             wire_tile_drag(&tile);
 
             // Initial body — shown instantly: the AI-in-flight hint, or a
@@ -3518,7 +3520,10 @@ fn main() -> Result<(), slint::PlatformError> {
                             {
                                 overlay_backend::deep_lock::blocked_notice(is_ru)
                             } else {
-                                classify_ai_error(&chain)
+                                slint_replay::app_state::ai_error_text(
+                                    classify_ai_error(&chain),
+                                    is_ru,
+                                )
                             };
                             let md = manual_tile_failure(heading_for_task, category, is_ru);
                             let blocks: Vec<MarkdownBlock> = markdown::parse(&md)
@@ -3532,7 +3537,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                 })
                                 .collect();
                             tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
-                            tile.set_source_label(SharedString::from("ai · error"));
+                            tile.set_source_label(SharedString::from(tile_text::error_label(is_ru)));
                         }
                     }
                 });
