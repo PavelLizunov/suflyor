@@ -48,7 +48,7 @@ ui-mcp = ["slint/mcp"]
 [build-dependencies]
 # Compiles ui/*.slint into Rust at build time. include_modules!() in
 # src/main.rs pulls the generated code in.
-slint-build = "1.17"
+slint-build = "1.18"
 # Embeds assets/icon.ico into the .exe (Explorer + taskbar). Best-effort:
 # build.rs ignores its error so a missing Windows SDK rc.exe never breaks
 # the build — the NSIS installer also sets the shortcut icon directly.
@@ -64,7 +64,7 @@ cc = "1"
 # need no system deps (no GTK/X11). `raw-window-handle-06` exposes the
 # native HWND so the overlay-spike binary can call Win32 SetWindowLongPtrW
 # directly.
-slint = { version = "1.17", features = [
+slint = { version = "1.18", features = [
     "raw-window-handle-06",
     # G1 (2026-07-03) — per-window winit event filter for layout-independent Ctrl+C/V/X/A
     # (see src/bin/overlay_host/kbd_shortcuts.rs). Slint's purpose-built interception point;
@@ -161,13 +161,13 @@ clipboard-win = "5"
 
 [dev-dependencies]
 # i-slint-backend-testing is the OFFICIAL test framework (not
-# "slint-testing"). Enable Slint 1.17's MCP only for QA with
+# "slint-testing"). Enable Slint's MCP only for QA with
 # `--features ui-mcp`; SLINT_EMIT_DEBUG_INFO=1 + SLINT_MCP_PORT=N then
 # starts the embedded MCP server at
 # http://127.0.0.1:N/mcp. Claude Code (any MCP-capable agent) can then
 # inspect the UI tree, take screenshots, click, and type — replaces
 # visual_check.ps1 + computer-use.
-i-slint-backend-testing = "1.17"
+i-slint-backend-testing = "1.18"
 
 [lints.clippy]
 # Tier 3 lint baseline (unwrap/expect/panic denied). `deny` (not `forbid`) so

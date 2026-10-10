@@ -209,10 +209,10 @@ export component TranscriptWindow inherits Window {
         if (root.lines.length == 0) {
             return;
         }
-        lv.viewport-y = -clamp(
-            idx * (lv.viewport-height / root.lines.length) - lv.height / 2,
+        lv.content-y = -clamp(
+            idx * (lv.content-height / root.lines.length) - lv.height / 2,
             0px,
-            max(0px, lv.viewport-height - lv.height));
+            max(0px, lv.content-height - lv.height));
     }
 
     forward-focus: fs;
