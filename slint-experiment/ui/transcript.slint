@@ -317,7 +317,7 @@ export component TranscriptWindow inherits Window {
                         background: copy-ta.pressed
                             ? Theme.accent.with-alpha(0.7)
                             : copy-ta.has-hover ? Theme.accent : Theme.accent.with-alpha(0.85);
-                        animate background { duration: 120ms; }
+                        animate background { duration: Metrics.motion-fast; }
                         copy-ta := TouchArea {
                             clicked => {
                                 root.copy-all-requested();
@@ -345,7 +345,7 @@ export component TranscriptWindow inherits Window {
                         background: sel-ta.pressed
                             ? Theme.accent.with-alpha(0.22)
                             : sel-ta.has-hover ? Theme.accent.with-alpha(0.14) : transparent;
-                        animate background { duration: 120ms; }
+                        animate background { duration: Metrics.motion-fast; }
                         sel-ta := TouchArea {
                             clicked => {
                                 root.copy-selected-requested();
@@ -377,7 +377,7 @@ export component TranscriptWindow inherits Window {
                     // ListView collapsed to ~2 rows) AND max-width=0 (opened the window narrower).
                     // Hoisting the `if` so NOTHING renders pre-detect fixes both. (D3 8b4fa2c regression.)
                     if root.has-diarization : HorizontalLayout {
-                        spacing: 4px;
+                        spacing: Metrics.space-xs;
                         Rectangle {
                             width: 92px;
                             height: 28px;
@@ -436,7 +436,7 @@ export component TranscriptWindow inherits Window {
                     // V-1 (fable review) — models missing: offer the one-time download. The
                     // detect controls (below) stay hidden until can-diarize flips true.
                     if root.needs-diar-models && !root.can-diarize : VerticalLayout {
-                        spacing: 4px;
+                        spacing: Metrics.space-xs;
                         Text {
                             text: @tr("Speaker detection needs a one-time model download (~30 MB).");
                             font-size: Metrics.font-caption;
@@ -452,7 +452,7 @@ export component TranscriptWindow inherits Window {
                                 background: root.installing-diar-models
                                     ? Theme.accent.with-alpha(0.5)
                                     : instd-ta.has-hover ? Theme.accent : Theme.accent.with-alpha(0.85);
-                                animate background { duration: 120ms; }
+                                animate background { duration: Metrics.motion-fast; }
                                 instd-ta := TouchArea {
                                     clicked => { if (!root.installing-diar-models) { root.install-diar-models(); } }
                                 }
@@ -531,7 +531,7 @@ export component TranscriptWindow inherits Window {
                             background: root.diarizing
                                 ? Theme.accent.with-alpha(0.5)
                                 : dia-ta.has-hover ? Theme.accent : Theme.accent.with-alpha(0.85);
-                            animate background { duration: 120ms; }
+                            animate background { duration: Metrics.motion-fast; }
                             dia-ta := TouchArea {
                                 clicked => {
                                     if (!root.diarizing) {
@@ -601,7 +601,7 @@ export component TranscriptWindow inherits Window {
                 // lines tint; Enter / ‹ › jump the player to a match's moment + scroll the list to it. ──
                 if !root.empty : HorizontalLayout {
                     spacing: Metrics.space-sm;
-                    padding-left: 4px;
+                    padding-left: Metrics.space-xs;
                     LineEdit {
                         horizontal-stretch: 1;
                         text <=> root.search-query;
@@ -652,7 +652,7 @@ export component TranscriptWindow inherits Window {
                 // ── "Select all" header above the list ──
                 if !root.empty : HorizontalLayout {
                     spacing: Metrics.space-sm;
-                    padding-left: 4px;
+                    padding-left: Metrics.space-xs;
                     Tick {
                         checked: root.all-selected;
                         clicked => {
@@ -714,7 +714,7 @@ export component TranscriptWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: Metrics.space-sm;
-                                padding-left: 4px;
+                                padding-left: Metrics.space-xs;
                                 // Keep the star column left of the ListView scrollbar using the
                                 // standard visual-audit gutter, so it stays clickable and visible.
                                 padding-right: 14px;
@@ -859,7 +859,7 @@ export component TranscriptWindow inherits Window {
                         horizontal-stretch: 0;
                         border-radius: 6px;
                         background: pp-ta.has-hover ? Theme.accent : Theme.accent.with-alpha(0.85);
-                        animate background { duration: 120ms; }
+                        animate background { duration: Metrics.motion-fast; }
                         pp-ta := TouchArea {
                             clicked => {
                                 root.toggle-play();

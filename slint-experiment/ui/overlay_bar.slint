@@ -364,7 +364,7 @@ component RecordBtn inherits Rectangle {
     border-radius: Metrics.radius-control;
     height: Metrics.control-md;
     horizontal-stretch: 0;
-    animate background, border-color { duration: 120ms; }
+    animate background, border-color { duration: Metrics.motion-fast; }
 
     // Reset the lock whenever recording ends from any cause (release, stop-click,
     // watchdog timeout) so the chip never gets stuck in the locked/stop look.
@@ -462,6 +462,10 @@ component VDivider inherits Rectangle {
 
 // ===== Main overlay bar =====
 
+// What the status pill is saying, named by the host. The bar turns it into a
+// theme colour (see `status-color`).
+export enum StatusTone { neutral, ok, warning, danger, info }
+
 export component OverlayBarWindow inherits Window {
     // Phase 4 — keep std-widgets (Button etc.) dark with the active scheme
     // instead of Slint's light fluent default. See settings_panel for detail.
@@ -511,7 +515,16 @@ export component OverlayBarWindow inherits Window {
 
     // Status pill text (idle / recording / etc).
     in-out property <string> status-text: "idle";
-    in-out property <color> status-color: Theme.text-muted;
+    // The host names the tone; the colour comes from the theme, so the pill
+    // stays readable in every scheme.
+    in-out property <StatusTone> status-tone: StatusTone.neutral;
+    property <color> status-color: root.status-tone == StatusTone.ok ? Theme.success
+        : root.status-tone == StatusTone.warning ? Theme.warning
+        : root.status-tone == StatusTone.danger ? Theme.danger
+        : root.status-tone == StatusTone.info ? Theme.accent
+        : Theme.text-muted;
+    // A verified stealth failure overrides the tone with the warning colour.
+    property <color> pill-color: root.stealth-fault ? Theme.warning : root.status-color;
 
     // Live capture flags.
     in-out property <bool> mic-active: false;
@@ -719,7 +732,7 @@ export component OverlayBarWindow inherits Window {
 
     Rectangle {
         background: Theme.bg-surface.with-alpha(0.92);
-        border-radius: 12px;
+        border-radius: Metrics.radius-panel;
         border-width: 1px;
         border-color: Theme.border;
 
@@ -734,7 +747,7 @@ export component OverlayBarWindow inherits Window {
 
         if !root.compact-bar && !root.bootstrap-mode : VerticalLayout {
             padding: 6px;
-            spacing: 4px;
+            spacing: Metrics.space-xs;
 
         HorizontalLayout {
             padding: 2px;
@@ -746,8 +759,8 @@ export component OverlayBarWindow inherits Window {
             // TouchArea here is safe: its bbox is only the pill, so
             // it can't shadow the sibling chips' TouchAreas.
             Rectangle {
-                background: (root.stealth-fault ? Theme.warning : root.status-color).with-alpha(0.18);
-                border-color: root.stealth-fault ? Theme.warning : root.status-color;
+                background: Theme.tint(root.pill-color);
+                border-color: Theme.on-tint(root.pill-color);
                 border-width: 1px;
                 border-radius: Metrics.radius-control;
                 height: 22px;
@@ -770,9 +783,9 @@ export component OverlayBarWindow inherits Window {
                     }
                 }
                 HorizontalLayout {
-                    padding-left: 4px;
-                    padding-right: 8px;
-                    spacing: 4px;
+                    padding-left: Metrics.space-xs;
+                    padding-right: Metrics.space-sm;
+                    spacing: Metrics.space-xs;
                     BrandStateMark {
                         assistant-active: root.ai-streaming;
                         mark-size: 22px;
@@ -790,9 +803,9 @@ export component OverlayBarWindow inherits Window {
                         // I1/I4 — a verified stealth failure overrides the
                         // mic/sys status with the translated generic banner.
                         text: root.presented-status;
-                        font-size: 11px;
+                        font-size: Metrics.font-label;
                         font-weight: 600;
-                        color: root.stealth-fault ? Theme.warning : root.status-color;
+                        color: Theme.on-tint(root.pill-color);
                         vertical-alignment: center;
                     }
                 }
@@ -1018,10 +1031,10 @@ export component OverlayBarWindow inherits Window {
                 clicked => { root.restart-clicked(); }
             }
             if root.restart-armed : HorizontalLayout {
-                spacing: 4px;
+                spacing: Metrics.space-xs;
                 Text {
                     text: @tr("Restart?");
-                    font-size: 11px;
+                    font-size: Metrics.font-label;
                     font-weight: 600;
                     color: Theme.text-primary;
                     vertical-alignment: center;
@@ -1073,10 +1086,10 @@ export component OverlayBarWindow inherits Window {
                 clicked => { root.quit-clicked(); }
             }
             if root.quit-armed : HorizontalLayout {
-                spacing: 4px;
+                spacing: Metrics.space-xs;
                 Text {
                     text: @tr("Quit?");
-                    font-size: 11px;
+                    font-size: Metrics.font-label;
                     font-weight: 600;
                     color: Theme.text-primary;
                     vertical-alignment: center;
@@ -1101,15 +1114,15 @@ export component OverlayBarWindow inherits Window {
         // that STT and AI are working without opening a separate
         // window or watching a log file.
         HorizontalLayout {
-            padding-left: 4px;
-            padding-right: 4px;
+            padding-left: Metrics.space-xs;
+            padding-right: Metrics.space-xs;
             spacing: 6px;
             // Session name (v0.22.0) — relocated here from the top chip row so it
             // no longer pushes the action chips; a small 10px left anchor with a
             // muted dot before the model-stack readout.
             if root.timer-active && root.session-name != "" : Text {
                 text: root.session-name;
-                font-size: 10px;
+                font-size: Metrics.font-caption;
                 font-weight: 600;
                 color: Theme.success;
                 vertical-alignment: center;
@@ -1117,7 +1130,7 @@ export component OverlayBarWindow inherits Window {
             }
             if root.timer-active && root.session-name != "" : Text {
                 text: "·";
-                font-size: 10px;
+                font-size: Metrics.font-caption;
                 color: Theme.text-muted;
                 vertical-alignment: center;
                 horizontal-stretch: 0;
@@ -1129,23 +1142,23 @@ export component OverlayBarWindow inherits Window {
 
                 Text {
                     text: root.active-stack + root.tok-per-sec;
-                    font-size: 10px;
+                    font-size: Metrics.font-caption;
                     font-weight: 600;
                     color: Theme.accent;
                     vertical-alignment: center;
                 }
                 if root.app-memory != "" || root.mlx-memory != "" : HorizontalLayout {
-                    spacing: 4px;
+                    spacing: Metrics.space-xs;
 
                     if root.app-memory != "" : Text {
                         text: @tr("App RAM") + " " + root.app-memory;
-                        font-size: 10px;
+                        font-size: Metrics.font-caption;
                         color: Theme.text-muted;
                         vertical-alignment: center;
                     }
                     if root.mlx-memory != "" : Text {
                         text: "MLX" + " " + root.mlx-memory;
-                        font-size: 10px;
+                        font-size: Metrics.font-caption;
                         color: Theme.text-muted;
                         vertical-alignment: center;
                     }
@@ -1170,7 +1183,7 @@ export component OverlayBarWindow inherits Window {
                 text: root.last-transcript-line == ""
                     ? @tr("waiting for transcript... (mic/sys → STT)")
                     : root.last-transcript-line;
-                font-size: 11px;
+                font-size: Metrics.font-label;
                 color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;
                 overflow: elide;
                 vertical-alignment: center;
@@ -1181,19 +1194,19 @@ export component OverlayBarWindow inherits Window {
                 width: root.ai-streaming ? 80px : 0px;
                 height: 18px;
                 y: (parent.height - self.height) / 2;
-                background: root.ai-streaming ? #818cf8.with-alpha(0.22) : transparent;
-                border-color: #818cf8;
+                background: root.ai-streaming ? Theme.tint(Theme.cat-indigo) : transparent;
+                border-color: Theme.on-tint(Theme.cat-indigo);
                 border-width: root.ai-streaming ? 1px : 0px;
                 border-radius: 9px;
                 horizontal-stretch: 0;
                 if root.ai-streaming : HorizontalLayout {
                     alignment: center;
-                    spacing: 4px;
+                    spacing: Metrics.space-xs;
                     padding-left: 6px;
                     padding-right: 6px;
                     Image {
                         source: @image-url("../assets/icons/brain.svg");
-                        colorize: #818cf8;
+                        colorize: Theme.on-tint(Theme.cat-indigo);
                         width: 12px;
                         height: 12px;
                         image-fit: contain;
@@ -1201,8 +1214,8 @@ export component OverlayBarWindow inherits Window {
                     }
                     Text {
                         text: @tr("AI streaming");
-                        font-size: 10px;
-                        color: #818cf8;
+                        font-size: Metrics.font-caption;
+                        color: Theme.on-tint(Theme.cat-indigo);
                         vertical-alignment: center;
                     }
                 }
@@ -1221,7 +1234,7 @@ export component OverlayBarWindow inherits Window {
         // layout (there is no on-bar Stop here, by design).
         if root.compact-bar && !root.bootstrap-mode : VerticalLayout {
             padding: 6px;
-            spacing: 4px;
+            spacing: Metrics.space-xs;
 
             // ── Action row: status (drag) · спросить · захватить · таймер · развернуть ──
             HorizontalLayout {
@@ -1233,8 +1246,8 @@ export component OverlayBarWindow inherits Window {
                 // bar: only the pill is the drag zone, so it can't shadow the
                 // sibling buttons' TouchAreas). Tinted by the live session state.
                 Rectangle {
-                    background: (root.stealth-fault ? Theme.warning : root.status-color).with-alpha(0.18);
-                    border-color: root.stealth-fault ? Theme.warning : root.status-color;
+                    background: Theme.tint(root.pill-color);
+                    border-color: Theme.on-tint(root.pill-color);
                     border-width: 1px;
                     border-radius: Metrics.radius-control;
                     height: 22px;
@@ -1269,9 +1282,9 @@ export component OverlayBarWindow inherits Window {
                         // brand mark, grip, order and padding/spacing — so the
                         // left brand+grip block doesn't change at all on the
                         // compact toggle (no icon difference between modes).
-                        padding-left: 4px;
-                        padding-right: 8px;
-                        spacing: 4px;
+                        padding-left: Metrics.space-xs;
+                        padding-right: Metrics.space-sm;
+                        spacing: Metrics.space-xs;
                         // Brand state mark — the SAME element the full bar uses
                         // (was a separate дуо icon; unified for zero visual diff;
                         // pulses on ai-streaming exactly like the full bar).
@@ -1292,9 +1305,9 @@ export component OverlayBarWindow inherits Window {
                             // I1/I4 — same translated stealth-failure override
                             // as the full bar's pill.
                             text: root.presented-status;
-                            font-size: 11px;
+                            font-size: Metrics.font-label;
                             font-weight: 600;
-                            color: root.stealth-fault ? Theme.warning : root.status-color;
+                            color: Theme.on-tint(root.pill-color);
                             vertical-alignment: center;
                             // Elide a long status within the capped pill so it can
                             // never overflow the narrow compact window. Short
@@ -1389,12 +1402,12 @@ export component OverlayBarWindow inherits Window {
 
             // ── Live-status footer — same readout as the full bar's bottom row. ──
             HorizontalLayout {
-                padding-left: 4px;
-                padding-right: 4px;
+                padding-left: Metrics.space-xs;
+                padding-right: Metrics.space-xs;
                 spacing: 6px;
                 Text {
                     text: root.active-stack + root.tok-per-sec;
-                    font-size: 10px;
+                    font-size: Metrics.font-caption;
                     font-weight: 600;
                     color: Theme.accent;
                     overflow: elide;
@@ -1414,7 +1427,7 @@ export component OverlayBarWindow inherits Window {
                     text: root.last-transcript-line == ""
                         ? @tr("waiting for transcript... (mic/sys → STT)")
                         : root.last-transcript-line;
-                    font-size: 11px;
+                    font-size: Metrics.font-label;
                     color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;
                     overflow: elide;
                     vertical-alignment: center;
@@ -1427,7 +1440,7 @@ export component OverlayBarWindow inherits Window {
         // hidden in this mode until its callbacks have real platform adapters.
         if root.bootstrap-mode : VerticalLayout {
             padding: Metrics.space-sm;
-            spacing: 4px;
+            spacing: Metrics.space-xs;
 
             HorizontalLayout {
                 spacing: Metrics.space-md;
@@ -1510,8 +1523,8 @@ export component OverlayBarWindow inherits Window {
             // readout the normal bars show (dot = source tag, text = the
             // newest STT line; the placeholder stays until the first line).
             HorizontalLayout {
-                padding-left: 4px;
-                padding-right: 4px;
+                padding-left: Metrics.space-xs;
+                padding-right: Metrics.space-xs;
                 spacing: 6px;
                 Rectangle {
                     width: 8px;
@@ -1526,7 +1539,7 @@ export component OverlayBarWindow inherits Window {
                     text: root.last-transcript-line == ""
                         ? @tr("waiting for transcript... (mic/sys → STT)")
                         : root.last-transcript-line;
-                    font-size: 11px;
+                    font-size: Metrics.font-label;
                     color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;
                     overflow: elide;
                     vertical-alignment: center;

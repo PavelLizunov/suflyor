@@ -18,12 +18,16 @@
 // frameless windows; present_window_stealth_aware does not wire DWM
 // blur-behind.
 
-import { Button, ScrollView } from "std-widgets.slint";
+import { Button, ScrollView, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { CloseButton, DragGrip } from "controls.slint";
 import { Metrics } from "metrics.slint";
 
 export component RecoverOfferWindow inherits Window {
+    // std-widgets follow the active colour scheme instead of the light default.
+    property <bool> widgets-light: Theme.is-light;
+    init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
+    changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     no-frame: true;
     always-on-top: true;
     title: @tr("suflyor recover session (Slint)");

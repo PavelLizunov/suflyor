@@ -41,13 +41,13 @@ pub(super) static TRAY_AVAILABLE: AtomicBool = AtomicBool::new(false);
 /// revert timer silently overwrote «mic muted» with «sys only»/«idle»,
 /// hiding the privacy-relevant mute state from the user.
 pub(super) fn refresh_status(overlay: &OverlayBarWindow, mic: bool, sys: bool) {
-    let (text, color) = match (mic, sys) {
-        (true, true) => ("recording", slint::Color::from_rgb_u8(0x34, 0xd3, 0x99)),
-        (true, false) => ("mic only", slint::Color::from_rgb_u8(0x34, 0xd3, 0x99)),
-        (false, _) => ("mic muted", slint::Color::from_rgb_u8(0xfb, 0xbf, 0x24)),
+    let (text, tone) = match (mic, sys) {
+        (true, true) => ("recording", crate::ui::StatusTone::Ok),
+        (true, false) => ("mic only", crate::ui::StatusTone::Ok),
+        (false, _) => ("mic muted", crate::ui::StatusTone::Warning),
     };
     overlay.set_status_text(SharedString::from(text));
-    overlay.set_status_color(color);
+    overlay.set_status_tone(tone);
 }
 
 pub(super) fn get_mic_active(state: &slint_replay::app_state::SharedState) -> bool {
