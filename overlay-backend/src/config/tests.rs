@@ -1742,13 +1742,50 @@ fn mask_host_handles_query_and_fragment_boundaries() {
     // RFC 3986: authority is delimited by '/', '?', or '#' without requiring a trailing slash.
     assert_eq!(
         mask_host("http://192.168.0.142:18902?token=secret123"),
-        "http://***:18902?token=secret123"
+        "http://***:18902?***"
     );
     assert_eq!(
         mask_host("http://user:secret@192.168.0.142:18902#section"),
-        "http://***:18902#section"
+        "http://***:18902#***"
     );
-    assert_eq!(mask_host("10.0.0.5:9000?query=1"), "***:9000?query=1");
+    assert_eq!(mask_host("10.0.0.5:9000?query=1"), "***:9000?***");
+}
+
+#[test]
+fn mask_host_drops_query_and_fragment_values() {
+    // A bridge token or key passed in the query string or the fragment must not
+    // survive into a copyable or exported string.
+    assert_eq!(
+        mask_host("http://192.168.0.142:18902/v1?token=BRIDGE_SECRET&x=1"),
+        "http://***:18902/v1?***"
+    );
+    assert_eq!(
+        mask_host("http://127.0.0.1/v1#bearer=abcdef"),
+        "http://***/v1#***"
+    );
+    assert_eq!(
+        mask_host("http://u:p@10.0.0.1:18902/v1?api_key=k#frag"),
+        "http://***:18902/v1?***"
+    );
+    // No query and no fragment: the path is kept as before.
+    assert_eq!(mask_host("http://10.0.0.1:80/v1"), "http://***:80/v1");
+}
+
+#[test]
+fn mask_host_masks_the_host_behind_extra_slashes() {
+    // A scheme-relative URL and a URL with an empty authority used to put the
+    // host into the part that is kept verbatim.
+    assert_eq!(mask_host("//192.168.0.142:18902/v1"), "//***:18902/v1");
+    assert_eq!(mask_host("http:///192.168.0.142/v1"), "http:///***/v1");
+    // A "://" inside a query value is not the scheme boundary.
+    assert_eq!(
+        mask_host("//user:secret@private.example/v1?token=T&next=https://public.example"),
+        "//***/v1?***"
+    );
+    assert_eq!(
+        mask_host("10.0.0.5:9000/v1?next=http://a.example"),
+        "***:9000/v1?***"
+    );
 }
 // ===== Deep lock (bar lock chip, managed-local only) =====
 

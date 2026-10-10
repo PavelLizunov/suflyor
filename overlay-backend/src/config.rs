@@ -1843,9 +1843,14 @@ pub struct ServerSettingsPreview {
     pub gigaam_dir_incoming: String,
 }
 
+fn is_scheme_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.')
+}
+
 /// Mask the host of a URL for a COPYABLE / loggable string, keeping the scheme,
 /// port and path so it's still recognisable without leaking the private LAN IP
-/// or hostname. `http://192.168.0.142:18902/v1` -> `http://***:18902/v1`. Empty
+/// or hostname. `http://192.168.0.142:18902/v1` -> `http://***:18902/v1`. A query
+/// string or a fragment is reduced to `?***` / `#***`. Empty
 /// input -> empty output. Best-effort: anything it can't parse is returned with
 /// the authority blanked rather than echoed.
 #[must_use]
@@ -1854,18 +1859,32 @@ pub fn mask_host(url: &str) -> String {
     if url.is_empty() {
         return String::new();
     }
-    // Split off scheme:// if present.
+    // Split off scheme:// if present. Only a real scheme counts (letters, digits,
+    // '+', '-', '.'): a "://" further in, for example in a query value of a URL
+    // that has no scheme of its own, must not move the boundary past the host.
     let (scheme, rest) = match url.find("://") {
-        Some(i) => (&url[..i + 3], &url[i + 3..]),
-        None => ("", url),
+        Some(i) if i > 0 && url[..i].bytes().all(is_scheme_byte) => (&url[..i + 3], &url[i + 3..]),
+        _ => ("", url),
     };
     // SECURITY: Per RFC 3986 URI generic syntax, the authority component is
     // delimited by the first '/', '?', or '#' character (or end of string).
     // Using rest.find(['/', '?', '#']) ensures query strings and fragments without
     // a leading slash do not leak into authority parsing or corrupt port detection.
-    let (authority, path) = match rest.find(['/', '?', '#']) {
+    // Slashes in front of the authority (`//host/v1`, `http:///host/v1`) are kept
+    // as they are, so that the host behind them is parsed as the authority and
+    // masked instead of landing in the verbatim remainder.
+    let slashes = rest.len() - rest.trim_start_matches('/').len();
+    let (lead, rest) = rest.split_at(slashes);
+    let (authority, tail) = match rest.find(['/', '?', '#']) {
         Some(i) => (&rest[..i], &rest[i..]),
         None => (rest, ""),
+    };
+    // A query string or a fragment may carry a token or a key: keep only the
+    // delimiter, so the string stays recognisable without its values.
+    let (path, hidden) = match tail.find(['?', '#']) {
+        Some(i) if tail[i..].starts_with('?') => (&tail[..i], "?***"),
+        Some(i) => (&tail[..i], "#***"),
+        None => (tail, ""),
     };
     // SECURITY: strip embedded user credentials (userinfo) before host/port parsing.
     // If a URL contains userinfo (e.g., http://user:password@host/v1), authority.rfind(':')
@@ -1908,7 +1927,7 @@ pub fn mask_host(url: &str) -> String {
             None => "",
         }
     };
-    format!("{scheme}***{port}{path}")
+    format!("{scheme}{lead}***{port}{path}{hidden}")
 }
 
 /// P1.7 — PURE, REDACTED preview of a server-settings import. For each endpoint
