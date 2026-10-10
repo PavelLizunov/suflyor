@@ -10,11 +10,11 @@ and pass --url http://127.0.0.1:19123/mcp (or set SLINT_MCP_URL).
 Commands (each prints JSON or plain lines; images are written as PNG files):
     tools                               list the server's tools
     windows                             every window: handle, position, size, visible
-    tree WINDOW                         flat element list of a window (role, label, value, box)
+    tree WINDOW                         flat element list of a window (role, label, value, checked state, box)
     shot WINDOW OUT.png                 screenshot of a window (true colours)
     shot-element WINDOW QUERY OUT.png   one element, cropped from the window screenshot
     shot-elements WINDOW OUTDIR         every labelled or interactive element, one PNG each,
-                                        plus index.tsv (file, role, label, value, x, y, w, h)
+                                        plus index.tsv (file, role, label, value, state, x, y, w, h)
     click WINDOW QUERY                  left click on one element
     set WINDOW QUERY VALUE              set the accessible value (text input, slider, combobox)
     scroll WINDOW QUERY DY [DX]         mouse wheel over an element (needs Slint 1.18 or newer)
@@ -24,7 +24,7 @@ Commands (each prints JSON or plain lines; images are written as PNG files):
 WINDOW is a handle "index" or "index:generation" as printed by `windows`, or one of
 the names bar, settings, palette, archive, transcript, help (matched by window size).
 QUERY selects one element: "label=Settings", "role=Button,label=Close", "value=English",
-"contains=knowledge", "id=App::my-button", "#12" (index in the tree listing). Add
+"contains=knowledge", "checked=true", "id=App::my-button", "#12" (index in the tree listing). Add
 ",nth=2" when several match.
 
 As a module: `import slint_mcp as m; m.connect(url); m.windows(); m.tree(w); ...`
@@ -192,6 +192,8 @@ def tree(window, max_elements=4000):
             "role": e.get("accessibleRole") or "",
             "label": e.get("accessibleLabel") or "",
             "value": e.get("accessibleValue") or "",
+            # True/False for a checkable element (toggle, current tab), None otherwise.
+            "checked": bool(e.get("accessibleChecked")) if e.get("accessibleCheckable") else None,
             "type": names[0].get("typeName", "") if names else "",
             "ids": [t.get("id") for t in names if t.get("id")],
             "x": pos.get("x", 0), "y": pos.get("y", 0),
@@ -220,6 +222,8 @@ def select(elements, query):
         if "role" in want and e["role"].lower() != want["role"].lower():
             continue
         if "value" in want and e["value"] != want["value"]:
+            continue
+        if "checked" in want and e["checked"] != (want["checked"].lower() in ("1", "true", "yes", "on")):
             continue
         if "contains" in want and want["contains"].lower() not in (e["label"] + " " + e["value"]).lower():
             continue
@@ -393,9 +397,10 @@ def shot_elements(window, outdir, pad=4):
         slug = "".join(c if c.isalnum() else "-" for c in (e["label"] or e["value"] or e["type"]))[:40].strip("-")
         name = f"{e['n']:04d}-{(e['role'] or 'element').lower()}-{slug}.png"
         if shot_element(window, e, os.path.join(outdir, name), pad, image):
-            rows.append((name, e["role"], e["label"], e["value"], e["x"], e["y"], e["width"], e["height"]))
+            state = "" if e["checked"] is None else ("checked" if e["checked"] else "unchecked")
+            rows.append((name, e["role"], e["label"], e["value"], state, e["x"], e["y"], e["width"], e["height"]))
     with open(os.path.join(outdir, "index.tsv"), "w", encoding="utf-8") as f:
-        f.write("file\trole\tlabel\tvalue\tx\ty\twidth\theight\n")
+        f.write("file\trole\tlabel\tvalue\tstate\tx\ty\twidth\theight\n")
         for row in rows:
             f.write("\t".join(str(v).replace("\t", " ").replace("\n", " ") for v in row) + "\n")
     return len(rows)
@@ -422,7 +427,8 @@ def main(argv):
     elif command == "tree":
         for e in tree(find_window(rest[0])):
             if e["role"] or e["label"] or e["value"] or e["ids"]:
-                print(f"#{e['n']}\t{e['role']}\t{e['label']!r}\t{e['value']!r}\t"
+                state = "" if e["checked"] is None else ("checked" if e["checked"] else "unchecked")
+                print(f"#{e['n']}\t{e['role']}\t{e['label']!r}\t{e['value']!r}\t{state}\t"
                       f"{e['x']:.0f},{e['y']:.0f} {e['width']:.0f}x{e['height']:.0f}\t{' '.join(e['ids'])}")
     elif command == "shot":
         with open(rest[1], "wb") as f:
