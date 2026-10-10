@@ -228,7 +228,7 @@ Fix plan: keep the failure kind, which has no address in it, in the message.
 Closed by: #249, master 1161c72e96bd37ab276585325b9bd919e6ead89f, released in v0.38.1-rc.5
 
 ### D-030 Text that the host builds in Rust exists in one language only   Severity: P3   Status: Open
-Evidence: slint-experiment/src/bin/overlay_host/settings_updates.rs:47 - `set_update_status` with `"Проверка GitHub…"`; slint-experiment/src/bin/overlay_host/settings_import_export.rs:103 - `"import cancelled"` (a script lists 62 Russian and 44 English literals passed straight to a Slint setter; ~/.hygiene/sufloyr/design/static-s7/rust-strings.tsv)
+Evidence: slint-experiment/src/bin/overlay_host/settings_updates.rs:47 - `set_update_status` with `"Проверка GitHub…"`; slint-experiment/src/bin/overlay_host/settings_import_export.rs:103 - `"import cancelled"` (master 1161c72; a script over the sources counts 62 Russian and 44 English string literals passed straight to a Slint setter, not counting the 12 state words that the bar translates itself)
 Scenario: the English interface shows Russian status lines in Updates, local AI, Hermes, diagnostics, memory and the transcript window; the Russian interface shows English ones in the connection tests, import and export, and the wizard (`[err] no Groq API key set`). A comment in transcript.rs says Rust-built Russian is allowed, so part of this is a recorded choice, not an oversight.
 Found by: script over the sources on 2026-10-11; the wizard and tile cases were also seen live.
 Fix plan: one helper per module in the style of `status_copy.rs` and `tile_text.rs`, and a guard test that fails on a literal with letters passed to a setter. The same pass can replace the 118 `[ok]` / `[err]` / `[--]` markers by a state the UI draws.
@@ -240,7 +240,7 @@ Found by: the 13-key pass on windows-worker on 2026-10-11.
 Fix plan: a short status on the bar, as the other keys that cannot act already do.
 
 ### D-032 `cargo fmt --check` does not see the modules of `overlay_host/`   Severity: P3   Status: Open
-Evidence: slint-experiment/src/bin/overlay_host/status_copy.rs:196 - a 109-character function signature, `pub(super) fn manual_tile_placeholder(deep_locked: bool, has_transcript: bool, is_ru: bool) -> &'static str {`, which rustfmt would wrap; slint-experiment/src/bin/overlay_host.rs:19 - `include!("overlay_host_windows.rs");`
+Evidence: slint-experiment/src/bin/overlay_host/status_copy.rs:196 - a 109-character function signature, `pub(super) fn manual_tile_placeholder(deep_locked: bool, has_transcript: bool, is_ru: bool) -> &'static str {`, which rustfmt would wrap (master 1161c72); slint-experiment/src/bin/overlay_host.rs:19 - `include!("overlay_host_windows.rs");`
 Scenario: the host's modules are declared with `#[path]` inside a file that is pulled in with `include!`, and rustfmt does not follow `include!`. The format step of the gate therefore passes whatever those 36 files look like.
 Found by: the worker's `cargo fmt` on 2026-10-11 changed nothing in a new file with an over-long line under `overlay_host/`, while it reformatted files outside it.
 Fix plan: a gate step that runs `rustfmt --check --edition 2021` on the files under `src/bin/overlay_host/`, after one formatting commit.
