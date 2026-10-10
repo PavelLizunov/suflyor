@@ -38,8 +38,12 @@ pub fn index_journal_file(store: &mut Store, path: &Path) -> Result<Option<Sessi
     if id.is_empty() {
         bail!("journal path has no usable file stem: {}", path.display());
     }
-    let content = std::fs::read_to_string(path)
-        .with_context(|| format!("read journal {}", path.display()))?;
+    // Lossy on purpose: a torn write can leave bytes that are not UTF-8, and one
+    // such line must not hide every valid event of the session. A damaged line
+    // that is no longer JSON is skipped below like any other corrupt line; one
+    // that is still JSON keeps its text with U+FFFD in place of the bad bytes.
+    let bytes = std::fs::read(path).with_context(|| format!("read journal {}", path.display()))?;
+    let content = String::from_utf8_lossy(&bytes);
 
     let mut started_at_ms = None;
     let mut finished_at_ms = None;
@@ -308,6 +312,35 @@ mod tests {
         let s = index_journal_file(&mut store, &path).unwrap().unwrap();
         assert_eq!(s.transcript_lines, 1);
         assert_eq!(s.status, "completed");
+    }
+
+    #[test]
+    fn invalid_utf8_line_does_not_hide_the_session() {
+        // A torn write can leave bytes that are not UTF-8. The valid lines around
+        // them must still be indexed, as with a line that is not JSON.
+        let mut store = Store::open_in_memory().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sess.jsonl");
+        let good = br#"{"kind":"transcript_line","unix_ms":1,"source":"mic","text":"hi"}"#;
+        let torn = b"{\"kind\":\"transcript_line\",\"text\":\"\xff\xfe";
+        let stop = br#"{"kind":"session_stop","unix_ms":2}"#;
+        let bytes = [&good[..], &torn[..], &stop[..]].join(&b'\n');
+        std::fs::write(&path, bytes).unwrap();
+        let s = index_journal_file(&mut store, &path).unwrap().unwrap();
+        assert_eq!(s.transcript_lines, 1);
+        assert_eq!(s.status, "completed");
+    }
+
+    #[test]
+    fn invalid_utf8_inside_a_complete_line_keeps_the_line() {
+        let mut store = Store::open_in_memory().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sess.jsonl");
+        let head = br#"{"kind":"transcript_line","unix_ms":1,"source":"mic","text":"a"#;
+        let line = [&head[..], &b"\xffb\"}\n"[..]].concat();
+        std::fs::write(&path, line).unwrap();
+        let s = index_journal_file(&mut store, &path).unwrap().unwrap();
+        assert_eq!(s.transcript_lines, 1);
     }
 
     #[test]
