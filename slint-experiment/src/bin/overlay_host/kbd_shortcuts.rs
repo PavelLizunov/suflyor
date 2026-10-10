@@ -67,7 +67,7 @@ pub(crate) fn install(win: &slint::Window) {
         // Core recomputes modifiers from its own tracked state, so the physically-held
         // Ctrl still applies → the synthetic letter arrives as Ctrl+<letter> on the
         // focused item. Swallow the original so the "м" isn't also handled.
-        let _ = slint_win.try_dispatch_event(synth);
+        let _ = slint_win.dispatch_event_with_result(synth);
         EventResult::PreventDefault
     });
 }

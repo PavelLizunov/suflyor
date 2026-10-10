@@ -16,7 +16,37 @@ fn element(bar: &ui::OverlayBarWindow, label: &str) -> ElementHandle {
         .unwrap_or_else(|| panic!("find element with accessible label: {label}"))
 }
 
-fn assert_open_tile_geometry(bar: &ui::OverlayBarWindow, close_all_label: &str, tile_label: &str) {
+/// Accessibility labels of the bar's icon-only chips in one interface language.
+struct ChipLabels {
+    archive: &'static str,
+    write: &'static str,
+    camera: &'static str,
+    quit: &'static str,
+    expand: &'static str,
+}
+
+const ENGLISH_CHIPS: ChipLabels = ChipLabels {
+    archive: "Session archive",
+    write: "Write a question",
+    camera: "Screenshot to vision",
+    quit: "Quit",
+    expand: "Expand the bar",
+};
+
+const RUSSIAN_CHIPS: ChipLabels = ChipLabels {
+    archive: "Архив сессий",
+    write: "Написать вопрос",
+    camera: "Скриншот в vision",
+    quit: "Выйти",
+    expand: "Развернуть бар",
+};
+
+fn assert_open_tile_geometry(
+    bar: &ui::OverlayBarWindow,
+    close_all_label: &str,
+    tile_label: &str,
+    chips: &ChipLabels,
+) {
     bar.set_deep_lock(true);
     bar.set_suppress_tiles(true);
     bar.set_timer_active(true);
@@ -35,12 +65,12 @@ fn assert_open_tile_geometry(bar: &ui::OverlayBarWindow, close_all_label: &str, 
         bar.window().set_size(LogicalSize::new(1280.0, 64.0));
 
         let lock = element(bar, "Lock mode");
-        let archive = element(bar, "Session archive");
+        let archive = element(bar, chips.archive);
         let close_all = element(bar, close_all_label);
-        let write = element(bar, "Write a question");
+        let write = element(bar, chips.write);
         let tile = element(bar, &format!("{tile_label} ({count})"));
-        let camera = element(bar, "Screenshot to vision");
-        let quit = element(bar, "Quit");
+        let camera = element(bar, chips.camera);
+        let quit = element(bar, chips.quit);
 
         assert!(
             close_all.size().width >= natural_close_width,
@@ -99,7 +129,7 @@ fn assert_open_tile_geometry(bar: &ui::OverlayBarWindow, close_all_label: &str, 
     }
 }
 
-fn assert_compact_geometry(bar: &ui::OverlayBarWindow) {
+fn assert_compact_geometry(bar: &ui::OverlayBarWindow, chips: &ChipLabels) {
     bar.set_compact_bar(true);
     bar.set_open_tiles(99);
     bar.set_deep_lock(true);
@@ -121,7 +151,7 @@ fn assert_compact_geometry(bar: &ui::OverlayBarWindow) {
     for (name, item) in [
         ("lock", element(bar, "Lock mode")),
         ("timer", element(bar, "88:88")),
-        ("expand", element(bar, "Expand the bar")),
+        ("expand", element(bar, chips.expand)),
     ] {
         let pos = item.absolute_position();
         let size = item.size();
@@ -209,15 +239,15 @@ fn open_tile_controls_stay_inside_1280_in_english_and_russian() {
     i_slint_backend_testing::init_no_event_loop();
 
     let english = ui::OverlayBarWindow::new().expect("create English bar");
-    assert_open_tile_geometry(&english, "close all", "+ tile");
-    assert_compact_geometry(&english);
+    assert_open_tile_geometry(&english, "close all", "+ tile", &ENGLISH_CHIPS);
+    assert_compact_geometry(&english, &ENGLISH_CHIPS);
     assert_memory_footer_geometry(&english, "App RAM");
     assert_confirming_geometry(&english, "Yes", "No");
 
     slint::select_bundled_translation("ru").expect("select Russian translation");
     let russian = ui::OverlayBarWindow::new().expect("create Russian bar");
-    assert_open_tile_geometry(&russian, "закрыть все", "+ тайл");
-    assert_compact_geometry(&russian);
+    assert_open_tile_geometry(&russian, "закрыть все", "+ тайл", &RUSSIAN_CHIPS);
+    assert_compact_geometry(&russian, &RUSSIAN_CHIPS);
     assert_memory_footer_geometry(&russian, "RAM приложения");
     assert_confirming_geometry(&russian, "Да", "Нет");
 }
