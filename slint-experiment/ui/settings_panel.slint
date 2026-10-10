@@ -89,7 +89,8 @@ export component SettingsWindow inherits Window {
     // via make_transparent_tile on show). User: "закруглить рамки".
     background: transparent;
 
-    in-out property <int> active-tab: 0;
+    // 10 is "Profile + context", the first entry of the navigation list.
+    in-out property <int> active-tab: 10;
     // Tile-placement monitor picker (tab 0). Items + selected index are filled by
     // the Rust controller from enum_monitors() on open; the card hides when there
     // is only one display.
