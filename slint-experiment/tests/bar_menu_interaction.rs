@@ -592,7 +592,8 @@ fn assert_menu_grid(menu: &ui::BarMenuWindow, russian: bool) {
                 "sound word is pinned to the key column's right edge: {right}"
             );
             assert!(chip_pos.x >= key_x && chip_size.width > 0.0);
-            assert_eq!(chip_size.height, 20.0);
+            // Only the Text carries the label; it sits inside the 20 px chip.
+            assert!(chip_size.height > 0.0 && chip_size.height <= 20.0);
             targets.push((format!("{label}: {word}"), chip_pos, chip_size));
         }
         let key = match index {
