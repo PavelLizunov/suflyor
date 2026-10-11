@@ -557,6 +557,27 @@ export component OverlayBarWindow inherits Window {
     out property <bool> autotile-word-fits: autotile-chip.fits;
     // Raw capsule evidence for every form; retain the mini-prefixed accessors.
     out property <length> state-content-width: state-capsule.content-width;
+    // Absolute capsule bounds for headless order/containment regression tests.
+    out property <length> state-capsule-x: state-capsule.absolute-position.x;
+    out property <length> state-capsule-y: state-capsule.absolute-position.y;
+    out property <length> state-capsule-width: state-capsule.width;
+    out property <length> state-capsule-height: state-capsule.height;
+    out property <length> voice-capsule-x: voice-capsule.absolute-position.x;
+    out property <length> voice-capsule-y: voice-capsule.absolute-position.y;
+    out property <length> voice-capsule-width: voice-capsule.width;
+    out property <length> voice-capsule-height: voice-capsule.height;
+    out property <length> session-capsule-x: session-capsule.absolute-position.x;
+    out property <length> session-capsule-y: session-capsule.absolute-position.y;
+    out property <length> session-capsule-width: session-capsule.width;
+    out property <length> session-capsule-height: session-capsule.height;
+    out property <length> tiles-capsule-x: tiles-capsule.absolute-position.x;
+    out property <length> tiles-capsule-y: tiles-capsule.absolute-position.y;
+    out property <length> tiles-capsule-width: tiles-capsule.width;
+    out property <length> tiles-capsule-height: tiles-capsule.height;
+    out property <length> window-capsule-x: window-capsule.absolute-position.x;
+    out property <length> window-capsule-y: window-capsule.absolute-position.y;
+    out property <length> window-capsule-width: window-capsule.width;
+    out property <length> window-capsule-height: window-capsule.height;
     out property <bool> mini-voice-fits: voice-capsule.fits;
     out property <bool> mini-session-fits: session-capsule.fits;
     out property <bool> mini-tiles-fits: tiles-capsule.fits;

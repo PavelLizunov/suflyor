@@ -91,7 +91,314 @@ fn assert_top_bounds(item: &ElementHandle, width: f32, name: &str) {
     );
 }
 
+#[derive(Clone, Copy, Debug)]
+struct Rect {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+}
+
+impl Rect {
+    fn of(item: &ElementHandle) -> Self {
+        let pos = item.absolute_position();
+        let size = item.size();
+        Self {
+            x: pos.x,
+            y: pos.y,
+            width: size.width,
+            height: size.height,
+        }
+    }
+
+    fn right(self) -> f32 {
+        self.x + self.width
+    }
+
+    fn bottom(self) -> f32 {
+        self.y + self.height
+    }
+
+    fn contains(self, x: f32, y: f32) -> bool {
+        x >= self.x && x <= self.right() && y >= self.y && y <= self.bottom()
+    }
+}
+
+fn mic_label(bar: &ui::OverlayBarWindow, labels: &Labels) -> &'static str {
+    match (labels.russian, bar.get_mic_muted()) {
+        (true, true) => "Микрофон выключен (нажмите, чтобы включить)",
+        (true, false) => "Микрофон включён (нажмите, чтобы выключить)",
+        (false, true) => "Mic muted (click to unmute)",
+        (false, false) => "Mic live (click to mute)",
+    }
+}
+
+fn assert_top_order_and_capsules(
+    bar: &ui::OverlayBarWindow,
+    labels: &Labels,
+    form: i32,
+    state: &str,
+) {
+    // No layout-derived reads until `if` children have been instantiated.
+    assert_eq!(
+        ElementHandle::find_by_accessible_label(bar, labels.stealth).count(),
+        1,
+        "settle top row: form={form}, russian={}, {state}",
+        labels.russian,
+    );
+    let spec = bar.global::<ui::BarSpec>();
+    let capsules = [
+        Rect {
+            x: bar.get_state_capsule_x(),
+            y: bar.get_state_capsule_y(),
+            width: bar.get_state_capsule_width(),
+            height: bar.get_state_capsule_height(),
+        },
+        Rect {
+            x: bar.get_voice_capsule_x(),
+            y: bar.get_voice_capsule_y(),
+            width: bar.get_voice_capsule_width(),
+            height: bar.get_voice_capsule_height(),
+        },
+        Rect {
+            x: bar.get_session_capsule_x(),
+            y: bar.get_session_capsule_y(),
+            width: bar.get_session_capsule_width(),
+            height: bar.get_session_capsule_height(),
+        },
+        Rect {
+            x: bar.get_tiles_capsule_x(),
+            y: bar.get_tiles_capsule_y(),
+            width: bar.get_tiles_capsule_width(),
+            height: bar.get_tiles_capsule_height(),
+        },
+        Rect {
+            x: bar.get_window_capsule_x(),
+            y: bar.get_window_capsule_y(),
+            width: bar.get_window_capsule_width(),
+            height: bar.get_window_capsule_height(),
+        },
+    ];
+    let first = usize::from(form == 2);
+    let width = match form {
+        0 => spec.get_full_width(),
+        1 => spec.get_compact_width(),
+        2 => spec.get_mini_width(),
+        _ => panic!("unsupported bar form: {form}"),
+    };
+    let declared = match form {
+        0 => [
+            spec.get_full_state(),
+            spec.get_full_voice(),
+            spec.get_full_session(),
+            spec.get_full_tiles(),
+            spec.get_full_window(),
+        ],
+        1 => [
+            spec.get_compact_state(),
+            spec.get_compact_voice(),
+            spec.get_compact_session(),
+            spec.get_compact_tiles(),
+            spec.get_compact_window(),
+        ],
+        2 => [
+            0.0,
+            spec.get_mini_voice(),
+            spec.get_mini_session(),
+            spec.get_mini_tiles(),
+            spec.get_mini_window(),
+        ],
+        _ => panic!("unsupported bar form: {form}"),
+    };
+    for (index, capsule) in capsules.iter().enumerate().skip(first) {
+        assert!(capsule.width > 0.0 && capsule.height > 0.0);
+        assert_eq!(
+            capsule.width, declared[index],
+            "actual capsule width: {state}"
+        );
+        assert!(capsule.y >= 0.0 && capsule.bottom() <= 34.0);
+        assert!(
+            capsule.x >= spec.get_pad() + spec.get_badge() + spec.get_pad()
+                && capsule.right() <= width - spec.get_pad(),
+            "capsule={index} outside content: {capsule:?}, form={form}, {state}"
+        );
+        assert_eq!(capsule.y, capsules[first].y, "capsule row: {state}");
+        assert_eq!(
+            capsule.height, capsules[first].height,
+            "capsule height: {state}"
+        );
+    }
+    for (index, pair) in capsules[first..].windows(2).enumerate() {
+        let separation = pair[1].x - pair[0].right();
+        assert!(
+            separation > 0.0,
+            "capsules overlap: form={form}, {state}, {pair:?}"
+        );
+        if index + first == 3 {
+            // The spring is a separate layout child with a gap on each side.
+            assert!(separation >= 2.0 * spec.get_gap() + spec.get_spring());
+        } else {
+            assert_eq!(
+                separation,
+                spec.get_gap(),
+                "capsule gap: form={form}, {state}"
+            );
+        }
+    }
+
+    let mut names = Vec::new();
+    if form != 2 {
+        names.push((labels.stealth.to_owned(), 0));
+        if form == 0 {
+            names.push((mic_label(bar, labels).to_owned(), 0));
+            names.push((
+                if labels.russian {
+                    "Захват системного звука"
+                } else {
+                    "System audio capture"
+                }
+                .to_owned(),
+                0,
+            ));
+        }
+    }
+    names.extend([(labels.ask.to_owned(), 1), (labels.grab.to_owned(), 1)]);
+    let session = if bar.get_timer_active() {
+        labels.stop
+    } else if labels.russian {
+        "Начать сессию"
+    } else {
+        "Start the session"
+    };
+    names.push((session.to_owned(), 2));
+    if bar.get_timer_active() {
+        let pause = match (labels.russian, bar.get_session_paused()) {
+            (true, true) => "Продолжить сессию",
+            (true, false) => "Приостановить сессию",
+            (false, true) => "Resume the session",
+            (false, false) => "Pause the session",
+        };
+        names.push((pause.to_owned(), 2));
+    }
+    if form == 2 {
+        names.push((labels.stealth.to_owned(), 3));
+    }
+    let switch = match (labels.russian, bar.get_autotile_mode()) {
+        (true, 0) => "Молчат: сами не появляются",
+        (true, 2) => "На каждую реплику",
+        (true, _) => "По вопросам",
+        (false, 0) => "Silent: no automatic tiles",
+        (false, 2) => "On every line",
+        (false, _) => "On questions",
+    };
+    names.push((switch.to_owned(), 3));
+    if form == 0 {
+        names.push((
+            labels.tile.replace("{}", &bar.get_open_tiles().to_string()),
+            3,
+        ));
+        if bar.get_open_tiles() > 0 {
+            names.push((labels.close_all.to_owned(), 3));
+        }
+        names.push((labels.write.to_owned(), 3));
+    }
+    // Compact's approved order is tray, expand, More (not expand, tray).
+    if form == 1 && bar.get_tray_available() {
+        names.push((labels.tray.to_owned(), 4));
+    }
+    names.push((
+        if form == 0 {
+            labels.compact
+        } else {
+            labels.expand
+        }
+        .to_owned(),
+        4,
+    ));
+    names.push((labels.more.to_owned(), 4));
+    let controls: Vec<_> = names
+        .iter()
+        .map(|(name, capsule)| {
+            let matches: Vec<_> = ElementHandle::find_by_accessible_label(bar, name).collect();
+            // A full-form tray pin is in the footer, never in this list.
+            assert_eq!(
+                matches.len(),
+                1,
+                "unique top control: {name}, form={form}, {state}"
+            );
+            let item = &matches[0];
+            assert_top_bounds(item, width, name);
+            let rect = Rect::of(item);
+            let parent = capsules[*capsule];
+            assert!(
+                parent.contains(rect.x, rect.y) && parent.contains(rect.right(), rect.bottom()),
+                "child outside capsule: {name}, rect={rect:?}, capsule={parent:?}, {state}"
+            );
+            (name.as_str(), rect)
+        })
+        .collect();
+    let status = if bar.get_stealth_fault() {
+        if labels.russian {
+            "[!] скрытность недоступна"
+        } else {
+            "[!] stealth unavailable"
+        }
+        .to_owned()
+    } else {
+        let status = bar.get_status_text().to_string();
+        if labels.russian && status == "idle" {
+            "ожидание".to_owned()
+        } else {
+            status
+        }
+    };
+    let mascot_label = format!(
+        "{status}. {}",
+        if labels.russian {
+            "Перетащить = двигать панель; показывает состояние"
+        } else {
+            "Drag to move the bar; shows the live state"
+        },
+    );
+    let mascot = Rect::of(&element(bar, &mascot_label));
+    assert_eq!(mascot.width, spec.get_badge());
+    assert!(
+        controls[0].1.x > mascot.right(),
+        "first control must start after mascot: form={form}, {state}"
+    );
+    for pair in controls.windows(2) {
+        assert!(
+            pair[0].1.right() < pair[1].1.x,
+            "top order/separation: {} before {}, form={form}, {state}: {pair:?}",
+            pair[0].0,
+            pair[1].0,
+        );
+        assert_eq!(pair[0].1.y, pair[1].1.y, "top y: {state}");
+        assert_eq!(
+            pair[0].1.bottom(),
+            pair[1].1.bottom(),
+            "top bottom: {state}"
+        );
+    }
+    for target in [labels.stealth, mic_label(bar, labels), labels.more] {
+        if let Some((_, rect)) = controls.iter().find(|(name, _)| *name == target) {
+            let centre = (rect.x + rect.width / 2.0, rect.y + rect.height / 2.0);
+            for (other, bounds) in &controls {
+                if *other != target {
+                    assert!(
+                        !bounds.contains(centre.0, centre.1),
+                        "centre covered: {target} by {other}, form={form}, {state}"
+                    );
+                }
+            }
+        } else {
+            assert!(form != 0 && target == mic_label(bar, labels));
+        }
+    }
+}
+
 fn assert_form_contract(bar: &ui::OverlayBarWindow, labels: &Labels, form: i32, state: &str) {
+    assert_top_order_and_capsules(bar, labels, form, state);
     let spec = bar.global::<ui::BarSpec>();
     let (width, declared) = match form {
         0 => (
@@ -193,6 +500,10 @@ fn assert_form_states(bar: &ui::OverlayBarWindow, labels: &Labels) {
         // Exercise both entry from compact and return from mini.
         for form in [0, 1, 2, 1, 0] {
             bar.set_bar_form(form);
+            assert_eq!(
+                ElementHandle::find_by_accessible_label(bar, labels.stealth).count(),
+                1
+            );
             let width = match form {
                 0 => spec.get_full_width(),
                 1 => spec.get_compact_width(),
@@ -218,7 +529,10 @@ fn assert_form_states(bar: &ui::OverlayBarWindow, labels: &Labels) {
                                     bar,
                                     labels,
                                     form,
-                                    &format!("compact={compact}, active={active}, fault={fault}, tray={tray}, timer={timer}, mode={mode}"),
+                                    &format!(
+                                        "compact={compact}, active={active}, fault={fault}, \
+                                         tray={tray}, timer={timer}, mode={mode}",
+                                    ),
                                 );
                             }
                         }
@@ -237,12 +551,20 @@ fn assert_form_states(bar: &ui::OverlayBarWindow, labels: &Labels) {
     bar.set_autotile_mode(1);
     bar.set_compact_bar(false);
     bar.set_bar_form(0);
+    assert_eq!(
+        ElementHandle::find_by_accessible_label(bar, labels.stealth).count(),
+        1
+    );
     slint::platform::update_timers_and_animations();
 }
 
 fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
     bar.set_compact_bar(compact);
     bar.set_bar_form(i32::from(compact));
+    assert_eq!(
+        ElementHandle::find_by_accessible_label(bar, labels.stealth).count(),
+        1
+    );
     bar.set_lock_a11y(labels.deep_lock.into());
     bar.set_autotile_mode(1);
     bar.set_deep_lock(false);
@@ -393,7 +715,11 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
                         bar.get_autotile_word_fits(),
                         "auto-tiles word clipped: compact={compact}, mode={mode}"
                     );
-                    assert!(bar.get_all_regions_fit(), "capsule overflow: compact={compact}, mode={mode}, tiles={count}, recording={recording}");
+                    assert!(
+                        bar.get_all_regions_fit(),
+                        "capsule overflow: compact={compact}, mode={mode}, \
+                         tiles={count}, recording={recording}",
+                    );
                     assert_form_contract(
                         bar,
                         labels,
@@ -408,7 +734,8 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
                         assert!(
                             pair[0].absolute_position().x + pair[0].size().width
                                 <= pair[1].absolute_position().x,
-                            "capsule controls overlap: compact={compact}, mode={mode}, tiles={count}"
+                            "capsule controls overlap: compact={compact}, \
+                             mode={mode}, tiles={count}",
                         );
                     }
                     for (name, x) in stable_names.iter().zip(&stable_x) {
@@ -541,6 +868,10 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
     ])));
     bar.set_compact_bar(false); // Mini must work even with the full preference.
     bar.set_bar_form(2);
+    assert_eq!(
+        ElementHandle::find_by_accessible_label(bar, labels.stealth).count(),
+        1
+    );
     for fault in [false, true] {
         bar.set_stealth_fault(fault);
         for tone in [
@@ -599,7 +930,11 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
                             assert_eq!(bar.window().size().width as f32, width);
                             assert!(
                                 bar.get_all_regions_fit(),
-                                "mini capsule overflow: language={}, fault={fault}, mode={mode}, recording={recording}, deep={deep}; fits: voice={}, session={}, tiles={}, window={}; preferred/declared px: voice={}/{}, session={}/{}, tiles={}/{}, window={}/{}",
+                                "mini capsule overflow: language={}, fault={fault}, \
+                                 mode={mode}, recording={recording}, deep={deep}; \
+                                 fits: voice={}, session={}, tiles={}, window={}; \
+                                 preferred/declared px: voice={}/{}, session={}/{}, \
+                                 tiles={}/{}, window={}/{}",
                                 labels.russian,
                                 bar.get_mini_voice_fits(),
                                 bar.get_mini_session_fits(),
@@ -618,7 +953,10 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
                                 bar,
                                 labels,
                                 2,
-                                &format!("fault={fault}, mode={mode}, recording={recording}, deep={deep}, source={source}"),
+                                &format!(
+                                    "fault={fault}, mode={mode}, recording={recording}, \
+                                     deep={deep}, source={source}",
+                                ),
                             );
                             assert!(bar.get_autotile_word_fits());
                             let top_names = [
@@ -734,6 +1072,10 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
         (2, width),
     ] {
         bar.set_bar_form(form);
+        assert_eq!(
+            ElementHandle::find_by_accessible_label(bar, labels.stealth).count(),
+            1
+        );
         bar.window().set_size(LogicalSize::new(form_width, height));
         slint::platform::update_timers_and_animations();
         let mascot = element(bar, &mascot_label);
@@ -786,6 +1128,18 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
     let height = bar.global::<ui::BarSpec>().get_height();
     bar.set_compact_bar(false);
     bar.set_bar_form(0);
+    assert_eq!(
+        ElementHandle::find_by_accessible_label(
+            bar,
+            if russian {
+                RUSSIAN.stealth
+            } else {
+                ENGLISH.stealth
+            },
+        )
+        .count(),
+        1,
+    );
     bar.set_last_transcript_line("PIN GEOMETRY TRANSCRIPT".into());
     bar.set_can_restore_tile(true);
     bar.set_autotile_mode(2);
@@ -855,7 +1209,8 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
             );
             assert!(
                 pos.x >= right && pos.x + size.width <= width,
-                "label={name}, full bar, {state}: pin overlaps transcript/previous pin or escapes bar"
+                "label={name}, full bar, {state}: \
+                 pin overlaps transcript/previous pin or escapes bar",
             );
             right = pos.x + size.width;
         }
@@ -887,6 +1242,18 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
         }
         bar.set_compact_bar(true);
         bar.set_bar_form(1);
+        assert_eq!(
+            ElementHandle::find_by_accessible_label(
+                bar,
+                if russian {
+                    RUSSIAN.stealth
+                } else {
+                    ENGLISH.stealth
+                },
+            )
+            .count(),
+            1,
+        );
         bar.window().set_size(LogicalSize::new(
             bar.global::<ui::BarSpec>().get_compact_width(),
             height,
@@ -910,7 +1277,8 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
             assert_eq!(
                 matching.len(),
                 usize::from(*id == "tray"),
-                "label={name}, id={id}, compact bar, {state}: only the built-in tray action may remain"
+                "label={name}, id={id}, compact bar, {state}: \
+                 only the built-in tray action may remain",
             );
             for item in &matching {
                 assert_top_bounds(
@@ -922,6 +1290,18 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
         }
         bar.set_compact_bar(false);
         bar.set_bar_form(0);
+        assert_eq!(
+            ElementHandle::find_by_accessible_label(
+                bar,
+                if russian {
+                    RUSSIAN.stealth
+                } else {
+                    ENGLISH.stealth
+                },
+            )
+            .count(),
+            1,
+        );
         slint::platform::update_timers_and_animations();
     }
     bar.set_pins(slint::ModelRc::new(
@@ -953,6 +1333,10 @@ fn assert_audit_states(bar: &ui::OverlayBarWindow, labels: &Labels) {
     bar.set_tray_available(false);
     for form in [0, 1, 2] {
         bar.set_bar_form(form);
+        assert_eq!(
+            ElementHandle::find_by_accessible_label(bar, labels.stealth).count(),
+            1
+        );
         let spec = bar.global::<ui::BarSpec>();
         let width = match form {
             0 => spec.get_full_width(),
@@ -1002,7 +1386,12 @@ fn assert_audit_states(bar: &ui::OverlayBarWindow, labels: &Labels) {
                                     tone,
                                     ui::StatusTone::Warning | ui::StatusTone::Danger
                                 );
-                            assert_eq!(count, usize::from(expected), "listening: form={form}, active={active}, paused={paused}, transcript={transcript}, fault={fault}, tone={tone:?}");
+                            assert_eq!(
+                                count,
+                                usize::from(expected),
+                                "listening: form={form}, active={active}, paused={paused}, \
+                                 transcript={transcript}, fault={fault}, tone={tone:?}",
+                            );
                             if expected {
                                 let cue = element(bar, listening);
                                 let pos = cue.absolute_position();
@@ -1055,6 +1444,44 @@ fn capsules_stay_inside_spec_sizes_in_english_and_russian() {
     assert_pins(&russian, true);
     assert_form_states(&russian, &RUSSIAN);
     assert_audit_states(&russian, &RUSSIAN);
+}
+
+#[test]
+fn state_capsule_centred_under_session_keeps_full_stealth_before_ask() {
+    i_slint_backend_testing::init_no_event_loop();
+    for (language, labels) in [("en", &ENGLISH), ("ru", &RUSSIAN)] {
+        slint::select_bundled_translation(language).expect("select regression language");
+        let bar = ui::OverlayBarWindow::new().expect("create regression bar");
+        bar.set_bar_form(0);
+        assert_eq!(
+            ElementHandle::find_by_accessible_label(&bar, labels.stealth).count(),
+            1,
+        );
+        let spec = bar.global::<ui::BarSpec>();
+        bar.window()
+            .set_size(LogicalSize::new(spec.get_full_width(), spec.get_height()));
+        assert_eq!(
+            ElementHandle::find_by_accessible_label(&bar, labels.stealth).count(),
+            1,
+        );
+        for muted in [false, true] {
+            bar.set_mic_muted(muted);
+            bar.set_sys_active(!muted);
+            assert_eq!(
+                ElementHandle::find_by_accessible_label(&bar, labels.stealth).count(),
+                1,
+            );
+            let stealth = element(&bar, labels.stealth);
+            let ask = element(&bar, labels.ask);
+            assert!(
+                stealth.absolute_position().x + stealth.size().width / 2.0
+                    < ask.absolute_position().x,
+                "centred state capsule hides stealth under session: language={language}"
+            );
+            assert_top_order_and_capsules(&bar, labels, 0, "incident regression, mic state");
+        }
+    }
+    slint::select_bundled_translation("en").expect("restore English translation");
 }
 
 #[test]
