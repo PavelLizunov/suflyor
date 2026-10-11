@@ -339,7 +339,8 @@ fn bar_interactions_and_focus_loss_share_the_close_path() {
     assert!(focus.contains("suppress_next_open()"));
     assert!(focus.contains("close_menu(&menu, &weak, &focus)"));
     assert_eq!(
-        host.matches("menu.hide()").count(), 1,
+        host.matches("menu.hide()").count(),
+        1,
         "hide belongs only to close_menu"
     );
     let open = host.split_once("overlay.on_menu_opened").unwrap().1;
@@ -373,5 +374,8 @@ fn bar_interactions_and_focus_loss_share_the_close_path() {
         .unwrap()
         .0;
     assert!(escape.contains("root.dismissed();"));
-    assert!(!escape.contains("else"), "Esc also closes an armed confirmation");
+    assert!(
+        !escape.contains("else"),
+        "Esc also closes an armed confirmation"
+    );
 }

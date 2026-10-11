@@ -47,16 +47,19 @@ fn rows_select_pins_do_not_select_and_danger_actions_require_yes() {
             .expect("actual row name Text, not its enclosing cell");
         let x = text.absolute_position().x;
         assert_eq!(
-            *name_x.get_or_insert(x), x,
+            *name_x.get_or_insert(x),
+            x,
             "every row name Text must start at the same x: {label}"
         );
         assert_eq!(
-            x, cell.absolute_position().x,
+            x,
+            cell.absolute_position().x,
             "name starts at the left edge of its cell"
         );
         assert_eq!(x, 36.0, "6px panel + 8px row pad + 14px icon + 8px gap");
         assert_eq!(
-            text.size(), cell.size(),
+            text.size(),
+            cell.size(),
             "name fills the elastic column for left alignment and right elision"
         );
     }
@@ -212,7 +215,8 @@ fn bar_actions_dismiss_more_and_compact_changes_cannot_keep_it_open() {
     bar.on_menu_dismissed(move || {
         let menu = menu_for_dismiss.upgrade().unwrap();
         menu.set_confirmation(SharedString::default());
-        menu.hide().expect("hide from shared bar dismissal callback");
+        menu.hide()
+            .expect("hide from shared bar dismissal callback");
         weak.upgrade().unwrap().set_menu_open(false);
     });
     let weak = bar.as_weak();
