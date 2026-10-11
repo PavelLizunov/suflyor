@@ -572,12 +572,25 @@ fn assert_menu_grid(menu: &ui::BarMenuWindow, russian: bool) {
                 (false, true) => "on",
                 (false, false) => "off",
             };
+            // The label may resolve to the chip or to the Text inside it (7 px inset).
             let chip = ElementHandle::find_by_accessible_label(menu, word)
-                .find(|item| item.absolute_position().y == pos.y + 4.0)
+                .filter(|item| {
+                    let y = item.absolute_position().y;
+                    y >= pos.y && y < pos.y + 28.0
+                })
+                .max_by(|a, b| a.size().width.total_cmp(&b.size().width))
                 .expect("word chip in the sound row");
             let chip_pos = chip.absolute_position();
             let chip_size = chip.size();
-            assert_eq!(chip_pos.x + chip_size.width, key_x + 96.0);
+            let right = chip_pos.x + chip_size.width;
+            assert!(
+                chip_pos.x >= key_x,
+                "sound word starts inside the key column"
+            );
+            assert!(
+                right <= key_x + 96.0 && right >= key_x + 96.0 - 8.0,
+                "sound word is pinned to the key column's right edge: {right}"
+            );
             assert!(chip_pos.x >= key_x && chip_size.width > 0.0);
             assert_eq!(chip_size.height, 20.0);
             targets.push((format!("{label}: {word}"), chip_pos, chip_size));

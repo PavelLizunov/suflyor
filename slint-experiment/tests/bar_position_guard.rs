@@ -87,10 +87,10 @@ fn saving_is_sampled_hidden_and_drag_guarded_and_recovery_is_not_a_preference() 
         "c.bar_positions = previous;",
         "clamped_bar_position(work, rect)",
     ] {
-        assert!(
-            check.contains(required),
-            "position sampling lost {required}"
-        );
+        // rustfmt may break a call chain across lines: compare without whitespace.
+        let flat: String = check.split_whitespace().collect();
+        let needle: String = required.split_whitespace().collect();
+        assert!(flat.contains(&needle), "position sampling lost {required}");
     }
     let monitor_change = check
         .split_once("if changed {")

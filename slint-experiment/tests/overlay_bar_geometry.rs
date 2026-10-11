@@ -1451,6 +1451,8 @@ fn capsules_stay_inside_spec_sizes_in_english_and_russian() {
 #[test]
 fn too_narrow_keeps_window_capsule_and_more_before_voice() {
     i_slint_backend_testing::init_no_event_loop();
+    // Bundled translations are registered when the first component is created.
+    let _warm = ui::OverlayBarWindow::new().expect("register bundled translations");
     for (language, labels) in [("en", &ENGLISH), ("ru", &RUSSIAN)] {
         slint::select_bundled_translation(language).expect("narrow language");
         let bar = ui::OverlayBarWindow::new().expect("narrow bar");
@@ -1498,6 +1500,8 @@ fn too_narrow_keeps_window_capsule_and_more_before_voice() {
 #[test]
 fn info_status_is_drawn_in_full_and_compact_while_routine_status_stays_quiet() {
     i_slint_backend_testing::init_no_event_loop();
+    // Bundled translations are registered when the first component is created.
+    let _warm = ui::OverlayBarWindow::new().expect("register bundled translations");
     for (language, progress, acknowledgement) in [
         ("en", "starting model…", "sys ok"),
         ("ru", "запускаю модель…", "системный звук: есть"),
@@ -1562,6 +1566,8 @@ fn info_status_is_drawn_in_full_and_compact_while_routine_status_stays_quiet() {
 #[test]
 fn state_capsule_centred_under_session_keeps_full_stealth_before_ask() {
     i_slint_backend_testing::init_no_event_loop();
+    // Bundled translations are registered when the first component is created.
+    let _warm = ui::OverlayBarWindow::new().expect("register bundled translations");
     for (language, labels) in [("en", &ENGLISH), ("ru", &RUSSIAN)] {
         slint::select_bundled_translation(language).expect("select regression language");
         let bar = ui::OverlayBarWindow::new().expect("create regression bar");
