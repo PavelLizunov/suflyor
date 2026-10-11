@@ -419,6 +419,10 @@ pub struct Config {
     #[serde(default)]
     pub compact_bar: bool,
 
+    /// Ordered action ids pinned to the full bar; empty for older configurations.
+    #[serde(default)]
+    pub bar_pins: Vec<String>,
+
     // NOTE: the legacy `hotkey_*` (F9/F10/F11/F12) and `manual_ask_mode` and
     // `custom_css` fields were REMOVED (P1.3). They were dead config that never
     // matched runtime behaviour — the app uses FIXED hotkeys (F1/F3/F4/F6/F8/F9/
@@ -700,6 +704,7 @@ impl Config {
             suppress_tiles: false,
             deep_lock: false,
             compact_bar: false,
+            bar_pins: Vec::new(),
             tile_body_opacity: default_tile_body_opacity(),
         }
     }

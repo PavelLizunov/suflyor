@@ -1,0 +1,236 @@
+import { Palette } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Metrics } from "metrics.slint";
+
+struct MenuRow { id: string, icon: image, name: string, key: string, head: bool, pinnable: bool, active: bool }
+
+// Separate native window: the bar's 64px client rectangle cannot host a popup.
+export component BarMenuWindow inherits Window {
+    no-frame: true;
+    always-on-top: true;
+    background: transparent;
+    title: @tr("More");
+    preferred-width: 408px;
+    preferred-height: root.tray-available ? 386px : 358px;
+    property <bool> widgets-light: Theme.is-light;
+    init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
+    changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
+
+    in property <[string]> pins;
+    in property <bool> aggressive-active;
+    in property <bool> can-restore-tile;
+    in property <bool> tray-available;
+    in property <bool> settings-open;
+    in property <bool> archive-open;
+    in property <bool> help-open;
+    in property <bool> summary-busy;
+    in-out property <string> confirmation: "";
+    property <int> inactive-ticks: 0;
+    callback action(string);
+    callback pin-toggled(string);
+    callback dismissed();
+
+    // Strict grid shared by every row, including empty and confirmation cells.
+    property <length> col-pad: 8px;
+    property <length> col-icon: 14px;
+    property <length> col-gap: 8px;
+    property <length> col-key: 96px;
+    property <length> col-pin: 78px;
+    property <[MenuRow]> rows: [
+        { name: @tr("TILES"), head: true },
+        { id: "capture", icon: @image-url("../assets/icons/camera.svg"), name: @tr("Ask about a screenshot"), key: "F8", pinnable: true },
+        { id: "aggressive", icon: @image-url("../assets/icons/flame.svg"), name: @tr("Auto-tiles on every line"), pinnable: true, active: root.aggressive-active },
+        { id: "restore", icon: @image-url("../assets/icons/restore.svg"), name: @tr("Restore closed tile"), pinnable: true },
+        { name: @tr("MEETING"), head: true },
+        { id: "archive", icon: @image-url("../assets/icons/archive.svg"), name: @tr("Session archive"), key: "F7", pinnable: true, active: root.archive-open },
+        { id: "summary", icon: @image-url("../assets/icons/summary.svg"), name: @tr("Meeting summary"), pinnable: true, active: root.summary-busy },
+        { id: "kb", icon: @image-url("../assets/icons/kb.svg"), name: @tr("Knowledge base"), key: "F4", pinnable: true },
+        { name: @tr("APP"), head: true },
+        { id: "settings", icon: @image-url("../assets/icons/gear.svg"), name: @tr("Settings"), pinnable: true, active: root.settings-open },
+        { id: "help", icon: @image-url("../assets/icons/sos.svg"), name: @tr("Help"), key: "F1", pinnable: true, active: root.help-open },
+        { id: "tray", icon: @image-url("../assets/icons/tray.svg"), name: @tr("Hide to tray"), pinnable: true },
+        { id: "restart", icon: @image-url("../assets/icons/restart.svg"), name: @tr("Restart"), pinnable: false },
+        { id: "quit", icon: @image-url("../assets/icons/x.svg"), name: @tr("Quit"), pinnable: false },
+    ];
+    pure function is-pinned(id: string) -> bool {
+        return (root.pins.length > 0 && root.pins[0] == id)
+            || (root.pins.length > 1 && root.pins[1] == id)
+            || (root.pins.length > 2 && root.pins[2] == id)
+            || (root.pins.length > 3 && root.pins[3] == id)
+            || (root.pins.length > 4 && root.pins[4] == id)
+            || (root.pins.length > 5 && root.pins[5] == id)
+            || (root.pins.length > 6 && root.pins[6] == id)
+            || (root.pins.length > 7 && root.pins[7] == id);
+    }
+    function choose(id: string) {
+        root.inactive-ticks = 0;
+        if (id == "restart" || id == "quit") {
+            root.confirmation = id;
+        } else if (id != "restore" || root.can-restore-tile) {
+            root.confirmation = "";
+            root.action(id);
+        }
+    }
+    Timer {
+        interval: 100ms;
+        running: root.confirmation != "";
+        triggered => {
+            root.inactive-ticks += 1;
+            if (root.inactive-ticks >= 40) { root.confirmation = ""; }
+        }
+    }
+    forward-focus: scope;
+    scope := FocusScope {
+        key-pressed(e) => {
+            root.inactive-ticks = 0;
+            if (e.text == Key.Escape) {
+                if (root.confirmation != "") { root.confirmation = ""; }
+                else { root.dismissed(); }
+                return accept;
+            }
+            return reject;
+        }
+        Rectangle {
+            background: Theme.bg-elevated;
+            border-color: Theme.border-strong;
+            border-width: Metrics.border-thin;
+            border-radius: Metrics.radius-panel;
+            VerticalLayout {
+                padding: 6px;
+                spacing: 0px;
+                alignment: start;
+                for r in root.rows : VerticalLayout {
+                    alignment: start;
+                    if r.id != "tray" || root.tray-available : Rectangle {
+                        property <bool> pinned: !r.head && root.is-pinned(r.id);
+                        height: r.head ? 22px : 28px;
+                        opacity: r.id == "restore" && !root.can-restore-tile ? 0.35 : 1;
+                        border-radius: Metrics.radius-control;
+                        background: self.pinned ? Theme.accent.with-alpha(0.10) : transparent;
+                        // Behind the cells: pin/Yes/No touch targets consume their
+                        // own clicks, all remaining row space selects the action.
+                        TouchArea {
+                            enabled: !r.head && (r.id != "restore" || root.can-restore-tile);
+                            mouse-cursor: pointer;
+                            clicked => { root.choose(r.id); }
+                            moved => { root.inactive-ticks = 0; }
+                        }
+                        HorizontalLayout {
+                            padding-left: root.col-pad; padding-right: root.col-pad; spacing: root.col-gap;
+                            if !r.head : Rectangle {
+                                width: root.col-icon;
+                                Image {
+                                    source: r.icon;
+                                    colorize: r.id == "quit" ? Theme.danger : r.active ? Theme.accent : Theme.text-secondary;
+                                    width: parent.width; height: root.col-icon;
+                                    y: (parent.height - self.height) / 2;
+                                }
+                                TouchArea {
+                                    enabled: r.id != "restore" || root.can-restore-tile;
+                                    clicked => { root.choose(r.id); }
+                                }
+                            }
+                            if r.head : Text {
+                                text: r.name;
+                                font-size: Metrics.font-caption; color: Theme.text-muted;
+                                vertical-alignment: center; horizontal-stretch: 1;
+                                overflow: elide; min-width: 0px;
+                            }
+                            if !r.head : Rectangle {
+                                horizontal-stretch: 1; min-width: 0px;
+                                accessible-role: button;
+                                accessible-label: r.name;
+                                accessible-checkable: r.id == "aggressive";
+                                accessible-checked: r.id == "aggressive" && root.aggressive-active;
+                                accessible-action-default => { root.choose(r.id); }
+                                Text {
+                                    text: root.confirmation == r.id
+                                        ? (r.id == "quit" ? @tr("Quit?") : @tr("Restart?")) : r.name;
+                                    accessible-label: ""; // The name cell owns the action label.
+                                    font-size: Metrics.font-body;
+                                    color: r.id == "quit" ? Theme.danger : Theme.text-primary;
+                                    vertical-alignment: center; overflow: elide; min-width: 0px;
+                                }
+                                TouchArea {
+                                    enabled: !r.head && (r.id != "restore" || root.can-restore-tile);
+                                    mouse-cursor: pointer;
+                                    clicked => { root.choose(r.id); }
+                                    moved => { root.inactive-ticks = 0; }
+                                }
+                            }
+                            if !r.head : Rectangle {
+                                width: root.col-key;
+                                if root.confirmation == r.id : Rectangle {
+                                    height: 20px; y: (parent.height - self.height) / 2;
+                                    width: parent.width; border-radius: Metrics.radius-control;
+                                    background: Theme.danger.with-alpha(0.14);
+                                    accessible-role: button; accessible-label: @tr("Yes");
+                                    accessible-action-default => { root.confirmation = ""; root.action(r.id); }
+                                    Text { text: @tr("Yes"); color: Theme.danger; font-size: Metrics.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                                    TouchArea {
+                                        mouse-cursor: pointer;
+                                        moved => { root.inactive-ticks = 0; }
+                                        clicked => { root.confirmation = ""; root.action(r.id); }
+                                    }
+                                }
+                                if root.confirmation != r.id && r.key != "" : Rectangle {
+                                    height: 20px; y: (parent.height - self.height) / 2;
+                                    width: min(kt.preferred-width + 14px, parent.width);
+                                    x: parent.width - self.width;
+                                    border-radius: Metrics.radius-control;
+                                    border-width: Metrics.border-thin; border-color: Theme.border;
+                                    background: Theme.bg-surface;
+                                    kt := Text { text: r.key; font-family: Theme.font-mono; font-size: Metrics.font-caption; color: Theme.text-secondary; horizontal-alignment: center; vertical-alignment: center; }
+                                    TouchArea { clicked => { root.choose(r.id); } }
+                                }
+                            }
+                            if !r.head : Rectangle {
+                                width: root.col-pin;
+                                if root.confirmation == r.id : Rectangle {
+                                    height: 20px; y: (parent.height - self.height) / 2;
+                                    border-radius: Metrics.radius-control;
+                                    border-width: Metrics.border-thin; border-color: Theme.border-strong;
+                                    accessible-role: button; accessible-label: @tr("No");
+                                    accessible-action-default => { root.confirmation = ""; }
+                                    Text { text: @tr("No"); color: Theme.text-secondary; font-size: Metrics.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                                    TouchArea {
+                                        mouse-cursor: pointer;
+                                        moved => { root.inactive-ticks = 0; }
+                                        clicked => { root.confirmation = ""; }
+                                    }
+                                }
+                                if r.pinnable : Rectangle {
+                                    height: 20px; y: (parent.height - self.height) / 2;
+                                    border-radius: Metrics.radius-control;
+                                    border-width: root.is-pinned(r.id) ? 0px : Metrics.border-thin;
+                                    border-color: Theme.border-strong;
+                                    background: root.is-pinned(r.id) ? Theme.accent : transparent;
+                                    accessible-role: button;
+                                    accessible-label: r.name + ". " + (root.is-pinned(r.id) ? @tr("on the bar") : @tr("pin"));
+                                    accessible-checkable: true; accessible-checked: root.is-pinned(r.id);
+                                    accessible-action-default => {
+                                        if (r.id != "restore" || root.can-restore-tile) {
+                                            root.inactive-ticks = 0; root.pin-toggled(r.id);
+                                        }
+                                    }
+                                    Text {
+                                        text: root.is-pinned(r.id) ? @tr("on the bar") : @tr("pin");
+                                        font-size: Metrics.font-caption; font-weight: root.is-pinned(r.id) ? 600 : 400;
+                                        color: root.is-pinned(r.id) ? Theme.on-accent : Theme.text-muted;
+                                        horizontal-alignment: center; vertical-alignment: center;
+                                    }
+                                    TouchArea {
+                                        enabled: r.id != "restore" || root.can-restore-tile;
+                                        mouse-cursor: pointer;
+                                        moved => { root.inactive-ticks = 0; }
+                                        clicked => { root.inactive-ticks = 0; root.pin-toggled(r.id); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

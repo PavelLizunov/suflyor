@@ -32,8 +32,9 @@ macro_rules! diag {
 }
 
 use ui::{
-    ArchiveRow, ArchiveWindow, CaptureOverlay, ComponentRow, HelpWindow, LockModeMenuWindow,
-    MarkdownBlock, MemoryRow, OverlayBarWindow, PaletteResult, PaletteWindow, RecoverOfferWindow,
+    ArchiveRow, ArchiveWindow, BarMenuWindow, CaptureOverlay, ComponentRow, HelpWindow,
+    LockModeMenuWindow, MarkdownBlock, MemoryRow, OverlayBarWindow, PaletteResult, PaletteWindow,
+    RecoverOfferWindow,
     SettingsWindow, SpeakerRow, TextAskWindow, TileWindow, TranscriptLine, TranscriptWindow,
     TrayMenuWindow, WizardWindow,
 };
@@ -48,6 +49,9 @@ use ui::{
 #[path = "overlay_host/window_lifecycle.rs"]
 mod window_lifecycle;
 use window_lifecycle::*;
+
+#[path = "overlay_host/bar_menu.rs"]
+mod bar_menu;
 
 #[path = "overlay_host/app_bootstrap.rs"]
 mod app_bootstrap;
@@ -2411,6 +2415,9 @@ fn main() -> Result<(), slint::PlatformError> {
     // registry below, so a live stealth toggle re-applies WDA to it too.
     let transcript: Rc<RefCell<Option<TranscriptWindow>>> = Rc::new(RefCell::new(None));
     let lock_menu: Rc<RefCell<Option<Rc<LockModeMenuWindow>>>> = Rc::new(RefCell::new(None));
+    let bar_menu = Rc::new(BarMenuWindow::new()?);
+    let bar_menu_slot = Rc::new(RefCell::new(Some(bar_menu.clone())));
+    let _bar_menu_poll = bar_menu::wire_bar_menu(&overlay, &bar_menu, &cfg, &palette, &tiles, &state);
     // Memory Phase 1 — crash-recovery offer, shown once a beat after startup if
     // the newest journal looks unfinished (see the delayed-open below).
     let recover_offer: Rc<RefCell<Option<RecoverOfferWindow>>> = Rc::new(RefCell::new(None));
@@ -2432,6 +2439,7 @@ fn main() -> Result<(), slint::PlatformError> {
         transcript: transcript.clone(),
         archive: archive.clone(),
         lock_menu: lock_menu.clone(),
+        bar_menu: bar_menu_slot.clone(),
     };
     // V3 — the Lightshot capture overlay. PERSISTENT + pre-stealthed so F8 shows
     // it flash-free: WDA_EXCLUDEFROMCAPTURE keeps it off any screen-share from the

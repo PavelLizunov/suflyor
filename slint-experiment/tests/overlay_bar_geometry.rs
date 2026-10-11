@@ -54,7 +54,7 @@ const RUSSIAN: Labels = Labels {
     compact: "Компактный режим чтения",
     expand: "Развернуть бар",
     more: "Ещё",
-    tray: "Скрыть в трей",
+    tray: "Свернуть в трей",
     app_ram: "RAM приложения",
     you: "вы:",
     them: "собеседник:",
@@ -265,16 +265,86 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
     );
 }
 
+fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
+    let ids = ["capture", "aggressive", "restore", "archive", "summary", "kb", "settings", "help"];
+    let names = if russian {
+        ["Вопрос по снимку экрана", "Автотайлы на всё", "Вернуть закрытый тайл", "Архив сессий", "Итог встречи", "База знаний", "Настройки", "Справка"]
+    } else {
+        ["Ask about a screenshot", "Auto-tiles on every line", "Restore closed tile", "Session archive", "Meeting summary", "Knowledge base", "Settings", "Help"]
+    };
+    let hint = if russian { "закрепить" } else { "pin" };
+    let width = bar.global::<ui::BarSpec>().get_full_width();
+    let height = bar.global::<ui::BarSpec>().get_height();
+    bar.set_compact_bar(false);
+    bar.set_last_transcript_line("PIN GEOMETRY TRANSCRIPT".into());
+    bar.set_can_restore_tile(true);
+    bar.set_aggressive_active(true);
+    for count in [0, 3, 8] {
+        bar.set_pins(slint::ModelRc::new(slint::VecModel::from(
+            ids[..count].iter().map(|id| slint::SharedString::from(*id)).collect::<Vec<_>>(),
+        )));
+        bar.window().set_size(LogicalSize::new(width, height));
+        assert_eq!(bar.window().size().width as f32, width, "pins must not resize the bar");
+        let hints: Vec<_> = ElementHandle::find_by_accessible_label(bar, hint).collect();
+        assert_eq!(hints.len(), usize::from(count == 0), "hint presence with {count} pins");
+        if let Some(hint) = hints.first() {
+            let more = element(bar, if russian { "Ещё" } else { "More" });
+            let anchor = std::rc::Rc::new(std::cell::Cell::new((0.0_f32, 0.0_f32)));
+            let anchor_for_callback = anchor.clone();
+            bar.on_menu_opened(move |x, y| anchor_for_callback.set((x, y)));
+            hint.invoke_accessible_default_action();
+            let pos = more.absolute_position();
+            let size = more.size();
+            assert_eq!(anchor.get(), (pos.x + size.width, pos.y + size.height), "hint must use the More chip's anchor");
+        }
+        let transcript = element(bar, "PIN GEOMETRY TRANSCRIPT");
+        let mut right = transcript.absolute_position().x + transcript.size().width;
+        for name in &names[..count] {
+            let name = *name;
+            let matching: Vec<_> = ElementHandle::find_by_accessible_label(bar, name).collect();
+            assert_eq!(matching.len(), 1, "duplicate pinned action: {name}");
+            let item = &matching[0];
+            let pos = item.absolute_position();
+            let size = item.size();
+            assert_eq!(size.width, 26.0, "fixed bare pin width: {name}");
+            assert_eq!(size.height, 22.0, "fixed bare pin height: {name}");
+            assert!(pos.y >= 34.0 && pos.y + size.height <= height, "pin escaped bottom row: {name}");
+            assert!(pos.x >= right && pos.x + size.width <= width, "pin overlaps transcript/previous pin or escapes bar: {name}");
+            right = pos.x + size.width;
+        }
+        for (id, legacy_label) in [("restore", "Restore last tile"), ("aggressive", "Aggressive auto-tile")] {
+            let legacy_label = if russian {
+                if id == "restore" { "Вернуть последний тайл" } else { "Агрессивные авто-тайлы" }
+            } else { legacy_label };
+            assert_eq!(ElementHandle::find_by_accessible_label(bar, legacy_label).count(), usize::from(!ids[..count].contains(&id)), "conditional action must not duplicate a pin: {id}");
+        }
+        bar.set_compact_bar(true);
+        bar.window().set_size(LogicalSize::new(bar.global::<ui::BarSpec>().get_compact_width(), height));
+        assert_eq!(ElementHandle::find_by_accessible_label(bar, hint).count(), 0);
+        for name in &names[..count] {
+            let name = *name;
+            assert_eq!(ElementHandle::find_by_accessible_label(bar, name).count(), 0, "compact bar must not show pins: {name}");
+        }
+        bar.set_compact_bar(false);
+    }
+    bar.set_pins(slint::ModelRc::new(slint::VecModel::<slint::SharedString>::default()));
+    bar.set_can_restore_tile(false);
+    bar.set_aggressive_active(false);
+    bar.set_last_transcript_line("".into());
+}
+
 #[test]
 fn capsules_stay_inside_spec_sizes_in_english_and_russian() {
     i_slint_backend_testing::init_no_event_loop();
     let english = ui::OverlayBarWindow::new().expect("create English bar");
     assert_layout(&english, &ENGLISH, false);
     assert_layout(&english, &ENGLISH, true);
+    assert_pins(&english, false);
     slint::select_bundled_translation("ru").expect("select Russian translation");
     let russian = ui::OverlayBarWindow::new().expect("create Russian bar");
     assert_layout(&russian, &RUSSIAN, false);
     assert_layout(&russian, &RUSSIAN, true);
+    assert_pins(&russian, true);
 }
 
 #[test]

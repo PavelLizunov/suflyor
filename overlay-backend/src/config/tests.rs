@@ -1925,6 +1925,23 @@ fn legacy_config_loads_and_startup_stays_visible() {
     assert!(!fresh.compact_bar);
 }
 
+#[test]
+fn bar_pins_round_trip_preserves_order_and_unknown_ids() {
+    let mut cfg = Config::defaults();
+    cfg.bar_pins = vec!["capture".into(), "future-action".into(), "archive".into()];
+    let json = serde_json::to_string(&cfg).unwrap();
+    let parsed: Config = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed.bar_pins, cfg.bar_pins);
+}
+
+#[test]
+fn old_config_without_bar_pins_loads_as_empty() {
+    let parsed: Config = serde_json::from_str(r#"{"compact_bar":true}"#).unwrap();
+    assert!(parsed.compact_bar);
+    assert!(parsed.bar_pins.is_empty());
+    assert!(Config::defaults().bar_pins.is_empty());
+}
+
 #[cfg(unix)]
 #[test]
 fn config_save_sets_unix_mode_0600() {

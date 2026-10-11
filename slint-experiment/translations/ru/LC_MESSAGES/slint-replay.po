@@ -60,7 +60,7 @@ msgstr "Вернуть последний тайл"
 # RC4 — hide-to-tray bar action (accessible label of the icon-only chip that
 # sits beside the compact control). Tray MENU labels are Rust-side (tray.rs).
 msgid "Hide to tray"
-msgstr "Скрыть в трей"
+msgstr "Свернуть в трей"
 
 # === tile.slint ===
 
@@ -2417,3 +2417,50 @@ msgstr "собеседник:"
 
 msgid "More"
 msgstr "Ещё"
+
+# === bar_menu.slint and pinned bar actions ===
+
+msgid "pin"
+msgstr "закрепить"
+
+msgid "on the bar"
+msgstr "на панели"
+
+msgid "TILES"
+msgstr "ТАЙЛЫ"
+
+msgid "MEETING"
+msgstr "ВСТРЕЧА"
+
+msgid "APP"
+msgstr "ПРИЛОЖЕНИЕ"
+
+msgid "Ask about a screenshot"
+msgstr "Вопрос по снимку экрана"
+
+msgid "Auto-tiles on every line"
+msgstr "Автотайлы на всё"
+
+msgid "Restore closed tile"
+msgstr "Вернуть закрытый тайл"
+
+msgid "Knowledge base"
+msgstr "База знаний"
+
+msgid "Restart"
+msgstr "Перезапустить"
+
+msgid "Meeting summary"
+msgstr "Итог встречи"
+
+msgid "Restart?"
+msgstr "Перезапустить?"
+
+msgid "Quit?"
+msgstr "Выйти?"
+
+msgid "Yes"
+msgstr "Да"
+
+msgid "No"
+msgstr "Нет"

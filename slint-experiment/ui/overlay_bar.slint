@@ -330,6 +330,37 @@ component BarChip inherits Rectangle {
 }
 
 
+// Second-row actions are bare: state is conveyed by the glyph, not a capsule.
+component PinChip inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <string> a11y;
+    in property <color> tint: Theme.text-secondary;
+    in property <bool> action-enabled: true;
+    callback clicked();
+    width: root.label == "" ? 26px : 86px;
+    height: 22px;
+    horizontal-stretch: 0;
+    opacity: root.action-enabled ? 1 : 0.35;
+    accessible-role: button;
+    accessible-label: root.a11y;
+    accessible-action-default => { if (root.action-enabled) { root.clicked(); } }
+    HorizontalLayout {
+        alignment: center; spacing: Metrics.space-xs;
+        IconSlot { icon: root.icon; tint: root.tint; }
+        if root.label != "" : Text {
+            text: root.label; color: root.tint; font-size: Metrics.font-caption;
+            accessible-label: ""; // The parent exposes the single action label.
+            vertical-alignment: center; overflow: elide; min-width: 0px;
+        }
+    }
+    TouchArea {
+        enabled: root.action-enabled;
+        mouse-cursor: OverlayCursorPolicy.force-arrow ? default : pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
 component MoreChip inherits Rectangle {
     in property <bool> active: false;
     in property <color> accent: Theme.accent;
@@ -525,6 +556,39 @@ export component OverlayBarWindow inherits Window {
         && voice-capsule.fits && session-capsule.fits && tiles-capsule.fits && window-capsule.fits);
     in property <bool> menu-open: false;
     callback menu-opened(length, length);
+    in property <[string]> pins;
+    callback pin-activated(string);
+    pure function pin-icon(id: string) -> image {
+        return id == "capture" ? @image-url("../assets/icons/camera.svg")
+            : id == "aggressive" ? @image-url("../assets/icons/flame.svg")
+            : id == "restore" ? @image-url("../assets/icons/restore.svg")
+            : id == "archive" ? @image-url("../assets/icons/archive.svg")
+            : id == "summary" ? @image-url("../assets/icons/summary.svg")
+            : id == "kb" ? @image-url("../assets/icons/kb.svg")
+            : id == "settings" ? @image-url("../assets/icons/gear.svg")
+            : id == "help" ? @image-url("../assets/icons/sos.svg")
+            : @image-url("../assets/icons/tray.svg");
+    }
+    pure function pin-label(id: string) -> string {
+        return id == "capture" ? @tr("Ask about a screenshot")
+            : id == "aggressive" ? @tr("Auto-tiles on every line")
+            : id == "restore" ? @tr("Restore closed tile")
+            : id == "archive" ? @tr("Session archive")
+            : id == "summary" ? @tr("Meeting summary")
+            : id == "kb" ? @tr("Knowledge base")
+            : id == "settings" ? @tr("Settings")
+            : id == "help" ? @tr("Help") : @tr("Hide to tray");
+    }
+    pure function is-pinned(id: string) -> bool {
+        return (root.pins.length > 0 && root.pins[0] == id)
+            || (root.pins.length > 1 && root.pins[1] == id)
+            || (root.pins.length > 2 && root.pins[2] == id)
+            || (root.pins.length > 3 && root.pins[3] == id)
+            || (root.pins.length > 4 && root.pins[4] == id)
+            || (root.pins.length > 5 && root.pins[5] == id)
+            || (root.pins.length > 6 && root.pins[6] == id)
+            || (root.pins.length > 7 && root.pins[7] == id);
+    }
 
     // Status pill text (idle / recording / etc).
     in-out property <string> status-text: "idle";
@@ -899,7 +963,7 @@ export component OverlayBarWindow inherits Window {
                             a11y: root.compact-bar ? @tr("Expand the bar") : @tr("Compact reader mode");
                             clicked => { root.compact-toggle-clicked(); }
                         }
-                        MoreChip {
+                        more-chip := MoreChip {
                             active: root.menu-open; accent: Theme.accent;
                             menu-opened(x, y) => { root.menu-opened(x, y); }
                         }
@@ -929,16 +993,16 @@ export component OverlayBarWindow inherits Window {
                     Text {
                         text: root.last-transcript-line;
                         font-size: Metrics.font-label; color: Theme.text-secondary;
-                        overflow: elide; vertical-alignment: center; horizontal-stretch: 1;
+                        overflow: elide; vertical-alignment: center; horizontal-stretch: 1; min-width: 0px;
                     }
-                    if !root.compact-bar && root.can-restore-tile : BarChip {
-                        icon: @image-url("../assets/icons/restore.svg"); has-icon: true;
+                    if !root.compact-bar && root.can-restore-tile && !root.is-pinned("restore") : PinChip {
+                        icon: @image-url("../assets/icons/restore.svg");
                         a11y: @tr("Restore last tile");
                         clicked => { root.restore-tile-clicked(); }
                     }
-                    if !root.compact-bar && root.aggressive-active : BarChip {
-                        icon: @image-url("../assets/icons/flame.svg"); has-icon: true;
-                        a11y: @tr("Aggressive auto-tile"); active: true; accent: Theme.cat-orange;
+                    if !root.compact-bar && root.aggressive-active && !root.is-pinned("aggressive") : PinChip {
+                        icon: @image-url("../assets/icons/flame.svg");
+                        a11y: @tr("Aggressive auto-tile"); tint: Theme.cat-orange;
                         clicked => { root.aggressive-toggle-clicked(); }
                     }
                     if root.app-memory != "" : Text {
@@ -950,6 +1014,25 @@ export component OverlayBarWindow inherits Window {
                         text: "MLX" + " " + root.mlx-memory;
                         font-size: Metrics.font-caption; color: Theme.text-muted;
                         vertical-alignment: center; horizontal-stretch: 0;
+                    }
+                    if !root.compact-bar : HorizontalLayout {
+                        spacing: BarSpec.gap; horizontal-stretch: 0;
+                        for id in root.pins : PinChip {
+                            icon: root.pin-icon(id); a11y: root.pin-label(id);
+                            action-enabled: (id != "restore" || root.can-restore-tile)
+                                && (id != "tray" || root.tray-available);
+                            tint: id == "aggressive" && root.aggressive-active ? Theme.cat-orange
+                                : (id == "archive" && root.archive-open)
+                                    || (id == "settings" && root.settings-open)
+                                    || (id == "help" && root.help-open)
+                                    || (id == "summary" && root.summary-busy) ? Theme.accent : Theme.text-secondary;
+                            clicked => { root.pin-activated(id); }
+                        }
+                        if root.pins.length == 0 : PinChip {
+                            icon: @image-url("../assets/icons/plus.svg"); label: @tr("pin"); a11y: @tr("pin");
+                            tint: Theme.text-muted; opacity: 0.7;
+                            clicked => { root.menu-opened(more-chip.absolute-position.x + more-chip.width, more-chip.absolute-position.y + more-chip.height); }
+                        }
                     }
                 }
             }
