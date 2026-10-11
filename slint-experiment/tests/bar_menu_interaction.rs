@@ -36,6 +36,40 @@ fn rows_select_pins_do_not_select_and_danger_actions_require_yes() {
         "Settings",
         "Help",
         "Hide to tray",
+        "Restart",
+        "Quit",
+    ] {
+        let cell = ElementHandle::find_by_accessible_label(&menu, label)
+            .next()
+            .expect("name action cell");
+        let text = ElementHandle::find_by_accessible_label(&menu, &format!("{label}."))
+            .next()
+            .expect("actual row name Text, not its enclosing cell");
+        let x = text.absolute_position().x;
+        assert_eq!(
+            *name_x.get_or_insert(x), x,
+            "every row name Text must start at the same x: {label}"
+        );
+        assert_eq!(
+            x, cell.absolute_position().x,
+            "name starts at the left edge of its cell"
+        );
+        assert_eq!(x, 36.0, "6px panel + 8px row pad + 14px icon + 8px gap");
+        assert_eq!(
+            text.size(), cell.size(),
+            "name fills the elastic column for left alignment and right elision"
+        );
+    }
+    for label in [
+        "Ask about a screenshot",
+        "Auto-tiles on every line",
+        "Restore closed tile",
+        "Session archive",
+        "Meeting summary",
+        "Knowledge base",
+        "Settings",
+        "Help",
+        "Hide to tray",
     ] {
         let name = ElementHandle::find_by_accessible_label(&menu, label)
             .next()
@@ -52,7 +86,15 @@ fn rows_select_pins_do_not_select_and_danger_actions_require_yes() {
     }
     let actions = Rc::new(RefCell::new(Vec::<String>::new()));
     let actions_for_callback = actions.clone();
-    menu.on_action(move |id| actions_for_callback.borrow_mut().push(id.to_string()));
+    let menu_for_action = menu.as_weak();
+    menu.on_action(move |id| {
+        actions_for_callback.borrow_mut().push(id.to_string());
+        menu_for_action
+            .upgrade()
+            .unwrap()
+            .hide()
+            .expect("dismiss selected menu action");
+    });
     let pins = Rc::new(RefCell::new(Vec::<String>::new()));
     let pins_for_callback = pins.clone();
     menu.on_pin_toggled(move |id| pins_for_callback.borrow_mut().push(id.to_string()));
@@ -90,8 +132,13 @@ fn rows_select_pins_do_not_select_and_danger_actions_require_yes() {
         ("Help", "help"),
         ("Hide to tray", "tray"),
     ] {
+        menu.show().expect("reopen before selecting each action");
         activate(&menu, label);
         assert_eq!(actions.borrow().last().map(String::as_str), Some(id));
+        assert!(
+            !menu.window().is_visible(),
+            "menu action must dismiss: {id}"
+        );
     }
     menu.set_tray_available(false);
     assert_eq!(
@@ -99,14 +146,23 @@ fn rows_select_pins_do_not_select_and_danger_actions_require_yes() {
         0
     );
     for (label, id) in [("Restart", "restart"), ("Quit", "quit")] {
+        menu.show().expect("reopen before danger action");
         let before = actions.borrow().len();
         activate(&menu, label);
         assert_eq!(menu.get_confirmation().as_str(), id);
+        assert!(
+            menu.window().is_visible(),
+            "arming confirmation must not dismiss"
+        );
         assert_eq!(
             actions.borrow().len(),
             before,
             "first click must not dispatch {id}"
         );
+        let question = ElementHandle::find_by_accessible_label(&menu, &format!("{label}?."))
+            .next()
+            .expect("confirmation question Text in name column");
+        assert_eq!(question.absolute_position().x, name_x.unwrap());
         let yes = ElementHandle::find_by_accessible_label(&menu, "Yes")
             .next()
             .expect("Yes in key cell");
@@ -128,5 +184,138 @@ fn rows_select_pins_do_not_select_and_danger_actions_require_yes() {
         assert_eq!(menu.get_confirmation().as_str(), "");
         assert_eq!(actions.borrow().len(), before + 1);
         assert_eq!(actions.borrow().last().map(String::as_str), Some(id));
+        assert!(
+            !menu.window().is_visible(),
+            "confirmed danger action must dismiss"
+        );
+    }
+}
+
+#[test]
+fn bar_actions_dismiss_more_and_compact_changes_cannot_keep_it_open() {
+    i_slint_backend_testing::init_no_event_loop();
+    let bar = ui::OverlayBarWindow::new().expect("create bar");
+    let menu = Rc::new(ui::BarMenuWindow::new().expect("create More menu"));
+    bar.set_lock_a11y("Lock mode".into());
+    bar.set_tray_available(true);
+    bar.set_can_restore_tile(true);
+    bar.set_aggressive_active(true);
+    bar.set_timer_active(true);
+    bar.set_open_tiles(1);
+    bar.set_pins(ModelRc::new(VecModel::from(vec![SharedString::from(
+        "archive",
+    )])));
+    // Inert host fixture: the source guard checks production wiring to close_menu.
+    // Native focus/owner/reveal behaviour is intentionally not simulated here.
+    let weak = bar.as_weak();
+    let menu_for_dismiss = menu.as_weak();
+    bar.on_menu_dismissed(move || {
+        let menu = menu_for_dismiss.upgrade().unwrap();
+        menu.set_confirmation(SharedString::default());
+        menu.hide().expect("hide from shared bar dismissal callback");
+        weak.upgrade().unwrap().set_menu_open(false);
+    });
+    let weak = bar.as_weak();
+    let menu_for_open = menu.as_weak();
+    bar.on_menu_opened(move |_, _| {
+        let menu = menu_for_open.upgrade().unwrap();
+        let bar = weak.upgrade().unwrap();
+        if menu.window().is_visible() {
+            bar.invoke_menu_dismissed();
+        } else {
+            menu.show().expect("show from more chip");
+            bar.set_menu_open(true);
+        }
+    });
+    let pinned = Rc::new(RefCell::new(Vec::<String>::new()));
+    let pinned_for_callback = pinned.clone();
+    let menu_for_pin = menu.as_weak();
+    bar.on_pin_activated(move |id| {
+        assert!(
+            !menu_for_pin.upgrade().unwrap().window().is_visible(),
+            "pin must dismiss before dispatch"
+        );
+        pinned_for_callback.borrow_mut().push(id.to_string());
+    });
+
+    for compact in [false, true] {
+        bar.set_compact_bar(compact);
+        let spec = bar.global::<ui::BarSpec>();
+        let width = if compact {
+            spec.get_compact_width()
+        } else {
+            spec.get_full_width()
+        };
+        bar.window()
+            .set_size(LogicalSize::new(width, spec.get_height()));
+        let mut labels = vec![
+            "Stealth (hide from capture)",
+            "Lock mode",
+            if compact {
+                "Expand the bar"
+            } else {
+                "Compact reader mode"
+            },
+        ];
+        if compact {
+            labels.push("Hide to tray");
+        } else {
+            labels.extend([
+                "Mic live (click to mute)",
+                "System audio capture",
+                "Pause the session",
+                "New tile, 1 open",
+                "close all",
+                "Write a question",
+                "Restore last tile",
+                "Aggressive auto-tile",
+                "Session archive",
+            ]);
+        }
+        for label in labels {
+            ElementHandle::find_by_accessible_label(&bar, "More")
+                .next()
+                .unwrap()
+                .invoke_accessible_default_action();
+            assert!(menu.window().is_visible());
+            assert!(bar.get_menu_open());
+            menu.set_confirmation("quit".into());
+            ElementHandle::find_by_accessible_label(&bar, label)
+                .next()
+                .unwrap_or_else(|| panic!("missing bar target: {label}"))
+                .invoke_accessible_default_action();
+            assert!(
+                !menu.window().is_visible(),
+                "bar action must hide More: {label}"
+            );
+            assert!(
+                !bar.get_menu_open(),
+                "bar action must clear active chip: {label}"
+            );
+            assert_eq!(menu.get_confirmation().as_str(), "");
+        }
+        // Clicking More itself toggles rather than running the generic dismiss first.
+        let more = ElementHandle::find_by_accessible_label(&bar, "More")
+            .next()
+            .unwrap();
+        more.invoke_accessible_default_action();
+        assert!(menu.window().is_visible());
+        more.invoke_accessible_default_action();
+        assert!(!menu.window().is_visible());
+        assert!(!bar.get_menu_open());
+    }
+    assert_eq!(&*pinned.borrow(), &["archive"]);
+    for compact in [false, true] {
+        ElementHandle::find_by_accessible_label(&bar, "More")
+            .next()
+            .unwrap()
+            .invoke_accessible_default_action();
+        assert!(menu.window().is_visible());
+        bar.set_compact_bar(compact);
+        assert!(!bar.get_menu_open(), "property change must clear menu-open");
+        assert!(
+            !menu.window().is_visible(),
+            "external compact/full change must dismiss"
+        );
     }
 }

@@ -85,7 +85,7 @@ export component BarMenuWindow inherits Window {
             root.inactive-ticks = 0;
             if (e.text == Key.Escape) {
                 if (root.confirmation != "") { root.confirmation = ""; }
-                else { root.dismissed(); }
+                root.dismissed();
                 return accept;
             }
             return reject;
@@ -143,10 +143,14 @@ export component BarMenuWindow inherits Window {
                                 accessible-checkable: r.id == "aggressive";
                                 accessible-checked: r.id == "aggressive" && root.aggressive-active;
                                 accessible-action-default => { root.choose(r.id); }
-                                Text {
+                                row-name := Text {
+                                    x: 0px; y: 0px;
+                                    width: parent.width; height: parent.height;
+                                    horizontal-alignment: left;
                                     text: root.confirmation == r.id
                                         ? (r.id == "quit" ? @tr("Quit?") : @tr("Restart?")) : r.name;
-                                    accessible-label: ""; // The name cell owns the action label.
+                                    accessible-role: text;
+                                    accessible-label: self.text + "."; // Distinct from the name cell's action.
                                     font-size: Metrics.font-body;
                                     color: r.id == "quit" ? Theme.danger : Theme.text-primary;
                                     vertical-alignment: center; overflow: elide; min-width: 0px;
@@ -177,8 +181,8 @@ export component BarMenuWindow inherits Window {
                                     height: 20px; y: (parent.height - self.height) / 2;
                                     width: min(kt.preferred-width + 14px, parent.width);
                                     x: parent.width - self.width;
-                                    border-radius: Metrics.radius-control;
-                                    border-width: Metrics.border-thin; border-color: Theme.border;
+                                    border-radius: 5px;
+                                    border-width: 1px; border-color: Theme.border;
                                     background: Theme.bg-surface;
                                     kt := Text { text: r.key; font-family: Theme.font-mono; font-size: Metrics.font-caption; color: Theme.text-secondary; horizontal-alignment: center; vertical-alignment: center; }
                                     TouchArea { clicked => { root.choose(r.id); } }

@@ -131,6 +131,16 @@ pub(super) fn wire_bar_menu(
         let weak = weak.clone();
         let menu_weak = Rc::downgrade(menu);
         let focus = focus.clone();
+        overlay.on_menu_dismissed(move || {
+            if let Some(menu) = menu_weak.upgrade() {
+                close_menu(&menu, &weak, &focus);
+            }
+        });
+    }
+    {
+        let weak = weak.clone();
+        let menu_weak = Rc::downgrade(menu);
+        let focus = focus.clone();
         menu.on_dismissed(move || {
             if let Some(menu) = menu_weak.upgrade() {
                 close_menu(&menu, &weak, &focus);
@@ -196,13 +206,9 @@ pub(super) fn wire_bar_menu(
                     });
                 }
                 if let Some(menu) = menu_weak.upgrade() {
-                    // focus_changed already closed this generation; preserve
-                    // owner-chip suppression until the matching click drains.
-                    menu.set_confirmation(SharedString::default());
-                    let _ = menu.hide();
-                }
-                if let Some(bar) = weak.upgrade() {
-                    bar.set_menu_open(false);
+                    // close() preserves owner-chip suppression until the
+                    // matching click drains, and invalidates pending reveals.
+                    close_menu(&menu, &weak, &focus);
                 }
             }
             EventResult::Propagate
@@ -276,8 +282,7 @@ pub(super) fn wire_bar_menu(
             set_platform_window_position(menu.window(), -32000, -32000);
             let generation = focus.borrow_mut().begin_open();
             if let Err(e) = menu.show() {
-                focus.borrow_mut().close();
-                bar.set_menu_open(false);
+                close_menu(&menu, &weak, &focus);
                 diag!("bar-menu show failed: {e}");
                 return;
             }

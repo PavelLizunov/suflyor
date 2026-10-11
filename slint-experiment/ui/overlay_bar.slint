@@ -554,8 +554,13 @@ export component OverlayBarWindow inherits Window {
     min-width: root.bootstrap-mode ? 440px : (root.compact-bar ? BarSpec.compact-width : BarSpec.full-width);
     out property <bool> all-regions-fit: root.bootstrap-mode || (state-capsule.fits
         && voice-capsule.fits && session-capsule.fits && tiles-capsule.fits && window-capsule.fits);
-    in property <bool> menu-open: false;
+    in-out property <bool> menu-open: false;
     callback menu-opened(length, length);
+    callback menu-dismissed();
+    function dismiss-menu() {
+        root.menu-open = false;
+        root.menu-dismissed();
+    }
     in property <[string]> pins;
     callback pin-activated(string);
     pure function pin-icon(id: string) -> image {
@@ -738,6 +743,7 @@ export component OverlayBarWindow inherits Window {
     // захватить + timer + Expand). Persisted via config.compact_bar; Rust resizes
     // the bar window on toggle.
     in-out property <bool> compact-bar: false;
+    changed compact-bar => { root.dismiss-menu(); }
     // macOS production bootstrap: keep the real product bar/window while its
     // platform adapters are connected, but never expose dead AI/audio controls.
     in property <bool> bootstrap-mode: false;
@@ -834,11 +840,11 @@ export component OverlayBarWindow inherits Window {
                     pointer-event(ev) => {
                         if (ev.button == PointerEventButton.left
                             && ev.kind == PointerEventKind.down) {
-                            root.drag-start-requested();
+                            root.dismiss-menu(); root.drag-start-requested();
                         }
                     }
                     moved => {
-                        if (self.pressed) { root.drag-moved(); }
+                        if (self.pressed) { root.dismiss-menu(); root.drag-moved(); }
                     }
                 }
             }
@@ -859,7 +865,7 @@ export component OverlayBarWindow inherits Window {
                             active: root.stealth-active; checkable: true;
                             solid: root.stealth-fault;
                             accent: root.stealth-fault ? Theme.danger : Theme.cat-pink;
-                            clicked => { root.stealth-toggle-clicked(); }
+                            clicked => { root.dismiss-menu(); root.stealth-toggle-clicked(); }
                         }
                         if !root.compact-bar : BarChip {
                             icon: root.mic-muted ? @image-url("../assets/icons/micslash.svg") : @image-url("../assets/icons/mic.svg");
@@ -867,14 +873,14 @@ export component OverlayBarWindow inherits Window {
                             a11y: root.mic-muted ? @tr("Mic muted (click to unmute)") : @tr("Mic live (click to mute)");
                             active: root.mic-muted; accent: Theme.danger;
                             checkable: true; checked: !root.mic-muted;
-                            clicked => { root.mic-toggle-clicked(); }
+                            clicked => { root.dismiss-menu(); root.mic-toggle-clicked(); }
                         }
                         if !root.compact-bar : BarChip {
                             icon: @image-url("../assets/icons/system-audio.svg"); has-icon: true;
                             a11y: @tr("System audio capture");
                             active: !root.sys-active; accent: Theme.danger;
                             checkable: true; checked: root.sys-active;
-                            clicked => { root.sys-toggle-clicked(); }
+                            clicked => { root.dismiss-menu(); root.sys-toggle-clicked(); }
                         }
                     }
                     voice-capsule := Capsule {
@@ -883,15 +889,15 @@ export component OverlayBarWindow inherits Window {
                             width: 102px;
                             icon: @image-url("../assets/icons/mic.svg"); has-icon: true;
                             label: @tr("ask"); accent: Theme.success; recording: root.mic-recording;
-                            pressed => { root.ptt-mic-pressed(); }
-                            released => { root.ptt-mic-released(); }
+                            pressed => { root.dismiss-menu(); root.ptt-mic-pressed(); }
+                            released => { root.dismiss-menu(); root.ptt-mic-released(); }
                         }
                         RecordBtn {
                             width: 108px;
                             icon: @image-url("../assets/icons/system-audio.svg"); has-icon: true;
                             label: @tr("grab"); accent: Theme.accent; recording: root.sys-recording;
-                            pressed => { root.ptt-sys-pressed(); }
-                            released => { root.ptt-sys-released(); }
+                            pressed => { root.dismiss-menu(); root.ptt-sys-pressed(); }
+                            released => { root.dismiss-menu(); root.ptt-sys-released(); }
                         }
                     }
                     session-capsule := Capsule {
@@ -902,7 +908,7 @@ export component OverlayBarWindow inherits Window {
                             has-icon: true;
                             label: root.timer-active ? root.timer-label : @tr("start"); mono: true;
                             checkable: true; checked: root.timer-active;
-                            clicked => { root.timer-toggle-clicked(); }
+                            clicked => { root.dismiss-menu(); root.timer-toggle-clicked(); }
                         }
                         Rectangle {
                             width: 26px; height: Metrics.control-md; horizontal-stretch: 0;
@@ -911,7 +917,7 @@ export component OverlayBarWindow inherits Window {
                                 has-icon: true;
                                 a11y: root.session-paused ? @tr("Resume the session") : @tr("Pause the session");
                                 active: root.session-paused; checkable: true; accent: Theme.warning;
-                                clicked => { root.pause-toggle-clicked(); }
+                                clicked => { root.dismiss-menu(); root.pause-toggle-clicked(); }
                             }
                         }
                     }
@@ -923,15 +929,15 @@ export component OverlayBarWindow inherits Window {
                             deep: root.deep-lock; a11y: root.lock-a11y;
                             managed: root.lock-menu-managed; tight: root.compact-bar;
                             mode: root.deep-lock ? 2 : (root.suppress-tiles ? 1 : 0);
-                            mode-selected(mode) => { root.lock-mode-selected(mode); }
-                            menu-opened(x, y) => { root.lock-menu-opened(x, y); }
+                            mode-selected(mode) => { root.dismiss-menu(); root.lock-mode-selected(mode); }
+                            menu-opened(x, y) => { root.dismiss-menu(); root.lock-menu-opened(x, y); }
                         }
                         if !root.compact-bar : BarChip {
                             width: 92px;
                             icon: @image-url("../assets/icons/plus.svg"); has-icon: true;
                             label: @tr("tile · {}", root.open-tiles);
                             a11y: @tr("New tile, {} open", root.open-tiles);
-                            clicked => { root.spawn-tile-clicked(); }
+                            clicked => { root.dismiss-menu(); root.spawn-tile-clicked(); }
                         }
                         if !root.compact-bar : Rectangle {
                             width: 22px; height: Metrics.control-md; horizontal-stretch: 0;
@@ -939,13 +945,13 @@ export component OverlayBarWindow inherits Window {
                                 width: 22px;
                                 icon: @image-url("../assets/icons/x.svg"); has-icon: true;
                                 a11y: @tr("close all");
-                                clicked => { root.close-all-tiles-clicked(); }
+                                clicked => { root.dismiss-menu(); root.close-all-tiles-clicked(); }
                             }
                         }
                         if !root.compact-bar : BarChip {
                             icon: @image-url("../assets/icons/pencil.svg"); has-icon: true;
                             a11y: @tr("Write a question");
-                            clicked => { root.text-ask-clicked(); }
+                            clicked => { root.dismiss-menu(); root.text-ask-clicked(); }
                         }
                     }
                     Rectangle { horizontal-stretch: 1; min-width: BarSpec.spring; }
@@ -956,14 +962,14 @@ export component OverlayBarWindow inherits Window {
                             if root.tray-available : BarChip {
                                 icon: @image-url("../assets/icons/tray.svg"); has-icon: true;
                                 a11y: @tr("Hide to tray");
-                                clicked => { root.hide-to-tray-clicked(); }
+                                clicked => { root.dismiss-menu(); root.hide-to-tray-clicked(); }
                             }
                         }
                         BarChip {
                             icon: root.compact-bar ? @image-url("../assets/icons/maximize.svg") : @image-url("../assets/icons/minimize.svg");
                             has-icon: true;
                             a11y: root.compact-bar ? @tr("Expand the bar") : @tr("Compact reader mode");
-                            clicked => { root.compact-toggle-clicked(); }
+                            clicked => { root.dismiss-menu(); root.compact-toggle-clicked(); }
                         }
                         more-chip := MoreChip {
                             active: root.menu-open; accent: Theme.accent;
@@ -1000,12 +1006,12 @@ export component OverlayBarWindow inherits Window {
                     if !root.compact-bar && root.can-restore-tile && !root.is-pinned("restore") : PinChip {
                         icon: @image-url("../assets/icons/restore.svg");
                         a11y: @tr("Restore last tile");
-                        clicked => { root.restore-tile-clicked(); }
+                        clicked => { root.dismiss-menu(); root.restore-tile-clicked(); }
                     }
                     if !root.compact-bar && root.aggressive-active && !root.is-pinned("aggressive") : PinChip {
                         icon: @image-url("../assets/icons/flame.svg");
                         a11y: @tr("Aggressive auto-tile"); tint: Theme.cat-orange;
-                        clicked => { root.aggressive-toggle-clicked(); }
+                        clicked => { root.dismiss-menu(); root.aggressive-toggle-clicked(); }
                     }
                     if root.app-memory != "" : Text {
                         text: @tr("App RAM") + " " + root.app-memory;
@@ -1028,7 +1034,7 @@ export component OverlayBarWindow inherits Window {
                                     || (id == "settings" && root.settings-open)
                                     || (id == "help" && root.help-open)
                                     || (id == "summary" && root.summary-busy) ? Theme.accent : Theme.text-secondary;
-                            clicked => { root.pin-activated(id); }
+                            clicked => { root.dismiss-menu(); root.pin-activated(id); }
                         }
                         if root.pins.length == 0 : PinChip {
                             icon: @image-url("../assets/icons/plus.svg"); label: @tr("pin"); a11y: @tr("pin");
@@ -1059,7 +1065,7 @@ export component OverlayBarWindow inherits Window {
                         pointer-event(ev) => {
                             if (ev.button == PointerEventButton.left
                                 && ev.kind == PointerEventKind.down) {
-                                root.drag-start-requested();
+                                root.dismiss-menu(); root.drag-start-requested();
                             }
                         }
                     }
@@ -1098,28 +1104,28 @@ export component OverlayBarWindow inherits Window {
                     accent: (root.mic-permission-state == 1 || root.mic-permission-state == 2)
                         || root.mic-capture-state == 2 ? Theme.danger
                         : (root.mic-capture-state == 1 ? Theme.success : Theme.accent);
-                    accessible-action-default => { root.mic-toggle-clicked(); }
-                    clicked => { root.mic-toggle-clicked(); }
+                    accessible-action-default => { root.dismiss-menu(); root.mic-toggle-clicked(); }
+                    clicked => { root.dismiss-menu(); root.mic-toggle-clicked(); }
                 }
                 Chip {
                     label: @tr("Ask");
                     height: 24px;
-                    accessible-action-default => { root.text-ask-clicked(); }
-                    clicked => { root.text-ask-clicked(); }
+                    accessible-action-default => { root.dismiss-menu(); root.text-ask-clicked(); }
+                    clicked => { root.dismiss-menu(); root.text-ask-clicked(); }
                 }
                 Chip {
                     label: @tr("AI setup");
                     height: 24px;
-                    accessible-action-default => { root.open-settings-clicked(); }
-                    clicked => { root.open-settings-clicked(); }
+                    accessible-action-default => { root.dismiss-menu(); root.open-settings-clicked(); }
+                    clicked => { root.dismiss-menu(); root.open-settings-clicked(); }
                 }
 
                 Chip {
                     label: @tr("Quit");
                     accent: Theme.danger;
                     height: 24px;
-                    accessible-action-default => { root.quit-confirm(); }
-                    clicked => { root.quit-confirm(); }
+                    accessible-action-default => { root.dismiss-menu(); root.quit-confirm(); }
+                    clicked => { root.dismiss-menu(); root.quit-confirm(); }
                 }
             }
 

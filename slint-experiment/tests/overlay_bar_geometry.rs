@@ -497,7 +497,7 @@ fn tile_counter_keeps_text_and_close_all_uses_a_reserved_icon_slot() {
         .split_once("width: 92px;")
         .expect("fixed tile counter slot")
         .1
-        .split_once("clicked => { root.spawn-tile-clicked(); }")
+        .split_once("clicked => { root.dismiss-menu(); root.spawn-tile-clicked(); }")
         .expect("tile action")
         .0;
     assert!(tile_chip.contains("icon: @image-url(\"../assets/icons/plus.svg\"); has-icon: true;"));

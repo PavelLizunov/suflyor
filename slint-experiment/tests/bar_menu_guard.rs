@@ -45,6 +45,58 @@ fn menu_is_exported_and_every_action_uses_one_fixed_column_grid() {
         "padding-left: root.col-pad; padding-right: root.col-pad; spacing: root.col-gap;"
     ));
     assert!(grid.contains("width: root.col-icon;"));
+    assert!(menu.contains("property <length> col-icon: 14px;"));
+    assert!(menu.contains("property <length> col-gap: 8px;"));
+    let name = grid
+        .split_once("row-name := Text {")
+        .unwrap()
+        .1
+        .split_once("\n                                }")
+        .unwrap()
+        .0;
+    for contract in [
+        "x: 0px; y: 0px;",
+        "width: parent.width; height: parent.height;",
+        "horizontal-alignment: left;",
+        "vertical-alignment: center;",
+        "overflow: elide; min-width: 0px;",
+        "root.confirmation == r.id",
+        "@tr(\"Quit?\")",
+        "@tr(\"Restart?\")",
+    ] {
+        assert!(
+            name.contains(contract),
+            "missing name-column contract: {contract}"
+        );
+    }
+    assert!(!name.contains("horizontal-alignment: center"));
+    let key = grid
+        .split_once("if root.confirmation != r.id && r.key != \"\" : Rectangle {")
+        .unwrap()
+        .1
+        .split_once("TouchArea")
+        .unwrap()
+        .0;
+    for contract in [
+        "height: 20px;",
+        "x: parent.width - self.width;",
+        "width: min(kt.preferred-width + 14px, parent.width);",
+        "border-radius: 5px;",
+        "border-width: 1px; border-color: Theme.border;",
+        "background: Theme.bg-surface;",
+        "font-family: Theme.font-mono;",
+        "font-size: Metrics.font-caption;",
+    ] {
+        assert!(
+            key.contains(contract),
+            "missing prototype key-chip contract: {contract}"
+        );
+    }
+    assert_eq!(key.matches("border-radius:").count(), 1);
+    assert!(
+        !key.contains("Metrics.radius-control"),
+        "key chip must not use the full pill radius"
+    );
     assert!(!menu.contains("+ key"));
     for (id, key) in [
         ("capture", "F8"),
@@ -185,6 +237,30 @@ fn menu_and_pins_dispatch_existing_callbacks_and_persist_only_the_pin_list() {
     assert!(host.contains("c.bar_pins = previous;"));
     assert!(host.contains("bar.set_pins(model)"));
     assert!(host.contains("refresh_menu(&menu, &bar)"));
+    let refresh = host
+        .split_once("fn refresh_menu(")
+        .unwrap()
+        .1
+        .split_once("fn close_menu(")
+        .unwrap()
+        .0;
+    for property in [
+        "pins",
+        "aggressive_active",
+        "can_restore_tile",
+        "tray_available",
+        "settings_open",
+        "archive_open",
+        "help_open",
+        "summary_busy",
+    ] {
+        assert!(refresh.contains(&format!("menu.set_{property}(bar.get_{property}())")));
+    }
+    let open = host.split_once("overlay.on_menu_opened").unwrap().1;
+    assert!(
+        open.find("refresh_menu(&menu, &bar)").unwrap() < open.find("menu.show()").unwrap(),
+        "every open must seed current bar state before showing"
+    );
     let config = source("../overlay-backend/src/config.rs");
     assert!(config.contains("#[serde(default)]\n    pub bar_pins: Vec<String>"));
     assert!(config.contains("bar_pins: Vec::new()"));
@@ -235,4 +311,67 @@ fn native_lifecycle_matches_lock_menu_and_the_bottom_row_stays_bare() {
     assert!(!chip.contains("border-width"));
     assert!(!chip.contains("background:"));
     assert!(chip.contains("height: 22px;"));
+}
+
+#[test]
+fn bar_interactions_and_focus_loss_share_the_close_path() {
+    let host = source("src/bin/overlay_host/bar_menu.rs");
+    let bar = source("ui/overlay_bar.slint");
+    assert!(bar.contains("in-out property <bool> menu-open: false;"));
+    assert!(bar.contains("callback menu-dismissed();"));
+    assert!(bar.contains("function dismiss-menu() {\n        root.menu-open = false;\n        root.menu-dismissed();\n    }"));
+    assert!(bar.contains("changed compact-bar => { root.dismiss-menu(); }"));
+    let dismiss = host
+        .split_once("overlay.on_menu_dismissed")
+        .unwrap()
+        .1
+        .split_once("menu.on_dismissed")
+        .unwrap()
+        .0;
+    assert!(dismiss.contains("close_menu(&menu, &weak, &focus)"));
+    let focus = host
+        .split_once("if transition == FocusTransition::DismissOutside")
+        .unwrap()
+        .1
+        .split_once("EventResult::Propagate")
+        .unwrap()
+        .0;
+    assert!(focus.contains("suppress_next_open()"));
+    assert!(focus.contains("close_menu(&menu, &weak, &focus)"));
+    assert_eq!(
+        host.matches("menu.hide()").count(), 1,
+        "hide belongs only to close_menu"
+    );
+    let open = host.split_once("overlay.on_menu_opened").unwrap().1;
+    assert!(open.contains("if menu.window().is_visible() {\n                close_menu(&menu, &weak, &focus);\n                return;\n            }"));
+    let bar = bar
+        .split_once("export component OverlayBarWindow")
+        .unwrap()
+        .1;
+    let callbacks: Vec<_> = bar
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("callback "))
+        .map(|declaration| declaration.split_once('(').unwrap().0)
+        .filter(|name| !matches!(*name, "menu-opened" | "menu-dismissed"))
+        .collect();
+    for line in bar.lines() {
+        for name in &callbacks {
+            if let Some(at) = line.find(&format!("root.{name}(")) {
+                assert!(
+                    line[..at].contains("root.dismiss-menu();"),
+                    "bar interaction bypasses dismissal: {line}"
+                );
+            }
+        }
+    }
+    let menu = source("ui/bar_menu.slint");
+    let escape = menu
+        .split_once("if (e.text == Key.Escape)")
+        .unwrap()
+        .1
+        .split_once("return accept;")
+        .unwrap()
+        .0;
+    assert!(escape.contains("root.dismissed();"));
+    assert!(!escape.contains("else"), "Esc also closes an armed confirmation");
 }
