@@ -1337,7 +1337,7 @@ fn main() -> Result<(), slint::PlatformError> {
         st.mic_active = true;
     }
 
-    apply_overlay_hwnd(&overlay, &state);
+    apply_overlay_hwnd(&overlay, &state, &cfg);
 
     // ===== Mic chip = MUTE toggle (v0.13.1) =====
     //
@@ -2359,6 +2359,8 @@ fn main() -> Result<(), slint::PlatformError> {
     let tick_timer = Timer::default();
     #[cfg(windows)]
     let last_bar_monitor_check = std::cell::Cell::new(std::time::Instant::now());
+    #[cfg(windows)]
+    let cfg_for_bar_position = cfg.clone();
     tick_timer.start(
         TimerMode::Repeated,
         Duration::from_secs(TIMER_TICK_SECS),
@@ -2367,7 +2369,7 @@ fn main() -> Result<(), slint::PlatformError> {
             if last_bar_monitor_check.get().elapsed() >= Duration::from_secs(2) {
                 last_bar_monitor_check.set(std::time::Instant::now());
                 if let Some(o) = tick_weak.upgrade() {
-                    reevaluate_bar_monitor(&o);
+                    reevaluate_bar_monitor(&o, &cfg_for_bar_position);
                 }
             }
             let (active, secs) = {
@@ -4539,6 +4541,8 @@ fn main() -> Result<(), slint::PlatformError> {
     {
         let weak_for_drag = overlay.as_weak();
         overlay.on_drag_start_requested(move || {
+            #[cfg(windows)]
+            begin_bar_position_drag();
             if let Some(o) = weak_for_drag.upgrade() {
                 #[cfg(target_os = "macos")]
                 let _ = slint_replay::native::window::begin_drag(o.window());

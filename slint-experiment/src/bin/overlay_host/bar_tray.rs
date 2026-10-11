@@ -8,6 +8,8 @@ use overlay_backend::config;
 use slint::{ComponentHandle, SharedString, Timer};
 use slint_replay::bar_form::{effective_form, BarForm};
 #[cfg(windows)]
+use slint_replay::bar_form::{bar_rect_inside_any, saved_bar_position, BarPositionTracker};
+#[cfg(windows)]
 use slint_replay::win32::{work_area_for_window, MonitorRect};
 use crate::ui::{OverlayBarWindow, TrayMenuWindow};
 
@@ -118,6 +120,69 @@ const BAR_MARGIN: f32 = 20.0;
 thread_local! {
     // Log entry into TooNarrow, not every periodic sample of the same condition.
     static BAR_TOO_NARROW: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static BAR_POSITION_TRACKER: RefCell<BarPositionTracker> = RefCell::new(BarPositionTracker::default());
+    // Outer Some: startup sizing is pending. Inner None: use today's centring.
+    static BAR_STARTUP_POSITION: std::cell::Cell<Option<Option<(i32, i32)>>> = const { std::cell::Cell::new(None) };
+}
+
+#[cfg(windows)]
+pub(super) static BAR_DRAG_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+#[cfg(windows)]
+pub(super) fn begin_bar_position_drag() {
+    BAR_DRAG_ACTIVE.store(true, Ordering::Relaxed);
+    BAR_STARTUP_POSITION.with(|position| position.set(None));
+    BAR_POSITION_TRACKER.with(|tracker| tracker.borrow_mut().user_drag());
+}
+
+#[cfg(windows)]
+fn bar_drag_in_progress() -> bool {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON};
+    let pressed = unsafe { GetAsyncKeyState(i32::from(VK_LBUTTON.0)) < 0 };
+    if !pressed {
+        BAR_DRAG_ACTIVE.store(false, Ordering::Relaxed);
+    }
+    pressed && BAR_DRAG_ACTIVE.load(Ordering::Relaxed)
+}
+
+#[cfg(windows)]
+fn forget_bar_position_sample() {
+    BAR_POSITION_TRACKER.with(|tracker| tracker.borrow_mut().programmatic_move());
+}
+
+#[cfg(windows)]
+fn monitor_key(monitor: MonitorRect) -> String {
+    format!(
+        "{}x{}@{},{}",
+        monitor.width(), monitor.height(), monitor.left, monitor.top
+    )
+}
+
+#[cfg(windows)]
+fn monitor_work_area(monitor: MonitorRect) -> Option<MonitorRect> {
+    work_area_for_point(
+        monitor.left + monitor.width() / 2,
+        monitor.top + monitor.height() / 2,
+    )
+    .filter(|work| work.width() > 0 && work.height() > 0)
+}
+
+#[cfg(windows)]
+fn clamped_bar_position(work: MonitorRect, rect: (i32, i32, i32, i32)) -> (i32, i32) {
+    let (x, y, width, height) = rect;
+    let position = saved_bar_position(
+        (x.saturating_sub(work.left), y.saturating_sub(work.top)),
+        work,
+        width,
+        height,
+    );
+    if position != (x, y) {
+        eprintln!(
+            "[overlay-host] bar position clamped: {x} {y} {} {} {width} {height}",
+            position.0, position.1
+        );
+    }
+    position
 }
 
 #[cfg(windows)]
@@ -144,7 +209,7 @@ fn bar_work_area(overlay: &OverlayBarWindow) -> Option<MonitorRect> {
 }
 
 /// Select and resize from the shared specification. No effective-form or width
-/// is persisted; only the user's compact preference belongs in config.
+/// is persisted; compact preference and monitor-relative origins live in config.
 pub(super) fn apply_bar_size(overlay: &OverlayBarWindow, compact: bool) -> BarForm {
     if overlay.get_bootstrap_mode() {
         return if compact {
@@ -188,8 +253,12 @@ pub(super) fn apply_bar_size(overlay: &OverlayBarWindow, compact: bool) -> BarFo
     let current_width =
         overlay.window().size().width as f32 / overlay.window().scale_factor().max(0.1);
     if old_form != index || (current_width - w).abs() > 1.0 {
+        #[cfg(windows)]
+        let resize_work = bar_work_area(overlay);
+        #[cfg(not(windows))]
+        let resize_work = None;
         overlay.window().set_size(slint::LogicalSize::new(w, spec.get_height()));
-        recenter_when_sized(overlay.as_weak(), w, 0);
+        recenter_when_sized(overlay.as_weak(), w, 0, resize_work);
     }
     form
 }
@@ -214,33 +283,83 @@ fn bar_position(
 
 /// Called by the existing session tick even when the session is idle.
 #[cfg(windows)]
-pub(super) fn reevaluate_bar_monitor(overlay: &OverlayBarWindow) {
-    if !overlay.window().is_visible() || overlay.get_bootstrap_mode() {
+pub(super) fn reevaluate_bar_monitor(overlay: &OverlayBarWindow, cfg: &config::SharedConfig) {
+    if BAR_TRAY_HIDDEN.load(Ordering::Relaxed)
+        || !overlay.window().is_visible()
+        || overlay.get_bootstrap_mode()
+    {
+        forget_bar_position_sample();
         return;
     }
-    let form = apply_bar_size(overlay, overlay.get_compact_bar());
-    let Ok(hwnd) = grab_hwnd(overlay.window()) else { return };
-    let Ok((x, y, width, height)) = get_window_rect(hwnd) else { return };
-    let contained = enum_monitors()
-        .into_iter()
-        .filter_map(|m| work_area_for_point(m.left + m.width() / 2, m.top + m.height() / 2))
-        .any(|work| {
-            x >= work.left && y >= work.top
-                && x + width <= work.right && y + height <= work.bottom
+    // Do not resize/recover under a held drag, including a stationary hold.
+    if bar_drag_in_progress() {
+        BAR_POSITION_TRACKER.with(|tracker| {
+            tracker.borrow_mut().observe((0, 0, 0, 0), true);
         });
-    if contained && form != BarForm::TooNarrow {
         return;
     }
+    BAR_STARTUP_POSITION.with(|position| position.set(None));
+    let form = apply_bar_size(overlay, overlay.get_compact_bar());
+    let Ok(hwnd) = grab_hwnd(overlay.window()) else {
+        forget_bar_position_sample();
+        return;
+    };
+    let Ok(rect @ (x, y, width, height)) = get_window_rect(hwnd) else {
+        forget_bar_position_sample();
+        return;
+    };
+    if width <= 0 || height <= 0 {
+        forget_bar_position_sample();
+        return;
+    }
+    let monitors: Vec<_> = enum_monitors()
+        .into_iter()
+        .filter_map(|monitor| monitor_work_area(monitor).map(|work| (monitor, work)))
+        .collect();
+    let works: Vec<_> = monitors.iter().map(|(_, work)| *work).collect();
+    let contained = bar_rect_inside_any(rect, &works);
+    if contained && form != BarForm::TooNarrow {
+        let should_save =
+            BAR_POSITION_TRACKER.with(|tracker| tracker.borrow_mut().observe(rect, false));
+        if should_save {
+            // Only an unambiguous, fully containing work area gets a key.
+            if let Some((monitor, work)) = monitors
+                .iter()
+                .find(|(_, work)| bar_rect_inside_any(rect, &[*work]))
+            {
+                let position = config::BarPosition {
+                    monitor: monitor_key(*monitor),
+                    x: x - work.left,
+                    y: y - work.top,
+                };
+                let mut c = cfg.write();
+                if c.bar_positions.iter().any(|saved| saved == &position) {
+                    BAR_POSITION_TRACKER.with(|tracker| tracker.borrow_mut().saved(rect));
+                    return;
+                }
+                let previous = c.bar_positions.clone();
+                c.bar_positions.retain(|saved| saved.monitor != position.monitor);
+                c.bar_positions.push(position.clone());
+                let excess = c.bar_positions.len().saturating_sub(8);
+                drop(c.bar_positions.drain(..excess));
+                if config::save(&c).is_ok() {
+                    BAR_POSITION_TRACKER.with(|tracker| tracker.borrow_mut().saved(rect));
+                    eprintln!(
+                        "[overlay-host] saved bar position: {} {} {width} {height}",
+                        position.x, position.y
+                    );
+                } else {
+                    c.bar_positions = previous;
+                }
+            }
+        }
+        return;
+    }
+    // Recovery is never a user preference, even on the following stable ticks.
+    BAR_STARTUP_POSITION.with(|position| position.set(None));
+    forget_bar_position_sample();
     let work = work_area_for_window(hwnd).or_else(primary_bar_work_area);
-    let (nx, ny) = work.map_or((60, 24), |work| {
-        bar_position(
-            work,
-            width,
-            height,
-            overlay.window().scale_factor(),
-            form == BarForm::TooNarrow,
-        )
-    });
+    let (nx, ny) = work.map_or((60, 24), |work| clamped_bar_position(work, rect));
     // TooNarrow cannot contain the entire mini surface. Keep its left controls
     // reachable without moving the same inevitably overflowing rect every tick.
     if (x, y) != (nx, ny) {
@@ -251,16 +370,31 @@ pub(super) fn reevaluate_bar_monitor(overlay: &OverlayBarWindow) {
     }
 }
 
-/// Re-center the bar on its current monitor for its NEW width — but only once the
+/// Keep the bar's left edge (clamped on Windows) for its NEW width, once the
 /// OS window has actually reached that size. `set_size` is applied on a later
 /// event-loop cycle, and at STARTUP the HWND isn't realized for ~200 ms, so a
 /// single fixed delay raced the resize/pin (it left a startup-compact bar
 /// left-of-centre). Poll every 50 ms (≤ ~0.6 s) until the rect width matches the
 /// requested size in native geometry units (DPI-scaled pixels on Windows,
-/// logical points on macOS), then center by the ACTUAL width.
-fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f32, attempt: u32) {
+/// logical points on macOS), then position by the ACTUAL width.
+fn recenter_when_sized(
+    weak: slint::Weak<OverlayBarWindow>,
+    target_w_logical: f32,
+    attempt: u32,
+    resize_work: Option<slint_replay::win32::MonitorRect>,
+) {
     Timer::single_shot(Duration::from_millis(50), move || {
         let Some(o) = weak.upgrade() else { return };
+        #[cfg(windows)]
+        if BAR_TRAY_HIDDEN.load(Ordering::Relaxed) {
+            forget_bar_position_sample();
+            return;
+        }
+        #[cfg(windows)]
+        if bar_drag_in_progress() {
+            BAR_POSITION_TRACKER.with(|tracker| tracker.borrow_mut().user_drag());
+            return;
+        }
         let spec = o.global::<crate::ui::BarSpec>();
         let selected_width = match o.get_bar_form() {
             0 => spec.get_full_width(),
@@ -272,7 +406,7 @@ fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f3
         }
         let Ok(hwnd) = grab_hwnd(o.window()) else {
             if attempt < 12 {
-                recenter_when_sized(weak.clone(), target_w_logical, attempt + 1);
+                recenter_when_sized(weak.clone(), target_w_logical, attempt + 1, resize_work);
             }
             return;
         };
@@ -282,21 +416,46 @@ fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f3
         let target_width = target_w_logical.round() as i32;
         let cur_w = get_window_rect(hwnd).map(|(_, _, bw, _)| bw).unwrap_or(0);
         if (cur_w - target_width).abs() > 24 && attempt < 12 {
-            recenter_when_sized(weak.clone(), target_w_logical, attempt + 1);
+            recenter_when_sized(weak.clone(), target_w_logical, attempt + 1, resize_work);
             return;
         }
         #[cfg(windows)]
-        let (x, y) = bar_work_area(&o).map_or((60, 24), |work| {
-            let height = get_window_rect(hwnd).map(|(_, _, _, h)| h).unwrap_or(0);
-            let scale = o.window().scale_factor().max(0.1);
-            let narrow = (work.width() as f32 / scale) < target_w_logical + 2.0 * BAR_MARGIN;
-            bar_position(work, cur_w, height, scale, narrow)
+        let (x, y) = resize_work.or_else(|| bar_work_area(&o)).map_or((60, 24), |work| {
+            match get_window_rect(hwnd) {
+                Ok(rect @ (x, y, width, height))
+                    if (x != -32000 || y != -32000) && width > 0 && height > 0 =>
+                {
+                    match BAR_STARTUP_POSITION.with(|position| position.take()) {
+                        Some(Some(offset)) => saved_bar_position(offset, work, width, height),
+                        Some(None) => {
+                            let scale = o.window().scale_factor().max(0.1);
+                            let narrow = (work.width() as f32 / scale) < target_w_logical + 2.0 * BAR_MARGIN;
+                            bar_position(work, width, height, scale, narrow)
+                        }
+                        None => clamped_bar_position(work, rect),
+                    }
+                }
+                _ => {
+                    let scale = o.window().scale_factor().max(0.1);
+                    let narrow = (work.width() as f32 / scale) < target_w_logical + 2.0 * BAR_MARGIN;
+                    bar_position(
+                        work, cur_w, (spec.get_height() * scale).round() as i32, scale, narrow,
+                    )
+                }
+            }
         });
         #[cfg(not(windows))]
         let (x, y) = match enum_monitors().into_iter().find(|m| m.is_primary) {
             Some(p) => (p.left + ((p.width() - cur_w) / 2).max(0), p.top + 24),
             None => (60, 24),
         };
+        #[cfg(windows)]
+        if get_window_rect(hwnd)
+            .map(|(old_x, old_y, _, _)| (old_x, old_y))
+            .ok() != Some((x, y))
+        {
+            forget_bar_position_sample();
+        }
         let _ = move_window_pos_only(hwnd, x, y);
         set_platform_window_position(o.window(), x, y);
     });
@@ -422,6 +581,8 @@ pub(super) fn hide_bar_to_tray(weak: &slint::Weak<OverlayBarWindow>) {
     let _ = o.hide();
     slint_replay::win32::force_hide(o.window());
     BAR_TRAY_HIDDEN.store(true, Ordering::Relaxed);
+    #[cfg(windows)]
+    forget_bar_position_sample();
     diag!("bar hidden to tray (recording/hotkeys/TTS keep running)");
 }
 
@@ -503,7 +664,11 @@ pub(super) fn tray_action_dispatch(
     }
 }
 
-pub(super) fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_replay::app_state::SharedState) {
+pub(super) fn apply_overlay_hwnd(
+    overlay: &OverlayBarWindow,
+    state: &slint_replay::app_state::SharedState,
+    _cfg: &overlay_backend::config::SharedConfig,
+) {
     // Поток C (stealth bar-flash fix) + I3: park the bar OFF the virtual desktop
     // synchronously NOW (this fn runs before overlay.run(), which composites the
     // window), ALWAYS — mirrors present_window_stealth_aware. Without parking the
@@ -516,6 +681,10 @@ pub(super) fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_repla
     // aux-window helper).
     set_platform_window_position(overlay.window(), -32000, -32000);
     let st = state.clone();
+    #[cfg(windows)]
+    let cfg = _cfg.clone();
+    #[cfg(windows)]
+    forget_bar_position_sample();
     let attempt: Rc<dyn Fn(&OverlayBarWindow) -> bool> = Rc::new(move |o: &OverlayBarWindow| {
         let Ok(hwnd) = grab_hwnd(o.window()) else {
             return false;
@@ -538,12 +707,10 @@ pub(super) fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_repla
         // the 🎯 chip + effective global follow the VERIFIED outcome (a failed
         // exclusion leaves the chip dark + surfaces "stealth unavailable").
         apply_bar_stealth(o, &st, global_stealth());
-        // #127 — pin the bar to the PRIMARY monitor. The bar has no
-        // position logic of its own; Slint/winit's default placement
-        // can drop it onto the user's PORTRAIT secondary (at negative
-        // X) or straddle two displays. Centre it near the top of
-        // primary. One-shot at launch — the user can still drag it
-        // afterward (the logo is a drag handle).
+        // #127 — pin the bar to the PRIMARY monitor. Slint/winit's default
+        // placement can choose a portrait secondary or straddle displays.
+        // Restore only the primary's entry; otherwise retain today's centring.
+        // One-shot at launch; the user can still drag the bar afterward.
         // Поток C — the pin MUST always land the bar on-screen: we parked it
         // at (-32000) above, so any path that skips the move would strand the
         // bar off the desktop (the bar is the whole control surface — the user
@@ -552,6 +719,8 @@ pub(super) fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_repla
         // Re-read startup DPI once the HWND exists, before the first reveal.
         #[cfg(windows)]
         let form = apply_bar_size(o, o.get_compact_bar());
+        #[cfg(windows)]
+        BAR_STARTUP_POSITION.with(|position| position.set(Some(None)));
         #[cfg(windows)]
         let (x, y) = primary_bar_work_area().map_or((60, 24), |work| {
             let (_, _, width, height) = get_window_rect(hwnd).unwrap_or((0, 0, 0, 0));
@@ -563,6 +732,50 @@ pub(super) fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_repla
                 form == BarForm::TooNarrow,
             )
         });
+        // Restore is optional: any missing/invalid geometry or failed move falls
+        // through to the unchanged primary pin, hard retry and reveal fallback.
+        #[cfg(windows)]
+        if let Some(primary) = enum_monitors().into_iter()
+            .find(|m| m.is_primary && !o.get_bootstrap_mode())
+        {
+            if let (Some(work), Ok((_, _, width, height))) =
+                (monitor_work_area(primary), get_window_rect(hwnd))
+            {
+                let key = monitor_key(primary);
+                let saved = cfg.read().bar_positions.iter()
+                    .find(|saved| saved.monitor == key).cloned();
+                if let Some(saved) = saved.filter(|_| width > 0 && height > 0) {
+                    let spec = o.global::<crate::ui::BarSpec>();
+                    let scale = o.window().scale_factor().max(0.1);
+                    let logical_width = match o.get_bar_form() {
+                        0 => spec.get_full_width(),
+                        1 => spec.get_compact_width(),
+                        _ => spec.get_mini_width(),
+                    };
+                    let current_width = (logical_width * scale).round() as i32;
+                    let current_height = (spec.get_height() * scale).round() as i32;
+                    let (rx, ry) = saved_bar_position(
+                        (saved.x, saved.y),
+                        work,
+                        width.max(current_width), height.max(current_height),
+                    );
+                    if current_width > 0 && current_height > 0
+                        && move_window_pos_only(hwnd, rx, ry).is_ok()
+                    {
+                        set_platform_window_position(o.window(), rx, ry);
+                        BAR_STARTUP_POSITION.with(|position| {
+                            position.set(Some(Some((saved.x, saved.y))));
+                        });
+                        forget_bar_position_sample();
+                        if (rx, ry) != (work.left.saturating_add(saved.x), work.top.saturating_add(saved.y)) {
+                            eprintln!("[overlay-host] bar position clamped: {} {} {rx} {ry} {current_width} {current_height}", saved.x, saved.y);
+                        }
+                        eprintln!("[overlay-host] restored bar position: {rx} {ry} {current_width} {current_height}");
+                        return true;
+                    }
+                }
+            }
+        }
         #[cfg(not(windows))]
         let (x, y) = {
             let primary = enum_monitors().into_iter().find(|m| m.is_primary);

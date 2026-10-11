@@ -80,7 +80,10 @@ fn monitor_sampling_and_recovery_keep_native_work_area_and_reveal_contracts() {
         "non-Windows keeps preference-only selection"
     );
     assert!(host.contains("const BAR_MARGIN: f32 = 20.0;"));
-    assert!(host.contains("x + width <= work.right && y + height <= work.bottom"));
+    assert!(host.contains("let contained = bar_rect_inside_any(rect, &works);"));
+    let geometry = read("src/bar_form.rs");
+    assert!(geometry.contains("i64::from(x) + i64::from(width) <= i64::from(work.right)"));
+    assert!(geometry.contains("i64::from(y) + i64::from(height) <= i64::from(work.bottom)"));
     assert!(host.contains("if contained && form != BarForm::TooNarrow"));
     assert!(host.contains("work_area_for_window(hwnd).or_else(primary_bar_work_area)"));
     assert!(host.contains("work.left + (BAR_MARGIN * scale).round() as i32"));
@@ -104,7 +107,7 @@ fn monitor_sampling_and_recovery_keep_native_work_area_and_reveal_contracts() {
         tick.split_once("let (active, secs)")
             .unwrap()
             .0
-            .contains("reevaluate_bar_monitor(&o)"),
+            .contains("reevaluate_bar_monitor(&o, &cfg_for_bar_position)"),
         "monitor check runs even with no active session"
     );
     assert!(main.contains("c.compact_bar = if was_mini { false } else { !c.compact_bar };"));
