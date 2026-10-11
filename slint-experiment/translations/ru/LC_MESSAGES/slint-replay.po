@@ -29,6 +29,24 @@ msgstr ""
 msgid "ask"
 msgstr "спросить"
 
+msgid "Hold to ask with your voice"
+msgstr "Удерживайте: вопрос своим голосом"
+
+msgid "Hold to ask about what they said"
+msgstr "Удерживайте: вопрос по словам собеседника"
+
+msgid "Start the session"
+msgstr "Начать сессию"
+
+msgid "Stop the session"
+msgstr "Остановить сессию"
+
+msgid "listening…"
+msgstr "слушаю…"
+
+msgid "Could not save. Try again."
+msgstr "Не удалось сохранить. Повторите."
+
 msgid "grab"
 msgstr "захватить"
 
@@ -56,9 +74,6 @@ msgstr "Новый тайл, открыто: {}"
 # #110 — bulk-close all open tiles.
 msgid "close all"
 msgstr "закрыть все"
-
-msgid "Restore last tile"
-msgstr "Вернуть последний тайл"
 
 # RC4 — hide-to-tray bar action (accessible label of the icon-only chip that
 # sits beside the compact control). Tray MENU labels are Rust-side (tray.rs).
@@ -1274,7 +1289,7 @@ msgid "How it works"
 msgstr "Как это работает"
 
 msgid "1) Start capture — press start on the bar. The mic records you; system audio records the other side."
-msgstr "1) Начните захват — нажмите старт на баре. Микрофон записывает вас, системный звук — собеседника."
+msgstr "1) Начните захват — нажмите старт на панели. Микрофон записывает вас, системный звук — собеседника."
 
 msgid "2) Get help — hold ask or grab for a voice question, or press F9. Answers appear in tiles."
 msgstr "2) Получайте помощь — удерживайте «спросить» или «захватить» для голосового вопроса, либо нажмите F9. Ответы появляются в тайлах."
@@ -1283,10 +1298,10 @@ msgid "3) Stop and review — press stop to end the session; open the session ar
 msgstr "3) Остановите и посмотрите — нажмите стоп для завершения сессии, затем откройте архив сессий (F7) для стенограмм и сводок."
 
 msgid "Bar icons"
-msgstr "Иконки бара"
+msgstr "Иконки панели"
 
 msgid "Drag to move the bar; shows the live state"
-msgstr "Перетащить = двигать бар; показывает состояние"
+msgstr "Перетащить = двигать панель; показывает состояние"
 
 msgid "Drag to move the window"
 msgstr "Перетащите, чтобы переместить окно"
@@ -1659,7 +1674,7 @@ msgid "Read-aloud · recognition · compact mode"
 msgstr "Озвучка · распознавание · компактный режим"
 
 msgid "Shift+Alt+1 — read the selected text aloud; Shift+Alt+2 — OCR text from a screen region and read it; Shift+Alt+3 — pause/resume. Voices (TTS) and the recognition engine (OCR) install with a button in Settings → AI (TTS and Vision). Compact \"reader\" mode: the collapse chip on the bar turns it into a tiny read-aloud-only pill. \"Listening mode\" (Settings → Auto-tiles) mutes auto-tiles so you can just record and listen."
-msgstr "Shift+Alt+1 — озвучить выделенный текст; Shift+Alt+2 — распознать текст с области экрана (OCR) и озвучить; Shift+Alt+3 — пауза/продолжение. Голоса (TTS) и движок распознавания (OCR) ставятся кнопкой в Настройки -> AI (TTS и Vision). Компактный режим «читалки»: чип свернуть на баре превращает бар в маленькую пилюлю только для озвучки. «Режим прослушивания» (Настройки -> Авто-тайлы) глушит авто-тайлы, чтобы просто записывать и слушать."
+msgstr "Shift+Alt+1 — озвучить выделенный текст; Shift+Alt+2 — распознать текст с области экрана (OCR) и озвучить; Shift+Alt+3 — пауза/продолжение. Голоса (TTS) и движок распознавания (OCR) ставятся кнопкой в Настройки -> AI (TTS и Vision). Компактный режим «читалки»: чип свернуть на панели превращает панель в маленькую пилюлю только для озвучки. «Режим прослушивания» (Настройки -> Авто-тайлы) глушит авто-тайлы, чтобы просто записывать и слушать."
 
 msgid "Preparing…"
 msgstr "Подготовка…"
@@ -2355,7 +2370,7 @@ msgid "Compact reader mode"
 msgstr "Компактный режим чтения"
 
 msgid "Expand the bar"
-msgstr "Развернуть бар"
+msgstr "Развернуть панель"
 
 msgid "idle"
 msgstr "ожидание"

@@ -11,7 +11,7 @@ export component BarMenuWindow inherits Window {
     background: transparent;
     title: @tr("More");
     preferred-width: 408px;
-    preferred-height: 330px + (root.tray-available ? 28px : 0px) + (root.lock-menu-managed ? 28px : 0px);
+    preferred-height: 330px + (root.tray-available ? 28px : 0px) + (root.lock-menu-managed ? 28px : 0px) + root.footer-height;
     property <bool> widgets-light: Theme.is-light;
     init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
@@ -27,6 +27,17 @@ export component BarMenuWindow inherits Window {
     in property <bool> summary-busy;
     in-out property <string> confirmation: "";
     property <int> inactive-ticks: 0;
+    property <int> pin-error-ticks: 0;
+    out property <length> footer-height: root.pin-error-ticks > 0 ? 24px : 0px;
+    callback footer-resized();
+    changed footer-height => { root.footer-resized(); }
+    callback pin-save-failed();
+    pin-save-failed => { root.pin-error-ticks = 40; }
+    Timer {
+        interval: 100ms;
+        running: root.pin-error-ticks > 0;
+        triggered => { root.pin-error-ticks -= 1; }
+    }
     callback action(string);
     callback pin-toggled(string);
     callback dismissed();
@@ -107,15 +118,9 @@ export component BarMenuWindow inherits Window {
                         height: r.head ? 22px : 28px;
                         opacity: r.id == "restore" && !root.can-restore-tile ? 0.35 : 1;
                         border-radius: Metrics.radius-control;
-                        background: self.pinned ? Theme.accent.with-alpha(0.10) : transparent;
-                        // Behind the cells: pin/Yes/No touch targets consume their
-                        // own clicks, all remaining row space selects the action.
-                        TouchArea {
-                            enabled: !r.head && (r.id != "restore" || root.can-restore-tile);
-                            mouse-cursor: pointer;
-                            clicked => { root.choose(r.id); }
-                            moved => { root.inactive-ticks = 0; }
-                        }
+                        background: row-touch.pressed ? Theme.tint(Theme.accent)
+                            : row-touch.has-hover ? Theme.border-strong.with-alpha(0.22)
+                            : self.pinned ? Theme.accent.with-alpha(0.10) : transparent;
                         HorizontalLayout {
                             padding-left: root.col-pad; padding-right: root.col-pad; spacing: root.col-gap;
                             if !r.head : Rectangle {
@@ -125,10 +130,6 @@ export component BarMenuWindow inherits Window {
                                     colorize: r.id == "quit" ? Theme.danger : r.active ? Theme.accent : Theme.text-secondary;
                                     width: parent.width; height: root.col-icon;
                                     y: (parent.height - self.height) / 2;
-                                }
-                                TouchArea {
-                                    enabled: r.id != "restore" || root.can-restore-tile;
-                                    clicked => { root.choose(r.id); }
                                 }
                             }
                             if r.head : Text {
@@ -156,22 +157,16 @@ export component BarMenuWindow inherits Window {
                                     color: r.id == "quit" ? Theme.danger : Theme.text-primary;
                                     vertical-alignment: center; overflow: elide; min-width: 0px;
                                 }
-                                TouchArea {
-                                    enabled: !r.head && (r.id != "restore" || root.can-restore-tile);
-                                    mouse-cursor: pointer;
-                                    clicked => { root.choose(r.id); }
-                                    moved => { root.inactive-ticks = 0; }
-                                }
                             }
                             if !r.head : Rectangle {
                                 width: root.col-key;
                                 if root.confirmation == r.id : Rectangle {
-                                    height: 20px; y: (parent.height - self.height) / 2;
-                                    width: parent.width; border-radius: Metrics.radius-control;
-                                    background: Theme.danger.with-alpha(0.14);
+                                    height: 24px; x: 0px; y: (parent.height - self.height) / 2;
+                                    width: parent.width; border-radius: Metrics.radius-field;
+                                    background: Theme.danger;
                                     accessible-role: button; accessible-label: @tr("Yes");
                                     accessible-action-default => { root.confirmation = ""; root.action(r.id); }
-                                    Text { text: @tr("Yes"); color: Theme.danger; font-size: Metrics.font-caption; horizontal-alignment: center; vertical-alignment: center; }
+                                    Text { text: @tr("Yes"); color: Theme.bg-surface; font-size: Metrics.font-caption; horizontal-alignment: center; vertical-alignment: center; }
                                     TouchArea {
                                         mouse-cursor: pointer;
                                         moved => { root.inactive-ticks = 0; }
@@ -186,14 +181,14 @@ export component BarMenuWindow inherits Window {
                                     border-width: 1px; border-color: Theme.border;
                                     background: Theme.bg-surface;
                                     kt := Text { text: r.key; font-family: Theme.font-mono; font-size: Metrics.font-caption; color: Theme.text-secondary; horizontal-alignment: center; vertical-alignment: center; }
-                                    TouchArea { clicked => { root.choose(r.id); } }
                                 }
                             }
                             if !r.head : Rectangle {
                                 width: root.col-pin;
                                 if root.confirmation == r.id : Rectangle {
-                                    height: 20px; y: (parent.height - self.height) / 2;
-                                    border-radius: Metrics.radius-control;
+                                    height: 24px; x: 0px; y: (parent.height - self.height) / 2;
+                                    width: parent.width; border-radius: Metrics.radius-field;
+                                    background: transparent;
                                     border-width: Metrics.border-thin; border-color: Theme.border-strong;
                                     accessible-role: button; accessible-label: @tr("No");
                                     accessible-action-default => { root.confirmation = ""; }
@@ -205,11 +200,12 @@ export component BarMenuWindow inherits Window {
                                     }
                                 }
                                 if r.pinnable : Rectangle {
-                                    height: 20px; y: (parent.height - self.height) / 2;
-                                    border-radius: Metrics.radius-control;
+                                    height: 24px; x: 0px; y: (parent.height - self.height) / 2;
+                                    width: parent.width; border-radius: Metrics.radius-field;
                                     border-width: root.is-pinned(r.id) ? 0px : Metrics.border-thin;
-                                    border-color: Theme.border-strong;
-                                    background: root.is-pinned(r.id) ? Theme.accent : transparent;
+                                    border-color: pin-touch.has-hover ? Theme.accent : Theme.border-strong;
+                                    background: root.is-pinned(r.id) ? Theme.accent
+                                        : pin-touch.pressed || pin-touch.has-hover ? Theme.tint(Theme.accent) : transparent;
                                     accessible-role: button;
                                     accessible-label: r.name + ". " + (root.is-pinned(r.id) ? @tr("on the bar") : @tr("pin"));
                                     accessible-checkable: true; accessible-checked: root.is-pinned(r.id);
@@ -221,10 +217,11 @@ export component BarMenuWindow inherits Window {
                                     Text {
                                         text: root.is-pinned(r.id) ? @tr("on the bar") : @tr("pin");
                                         font-size: Metrics.font-caption; font-weight: root.is-pinned(r.id) ? 600 : 400;
-                                        color: root.is-pinned(r.id) ? Theme.on-accent : Theme.text-muted;
+                                        color: root.is-pinned(r.id) ? Theme.on-accent
+                                            : pin-touch.pressed || pin-touch.has-hover ? Theme.on-tint(Theme.accent) : Theme.text-muted;
                                         horizontal-alignment: center; vertical-alignment: center;
                                     }
-                                    TouchArea {
+                                    pin-touch := TouchArea {
                                         enabled: r.id != "restore" || root.can-restore-tile;
                                         mouse-cursor: pointer;
                                         moved => { root.inactive-ticks = 0; }
@@ -233,7 +230,26 @@ export component BarMenuWindow inherits Window {
                                 }
                             }
                         }
+                        // One action hit region covers icon, name and shortcut;
+                        // confirmation and pin cells keep their independent targets.
+                        row-touch := TouchArea {
+                            x: 0px; y: 0px; height: parent.height;
+                            width: root.confirmation == r.id
+                                ? parent.width - root.col-key - root.col-pin - 2 * root.col-gap - root.col-pad
+                                : r.pinnable ? parent.width - root.col-pin - root.col-gap - root.col-pad
+                                : parent.width;
+                            enabled: !r.head && (r.id != "restore" || root.can-restore-tile);
+                            mouse-cursor: pointer;
+                            clicked => { root.choose(r.id); }
+                            moved => { root.inactive-ticks = 0; }
+                        }
                     }
+                }
+                if root.pin-error-ticks > 0 : Text {
+                    height: root.footer-height;
+                    text: @tr("Could not save. Try again.");
+                    color: Theme.on-tint(Theme.danger); font-size: Metrics.font-label;
+                    vertical-alignment: center; overflow: elide;
                 }
             }
         }

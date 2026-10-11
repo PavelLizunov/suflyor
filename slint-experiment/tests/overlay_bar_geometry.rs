@@ -11,6 +11,8 @@ mod ui {
 }
 
 fn element(bar: &ui::OverlayBarWindow, label: &str) -> ElementHandle {
+    // Settle lazily instantiated `if` children before any caller reads layout.
+    assert!(ElementHandle::find_by_accessible_label(bar, label).count() > 0);
     ElementHandle::find_by_accessible_label(bar, label)
         .next()
         .unwrap_or_else(|| panic!("find element with accessible label: {label}"))
@@ -20,6 +22,7 @@ struct Labels {
     russian: bool,
     ask: &'static str,
     grab: &'static str,
+    stop: &'static str,
     close_all: &'static str,
     tile: &'static str,
     deep_lock: &'static str,
@@ -36,8 +39,9 @@ struct Labels {
 
 const ENGLISH: Labels = Labels {
     russian: false,
-    ask: "ask",
-    grab: "grab",
+    ask: "Hold to ask with your voice",
+    grab: "Hold to ask about what they said",
+    stop: "Stop the session",
     close_all: "close all",
     tile: "New tile, {} open",
     deep_lock: "Deep AI hint",
@@ -53,14 +57,15 @@ const ENGLISH: Labels = Labels {
 };
 const RUSSIAN: Labels = Labels {
     russian: true,
-    ask: "спросить",
-    grab: "захватить",
+    ask: "Удерживайте: вопрос своим голосом",
+    grab: "Удерживайте: вопрос по словам собеседника",
+    stop: "Остановить сессию",
     close_all: "закрыть все",
     tile: "Новый тайл, открыто: {}",
     deep_lock: "Deep AI hint",
     write: "Написать вопрос",
     compact: "Компактный режим чтения",
-    expand: "Развернуть бар",
+    expand: "Развернуть панель",
     more: "Ещё",
     tray: "Свернуть в трей",
     stealth: "Скрытность (не показывать при захвате экрана)",
@@ -264,7 +269,7 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
         vec![
             labels.ask,
             labels.grab,
-            "1:07:31",
+            labels.stop,
             if labels.russian {
                 "По вопросам"
             } else {
@@ -277,7 +282,7 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
         vec![
             labels.ask,
             labels.grab,
-            "1:07:31",
+            labels.stop,
             if labels.russian {
                 "По вопросам"
             } else {
@@ -316,7 +321,7 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
                         (false, 2) => "On every line",
                         (false, _) => "On questions",
                     };
-                    let mut names = vec![labels.ask, labels.grab, "1:07:31", lock_label];
+                    let mut names = vec![labels.ask, labels.grab, labels.stop, lock_label];
                     let tile_label = labels.tile.replace("{}", &count.to_string());
                     if !compact {
                         names.push(&tile_label);
@@ -619,7 +624,7 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
                             let top_names = [
                                 labels.ask,
                                 labels.grab,
-                                "1:07:31",
+                                labels.stop,
                                 pause,
                                 labels.stealth,
                                 switch,
@@ -717,7 +722,7 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
     let mascot_label = format!(
         "STATUS. {}",
         if labels.russian {
-            "Перетащить = двигать бар; показывает состояние"
+            "Перетащить = двигать панель; показывает состояние"
         } else {
             "Drag to move the bar; shows the live state"
         }
@@ -869,15 +874,15 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
         );
         {
             let id = "restore";
-            let legacy_label = if russian {
-                "Вернуть последний тайл"
+            let restore_label = if russian {
+                "Вернуть закрытый тайл"
             } else {
-                "Restore last tile"
+                "Restore closed tile"
             };
             assert_eq!(
-                ElementHandle::find_by_accessible_label(bar, legacy_label).count(),
-                usize::from(!ids[..count].contains(&id)),
-                "label={legacy_label}, id={id}, full bar, {state}: conditional action must not duplicate a pin"
+                ElementHandle::find_by_accessible_label(bar, restore_label).count(),
+                1,
+                "label={restore_label}, id={id}, full bar, {state}: fallback or pin, never both"
             );
         }
         bar.set_compact_bar(true);
@@ -927,6 +932,76 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
     bar.set_last_transcript_line("".into());
 }
 
+fn assert_audit_states(bar: &ui::OverlayBarWindow, labels: &Labels) {
+    let start = if labels.russian { "Начать сессию" } else { "Start the session" };
+    let listening = if labels.russian { "слушаю…" } else { "listening…" };
+    let toggles = std::rc::Rc::new(std::cell::Cell::new(0));
+    let toggles_for_callback = toggles.clone();
+    bar.on_timer_toggle_clicked(move || toggles_for_callback.set(toggles_for_callback.get() + 1));
+    bar.set_status_text("idle".into());
+    bar.set_session_name("".into());
+    bar.set_last_transcript_source("".into());
+    bar.set_deep_lock(false);
+    bar.set_tray_available(false);
+    for form in [0, 1, 2] {
+        bar.set_bar_form(form);
+        let spec = bar.global::<ui::BarSpec>();
+        let width = match form {
+            0 => spec.get_full_width(),
+            1 => spec.get_compact_width(),
+            _ => spec.get_mini_width(),
+        };
+        bar.window().set_size(LogicalSize::new(width, spec.get_height()));
+        for active in [false, true] {
+            bar.set_timer_active(active);
+            let timer_label = if active { labels.stop } else { start };
+            assert_eq!(ElementHandle::find_by_accessible_label(bar, timer_label).count(), 1);
+            let before = toggles.get();
+            element(bar, timer_label).invoke_accessible_default_action();
+            assert_eq!(toggles.get(), before + 1, "timer accessible dispatch: form={form}");
+            for paused in [false, true] {
+                bar.set_session_paused(paused);
+                for transcript in ["", "AUDIT TRANSCRIPT"] {
+                    bar.set_last_transcript_line(transcript.into());
+                    for fault in [false, true] {
+                        bar.set_stealth_fault(fault);
+                        for tone in [
+                            ui::StatusTone::Neutral,
+                            ui::StatusTone::Ok,
+                            ui::StatusTone::Info,
+                            ui::StatusTone::Warning,
+                            ui::StatusTone::Danger,
+                        ] {
+                            bar.set_status_tone(tone);
+                            slint::platform::update_timers_and_animations();
+                            // Drain conditional children before layout-derived reads.
+                            let count = ElementHandle::find_by_accessible_label(bar, listening).count();
+                            let expected = form != 2 && active && !paused && transcript.is_empty()
+                                && !fault && !matches!(tone, ui::StatusTone::Warning | ui::StatusTone::Danger);
+                            assert_eq!(count, usize::from(expected), "listening: form={form}, active={active}, paused={paused}, transcript={transcript}, fault={fault}, tone={tone:?}");
+                            if expected {
+                                let cue = element(bar, listening);
+                                let pos = cue.absolute_position();
+                                let size = cue.size();
+                                assert!(pos.y >= 34.0 && pos.y + size.height <= spec.get_height());
+                                assert!(pos.x >= 0.0 && pos.x + size.width <= width);
+                            }
+                            assert_eq!(ElementHandle::find_by_accessible_label(bar, labels.ask).count(), 1);
+                            assert_eq!(ElementHandle::find_by_accessible_label(bar, labels.grab).count(), 1);
+                            assert_form_contract(bar, labels, form, "audit cue and accessible labels");
+                        }
+                    }
+                }
+            }
+        }
+    }
+    bar.set_stealth_fault(false);
+    bar.set_timer_active(false);
+    bar.set_session_paused(false);
+    bar.set_last_transcript_line("".into());
+    bar.set_status_tone(ui::StatusTone::Neutral);
+}
+
 #[test]
 fn capsules_stay_inside_spec_sizes_in_english_and_russian() {
     i_slint_backend_testing::init_no_event_loop();
@@ -936,6 +1011,7 @@ fn capsules_stay_inside_spec_sizes_in_english_and_russian() {
     assert_mini(&english, &ENGLISH);
     assert_pins(&english, false);
     assert_form_states(&english, &ENGLISH);
+    assert_audit_states(&english, &ENGLISH);
     slint::select_bundled_translation("ru").expect("select Russian translation");
     let russian = ui::OverlayBarWindow::new().expect("create Russian bar");
     assert_layout(&russian, &RUSSIAN, false);
@@ -943,6 +1019,7 @@ fn capsules_stay_inside_spec_sizes_in_english_and_russian() {
     assert_mini(&russian, &RUSSIAN);
     assert_pins(&russian, true);
     assert_form_states(&russian, &RUSSIAN);
+    assert_audit_states(&russian, &RUSSIAN);
 }
 
 #[test]

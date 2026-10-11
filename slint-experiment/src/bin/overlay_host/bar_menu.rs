@@ -37,6 +37,13 @@ fn refresh_menu(menu: &BarMenuWindow, bar: &OverlayBarWindow) {
     menu.set_summary_busy(bar.get_summary_busy());
 }
 
+fn menu_logical_height(menu: &BarMenuWindow) -> f32 {
+    330.0
+        + if menu.get_tray_available() { 28.0 } else { 0.0 }
+        + if menu.get_lock_menu_managed() { 28.0 } else { 0.0 }
+        + menu.get_footer_height()
+}
+
 fn close_menu(
     menu: &BarMenuWindow,
     bar: &slint::Weak<OverlayBarWindow>,
@@ -81,6 +88,33 @@ pub(super) fn wire_bar_menu(
 ) -> Timer {
     overlay.set_pins(pins_model(&cfg.read().bar_pins));
     refresh_menu(menu, overlay);
+    {
+        let menu_weak = Rc::downgrade(menu);
+        menu.on_footer_resized(move || {
+            if let Some(menu) = menu_weak.upgrade() {
+                let logical_height = menu_logical_height(&menu);
+                menu.window()
+                    .set_size(slint::LogicalSize::new(408.0, logical_height));
+                // A footer can appear after placement near the work-area edge.
+                let pos = menu.window().position();
+                if menu.window().is_visible() && pos.y != -32000 {
+                    #[cfg(windows)]
+                    let scale = menu.window().scale_factor().max(0.1);
+                    #[cfg(target_os = "macos")]
+                    let scale = 1.0_f32;
+                    if let Some(work) = work_area_for_point(pos.x, pos.y) {
+                        let height = (logical_height * scale).round() as i32;
+                        let max_y = (work.bottom - height).max(work.top);
+                        set_platform_window_position(
+                            menu.window(),
+                            pos.x,
+                            pos.y.clamp(work.top, max_y),
+                        );
+                    }
+                }
+            }
+        });
+    }
     let focus = Rc::new(RefCell::new(LockMenuFocusState::default()));
     let weak = overlay.as_weak();
     let palette = palette.clone();
@@ -171,6 +205,9 @@ pub(super) fn wire_bar_menu(
                 if let Err(e) = overlay_backend::config::save(&c) {
                     c.bar_pins = previous;
                     diag!("bar-menu pin save failed: {e}");
+                    if let Some(menu) = menu_weak.upgrade() {
+                        menu.invoke_pin_save_failed();
+                    }
                     return;
                 }
                 pins_model(&c.bar_pins)
@@ -254,9 +291,7 @@ pub(super) fn wire_bar_menu(
             let scale = bar.window().scale_factor().max(0.1);
             #[cfg(target_os = "macos")]
             let scale = 1.0_f32;
-            let logical_height = 330.0
-                + if bar.get_tray_available() { 28.0 } else { 0.0 }
-                + if bar.get_lock_menu_managed() { 28.0 } else { 0.0 };
+            let logical_height = menu_logical_height(&menu);
             menu.window()
                 .set_size(slint::LogicalSize::new(408.0, logical_height));
             let width = (408.0 * scale).round() as i32;

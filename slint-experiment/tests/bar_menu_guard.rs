@@ -74,7 +74,7 @@ fn menu_is_exported_and_every_action_uses_one_fixed_column_grid() {
         .split_once("if root.confirmation != r.id && r.key != \"\" : Rectangle {")
         .unwrap()
         .1
-        .split_once("TouchArea")
+        .split_once("\n                                }")
         .unwrap()
         .0;
     for contract in [
@@ -332,7 +332,9 @@ fn native_lifecycle_matches_lock_menu_and_the_bottom_row_stays_bare() {
         .unwrap()
         .0;
     assert!(!chip.contains("border-width"));
-    assert!(!chip.contains("background:"));
+    assert!(chip.contains("background: pin-touch.pressed ? Theme.tint(Theme.accent)"));
+    assert!(chip.contains("pin-touch.has-hover ? Theme.border-strong.with-alpha(0.22)"));
+    assert!(chip.contains("border-radius: Metrics.radius-control;"));
     assert!(chip.contains("height: 22px;"));
 }
 

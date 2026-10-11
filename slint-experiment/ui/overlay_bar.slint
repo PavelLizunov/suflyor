@@ -114,7 +114,7 @@ component Chip inherits Rectangle {
             text: label;
             font-family: root.mono ? Theme.font-mono : "";
             font-size: Metrics.font-label;
-            color: active ? accent : Theme.text-secondary;
+            color: active ? Theme.on-tint(accent) : Theme.text-secondary;
             vertical-alignment: center;
         }
     }
@@ -156,14 +156,14 @@ export component LockModeMenuRow inherits Rectangle {
         }
         Text {
             text: root.label;
-            color: root.current ? root.mode-color : Theme.text-secondary;
+            color: root.current ? Theme.on-tint(root.mode-color) : Theme.text-secondary;
             font-size: Metrics.font-label;
             vertical-alignment: center;
         }
         Rectangle { horizontal-stretch: 1; }
         if root.current : Text {
             text: @tr("Current");
-            color: root.mode-color;
+            color: Theme.on-tint(root.mode-color);
             font-size: Metrics.font-label;
             vertical-alignment: center;
         }
@@ -273,6 +273,7 @@ component BarChip inherits Rectangle {
 
     width: 26px;
     in property <bool> solid: false;
+    in property <bool> fault-outline: false;
     in property <bool> press-feedback: true;
     callback clicked();
 
@@ -283,16 +284,17 @@ component BarChip inherits Rectangle {
     accessible-action-default => { root.clicked(); }
 
     // State colour wins over press/hover feedback. The capsule owns the border.
-    background: root.solid ? root.accent : active
+    background: root.fault-outline ? transparent : root.solid ? root.accent : active
         ? Theme.tint(accent)
         : (ta.pressed && root.press-feedback
             ? accent.with-alpha(0.34)
             : (ta.has-hover ? Theme.border-strong.with-alpha(0.22) : transparent));
-    border-width: 0px;
+    border-width: root.fault-outline ? Metrics.border-thin : 0px;
+    border-color: root.accent;
     border-radius: Metrics.radius-control;
     height: Metrics.control-md;
     horizontal-stretch: 0;
-    animate background { duration: 80ms; }
+    animate background { duration: root.solid || root.fault-outline ? 0ms : 80ms; }
 
     HorizontalLayout {
         padding-left: Metrics.space-xs;
@@ -301,7 +303,7 @@ component BarChip inherits Rectangle {
         alignment: center;
         if root.has-icon : IconSlot {
             icon: root.icon;
-            tint: root.solid ? Theme.bg-surface : active ? Theme.on-tint(accent) : Theme.text-secondary;
+            tint: root.solid ? Theme.bg-surface : root.fault-outline || active ? Theme.on-tint(accent) : Theme.text-secondary;
             glyph-size: 14px;
             slot-width: 14px;
             slot-height: 22px;
@@ -310,7 +312,7 @@ component BarChip inherits Rectangle {
             text: label;
             font-family: root.mono ? Theme.font-mono : "";
             font-size: Metrics.font-label;
-            color: root.solid ? Theme.bg-surface : active ? Theme.on-tint(accent) : Theme.text-secondary;
+            color: root.solid ? Theme.bg-surface : root.fault-outline || active ? Theme.on-tint(accent) : Theme.text-secondary;
             vertical-alignment: center;
         }
     }
@@ -321,7 +323,7 @@ component BarChip inherits Rectangle {
 }
 
 
-// Second-row actions are bare: state is conveyed by the glyph, not a capsule.
+// Second-row actions stay unoutlined; hover/press fills provide immediate feedback.
 component PinChip inherits Rectangle {
     in property <image> icon;
     in property <string> label;
@@ -333,6 +335,9 @@ component PinChip inherits Rectangle {
     width: root.label == "" ? 26px : 86px;
     height: 22px;
     horizontal-stretch: 0;
+    border-radius: Metrics.radius-control;
+    background: pin-touch.pressed ? Theme.tint(Theme.accent)
+        : pin-touch.has-hover ? Theme.border-strong.with-alpha(0.22) : transparent;
     opacity: root.action-enabled ? 1 : 0.35;
     accessible-role: button;
     accessible-label: root.a11y;
@@ -346,7 +351,7 @@ component PinChip inherits Rectangle {
             vertical-alignment: center; overflow: elide; min-width: 0px;
         }
     }
-    TouchArea {
+    pin-touch := TouchArea {
         enabled: root.action-enabled;
         mouse-cursor: OverlayCursorPolicy.force-arrow ? default : pointer;
         clicked => { root.clicked(); }
@@ -473,7 +478,7 @@ component RecordBtn inherits Rectangle {
         if !root.icon-only : Text {
             text: root.label;
             font-size: Metrics.font-label;
-            color: root.recording ? Theme.on-tint(Theme.danger) : Theme.text-secondary;
+            color: root.recording ? Theme.text-primary : Theme.text-secondary;
             font-weight: 600;
             overflow: elide;
             horizontal-stretch: 1;
@@ -611,8 +616,8 @@ export component OverlayBarWindow inherits Window {
         : root.status-tone == StatusTone.danger ? Theme.danger
         : root.status-tone == StatusTone.info ? Theme.accent
         : Theme.text-muted;
-    // A verified stealth failure overrides the tone with the warning colour.
-    property <color> pill-color: root.stealth-fault ? Theme.warning : root.status-color;
+    // A verified stealth failure always uses the danger text token.
+    property <color> pill-color: root.stealth-fault ? Theme.danger : root.status-color;
 
     // Live capture flags.
     in-out property <bool> mic-active: false;
@@ -673,6 +678,13 @@ export component OverlayBarWindow inherits Window {
     // apply_bar_stealth); the pill TEXT is translated here so RU follows
     // ui_language (the pill's colour stays Rust-owned — colours don't translate).
     in-out property <bool> stealth-fault: false;
+    property <bool> stealth-fault-phase: true;
+    changed stealth-fault => { root.stealth-fault-phase = true; }
+    Timer {
+        interval: 420ms;
+        running: root.stealth-fault;
+        triggered => { root.stealth-fault-phase = !root.stealth-fault-phase; }
+    }
     property <string> presented-status: root.stealth-fault
         ? @tr("[!] stealth unavailable")
         : root.localized-status(root.status-text);
@@ -829,7 +841,8 @@ export component OverlayBarWindow inherits Window {
                 x: BarSpec.pad; y: (parent.height - self.height) / 2;
                 width: BarSpec.badge; height: BarSpec.badge;
                 border-radius: self.width / 2;
-                background: Theme.bg-elevated;
+                background: root.stealth-fault && root.stealth-fault-phase
+                    ? Theme.danger.with-alpha(0.30) : Theme.bg-elevated;
                 border-width: 2px;
                 border-color: root.stealth-fault ? Theme.danger : root.status-color;
                 accessible-role: text;
@@ -867,7 +880,8 @@ export component OverlayBarWindow inherits Window {
                                 : root.stealth-active ? @tr("hidden") : @tr("visible");
                             a11y: @tr("Stealth (hide from capture)");
                             active: root.stealth-active; checkable: true;
-                            solid: root.stealth-fault;
+                            solid: root.stealth-fault && root.stealth-fault-phase;
+                            fault-outline: root.stealth-fault && !root.stealth-fault-phase;
                             accent: root.stealth-fault ? Theme.danger : Theme.cat-pink;
                             clicked => { root.dismiss-menu(); root.stealth-toggle-clicked(); }
                         }
@@ -894,7 +908,7 @@ export component OverlayBarWindow inherits Window {
                             width: root.bar-form == 2 ? BarSpec.mini-voice : root.bar-form == 1 ? BarSpec.compact-voice : BarSpec.full-voice;
                             RecordBtn {
                                 width: root.bar-form == 2 ? 34px : 102px;
-                                icon-only: root.bar-form == 2; a11y: @tr("ask");
+                                icon-only: root.bar-form == 2; a11y: @tr("Hold to ask with your voice");
                                 icon: @image-url("../assets/icons/mic.svg"); has-icon: true;
                                 label: root.bar-form == 2 ? "" : @tr("ask"); accent: Theme.success; recording: root.mic-recording;
                                 pressed => { root.dismiss-menu(); root.ptt-mic-pressed(); }
@@ -902,7 +916,7 @@ export component OverlayBarWindow inherits Window {
                             }
                             RecordBtn {
                                 width: root.bar-form == 2 ? 34px : 108px;
-                                icon-only: root.bar-form == 2; a11y: @tr("grab");
+                                icon-only: root.bar-form == 2; a11y: @tr("Hold to ask about what they said");
                                 icon: @image-url("../assets/icons/system-audio.svg"); has-icon: true;
                                 label: root.bar-form == 2 ? "" : @tr("grab"); accent: Theme.accent; recording: root.sys-recording;
                                 pressed => { root.dismiss-menu(); root.ptt-sys-pressed(); }
@@ -916,6 +930,7 @@ export component OverlayBarWindow inherits Window {
                                 icon: root.timer-active ? @image-url("../assets/icons/stop.svg") : @image-url("../assets/icons/session-start.svg");
                                 has-icon: true;
                                 label: root.timer-active ? root.timer-label : @tr("start"); mono: true;
+                                a11y: root.timer-active ? @tr("Stop the session") : @tr("Start the session");
                                 checkable: true; checked: root.timer-active;
                                 clicked => { root.dismiss-menu(); root.timer-toggle-clicked(); }
                             }
@@ -937,7 +952,8 @@ export component OverlayBarWindow inherits Window {
                                 icon: @image-url("../assets/icons/stealth.svg"); has-icon: true;
                                 a11y: @tr("Stealth (hide from capture)");
                                 active: root.stealth-active; checkable: true;
-                                solid: root.stealth-fault;
+                                solid: root.stealth-fault && root.stealth-fault-phase;
+                                fault-outline: root.stealth-fault && !root.stealth-fault-phase;
                                 accent: root.stealth-fault ? Theme.danger : Theme.cat-pink;
                                 clicked => { root.dismiss-menu(); root.stealth-toggle-clicked(); }
                             }
@@ -1010,6 +1026,14 @@ export component OverlayBarWindow inherits Window {
                         max-width: root.bar-form == 2 ? parent.width / 3 : parent.width / 2;
                         horizontal-stretch: 0;
                     }
+                    if (root.bar-form == 0 || root.bar-form == 1) && root.timer-active
+                        && !root.session-paused && root.last-transcript-line == ""
+                        && !root.stealth-fault && root.status-tone != StatusTone.warning
+                        && root.status-tone != StatusTone.danger : Text {
+                        text: @tr("listening…");
+                        font-size: Metrics.font-label; color: Theme.text-muted;
+                        vertical-alignment: center; horizontal-stretch: 0;
+                    }
                     if root.deep-lock : PinChip {
                         width: 70px;
                         icon: @image-url("../assets/icons/lock.svg");
@@ -1038,7 +1062,7 @@ export component OverlayBarWindow inherits Window {
                     }
                     if root.bar-form == 0 && root.can-restore-tile && !root.is-pinned("restore") : PinChip {
                         icon: @image-url("../assets/icons/restore.svg");
-                        a11y: @tr("Restore last tile");
+                        a11y: @tr("Restore closed tile");
                         clicked => { root.dismiss-menu(); root.restore-tile-clicked(); }
                     }
                     if root.app-memory != "" && (root.bar-form == 0 || root.bar-form == 1) : Text {
@@ -1065,7 +1089,7 @@ export component OverlayBarWindow inherits Window {
                         }
                         if root.pins.length == 0 : PinChip {
                             icon: @image-url("../assets/icons/plus.svg"); label: @tr("pin"); a11y: @tr("pin");
-                            tint: Theme.text-muted; opacity: 0.7;
+                            tint: Theme.text-secondary;
                             clicked => { root.menu-opened(more-chip.absolute-position.x + more-chip.width, more-chip.absolute-position.y + more-chip.height); }
                         }
                     }
