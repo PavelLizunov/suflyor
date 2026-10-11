@@ -344,6 +344,7 @@ fn bar_interactions_and_focus_loss_share_the_close_path() {
     assert!(bar.contains("callback menu-dismissed();"));
     assert!(bar.contains("function dismiss-menu() {\n        root.menu-open = false;\n        root.menu-dismissed();\n    }"));
     assert!(bar.contains("changed compact-bar => { root.dismiss-menu(); }"));
+    assert!(bar.contains("changed bar-form => { root.dismiss-menu(); }"));
     let dismiss = host
         .split_once("overlay.on_menu_dismissed")
         .unwrap()

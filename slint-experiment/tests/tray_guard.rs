@@ -59,7 +59,7 @@ fn hide_action_is_guarded_in_the_compact_window_capsule() {
         panic!("Hide to tray, compact window capsule, en/ru: unclosed {opening}");
     }
     let window_capsule = block(&bar, "window-capsule := Capsule {");
-    let compact_slot = block(window_capsule, "if root.compact-bar : Rectangle {");
+    let compact_slot = block(window_capsule, "if root.bar-form == 1 : Rectangle {");
     let tray_chip = block(compact_slot, "if root.tray-available : BarChip {");
     let click = tray_chip
         .split_once("clicked => {")

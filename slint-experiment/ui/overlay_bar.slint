@@ -273,6 +273,7 @@ component BarChip inherits Rectangle {
 
     width: 26px;
     in property <bool> solid: false;
+    in property <bool> press-feedback: true;
     callback clicked();
 
     accessible-role: button;
@@ -284,7 +285,7 @@ component BarChip inherits Rectangle {
     // State colour wins over press/hover feedback. The capsule owns the border.
     background: root.solid ? root.accent : active
         ? Theme.tint(accent)
-        : (ta.pressed
+        : (ta.pressed && root.press-feedback
             ? accent.with-alpha(0.34)
             : (ta.has-hover ? Theme.border-strong.with-alpha(0.22) : transparent));
     border-width: 0px;
@@ -405,6 +406,8 @@ component RecordBtn inherits Rectangle {
     in property <bool> has-icon: false;
     in property <color> accent: Theme.success;
     in property <bool> recording: false;
+    in property <bool> icon-only: false;
+    in property <string> a11y: root.label;
     callback pressed();
     callback released();
 
@@ -425,7 +428,7 @@ component RecordBtn inherits Rectangle {
     property <length> lock-dy: 24px;
 
     accessible-role: button;
-    accessible-label: label;
+    accessible-label: root.a11y;
 
     background: recording ? Theme.danger.with-alpha(0.2) : transparent;
     border-color: recording ? Theme.danger : Theme.border-strong;
@@ -464,7 +467,7 @@ component RecordBtn inherits Rectangle {
             slot-width: 14px;
             slot-height: 22px;
         }
-        Text {
+        if !root.icon-only : Text {
             text: root.label;
             font-size: Metrics.font-label;
             color: root.recording ? Theme.on-tint(Theme.danger) : Theme.text-secondary;
@@ -473,7 +476,7 @@ component RecordBtn inherits Rectangle {
             horizontal-stretch: 1;
             vertical-alignment: center;
         }
-        IconSlot {
+        if !root.icon-only : IconSlot {
             opacity: root.recording ? 1 : 0;
             icon: root.locked
                 ? @image-url("../assets/icons/stop.svg")
@@ -540,11 +543,11 @@ export component OverlayBarWindow inherits Window {
     background: transparent;
     no-frame: true;
     always-on-top: true;
-    preferred-width: root.bootstrap-mode ? 560px : (root.compact-bar ? BarSpec.compact-width : BarSpec.full-width);
+    preferred-width: root.bootstrap-mode ? 560px : (root.bar-form == 2 ? BarSpec.mini-width : root.bar-form == 1 ? BarSpec.compact-width : BarSpec.full-width);
     preferred-height: BarSpec.height;
-    min-width: root.bootstrap-mode ? 440px : (root.compact-bar ? BarSpec.compact-width : BarSpec.full-width);
+    min-width: root.bootstrap-mode ? 440px : (root.bar-form == 2 ? BarSpec.mini-width : root.bar-form == 1 ? BarSpec.compact-width : BarSpec.full-width);
     out property <bool> autotile-word-fits: autotile-chip.fits;
-    out property <bool> all-regions-fit: root.bootstrap-mode || (state-capsule.fits
+    out property <bool> all-regions-fit: root.bootstrap-mode || ((root.bar-form == 2 || state-capsule.fits)
         && voice-capsule.fits && session-capsule.fits && tiles-capsule.fits && window-capsule.fits);
     in-out property <bool> menu-open: false;
     callback menu-opened(length, length);
@@ -732,6 +735,9 @@ export component OverlayBarWindow inherits Window {
     // the bar window on toggle.
     in-out property <bool> compact-bar: false;
     changed compact-bar => { root.dismiss-menu(); }
+    // Rust derives the effective form; compact-bar remains the saved preference.
+    in property <int> bar-form: 0;
+    changed bar-form => { root.dismiss-menu(); }
     // macOS production bootstrap: keep the real product bar/window while its
     // platform adapters are connected, but never expose dead AI/audio controls.
     in property <bool> bootstrap-mode: false;
@@ -802,7 +808,7 @@ export component OverlayBarWindow inherits Window {
         border-width: 1px;
         border-color: Theme.border;
 
-        // One set of named capsules serves both layouts and exposes fit evidence.
+        // One set of named capsules serves all layouts and exposes fit evidence.
         Rectangle {
             visible: !root.bootstrap-mode;
             width: parent.width; height: parent.height;
@@ -836,14 +842,15 @@ export component OverlayBarWindow inherits Window {
                 x: BarSpec.pad + BarSpec.badge + BarSpec.pad;
                 width: parent.width - self.x - BarSpec.pad;
                 padding-top: 6px; padding-bottom: 6px; spacing: Metrics.space-xs;
-                HorizontalLayout {
-                    height: 26px; spacing: BarSpec.gap;
+                Rectangle {
+                    height: 26px;
                     state-capsule := Capsule {
-                        width: root.compact-bar ? BarSpec.compact-state : BarSpec.full-state;
-                        BarChip {
-                            width: root.compact-bar ? 26px : 70px;
+                        visible: root.bar-form != 2;
+                        width: root.bar-form == 2 ? 0px : root.bar-form == 1 ? BarSpec.compact-state : BarSpec.full-state;
+                        if root.bar-form != 2 : BarChip {
+                            width: root.bar-form == 1 ? 26px : 70px;
                             icon: @image-url("../assets/icons/stealth.svg"); has-icon: true;
-                            label: root.compact-bar ? "" : root.stealth-fault ? @tr("visible!")
+                            label: root.bar-form == 1 ? "" : root.stealth-fault ? @tr("visible!")
                                 : root.stealth-active ? @tr("hidden") : @tr("visible");
                             a11y: @tr("Stealth (hide from capture)");
                             active: root.stealth-active; checkable: true;
@@ -851,7 +858,7 @@ export component OverlayBarWindow inherits Window {
                             accent: root.stealth-fault ? Theme.danger : Theme.cat-pink;
                             clicked => { root.dismiss-menu(); root.stealth-toggle-clicked(); }
                         }
-                        if !root.compact-bar : BarChip {
+                        if root.bar-form == 0 : BarChip {
                             icon: root.mic-muted ? @image-url("../assets/icons/micslash.svg") : @image-url("../assets/icons/mic.svg");
                             has-icon: true;
                             a11y: root.mic-muted ? @tr("Mic muted (click to unmute)") : @tr("Mic live (click to mute)");
@@ -859,7 +866,7 @@ export component OverlayBarWindow inherits Window {
                             checkable: true; checked: !root.mic-muted;
                             clicked => { root.dismiss-menu(); root.mic-toggle-clicked(); }
                         }
-                        if !root.compact-bar : BarChip {
+                        if root.bar-form == 0 : BarChip {
                             icon: @image-url("../assets/icons/system-audio.svg"); has-icon: true;
                             a11y: @tr("System audio capture");
                             active: !root.sys-active; accent: Theme.danger;
@@ -867,105 +874,125 @@ export component OverlayBarWindow inherits Window {
                             clicked => { root.dismiss-menu(); root.sys-toggle-clicked(); }
                         }
                     }
-                    voice-capsule := Capsule {
-                        width: root.compact-bar ? BarSpec.compact-voice : BarSpec.full-voice;
-                        RecordBtn {
-                            width: 102px;
-                            icon: @image-url("../assets/icons/mic.svg"); has-icon: true;
-                            label: @tr("ask"); accent: Theme.success; recording: root.mic-recording;
-                            pressed => { root.dismiss-menu(); root.ptt-mic-pressed(); }
-                            released => { root.dismiss-menu(); root.ptt-mic-released(); }
+                    HorizontalLayout {
+                        x: root.bar-form == 2 ? 0px : state-capsule.width + BarSpec.gap;
+                        width: parent.width - self.x; height: parent.height; spacing: BarSpec.gap;
+                        voice-capsule := Capsule {
+                            width: root.bar-form == 2 ? BarSpec.mini-voice : root.bar-form == 1 ? BarSpec.compact-voice : BarSpec.full-voice;
+                            RecordBtn {
+                                width: root.bar-form == 2 ? 34px : 102px;
+                                icon-only: root.bar-form == 2; a11y: @tr("ask");
+                                icon: @image-url("../assets/icons/mic.svg"); has-icon: true;
+                                label: root.bar-form == 2 ? "" : @tr("ask"); accent: Theme.success; recording: root.mic-recording;
+                                pressed => { root.dismiss-menu(); root.ptt-mic-pressed(); }
+                                released => { root.dismiss-menu(); root.ptt-mic-released(); }
+                            }
+                            RecordBtn {
+                                width: root.bar-form == 2 ? 34px : 108px;
+                                icon-only: root.bar-form == 2; a11y: @tr("grab");
+                                icon: @image-url("../assets/icons/system-audio.svg"); has-icon: true;
+                                label: root.bar-form == 2 ? "" : @tr("grab"); accent: Theme.accent; recording: root.sys-recording;
+                                pressed => { root.dismiss-menu(); root.ptt-sys-pressed(); }
+                                released => { root.dismiss-menu(); root.ptt-sys-released(); }
+                            }
                         }
-                        RecordBtn {
-                            width: 108px;
-                            icon: @image-url("../assets/icons/system-audio.svg"); has-icon: true;
-                            label: @tr("grab"); accent: Theme.accent; recording: root.sys-recording;
-                            pressed => { root.dismiss-menu(); root.ptt-sys-pressed(); }
-                            released => { root.dismiss-menu(); root.ptt-sys-released(); }
-                        }
-                    }
-                    session-capsule := Capsule {
-                        width: root.compact-bar ? BarSpec.compact-session : BarSpec.full-session;
-                        BarChip {
-                            width: 82px;
-                            icon: root.timer-active ? @image-url("../assets/icons/stop.svg") : @image-url("../assets/icons/session-start.svg");
-                            has-icon: true;
-                            label: root.timer-active ? root.timer-label : @tr("start"); mono: true;
-                            checkable: true; checked: root.timer-active;
-                            clicked => { root.dismiss-menu(); root.timer-toggle-clicked(); }
-                        }
-                        Rectangle {
-                            width: 26px; height: Metrics.control-md; horizontal-stretch: 0;
-                            if root.timer-active : BarChip {
-                                icon: root.session-paused ? @image-url("../assets/icons/play.svg") : @image-url("../assets/icons/pause.svg");
+                        session-capsule := Capsule {
+                            width: root.bar-form == 2 ? BarSpec.mini-session : root.bar-form == 1 ? BarSpec.compact-session : BarSpec.full-session;
+                            BarChip {
+                                width: 82px;
+                                icon: root.timer-active ? @image-url("../assets/icons/stop.svg") : @image-url("../assets/icons/session-start.svg");
                                 has-icon: true;
-                                a11y: root.session-paused ? @tr("Resume the session") : @tr("Pause the session");
-                                active: root.session-paused; checkable: true; accent: Theme.warning;
-                                clicked => { root.dismiss-menu(); root.pause-toggle-clicked(); }
+                                label: root.timer-active ? root.timer-label : @tr("start"); mono: true;
+                                checkable: true; checked: root.timer-active;
+                                clicked => { root.dismiss-menu(); root.timer-toggle-clicked(); }
+                            }
+                            Rectangle {
+                                width: 26px; height: Metrics.control-md; horizontal-stretch: 0;
+                                if root.timer-active : BarChip {
+                                    icon: root.session-paused ? @image-url("../assets/icons/play.svg") : @image-url("../assets/icons/pause.svg");
+                                    has-icon: true;
+                                    a11y: root.session-paused ? @tr("Resume the session") : @tr("Pause the session");
+                                    active: root.session-paused; checkable: true; accent: Theme.warning;
+                                    clicked => { root.dismiss-menu(); root.pause-toggle-clicked(); }
+                                }
                             }
                         }
-                    }
-                    tiles-capsule := Capsule {
-                        width: root.compact-bar ? BarSpec.compact-tiles : BarSpec.full-tiles;
-                        autotile-chip := AutotileChip {
-                            width: root.compact-bar ? 26px : 96px;
-                            tight: root.compact-bar;
-                            mode: root.autotile-mode;
-                            menu-opened(x, y) => { root.dismiss-menu(); root.lock-menu-opened(x, y); }
-                        }
-                        if !root.compact-bar : BarChip {
-                            width: 92px;
-                            icon: @image-url("../assets/icons/plus.svg"); has-icon: true;
-                            label: @tr("tile · {}", root.open-tiles);
-                            a11y: @tr("New tile, {} open", root.open-tiles);
-                            clicked => { root.dismiss-menu(); root.spawn-tile-clicked(); }
-                        }
-                        if !root.compact-bar : Rectangle {
-                            width: 22px; height: Metrics.control-md; horizontal-stretch: 0;
-                            if root.open-tiles > 0 : BarChip {
-                                width: 22px;
-                                icon: @image-url("../assets/icons/x.svg"); has-icon: true;
-                                a11y: @tr("close all");
-                                clicked => { root.dismiss-menu(); root.close-all-tiles-clicked(); }
+                        tiles-capsule := Capsule {
+                            width: root.bar-form == 2 ? BarSpec.mini-tiles : root.bar-form == 1 ? BarSpec.compact-tiles : BarSpec.full-tiles;
+                            if root.bar-form == 2 : BarChip {
+                                icon: @image-url("../assets/icons/stealth.svg"); has-icon: true;
+                                a11y: @tr("Stealth (hide from capture)");
+                                active: root.stealth-active; checkable: true;
+                                solid: root.stealth-fault;
+                                accent: root.stealth-fault ? Theme.danger : Theme.cat-pink;
+                                clicked => { root.dismiss-menu(); root.stealth-toggle-clicked(); }
+                            }
+                            autotile-chip := AutotileChip {
+                                width: root.bar-form != 0 ? 26px : 96px;
+                                tight: root.bar-form != 0;
+                                mode: root.autotile-mode;
+                                menu-opened(x, y) => { root.dismiss-menu(); root.lock-menu-opened(x, y); }
+                            }
+                            if root.bar-form == 0 : BarChip {
+                                width: 92px;
+                                icon: @image-url("../assets/icons/plus.svg"); has-icon: true;
+                                label: @tr("tile · {}", root.open-tiles);
+                                a11y: @tr("New tile, {} open", root.open-tiles);
+                                clicked => { root.dismiss-menu(); root.spawn-tile-clicked(); }
+                            }
+                            if root.bar-form == 0 : Rectangle {
+                                width: 22px; height: Metrics.control-md; horizontal-stretch: 0;
+                                if root.open-tiles > 0 : BarChip {
+                                    width: 22px;
+                                    icon: @image-url("../assets/icons/x.svg"); has-icon: true;
+                                    a11y: @tr("close all");
+                                    clicked => { root.dismiss-menu(); root.close-all-tiles-clicked(); }
+                                }
+                            }
+                            if root.bar-form == 0 : BarChip {
+                                icon: @image-url("../assets/icons/pencil.svg"); has-icon: true;
+                                a11y: @tr("Write a question");
+                                clicked => { root.dismiss-menu(); root.text-ask-clicked(); }
                             }
                         }
-                        if !root.compact-bar : BarChip {
-                            icon: @image-url("../assets/icons/pencil.svg"); has-icon: true;
-                            a11y: @tr("Write a question");
-                            clicked => { root.dismiss-menu(); root.text-ask-clicked(); }
-                        }
-                    }
-                    Rectangle { horizontal-stretch: 1; min-width: BarSpec.spring; }
-                    window-capsule := Capsule {
-                        width: root.compact-bar ? BarSpec.compact-window : BarSpec.full-window;
-                        if root.compact-bar : Rectangle {
-                            width: 26px; height: Metrics.control-md; horizontal-stretch: 0;
-                            if root.tray-available : BarChip {
-                                icon: @image-url("../assets/icons/tray.svg"); has-icon: true;
-                                a11y: @tr("Hide to tray");
-                                clicked => { root.dismiss-menu(); root.hide-to-tray-clicked(); }
+                        Rectangle { horizontal-stretch: 1; min-width: BarSpec.spring; }
+                        window-capsule := Capsule {
+                            width: root.bar-form == 2 ? BarSpec.mini-window : root.bar-form == 1 ? BarSpec.compact-window : BarSpec.full-window;
+                            if root.bar-form == 1 : Rectangle {
+                                width: 26px; height: Metrics.control-md; horizontal-stretch: 0;
+                                if root.tray-available : BarChip {
+                                    icon: @image-url("../assets/icons/tray.svg"); has-icon: true;
+                                    a11y: @tr("Hide to tray");
+                                    clicked => { root.dismiss-menu(); root.hide-to-tray-clicked(); }
+                                }
                             }
-                        }
-                        BarChip {
-                            icon: root.compact-bar ? @image-url("../assets/icons/maximize.svg") : @image-url("../assets/icons/minimize.svg");
-                            has-icon: true;
-                            a11y: root.compact-bar ? @tr("Expand the bar") : @tr("Compact reader mode");
-                            clicked => { root.dismiss-menu(); root.compact-toggle-clicked(); }
-                        }
-                        more-chip := MoreChip {
-                            active: root.menu-open; accent: Theme.accent;
-                            menu-opened(x, y) => { root.menu-opened(x, y); }
+                            BarChip {
+                                icon: root.bar-form != 0 ? @image-url("../assets/icons/maximize.svg") : @image-url("../assets/icons/minimize.svg");
+                                has-icon: true;
+                                a11y: root.bar-form != 0 ? @tr("Expand the bar") : @tr("Compact reader mode");
+                                press-feedback: root.bar-form != 2;
+                                clicked => { root.dismiss-menu(); root.compact-toggle-clicked(); }
+                            }
+                            more-chip := MoreChip {
+                                active: root.menu-open; accent: Theme.accent;
+                                menu-opened(x, y) => { root.menu-opened(x, y); }
+                            }
                         }
                     }
                 }
-                // Bottom row: only real abnormalities and non-empty transcript data.
+                // Bottom row: mini always includes the status, without pins or hints.
                 HorizontalLayout {
                     height: Metrics.control-md; spacing: BarSpec.gap; padding-left: Metrics.space-xs;
-                    if root.stealth-fault || root.status-tone == StatusTone.warning || root.status-tone == StatusTone.danger : Text {
+                    if root.bar-form == 2 || root.stealth-fault || root.status-tone == StatusTone.warning || root.status-tone == StatusTone.danger : Text {
                         text: root.presented-status;
                         font-size: Metrics.font-label; font-weight: 600;
-                        color: Theme.on-tint(root.pill-color); vertical-alignment: center;
-                        overflow: elide; max-width: parent.width / 2; horizontal-stretch: 0;
+                        color: root.stealth-fault || root.status-tone == StatusTone.ok
+                            || root.status-tone == StatusTone.warning || root.status-tone == StatusTone.danger
+                            ? Theme.on-tint(root.pill-color) : Theme.text-secondary;
+                        vertical-alignment: center;
+                        overflow: elide; min-width: 0px;
+                        max-width: root.bar-form == 2 ? parent.width / 3 : parent.width / 2;
+                        horizontal-stretch: 0;
                     }
                     if root.deep-lock : PinChip {
                         width: 70px;
@@ -974,7 +1001,7 @@ export component OverlayBarWindow inherits Window {
                         tint: Theme.on-tint(Theme.danger); weight: 600;
                         clicked => { root.dismiss-menu(); root.local-ai-mode-selected(0); }
                     }
-                    if root.timer-active && root.session-name != "" : Text {
+                    if root.timer-active && root.session-name != "" && root.bar-form != 2 : Text {
                         text: root.session-name;
                         font-size: Metrics.font-label; font-weight: 600;
                         color: Theme.text-secondary; vertical-alignment: center;
@@ -985,28 +1012,30 @@ export component OverlayBarWindow inherits Window {
                         font-size: Metrics.font-label; font-weight: 600;
                         color: Theme.on-tint(root.last-transcript-source == "mic" ? Theme.success : Theme.accent);
                         vertical-alignment: center; horizontal-stretch: 0;
+                        overflow: elide; min-width: 0px;
+                        max-width: root.bar-form == 2 ? parent.width / 4 : parent.width;
                     }
                     Text {
                         text: root.last-transcript-line;
                         font-size: Metrics.font-label; color: Theme.text-secondary;
                         overflow: elide; vertical-alignment: center; horizontal-stretch: 1; min-width: 0px;
                     }
-                    if !root.compact-bar && root.can-restore-tile && !root.is-pinned("restore") : PinChip {
+                    if root.bar-form == 0 && root.can-restore-tile && !root.is-pinned("restore") : PinChip {
                         icon: @image-url("../assets/icons/restore.svg");
                         a11y: @tr("Restore last tile");
                         clicked => { root.dismiss-menu(); root.restore-tile-clicked(); }
                     }
-                    if root.app-memory != "" : Text {
+                    if root.app-memory != "" && root.bar-form != 2 : Text {
                         text: @tr("App RAM") + " " + root.app-memory;
                         font-size: Metrics.font-caption; color: Theme.text-muted;
                         vertical-alignment: center; horizontal-stretch: 0;
                     }
-                    if root.mlx-memory != "" : Text {
+                    if root.mlx-memory != "" && root.bar-form != 2 : Text {
                         text: "MLX" + " " + root.mlx-memory;
                         font-size: Metrics.font-caption; color: Theme.text-muted;
                         vertical-alignment: center; horizontal-stretch: 0;
                     }
-                    if !root.compact-bar : HorizontalLayout {
+                    if root.bar-form == 0 : HorizontalLayout {
                         spacing: BarSpec.gap; horizontal-stretch: 0;
                         for id in root.pins : PinChip {
                             icon: root.pin-icon(id); a11y: root.pin-label(id);

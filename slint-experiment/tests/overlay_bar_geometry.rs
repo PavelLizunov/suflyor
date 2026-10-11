@@ -1,4 +1,4 @@
-//! Headless geometry regression for both fixed capsule layouts in English and Russian.
+//! Headless geometry regression for all three fixed capsule layouts in English and Russian.
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
 use i_slint_backend_testing::ElementHandle;
@@ -85,6 +85,7 @@ fn assert_top_bounds(item: &ElementHandle, width: f32, name: &str) {
 
 fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
     bar.set_compact_bar(compact);
+    bar.set_bar_form(i32::from(compact));
     bar.set_lock_a11y(labels.deep_lock.into());
     bar.set_autotile_mode(1);
     bar.set_deep_lock(false);
@@ -350,6 +351,130 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
     );
 }
 
+fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
+    let spec = bar.global::<ui::BarSpec>();
+    let width = spec.get_mini_width();
+    let height = spec.get_height();
+    assert_eq!(spec.get_mini_voice(), 74.0);
+    assert_eq!(spec.get_mini_session(), 114.0);
+    assert_eq!(spec.get_mini_tiles(), 58.0);
+    assert_eq!(spec.get_mini_window(), 58.0);
+    assert_eq!(width, 408.0);
+    bar.set_lock_a11y(labels.deep_lock.into());
+    bar.set_timer_active(true);
+    bar.set_timer_label("1:07:31".into());
+    bar.set_session_name("HIDDEN SESSION".into());
+    bar.set_last_transcript_line("MINI TRANSCRIPT".into());
+    bar.set_app_memory("HIDDEN APP RAM".into());
+    bar.set_mlx_memory("HIDDEN MLX RAM".into());
+    bar.set_tray_available(true);
+    bar.set_can_restore_tile(true);
+    bar.set_pins(slint::ModelRc::new(slint::VecModel::from(vec![
+        slint::SharedString::from("archive"),
+    ])));
+    bar.set_compact_bar(false); // Mini must work even with the full preference.
+    bar.set_bar_form(2);
+    let stealth = if labels.russian { "Скрытность (не показывать при захвате экрана)" } else { "Stealth (hide from capture)" };
+    for fault in [false, true] {
+        bar.set_stealth_fault(fault);
+        for tone in [ui::StatusTone::Neutral, ui::StatusTone::Ok, ui::StatusTone::Warning, ui::StatusTone::Danger, ui::StatusTone::Info] {
+            bar.set_status_tone(tone);
+            bar.set_status_text("STATUS".into());
+            let status = if fault {
+                if labels.russian { "[!] скрытность недоступна" } else { "[!] stealth unavailable" }
+            } else {
+                "STATUS"
+            };
+            for mode in [0, 1, 2] {
+                bar.set_autotile_mode(mode);
+                let switch = match (labels.russian, mode) {
+                    (true, 0) => "Молчат: сами не появляются",
+                    (true, 2) => "На каждую реплику",
+                    (true, _) => "По вопросам",
+                    (false, 0) => "Silent: no automatic tiles",
+                    (false, 2) => "On every line",
+                    (false, _) => "On questions",
+                };
+                for recording in [false, true] {
+                    bar.set_mic_recording(recording);
+                    bar.set_sys_recording(recording);
+                    bar.set_session_paused(recording);
+                    let pause = match (labels.russian, recording) {
+                        (true, true) => "Продолжить сессию",
+                        (true, false) => "Приостановить сессию",
+                        (false, true) => "Resume the session",
+                        (false, false) => "Pause the session",
+                    };
+                    for deep in [false, true] {
+                        bar.set_deep_lock(deep);
+                        for (source, speaker) in [("mic", labels.you), ("sys", labels.them)] {
+                            bar.set_last_transcript_source(source.into());
+                            bar.window().set_size(LogicalSize::new(width, height));
+                            assert_eq!(bar.window().size().width as f32, width);
+                            assert!(bar.get_all_regions_fit(), "mini capsule overflow: language={}, fault={fault}, mode={mode}, recording={recording}, deep={deep}", labels.russian);
+                            assert!(bar.get_autotile_word_fits());
+                            let top_names = [labels.ask, labels.grab, "1:07:31", pause, stealth, switch, labels.expand, labels.more];
+                            let top: Vec<_> = top_names.iter().map(|name| element(bar, name)).collect();
+                            for (name, item) in top_names.iter().zip(&top) {
+                                assert_top_bounds(item, width, name);
+                            }
+                            for pair in top.windows(2) {
+                                assert!(pair[0].absolute_position().x + pair[0].size().width <= pair[1].absolute_position().x, "mini top controls overlap");
+                            }
+                            for name in [labels.ask, labels.grab] {
+                                assert_eq!(element(bar, name).size().width, 34.0, "mini voice icon width");
+                            }
+                            assert_eq!(element(bar, switch).size().width, 26.0);
+                            let mut footer_names = vec![status];
+                            if deep { footer_names.push(labels.deep_lock); }
+                            footer_names.extend([speaker, "MINI TRANSCRIPT"]);
+                            let footer: Vec<_> = footer_names.iter().map(|name| element(bar, name)).collect();
+                            for (name, item) in footer_names.iter().zip(&footer) {
+                                let pos = item.absolute_position();
+                                let size = item.size();
+                                assert!(pos.y >= 34.0 && pos.y + size.height <= height, "{name} escaped mini footer");
+                                assert!(pos.x >= spec.get_pad() + spec.get_badge() && pos.x + size.width <= width, "{name} escaped mini bounds");
+                            }
+                            for pair in footer.windows(2) {
+                                assert!(pair[0].absolute_position().x + pair[0].size().width <= pair[1].absolute_position().x, "mini footer overlaps");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for hidden in [labels.tray, labels.write, labels.compact, "HIDDEN SESSION", "MLX HIDDEN MLX RAM", if labels.russian { "закрепить" } else { "pin" }, if labels.russian { "Архив сессий" } else { "Session archive" }] {
+        assert_eq!(ElementHandle::find_by_accessible_label(bar, hidden).count(), 0, "mini must not expose {hidden}");
+    }
+    bar.set_pins(slint::ModelRc::new(slint::VecModel::<slint::SharedString>::default()));
+    bar.set_app_memory("".into());
+    bar.set_mlx_memory("".into());
+    bar.set_session_name("".into());
+    bar.set_last_transcript_line("".into());
+    bar.set_deep_lock(false);
+    bar.set_mic_recording(false);
+    bar.set_sys_recording(false);
+    bar.set_stealth_fault(false);
+    bar.set_status_text("STATUS".into());
+    let mascot_label = format!("STATUS. {}", if labels.russian { "Перетащить = двигать бар; показывает состояние" } else { "Drag to move the bar; shows the live state" });
+    let mut mascot_position = None;
+    for (form, form_width) in [(0, spec.get_full_width()), (1, spec.get_compact_width()), (2, width)] {
+        bar.set_bar_form(form);
+        bar.window().set_size(LogicalSize::new(form_width, height));
+        let mascot = element(bar, &mascot_label);
+        let pos = mascot.absolute_position();
+        let size = mascot.size();
+        assert_eq!((size.width, size.height), (48.0, 48.0));
+        assert!(pos.x >= 0.0 && pos.y >= 0.0 && pos.x + size.width <= form_width && pos.y + size.height <= height);
+        if let Some(expected) = mascot_position {
+            assert_eq!((pos.x, pos.y), expected, "form={form} moved mascot");
+        } else {
+            mascot_position = Some((pos.x, pos.y));
+        }
+    }
+}
+
 fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
     let ids = [
         "capture", "restore", "archive", "summary", "kb", "settings", "help", "tray",
@@ -381,6 +506,7 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
     let width = bar.global::<ui::BarSpec>().get_full_width();
     let height = bar.global::<ui::BarSpec>().get_height();
     bar.set_compact_bar(false);
+    bar.set_bar_form(0);
     bar.set_last_transcript_line("PIN GEOMETRY TRANSCRIPT".into());
     bar.set_can_restore_tile(true);
     bar.set_autotile_mode(2);
@@ -480,6 +606,7 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
             );
         }
         bar.set_compact_bar(true);
+        bar.set_bar_form(1);
         bar.window().set_size(LogicalSize::new(
             bar.global::<ui::BarSpec>().get_compact_width(),
             height,
@@ -513,6 +640,7 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
             }
         }
         bar.set_compact_bar(false);
+        bar.set_bar_form(0);
     }
     bar.set_pins(slint::ModelRc::new(
         slint::VecModel::<slint::SharedString>::default(),
@@ -528,11 +656,13 @@ fn capsules_stay_inside_spec_sizes_in_english_and_russian() {
     let english = ui::OverlayBarWindow::new().expect("create English bar");
     assert_layout(&english, &ENGLISH, false);
     assert_layout(&english, &ENGLISH, true);
+    assert_mini(&english, &ENGLISH);
     assert_pins(&english, false);
     slint::select_bundled_translation("ru").expect("select Russian translation");
     let russian = ui::OverlayBarWindow::new().expect("create Russian bar");
     assert_layout(&russian, &RUSSIAN, false);
     assert_layout(&russian, &RUSSIAN, true);
+    assert_mini(&russian, &RUSSIAN);
     assert_pins(&russian, true);
 }
 
@@ -583,6 +713,13 @@ fn record_indicator_reserves_an_empty_idle_cell_and_keeps_active_shapes() {
         "idle cell must not collapse"
     );
     assert!(record.contains("if (!self.recording) {\n            self.locked = false;"));
+    assert!(record.contains("in property <bool> icon-only: false;"));
+    assert!(record.contains("accessible-label: root.a11y;"));
+    assert!(record.contains("if !root.icon-only : Text {"), "mini has no text cell");
+    assert!(record.contains("if !root.icon-only : IconSlot {"), "mini has no tail slot");
+    assert!(record.contains("background: recording ? Theme.danger.with-alpha(0.2) : transparent;"));
+    assert!(record.contains("root.press-y - self.mouse-y > root.lock-dy"), "mini retains swipe lock gesture");
+    assert!(source.contains("press-feedback: root.bar-form != 2;"), "unsatisfied mini expand must not flash");
 }
 
 #[test]

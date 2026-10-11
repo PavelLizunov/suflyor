@@ -17,8 +17,8 @@ fn auto_tiles_and_ai_off_have_distinct_fixed_slots() {
         .0;
     assert!(chip.contains("y: (parent.height - self.height) / 2;"));
     assert!(chip.contains("border-width: 0px;"), "capsule owns outline");
-    assert!(ui.contains("width: root.compact-bar ? 26px : 96px;"));
-    assert!(ui.contains("tight: root.compact-bar;"));
+    assert!(ui.contains("width: root.bar-form != 0 ? 26px : 96px;"));
+    assert!(ui.contains("tight: root.bar-form != 0;"));
     assert!(chip.contains("min-width: 26px;"));
     assert!(!chip.contains("min-width: 30px;"));
     assert!(chip.contains("if !root.tight : Text {"));

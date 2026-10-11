@@ -2357,10 +2357,19 @@ fn main() -> Result<(), slint::PlatformError> {
     let tick_weak = overlay.as_weak();
     let tick_slint_rt = slint_rt.clone();
     let tick_timer = Timer::default();
+    #[cfg(windows)]
+    let last_bar_monitor_check = std::cell::Cell::new(std::time::Instant::now());
     tick_timer.start(
         TimerMode::Repeated,
         Duration::from_secs(TIMER_TICK_SECS),
         move || {
+            #[cfg(windows)]
+            if last_bar_monitor_check.get().elapsed() >= Duration::from_secs(2) {
+                last_bar_monitor_check.set(std::time::Instant::now());
+                if let Some(o) = tick_weak.upgrade() {
+                    reevaluate_bar_monitor(&o);
+                }
+            }
             let (active, secs) = {
                 let mut st = match tick_state.lock() {
                     Ok(g) => g,
@@ -4484,21 +4493,23 @@ fn main() -> Result<(), slint::PlatformError> {
         if let Some(o) = weak_for_compact.upgrade() {
             let compact = cfg_for_compact.read().compact_bar;
             o.set_compact_bar(compact);
-            if compact {
-                apply_bar_size(&o, true);
-            }
+            apply_bar_size(&o, compact);
         }
         overlay.on_compact_toggle_clicked(move || {
+            let Some(o) = weak_for_compact.upgrade() else { return };
+            let was_mini = o.get_bar_form() == 2;
             let now_compact = {
                 let mut c = cfg_for_compact.write();
-                c.compact_bar = !c.compact_bar;
+                c.compact_bar = if was_mini { false } else { !c.compact_bar };
                 let _ = overlay_backend::config::save(&c);
                 c.compact_bar
             };
-            diag!("[overlay-host] compact bar -> {now_compact}");
-            if let Some(o) = weak_for_compact.upgrade() {
-                o.set_compact_bar(now_compact);
-                apply_bar_size(&o, now_compact);
+            o.set_compact_bar(now_compact);
+            let form = apply_bar_size(&o, now_compact);
+            if was_mini && matches!(form, slint_replay::bar_form::BarForm::Mini | slint_replay::bar_form::BarForm::TooNarrow) {
+                diag!("[overlay-host] bar expand requested: monitor still requires mini");
+            } else {
+                diag!("[overlay-host] compact bar -> {now_compact}");
             }
         });
     }

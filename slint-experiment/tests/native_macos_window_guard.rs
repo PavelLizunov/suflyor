@@ -91,8 +91,8 @@ fn production_macos_window_uses_the_proven_minimal_appkit_bridge() {
     assert!(!rust.contains("center_window"));
     assert!(!objc.contains("center_window"));
     assert!(ui.contains("visible: !root.bootstrap-mode;"));
-    assert!(ui.contains("width: root.compact-bar ? BarSpec.compact-state : BarSpec.full-state;"));
-    assert!(ui.contains("width: root.compact-bar ? BarSpec.compact-window : BarSpec.full-window;"));
+    assert!(ui.contains("width: root.bar-form == 2 ? 0px : root.bar-form == 1 ? BarSpec.compact-state : BarSpec.full-state;"));
+    assert!(ui.contains("width: root.bar-form == 2 ? BarSpec.mini-window : root.bar-form == 1 ? BarSpec.compact-window : BarSpec.full-window;"));
     assert!(ui.contains("if root.bootstrap-mode : VerticalLayout"));
     assert!(build.contains("cargo:rustc-link-lib=framework=AppKit"));
 }

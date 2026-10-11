@@ -293,6 +293,7 @@ fn bar_actions_dismiss_more_and_compact_changes_cannot_keep_it_open() {
 
     for compact in [false, true] {
         bar.set_compact_bar(compact);
+        bar.set_bar_form(i32::from(compact));
         let spec = bar.global::<ui::BarSpec>();
         let width = if compact {
             spec.get_compact_width()
@@ -461,5 +462,19 @@ fn bar_actions_dismiss_more_and_compact_changes_cannot_keep_it_open() {
             "",
             "external form change must clear confirmation: {state}"
         );
+    }
+    for form in [0, 2, 1] {
+        ElementHandle::find_by_accessible_label(&bar, "More")
+            .next().unwrap().invoke_accessible_default_action();
+        assert!(menu.window().is_visible());
+        assert_ne!(bar.get_bar_form(), form);
+        menu.set_confirmation("quit".into());
+        let dismissals_before = dismissals.get();
+        bar.set_bar_form(form);
+        slint::platform::update_timers_and_animations();
+        assert_eq!(dismissals.get(), dismissals_before + 1, "effective form={form} dismissal");
+        assert!(!bar.get_menu_open());
+        assert!(!menu.window().is_visible());
+        assert_eq!(menu.get_confirmation().as_str(), "");
     }
 }

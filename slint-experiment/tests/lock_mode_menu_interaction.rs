@@ -34,6 +34,7 @@ fn auto_tiles_chip_opens_menu_in_every_state_and_each_row_selects() {
 
     for compact in [false, true] {
         bar.set_compact_bar(compact);
+        bar.set_bar_form(i32::from(compact));
         let spec = bar.global::<ui::BarSpec>();
         let width = if compact {
             spec.get_compact_width()
@@ -145,6 +146,7 @@ fn auto_tiles_chip_opens_menu_in_every_state_and_each_row_selects() {
     bar.on_local_ai_mode_selected(move |mode| loaded_for_callback.set(mode));
     for compact in [false, true] {
         bar.set_compact_bar(compact);
+        bar.set_bar_form(i32::from(compact));
         bar.set_deep_lock(true);
         loaded.set(-1);
         ElementHandle::find_by_accessible_label(&bar, "Deep AI hint")
