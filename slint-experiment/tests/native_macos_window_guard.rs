@@ -23,7 +23,7 @@ fn production_macos_window_uses_the_proven_minimal_appkit_bridge() {
         .split_once("overlay.on_lock_menu_opened")
         .expect("lock menu open handler")
         .1
-        .split_once("overlay.on_lock_mode_selected")
+        .split_once("overlay.on_autotile_mode_selected")
         .expect("lock menu selection handler follows open handler")
         .0;
     let maximize = tiles
@@ -90,7 +90,9 @@ fn production_macos_window_uses_the_proven_minimal_appkit_bridge() {
     assert!(!bar_tray.contains("center_window"));
     assert!(!rust.contains("center_window"));
     assert!(!objc.contains("center_window"));
-    assert!(ui.contains("!root.compact-bar && !root.bootstrap-mode"));
-    assert!(ui.contains("root.compact-bar && !root.bootstrap-mode"));
+    assert!(ui.contains("visible: !root.bootstrap-mode;"));
+    assert!(ui.contains("width: root.bar-form == 2 ? 0px : root.bar-form == 1 ? BarSpec.compact-state : BarSpec.full-state;"));
+    assert!(ui.contains("width: root.bar-form == 2 ? BarSpec.mini-window : root.bar-form == 1 ? BarSpec.compact-window : BarSpec.full-window;"));
+    assert!(ui.contains("if root.bootstrap-mode : VerticalLayout"));
     assert!(build.contains("cargo:rustc-link-lib=framework=AppKit"));
 }

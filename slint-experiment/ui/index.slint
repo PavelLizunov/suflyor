@@ -9,6 +9,7 @@ import { OverlaySpike } from "overlay_spike.slint";
 import { MarkdownSpike } from "markdown_spike.slint";
 import { OverlayBarWindow, StatusTone } from "overlay_bar.slint";
 import { LockModeMenuWindow } from "lock_mode_menu.slint";
+import { BarMenuWindow } from "bar_menu.slint";
 import { TrayMenuWindow } from "tray_menu.slint";
 import { TileWindow, TileTone, MarkdownBlock } from "tile.slint";
 import { SettingsWindow, MemoryRow } from "settings_panel.slint";
@@ -32,12 +33,13 @@ import { Theme } from "theme.slint";
 // reachable from every component's `import { Metrics } from "metrics.slint";`
 // and keeps the single-compilation-root contract intact.
 import { Metrics } from "metrics.slint";
+import { BarSpec } from "bar_spec.slint";
 
 export {
     MainWindow, FilterChip, ReplayEvent,
     OverlaySpike,
     MarkdownSpike,
-    OverlayBarWindow, StatusTone, LockModeMenuWindow, TrayMenuWindow, TileWindow, TileTone, MarkdownBlock, SettingsWindow, MemoryRow,
+    OverlayBarWindow, StatusTone, LockModeMenuWindow, BarMenuWindow, TrayMenuWindow, TileWindow, TileTone, MarkdownBlock, SettingsWindow, MemoryRow,
     PaletteWindow, PaletteResult,
     CaptureOverlay,
     TextAskWindow,
@@ -49,5 +51,6 @@ export {
     TranscriptWindow, TranscriptLine,
     Theme,
     Metrics,
+    BarSpec,
     Platform,
 }

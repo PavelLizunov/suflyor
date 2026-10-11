@@ -29,6 +29,24 @@ msgstr ""
 msgid "ask"
 msgstr "спросить"
 
+msgid "Hold to ask with your voice"
+msgstr "Удерживайте: вопрос своим голосом"
+
+msgid "Hold to ask about what they said"
+msgstr "Удерживайте: вопрос по словам собеседника"
+
+msgid "Start the session"
+msgstr "Начать сессию"
+
+msgid "Stop the session"
+msgstr "Остановить сессию"
+
+msgid "listening…"
+msgstr "слушаю…"
+
+msgid "Could not save. Try again."
+msgstr "Не удалось сохранить. Повторите."
+
 msgid "grab"
 msgstr "захватить"
 
@@ -47,34 +65,20 @@ msgstr "старт"
 msgid "🧠 {}"
 msgstr "🧠 {}"
 
-msgid "+ tile ({})"
-msgstr "+ тайл ({})"
+msgid "tile · {}"
+msgstr "тайл · {}"
+
+msgid "New tile, {} open"
+msgstr "Новый тайл, открыто: {}"
 
 # #110 — bulk-close all open tiles.
 msgid "close all"
 msgstr "закрыть все"
 
-msgid "Restore last tile"
-msgstr "Вернуть последний тайл"
-
-# Phase E6 v45 — two-step quit confirm (X arms "Quit? Yes/No").
-msgid "Quit?"
-msgstr "Выйти?"
-
-msgid "Yes"
-msgstr "Да"
-
-msgid "No"
-msgstr "Нет"
-
-# V0.8.0 (Поток B) — two-step emergency-restart confirm (⟳ arms "Restart? Yes/No").
-msgid "Restart?"
-msgstr "Перезапустить?"
-
 # RC4 — hide-to-tray bar action (accessible label of the icon-only chip that
 # sits beside the compact control). Tray MENU labels are Rust-side (tray.rs).
 msgid "Hide to tray"
-msgstr "Скрыть в трей"
+msgstr "Свернуть в трей"
 
 # === tile.slint ===
 
@@ -349,7 +353,7 @@ msgid "Microphone"
 msgstr "Микрофон"
 
 msgid "System audio"
-msgstr "Системный звук"
+msgstr "Звук системы"
 
 msgid "default"
 msgstr "по умолчанию"
@@ -357,8 +361,14 @@ msgstr "по умолчанию"
 msgid "on — verify with a screen-share preview"
 msgstr "включён — проверьте через предпросмотр захвата экрана"
 
+msgid "SOUND"
+msgstr "ЗВУК"
+
+msgid "on"
+msgstr "вкл"
+
 msgid "off"
-msgstr "выключен"
+msgstr "выкл"
 
 msgid "Ready"
 msgstr "Готов"
@@ -1169,9 +1179,6 @@ msgstr "Groq STT (Whisper) — ключ и модель. Используетс�
 msgid "waiting for transcript... (mic/sys → STT)"
 msgstr "ожидаю транскрипт... (mic/sys → STT)"
 
-msgid "AI streaming"
-msgstr "AI стримит"
-
 msgid "✏ Write a question for the assistant"
 msgstr "✏ Напишите вопрос ассистенту"
 
@@ -1288,7 +1295,7 @@ msgid "How it works"
 msgstr "Как это работает"
 
 msgid "1) Start capture — press start on the bar. The mic records you; system audio records the other side."
-msgstr "1) Начните захват — нажмите старт на баре. Микрофон записывает вас, системный звук — собеседника."
+msgstr "1) Начните захват — нажмите старт на панели. Микрофон записывает вас, системный звук — собеседника."
 
 msgid "2) Get help — hold ask or grab for a voice question, or press F9. Answers appear in tiles."
 msgstr "2) Получайте помощь — удерживайте «спросить» или «захватить» для голосового вопроса, либо нажмите F9. Ответы появляются в тайлах."
@@ -1297,10 +1304,10 @@ msgid "3) Stop and review — press stop to end the session; open the session ar
 msgstr "3) Остановите и посмотрите — нажмите стоп для завершения сессии, затем откройте архив сессий (F7) для стенограмм и сводок."
 
 msgid "Bar icons"
-msgstr "Иконки бара"
+msgstr "Иконки панели"
 
 msgid "Drag to move the bar; shows the live state"
-msgstr "Перетащить = двигать бар; показывает состояние"
+msgstr "Перетащить = двигать панель; показывает состояние"
 
 msgid "Drag to move the window"
 msgstr "Перетащите, чтобы переместить окно"
@@ -1326,8 +1333,11 @@ msgstr "Стоимость сессии (только cloud; локально б
 msgid "Stealth: hide the overlay from screen capture / share"
 msgstr "Stealth: скрыть overlay от захвата/шеринга экрана"
 
-msgid "Aggressive auto-tiles (answer more often)"
-msgstr "Агрессивные авто-тайлы (отвечать чаще)"
+msgid "Auto-tiles: silent, on questions, or on every line"
+msgstr "Автотайлы: молчат, по вопросам или на каждую реплику"
+
+msgid "AI off: load the local model"
+msgstr "AI выкл: загрузить локальную модель"
 
 msgid "Write a question as text"
 msgstr "Написать вопрос текстом"
@@ -1670,7 +1680,7 @@ msgid "Read-aloud · recognition · compact mode"
 msgstr "Озвучка · распознавание · компактный режим"
 
 msgid "Shift+Alt+1 — read the selected text aloud; Shift+Alt+2 — OCR text from a screen region and read it; Shift+Alt+3 — pause/resume. Voices (TTS) and the recognition engine (OCR) install with a button in Settings → AI (TTS and Vision). Compact \"reader\" mode: the collapse chip on the bar turns it into a tiny read-aloud-only pill. \"Listening mode\" (Settings → Auto-tiles) mutes auto-tiles so you can just record and listen."
-msgstr "Shift+Alt+1 — озвучить выделенный текст; Shift+Alt+2 — распознать текст с области экрана (OCR) и озвучить; Shift+Alt+3 — пауза/продолжение. Голоса (TTS) и движок распознавания (OCR) ставятся кнопкой в Настройки -> AI (TTS и Vision). Компактный режим «читалки»: чип свернуть на баре превращает бар в маленькую пилюлю только для озвучки. «Режим прослушивания» (Настройки -> Авто-тайлы) глушит авто-тайлы, чтобы просто записывать и слушать."
+msgstr "Shift+Alt+1 — озвучить выделенный текст; Shift+Alt+2 — распознать текст с области экрана (OCR) и озвучить; Shift+Alt+3 — пауза/продолжение. Голоса (TTS) и движок распознавания (OCR) ставятся кнопкой в Настройки -> AI (TTS и Vision). Компактный режим «читалки»: чип свернуть на панели превращает панель в маленькую пилюлю только для озвучки. «Режим прослушивания» (Настройки -> Авто-тайлы) глушит авто-тайлы, чтобы просто записывать и слушать."
 
 msgid "Preparing…"
 msgstr "Подготовка…"
@@ -1950,27 +1960,36 @@ msgstr "Текстовый вопрос suflyor (Slint)"
 msgid "Retry"
 msgstr "Повторить"
 
-msgid "Local AI unloaded"
-msgstr "Локальный ИИ выгружен"
-
-# Tight 1280px bar state while tile actions are visible.
+# Bare unloaded-AI indicator in both bar forms.
 msgid "AI off"
-msgstr "ИИ выкл."
+msgstr "AI выкл"
 
 msgid "Current"
 msgstr "Текущий"
 
-msgid "Unlocked"
-msgstr "Разблокировано"
+msgid "silent"
+msgstr "молчат"
 
-msgid "Listening"
-msgstr "Прослушивание"
+msgid "questions"
+msgstr "вопросы"
+
+msgid "everything"
+msgstr "на всё"
+
+msgid "Silent: no automatic tiles"
+msgstr "Молчат: сами не появляются"
+
+msgid "On questions"
+msgstr "По вопросам"
+
+msgid "On every line"
+msgstr "На каждую реплику"
 
 msgid "Unload local AI"
-msgstr "Выгрузить локальный ИИ"
+msgstr "Выгрузить локальный AI"
 
-msgid "Lock mode"
-msgstr "Режим блокировки"
+msgid "Load local AI"
+msgstr "Загрузить локальный AI"
 
 # RC13 — direct AI providers.
 msgid "Custom OpenAI-compatible bridge"
@@ -2350,26 +2369,14 @@ msgstr "Приостановить сессию"
 msgid "Stealth (hide from capture)"
 msgstr "Скрытность (не показывать при захвате экрана)"
 
-msgid "Aggressive auto-tile"
-msgstr "Агрессивные авто-тайлы"
-
-msgid "Meeting summary"
-msgstr "Итог встречи"
-
 msgid "Write a question"
 msgstr "Написать вопрос"
-
-msgid "Screenshot to vision"
-msgstr "Скриншот в vision"
-
-msgid "Emergency restart"
-msgstr "Аварийный перезапуск"
 
 msgid "Compact reader mode"
 msgstr "Компактный режим чтения"
 
 msgid "Expand the bar"
-msgstr "Развернуть бар"
+msgstr "Развернуть панель"
 
 msgid "idle"
 msgstr "ожидание"
@@ -2424,3 +2431,66 @@ msgstr "Удалить сессию"
 
 msgid "View transcript"
 msgstr "Открыть расшифровку"
+
+# Capsule bar state and speaker labels.
+msgid "hidden"
+msgstr "скрыт"
+
+msgid "visible"
+msgstr "виден"
+
+msgid "visible!"
+msgstr "виден!"
+
+msgid "you:"
+msgstr "вы:"
+
+msgid "them:"
+msgstr "собеседник:"
+
+msgid "More"
+msgstr "Ещё"
+
+# === bar_menu.slint and pinned bar actions ===
+
+msgid "pin"
+msgstr "закрепить"
+
+msgid "on the bar"
+msgstr "на панели"
+
+msgid "TILES"
+msgstr "ТАЙЛЫ"
+
+msgid "MEETING"
+msgstr "ВСТРЕЧА"
+
+msgid "APP"
+msgstr "ПРИЛОЖЕНИЕ"
+
+msgid "Ask about a screenshot"
+msgstr "Вопрос по снимку экрана"
+
+msgid "Restore closed tile"
+msgstr "Вернуть закрытый тайл"
+
+msgid "Knowledge base"
+msgstr "База знаний"
+
+msgid "Restart"
+msgstr "Перезапустить"
+
+msgid "Meeting summary"
+msgstr "Итог встречи"
+
+msgid "Restart?"
+msgstr "Перезапустить?"
+
+msgid "Quit?"
+msgstr "Выйти?"
+
+msgid "Yes"
+msgstr "Да"
+
+msgid "No"
+msgstr "Нет"

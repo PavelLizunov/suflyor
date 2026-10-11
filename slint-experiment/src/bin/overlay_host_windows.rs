@@ -32,10 +32,10 @@ macro_rules! diag {
 }
 
 use ui::{
-    ArchiveRow, ArchiveWindow, CaptureOverlay, ComponentRow, HelpWindow, LockModeMenuWindow,
-    MarkdownBlock, MemoryRow, OverlayBarWindow, PaletteResult, PaletteWindow, RecoverOfferWindow,
-    SettingsWindow, SpeakerRow, TextAskWindow, TileWindow, TranscriptLine, TranscriptWindow,
-    TrayMenuWindow, WizardWindow,
+    ArchiveRow, ArchiveWindow, BarMenuWindow, CaptureOverlay, ComponentRow, HelpWindow,
+    LockModeMenuWindow, MarkdownBlock, MemoryRow, OverlayBarWindow, PaletteResult, PaletteWindow,
+    RecoverOfferWindow, SettingsWindow, SpeakerRow, TextAskWindow, TileWindow, TranscriptLine,
+    TranscriptWindow, TrayMenuWindow, WizardWindow,
 };
 
 // Phase 1 of the modularization (docs/overlay-host-modularization-plan.md §5.1):
@@ -48,6 +48,9 @@ use ui::{
 #[path = "overlay_host/window_lifecycle.rs"]
 mod window_lifecycle;
 use window_lifecycle::*;
+
+#[path = "overlay_host/bar_menu.rs"]
+mod bar_menu;
 
 #[path = "overlay_host/app_bootstrap.rs"]
 mod app_bootstrap;
@@ -817,7 +820,10 @@ fn main() -> Result<(), slint::PlatformError> {
                         use overlay_backend::audio::SystemCaptureState;
                         let system_state = {
                             let runtime = slint_replay::runtime_state::lock(&session_rt_tps);
-                            runtime.capture.as_ref().map(|capture| capture.system_capture_state())
+                            runtime
+                                .capture
+                                .as_ref()
+                                .map(|capture| capture.system_capture_state())
                         };
                         let code = match system_state {
                             None => 0,
@@ -849,11 +855,10 @@ fn main() -> Result<(), slint::PlatformError> {
                                     }));
                                     o.set_status_tone(crate::ui::StatusTone::Danger);
                                 }
-                                0 | 2 => refresh_status(
-                                    &o,
-                                    get_mic_active(&app_state_tps),
-                                    active,
-                                ),
+                                0 | 2 => {
+                                    let mic = get_mic_active(&app_state_tps);
+                                    refresh_status(&o, mic, active);
+                                }
                                 _ => {}
                             }
                         }
@@ -1333,7 +1338,7 @@ fn main() -> Result<(), slint::PlatformError> {
         st.mic_active = true;
     }
 
-    apply_overlay_hwnd(&overlay, &state);
+    apply_overlay_hwnd(&overlay, &state, &cfg);
 
     // ===== Mic chip = MUTE toggle (v0.13.1) =====
     //
@@ -1365,7 +1370,7 @@ fn main() -> Result<(), slint::PlatformError> {
             if let Some(o) = weak.upgrade() {
                 o.set_mic_active(!muted);
                 o.set_mic_muted(muted);
-                if muted {
+                if muted && !o.get_operation_active() {
                     o.set_status_text(SharedString::from("mic muted"));
                     o.set_status_tone(crate::ui::StatusTone::Warning);
                 } else {
@@ -1420,24 +1425,27 @@ fn main() -> Result<(), slint::PlatformError> {
             // process tap. Reuse its System chunks instead of opening a second
             // aggregate device with the same UID. Outside a session the bounded
             // standalone probe remains unchanged.
-            let session_active =
-                slint_replay::runtime_state::lock(&slint_rt_sys).capture.is_some();
-            let use_session_stream = session_active
-                && slint_session::begin_system_audio_collector(&slint_rt_sys);
+            let session_active = slint_replay::runtime_state::lock(&slint_rt_sys)
+                .capture
+                .is_some();
+            let use_session_stream =
+                session_active && slint_session::begin_system_audio_collector(&slint_rt_sys);
             let aux_guard = if session_active {
                 None
             } else {
                 slint_session::try_acquire_system_audio_aux()
             };
-            if (session_active && !use_session_stream)
-                || (!session_active && aux_guard.is_none())
-            {
+            let session_busy = session_active && !use_session_stream;
+            let standalone_busy = !session_active && aux_guard.is_none();
+            if session_busy || standalone_busy {
                 match s.lock() {
                     Ok(mut st) => st.sys_probe_in_flight = false,
                     Err(poisoned) => poisoned.into_inner().sys_probe_in_flight = false,
                 }
-                o.set_status_text(SharedString::from("sys test failed"));
-                o.set_status_tone(crate::ui::StatusTone::Danger);
+                if !o.get_operation_active() {
+                    o.set_status_text(SharedString::from("sys test failed"));
+                    o.set_status_tone(crate::ui::StatusTone::Danger);
+                }
                 return;
             }
             let sys_device = cfg_sys.read().system_audio_device.clone();
@@ -1503,16 +1511,16 @@ fn main() -> Result<(), slint::PlatformError> {
                             ("sys ok", crate::ui::StatusTone::Info)
                         }
                         Some(db) if db.is_finite() => {
-                            ("sys quiet", crate::ui::StatusTone::Warning)
+                            let tone = crate::ui::StatusTone::Warning;
+                            ("sys quiet", tone)
                         }
                         Some(_) => ("sys silent", crate::ui::StatusTone::Warning),
-                        None => (
-                            "sys test failed",
-                            crate::ui::StatusTone::Danger,
-                        ),
+                        None => ("sys test failed", crate::ui::StatusTone::Danger),
                     };
-                    o.set_status_text(SharedString::from(label));
-                    o.set_status_tone(tone);
+                    if !o.get_operation_active() {
+                        o.set_status_text(SharedString::from(label));
+                        o.set_status_tone(tone);
+                    }
                     eprintln!(
                         "[overlay-host] sys test result: {} dBFS ({label})",
                         peak_dbfs.map_or_else(|| "?".into(), |d| format!("{d:.2}"))
@@ -1565,7 +1573,7 @@ fn main() -> Result<(), slint::PlatformError> {
             }
             if let Some(o) = weak.upgrade() {
                 o.set_session_paused(paused);
-                if paused {
+                if paused && !o.get_operation_active() {
                     o.set_status_text(SharedString::from("paused"));
                     o.set_status_tone(crate::ui::StatusTone::Warning);
                 } else {
@@ -1645,8 +1653,10 @@ fn main() -> Result<(), slint::PlatformError> {
                     o.set_session_name(SharedString::from(""));
                     // Clear any "paused"/"recording" status back to idle so a
                     // Stop-while-paused doesn't leave a stale pill.
-                    o.set_status_text(SharedString::from("idle"));
-                    o.set_status_tone(crate::ui::StatusTone::Neutral);
+                    if !o.get_operation_active() {
+                        o.set_status_text(SharedString::from("idle"));
+                        o.set_status_tone(crate::ui::StatusTone::Neutral);
+                    }
                 }
             }
 
@@ -1691,8 +1701,10 @@ fn main() -> Result<(), slint::PlatformError> {
                             drop(st);
                             if let Some(o) = weak_revert.upgrade() {
                                 o.set_timer_active(false);
-                                o.set_status_text(SharedString::from("start failed"));
-                                o.set_status_tone(crate::ui::StatusTone::Danger);
+                                if !o.get_operation_active() {
+                                    o.set_status_text(SharedString::from("start failed"));
+                                    o.set_status_tone(crate::ui::StatusTone::Danger);
+                                }
                             }
                         });
                     }
@@ -2353,10 +2365,21 @@ fn main() -> Result<(), slint::PlatformError> {
     let tick_weak = overlay.as_weak();
     let tick_slint_rt = slint_rt.clone();
     let tick_timer = Timer::default();
+    #[cfg(windows)]
+    let last_bar_monitor_check = std::cell::Cell::new(std::time::Instant::now());
+    #[cfg(windows)]
+    let cfg_for_bar_position = cfg.clone();
     tick_timer.start(
         TimerMode::Repeated,
         Duration::from_secs(TIMER_TICK_SECS),
         move || {
+            #[cfg(windows)]
+            if last_bar_monitor_check.get().elapsed() >= Duration::from_secs(2) {
+                last_bar_monitor_check.set(std::time::Instant::now());
+                if let Some(o) = tick_weak.upgrade() {
+                    reevaluate_bar_monitor(&o, &cfg_for_bar_position);
+                }
+            }
             let (active, secs) = {
                 let mut st = match tick_state.lock() {
                     Ok(g) => g,
@@ -2411,6 +2434,10 @@ fn main() -> Result<(), slint::PlatformError> {
     // registry below, so a live stealth toggle re-applies WDA to it too.
     let transcript: Rc<RefCell<Option<TranscriptWindow>>> = Rc::new(RefCell::new(None));
     let lock_menu: Rc<RefCell<Option<Rc<LockModeMenuWindow>>>> = Rc::new(RefCell::new(None));
+    let bar_menu = Rc::new(BarMenuWindow::new()?);
+    let bar_menu_slot = Rc::new(RefCell::new(Some(bar_menu.clone())));
+    let _bar_menu_poll =
+        bar_menu::wire_bar_menu(&overlay, &bar_menu, &cfg, &palette, &tiles, &state);
     // Memory Phase 1 — crash-recovery offer, shown once a beat after startup if
     // the newest journal looks unfinished (see the delayed-open below).
     let recover_offer: Rc<RefCell<Option<RecoverOfferWindow>>> = Rc::new(RefCell::new(None));
@@ -2432,6 +2459,7 @@ fn main() -> Result<(), slint::PlatformError> {
         transcript: transcript.clone(),
         archive: archive.clone(),
         lock_menu: lock_menu.clone(),
+        bar_menu: bar_menu_slot.clone(),
     };
     // V3 — the Lightshot capture overlay. PERSISTENT + pre-stealthed so F8 shows
     // it flash-free: WDA_EXCLUDEFROMCAPTURE keeps it off any screen-share from the
@@ -2878,8 +2906,12 @@ fn main() -> Result<(), slint::PlatformError> {
                 // status pill, reverting after STATUS_REVERT_SECS exactly like
                 // the sys-probe result does.
                 if let Some(o) = weak.upgrade() {
-                    o.set_status_text(SharedString::from(mic_busy_status(cfg_p.read().ui_is_ru())));
-                    o.set_status_tone(crate::ui::StatusTone::Warning);
+                    if !o.get_operation_active() {
+                        o.set_status_text(SharedString::from(mic_busy_status(
+                            cfg_p.read().ui_is_ru(),
+                        )));
+                        o.set_status_tone(crate::ui::StatusTone::Warning);
+                    }
                 }
                 let weak_revert = weak.clone();
                 let state_revert = state_busy.clone();
@@ -2953,18 +2985,19 @@ fn main() -> Result<(), slint::PlatformError> {
             if ptt_state.borrow().is_some() {
                 return;
             }
-            let session_active =
-                slint_replay::runtime_state::lock(&slint_rt_p).capture.is_some();
-            let use_session_stream = session_active
-                && slint_session::begin_system_audio_collector(&slint_rt_p);
+            let session_active = slint_replay::runtime_state::lock(&slint_rt_p)
+                .capture
+                .is_some();
+            let use_session_stream =
+                session_active && slint_session::begin_system_audio_collector(&slint_rt_p);
             let aux_guard = if session_active {
                 None
             } else {
                 slint_session::try_acquire_system_audio_aux()
             };
-            if (session_active && !use_session_stream)
-                || (!session_active && aux_guard.is_none())
-            {
+            let session_busy = session_active && !use_session_stream;
+            let standalone_busy = !session_active && aux_guard.is_none();
+            if session_busy || standalone_busy {
                 eprintln!("[overlay-host] PTT sys unavailable — system capture is busy");
                 return;
             }
@@ -3201,9 +3234,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 v.clear();
                 count
             };
-            if let Some(hidden) =
-                LAST_CLOSED_READ_TILE.with(|slot| slot.borrow_mut().take())
-            {
+            if let Some(hidden) = LAST_CLOSED_READ_TILE.with(|slot| slot.borrow_mut().take()) {
                 bridge_for_close_all.drop_conversation(hidden.get_convo_id());
             }
             eprintln!("[overlay-host] close-all-tiles: closed {n} tile(s)");
@@ -3723,46 +3754,8 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Aggressive auto-tile toggle =====
-    // Phase E6 v10 — surface backend's cfg.auto_tile_every_line as a
-    // bar-level switch. Reads current value into chip state at startup,
-    // then toggles on click + persists to config.json. The backend
-    // detector pipeline in slint_session already honours this flag
-    // (every_line=true → MAX_TILES_PER_MIN_AGGRESSIVE=20).
-    {
-        let cfg_for_agg = cfg.clone();
-        let weak_for_agg = overlay.as_weak();
-        // Sync initial state from cfg.
-        if let Some(o) = weak_for_agg.upgrade() {
-            o.set_aggressive_active(cfg_for_agg.read().auto_tile_every_line);
-        }
-        overlay.on_aggressive_toggle_clicked(move || {
-            let new_state = {
-                let mut c = cfg_for_agg.write();
-                c.auto_tile_every_line = !c.auto_tile_every_line;
-                let _ = overlay_backend::config::save(&c);
-                c.auto_tile_every_line
-            };
-            diag!("[overlay-host] aggressive auto-tile -> {new_state}");
-            if let Some(o) = weak_for_agg.upgrade() {
-                o.set_aggressive_active(new_state);
-            }
-        });
-    }
-
-    // 🔒 Lock tiles (listening mode) + DEEP LOCK (v0.37, managed-local only).
-    // The bar lock chip mirrors config.suppress_tiles — the SAME field the
-    // Settings "listening mode" checkbox and slint_session::maybe_spawn_auto_tile
-    // read, so toggling here suppresses/resumes auto AI tiles live (no restart,
-    // no extra flag). The chip trembles while active so their absence reads as
-    // deliberate.
-    //
-    // For the app-managed llama-server the SAME chip is three-state (see
-    // overlay_backend::deep_lock): listening mode -> deep lock (unload the
-    // app-owned :8080 server owner-aware to free RAM/VRAM) -> the next click
-    // starts the selected model back up and only a CONFIRMED ready releases
-    // the lock. Cloud / external Ollama keep the legacy two-state toggle —
-    // external processes are never stopped.
+    // Auto-tiles uses the existing native menu. Local AI lifecycle is separate;
+    // its owner-aware stop, strict readiness and durable deep-lock guard remain.
     {
         // The menu must be its own native window: PopupWindow is clipped by the
         // intentionally 64px-high overlay bar on winit/Win32.
@@ -3846,7 +3839,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     diag!("[overlay-host] lock-menu event=error stage=hide-selection error={e}");
                 }
                 if let Some(bar) = weak.upgrade() {
-                    bar.invoke_lock_mode_selected(mode);
+                    bar.invoke_autotile_mode_selected(mode);
                 } else {
                     diag!("[overlay-host] lock-menu event=error stage=select reason=bar-dropped");
                 }
@@ -3894,14 +3887,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 };
                 let snap = cfg_for_menu.read();
                 let managed = overlay_backend::deep_lock::cfg_is_managed_local(&snap);
-                let mode = if managed && snap.deep_lock {
-                    2
-                } else if snap.suppress_tiles {
-                    1
-                } else {
-                    0
-                };
-                menu.set_managed(managed);
+                let mode = slint_replay::autotile::mode_from_flags(snap.suppress_tiles, snap.auto_tile_every_line);
                 menu.set_mode(mode);
                 menu.global::<ui::Theme>()
                     .set_scheme(clamp_scheme(snap.color_scheme));
@@ -3942,30 +3928,23 @@ fn main() -> Result<(), slint::PlatformError> {
                 let scale = bar.window().scale_factor().max(0.1);
                 #[cfg(target_os = "macos")]
                 let scale = 1.0_f32;
-                let menu_width = (210.0 * scale).round() as i32;
-                let menu_height = ((if managed { 106.0 } else { 74.0 }) * scale).round() as i32;
+                let menu_width = (320.0 * scale).round() as i32;
+                let menu_height = (106.0 * scale).round() as i32;
                 let anchor_x = bar_left + (anchor_x * scale) as i32;
                 let anchor_y = bar_top + (anchor_y * scale) as i32;
-                let monitor = enum_monitors()
-                    .into_iter()
-                    .find(|m| {
-                        anchor_x >= m.left
-                            && anchor_x < m.right
-                            && anchor_y >= m.top
-                            && anchor_y < m.bottom
-                    })
-                    .or_else(|| enum_monitors().into_iter().find(|m| m.is_primary));
-                let Some(monitor) = monitor else {
+                let Some(work) = work_area_for_point(anchor_x, anchor_y) else {
                     diag!("[overlay-host] lock-menu event=error stage=monitor reason=none");
                     return;
                 };
-                let x = (anchor_x - menu_width).clamp(monitor.left, monitor.right - menu_width);
-                let below = anchor_y + (4.0 * scale) as i32;
-                let y = if below + menu_height <= monitor.bottom {
-                    below
-                } else {
-                    (bar_top - menu_height - (4.0 * scale) as i32).max(monitor.top)
-                };
+                let bar_bottom = bar_top
+                    + (bar.global::<ui::BarSpec>().get_height() * scale).round() as i32;
+                let (x, y) = slint_replay::bar_form::bar_menu_position(
+                    work,
+                    (anchor_x, anchor_y.max(bar_bottom)),
+                    bar_top,
+                    (menu_width, menu_height),
+                    (4.0 * scale).round() as i32,
+                );
                 // Realize off-screen, then add owner/taskbar/stealth styles
                 // before the first visible frame. A fresh Slint HWND is not
                 // always available immediately after show(), hence the shared
@@ -4049,6 +4028,17 @@ fn main() -> Result<(), slint::PlatformError> {
             });
         }
 
+        {
+            let settings = settings.clone();
+            let weak = overlay.as_weak();
+            overlay.on_autotile_state_refreshed(move || {
+                if let (Some(bar), Ok(slot)) = (weak.upgrade(), settings.try_borrow()) {
+                    if let Some(win) = slot.as_ref() {
+                        win.set_suppress_tiles(bar.get_suppress_tiles());
+                    }
+                }
+            });
+        }
         let cfg_for_lock = cfg.clone();
         let state_for_lock = state.clone();
         let events_for_lock = events.clone();
@@ -4058,12 +4048,49 @@ fn main() -> Result<(), slint::PlatformError> {
         if let Some(o) = weak_for_lock.upgrade() {
             refresh_lock_chip(&o, &cfg_for_lock);
         }
-        overlay.on_lock_mode_selected(move |mode| {
+        {
+            let cfg = cfg.clone();
+            let weak = overlay.as_weak();
+            let busy = lock_transition_busy.clone();
+            overlay.on_autotile_mode_selected(move |mode| {
+                let Some((suppress, every_line)) = slint_replay::autotile::flags_from_mode(mode)
+                else {
+                    return;
+                };
+                let Some(bar) = weak.upgrade() else { return };
+                if busy.load(std::sync::atomic::Ordering::Acquire) {
+                    refresh_lock_chip(&bar, &cfg);
+                    return;
+                }
+                let deep_managed = {
+                    let c = cfg.read();
+                    c.deep_lock && overlay_backend::deep_lock::cfg_is_managed_local(&c)
+                };
+                if !suppress && deep_managed {
+                    // Never release suppression before the managed model is ready.
+                    bar.invoke_local_ai_mode_selected(if every_line { 3 } else { 4 });
+                    return;
+                }
+                {
+                    let mut c = cfg.write();
+                    let previous = (c.suppress_tiles, c.auto_tile_every_line);
+                    c.suppress_tiles = suppress;
+                    c.auto_tile_every_line = every_line;
+                    if let Err(e) = overlay_backend::config::save(&c) {
+                        (c.suppress_tiles, c.auto_tile_every_line) = previous;
+                        eprintln!("[overlay-host] auto-tiles save failed: {e:#}");
+                    }
+                }
+                refresh_lock_chip(&bar, &cfg);
+            });
+        }
+        overlay.on_local_ai_mode_selected(move |mode| {
             use overlay_backend::deep_lock::{LockAction, LockMode, LockStatus};
             let requested = match mode {
                 1 => LockMode::Listening,
                 2 => LockMode::Deep,
-                _ => LockMode::Normal,
+                0 | 3 | 4 => LockMode::Normal,
+                _ => return,
             };
             let action = {
                 let c = cfg_for_lock.read();
@@ -4109,7 +4136,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         c.suppress_tiles = true;
                         let _ = overlay_backend::config::save(&c);
                     }
-                    eprintln!("[overlay-host] listening mode on (one more click deep-locks)");
+                    eprintln!("[overlay-host] automatic tiles suppressed");
                     if let Some(o) = weak_for_lock.upgrade() {
                         refresh_lock_chip(&o, &cfg_for_lock);
                         let ru = cfg_for_lock.read().ui_is_ru();
@@ -4140,9 +4167,8 @@ fn main() -> Result<(), slint::PlatformError> {
                         match overlay_backend::config::save(&c) {
                             Ok(()) => true,
                             Err(e) => {
-                                // Listening mode was already on. If the durable
-                                // lock cannot be recorded, do not unload the
-                                // server and leave the two states consistent.
+                                // If the durable lock cannot be recorded, do not
+                                // unload the server; suppression remains safe.
                                 c.deep_lock = false;
                                 eprintln!(
                                     "[overlay-host] deep lock save failed; server left running: {e:#}"
@@ -4162,15 +4188,15 @@ fn main() -> Result<(), slint::PlatformError> {
                     eprintln!(
                         "[overlay-host] deep lock engaged — unloading the managed llama-server"
                     );
-                    if let Some(o) = weak_for_lock.upgrade() {
+                    let previous_status = weak_for_lock.upgrade().map(|o| {
                         refresh_lock_chip(&o, &cfg_for_lock);
                         let ru = cfg_for_lock.read().ui_is_ru();
-                        o.set_status_text(SharedString::from(
+                        begin_bar_operation(
+                            &o,
                             overlay_backend::deep_lock::status_text(ru, LockStatus::Unloading),
-                        ));
-                    }
+                        )
+                    });
                     let state_stop = state_for_lock.clone();
-                    let cfg_stop = cfg_for_lock.clone();
                     let weak_stop = weak_for_lock.clone();
                     let busy_stop = busy_for_lock.clone();
                     std::thread::spawn(move || {
@@ -4201,16 +4227,12 @@ fn main() -> Result<(), slint::PlatformError> {
                             .unwrap_or_else(|p| p.into_inner())
                             .local_ai_servers
                             .retain_mut(|c| !matches!(c.try_wait(), Ok(Some(_))));
-                        let ru = cfg_stop.read().ui_is_ru();
                         busy_stop.store(false, std::sync::atomic::Ordering::Release);
                         let _ = slint::invoke_from_event_loop(move || {
                             if let Some(o) = weak_stop.upgrade() {
-                                o.set_status_text(SharedString::from(
-                                    overlay_backend::deep_lock::status_text(
-                                        ru,
-                                        LockStatus::Unloaded,
-                                    ),
-                                ));
+                                if let Some(previous) = previous_status {
+                                    finish_bar_operation(&o, previous);
+                                }
                             }
                         });
                     });
@@ -4229,19 +4251,23 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                     // The model can take the full strict-ready budget — say so
                     // immediately; the chip stays red + deep until confirmed.
-                    {
+                    let previous_status = weak_for_lock.upgrade().map(|o| {
                         let ru = cfg_for_lock.read().ui_is_ru();
-                        if let Some(o) = weak_for_lock.upgrade() {
-                            o.set_status_text(SharedString::from(
-                                overlay_backend::deep_lock::status_text(ru, LockStatus::Unlocking),
-                            ));
-                        }
-                    }
+                        begin_bar_operation(
+                            &o,
+                            overlay_backend::deep_lock::status_text(ru, LockStatus::Unlocking),
+                        )
+                    });
                     eprintln!(
                         "[overlay-host] deep lock unlock requested — starting the managed model"
                     );
                     // Deep -> Listening reloads the model but keeps tile suppression.
                     let target_listening = requested == LockMode::Listening;
+                    let target_every_line = match mode {
+                        3 => true,
+                        4 => false,
+                        _ => cfg_for_lock.read().auto_tile_every_line,
+                    };
                     let state_unlock = state_for_lock.clone();
                     let cfg_unlock = cfg_for_lock.clone();
                     let weak_unlock = weak_for_lock.clone();
@@ -4263,6 +4289,8 @@ fn main() -> Result<(), slint::PlatformError> {
                                 let mut config = cfg_unlock.write();
                                 config.deep_lock = false;
                                 config.suppress_tiles = target_listening;
+                                let previous_every_line = config.auto_tile_every_line;
+                                config.auto_tile_every_line = target_every_line;
                                 match overlay_backend::config::save(&config) {
                                     Ok(()) => {
                                         overlay_backend::deep_lock::set_deep_lock_active(false);
@@ -4275,6 +4303,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                     Err(_) => {
                                         config.deep_lock = true;
                                         config.suppress_tiles = true;
+                                        config.auto_tile_every_line = previous_every_line;
                                         overlay_backend::mlx_runtime::stop();
                                         None
                                     }
@@ -4288,28 +4317,14 @@ fn main() -> Result<(), slint::PlatformError> {
                                     return;
                                 };
                                 refresh_lock_chip(&overlay, &cfg_unlock);
+                                if let Some(previous) = previous_status {
+                                    finish_bar_operation(&overlay, previous);
+                                }
                                 match ready {
-                                    Some((ru, label, listening)) => {
+                                    Some((_, label, _)) => {
                                         overlay.set_active_stack(SharedString::from(label));
-                                        overlay.set_status_text(SharedString::from(
-                                            overlay_backend::deep_lock::status_text(
-                                                ru,
-                                                if listening {
-                                                    LockStatus::ListeningOn
-                                                } else {
-                                                    LockStatus::UnlockReady
-                                                },
-                                            ),
-                                        ));
                                     }
                                     None => {
-                                        let ru = cfg_unlock.read().ui_is_ru();
-                                        overlay.set_status_text(SharedString::from(
-                                            overlay_backend::deep_lock::status_text(
-                                                ru,
-                                                LockStatus::UnlockFailed,
-                                            ),
-                                        ));
                                         spawn_mlx_runtime_error(&events_unlock, &cfg_unlock);
                                     }
                                 }
@@ -4367,6 +4382,8 @@ fn main() -> Result<(), slint::PlatformError> {
                             );
                             c.deep_lock = false;
                             c.suppress_tiles = target_listening;
+                            let previous_every_line = c.auto_tile_every_line;
+                            c.auto_tile_every_line = target_every_line;
                             match overlay_backend::config::save(&c) {
                                 Ok(()) => {
                                     overlay_backend::deep_lock::set_deep_lock_active(false);
@@ -4375,6 +4392,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                 Err(e) => {
                                     c.deep_lock = true;
                                     c.suppress_tiles = true;
+                                    c.auto_tile_every_line = previous_every_line;
                                     eprintln!(
                                         "[overlay-host] deep lock release save failed; lock kept: {e:#}"
                                     );
@@ -4401,28 +4419,15 @@ fn main() -> Result<(), slint::PlatformError> {
                                 return;
                             };
                             refresh_lock_chip(&o, &cfg_unlock);
+                            if let Some(previous) = previous_status {
+                                finish_bar_operation(&o, previous);
+                            }
                             match ready {
-                                Some((ru, label, listening)) => {
+                                Some((_, label, _)) => {
                                     o.set_active_stack(SharedString::from(label));
-                                    o.set_status_text(SharedString::from(
-                                        overlay_backend::deep_lock::status_text(
-                                            ru,
-                                            if listening {
-                                                LockStatus::ListeningOn
-                                            } else {
-                                                LockStatus::UnlockReady
-                                            },
-                                        ),
-                                    ));
                                 }
                                 None => {
                                     let ru = cfg_unlock.read().ui_is_ru();
-                                    o.set_status_text(SharedString::from(
-                                        overlay_backend::deep_lock::status_text(
-                                            ru,
-                                            LockStatus::UnlockFailed,
-                                        ),
-                                    ));
                                     // The status pill is small — also spawn the
                                     // concise localized error tile so a failed
                                     // reload is impossible to miss.
@@ -4464,21 +4469,31 @@ fn main() -> Result<(), slint::PlatformError> {
         if let Some(o) = weak_for_compact.upgrade() {
             let compact = cfg_for_compact.read().compact_bar;
             o.set_compact_bar(compact);
-            if compact {
-                apply_bar_size(&o, true);
-            }
+            apply_bar_size(&o, compact);
         }
         overlay.on_compact_toggle_clicked(move || {
+            let Some(o) = weak_for_compact.upgrade() else {
+                return;
+            };
+            let was_mini = o.get_bar_form() == 2;
             let now_compact = {
                 let mut c = cfg_for_compact.write();
-                c.compact_bar = !c.compact_bar;
+                c.compact_bar = if was_mini { false } else { !c.compact_bar };
                 let _ = overlay_backend::config::save(&c);
                 c.compact_bar
             };
-            diag!("[overlay-host] compact bar -> {now_compact}");
-            if let Some(o) = weak_for_compact.upgrade() {
-                o.set_compact_bar(now_compact);
-                apply_bar_size(&o, now_compact);
+            o.set_compact_bar(now_compact);
+            let form = apply_bar_size(&o, now_compact);
+            if was_mini
+                && matches!(
+                    form,
+                    slint_replay::bar_form::BarForm::Mini
+                        | slint_replay::bar_form::BarForm::TooNarrow
+                )
+            {
+                diag!("[overlay-host] bar expand requested: monitor still requires mini");
+            } else {
+                diag!("[overlay-host] compact bar -> {now_compact}");
             }
         });
     }
@@ -4508,19 +4523,39 @@ fn main() -> Result<(), slint::PlatformError> {
     {
         let weak_for_drag = overlay.as_weak();
         overlay.on_drag_start_requested(move || {
+            #[cfg(windows)]
+            begin_bar_position_drag();
             if let Some(o) = weak_for_drag.upgrade() {
                 #[cfg(target_os = "macos")]
                 let _ = slint_replay::native::window::begin_drag(o.window());
                 if let Ok(hwnd) = grab_hwnd(o.window()) {
                     drag_begin(hwnd);
+                    #[cfg(windows)]
+                    record_bar_position_drop(&o);
                 }
             }
         });
+        let weak_for_drop = overlay.as_weak();
+        overlay.on_drag_finished(move || {
+            #[cfg(windows)]
+            if let Some(bar) = weak_for_drop.upgrade() {
+                if BAR_DRAG_ACTIVE.swap(false, Ordering::Relaxed) {
+                    record_bar_position_drop(&bar);
+                }
+            }
+            #[cfg(not(windows))]
+            let _ = &weak_for_drop;
+            slint_replay::win32::drag_end();
+        });
         let weak_for_move = overlay.as_weak();
         overlay.on_drag_moved(move || {
+            #[cfg(windows)]
+            begin_bar_position_drag();
             if let Some(o) = weak_for_move.upgrade() {
                 if let Ok(hwnd) = grab_hwnd(o.window()) {
                     drag_update(hwnd);
+                    #[cfg(windows)]
+                    record_bar_position_drop(&o);
                 }
                 #[cfg(target_os = "macos")]
                 {

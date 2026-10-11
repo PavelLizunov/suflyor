@@ -861,15 +861,22 @@ impl SlintUiBridge for OverlayBarBridge {
             match channel.as_str() {
                 "session:started" => {
                     o.set_timer_active(true);
-                    o.set_status_text(SharedString::from("recording"));
-                    o.set_status_tone(crate::ui::StatusTone::Ok);
+                    if !o.get_operation_active() {
+                        o.set_status_text(SharedString::from("recording"));
+                        o.set_status_tone(crate::ui::StatusTone::Ok);
+                    }
                 }
                 "session:stopped" => {
                     o.set_timer_active(false);
-                    o.set_status_text(SharedString::from("idle"));
-                    o.set_status_tone(crate::ui::StatusTone::Neutral);
+                    if !o.get_operation_active() {
+                        o.set_status_text(SharedString::from("idle"));
+                        o.set_status_tone(crate::ui::StatusTone::Neutral);
+                    }
                 }
                 "health:update" => {
+                    if o.get_operation_active() {
+                        return;
+                    }
                     // Crude: collapse 3-subsystem state to single
                     // status color until the bar gets dedicated dots.
                     let st = |k: &str| -> Option<&str> {
@@ -938,7 +945,9 @@ impl SlintUiBridge for OverlayBarBridge {
                     // UI-audit 2026-06-13: dropped the 🏁 flag emoji — the rest
                     // of the chrome is SVG/ASCII. The bar translates this state
                     // word at display (`localized-status` in overlay_bar.slint).
-                    o.set_status_text(SharedString::from("wrapping up"));
+                    if !o.get_operation_active() {
+                        o.set_status_text(SharedString::from("wrapping up"));
+                    }
                 }
                 "transcript:line" => {
                     // Phase E6 v11 — surface latest STT on bar.

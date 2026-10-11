@@ -12,6 +12,15 @@ fn canonical_runtime_wires_product_bar_callbacks() {
         .expect("read canonical host");
 
     assert!(wrapper.contains("include!(\"overlay_host_windows.rs\");"));
+    let menu_host = fs::read_to_string(root.join("src/bin/overlay_host/bar_menu.rs"))
+        .expect("read bar menu host");
+    assert!(host.contains("bar_menu::wire_bar_menu"));
+    for callback in ["overlay.on_menu_opened", "overlay.on_pin_activated"] {
+        assert!(
+            menu_host.contains(callback),
+            "missing callback wiring: {callback}"
+        );
+    }
     for callback in [
         "overlay.on_quit_confirm",
         "overlay.on_drag_start_requested",

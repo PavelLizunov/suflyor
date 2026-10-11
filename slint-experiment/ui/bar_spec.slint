@@ -1,0 +1,36 @@
+// Fixed capsule slots. Keep the Rust window size on this same contract.
+export global BarSpec {
+    out property <length> height: 64px;
+    out property <length> pad: 8px;
+    out property <length> badge: 48px;
+    out property <length> gap: 6px;
+    out property <length> spring: 8px;
+
+    // Chips + 2px inter-chip gaps + 2px padding on each side.
+    out property <length> full-state: 70px + 26px + 26px + 2 * 2px + 2 * 2px;
+    out property <length> full-voice: 102px + 108px + 2px + 2 * 2px;
+    out property <length> full-session: 82px + 26px + 2px + 2 * 2px;
+    out property <length> full-tiles: 96px + 92px + 22px + 26px + 3 * 2px + 2 * 2px;
+    out property <length> full-window: 26px + 26px + 2px + 2 * 2px;
+
+    out property <length> compact-state: 26px + 2 * 2px;
+    out property <length> compact-voice: full-voice;
+    out property <length> compact-session: full-session;
+    out property <length> compact-tiles: 26px + 2 * 2px;
+    out property <length> compact-window: 26px + 26px + 26px + 2 * 2px + 2 * 2px;
+
+    out property <length> mini-voice: 34px + 34px + 2px + 2 * 2px;
+    out property <length> mini-session: full-session;
+    out property <length> mini-tiles: 26px + 26px + 2px + 2 * 2px;
+    out property <length> mini-window: full-window;
+
+    // Three pads: left edge, badge-to-content, right edge. Five row gaps
+    // separate the five capsules and the spring (six layout children).
+    out property <length> full-width: badge + 3 * pad + full-state + full-voice
+        + full-session + full-tiles + full-window + 5 * gap + spring;
+    out property <length> compact-width: badge + 3 * pad + compact-state + compact-voice
+        + compact-session + compact-tiles + compact-window + 5 * gap + spring;
+    // Four capsules and the spring have four gaps; mini has no state capsule.
+    out property <length> mini-width: badge + 3 * pad + mini-voice + mini-session
+        + mini-tiles + mini-window + 4 * gap + spring;
+}
