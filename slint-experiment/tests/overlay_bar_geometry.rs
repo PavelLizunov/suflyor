@@ -285,11 +285,38 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
 }
 
 fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
-    let ids = ["capture", "aggressive", "restore", "archive", "summary", "kb", "settings", "help"];
+    let ids = [
+        "capture",
+        "aggressive",
+        "restore",
+        "archive",
+        "summary",
+        "kb",
+        "settings",
+        "help",
+    ];
     let names = if russian {
-        ["Вопрос по снимку экрана", "Автотайлы на всё", "Вернуть закрытый тайл", "Архив сессий", "Итог встречи", "База знаний", "Настройки", "Справка"]
+        [
+            "Вопрос по снимку экрана",
+            "Автотайлы на всё",
+            "Вернуть закрытый тайл",
+            "Архив сессий",
+            "Итог встречи",
+            "База знаний",
+            "Настройки",
+            "Справка",
+        ]
     } else {
-        ["Ask about a screenshot", "Auto-tiles on every line", "Restore closed tile", "Session archive", "Meeting summary", "Knowledge base", "Settings", "Help"]
+        [
+            "Ask about a screenshot",
+            "Auto-tiles on every line",
+            "Restore closed tile",
+            "Session archive",
+            "Meeting summary",
+            "Knowledge base",
+            "Settings",
+            "Help",
+        ]
     };
     let hint = if russian { "закрепить" } else { "pin" };
     let width = bar.global::<ui::BarSpec>().get_full_width();
@@ -300,12 +327,23 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
     bar.set_aggressive_active(true);
     for count in [0, 3, 8] {
         bar.set_pins(slint::ModelRc::new(slint::VecModel::from(
-            ids[..count].iter().map(|id| slint::SharedString::from(*id)).collect::<Vec<_>>(),
+            ids[..count]
+                .iter()
+                .map(|id| slint::SharedString::from(*id))
+                .collect::<Vec<_>>(),
         )));
         bar.window().set_size(LogicalSize::new(width, height));
-        assert_eq!(bar.window().size().width as f32, width, "pins must not resize the bar");
+        assert_eq!(
+            bar.window().size().width as f32,
+            width,
+            "pins must not resize the bar"
+        );
         let hints: Vec<_> = ElementHandle::find_by_accessible_label(bar, hint).collect();
-        assert_eq!(hints.len(), usize::from(count == 0), "hint presence with {count} pins");
+        assert_eq!(
+            hints.len(),
+            usize::from(count == 0),
+            "hint presence with {count} pins"
+        );
         if let Some(hint) = hints.first() {
             let more = element(bar, if russian { "Ещё" } else { "More" });
             let anchor = std::rc::Rc::new(std::cell::Cell::new((0.0_f32, 0.0_f32)));
@@ -314,7 +352,11 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
             hint.invoke_accessible_default_action();
             let pos = more.absolute_position();
             let size = more.size();
-            assert_eq!(anchor.get(), (pos.x + size.width, pos.y + size.height), "hint must use the More chip's anchor");
+            assert_eq!(
+                anchor.get(),
+                (pos.x + size.width, pos.y + size.height),
+                "hint must use the More chip's anchor"
+            );
         }
         let transcript = element(bar, "PIN GEOMETRY TRANSCRIPT");
         let mut right = transcript.absolute_position().x + transcript.size().width;
@@ -327,26 +369,57 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
             let size = item.size();
             assert_eq!(size.width, 26.0, "fixed bare pin width: {name}");
             assert_eq!(size.height, 22.0, "fixed bare pin height: {name}");
-            assert!(pos.y >= 34.0 && pos.y + size.height <= height, "pin escaped bottom row: {name}");
-            assert!(pos.x >= right && pos.x + size.width <= width, "pin overlaps transcript/previous pin or escapes bar: {name}");
+            assert!(
+                pos.y >= 34.0 && pos.y + size.height <= height,
+                "pin escaped bottom row: {name}"
+            );
+            assert!(
+                pos.x >= right && pos.x + size.width <= width,
+                "pin overlaps transcript/previous pin or escapes bar: {name}"
+            );
             right = pos.x + size.width;
         }
-        for (id, legacy_label) in [("restore", "Restore last tile"), ("aggressive", "Aggressive auto-tile")] {
+        for (id, legacy_label) in [
+            ("restore", "Restore last tile"),
+            ("aggressive", "Aggressive auto-tile"),
+        ] {
             let legacy_label = if russian {
-                if id == "restore" { "Вернуть последний тайл" } else { "Агрессивные авто-тайлы" }
-            } else { legacy_label };
-            assert_eq!(ElementHandle::find_by_accessible_label(bar, legacy_label).count(), usize::from(!ids[..count].contains(&id)), "conditional action must not duplicate a pin: {id}");
+                if id == "restore" {
+                    "Вернуть последний тайл"
+                } else {
+                    "Агрессивные авто-тайлы"
+                }
+            } else {
+                legacy_label
+            };
+            assert_eq!(
+                ElementHandle::find_by_accessible_label(bar, legacy_label).count(),
+                usize::from(!ids[..count].contains(&id)),
+                "conditional action must not duplicate a pin: {id}"
+            );
         }
         bar.set_compact_bar(true);
-        bar.window().set_size(LogicalSize::new(bar.global::<ui::BarSpec>().get_compact_width(), height));
-        assert_eq!(ElementHandle::find_by_accessible_label(bar, hint).count(), 0);
+        bar.window().set_size(LogicalSize::new(
+            bar.global::<ui::BarSpec>().get_compact_width(),
+            height,
+        ));
+        assert_eq!(
+            ElementHandle::find_by_accessible_label(bar, hint).count(),
+            0
+        );
         for name in &names[..count] {
             let name = *name;
-            assert_eq!(ElementHandle::find_by_accessible_label(bar, name).count(), 0, "compact bar must not show pins: {name}");
+            assert_eq!(
+                ElementHandle::find_by_accessible_label(bar, name).count(),
+                0,
+                "compact bar must not show pins: {name}"
+            );
         }
         bar.set_compact_bar(false);
     }
-    bar.set_pins(slint::ModelRc::new(slint::VecModel::<slint::SharedString>::default()));
+    bar.set_pins(slint::ModelRc::new(
+        slint::VecModel::<slint::SharedString>::default(),
+    ));
     bar.set_can_restore_tile(false);
     bar.set_aggressive_active(false);
     bar.set_last_transcript_line("".into());
@@ -408,7 +481,10 @@ fn record_indicator_reserves_an_empty_idle_cell_and_keeps_active_shapes() {
         !indicator.contains("border-color:"),
         "idle cell must not draw a ring"
     );
-    assert!(!indicator.contains("visible:"), "idle cell must not collapse");
+    assert!(
+        !indicator.contains("visible:"),
+        "idle cell must not collapse"
+    );
     assert!(record.contains("if (!self.recording) {\n            self.locked = false;"));
 }
 

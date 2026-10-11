@@ -16,7 +16,10 @@ fn canonical_runtime_wires_product_bar_callbacks() {
         .expect("read bar menu host");
     assert!(host.contains("bar_menu::wire_bar_menu"));
     for callback in ["overlay.on_menu_opened", "overlay.on_pin_activated"] {
-        assert!(menu_host.contains(callback), "missing callback wiring: {callback}");
+        assert!(
+            menu_host.contains(callback),
+            "missing callback wiring: {callback}"
+        );
     }
     for callback in [
         "overlay.on_quit_confirm",

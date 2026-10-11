@@ -385,7 +385,9 @@ fn capsule_bar_uses_the_owner_approved_russian_words() {
 #[test]
 fn translation_scanner_preserves_utf8_and_format_arguments() {
     assert_eq!(
-        tr_msgids(r#"label: @tr("tile · {}", root.open-tiles); a11y: @tr("New tile, {} open", root.open-tiles); text: @tr("AI off");"#),
+        tr_msgids(
+            r#"label: @tr("tile · {}", root.open-tiles); a11y: @tr("New tile, {} open", root.open-tiles); text: @tr("AI off");"#
+        ),
         ["tile · {}", "New tile, {} open", "AI off"]
     );
     assert_eq!(

@@ -28,7 +28,9 @@ fn lock_chip_icon_has_an_explicit_vertical_center() {
         lock_chip.contains("in property <color> accent: root.deep ? Theme.danger : Theme.warning;")
     );
     assert!(lock_chip.contains("running: root.locked && !root.deep;"));
-    assert!(lock_icon.contains("transform-rotation: root.locked && !root.deep ? (root.phase ? 7deg : -7deg) : 0deg;"));
+    assert!(lock_icon.contains(
+        "transform-rotation: root.locked && !root.deep ? (root.phase ? 7deg : -7deg) : 0deg;"
+    ));
 
     // HorizontalLayout centers on its horizontal axis only. The label added by
     // deep lock therefore must not rely on the layout to center the 14px SVG.
