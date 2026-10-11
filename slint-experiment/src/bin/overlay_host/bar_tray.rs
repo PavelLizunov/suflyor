@@ -109,25 +109,20 @@ pub(super) fn spawn_relaunch() -> bool {
     }
 }
 
-/// Resize the bar window for compact "reader mode" (a small read-aloud pill)
-/// vs the full bar, then re-center it on the primary monitor for the new width.
+/// Resize the capsule bar from its shared Slint specification, then re-center
+/// it on the primary monitor for the new width.
 /// LogicalSize matches the `.slint` preferred sizes (Slint DPI-scales it). The
 /// re-pin is deferred a frame because `set_size` is processed on the next event-
 /// loop cycle — reading the window rect immediately would still see the old
 /// width and mis-center.
 pub(super) fn apply_bar_size(overlay: &OverlayBarWindow, compact: bool) {
-    let (w, h) = if compact {
-        // Narrow SESSION strip (Glacier redesign): status pill + спросить +
-        // захватить + timer + expand in one row, over the live-status footer —
-        // two 22px rows like the full bar, just fewer chips. 680×64 also fits
-        // the explicit deep-lock label without crowding; kept in sync with
-        // overlay_bar.slint's compact min-width (660) + preferred-height (64).
-        (680.0_f32, 64.0_f32)
+    let spec = overlay.global::<crate::ui::BarSpec>();
+    let w = if compact {
+        spec.get_compact_width()
     } else {
-        // 64 (was 86) — matches overlay_bar.slint preferred-height; trims the
-        // empty vertical band around the 22px chip row (design review #1).
-        (1280.0_f32, 64.0_f32)
+        spec.get_full_width()
     };
+    let h = spec.get_height();
     overlay.window().set_size(slint::LogicalSize::new(w, h));
     recenter_when_sized(overlay.as_weak(), w, 0);
 }

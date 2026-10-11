@@ -11,7 +11,7 @@ fn lock_chip_icon_has_an_explicit_vertical_center() {
     let lock_chip = source
         .split("component LockChip inherits Rectangle {")
         .nth(1)
-        .and_then(|rest| rest.split("// Active-indicator chip").next())
+        .and_then(|rest| rest.split_once("// Capsule children").map(|(chip, _)| chip))
         .expect("find LockChip component");
 
     let lock_icon = lock_chip

@@ -12,7 +12,7 @@ fn lock_menu_is_a_top_level_window_and_hides_deep_for_external_ai() {
     let lock_chip = source
         .split("component LockChip inherits Rectangle {")
         .nth(1)
-        .and_then(|rest| rest.split("// Active-indicator chip").next())
+        .and_then(|rest| rest.split_once("// Capsule children").map(|(chip, _)| chip))
         .expect("find LockChip component");
 
     for label in ["Unlocked", "Listening", "Unload local AI"] {

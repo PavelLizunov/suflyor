@@ -5,7 +5,7 @@
 //! (`src/tray.rs`); this file pins the CROSS-FILE contracts that a partial
 //! edit could silently break:
 //!
-//! - the bar action exists in BOTH layouts (wide + compact),
+//! - the bar callback remains available, with a guarded compact-only action,
 //! - tray Pause/Resume/Stop route through the EXISTING bar callbacks instead
 //!   of re-implementing session lifecycle,
 //! - tray Quit uses the existing clean `quit_event_loop` path,
@@ -23,7 +23,7 @@ fn read(root: &Path, rel: &str) -> String {
 }
 
 #[test]
-fn hide_action_present_in_both_bar_layouts() {
+fn hide_action_is_guarded_in_the_compact_window_capsule() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let bar = read(root, "ui/overlay_bar.slint");
     assert!(
@@ -34,13 +34,30 @@ fn hide_action_present_in_both_bar_layouts() {
         bar.contains("in property <bool> tray-available: false;"),
         "the hide action must stay unavailable until tray installation succeeds"
     );
-    let invokes = bar.matches("root.hide-to-tray-clicked();").count();
-    assert_eq!(
-        invokes, 2,
-        "hide-to-tray must be wired in BOTH the wide and compact layouts"
-    );
-    let icons = bar.matches("icons/tray.svg").count();
-    assert_eq!(icons, 2, "both layouts use the shared tray icon");
+    let window_capsule = bar
+        .split_once("window-capsule := Capsule {")
+        .expect("window capsule")
+        .1
+        .split_once("// Bottom row:")
+        .expect("bottom row after the action row")
+        .0;
+    let compact_slot = window_capsule
+        .split_once("if root.compact-bar : Rectangle {")
+        .expect("compact-only tray slot")
+        .1;
+    let tray_chip = compact_slot
+        .split_once("if root.tray-available : BarChip {")
+        .expect("tray must still be unavailable until installed")
+        .1
+        .split_once("clicked => { root.hide-to-tray-clicked(); }")
+        .expect("guarded tray click")
+        .0;
+    assert!(compact_slot.contains("width: 26px;"), "reserve the tray slot");
+    assert!(tray_chip.contains("icons/tray.svg"));
+    assert!(tray_chip.contains("@tr(\"Hide to tray\")"));
+    assert_eq!(bar.matches("root.hide-to-tray-clicked();").count(), 1);
+    assert_eq!(bar.matches("icons/tray.svg").count(), 1);
+    assert!(bar.contains("callback menu-opened(length, length);"));
 }
 
 #[test]

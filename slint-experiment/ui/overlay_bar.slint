@@ -1,17 +1,9 @@
-// Real overlay bar with full chip set.
-//
-// Ports the structural pattern of src/Overlay.tsx: a horizontal strip
-// of small chips on a translucent dark rounded background, drawn
-// always on top + transparent + click-through. Each chip is a reusable
-// Component so future chips slot in without touching the layout.
-//
-// Consumed by the `overlay-host` binary (src/bin/overlay_host.rs)
-// which wires every callback to real backend modules: audio probe,
-// AI ask, KB palette, hotkey dispatch, journal bookmark, etc.
+// Capsule overlay bar. Rust retains ownership of capture/session state and actions.
 
 import { Button, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Metrics } from "metrics.slint";
+import { BarSpec } from "bar_spec.slint";
 
 global OverlayCursorPolicy {
     in-out property <bool> force-arrow: false;
@@ -51,7 +43,7 @@ component BrandStateMark inherits Rectangle {
         source: root.assistant-active
             ? @image-url("../assets/brand-penguin.svg")
             : @image-url("../assets/brand-head.svg");
-        colorize: Theme.is-light ? #111827 : #ffffff;
+        colorize: Theme.text-primary;
         width: root.mark-size;
         height: root.mark-size;
         image-fit: contain;
@@ -197,14 +189,11 @@ component LockChip inherits Rectangle {
     in property <bool> deep: false;
     in property <string> a11y;
     in property <bool> managed: false;
-    // The full 1280px bar has no spare width once live tiles add their
-    // controls. Keep the state explicit, but use the short label in that
-    // deterministic tight layout instead of letting Slint clip this text
-    // under the following action chips.
+    // Compact mode keeps only the short deep-lock label.
     in property <bool> tight: false;
     // 0 = normal, 1 = listening, 2 = deep. Rust owns the durable transition.
     in property <int> mode: 0;
-    in property <color> accent: root.deep ? Theme.danger : #f59e0b;
+    in property <color> accent: root.deep ? Theme.danger : Theme.warning;
     callback mode-selected(int);
     callback menu-opened(length, length);
     property <bool> phase: false;
@@ -220,7 +209,7 @@ component LockChip inherits Rectangle {
             ? accent.with-alpha(0.34)
             : (ta.has-hover ? Theme.border-strong.with-alpha(0.22) : transparent));
     border-color: locked ? accent : (ta.has-hover ? accent.with-alpha(0.6) : Theme.border-strong);
-    border-width: Metrics.border-thin;
+    border-width: 0px;
     border-radius: Metrics.radius-control;
     height: Metrics.control-md;
     min-width: 30px;
@@ -238,8 +227,8 @@ component LockChip inherits Rectangle {
         }
     }
     HorizontalLayout {
-        padding-left: Metrics.space-sm;
-        padding-right: Metrics.space-sm;
+        padding-left: Metrics.space-xs;
+        padding-right: Metrics.space-xs;
         spacing: Metrics.space-xs;
         alignment: center;
 
@@ -271,56 +260,114 @@ component LockChip inherits Rectangle {
     }
 }
 
-// Active-indicator chip: chip with a small pulsing dot prefix that
-// represents an "active" / "live" capture state. Used for mic + sys.
-component LiveChip inherits Rectangle {
+// Capsule children have stable slots and no individual outline.
+component BarChip inherits Rectangle {
     in property <string> label;
+    // Design-system icon (skia-safe line SVG, tinted by `colorize` to the
+    // chip's semantic colour). When `has-icon` is set, the icon renders in
+    // place of (or alongside) the text. Icon-only chips set `a11y` so screen
+    // readers still get a word instead of a glyph.
     in property <image> icon;
     in property <bool> has-icon: false;
     in property <string> a11y;
     in property <bool> active: false;
-    in property <color> accent: Theme.success;
+    in property <color> accent: Theme.accent;
+    // Render the label in the mono font (Cascadia) — for the session timer so
+    // the ticking digits don't shift width frame to frame.
+    in property <bool> mono: false;
 
+    // Toggle chips set this so assistive technology and the MCP audit can read
+    // the state (`active`) instead of guessing it from the colour.
+    in property <bool> checkable: false;
+    in property <bool> checked: root.active;
+
+    width: 26px;
+    in property <bool> solid: false;
     callback clicked();
 
     accessible-role: button;
-    accessible-label: label != "" ? label : a11y;
-    accessible-checkable: true;
-    accessible-checked: active;
+    accessible-label: a11y != "" ? a11y : label;
+    accessible-checkable: checkable;
+    accessible-checked: root.checkable && root.checked;
+    accessible-action-default => { root.clicked(); }
 
-    background: active ? accent.with-alpha(0.18) : transparent;
-    border-color: active ? accent : Theme.border-strong;
-    border-width: 1px;
+    // State colour wins over press/hover feedback. The capsule owns the border.
+    background: root.solid ? root.accent : active
+        ? Theme.tint(accent)
+        : (ta.pressed
+            ? accent.with-alpha(0.34)
+            : (ta.has-hover ? Theme.border-strong.with-alpha(0.22) : transparent));
+    border-width: 0px;
     border-radius: Metrics.radius-control;
-    height: 22px;
+    height: Metrics.control-md;
+    horizontal-stretch: 0;
+    animate background { duration: 80ms; }
 
     HorizontalLayout {
-        padding-left: Metrics.space-sm;
-        padding-right: Metrics.space-sm;
+        padding-left: Metrics.space-xs;
+        padding-right: Metrics.space-xs;
         spacing: Metrics.space-xs;
-        // Dot indicator
-        Rectangle {
-            width: 6px;
-            height: 6px;
-            border-radius: 3px;
-            background: active ? accent : Theme.border-strong;
-            y: (parent.height - self.height) / 2;
-        }
+        alignment: center;
         if root.has-icon : IconSlot {
             icon: root.icon;
-            tint: active ? accent : Theme.text-secondary;
+            tint: root.solid ? Theme.bg-surface : active ? Theme.on-tint(accent) : Theme.text-secondary;
             glyph-size: 14px;
             slot-width: 14px;
             slot-height: 22px;
         }
         if root.label != "" : Text {
             text: label;
+            font-family: root.mono ? Theme.font-mono : "";
             font-size: Metrics.font-label;
-            color: active ? accent : Theme.text-secondary;
+            color: root.solid ? Theme.bg-surface : active ? Theme.on-tint(accent) : Theme.text-secondary;
             vertical-alignment: center;
         }
     }
-    TouchArea { clicked => { root.clicked(); } }
+    ta := TouchArea {
+        mouse-cursor: OverlayCursorPolicy.force-arrow ? default : pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+
+component MoreChip inherits Rectangle {
+    in property <bool> active: false;
+    in property <color> accent: Theme.accent;
+    callback menu-opened(length, length);
+    width: 26px; height: Metrics.control-md;
+    horizontal-stretch: 0;
+    border-radius: Metrics.radius-control;
+    background: root.active ? Theme.tint(root.accent)
+        : more-touch.pressed ? Theme.tint(root.accent)
+        : more-touch.has-hover ? Theme.bg-surface : transparent;
+    accessible-role: button;
+    accessible-label: @tr("More");
+    accessible-action-default => { root.menu-opened(root.absolute-position.x + root.width, root.absolute-position.y + root.height); }
+    IconSlot {
+        icon: @image-url("../assets/icons/more.svg");
+        tint: root.active ? Theme.on-tint(root.accent) : Theme.text-secondary;
+        x: (parent.width - self.width) / 2;
+    }
+    more-touch := TouchArea {
+        mouse-cursor: OverlayCursorPolicy.force-arrow ? default : pointer;
+        clicked => { root.menu-opened(root.absolute-position.x + root.width, root.absolute-position.y + root.height); }
+    }
+}
+
+component Capsule inherits Rectangle {
+    out property <bool> fits: lay.preferred-width <= self.width;
+    height: 26px;
+    border-radius: Metrics.radius-control;
+    background: Theme.bg-elevated;
+    border-width: 1px;
+    border-color: Theme.border;
+    horizontal-stretch: 0;
+    lay := HorizontalLayout {
+        padding: 2px;
+        spacing: 2px;
+        alignment: start;
+        @children
+    }
 }
 
 // Phase E6 v42 — push-to-record button. HOLD to record: pointer-down
@@ -375,11 +422,10 @@ component RecordBtn inherits Rectangle {
     }
 
     HorizontalLayout {
-        padding-left: Metrics.space-sm;
-        padding-right: Metrics.space-sm;
-        spacing: Metrics.space-xs;
-        // Record dot: filled red while recording; a SQUARE (border-radius 0)
-        // once locked to read as a "stop" affordance; hollow accent ring idle.
+        padding-left: Metrics.space-xs;
+        padding-right: Metrics.space-xs;
+        spacing: 2px;
+        // Neutral ring idle; filled red while recording, square while locked.
         Rectangle {
             width: 8px;
             height: 8px;
@@ -387,7 +433,7 @@ component RecordBtn inherits Rectangle {
             y: (parent.height - self.height) / 2;
             background: root.recording ? Theme.danger : transparent;
             border-width: root.recording ? 0px : 1px;
-            border-color: root.accent;
+            border-color: Theme.border-strong;
         }
         if root.has-icon : IconSlot {
             icon: root.icon;
@@ -399,10 +445,14 @@ component RecordBtn inherits Rectangle {
         Text {
             text: root.label;
             font-size: Metrics.font-label;
-            color: root.recording ? Theme.danger : Theme.text-secondary;
+            color: root.recording ? Theme.on-tint(Theme.danger) : Theme.text-secondary;
+            font-weight: 600;
+            overflow: elide;
+            horizontal-stretch: 1;
             vertical-alignment: center;
         }
-        if root.recording : IconSlot {
+        IconSlot {
+            opacity: root.recording ? 1 : 0;
             icon: root.locked
                 ? @image-url("../assets/icons/stop.svg")
                 : @image-url("../assets/icons/arrow-up.svg");
@@ -451,15 +501,6 @@ component RecordBtn inherits Rectangle {
     }
 }
 
-// Phase E6 v44 — thin vertical separator between chip groups. Fixed
-// height (Slint forbids `parent.*` inside a component body); the
-// HorizontalLayout centres it on the cross axis.
-component VDivider inherits Rectangle {
-    width: 1px;
-    height: 16px;
-    background: Theme.border-strong;
-}
-
 // ===== Main overlay bar =====
 
 // What the status pill is saying, named by the host. The bar turns it into a
@@ -477,41 +518,13 @@ export component OverlayBarWindow inherits Window {
     background: transparent;
     no-frame: true;
     always-on-top: true;
-    // Phase E6 v10 — widened from 720 to 980 so new chip labels
-    // (💡 tips, ⭐ bm, 🎯 stealth, 🔥 auto, ⚙ settings, X quit) all
-    // fit without truncating the rightmost (X quit) chip.
-    // Phase E6 v11 — height bumped 56 → 86 to fit live transcript row.
-    // Phase E6 v38 — widened 980 → 1140: the Russian chip labels
-    // (подсказки / закладка / скрытность / настройки / выход) are wider
-    // than the English originals and were clipping the rightmost chip.
-    // Phase E6 v44 — narrowed 1320 → 1000: the grouped layout makes the
-    // capture toggles + quick actions icon-only, so the row is far more
-    // compact (icons + 3 short labels instead of 15 text chips).
-    // E10.2 — 1000 → 1080 after the "close all" chip landed, so the Settings
-    // + quit chips never clip; the active-stack readout moved to the bottom
-    // status row to keep the action row compact.
-    // V0.8.3 — 1080 → 1120 to absorb the new ✏ "Написать" chip's width and keep
-    // the un-armed RU worst case (wide "⚠ AI недоступен" status + close-all + 2
-    // open tiles) comfortably inside the fixed-width bar (single-row layout, so
-    // total content — not cluster placement — is what clips).
-    // Phase 3a — 1120 → 1160 to absorb the new 🗄 archive chip with the SAME
-    // worst-case slack as the verified 1120 baseline (icon-only chip ≈ 30 px).
-    // v0.12.0 — 1160 → 1200 to absorb the new 📝 Summary chip (icon-only,
-    // ≈ 30 px) with the same RU worst-case slack (review-agent finding).
-    // v0.36.1-rc.2 — 1200 → 1280 so the permanent RU deep-lock label still
-    // leaves room for Pause + Close all in the running/open-tile worst case.
-    preferred-width: root.bootstrap-mode ? 560px : 1280px;
-    // 64px (was 86) — the chip row is only 22px, so 86 left a wide empty band
-    // around one status line (design review #1). Kept in sync with apply_bar_size
-    // in overlay_host.rs.
-    preferred-height: 64px;
-    // Relax the min-width in compact "narrow session" mode so the runtime
-    // set_size(680) isn't clamped back up (Slint propagates min-width to the OS
-    // as a minimum inner size). Compact still needs room for status + спросить +
-    // захватить + timer + the persistent deep-lock label + expand in one row,
-    // so 660 (not the old 300 reader pill). Full bar keeps 720 so its chip row
-    // never collapses. Kept in sync with apply_bar_size in overlay_host.rs.
-    min-width: root.bootstrap-mode ? 440px : (root.compact-bar ? 660px : 720px);
+    preferred-width: root.bootstrap-mode ? 560px : (root.compact-bar ? BarSpec.compact-width : BarSpec.full-width);
+    preferred-height: BarSpec.height;
+    min-width: root.bootstrap-mode ? 440px : (root.compact-bar ? BarSpec.compact-width : BarSpec.full-width);
+    out property <bool> all-regions-fit: root.bootstrap-mode || (state-capsule.fits
+        && voice-capsule.fits && session-capsule.fits && tiles-capsule.fits && window-capsule.fits);
+    in property <bool> menu-open: false;
+    callback menu-opened(length, length);
 
     // Status pill text (idle / recording / etc).
     in-out property <string> status-text: "idle";
@@ -648,8 +661,7 @@ export component OverlayBarWindow inherits Window {
     // the restart-while-AI-down flow the feature exists for. The un-armed bar
     // is pixel-identical to before (chips only hide during the ≤4s confirm).
     property <bool> confirming: root.quit-armed || root.restart-armed;
-    // A live tile makes the fixed-width action row tight. Keep the established
-    // text actions stable and shorten only the deep-lock state label.
+    // Retained legacy state for host compatibility; these controls move to the menu.
     property <bool> tight-open-tiles: root.open-tiles > 0;
 
     // v0.12.0 — true while a Summary request is in flight. Lights the 📝
@@ -736,40 +748,23 @@ export component OverlayBarWindow inherits Window {
         border-width: 1px;
         border-color: Theme.border;
 
-        // Phase E6 v21 — bar drag is now SCOPED to the status pill
-        // only (see drag-handle TouchArea inside the pill below).
-        // Cycle 20's full-background TouchArea stole every chip click
-        // because Slint's pointer-event fires for ALL events in the
-        // bbox even when children have their own TouchAreas (same
-        // root cause as tile chrome cycle 10). User: "интерфейс
-        // сразу стал не кликабельным". Now only the ~80px status
-        // pill is the drag zone; every chip is freely clickable.
-
-        if !root.compact-bar && !root.bootstrap-mode : VerticalLayout {
-            padding: 6px;
-            spacing: Metrics.space-xs;
-
-        HorizontalLayout {
-            padding: 2px;
-            spacing: 6px;
-            alignment: start;
-
-            // Status pill (left edge) — DOUBLES AS DRAG HANDLE.
-            // It has no click action of its own, so a pointer-event
-            // TouchArea here is safe: its bbox is only the pill, so
-            // it can't shadow the sibling chips' TouchAreas.
+        // One set of named capsules serves both layouts and exposes fit evidence.
+        Rectangle {
+            visible: !root.bootstrap-mode;
+            width: parent.width; height: parent.height;
             Rectangle {
-                background: Theme.tint(root.pill-color);
-                border-color: Theme.on-tint(root.pill-color);
-                border-width: 1px;
-                border-radius: Metrics.radius-control;
-                height: 22px;
-                horizontal-stretch: 0;
-                // The pill is the bar's status readout AND its drag handle —
-                // expose both to accessibility (no visible caption describes it).
+                x: BarSpec.pad; y: (parent.height - self.height) / 2;
+                width: BarSpec.badge; height: BarSpec.badge;
+                border-radius: self.width / 2;
+                background: Theme.bg-elevated;
+                border-width: 2px;
+                border-color: root.stealth-fault ? Theme.danger : root.status-color;
                 accessible-role: text;
                 accessible-label: root.presented-status + ". " + @tr("Drag to move the bar; shows the live state");
-                // Drag handle — press-and-drag to move the whole bar.
+                BrandStateMark {
+                    assistant-active: root.ai-streaming; mark-size: 34px;
+                    x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                }
                 TouchArea {
                     mouse-cursor: OverlayCursorPolicy.force-arrow ? default : grab;
                     pointer-event(ev) => {
@@ -782,656 +777,180 @@ export component OverlayBarWindow inherits Window {
                         if (self.pressed) { root.drag-moved(); }
                     }
                 }
+            }
+            VerticalLayout {
+                x: BarSpec.pad + BarSpec.badge + BarSpec.pad;
+                width: parent.width - self.x - BarSpec.pad;
+                padding-top: 6px; padding-bottom: 6px; spacing: Metrics.space-xs;
                 HorizontalLayout {
-                    padding-left: Metrics.space-xs;
-                    padding-right: Metrics.space-sm;
-                    spacing: Metrics.space-xs;
-                    BrandStateMark {
-                        assistant-active: root.ai-streaming;
-                        mark-size: 22px;
+                    height: 26px; spacing: BarSpec.gap;
+                    state-capsule := Capsule {
+                        width: root.compact-bar ? BarSpec.compact-state : BarSpec.full-state;
+                        BarChip {
+                            width: root.compact-bar ? 26px : 70px;
+                            icon: @image-url("../assets/icons/stealth.svg"); has-icon: true;
+                            label: root.compact-bar ? "" : root.stealth-fault ? @tr("visible!")
+                                : root.stealth-active ? @tr("hidden") : @tr("visible");
+                            a11y: @tr("Stealth (hide from capture)");
+                            active: root.stealth-active; checkable: true;
+                            solid: root.stealth-fault;
+                            accent: root.stealth-fault ? Theme.danger : Theme.cat-pink;
+                            clicked => { root.stealth-toggle-clicked(); }
+                        }
+                        if !root.compact-bar : BarChip {
+                            icon: root.mic-muted ? @image-url("../assets/icons/micslash.svg") : @image-url("../assets/icons/mic.svg");
+                            has-icon: true;
+                            a11y: root.mic-muted ? @tr("Mic muted (click to unmute)") : @tr("Mic live (click to mute)");
+                            active: root.mic-muted; accent: Theme.danger;
+                            checkable: true; checked: !root.mic-muted;
+                            clicked => { root.mic-toggle-clicked(); }
+                        }
+                        if !root.compact-bar : BarChip {
+                            icon: @image-url("../assets/icons/system-audio.svg"); has-icon: true;
+                            a11y: @tr("System audio capture");
+                            active: !root.sys-active; accent: Theme.danger;
+                            checkable: true; checked: root.sys-active;
+                            clicked => { root.sys-toggle-clicked(); }
+                        }
                     }
-                    // Grip — drag affordance (accent). Design-system 6-dot
-                    // grip icon (skia-safe) in place of the "::" text.
-                    IconSlot {
-                        icon: @image-url("../assets/icons/grip.svg");
-                        tint: Theme.accent;
-                        glyph-size: 12px;
-                        slot-width: 12px;
-                        slot-height: 22px;
+                    voice-capsule := Capsule {
+                        width: root.compact-bar ? BarSpec.compact-voice : BarSpec.full-voice;
+                        RecordBtn {
+                            width: 102px;
+                            icon: @image-url("../assets/icons/mic.svg"); has-icon: true;
+                            label: @tr("ask"); accent: Theme.success; recording: root.mic-recording;
+                            pressed => { root.ptt-mic-pressed(); }
+                            released => { root.ptt-mic-released(); }
+                        }
+                        RecordBtn {
+                            width: 108px;
+                            icon: @image-url("../assets/icons/system-audio.svg"); has-icon: true;
+                            label: @tr("grab"); accent: Theme.accent; recording: root.sys-recording;
+                            pressed => { root.ptt-sys-pressed(); }
+                            released => { root.ptt-sys-released(); }
+                        }
+                    }
+                    session-capsule := Capsule {
+                        width: root.compact-bar ? BarSpec.compact-session : BarSpec.full-session;
+                        BarChip {
+                            width: 82px;
+                            icon: root.timer-active ? @image-url("../assets/icons/stop.svg") : @image-url("../assets/icons/session-start.svg");
+                            has-icon: true;
+                            label: root.timer-active ? root.timer-label : @tr("start"); mono: true;
+                            checkable: true; checked: root.timer-active;
+                            clicked => { root.timer-toggle-clicked(); }
+                        }
+                        Rectangle {
+                            width: 26px; height: Metrics.control-md; horizontal-stretch: 0;
+                            if root.timer-active : BarChip {
+                                icon: root.session-paused ? @image-url("../assets/icons/play.svg") : @image-url("../assets/icons/pause.svg");
+                                has-icon: true;
+                                a11y: root.session-paused ? @tr("Resume the session") : @tr("Pause the session");
+                                active: root.session-paused; checkable: true; accent: Theme.warning;
+                                clicked => { root.pause-toggle-clicked(); }
+                            }
+                        }
+                    }
+                    tiles-capsule := Capsule {
+                        width: root.compact-bar ? BarSpec.compact-tiles : BarSpec.full-tiles;
+                        LockChip {
+                            width: root.compact-bar ? 76px : 164px;
+                            locked: root.suppress-tiles; unlocked: root.lock-icon-unlocked;
+                            deep: root.deep-lock; a11y: root.lock-a11y;
+                            managed: root.lock-menu-managed; tight: root.compact-bar;
+                            mode: root.deep-lock ? 2 : (root.suppress-tiles ? 1 : 0);
+                            mode-selected(mode) => { root.lock-mode-selected(mode); }
+                            menu-opened(x, y) => { root.lock-menu-opened(x, y); }
+                        }
+                        if !root.compact-bar : BarChip {
+                            width: 92px;
+                            label: @tr("+ tile ({})", root.open-tiles);
+                            clicked => { root.spawn-tile-clicked(); }
+                        }
+                        if !root.compact-bar : Rectangle {
+                            width: 22px; height: Metrics.control-md; horizontal-stretch: 0;
+                            if root.open-tiles > 0 : BarChip {
+                                width: 22px;
+                                icon: @image-url("../assets/icons/x.svg"); has-icon: true;
+                                a11y: @tr("close all");
+                                clicked => { root.close-all-tiles-clicked(); }
+                            }
+                        }
+                        if !root.compact-bar : BarChip {
+                            icon: @image-url("../assets/icons/pencil.svg"); has-icon: true;
+                            a11y: @tr("Write a question");
+                            clicked => { root.text-ask-clicked(); }
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; min-width: BarSpec.spring; }
+                    window-capsule := Capsule {
+                        width: root.compact-bar ? BarSpec.compact-window : BarSpec.full-window;
+                        if root.compact-bar : Rectangle {
+                            width: 26px; height: Metrics.control-md; horizontal-stretch: 0;
+                            if root.tray-available : BarChip {
+                                icon: @image-url("../assets/icons/tray.svg"); has-icon: true;
+                                a11y: @tr("Hide to tray");
+                                clicked => { root.hide-to-tray-clicked(); }
+                            }
+                        }
+                        BarChip {
+                            icon: root.compact-bar ? @image-url("../assets/icons/maximize.svg") : @image-url("../assets/icons/minimize.svg");
+                            has-icon: true;
+                            a11y: root.compact-bar ? @tr("Expand the bar") : @tr("Compact reader mode");
+                            clicked => { root.compact-toggle-clicked(); }
+                        }
+                        MoreChip {
+                            active: root.menu-open; accent: Theme.accent;
+                            menu-opened(x, y) => { root.menu-opened(x, y); }
+                        }
+                    }
+                }
+                // Bottom row: only real abnormalities and non-empty transcript data.
+                HorizontalLayout {
+                    height: Metrics.control-md; spacing: BarSpec.gap; padding-left: Metrics.space-xs;
+                    if root.stealth-fault || root.status-tone == StatusTone.warning || root.status-tone == StatusTone.danger : Text {
+                        text: root.presented-status;
+                        font-size: Metrics.font-label; font-weight: 600;
+                        color: Theme.on-tint(root.pill-color); vertical-alignment: center;
+                        overflow: elide; max-width: parent.width / 2; horizontal-stretch: 0;
+                    }
+                    if root.timer-active && root.session-name != "" : Text {
+                        text: root.session-name;
+                        font-size: Metrics.font-label; font-weight: 600;
+                        color: Theme.text-secondary; vertical-alignment: center;
+                        overflow: elide; max-width: parent.width / 3; horizontal-stretch: 0;
+                    }
+                    if root.last-transcript-line != "" && (root.last-transcript-source == "mic" || root.last-transcript-source == "sys") : Text {
+                        text: root.last-transcript-source == "mic" ? @tr("you:") : @tr("them:");
+                        font-size: Metrics.font-label; font-weight: 600;
+                        color: Theme.on-tint(root.last-transcript-source == "mic" ? Theme.success : Theme.accent);
+                        vertical-alignment: center; horizontal-stretch: 0;
                     }
                     Text {
-                        // I1/I4 — a verified stealth failure overrides the
-                        // mic/sys status with the translated generic banner.
-                        text: root.presented-status;
-                        font-size: Metrics.font-label;
-                        font-weight: 600;
-                        color: Theme.on-tint(root.pill-color);
-                        vertical-alignment: center;
+                        text: root.last-transcript-line;
+                        font-size: Metrics.font-label; color: Theme.text-secondary;
+                        overflow: elide; vertical-alignment: center; horizontal-stretch: 1;
                     }
-                }
-            }
-
-            // Phase E6 v44 — grouped, scannable layout (user: "слишком
-            // много надписей в ряд"). Groups separated by VDividers:
-            // [state] · [capture toggles] · [push-to-ask] · [session info]
-            // · [quick actions] · →spring→ · [primary + system]. Toggles
-            // and secondary actions are ICON-ONLY; the push-to-record
-            // buttons keep words (the key feature) with a colour-coded
-            // record dot (green=mic, cyan=sys).
-
-            // ── Capture toggles (continuous mic / sys) — icon-only + dot ──
-            LiveChip {
-                // v0.13.1 — slashed mic when muted; lit green when live.
-                icon: root.mic-muted
-                    ? @image-url("../assets/icons/micslash.svg")
-                    : @image-url("../assets/icons/mic.svg");
-                has-icon: true;
-                a11y: root.mic-muted ? @tr("Mic muted (click to unmute)") : @tr("Mic live (click to mute)");
-                active: !root.mic-muted;
-                accent: root.mic-muted ? Theme.text-muted : Theme.success;
-                clicked => { root.mic-toggle-clicked(); }
-            }
-            LiveChip {
-                icon: @image-url("../assets/icons/system-audio.svg");
-                has-icon: true;
-                a11y: @tr("System audio capture");
-                active: root.sys-active;
-                accent: Theme.accent;
-                clicked => { root.sys-toggle-clicked(); }
-            }
-
-            VDivider { }
-
-            // ── Push-to-record (hold to ask) — labelled; dot colour marks
-            //    the source: green = mic (your voice), cyan = sys (them).
-            RecordBtn {
-                icon: @image-url("../assets/icons/mic.svg");
-                has-icon: true;
-                label: @tr("ask");
-                accent: Theme.success;
-                recording: root.mic-recording;
-                pressed => { root.ptt-mic-pressed(); }
-                released => { root.ptt-mic-released(); }
-            }
-            RecordBtn {
-                icon: @image-url("../assets/icons/system-audio.svg");
-                has-icon: true;
-                label: @tr("grab");
-                accent: Theme.accent;
-                recording: root.sys-recording;
-                pressed => { root.ptt-sys-pressed(); }
-                released => { root.ptt-sys-released(); }
-            }
-
-            VDivider { }
-
-            // ── Session info (timer) ──
-            Chip {
-                icon: root.timer-active
-                    ? @image-url("../assets/icons/stop.svg")
-                    : @image-url("../assets/icons/session-start.svg");
-                has-icon: true;
-                label: root.timer-active ? root.timer-label : @tr("start");
-                active: root.timer-active;
-                checkable: true;
-                accent: #fbbf24;
-                mono: true;
-                clicked => { root.timer-toggle-clicked(); }
-            }
-
-            // ── Pause / Resume (v0.22.0) — visible only while a session runs.
-            // Pauses recording + transcript + auto-tiles but keeps the SAME
-            // session alive; Resume continues it. Manual F9 still works.
-            if root.timer-active : Chip {
-                icon: root.session-paused
-                    ? @image-url("../assets/icons/play.svg")
-                    : @image-url("../assets/icons/pause.svg");
-                has-icon: true;
-                a11y: root.session-paused ? @tr("Resume the session") : @tr("Pause the session");
-                active: root.session-paused;
-                checkable: true;
-                accent: #fbbf24;
-                clicked => { root.pause-toggle-clicked(); }
-            }
-
-            VDivider { }
-
-            // ── Quick actions — icon-only (stealth / auto)
-            Chip {
-                icon: @image-url("../assets/icons/stealth.svg");
-                has-icon: true;
-                a11y: @tr("Stealth (hide from capture)");
-                active: root.stealth-active;
-                checkable: true;
-                accent: #ec4899;
-                clicked => { root.stealth-toggle-clicked(); }
-            }
-            Chip {
-                icon: @image-url("../assets/icons/flame.svg");
-                has-icon: true;
-                a11y: @tr("Aggressive auto-tile");
-                active: root.aggressive-active;
-                checkable: true;
-                accent: #fb923c;
-                clicked => { root.aggressive-toggle-clicked(); }
-            }
-            // 🔒 Lock tiles (listening mode) — stop auto AI tiles popping (e.g. over a game).
-            // Trembles while active so their absence is obviously ON PURPOSE. For the
-            // app-managed local server the SAME chip runs a third state (deep lock,
-            // v0.37): red + still, the managed server unloaded until the next click.
-            LockChip {
-                locked: root.suppress-tiles;
-                unlocked: root.lock-icon-unlocked;
-                deep: root.deep-lock;
-                a11y: root.lock-a11y;
-                managed: root.lock-menu-managed;
-                tight: root.tight-open-tiles;
-                mode: root.deep-lock ? 2 : (root.suppress-tiles ? 1 : 0);
-                mode-selected(mode) => { root.lock-mode-selected(mode); }
-                menu-opened(x, y) => { root.lock-menu-opened(x, y); }
-            }
-            // 🗄 Session archive (also F7) — browse + search past sessions.
-            // Icon-only + left of the spring so it consumes slack, not the
-            // width-sensitive right cluster. Lights while the archive is open.
-            Chip {
-                icon: @image-url("../assets/icons/archive.svg");
-                has-icon: true;
-                a11y: @tr("Session archive");
-                active: root.archive-open;
-                checkable: true;
-                accent: #a78bfa;
-                clicked => { root.archive-clicked(); }
-            }
-            // v0.12.0 — Summary созвона: run the full-session transcript
-            // through the AI → structured recap tile (participants / topics /
-            // decisions / tasks / agreements). Works mid-session AND after
-            // Стоп. Lights while the request is in flight.
-            Chip {
-                icon: @image-url("../assets/icons/summary.svg");
-                has-icon: true;
-                a11y: @tr("Meeting summary");
-                active: root.summary-busy;
-                accent: #38bdf8;
-                clicked => { root.summary-clicked(); }
-            }
-
-            // Spring spacer — pushes the primary + system cluster right.
-            Rectangle { horizontal-stretch: 1; min-width: 12px; }
-
-            // ── Primary + system ──
-            // Close-all appears once tiles have been spawned so the user can
-            // dismiss a screenful in one click (#110); resets the counter,
-            // which also hides this chip again.
-            if root.open-tiles > 0 && !root.confirming : Chip {
-                label: @tr("close all");
-                a11y: @tr("close all");
-                accent: #fb7185;
-                clicked => { root.close-all-tiles-clicked(); }
-            }
-            if root.can-restore-tile && !root.confirming : Chip {
-                icon: @image-url("../assets/icons/restore.svg");
-                has-icon: true;
-                a11y: @tr("Restore last tile");
-                accent: #34d399;
-                clicked => { root.restore-tile-clicked(); }
-            }
-            // V0.8.3 — ✏ Написать: type a question when speaking aloud isn't an
-            // option. Opens a small stealth-aware input window.
-            if !root.confirming : Chip {
-                icon: @image-url("../assets/icons/pencil.svg");
-                has-icon: true;
-                a11y: @tr("Write a question");
-                accent: #34d399;
-                clicked => { root.text-ask-clicked(); }
-            }
-            if !root.confirming : Chip {
-                label: @tr("+ tile ({})", root.open-tiles);
-                a11y: @tr("+ tile ({})", root.open-tiles);
-                accent: #f472b6;
-                clicked => { root.spawn-tile-clicked(); }
-            }
-            if !root.confirming : Chip {
-                icon: @image-url("../assets/icons/camera.svg");
-                has-icon: true;
-                a11y: @tr("Screenshot to vision");
-                accent: #22d3ee;
-                clicked => { root.capture-clicked(); }
-            }
-            if !root.confirming : Chip {
-                icon: @image-url("../assets/icons/gear.svg");
-                has-icon: true;
-                a11y: @tr("Settings");
-                active: root.settings-open;
-                checkable: true;
-                accent: Theme.text-muted;
-                clicked => { root.open-settings-clicked(); }
-            }
-            // V0.8.4 — 🆘 help (icons + hotkeys + gestures); also F1. Lights up
-            // while the help window is open (same as the ⚙ chip for Settings).
-            if !root.confirming : Chip {
-                icon: @image-url("../assets/icons/sos.svg");
-                has-icon: true;
-                a11y: @tr("Help");
-                active: root.help-open;
-                checkable: true;
-                accent: #60a5fa;
-                clicked => { root.help-clicked(); }
-            }
-            // V0.8.0 (Поток B) — emergency restart, two-step like Quit. Use it
-            // when the app/local AI gets stuck; settings (incl. stealth) survive.
-            // Label is the recycle EMOJI 🔄 (color-emoji font), NOT the text
-            // glyph ⟳ (U+27F3) — the latter renders as a missing-glyph box on
-            // the Slint+skia text-font fallback (same class as ✕, why Quit uses
-            // ASCII "X"). 🔄 renders fine (proven by tile.slint's regen button).
-            if !root.restart-armed : Chip {
-                icon: @image-url("../assets/icons/restart.svg");
-                has-icon: true;
-                a11y: @tr("Emergency restart");
-                accent: #38bdf8;
-                clicked => { root.restart-clicked(); }
-            }
-            if root.restart-armed : HorizontalLayout {
-                spacing: Metrics.space-xs;
-                Text {
-                    text: @tr("Restart?");
-                    font-size: Metrics.font-label;
-                    font-weight: 600;
-                    color: Theme.text-primary;
-                    vertical-alignment: center;
-                }
-                Chip {
-                    label: @tr("Yes");
-                    active: true;
-                    accent: #38bdf8;
-                    clicked => { root.restart-confirm(); }
-                }
-                Chip {
-                    label: @tr("No");
-                    accent: Theme.accent;
-                    clicked => { root.restart-cancel(); }
-                }
-            }
-            // Compact "reader mode" — collapse the bar to a small read-aloud
-            // pill. Lives with the window controls (left of Quit), where a
-            // minimize/collapse affordance is expected. Hidden during a quit/
-            // restart confirm so the inline buttons stay inside the bar.
-            if !root.confirming : Chip {
-                icon: @image-url("../assets/icons/minimize.svg");
-                has-icon: true;
-                a11y: @tr("Compact reader mode");
-                active: root.compact-bar;
-                checkable: true;
-                accent: #38bdf8;
-                clicked => { root.compact-toggle-clicked(); }
-            }
-            // RC4 — hide the bar to the system tray, immediately beside the
-            // compact control. Explicit only — startup is always visible; the
-            // tray icon restores the bar (same compact mode). Recording,
-            // hotkeys, TTS and session tasks keep running while hidden.
-            if root.tray-available && !root.confirming : Chip {
-                icon: @image-url("../assets/icons/tray.svg");
-                has-icon: true;
-                a11y: @tr("Hide to tray");
-                accent: #38bdf8;
-                clicked => { root.hide-to-tray-clicked(); }
-            }
-            // Quit — two-step. Idle: a single ASCII "X" (Unicode ✕ renders
-            // as a missing-glyph box on the Slint+skia fallback). Armed:
-            // inline "Quit? [Yes] [No]" so a stray click can't kill the app.
-            if !root.quit-armed : Chip {
-                icon: @image-url("../assets/icons/x.svg");
-                has-icon: true;
-                a11y: @tr("Quit");
-                accent: Theme.danger;
-                clicked => { root.quit-clicked(); }
-            }
-            if root.quit-armed : HorizontalLayout {
-                spacing: Metrics.space-xs;
-                Text {
-                    text: @tr("Quit?");
-                    font-size: Metrics.font-label;
-                    font-weight: 600;
-                    color: Theme.text-primary;
-                    vertical-alignment: center;
-                }
-                Chip {
-                    label: @tr("Yes");
-                    active: true;
-                    accent: Theme.danger;
-                    clicked => { root.quit-confirm(); }
-                }
-                Chip {
-                    label: @tr("No");
-                    accent: Theme.accent;
-                    clicked => { root.quit-cancel(); }
-                }
-            }
-        }
-
-        // ===== Live status row =====
-        // Phase E6 v11 — bottom row shows last transcript line + AI
-        // streaming indicator. Gives the user immediate visual proof
-        // that STT and AI are working without opening a separate
-        // window or watching a log file.
-        HorizontalLayout {
-            padding-left: Metrics.space-xs;
-            padding-right: Metrics.space-xs;
-            spacing: 6px;
-            // Session name (v0.22.0) — relocated here from the top chip row so it
-            // no longer pushes the action chips; a small 10px left anchor with a
-            // muted dot before the model-stack readout.
-            if root.timer-active && root.session-name != "" : Text {
-                text: root.session-name;
-                font-size: Metrics.font-caption;
-                font-weight: 600;
-                color: Theme.success;
-                vertical-alignment: center;
-                horizontal-stretch: 0;
-            }
-            if root.timer-active && root.session-name != "" : Text {
-                text: "·";
-                font-size: Metrics.font-caption;
-                color: Theme.text-muted;
-                vertical-alignment: center;
-                horizontal-stretch: 0;
-            }
-            // Active-stack and compact memory readout (read-only).
-            VerticalLayout {
-                horizontal-stretch: 0;
-                alignment: center;
-
-                Text {
-                    text: root.active-stack + root.tok-per-sec;
-                    font-size: Metrics.font-caption;
-                    font-weight: 600;
-                    color: Theme.accent;
-                    vertical-alignment: center;
-                }
-                if root.app-memory != "" || root.mlx-memory != "" : HorizontalLayout {
-                    spacing: Metrics.space-xs;
-
+                    if !root.compact-bar && root.can-restore-tile : BarChip {
+                        icon: @image-url("../assets/icons/restore.svg"); has-icon: true;
+                        a11y: @tr("Restore last tile");
+                        clicked => { root.restore-tile-clicked(); }
+                    }
+                    if !root.compact-bar && root.aggressive-active : BarChip {
+                        icon: @image-url("../assets/icons/flame.svg"); has-icon: true;
+                        a11y: @tr("Aggressive auto-tile"); active: true; accent: Theme.cat-orange;
+                        clicked => { root.aggressive-toggle-clicked(); }
+                    }
                     if root.app-memory != "" : Text {
                         text: @tr("App RAM") + " " + root.app-memory;
-                        font-size: Metrics.font-caption;
-                        color: Theme.text-muted;
-                        vertical-alignment: center;
+                        font-size: Metrics.font-caption; color: Theme.text-muted;
+                        vertical-alignment: center; horizontal-stretch: 0;
                     }
                     if root.mlx-memory != "" : Text {
                         text: "MLX" + " " + root.mlx-memory;
-                        font-size: Metrics.font-caption;
-                        color: Theme.text-muted;
-                        vertical-alignment: center;
+                        font-size: Metrics.font-caption; color: Theme.text-muted;
+                        vertical-alignment: center; horizontal-stretch: 0;
                     }
-                }
-            }
-            // Source tag — "mic" green dot, "sys" cyan dot, "" gray. The dot is
-            // colour-ONLY, so accessibility gets a word for the source it marks.
-            Rectangle {
-                width: 8px;
-                height: 8px;
-                y: (parent.height - self.height) / 2;
-                border-radius: 4px;
-                background: root.last-transcript-source == "mic"
-                    ? Theme.success
-                    : (root.last-transcript-source == "sys" ? Theme.accent : Theme.border-strong);
-                accessible-role: text;
-                accessible-label: root.last-transcript-source == "mic" ? @tr("Microphone")
-                    : (root.last-transcript-source == "sys" ? @tr("System audio") : "");
-            }
-            // The live transcript text — elide when too long.
-            Text {
-                text: root.last-transcript-line == ""
-                    ? @tr("waiting for transcript... (mic/sys → STT)")
-                    : root.last-transcript-line;
-                font-size: Metrics.font-label;
-                color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;
-                overflow: elide;
-                vertical-alignment: center;
-                horizontal-stretch: 1;
-            }
-            // AI streaming pulse — visible when an ask is in flight.
-            Rectangle {
-                width: root.ai-streaming ? 80px : 0px;
-                height: 18px;
-                y: (parent.height - self.height) / 2;
-                background: root.ai-streaming ? Theme.tint(Theme.cat-indigo) : transparent;
-                border-color: Theme.on-tint(Theme.cat-indigo);
-                border-width: root.ai-streaming ? 1px : 0px;
-                border-radius: 9px;
-                horizontal-stretch: 0;
-                if root.ai-streaming : HorizontalLayout {
-                    alignment: center;
-                    spacing: Metrics.space-xs;
-                    padding-left: 6px;
-                    padding-right: 6px;
-                    Image {
-                        source: @image-url("../assets/icons/brain.svg");
-                        colorize: Theme.on-tint(Theme.cat-indigo);
-                        width: 12px;
-                        height: 12px;
-                        image-fit: contain;
-                        vertical-alignment: center;
-                    }
-                    Text {
-                        text: @tr("AI streaming");
-                        font-size: Metrics.font-caption;
-                        color: Theme.on-tint(Theme.cat-indigo);
-                        vertical-alignment: center;
-                    }
-                }
-            }
-        }
-        }
-
-        // ===== Compact bar — narrow session strip =====
-        // Per the «Glacier» redesign reference, compact is "the same bar with its
-        // groups collapsed" (one window, the `compact` flag) — NOT a TTS reader.
-        // It keeps the session status pill (drag handle) + the two key push-to-
-        // record actions (спросить = your mic, захватить = system audio) + the
-        // session timer + an Expand button, over the same live-status footer as
-        // the full bar. The full action set returns on Expand. Read-aloud is
-        // unaffected — the global Shift+Alt+1/2/3 hotkeys work regardless of this
-        // layout (there is no on-bar Stop here, by design).
-        if root.compact-bar && !root.bootstrap-mode : VerticalLayout {
-            padding: 6px;
-            spacing: Metrics.space-xs;
-
-            // ── Action row: status (drag) · спросить · захватить · таймер · развернуть ──
-            HorizontalLayout {
-                padding-left: 2px;
-                padding-right: 2px;
-                spacing: 6px;
-
-                // Status pill — DOUBLES AS DRAG HANDLE (same pattern as the full
-                // bar: only the pill is the drag zone, so it can't shadow the
-                // sibling buttons' TouchAreas). Tinted by the live session state.
-                Rectangle {
-                    background: Theme.tint(root.pill-color);
-                    border-color: Theme.on-tint(root.pill-color);
-                    border-width: 1px;
-                    border-radius: Metrics.radius-control;
-                    height: 22px;
-                    // Natural width like the full bar pill (NOT stretched) so the
-                    // pill is the SAME length in both modes; the spring spacer
-                    // below absorbs the slack and pushes Expand to the right edge.
-                    horizontal-stretch: 0;
-                    // Cap the pill so an unusually long / error status elides (…)
-                    // instead of growing past the narrow 680px compact window and
-                    // clipping the right-edge chips. Short statuses stay well under
-                    // this, so the normal look is unchanged (full bar has 1280px,
-                    // so it never needs the cap).
-                    max-width: 150px;
-                    // Same accessibility label as the full bar's pill (status +
-                    // drag affordance) — zero layout impact.
-                    accessible-role: text;
-                    accessible-label: root.presented-status + ". " + @tr("Drag to move the bar; shows the live state");
-                    TouchArea {
-                        mouse-cursor: OverlayCursorPolicy.force-arrow ? default : grab;
-                        pointer-event(ev) => {
-                            if (ev.button == PointerEventButton.left
-                                && ev.kind == PointerEventKind.down) {
-                                root.drag-start-requested();
-                            }
-                        }
-                        moved => {
-                            if (self.pressed) { root.drag-moved(); }
-                        }
-                    }
-                    HorizontalLayout {
-                        // PIXEL-IDENTICAL to the full bar's status pill — same
-                        // brand mark, grip, order and padding/spacing — so the
-                        // left brand+grip block doesn't change at all on the
-                        // compact toggle (no icon difference between modes).
-                        padding-left: Metrics.space-xs;
-                        padding-right: Metrics.space-sm;
-                        spacing: Metrics.space-xs;
-                        // Brand state mark — the SAME element the full bar uses
-                        // (was a separate дуо icon; unified for zero visual diff;
-                        // pulses on ai-streaming exactly like the full bar).
-                        BrandStateMark {
-                            assistant-active: root.ai-streaming;
-                            mark-size: 22px;
-                        }
-                        // Grip — AFTER the brand mark, mirroring the full bar's
-                        // [brand · grip · status] order (constraint #2: keep it).
-                        IconSlot {
-                            icon: @image-url("../assets/icons/grip.svg");
-                            tint: Theme.accent;
-                            glyph-size: 12px;
-                            slot-width: 12px;
-                            slot-height: 22px;
-                        }
-                        Text {
-                            // I1/I4 — same translated stealth-failure override
-                            // as the full bar's pill.
-                            text: root.presented-status;
-                            font-size: Metrics.font-label;
-                            font-weight: 600;
-                            color: Theme.on-tint(root.pill-color);
-                            vertical-alignment: center;
-                            // Elide a long status within the capped pill so it can
-                            // never overflow the narrow compact window. Short
-                            // statuses are well under the cap, so no visible change.
-                            overflow: elide;
-                            horizontal-stretch: 1;
-                        }
-                    }
-                }
-
-                // спросить — hold to record YOUR voice (mic) → STT → AI. Same
-                // callbacks as the full bar's push-to-record button.
-                RecordBtn {
-                    icon: @image-url("../assets/icons/mic.svg");
-                    has-icon: true;
-                    label: @tr("ask");
-                    accent: Theme.success;
-                    recording: root.mic-recording;
-                    pressed => { root.ptt-mic-pressed(); }
-                    released => { root.ptt-mic-released(); }
-                }
-                // захватить — hold to record THEM (system audio) → STT → AI.
-                RecordBtn {
-                    icon: @image-url("../assets/icons/system-audio.svg");
-                    has-icon: true;
-                    label: @tr("grab");
-                    accent: Theme.accent;
-                    recording: root.sys-recording;
-                    pressed => { root.ptt-sys-pressed(); }
-                    released => { root.ptt-sys-released(); }
-                }
-                // Timer — start/stop the session; shows the running clock in session.
-                Chip {
-                    icon: root.timer-active
-                        ? @image-url("../assets/icons/stop.svg")
-                        : @image-url("../assets/icons/session-start.svg");
-                    has-icon: true;
-                    label: root.timer-active ? root.timer-label : @tr("start");
-                    active: root.timer-active;
-                    checkable: true;
-                    accent: #fbbf24;
-                    mono: true;
-                    clicked => { root.timer-toggle-clicked(); }
-                }
-                // ── Pause / Resume (v0.22.0) — only while a session runs.
-                if root.timer-active : Chip {
-                    icon: root.session-paused
-                        ? @image-url("../assets/icons/play.svg")
-                        : @image-url("../assets/icons/pause.svg");
-                    has-icon: true;
-                    a11y: root.session-paused ? @tr("Resume the session") : @tr("Pause the session");
-                    active: root.session-paused;
-                    checkable: true;
-                    accent: #fbbf24;
-                    clicked => { root.pause-toggle-clicked(); }
-                }
-                // 🔒 Lock tiles (listening mode) — same toggle as the full bar; trembles
-                // while active, turns red + still in the deep-lock state (v0.37).
-                LockChip {
-                    locked: root.suppress-tiles;
-                    unlocked: root.lock-icon-unlocked;
-                    deep: root.deep-lock;
-                    a11y: root.lock-a11y;
-                    managed: root.lock-menu-managed;
-                    tight: true;
-                    mode: root.deep-lock ? 2 : (root.suppress-tiles ? 1 : 0);
-                    mode-selected(mode) => { root.lock-mode-selected(mode); }
-                    menu-opened(x, y) => { root.lock-menu-opened(x, y); }
-                }
-                // Spring — absorbs the slack so the status pill stays natural-
-                // width (identical to the full bar) and Expand sits at the right
-                // edge, mirroring the full bar's window-control placement.
-                Rectangle { horizontal-stretch: 1; min-width: 8px; }
-                // RC4 — hide to tray, beside the Expand control (same action +
-                // same icon as the full bar's hide chip).
-                if root.tray-available : Chip {
-                    icon: @image-url("../assets/icons/tray.svg");
-                    has-icon: true;
-                    a11y: @tr("Hide to tray");
-                    accent: #38bdf8;
-                    clicked => { root.hide-to-tray-clicked(); }
-                }
-                // Expand — restore the full bar (full action set).
-                Chip {
-                    icon: @image-url("../assets/icons/maximize.svg");
-                    has-icon: true;
-                    a11y: @tr("Expand the bar");
-                    accent: #38bdf8;
-                    clicked => { root.compact-toggle-clicked(); }
-                }
-            }
-
-            // ── Live-status footer — same readout as the full bar's bottom row. ──
-            HorizontalLayout {
-                padding-left: Metrics.space-xs;
-                padding-right: Metrics.space-xs;
-                spacing: 6px;
-                Text {
-                    text: root.active-stack + root.tok-per-sec;
-                    font-size: Metrics.font-caption;
-                    font-weight: 600;
-                    color: Theme.accent;
-                    overflow: elide;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                }
-                Rectangle {
-                    width: 8px;
-                    height: 8px;
-                    y: (parent.height - self.height) / 2;
-                    border-radius: 4px;
-                    background: root.last-transcript-source == "mic"
-                        ? Theme.success
-                        : (root.last-transcript-source == "sys" ? Theme.accent : Theme.border-strong);
-                }
-                Text {
-                    text: root.last-transcript-line == ""
-                        ? @tr("waiting for transcript... (mic/sys → STT)")
-                        : root.last-transcript-line;
-                    font-size: Metrics.font-label;
-                    color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;
-                    overflow: elide;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
                 }
             }
         }

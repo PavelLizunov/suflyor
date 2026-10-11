@@ -16,9 +16,9 @@ use std::path::{Path, PathBuf};
 /// Font sizes written as a number instead of a `Metrics.font-*` token.
 const FONT_SIZE_LITERALS: usize = 18;
 /// Corner radii written as a number instead of a `Metrics.radius-*` token.
-const RADIUS_LITERALS: usize = 71;
+const RADIUS_LITERALS: usize = 67;
 /// Hex colours outside `theme.slint`.
-const HEX_COLOURS: usize = 47;
+const HEX_COLOURS: usize = 24;
 
 /// Not part of the shipped overlay: two layout spikes and the replay viewer.
 const NOT_SHIPPED: &[&str] = &[

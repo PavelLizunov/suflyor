@@ -349,6 +349,23 @@ fn every_display_literal_is_translated_or_technical() {
 }
 
 #[test]
+fn capsule_bar_uses_the_owner_approved_russian_words() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let bar = fs::read_to_string(root.join("ui/overlay_bar.slint")).expect("read bar");
+    let po = fs::read_to_string(root.join("translations/ru/LC_MESSAGES/slint-replay.po"))
+        .expect("read Russian translations");
+    for (english, russian) in [
+        ("hidden", "скрыт"), ("visible", "виден"), ("visible!", "виден!"),
+        ("you:", "вы:"), ("them:", "собеседник:"), ("More", "Ещё"),
+        ("AI off", "AI выкл."), ("Local AI unloaded", "Локальный AI выгружен"),
+    ] {
+        assert!(bar.contains(&format!("@tr(\"{english}\")")), "missing bar label: {english}");
+        assert!(po.contains(&format!("msgid \"{english}\"\nmsgstr \"{russian}\"")),
+            "wrong capsule bar translation: {english}");
+    }
+}
+
+#[test]
 fn every_tr_string_has_a_russian_translation() {
     // The byte-level scan above mangles multi-byte UTF-8 (pushes each byte as a
     // char). That's fine for ASCII msgids — and Slint @tr msgids are the ENGLISH

@@ -57,20 +57,6 @@ msgstr "закрыть все"
 msgid "Restore last tile"
 msgstr "Вернуть последний тайл"
 
-# Phase E6 v45 — two-step quit confirm (X arms "Quit? Yes/No").
-msgid "Quit?"
-msgstr "Выйти?"
-
-msgid "Yes"
-msgstr "Да"
-
-msgid "No"
-msgstr "Нет"
-
-# V0.8.0 (Поток B) — two-step emergency-restart confirm (⟳ arms "Restart? Yes/No").
-msgid "Restart?"
-msgstr "Перезапустить?"
-
 # RC4 — hide-to-tray bar action (accessible label of the icon-only chip that
 # sits beside the compact control). Tray MENU labels are Rust-side (tray.rs).
 msgid "Hide to tray"
@@ -1169,9 +1155,6 @@ msgstr "Groq STT (Whisper) — ключ и модель. Используетс�
 msgid "waiting for transcript... (mic/sys → STT)"
 msgstr "ожидаю транскрипт... (mic/sys → STT)"
 
-msgid "AI streaming"
-msgstr "AI стримит"
-
 msgid "✏ Write a question for the assistant"
 msgstr "✏ Напишите вопрос ассистенту"
 
@@ -1951,11 +1934,11 @@ msgid "Retry"
 msgstr "Повторить"
 
 msgid "Local AI unloaded"
-msgstr "Локальный ИИ выгружен"
+msgstr "Локальный AI выгружен"
 
-# Tight 1280px bar state while tile actions are visible.
+# Compact capsule deep-lock state.
 msgid "AI off"
-msgstr "ИИ выкл."
+msgstr "AI выкл."
 
 msgid "Current"
 msgstr "Текущий"
@@ -2353,17 +2336,8 @@ msgstr "Скрытность (не показывать при захвате э
 msgid "Aggressive auto-tile"
 msgstr "Агрессивные авто-тайлы"
 
-msgid "Meeting summary"
-msgstr "Итог встречи"
-
 msgid "Write a question"
 msgstr "Написать вопрос"
-
-msgid "Screenshot to vision"
-msgstr "Скриншот в vision"
-
-msgid "Emergency restart"
-msgstr "Аварийный перезапуск"
 
 msgid "Compact reader mode"
 msgstr "Компактный режим чтения"
@@ -2424,3 +2398,22 @@ msgstr "Удалить сессию"
 
 msgid "View transcript"
 msgstr "Открыть расшифровку"
+
+# Capsule bar state and speaker labels.
+msgid "hidden"
+msgstr "скрыт"
+
+msgid "visible"
+msgstr "виден"
+
+msgid "visible!"
+msgstr "виден!"
+
+msgid "you:"
+msgstr "вы:"
+
+msgid "them:"
+msgstr "собеседник:"
+
+msgid "More"
+msgstr "Ещё"
