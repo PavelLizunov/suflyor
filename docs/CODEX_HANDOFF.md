@@ -76,6 +76,18 @@ row, state shown by the UI instead of `[ok]` / `[err]` text, splitting `settings
 the bar, one vocabulary. From the scale phase on the look changes; the owner was asked whether
 to keep the Glacier look, how to lay out the bar, and which words to keep.
 
+On master after `v0.38.1-rc.5` and not released yet (pull request #251, merge commit `84a4173`):
+the session archive has a notice line for a request that cannot act (ledger D-033), Shift+Alt+1
+with nothing selected opens a notice tile (D-031), and the conspect and debrief sidecars are
+created private on Unix (the first commit of the Sentinel pull request #248, cherry-picked).
+
+About the Sentinel bot (`google-labs-jules[bot]`, branches `jules-<number>`): it answers a comment
+on its pull request with a new commit, and on #248 that commit wrote an older snapshot of the
+tree over the branch, which would have reverted #249 and #250 (42 files, 1305 lines) under the
+title of a one-line date fix. Check `git diff --stat origin/master...<head>` of a bot branch
+right before integrating it, and take its reviewed commit by cherry-pick instead of merging the
+branch. Do not use pull request comments to ask the bot for changes.
+
 Open, check `gh pr list` first:
 
 - #205 (Nemotron diarization; its branch uses the version 0.38.1-rc.4, which is now taken twice over), #217 and #199
@@ -83,8 +95,8 @@ Open, check `gh pr list` first:
 - `docs/audit-grok/` stays in the tree while `docs/goal-grok-codebase-audit.md` is an
   active charter that refers to it. Its 119 findings were checked against the source; the
   42 confirmed ones are in `docs/DEFECT-LEDGER.md` and 41 of them are not fixed.
-- Ledger D-004 and D-012 need a product decision; D-005, D-009, D-010, D-011, D-012, D-030,
-  D-031 and D-032 are open.
+- Ledger D-004 and D-012 need a product decision; D-005, D-009, D-010, D-011, D-012, D-030
+  and D-032 are open.
 - Comments: a census with the Rust lexer exists (15023 comment lines, 477 of them history
   or provenance); nothing was deleted.
 - Design: a full design audit is the next piece of work. A source scan counts 284 font sizes,
