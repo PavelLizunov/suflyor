@@ -34,33 +34,52 @@ fn hide_action_is_guarded_in_the_compact_window_capsule() {
         bar.contains("in property <bool> tray-available: false;"),
         "the hide action must stay unavailable until tray installation succeeds"
     );
-    let window_capsule = bar
-        .split_once("window-capsule := Capsule {")
-        .expect("window capsule")
-        .1
-        .split_once("// Bottom row:")
-        .expect("bottom row after the action row")
-        .0;
-    let compact_slot = window_capsule
-        .split_once("if root.compact-bar : Rectangle {")
-        .expect("compact-only tray slot")
+    // Restrict each lookup to its actual braces, not the rest of the file:
+    // a tray chip moved outside either guard must fail this contract.
+    fn block<'a>(source: &'a str, opening: &str) -> &'a str {
+        let rest = source.split_once(opening)
+            .unwrap_or_else(|| panic!("Hide to tray, compact window capsule, en/ru: missing {opening}"))
+            .1;
+        let mut depth = 1;
+        for (offset, ch) in rest.char_indices() {
+            match ch {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 { return &rest[..offset]; }
+                }
+                _ => {}
+            }
+        }
+        panic!("Hide to tray, compact window capsule, en/ru: unclosed {opening}");
+    }
+    let window_capsule = block(&bar, "window-capsule := Capsule {");
+    let compact_slot = block(window_capsule, "if root.compact-bar : Rectangle {");
+    let tray_chip = block(compact_slot, "if root.tray-available : BarChip {");
+    let click = tray_chip
+        .split_once("clicked => {")
+        .expect("Hide to tray, compact window capsule, en/ru: guarded tray click")
         .1;
-    let tray_chip = compact_slot
-        .split_once("if root.tray-available : BarChip {")
-        .expect("tray must still be unavailable until installed")
-        .1
-        .split_once("clicked => { root.hide-to-tray-clicked(); }")
-        .expect("guarded tray click")
+    let click = click
+        .split_once('}')
+        .expect("Hide to tray, compact window capsule, en/ru: click handler boundary")
         .0;
+    assert_eq!(
+        click.split_whitespace().collect::<Vec<_>>(),
+        ["root.dismiss-menu();", "root.hide-to-tray-clicked();"],
+        "Hide to tray, compact window capsule, en/ru: dismiss More before dispatching hide"
+    );
     assert!(
         compact_slot.contains("width: 26px;"),
-        "reserve the tray slot"
+        "Hide to tray, compact window capsule, en/ru: reserve the 26px tray slot"
     );
-    assert!(tray_chip.contains("icons/tray.svg"));
-    assert!(tray_chip.contains("@tr(\"Hide to tray\")"));
-    assert_eq!(bar.matches("root.hide-to-tray-clicked();").count(), 1);
-    assert_eq!(bar.matches("icons/tray.svg").count(), 1);
-    assert!(bar.contains("callback menu-opened(length, length);"));
+    assert!(tray_chip.contains("icons/tray.svg"), "Hide to tray, compact window capsule, en/ru: tray icon");
+    assert!(tray_chip.contains("@tr(\"Hide to tray\")"), "Hide to tray, compact window capsule, en/ru: translated label");
+    assert_eq!(bar.matches("root.hide-to-tray-clicked();").count(), 1, "Hide to tray, compact window capsule, en/ru: one direct hide dispatch");
+    // pin-icon has the same asset as its fallback; that is not a second
+    // built-in tray chip. Count the chip inside its guarded capsule instead.
+    assert_eq!(tray_chip.matches("icons/tray.svg").count(), 1, "Hide to tray, compact window capsule, en/ru: one built-in tray icon");
+    assert!(bar.contains("callback menu-opened(length, length);"), "More, both bar forms, en/ru: menu callback remains available");
 }
 
 #[test]

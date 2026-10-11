@@ -81,7 +81,7 @@ fn menu_is_exported_and_every_action_uses_one_fixed_column_grid() {
         "height: 20px;",
         "x: parent.width - self.width;",
         "width: min(kt.preferred-width + 14px, parent.width);",
-        "border-radius: 5px;",
+        "border-radius: Metrics.radius-keycap;",
         "border-width: 1px; border-color: Theme.border;",
         "background: Theme.bg-surface;",
         "font-family: Theme.font-mono;",
@@ -89,10 +89,15 @@ fn menu_is_exported_and_every_action_uses_one_fixed_column_grid() {
     ] {
         assert!(
             key.contains(contract),
-            "missing prototype key-chip contract: {contract}"
+            "More keycap, form=menu, language=en/ru, all shortcut rows: missing prototype contract {contract}"
         );
     }
-    assert_eq!(key.matches("border-radius:").count(), 1);
+    assert_eq!(key.matches("border-radius:").count(), 1, "More menu keycap, all rows, en/ru: exactly one radius binding");
+    assert_eq!(
+        source("ui/metrics.slint").matches("out property <length> radius-keycap: 5px;").count(),
+        1,
+        "More menu keycap, all rows, en/ru: rectangular 5px token is declared once"
+    );
     assert!(
         !key.contains("Metrics.radius-control"),
         "key chip must not use the full pill radius"

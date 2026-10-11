@@ -351,7 +351,8 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
     bar.set_can_restore_tile(true);
     bar.set_autotile_mode(2);
     bar.set_tray_available(true);
-    for count in [0, 3, 8] {
+    for (iteration, count) in [0, 3, 8].into_iter().enumerate() {
+        let state = format!("language={}, pins={count}, iteration={iteration}", if russian { "ru" } else { "en" });
         bar.set_pins(slint::ModelRc::new(slint::VecModel::from(
             ids[..count]
                 .iter()
@@ -362,13 +363,13 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
         assert_eq!(
             bar.window().size().width as f32,
             width,
-            "pins must not resize the bar"
+            "full bar, {state}: pins must not resize the bar"
         );
         let hints: Vec<_> = ElementHandle::find_by_accessible_label(bar, hint).collect();
         assert_eq!(
             hints.len(),
             usize::from(count == 0),
-            "hint presence with {count} pins"
+            "label={hint}, full bar, {state}: hint presence"
         );
         if let Some(hint) = hints.first() {
             let more = element(bar, if russian { "Ещё" } else { "More" });
@@ -381,7 +382,7 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
             assert_eq!(
                 anchor.get(),
                 (pos.x + size.width, pos.y + size.height),
-                "hint must use the More chip's anchor"
+                "label=pin/More, full bar, {state}: hint must use the More chip's anchor"
             );
         }
         let transcript = element(bar, "PIN GEOMETRY TRANSCRIPT");
@@ -389,23 +390,23 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
         for name in &names[..count] {
             let name = *name;
             let matching: Vec<_> = ElementHandle::find_by_accessible_label(bar, name).collect();
-            assert_eq!(matching.len(), 1, "duplicate pinned action: {name}");
+            assert_eq!(matching.len(), 1, "label={name}, full bar, {state}: one pinned action");
             let item = &matching[0];
             let pos = item.absolute_position();
             let size = item.size();
-            assert_eq!(size.width, 26.0, "fixed bare pin width: {name}");
-            assert_eq!(size.height, 22.0, "fixed bare pin height: {name}");
+            assert_eq!(size.width, 26.0, "label={name}, full bar, {state}: fixed bare pin width");
+            assert_eq!(size.height, 22.0, "label={name}, full bar, {state}: fixed bare pin height");
             assert!(
                 pos.y >= 34.0 && pos.y + size.height <= height,
-                "pin escaped bottom row: {name}"
+                "label={name}, full bar, {state}: pin escaped bottom row"
             );
             assert!(
                 pos.x >= right && pos.x + size.width <= width,
-                "pin overlaps transcript/previous pin or escapes bar: {name}"
+                "label={name}, full bar, {state}: pin overlaps transcript/previous pin or escapes bar"
             );
             right = pos.x + size.width;
         }
-        assert_eq!(ElementHandle::find_by_accessible_label(bar, if russian { "Агрессивные авто-тайлы" } else { "Aggressive auto-tile" }).count(), 0, "legacy flame is removed");
+        assert_eq!(ElementHandle::find_by_accessible_label(bar, if russian { "Агрессивные авто-тайлы" } else { "Aggressive auto-tile" }).count(), 0, "label=Aggressive auto-tile, full bar, {state}: legacy flame is removed");
         for (id, legacy_label) in [("restore", "Restore last tile")] {
             let legacy_label = if russian {
                 "Вернуть последний тайл"
@@ -415,7 +416,7 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
             assert_eq!(
                 ElementHandle::find_by_accessible_label(bar, legacy_label).count(),
                 usize::from(!ids[..count].contains(&id)),
-                "conditional action must not duplicate a pin: {id}"
+                "label={legacy_label}, id={id}, full bar, {state}: conditional action must not duplicate a pin"
             );
         }
         bar.set_compact_bar(true);
@@ -425,15 +426,28 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
         ));
         assert_eq!(
             ElementHandle::find_by_accessible_label(bar, hint).count(),
-            0
+            0,
+            "label={hint}, compact bar, {state}: compact bar must not show pin hint"
         );
-        for name in &names[..count] {
-            let name = *name;
+        // Labels identify actions, not rows: the compact window capsule has
+        // its own tray chip. Pins belong to the footer; do not count that chip
+        // as a pin, but still require exactly one top-row tray action.
+        for (id, name) in ids.iter().zip(&names) {
+            let matching: Vec<_> = ElementHandle::find_by_accessible_label(bar, name).collect();
             assert_eq!(
-                ElementHandle::find_by_accessible_label(bar, name).count(),
+                matching.iter().filter(|item| item.absolute_position().y >= 34.0).count(),
                 0,
-                "compact bar must not show pins: {name}"
+                "label={name}, id={id}, compact bar, {state}: compact bar must not show footer pins"
             );
+            assert_eq!(
+                matching.len(),
+                usize::from(*id == "tray"),
+                "label={name}, id={id}, compact bar, {state}: only the built-in tray action may remain"
+            );
+            for item in &matching {
+                assert_top_bounds(item, bar.global::<ui::BarSpec>().get_compact_width(),
+                    &format!("label={name}, compact bar, {state}"));
+            }
         }
         bar.set_compact_bar(false);
     }
@@ -513,13 +527,21 @@ fn tile_counter_keeps_text_and_close_all_uses_a_reserved_icon_slot() {
     let source =
         fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("ui/overlay_bar.slint"))
             .expect("read overlay bar source");
-    let tile_chip = source
+    let (tile_chip, tile_click) = source
         .split_once("width: 92px;")
         .expect("fixed tile counter slot")
         .1
-        .split_once("clicked => { root.dismiss-menu(); root.spawn-tile-clicked(); }")
-        .expect("tile action")
+        .split_once("clicked => {")
+        .expect("tile action handler");
+    let tile_click = tile_click
+        .split_once('}')
+        .expect("tile action handler boundary")
         .0;
+    assert_eq!(
+        tile_click.split_whitespace().collect::<Vec<_>>(),
+        ["root.dismiss-menu();", "root.spawn-tile-clicked();"],
+        "label=New tile, full bar, en/ru, all tile counts: dismiss More before spawning tile"
+    );
     assert!(tile_chip.contains("icon: @image-url(\"../assets/icons/plus.svg\"); has-icon: true;"));
     assert!(tile_chip.contains("label: @tr(\"tile · {}\", root.open-tiles);"));
     assert!(tile_chip.contains("a11y: @tr(\"New tile, {} open\", root.open-tiles);"));

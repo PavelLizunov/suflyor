@@ -182,7 +182,7 @@ export component BarMenuWindow inherits Window {
                                     height: 20px; y: (parent.height - self.height) / 2;
                                     width: min(kt.preferred-width + 14px, parent.width);
                                     x: parent.width - self.width;
-                                    border-radius: 5px;
+                                    border-radius: Metrics.radius-keycap;
                                     border-width: 1px; border-color: Theme.border;
                                     background: Theme.bg-surface;
                                     kt := Text { text: r.key; font-family: Theme.font-mono; font-size: Metrics.font-caption; color: Theme.text-secondary; horizontal-alignment: center; vertical-alignment: center; }

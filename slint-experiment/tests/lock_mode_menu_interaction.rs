@@ -43,6 +43,7 @@ fn auto_tiles_chip_opens_menu_in_every_state_and_each_row_selects() {
         bar.window()
             .set_size(LogicalSize::new(width, spec.get_height()));
         for mode in [0, 1, 2] {
+            lock_anchor.set((-1.0, -1.0));
             bar.set_autotile_mode(mode);
             bar.set_deep_lock(mode == 2);
             let label = match mode {
@@ -50,26 +51,28 @@ fn auto_tiles_chip_opens_menu_in_every_state_and_each_row_selects() {
                 2 => "On every line",
                 _ => "On questions",
             };
-            assert_eq!(bar.get_suppress_tiles(), mode == 0);
-            assert_eq!(bar.get_aggressive_active(), mode == 2);
-            assert_eq!(bar.get_lock_icon_unlocked(), mode == 1);
+            let state = format!("label={label}, language=en, compact={compact}, mode={mode}");
+            assert_eq!(bar.get_suppress_tiles(), mode == 0, "silent binding: {state}");
+            assert_eq!(bar.get_aggressive_active(), mode == 2, "every-line binding: {state}");
+            assert_eq!(bar.get_lock_icon_unlocked(), mode == 1, "unlock binding: {state}");
             let lock_chip = ElementHandle::find_by_accessible_label(&bar, label)
                 .next()
                 .expect("find lock chip by accessibility label");
             lock_chip.invoke_accessible_default_action();
-            assert!(menu.window().is_visible(), "lock click must show the menu");
+            assert!(menu.window().is_visible(), "auto-tiles click must show menu: {state}");
             let pos = lock_chip.absolute_position();
             let size = lock_chip.size();
-            assert_eq!(lock_anchor.get(), (pos.x + size.width, pos.y + size.height));
+            assert_eq!(lock_anchor.get(), (pos.x + size.width, pos.y + size.height), "auto-tiles anchor callback: {state}");
             menu.hide().expect("hide lock menu between states");
         }
         let more = ElementHandle::find_by_accessible_label(&bar, "More")
             .next()
             .expect("find more chip");
+        more_anchor.set((-1.0, -1.0));
         more.invoke_accessible_default_action();
         let pos = more.absolute_position();
         let size = more.size();
-        assert_eq!(more_anchor.get(), (pos.x + size.width, pos.y + size.height));
+        assert_eq!(more_anchor.get(), (pos.x + size.width, pos.y + size.height), "More anchor callback: language=en, compact={compact}");
     }
 
     bar.set_autotile_mode(0);
@@ -88,13 +91,15 @@ fn auto_tiles_chip_opens_menu_in_every_state_and_each_row_selects() {
     for current in [0, 1, 2] {
         menu.set_mode(current);
         for (mode, label) in [(0, "Silent: no automatic tiles"), (1, "On questions"), (2, "On every line")] {
+            selected.set(-1);
+            let state = format!("label={label}, language=en, form=auto-tiles menu, current={current}, selected mode={mode}");
             menu.show().expect("show menu before selecting");
-            assert!(menu.window().is_visible());
+            assert!(menu.window().is_visible(), "menu visible before selection: {state}");
             let row = ElementHandle::find_by_accessible_label(menu.as_ref(), label)
                 .next().expect("find auto-tiles row");
             row.invoke_accessible_default_action();
-            assert_eq!(selected.get(), mode);
-            assert!(!menu.window().is_visible(), "selection must dismiss menu");
+            assert_eq!(selected.get(), mode, "row dispatch must not reuse previous selection: {state}");
+            assert!(!menu.window().is_visible(), "selection must dismiss menu: {state}");
         }
     }
     let loaded = Rc::new(Cell::new(-1));
@@ -103,10 +108,11 @@ fn auto_tiles_chip_opens_menu_in_every_state_and_each_row_selects() {
     for compact in [false, true] {
         bar.set_compact_bar(compact);
         bar.set_deep_lock(true);
+        loaded.set(-1);
         ElementHandle::find_by_accessible_label(&bar, "Deep AI hint").next()
             .expect("AI-off action").invoke_accessible_default_action();
-        assert_eq!(loaded.get(), 0, "indicator requests old unlocked lifecycle");
+        assert_eq!(loaded.get(), 0, "AI-off indicator must dispatch unlocked lifecycle anew: label=Deep AI hint, language=en, compact={compact}");
         bar.set_deep_lock(false);
-        assert_eq!(ElementHandle::find_by_accessible_label(&bar, "Deep AI hint").count(), 0);
+        assert_eq!(ElementHandle::find_by_accessible_label(&bar, "Deep AI hint").count(), 0, "loaded AI removes indicator: label=Deep AI hint, language=en, compact={compact}");
     }
 }
