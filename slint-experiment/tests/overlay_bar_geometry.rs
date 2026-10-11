@@ -1384,7 +1384,9 @@ fn assert_audit_states(bar: &ui::OverlayBarWindow, labels: &Labels) {
                                 && !fault
                                 && !matches!(
                                     tone,
-                                    ui::StatusTone::Warning | ui::StatusTone::Danger
+                                    ui::StatusTone::Info
+                                        | ui::StatusTone::Warning
+                                        | ui::StatusTone::Danger
                                 );
                             assert_eq!(
                                 count,
@@ -1444,6 +1446,117 @@ fn capsules_stay_inside_spec_sizes_in_english_and_russian() {
     assert_pins(&russian, true);
     assert_form_states(&russian, &RUSSIAN);
     assert_audit_states(&russian, &RUSSIAN);
+}
+
+#[test]
+fn too_narrow_keeps_window_capsule_and_more_before_voice() {
+    i_slint_backend_testing::init_no_event_loop();
+    for (language, labels) in [("en", &ENGLISH), ("ru", &RUSSIAN)] {
+        slint::select_bundled_translation(language).expect("narrow language");
+        let bar = ui::OverlayBarWindow::new().expect("narrow bar");
+        bar.set_bar_form(2);
+        let spec = bar.global::<ui::BarSpec>();
+        bar.window()
+            .set_size(LogicalSize::new(spec.get_mini_width(), spec.get_height()));
+        bar.show().expect("show narrow fixture");
+        for narrow in [true, false, true] {
+            bar.set_too_narrow(narrow);
+            assert_eq!(
+                ElementHandle::find_by_accessible_label(&bar, labels.more).count(),
+                1
+            );
+            let more = Rect::of(&element(&bar, labels.more));
+            let expand = Rect::of(&element(&bar, labels.expand));
+            let ask = Rect::of(&element(&bar, labels.ask));
+            let grab = Rect::of(&element(&bar, labels.grab));
+            assert!(expand.right() < more.x);
+            assert!(ask.right() < grab.x);
+            assert_eq!(bar.get_window_capsule_width(), spec.get_mini_window());
+            assert!(bar.get_all_regions_fit());
+            if narrow {
+                let left = spec.get_pad() + spec.get_badge() + spec.get_pad();
+                assert_eq!(bar.get_window_capsule_x(), left);
+                assert!(more.right() <= left + spec.get_mini_window());
+                assert!(more.right() < ask.x, "More precedes voice on TooNarrow");
+                assert_eq!(
+                    bar.get_voice_capsule_x(),
+                    left + spec.get_mini_window() + spec.get_gap(),
+                );
+                assert!(bar.get_voice_capsule_x() < bar.get_session_capsule_x());
+                assert!(bar.get_session_capsule_x() < bar.get_tiles_capsule_x());
+            } else {
+                assert!(
+                    grab.right() < expand.x,
+                    "normal mini keeps the original order"
+                );
+            }
+        }
+    }
+    slint::select_bundled_translation("en").expect("restore narrow language");
+}
+
+#[test]
+fn info_status_is_drawn_in_full_and_compact_while_routine_status_stays_quiet() {
+    i_slint_backend_testing::init_no_event_loop();
+    for (language, progress, acknowledgement) in [
+        ("en", "starting model…", "sys ok"),
+        ("ru", "запускаю модель…", "системный звук: есть"),
+    ] {
+        slint::select_bundled_translation(language).expect("progress language");
+        let bar = ui::OverlayBarWindow::new().expect("progress bar");
+        for form in [0, 1] {
+            bar.set_bar_form(form);
+            let spec = bar.global::<ui::BarSpec>();
+            let width = if form == 0 {
+                spec.get_full_width()
+            } else {
+                spec.get_compact_width()
+            };
+            bar.window()
+                .set_size(LogicalSize::new(width, spec.get_height()));
+            bar.show().expect("show progress fixture");
+            for (source, status) in [(progress, progress), ("sys ok", acknowledgement)] {
+                bar.set_status_text(source.into());
+                bar.set_status_tone(ui::StatusTone::Info);
+                assert_eq!(
+                    ElementHandle::find_by_accessible_label(&bar, status).count(),
+                    1
+                );
+                let item = Rect::of(&element(&bar, status));
+                assert!(item.width > 0.0 && item.height > 0.0);
+                assert!(item.y >= 34.0 && item.bottom() <= spec.get_height());
+                assert!(item.x >= 0.0 && item.right() <= width);
+            }
+            for (status, tone, label) in [
+                (
+                    "idle",
+                    ui::StatusTone::Neutral,
+                    if language == "ru" {
+                        "ожидание"
+                    } else {
+                        "idle"
+                    },
+                ),
+                (
+                    "recording",
+                    ui::StatusTone::Ok,
+                    if language == "ru" {
+                        "запись"
+                    } else {
+                        "recording"
+                    },
+                ),
+            ] {
+                bar.set_status_text(status.into());
+                bar.set_status_tone(tone);
+                assert_eq!(
+                    ElementHandle::find_by_accessible_label(&bar, label).count(),
+                    0
+                );
+            }
+        }
+    }
+    slint::select_bundled_translation("en").expect("restore progress language");
 }
 
 #[test]

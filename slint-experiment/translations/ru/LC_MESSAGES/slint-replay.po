@@ -353,7 +353,7 @@ msgid "Microphone"
 msgstr "Микрофон"
 
 msgid "System audio"
-msgstr "Системный звук"
+msgstr "Звук системы"
 
 msgid "default"
 msgstr "по умолчанию"
@@ -361,8 +361,14 @@ msgstr "по умолчанию"
 msgid "on — verify with a screen-share preview"
 msgstr "включён — проверьте через предпросмотр захвата экрана"
 
+msgid "SOUND"
+msgstr "ЗВУК"
+
+msgid "on"
+msgstr "вкл"
+
 msgid "off"
-msgstr "выключен"
+msgstr "выкл"
 
 msgid "Ready"
 msgstr "Готов"

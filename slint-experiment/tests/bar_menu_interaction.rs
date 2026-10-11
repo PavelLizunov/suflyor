@@ -35,7 +35,7 @@ fn rows_select_pins_do_not_select_and_danger_actions_require_yes() {
     let menu = ui::BarMenuWindow::new().expect("create More menu");
     menu.set_tray_available(true);
     menu.set_lock_menu_managed(true);
-    menu.window().set_size(LogicalSize::new(408.0, 386.0));
+    menu.window().set_size(LogicalSize::new(408.0, 464.0));
     menu.show().expect("show menu");
     assert_eq!(
         ElementHandle::find_by_accessible_label(&menu, "Ask about a screenshot").count(),
@@ -140,8 +140,28 @@ fn rows_select_pins_do_not_select_and_danger_actions_require_yes() {
 
     activate(&menu, "Restore closed tile");
     activate(&menu, "Restore closed tile. pin");
-    assert!(actions.borrow().is_empty(), "disabled restore is inert");
-    assert_eq!(pins.borrow().len(), 2, "disabled restore pin is inert");
+    assert!(
+        actions.borrow().is_empty(),
+        "disabled restore action is inert"
+    );
+    assert_eq!(&*pins.borrow(), &["capture", "capture", "restore"]);
+    menu.set_pins(ModelRc::new(VecModel::from(vec![SharedString::from(
+        "restore",
+    )])));
+    assert_eq!(
+        ElementHandle::find_by_accessible_label(&menu, "Restore closed tile. on the bar").count(),
+        1,
+    );
+    activate(&menu, "Restore closed tile. on the bar");
+    assert_eq!(
+        &*pins.borrow(),
+        &["capture", "capture", "restore", "restore"]
+    );
+    assert!(
+        actions.borrow().is_empty(),
+        "unpin does not execute restore"
+    );
+    assert!(menu.window().is_visible(), "unavailable pins stay editable");
     menu.set_can_restore_tile(true);
     for (label, id) in [
         ("Ask about a screenshot", "capture"),
@@ -254,12 +274,103 @@ fn rows_select_pins_do_not_select_and_danger_actions_require_yes() {
         );
     }
     pin_save_failure_footer_is_bilingual_temporary_and_does_not_dispatch();
+    sound_rows_dispatch_bar_toggles_without_dismissal_in_reduced_forms();
     more_menu_rows_and_columns_do_not_overlap_in_english_and_russian();
+}
+
+fn sound_rows_dispatch_bar_toggles_without_dismissal_in_reduced_forms() {
+    for (language, mic, sys, on, off) in [
+        ("en", "Microphone", "System audio", "on", "off"),
+        ("ru", "Микрофон", "Звук системы", "вкл", "выкл"),
+    ] {
+        slint::select_bundled_translation(language).expect("sound language");
+        for (form, too_narrow) in [(0, false), (1, false), (2, false), (2, true)] {
+            let bar = ui::OverlayBarWindow::new().expect("sound bar");
+            bar.set_bar_form(form);
+            bar.set_too_narrow(too_narrow);
+            let menu = ui::BarMenuWindow::new().expect("sound menu");
+            menu.window().set_size(LogicalSize::new(408.0, 408.0));
+            menu.show().expect("show sound menu");
+            let calls = Rc::new(RefCell::new(Vec::new()));
+            let weak = bar.as_weak();
+            let mic_calls = calls.clone();
+            bar.on_mic_toggle_clicked(move || {
+                let bar = weak.upgrade().expect("mic bar");
+                bar.set_mic_muted(!bar.get_mic_muted());
+                mic_calls.borrow_mut().push("microphone");
+            });
+            let weak = bar.as_weak();
+            let sys_calls = calls.clone();
+            bar.on_sys_toggle_clicked(move || {
+                let bar = weak.upgrade().expect("sys bar");
+                bar.set_sys_active(!bar.get_sys_active());
+                sys_calls.borrow_mut().push("system_audio");
+            });
+            let weak_bar = bar.as_weak();
+            let weak_menu = menu.as_weak();
+            menu.on_action(move |id| {
+                let bar = weak_bar.upgrade().expect("dispatch bar");
+                match id.as_str() {
+                    "microphone" => bar.invoke_mic_toggle_clicked(),
+                    "system_audio" => bar.invoke_sys_toggle_clicked(),
+                    _ => panic!("unexpected sound action"),
+                }
+                let menu = weak_menu.upgrade().expect("refresh menu");
+                menu.set_mic_muted(bar.get_mic_muted());
+                menu.set_sys_active(bar.get_sys_active());
+            });
+            for (muted, active) in [(false, false), (true, true)] {
+                bar.set_mic_muted(muted);
+                bar.set_sys_active(active);
+                menu.set_mic_muted(muted);
+                menu.set_sys_active(active);
+                for (label, enabled) in [(mic, !muted), (sys, active)] {
+                    assert_eq!(
+                        ElementHandle::find_by_accessible_label(&menu, label).count(),
+                        1
+                    );
+                    let name = menu_element(&menu, label);
+                    assert_eq!(name.absolute_position().x, 36.0);
+                    assert_eq!(name.size().height, 28.0);
+                    assert_eq!(
+                        if label == mic {
+                            !menu.get_mic_muted()
+                        } else {
+                            menu.get_sys_active()
+                        },
+                        enabled,
+                    );
+                    assert_eq!(
+                        ElementHandle::find_by_accessible_label(&menu, &format!("{label}. pin"),)
+                            .count(),
+                        0,
+                    );
+                    let word = if enabled { on } else { off };
+                    assert!(ElementHandle::find_by_accessible_label(&menu, word).count() > 0);
+                }
+                activate(&menu, mic);
+                assert_eq!(menu.get_mic_muted(), !muted);
+                assert!(menu.window().is_visible());
+                activate(&menu, sys);
+                assert_eq!(menu.get_sys_active(), !active);
+                assert!(menu.window().is_visible());
+                assert_eq!(!menu.get_mic_muted(), muted);
+                assert_eq!(menu.get_sys_active(), !active);
+            }
+            assert_eq!(
+                &*calls.borrow(),
+                &["microphone", "system_audio", "microphone", "system_audio"],
+            );
+        }
+    }
+    slint::select_bundled_translation("en").expect("restore sound language");
 }
 
 fn assert_menu_grid(menu: &ui::BarMenuWindow, russian: bool) {
     let rows = if russian {
         [
+            "Микрофон",
+            "Звук системы",
             "Вопрос по снимку экрана",
             "Вернуть закрытый тайл",
             "Архив сессий",
@@ -278,6 +389,8 @@ fn assert_menu_grid(menu: &ui::BarMenuWindow, russian: bool) {
         ]
     } else {
         [
+            "Microphone",
+            "System audio",
             "Ask about a screenshot",
             "Restore closed tile",
             "Session archive",
@@ -296,9 +409,9 @@ fn assert_menu_grid(menu: &ui::BarMenuWindow, russian: bool) {
         ]
     };
     let headings = if russian {
-        ["ТАЙЛЫ", "ВСТРЕЧА", "ПРИЛОЖЕНИЕ"]
+        ["ЗВУК", "ТАЙЛЫ", "ВСТРЕЧА", "ПРИЛОЖЕНИЕ"]
     } else {
-        ["TILES", "MEETING", "APP"]
+        ["SOUND", "TILES", "MEETING", "APP"]
     };
     // Instantiating the entire conditional tree precedes all position reads.
     assert_eq!(
@@ -319,7 +432,8 @@ fn assert_menu_grid(menu: &ui::BarMenuWindow, russian: bool) {
         let heading = match index {
             0 => Some(headings[0]),
             2 => Some(headings[1]),
-            5 => Some(headings[2]),
+            4 => Some(headings[2]),
+            7 => Some(headings[3]),
             _ => None,
         };
         if let Some(heading) = heading {
@@ -333,8 +447,8 @@ fn assert_menu_grid(menu: &ui::BarMenuWindow, russian: bool) {
             previous_bottom = item.absolute_position().y + item.size().height;
             targets.push((heading.to_owned(), item.absolute_position(), item.size()));
         }
-        if (index == 7 && !menu.get_tray_available())
-            || (index == 8 && !menu.get_lock_menu_managed())
+        if (index == 9 && !menu.get_tray_available())
+            || (index == 10 && !menu.get_lock_menu_managed())
         {
             assert_eq!(
                 ElementHandle::find_by_accessible_label(menu, label).count(),
@@ -354,6 +468,8 @@ fn assert_menu_grid(menu: &ui::BarMenuWindow, russian: bool) {
         // the valid state. Do not dispatch actions in the synthetic probe.
         let saved_confirmation = menu.get_confirmation();
         let id = [
+            "microphone",
+            "system_audio",
             "capture",
             "restore",
             "archive",
@@ -399,8 +515,8 @@ fn assert_menu_grid(menu: &ui::BarMenuWindow, russian: bool) {
         );
         previous_bottom = pos.y + size.height;
         let confirmation = match index {
-            9 => menu.get_confirmation() == "restart",
-            10 => menu.get_confirmation() == "quit",
+            11 => menu.get_confirmation() == "restart",
+            12 => menu.get_confirmation() == "quit",
             _ => false,
         };
         let text_label = if confirmation {
@@ -411,7 +527,7 @@ fn assert_menu_grid(menu: &ui::BarMenuWindow, russian: bool) {
         let text = menu_element(menu, &text_label);
         assert_eq!(text.absolute_position(), pos);
         assert_eq!(text.size(), size);
-        if index < 8 {
+        if (2..10).contains(&index) {
             let pinned = menu.get_pins().row_count() != 0;
             // The fixture uses either all pinnable IDs or none, in row order.
             let suffix = match (russian, pinned) {
@@ -444,11 +560,33 @@ fn assert_menu_grid(menu: &ui::BarMenuWindow, russian: bool) {
                 targets.push((button.to_owned(), item.absolute_position(), item.size()));
             }
         }
+        if index < 2 {
+            let enabled = if index == 0 {
+                !menu.get_mic_muted()
+            } else {
+                menu.get_sys_active()
+            };
+            let word = match (russian, enabled) {
+                (true, true) => "вкл",
+                (true, false) => "выкл",
+                (false, true) => "on",
+                (false, false) => "off",
+            };
+            let chip = ElementHandle::find_by_accessible_label(menu, word)
+                .find(|item| item.absolute_position().y == pos.y + 4.0)
+                .expect("word chip in the sound row");
+            let chip_pos = chip.absolute_position();
+            let chip_size = chip.size();
+            assert_eq!(chip_pos.x + chip_size.width, key_x + 96.0);
+            assert!(chip_pos.x >= key_x && chip_size.width > 0.0);
+            assert_eq!(chip_size.height, 20.0);
+            targets.push((format!("{label}: {word}"), chip_pos, chip_size));
+        }
         let key = match index {
-            0 => Some("F8"),
-            2 => Some("F7"),
-            4 => Some("F4"),
-            6 => Some("F1"),
+            2 => Some("F8"),
+            4 => Some("F7"),
+            6 => Some("F4"),
+            8 => Some("F1"),
             _ => None,
         };
         if let Some(key) = key {
@@ -511,7 +649,7 @@ fn more_menu_rows_and_columns_do_not_overlap_in_english_and_russian() {
                     menu.set_lock_menu_managed(managed);
                     for deep in [false, true] {
                         menu.set_deep_lock(deep);
-                        let height = 330.0
+                        let height = 408.0
                             + if tray { 28.0 } else { 0.0 }
                             + if managed { 28.0 } else { 0.0 };
                         menu.window().set_size(LogicalSize::new(408.0, height));
@@ -543,14 +681,14 @@ fn pin_save_failure_footer_is_bilingual_temporary_and_does_not_dispatch() {
         menu.on_footer_resized(move || {
             let menu = weak.upgrade().expect("live fixture");
             menu.window()
-                .set_size(LogicalSize::new(408.0, 330.0 + menu.get_footer_height()));
+                .set_size(LogicalSize::new(408.0, 408.0 + menu.get_footer_height()));
         });
         let actions = Rc::new(Cell::new(0));
         let count = actions.clone();
         menu.on_action(move |_| count.set(count.get() + 1));
         let weak = menu.as_weak();
         menu.on_pin_toggled(move |_| weak.upgrade().unwrap().invoke_pin_save_failed());
-        menu.window().set_size(LogicalSize::new(408.0, 330.0));
+        menu.window().set_size(LogicalSize::new(408.0, 408.0));
         menu.show().expect("show footer fixture");
         assert_eq!(
             ElementHandle::find_by_accessible_label(&menu, error).count(),
@@ -573,7 +711,7 @@ fn pin_save_failure_footer_is_bilingual_temporary_and_does_not_dispatch() {
             .next()
             .unwrap();
         assert_eq!(footer.size().height, 24.0);
-        assert!(footer.absolute_position().y + footer.size().height <= 354.0);
+        assert!(footer.absolute_position().y + footer.size().height <= 432.0);
         assert_eq!(actions.get(), 0, "failure is not an action");
         assert_eq!(
             menu.get_pins().row_count(),

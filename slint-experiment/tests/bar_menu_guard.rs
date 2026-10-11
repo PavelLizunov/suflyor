@@ -82,8 +82,9 @@ fn menu_is_exported_and_every_action_uses_one_fixed_column_grid() {
         "x: parent.width - self.width;",
         "width: min(kt.preferred-width + 14px, parent.width);",
         "border-radius: Metrics.radius-keycap;",
-        "border-width: 1px; border-color: Theme.border;",
-        "background: Theme.bg-surface;",
+        "border-width: 1px;",
+        "border-color: r.sound && r.off ? Theme.danger : Theme.border;",
+        "background: r.sound && r.off ? Theme.tint(Theme.danger) : Theme.bg-surface;",
         "font-family: Theme.font-mono;",
         "font-size: Metrics.font-caption;",
     ] {
@@ -188,6 +189,11 @@ fn confirmation_and_pin_controls_stay_inside_their_rows() {
     assert!(pin.contains("root.pin-toggled(r.id)"));
     assert!(!pin.contains("root.action(r.id)"));
     assert!(!pin.contains("root.dismissed()"));
+    let pin = pin.split_once("// One action hit region").unwrap().0;
+    assert!(
+        !pin.contains("can-restore-tile"),
+        "availability must not gate pin editing"
+    );
 }
 
 #[test]
@@ -197,6 +203,8 @@ fn menu_and_pins_dispatch_existing_callbacks_and_persist_only_the_pin_list() {
     assert!(root
         .contains("bar_menu::wire_bar_menu(&overlay, &bar_menu, &cfg, &palette, &tiles, &state)"));
     for (id, invocation) in [
+        ("microphone", "invoke_mic_toggle_clicked"),
+        ("system_audio", "invoke_sys_toggle_clicked"),
         ("capture", "invoke_capture_clicked"),
         ("unload_ai", "invoke_local_ai_mode_selected"),
         ("restore", "invoke_restore_tile_clicked"),
@@ -208,11 +216,18 @@ fn menu_and_pins_dispatch_existing_callbacks_and_persist_only_the_pin_list() {
         ("restart", "invoke_restart_confirm"),
         ("quit", "invoke_quit_confirm"),
     ] {
-        let route = host
-            .lines()
-            .find(|line| line.contains(&format!("\"{id}\"")) && line.contains("=>"))
-            .unwrap();
-        assert!(route.contains(invocation), "wrong dispatch: {id}");
+        let rest = host
+            .split_once(&format!("        \"{id}\""))
+            .expect("dispatch arm")
+            .1;
+        let route = rest.split_once("\n        \"").map_or(rest, |(arm, _)| arm);
+        let route = route
+            .split_once("\n        _ =>")
+            .map_or(route, |(arm, _)| arm);
+        assert!(
+            route.contains("=>") && route.contains(invocation),
+            "wrong dispatch: {id}"
+        );
     }
     assert!(host.contains("\"kb\" => kb()"));
     assert!(host.contains("open_palette(&palette, &tiles, &state, &weak_for_kb)"));
@@ -267,6 +282,8 @@ fn menu_and_pins_dispatch_existing_callbacks_and_persist_only_the_pin_list() {
         .0;
     for property in [
         "pins",
+        "mic_muted",
+        "sys_active",
         "lock_menu_managed",
         "deep_lock",
         "can_restore_tile",
@@ -304,7 +321,7 @@ fn native_lifecycle_matches_lock_menu_and_the_bottom_row_stays_bare() {
         "is_current_open(generation)",
         "bar.set_menu_open(true)",
         "bar.set_menu_open(false)",
-        "bar_top - height - gap",
+        "slint_replay::bar_form::bar_menu_position(",
     ] {
         assert!(
             host.contains(contract),
@@ -336,6 +353,51 @@ fn native_lifecycle_matches_lock_menu_and_the_bottom_row_stays_bare() {
     assert!(chip.contains("pin-touch.has-hover ? Theme.border-strong.with-alpha(0.22)"));
     assert!(chip.contains("border-radius: Metrics.radius-control;"));
     assert!(chip.contains("height: 22px;"));
+}
+
+#[test]
+fn sound_rows_are_first_non_pinnable_and_keep_the_menu_open() {
+    let menu = source("ui/bar_menu.slint");
+    let rows = menu.split_once("property <[MenuRow]> rows:").unwrap().1;
+    let sound = rows.split_once("{ name: @tr(\"TILES\")").unwrap().0;
+    assert!(sound.contains("@tr(\"SOUND\")"));
+    assert!(sound.contains("@tr(\"Microphone\")"));
+    assert!(sound.contains("@tr(\"System audio\")"));
+    assert!(sound.contains("root.mic-muted ? @tr(\"off\") : @tr(\"on\")"));
+    assert!(sound.contains("root.sys-active ? @tr(\"on\") : @tr(\"off\")"));
+    assert!(!sound.contains("pinnable: true"));
+    assert!(menu.contains("Theme.on-tint(Theme.danger)"));
+    let host = source("src/bin/overlay_host/bar_menu.rs");
+    let action = host
+        .split_once("menu.on_action")
+        .unwrap()
+        .1
+        .split_once("overlay.on_menu_dismissed")
+        .unwrap()
+        .0;
+    assert!(action.contains("matches!(id.as_str(), \"microphone\" | \"system_audio\")"));
+    assert!(action.contains("if !keep_open"));
+    assert!(action.contains("if keep_open"));
+    assert!(action.contains("refresh_menu(&menu, &bar)"));
+    let pins = host
+        .split_once("const PINNABLE_IDS")
+        .unwrap()
+        .1
+        .split_once("];")
+        .unwrap()
+        .0;
+    assert!(!pins.contains("microphone"));
+    assert!(!pins.contains("system_audio"));
+    let po = source("translations/ru/LC_MESSAGES/slint-replay.po");
+    for (en, ru) in [
+        ("SOUND", "ЗВУК"),
+        ("Microphone", "Микрофон"),
+        ("System audio", "Звук системы"),
+        ("on", "вкл"),
+        ("off", "выкл"),
+    ] {
+        assert!(po.contains(&format!("msgid \"{en}\"\nmsgstr \"{ru}\"")));
+    }
 }
 
 #[test]

@@ -1,6 +1,6 @@
+use crate::ui::OverlayBarWindow;
 use overlay_backend::config;
 use slint::SharedString;
-use crate::ui::OverlayBarWindow;
 
 /// Short, human display name for a model id: drop a `.gguf`/`.bin` extension,
 /// then take the first token (or the tier after "claude-"). Used by the bar's
@@ -43,7 +43,11 @@ pub(super) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
     // can tell the fallback vs primary model apart at a glance (the user asked to see
     // the selected model more explicitly); cloud models keep the short id.
     let model = if c.ai_provider == "mlx" {
-        model_full.rsplit('/').next().unwrap_or(model_full).to_string()
+        model_full
+            .rsplit('/')
+            .next()
+            .unwrap_or(model_full)
+            .to_string()
     } else if ai_local {
         overlay_backend::local_ai::local_model_label(model_full)
     } else if c.ai_provider == "codex" {
@@ -193,7 +197,11 @@ pub(super) fn mic_busy_status(is_ru: bool) -> &'static str {
     }
 }
 
-pub(super) fn manual_tile_placeholder(deep_locked: bool, has_transcript: bool, is_ru: bool) -> &'static str {
+pub(super) fn manual_tile_placeholder(
+    deep_locked: bool,
+    has_transcript: bool,
+    is_ru: bool,
+) -> &'static str {
     if deep_locked {
         return overlay_backend::deep_lock::blocked_notice(is_ru);
     }
@@ -221,12 +229,34 @@ pub(super) fn manual_tile_failure(heading: &str, category: &str, is_ru: bool) ->
     }
 }
 
+/// Keep progress readable, then restore the status that the operation replaced.
+pub(super) fn begin_bar_operation(
+    bar: &OverlayBarWindow,
+    progress: &str,
+) -> (SharedString, crate::ui::StatusTone) {
+    let previous = (bar.get_status_text(), bar.get_status_tone());
+    bar.set_operation_active(true);
+    bar.set_status_text(SharedString::from(progress));
+    bar.set_status_tone(crate::ui::StatusTone::Info);
+    previous
+}
+
+pub(super) fn finish_bar_operation(
+    bar: &OverlayBarWindow,
+    previous: (SharedString, crate::ui::StatusTone),
+) {
+    bar.set_operation_active(false);
+    bar.set_status_text(previous.0);
+    bar.set_status_tone(previous.1);
+}
+
 /// Refresh auto-tiles and the independent unloaded-AI indicator from live config.
 /// Retain the helper name for existing Settings/import/language callers.
 pub(super) fn refresh_lock_chip(o: &OverlayBarWindow, cfg: &config::SharedConfig) {
     let snap = cfg.read();
     let managed = overlay_backend::deep_lock::cfg_is_managed_local(&snap);
-    let mode = slint_replay::autotile::mode_from_flags(snap.suppress_tiles, snap.auto_tile_every_line);
+    let mode =
+        slint_replay::autotile::mode_from_flags(snap.suppress_tiles, snap.auto_tile_every_line);
     o.set_autotile_mode(mode);
     if let Some((suppress, every_line)) = slint_replay::autotile::flags_from_mode(mode) {
         o.set_suppress_tiles(suppress);
@@ -256,6 +286,32 @@ mod tile_heading_tests {
 
     #[cfg(target_os = "macos")]
     use super::capture_stopped_copy;
+
+    #[test]
+    fn operation_status_restores_both_text_and_tone() {
+        i_slint_backend_testing::init_no_event_loop();
+        let bar = crate::ui::OverlayBarWindow::new().expect("operation bar");
+        for tone in [
+            crate::ui::StatusTone::Neutral,
+            crate::ui::StatusTone::Ok,
+            crate::ui::StatusTone::Warning,
+            crate::ui::StatusTone::Danger,
+        ] {
+            for progress in ["starting model…", "unloading model…", "запускаю модель…"]
+            {
+                bar.set_status_text("previous status".into());
+                bar.set_status_tone(tone);
+                let previous = super::begin_bar_operation(&bar, progress);
+                assert_eq!(bar.get_status_text(), progress);
+                assert_eq!(bar.get_status_tone(), crate::ui::StatusTone::Info);
+                assert!(bar.get_operation_active());
+                super::finish_bar_operation(&bar, previous);
+                assert_eq!(bar.get_status_text(), "previous status");
+                assert_eq!(bar.get_status_tone(), tone);
+                assert!(!bar.get_operation_active());
+            }
+        }
+    }
 
     #[test]
     fn active_stack_uses_the_selected_direct_provider_model() {

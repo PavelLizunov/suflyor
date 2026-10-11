@@ -27,6 +27,8 @@ fn pins_model(ids: &[String]) -> ModelRc<SharedString> {
 
 fn refresh_menu(menu: &BarMenuWindow, bar: &OverlayBarWindow) {
     menu.set_pins(bar.get_pins());
+    menu.set_mic_muted(bar.get_mic_muted());
+    menu.set_sys_active(bar.get_sys_active());
     menu.set_lock_menu_managed(bar.get_lock_menu_managed());
     menu.set_deep_lock(bar.get_deep_lock());
     menu.set_can_restore_tile(bar.get_can_restore_tile());
@@ -38,9 +40,13 @@ fn refresh_menu(menu: &BarMenuWindow, bar: &OverlayBarWindow) {
 }
 
 fn menu_logical_height(menu: &BarMenuWindow) -> f32 {
-    330.0
+    408.0
         + if menu.get_tray_available() { 28.0 } else { 0.0 }
-        + if menu.get_lock_menu_managed() { 28.0 } else { 0.0 }
+        + if menu.get_lock_menu_managed() {
+            28.0
+        } else {
+            0.0
+        }
         + menu.get_footer_height()
 }
 
@@ -62,8 +68,12 @@ fn close_menu(
 // Menu and pinned chips share this route; no action handler is duplicated.
 fn dispatch_bar_action(bar: &OverlayBarWindow, id: &str, kb: &dyn Fn()) {
     match id {
+        "microphone" => bar.invoke_mic_toggle_clicked(),
+        "system_audio" => bar.invoke_sys_toggle_clicked(),
         "capture" => bar.invoke_capture_clicked(),
-        "unload_ai" if bar.get_lock_menu_managed() => bar.invoke_local_ai_mode_selected(if bar.get_deep_lock() { 0 } else { 2 }),
+        "unload_ai" if bar.get_lock_menu_managed() => {
+            bar.invoke_local_ai_mode_selected(if bar.get_deep_lock() { 0 } else { 2 })
+        }
         "restore" if bar.get_can_restore_tile() => bar.invoke_restore_tile_clicked(),
         "archive" => bar.invoke_archive_clicked(),
         "summary" => bar.invoke_summary_clicked(),
@@ -103,13 +113,13 @@ pub(super) fn wire_bar_menu(
                     #[cfg(target_os = "macos")]
                     let scale = 1.0_f32;
                     if let Some(work) = work_area_for_point(pos.x, pos.y) {
-                        let height = (logical_height * scale).round() as i32;
-                        let max_y = (work.bottom - height).max(work.top);
-                        set_platform_window_position(
-                            menu.window(),
-                            pos.x,
-                            pos.y.clamp(work.top, max_y),
+                        let size = (
+                            (408.0 * scale).round() as i32,
+                            (logical_height * scale).round() as i32,
                         );
+                        let (x, y) =
+                            slint_replay::bar_form::clamp_menu_origin(work, (pos.x, pos.y), size);
+                        set_platform_window_position(menu.window(), x, y);
                     }
                 }
             }
@@ -154,11 +164,19 @@ pub(super) fn wire_bar_menu(
         let menu_weak = Rc::downgrade(menu);
         let focus = focus.clone();
         menu.on_action(move |id| {
-            if let Some(menu) = menu_weak.upgrade() {
-                close_menu(&menu, &weak, &focus);
+            let keep_open = matches!(id.as_str(), "microphone" | "system_audio");
+            if !keep_open {
+                if let Some(menu) = menu_weak.upgrade() {
+                    close_menu(&menu, &weak, &focus);
+                }
             }
             if let Some(bar) = weak.upgrade() {
                 dispatch_bar_action(&bar, id.as_str(), kb.as_ref());
+                if keep_open {
+                    if let Some(menu) = menu_weak.upgrade() {
+                        refresh_menu(&menu, &bar);
+                    }
+                }
             }
         });
     }
@@ -270,7 +288,9 @@ pub(super) fn wire_bar_menu(
             menu.set_confirmation(SharedString::default());
             menu.global::<ui::Theme>()
                 .set_scheme(clamp_scheme(cfg.read().color_scheme));
-            let Ok(bar_hwnd) = grab_hwnd(bar.window()) else { return };
+            let Ok(bar_hwnd) = grab_hwnd(bar.window()) else {
+                return;
+            };
             #[cfg(windows)]
             let (bar_left, bar_top) = {
                 let pos = bar.window().position();
@@ -298,21 +318,20 @@ pub(super) fn wire_bar_menu(
             let height = (logical_height * scale).round() as i32;
             let anchor_x = bar_left + (anchor_x * scale).round() as i32;
             let anchor_y = bar_top + (anchor_y * scale).round() as i32;
-            let Some(work) = work_area_for_point(anchor_x, anchor_y) else { return };
+            let Some(work) = work_area_for_point(anchor_x, anchor_y) else {
+                return;
+            };
             let gap = (4.0 * scale).round() as i32;
-            let max_x = (work.right - width).max(work.left);
-            let max_y = (work.bottom - height).max(work.top);
-            let x = (anchor_x - width).clamp(work.left, max_x);
             // The callback anchors the top-row chip; placement clears the entire bar.
             let bar_bottom =
                 bar_top + (bar.global::<ui::BarSpec>().get_height() * scale).round() as i32;
-            let below = anchor_y.max(bar_bottom) + gap;
-            let y = if below + height <= work.bottom {
-                below
-            } else {
-                bar_top - height - gap
-            }
-            .clamp(work.top, max_y);
+            let (x, y) = slint_replay::bar_form::bar_menu_position(
+                work,
+                (anchor_x, anchor_y.max(bar_bottom)),
+                bar_top,
+                (width, height),
+                gap,
+            );
             set_platform_window_position(menu.window(), -32000, -32000);
             let generation = focus.borrow_mut().begin_open();
             if let Err(e) = menu.show() {
@@ -326,7 +345,9 @@ pub(super) fn wire_bar_menu(
                 if !focus_for_reveal.borrow().is_current_open(generation) {
                     return true;
                 }
-                let Ok(hwnd) = grab_hwnd(window.window()) else { return false };
+                let Ok(hwnd) = grab_hwnd(window.window()) else {
+                    return false;
+                };
                 set_window_owner(hwnd, bar_hwnd);
                 if set_skip_taskbar(hwnd, true).is_err() || set_always_on_top(hwnd, true).is_err() {
                     return false;
@@ -380,13 +401,35 @@ mod tests {
     #[test]
     fn old_aggressive_and_lifecycle_ids_are_unknown_pins() {
         let ids = [
-            "aggressive", "unload_ai", "capture", "capture", "unknown", "restore",
-            "archive", "summary", "kb", "settings", "help", "tray", "restart", "quit",
-        ].into_iter().map(str::to_string).collect::<Vec<_>>();
-        assert_eq!(visible_pins(&ids), [
-            "capture", "restore", "archive", "summary", "kb", "settings", "help", "tray",
-        ].into_iter().map(str::to_string).collect::<Vec<_>>());
-        assert_eq!(ids[0], "aggressive", "filtering must not modify persisted ids");
+            "aggressive",
+            "unload_ai",
+            "capture",
+            "capture",
+            "unknown",
+            "restore",
+            "archive",
+            "summary",
+            "kb",
+            "settings",
+            "help",
+            "tray",
+            "restart",
+            "quit",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+        assert_eq!(
+            visible_pins(&ids),
+            ["capture", "restore", "archive", "summary", "kb", "settings", "help", "tray",]
+                .into_iter()
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            ids[0], "aggressive",
+            "filtering must not modify persisted ids"
+        );
         assert_eq!(ids[1], "unload_ai");
     }
 }

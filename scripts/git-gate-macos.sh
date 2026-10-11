@@ -46,8 +46,14 @@ cargo clippy --locked --lib --bin slint-replay --bin markdown-spike --bin overla
 cargo test --locked --lib --manifest-path slint-experiment/Cargo.toml
 cargo test --locked --bin slint-replay --manifest-path slint-experiment/Cargo.toml
 cargo test --locked --bin overlay-host --manifest-path slint-experiment/Cargo.toml
-# The two omitted integration tests create/show Slint windows and belong to live GUI QA.
+# Bar geometry/interaction targets use the testing backend, not native display windows.
 for test in \
+  bar_menu_guard \
+  bar_menu_interaction \
+  bar_position_guard \
+  bar_slop_guard \
+  bar_spec_guard \
+  overlay_bar_geometry \
   codex_copy_guard \
   i18n_guard \
   icon_guard \

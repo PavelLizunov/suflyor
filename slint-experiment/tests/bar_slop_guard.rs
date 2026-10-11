@@ -168,9 +168,44 @@ fn save_failure_keeps_rollback_and_shows_a_timed_translated_footer() {
     );
     assert!(failure.contains("return;"));
     assert!(host.contains("menu.on_footer_resized"));
-    assert!(host.contains("pos.y.clamp(work.top, max_y)"));
+    assert!(host.contains("slint_replay::bar_form::clamp_menu_origin("));
     assert!(host.contains("+ menu.get_footer_height()"));
     assert!(host.contains("let logical_height = menu_logical_height(&menu);"));
+}
+
+#[test]
+fn info_progress_is_visible_and_restores_the_prior_status_on_all_completions() {
+    let bar = source("ui/overlay_bar.slint");
+    let status = section(&bar, "// Bottom row:", "if root.deep-lock");
+    assert!(status.contains("root.status-tone == StatusTone.info"));
+    assert!(status.contains("? Theme.on-tint(Theme.accent)"));
+    assert!(status.contains("font-weight: 600;"));
+    assert!(status.contains("root.status-tone != StatusTone.info"));
+    let copy = source("src/bin/overlay_host/status_copy.rs");
+    let begin = section(
+        &copy,
+        "pub(super) fn begin_bar_operation",
+        "pub(super) fn finish",
+    );
+    assert!(begin.contains("(bar.get_status_text(), bar.get_status_tone())"));
+    assert!(begin.contains("bar.set_status_tone(crate::ui::StatusTone::Info)"));
+    let finish = section(
+        &copy,
+        "pub(super) fn finish_bar_operation",
+        "/// Refresh auto-tiles",
+    );
+    assert!(finish.contains("bar.set_status_text(previous.0)"));
+    assert!(finish.contains("bar.set_status_tone(previous.1)"));
+    let host = source("src/bin/overlay_host_windows.rs");
+    let lifecycle = section(&host, "LockAction::EnterDeepLock =>", "// ===== Bar drag");
+    assert_eq!(lifecycle.matches("begin_bar_operation(").count(), 2);
+    assert_eq!(lifecycle.matches("finish_bar_operation(").count(), 3);
+    assert!(lifecycle.contains("LockStatus::Unlocking"));
+    assert!(lifecycle.contains("LockStatus::Unloading"));
+    assert!(lifecycle.contains("spawn_mlx_runtime_error"));
+    assert!(lifecycle.contains("overlay_backend::deep_lock::unlock_failed_notice(ru)"));
+    let bridge = source("src/bin/overlay_host/tile_controller.rs");
+    assert!(bridge.contains("if o.get_operation_active()"));
 }
 
 #[test]

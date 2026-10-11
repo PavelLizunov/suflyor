@@ -157,6 +157,8 @@ foreach ($crate in $affectedCrates) {
             & $cargo check --locked --manifest-path $manifest --bin overlay-host
         }
         $guards = @(
+            'bar_menu_guard', 'bar_menu_interaction', 'bar_position_guard',
+            'bar_slop_guard', 'bar_spec_guard', 'overlay_bar_geometry',
             'codex_copy_guard', 'i18n_guard', 'icon_guard',
             'lock_chip_geometry_guard', 'lock_chip_layout_guard',
             'lock_mode_menu_guard', 'macos_settings_guard',

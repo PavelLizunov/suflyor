@@ -65,16 +65,49 @@ pub fn bar_rect_inside_any(
         })
 }
 
-/// On a work-area change, prefer that monitor's saved offset; otherwise keep
+/// A user drag wins over a destination's stored offset. Otherwise prefer that
+/// monitor's saved offset; without one, keep
 /// the current origin. Both paths use the same clamp for the current bar size.
 #[must_use]
 pub fn bar_position_after_monitor_change(
     saved_offset: Option<(i32, i32)>,
+    user_drag: bool,
     work: crate::win32::MonitorRect,
     (x, y, width, height): (i32, i32, i32, i32),
 ) -> (i32, i32) {
+    let saved_offset = saved_offset.filter(|_| !user_drag);
     let offset = saved_offset.unwrap_or((x.saturating_sub(work.left), y.saturating_sub(work.top)));
     saved_bar_position(offset, work, width, height)
+}
+
+/// Clamp a popup origin independently on each axis, including oversized menus.
+#[must_use]
+pub fn clamp_menu_origin(
+    work: crate::win32::MonitorRect,
+    (x, y): (i32, i32),
+    (width, height): (i32, i32),
+) -> (i32, i32) {
+    let max_x = work.right.saturating_sub(width.max(0)).max(work.left);
+    let max_y = work.bottom.saturating_sub(height.max(0)).max(work.top);
+    (x.clamp(work.left, max_x), y.clamp(work.top, max_y))
+}
+
+/// Prefer below the bar, otherwise above it, then clamp into the work area.
+#[must_use]
+pub fn bar_menu_position(
+    work: crate::win32::MonitorRect,
+    (anchor_x, anchor_y): (i32, i32),
+    bar_top: i32,
+    (width, height): (i32, i32),
+    gap: i32,
+) -> (i32, i32) {
+    let below = anchor_y.saturating_add(gap);
+    let y = if i64::from(below) + i64::from(height) <= i64::from(work.bottom) {
+        below
+    } else {
+        bar_top.saturating_sub(height).saturating_sub(gap)
+    };
+    clamp_menu_origin(work, (anchor_x.saturating_sub(width), y), (width, height))
 }
 
 #[must_use]
@@ -87,13 +120,15 @@ pub fn should_save_bar_position(
     dragged_since_save && stable && !dragging_now && !hidden
 }
 
-/// Only drag callbacks make a position eligible. Two equal samples establish
-/// stability; programmatic moves reset sampling, not drag intent. A failed save
-/// keeps that intent for retry, and a successful save consumes it.
+/// Only drag callbacks make a position eligible. Remember the actual drop and
+/// its clamp in the work area at drop time, never a later recovery rectangle.
+/// Two equal samples establish stability; failed saves can retry the same drop.
 #[derive(Default)]
 pub struct BarPositionTracker {
     previous: Option<(i32, i32, i32, i32)>,
     dragged_since_save: bool,
+    drop_rect: Option<(i32, i32, i32, i32)>,
+    clamped_drop: Option<(i32, i32, i32, i32)>,
 }
 
 impl BarPositionTracker {
@@ -104,6 +139,40 @@ impl BarPositionTracker {
     pub fn user_drag(&mut self) {
         self.previous = None;
         self.dragged_since_save = true;
+        self.drop_rect = None;
+        self.clamped_drop = None;
+    }
+
+    /// Capture native geometry only from a user drag callback, before app moves.
+    pub fn record_drop(
+        &mut self,
+        rect @ (x, y, width, height): (i32, i32, i32, i32),
+        work: crate::win32::MonitorRect,
+    ) {
+        if self.dragged_since_save {
+            let (cx, cy) = saved_bar_position(
+                (x.saturating_sub(work.left), y.saturating_sub(work.top)),
+                work,
+                width,
+                height,
+            );
+            self.drop_rect = Some(rect);
+            self.clamped_drop = Some((cx, cy, width, height));
+        }
+    }
+
+    pub fn pending_drag(&self) -> bool {
+        self.dragged_since_save
+    }
+
+    /// Call before an app move as well as on samples, so a move-away-and-back
+    /// cannot revive intent after repair or a form/work-area change.
+    pub fn validate_drop(&mut self, rect: (i32, i32, i32, i32)) {
+        if self.drop_rect != Some(rect) && self.clamped_drop != Some(rect) {
+            self.dragged_since_save = false;
+            self.drop_rect = None;
+            self.clamped_drop = None;
+        }
     }
 
     pub fn observe(
@@ -112,6 +181,9 @@ impl BarPositionTracker {
         dragging_now: bool,
         hidden: bool,
     ) -> bool {
+        if !dragging_now {
+            self.validate_drop(rect);
+        }
         let stable = self.previous.replace(rect) == Some(rect);
         if dragging_now || hidden {
             self.previous = None;
@@ -122,6 +194,8 @@ impl BarPositionTracker {
     pub fn saved(&mut self, rect: (i32, i32, i32, i32)) {
         self.previous = Some(rect);
         self.dragged_since_save = false;
+        self.drop_rect = None;
+        self.clamped_drop = None;
     }
 }
 
@@ -222,20 +296,21 @@ mod tests {
                 (Some((1100, 780)), (326, 736)),
             ] {
                 assert_eq!(
-                    bar_position_after_monitor_change(saved, area, rect),
+                    bar_position_after_monitor_change(saved, false, area, rect),
                     (area.left + expected.0, area.top + expected.1)
                 );
             }
             assert_eq!(
                 bar_position_after_monitor_change(
                     None,
+                    false,
                     area,
                     (area.left + 1100, area.top + 780, 874, 64),
                 ),
                 (area.left + 326, area.top + 736)
             );
             assert_eq!(
-                bar_position_after_monitor_change(Some((270, 268)), area, (0, 0, 1201, 64)),
+                bar_position_after_monitor_change(Some((270, 268)), false, area, (0, 0, 1201, 64)),
                 (area.left, area.top)
             );
         }
@@ -255,6 +330,7 @@ mod tests {
         assert!(!tracker.observe(moved, false, false));
         assert!(!tracker.observe(moved, false, false));
         tracker.user_drag();
+        tracker.record_drop(moved, work(0, 0));
         assert!(!tracker.observe(moved, true, false));
         assert!(!tracker.observe(moved, true, false));
         assert!(!tracker.observe(moved, false, false));
@@ -272,6 +348,7 @@ mod tests {
         assert!(!tracker.observe(moved, false, false));
         assert!(!tracker.observe(moved, false, false));
         tracker.user_drag();
+        tracker.record_drop(moved, work(0, 0));
         assert!(!tracker.observe(moved, false, true));
         assert!(!tracker.observe(moved, false, true));
         assert!(!tracker.observe(moved, false, false));
@@ -284,6 +361,7 @@ mod tests {
         let moved = (-1100, 24, 100, 50);
         tracker.programmatic_move();
         tracker.user_drag();
+        tracker.record_drop(moved, work(-1200, 0));
         tracker.programmatic_move();
         assert!(!tracker.observe(moved, false, false));
         assert!(tracker.observe(moved, false, false));
@@ -307,17 +385,22 @@ mod tests {
         let user_rect = (saved.0, saved.1, 874, 64);
         let mut tracker = BarPositionTracker::default();
         tracker.user_drag();
+        tracker.record_drop(user_rect, large);
         assert!(!tracker.observe(user_rect, false, false));
         assert!(tracker.observe(user_rect, false, false));
         tracker.saved(user_rect);
-        let clamped = bar_position_after_monitor_change(None, small, (270, 268, 586, 64));
+        let clamped = bar_position_after_monitor_change(None, false, small, (270, 268, 586, 64));
         assert_eq!(clamped, (214, 268));
         tracker.programmatic_move();
         let small_rect = (clamped.0, clamped.1, 586, 64);
         assert!(!tracker.observe(small_rect, false, false));
         assert!(!tracker.observe(small_rect, false, false));
-        let restored =
-            bar_position_after_monitor_change(Some(saved), large, (clamped.0, clamped.1, 874, 64));
+        let restored = bar_position_after_monitor_change(
+            Some(saved),
+            false,
+            large,
+            (clamped.0, clamped.1, 874, 64),
+        );
         assert_eq!(restored, saved);
         tracker.programmatic_move();
         assert!(!tracker.observe(user_rect, false, false));
@@ -326,6 +409,107 @@ mod tests {
         let os_rect = (214, 268, 874, 64);
         assert!(!tracker.observe(os_rect, false, false));
         assert!(!tracker.observe(os_rect, false, false));
+    }
+
+    #[test]
+    fn drag_to_monitor_with_saved_entry_keeps_and_saves_the_drop() {
+        let area = work(-1200, -100);
+        let drop = (-1000, 124, 100, 50);
+        let mut tracker = BarPositionTracker::default();
+        tracker.user_drag();
+        tracker.record_drop(drop, area);
+        let origin =
+            bar_position_after_monitor_change(Some((10, 20)), tracker.pending_drag(), area, drop);
+        assert_eq!(origin, (drop.0, drop.1));
+        tracker.programmatic_move();
+        assert!(!tracker.observe(drop, false, false));
+        assert!(tracker.observe(drop, false, false));
+    }
+
+    #[test]
+    fn drop_clamp_is_allowed_only_in_the_original_work_area_and_size() {
+        let area = work(0, 0);
+        let drop = (1150, 780, 100, 50);
+        let clamped = (1100, 750, 100, 50);
+        let mut tracker = BarPositionTracker::default();
+        tracker.user_drag();
+        tracker.record_drop(drop, area);
+        tracker.programmatic_move();
+        assert!(!tracker.observe(clamped, false, false));
+        assert!(tracker.observe(clamped, false, false));
+    }
+
+    #[test]
+    fn unsaved_drag_then_work_area_shrink_or_repair_cannot_save_app_position() {
+        let drop = (1000, 700, 100, 50);
+        let small = crate::win32::MonitorRect {
+            right: 800,
+            bottom: 600,
+            ..work(0, 0)
+        };
+        let shrunk = bar_position_after_monitor_change(None, true, small, drop);
+        assert_eq!(shrunk, (700, 550));
+        for app_rect in [
+            (shrunk.0, shrunk.1, 100, 50),
+            (60, 24, 100, 50),
+            (drop.0, drop.1, 80, 50),
+        ] {
+            let mut tracker = BarPositionTracker::default();
+            tracker.user_drag();
+            tracker.record_drop(drop, work(0, 0));
+            assert!(!tracker.observe(drop, false, false));
+            tracker.programmatic_move();
+            assert!(!tracker.observe(app_rect, false, false));
+            assert!(!tracker.observe(app_rect, false, false));
+            assert!(!tracker.pending_drag());
+            assert!(!tracker.observe(drop, false, false));
+            assert!(!tracker.observe(drop, false, false));
+        }
+    }
+
+    #[test]
+    fn popup_origins_clamp_every_edge_and_oversized_axis() {
+        for area in [work(0, 0), work(-1200, -100)] {
+            for (origin, size, expected) in [
+                ((200, 200), (408, 106), (200, 200)),
+                ((-1, 200), (408, 106), (0, 200)),
+                ((1199, 200), (408, 106), (792, 200)),
+                ((200, -1), (408, 106), (200, 0)),
+                ((200, 799), (408, 106), (200, 694)),
+                ((200, 200), (1201, 106), (0, 200)),
+                ((200, 200), (408, 801), (200, 0)),
+                ((200, 200), (1201, 801), (0, 0)),
+            ] {
+                assert_eq!(
+                    clamp_menu_origin(area, (area.left + origin.0, area.top + origin.1), size,),
+                    (area.left + expected.0, area.top + expected.1),
+                );
+            }
+            assert_eq!(
+                bar_menu_position(
+                    area,
+                    (area.left + 600, area.top + 64),
+                    area.top,
+                    (320, 106),
+                    4,
+                ),
+                (area.left + 280, area.top + 68),
+            );
+            assert_eq!(
+                bar_menu_position(
+                    area,
+                    (area.left + 600, area.top + 780),
+                    area.top + 716,
+                    (320, 106),
+                    4,
+                ),
+                (area.left + 280, area.top + 606),
+            );
+            assert_eq!(
+                bar_menu_position(area, (area.right, area.bottom), area.top, (1300, 900), 4),
+                (area.left, area.top),
+            );
+        }
     }
 
     const PAD: f32 = 8.0;

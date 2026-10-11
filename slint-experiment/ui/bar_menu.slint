@@ -2,7 +2,7 @@ import { Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Metrics } from "metrics.slint";
 
-struct MenuRow { id: string, icon: image, name: string, key: string, head: bool, pinnable: bool, active: bool }
+struct MenuRow { id: string, icon: image, name: string, key: string, head: bool, pinnable: bool, active: bool, sound: bool, off: bool }
 
 // Separate native window: the bar's 64px client rectangle cannot host a popup.
 export component BarMenuWindow inherits Window {
@@ -11,12 +11,14 @@ export component BarMenuWindow inherits Window {
     background: transparent;
     title: @tr("More");
     preferred-width: 408px;
-    preferred-height: 330px + (root.tray-available ? 28px : 0px) + (root.lock-menu-managed ? 28px : 0px) + root.footer-height;
+    preferred-height: 408px + (root.tray-available ? 28px : 0px) + (root.lock-menu-managed ? 28px : 0px) + root.footer-height;
     property <bool> widgets-light: Theme.is-light;
     init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
 
     in property <[string]> pins;
+    in property <bool> mic-muted;
+    in property <bool> sys-active;
     in property <bool> lock-menu-managed;
     in property <bool> deep-lock;
     in property <bool> can-restore-tile;
@@ -49,6 +51,13 @@ export component BarMenuWindow inherits Window {
     property <length> col-key: 96px;
     property <length> col-pin: 78px;
     property <[MenuRow]> rows: [
+        { name: @tr("SOUND"), head: true },
+        { id: "microphone", icon: @image-url("../assets/icons/mic.svg"),
+          name: @tr("Microphone"), key: root.mic-muted ? @tr("off") : @tr("on"),
+          sound: true, off: root.mic-muted },
+        { id: "system_audio", icon: @image-url("../assets/icons/system-audio.svg"),
+          name: @tr("System audio"), key: root.sys-active ? @tr("on") : @tr("off"),
+          sound: true, off: !root.sys-active },
         { name: @tr("TILES"), head: true },
         { id: "capture", icon: @image-url("../assets/icons/camera.svg"), name: @tr("Ask about a screenshot"), key: "F8", pinnable: true },
         { id: "restore", icon: @image-url("../assets/icons/restore.svg"), name: @tr("Restore closed tile"), pinnable: true },
@@ -116,7 +125,6 @@ export component BarMenuWindow inherits Window {
                     if (r.id != "tray" || root.tray-available) && (r.id != "unload_ai" || root.lock-menu-managed) : Rectangle {
                         property <bool> pinned: !r.head && root.is-pinned(r.id);
                         height: r.head ? 22px : 28px;
-                        opacity: r.id == "restore" && !root.can-restore-tile ? 0.35 : 1;
                         border-radius: Metrics.radius-control;
                         background: row-touch.pressed ? Theme.tint(Theme.accent)
                             : row-touch.has-hover ? Theme.border-strong.with-alpha(0.22)
@@ -125,6 +133,7 @@ export component BarMenuWindow inherits Window {
                             padding-left: root.col-pad; padding-right: root.col-pad; spacing: root.col-gap;
                             if !r.head : Rectangle {
                                 width: root.col-icon;
+                                opacity: r.id == "restore" && !root.can-restore-tile ? 0.35 : 1;
                                 Image {
                                     source: r.icon;
                                     colorize: r.id == "quit" ? Theme.danger : r.active ? Theme.accent : Theme.text-secondary;
@@ -142,8 +151,9 @@ export component BarMenuWindow inherits Window {
                                 horizontal-stretch: 1; min-width: 0px;
                                 accessible-role: button;
                                 accessible-label: r.name;
-                                accessible-checkable: r.id == "unload_ai";
-                                accessible-checked: r.id == "unload_ai" && root.deep-lock;
+                                opacity: r.id == "restore" && !root.can-restore-tile ? 0.35 : 1;
+                                accessible-checkable: r.sound || r.id == "unload_ai";
+                                accessible-checked: r.sound ? !r.off : r.id == "unload_ai" && root.deep-lock;
                                 accessible-action-default => { root.choose(r.id); }
                                 row-name := Text {
                                     x: 0px; y: 0px;
@@ -160,6 +170,7 @@ export component BarMenuWindow inherits Window {
                             }
                             if !r.head : Rectangle {
                                 width: root.col-key;
+                                opacity: r.id == "restore" && !root.can-restore-tile ? 0.35 : 1;
                                 if root.confirmation == r.id : Rectangle {
                                     height: 24px; x: 0px; y: (parent.height - self.height) / 2;
                                     width: parent.width; border-radius: Metrics.radius-field;
@@ -178,9 +189,15 @@ export component BarMenuWindow inherits Window {
                                     width: min(kt.preferred-width + 14px, parent.width);
                                     x: parent.width - self.width;
                                     border-radius: Metrics.radius-keycap;
-                                    border-width: 1px; border-color: Theme.border;
-                                    background: Theme.bg-surface;
-                                    kt := Text { text: r.key; font-family: Theme.font-mono; font-size: Metrics.font-caption; color: Theme.text-secondary; horizontal-alignment: center; vertical-alignment: center; }
+                                    border-width: 1px;
+                                    border-color: r.sound && r.off ? Theme.danger : Theme.border;
+                                    background: r.sound && r.off ? Theme.tint(Theme.danger) : Theme.bg-surface;
+                                    kt := Text {
+                                        text: r.key;
+                                        font-family: Theme.font-mono; font-size: Metrics.font-caption;
+                                        color: r.sound && r.off ? Theme.on-tint(Theme.danger) : Theme.text-secondary;
+                                        horizontal-alignment: center; vertical-alignment: center;
+                                    }
                                 }
                             }
                             if !r.head : Rectangle {
@@ -210,9 +227,7 @@ export component BarMenuWindow inherits Window {
                                     accessible-label: r.name + ". " + (root.is-pinned(r.id) ? @tr("on the bar") : @tr("pin"));
                                     accessible-checkable: true; accessible-checked: root.is-pinned(r.id);
                                     accessible-action-default => {
-                                        if (r.id != "restore" || root.can-restore-tile) {
-                                            root.inactive-ticks = 0; root.pin-toggled(r.id);
-                                        }
+                                        root.inactive-ticks = 0; root.pin-toggled(r.id);
                                     }
                                     Text {
                                         text: root.is-pinned(r.id) ? @tr("on the bar") : @tr("pin");
@@ -222,7 +237,6 @@ export component BarMenuWindow inherits Window {
                                         horizontal-alignment: center; vertical-alignment: center;
                                     }
                                     pin-touch := TouchArea {
-                                        enabled: r.id != "restore" || root.can-restore-tile;
                                         mouse-cursor: pointer;
                                         moved => { root.inactive-ticks = 0; }
                                         clicked => { root.inactive-ticks = 0; root.pin-toggled(r.id); }

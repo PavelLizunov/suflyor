@@ -86,7 +86,8 @@ fn monitor_sampling_and_recovery_keep_native_work_area_and_reveal_contracts() {
     assert!(geometry.contains("i64::from(y) + i64::from(height) <= i64::from(work.bottom)"));
     assert!(host.contains("if contained && form != BarForm::TooNarrow"));
     assert!(host.contains("work_area_for_window(hwnd).or_else(primary_bar_work_area)"));
-    assert!(host.contains("work.left + (BAR_MARGIN * scale).round() as i32"));
+    assert!(host.contains("let x = if narrow {\n        work.left"));
+    assert!(host.contains("overlay.set_too_narrow(form == BarForm::TooNarrow)"));
     assert!(host.contains("(work.top + 24).clamp(work.top, (work.bottom - height).max(work.top))"));
     assert!(
         host.contains("if selected_width != target_w_logical"),
@@ -112,6 +113,67 @@ fn monitor_sampling_and_recovery_keep_native_work_area_and_reveal_contracts() {
     );
     assert!(main.contains("c.compact_bar = if was_mini { false } else { !c.compact_bar };"));
     assert!(main.contains("bar expand requested: monitor still requires mini"));
+}
+
+#[test]
+fn headless_bar_regressions_are_selected_by_both_native_gates() {
+    let windows = read("../scripts/git-gate-native.ps1");
+    let windows = windows
+        .split_once("$guards = @(")
+        .expect("UI guards")
+        .1
+        .split_once(')')
+        .expect("guard list end")
+        .0;
+    let macos = read("../scripts/git-gate-macos.sh");
+    let macos = macos
+        .split_once("for test in")
+        .expect("macOS integration list")
+        .1
+        .split_once("\ndo")
+        .expect("integration list end")
+        .0;
+    for test in [
+        "bar_menu_guard",
+        "bar_menu_interaction",
+        "bar_position_guard",
+        "bar_slop_guard",
+        "bar_spec_guard",
+        "overlay_bar_geometry",
+    ] {
+        assert!(
+            windows.contains(&format!("'{test}'")),
+            "Windows UI-only gate: {test}"
+        );
+        assert!(
+            macos
+                .lines()
+                .any(|line| line.trim().trim_end_matches('\\').trim() == test),
+            "macOS headless gate: {test}"
+        );
+    }
+}
+
+#[test]
+fn both_popups_share_work_area_placement_without_an_invalid_clamp() {
+    let host = read("src/bin/overlay_host_windows.rs");
+    let placement = host
+        .split_once("let menu_width = (320.0 * scale)")
+        .unwrap()
+        .1
+        .split_once("// Realize off-screen")
+        .unwrap()
+        .0;
+    assert!(placement.contains("work_area_for_point(anchor_x, anchor_y)"));
+    assert!(placement.contains("slint_replay::bar_form::bar_menu_position("));
+    assert!(!placement.contains("enum_monitors()"));
+    assert!(!placement.contains(".clamp("));
+    let more = read("src/bin/overlay_host/bar_menu.rs");
+    assert!(more.contains("slint_replay::bar_form::bar_menu_position("));
+    assert!(more.contains("slint_replay::bar_form::clamp_menu_origin("));
+    let pure = read("src/bar_form.rs");
+    assert!(pure.contains("work.right.saturating_sub(width.max(0)).max(work.left)"));
+    assert!(pure.contains("work.bottom.saturating_sub(height.max(0)).max(work.top)"));
 }
 
 #[test]
@@ -176,6 +238,9 @@ fn native_size_and_capsule_fit_evidence_use_the_spec() {
     assert!(bar.contains("out property <bool> fits: lay.preferred-width <= self.width;"));
     assert!(bar.contains("in-out property <bool> compact-bar: false;"));
     assert!(bar.contains("in property <int> bar-form: 0;"));
+    assert!(bar.contains("in property <bool> too-narrow: false;"));
+    assert!(bar.contains("x: root.too-narrow ? 0px : parent.width - self.width;"));
+    assert!(bar.contains("x: root.too-narrow ? window-capsule.width + BarSpec.gap"));
     let fit = bar
         .split_once("out property <bool> all-regions-fit:")
         .expect("fit accessor")

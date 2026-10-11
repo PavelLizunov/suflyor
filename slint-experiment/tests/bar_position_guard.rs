@@ -4,6 +4,10 @@
 use std::fs;
 use std::path::Path;
 
+use slint_replay::win32;
+#[path = "../src/bar_form.rs"]
+mod bar_form;
+
 fn read(relative: &str) -> String {
     fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(relative))
         .unwrap_or_else(|error| panic!("read {relative}: {error}"))
@@ -43,7 +47,10 @@ fn startup_restore_keeps_parking_primary_pin_hard_retry_and_slint_fallback() {
     assert!(restore.contains("find(|m| m.is_primary && !o.get_bootstrap_mode())"));
     assert!(restore.contains("monitor_work_area(primary)"));
     assert!(restore.contains("saved_bar_position("));
-    assert!(restore.contains("width.max(current_width), height.max(current_height)"));
+    assert!(restore.contains(concat!(
+        "width.max(current_width),\n",
+        "                        height.max(current_height),",
+    )));
     assert!(restore.contains("move_window_pos_only(hwnd, rx, ry).is_ok()"));
     assert!(
         apply.find("make_transparent_overlay(hwnd)").unwrap()
@@ -95,7 +102,7 @@ fn saving_is_sampled_hidden_and_drag_guarded_and_recovery_is_not_a_preference() 
     for required in [
         "let key = monitor_key(*monitor);",
         "find(|saved| saved.monitor == key)",
-        "bar_position_after_monitor_change(saved_offset, *work, form_rect)",
+        "bar_position_after_monitor_change(saved_offset, user_drag, *work, form_rect)",
         "(logical_width * scale).round() as i32",
         "(spec.get_height() * scale).round() as i32",
         "BAR_PENDING_POSITION.with(|position| position.set(saved_offset.map(Some)))",
@@ -107,7 +114,10 @@ fn saving_is_sampled_hidden_and_drag_guarded_and_recovery_is_not_a_preference() 
             "monitor restore lost {required}"
         );
     }
-    assert!(check.contains("last.replace(Some(bounds)).is_some_and(|previous| previous != bounds)"));
+    assert!(check.contains(concat!(
+        "last.replace(Some(bounds))\n",
+        "                .is_some_and(|previous| previous != bounds)",
+    )));
     assert!(!monitor_change.contains("config::save"));
     assert!(!monitor_change.contains("user_drag()"));
     let recovery = check
@@ -129,6 +139,18 @@ fn saving_is_sampled_hidden_and_drag_guarded_and_recovery_is_not_a_preference() 
         .expect("bar drag move callback");
     assert!(start.contains("begin_bar_position_drag();"));
     assert!(moved.contains("begin_bar_position_drag();"));
+    assert!(start.contains("record_bar_position_drop(&o)"));
+    assert!(moved.contains("record_bar_position_drop(&o)"));
+    assert!(start.contains("overlay.on_drag_finished"));
+    assert!(start.contains("record_bar_position_drop(&bar)"));
+    assert!(start.contains("slint_replay::win32::drag_end()"));
+    assert!(
+        moved.find("drag_update(hwnd)").unwrap()
+            < moved.find("record_bar_position_drop(&o)").unwrap()
+    );
+    assert!(check.contains("tracker.borrow_mut().validate_drop(rect)"));
+    assert!(check.contains("tracker.borrow().pending_drag()"));
+    assert!(monitor_change.contains(".filter(|_| !user_drag)"));
     let tracker = read("src/bar_form.rs");
     let observe = tracker
         .split_once("pub fn observe(")
@@ -141,6 +163,8 @@ fn saving_is_sampled_hidden_and_drag_guarded_and_recovery_is_not_a_preference() 
         "should_save_bar_position(self.dragged_since_save, stable, dragging_now, hidden)"
     ));
     assert!(!observe.contains("self.user_drag()"));
+    assert!(observe.contains("self.validate_drop(rect)"));
+    assert!(tracker.contains("self.drop_rect != Some(rect) && self.clamped_drop != Some(rect)"));
     assert!(tracker.contains("dragged_since_save && stable && !dragging_now && !hidden"));
     assert!(tracker.contains("self.dragged_since_save = false;"));
     assert!(!drag.contains("config::save"));
@@ -152,7 +176,7 @@ fn saving_is_sampled_hidden_and_drag_guarded_and_recovery_is_not_a_preference() 
         .split_once("pub(super) fn tray_menu_action(")
         .unwrap()
         .0;
-    assert!(resize.contains("resize_work.or_else(|| bar_work_area(&o))"));
+    assert!(resize.contains("resize_work\n            .or_else(|| bar_work_area(&o))"));
     assert!(resize.contains("None => clamped_bar_position(work, rect)"));
     assert!(
         resize.contains("Some(Some(offset)) => saved_bar_position(offset, work, width, height)")

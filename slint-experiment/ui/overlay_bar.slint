@@ -629,6 +629,7 @@ export component OverlayBarWindow inherits Window {
 
     // Status pill text (idle / recording / etc).
     in-out property <string> status-text: "idle";
+    in-out property <bool> operation-active: false;
     // The host names the tone; the colour comes from the theme, so the pill
     // stays readable in every scheme.
     in-out property <StatusTone> status-tone: StatusTone.neutral;
@@ -783,6 +784,7 @@ export component OverlayBarWindow inherits Window {
     changed compact-bar => { root.dismiss-menu(); }
     // Rust derives the effective form; compact-bar remains the saved preference.
     in property <int> bar-form: 0;
+    in property <bool> too-narrow: false;
     changed bar-form => { root.dismiss-menu(); }
     // macOS production bootstrap: keep the real product bar/window while its
     // platform adapters are connected, but never expose dead AI/audio controls.
@@ -842,6 +844,7 @@ export component OverlayBarWindow inherits Window {
     // drag-start-requested (anchor), move-while-pressed → drag-moved.
     callback drag-start-requested();
     callback drag-moved();
+    callback drag-finished();
     // Compact mode: collapse/expand the bar.
     callback compact-toggle-clicked();
     // RC4 — hide the bar to the system tray (explicit only; startup is always
@@ -878,6 +881,10 @@ export component OverlayBarWindow inherits Window {
                         if (ev.button == PointerEventButton.left
                             && ev.kind == PointerEventKind.down) {
                             root.dismiss-menu(); root.drag-start-requested();
+                        }
+                        if (ev.button == PointerEventButton.left
+                            && ev.kind == PointerEventKind.up) {
+                            root.dismiss-menu(); root.drag-finished();
                         }
                     }
                     moved => {
@@ -925,7 +932,8 @@ export component OverlayBarWindow inherits Window {
                         }
                     }
                     HorizontalLayout {
-                        x: root.bar-form == 2 ? 0px : state-capsule.width + BarSpec.gap;
+                        x: root.too-narrow ? window-capsule.width + BarSpec.gap
+                            : root.bar-form == 2 ? 0px : state-capsule.width + BarSpec.gap;
                         width: parent.width - self.x; height: parent.height; spacing: BarSpec.gap;
                         voice-capsule := Capsule {
                             width: root.bar-form == 2 ? BarSpec.mini-voice : root.bar-form == 1 ? BarSpec.compact-voice : BarSpec.full-voice;
@@ -1009,28 +1017,35 @@ export component OverlayBarWindow inherits Window {
                             }
                         }
                         Rectangle { horizontal-stretch: 1; min-width: BarSpec.spring; }
-                        window-capsule := Capsule {
-                            width: root.bar-form == 2 ? BarSpec.mini-window : root.bar-form == 1 ? BarSpec.compact-window : BarSpec.full-window;
-                            // Only compact reserves a tray slot; mini has expand + More.
-                            if root.bar-form == 1 : Rectangle {
-                                width: 26px; height: Metrics.control-md; horizontal-stretch: 0;
-                                if root.tray-available : BarChip {
-                                    icon: @image-url("../assets/icons/tray.svg"); has-icon: true;
-                                    a11y: @tr("Hide to tray");
-                                    clicked => { root.dismiss-menu(); root.hide-to-tray-clicked(); }
-                                }
+                        if !root.too-narrow : Rectangle {
+                            width: window-capsule.width; height: parent.height;
+                            horizontal-stretch: 0;
+                        }
+                    }
+                    // One shared capsule moves left only for the emergency mini order.
+                    window-capsule := Capsule {
+                        x: root.too-narrow ? 0px : parent.width - self.width;
+                        y: 0px;
+                        width: root.bar-form == 2 ? BarSpec.mini-window : root.bar-form == 1 ? BarSpec.compact-window : BarSpec.full-window;
+                        // Only compact reserves a tray slot; mini has expand + More.
+                        if root.bar-form == 1 : Rectangle {
+                            width: 26px; height: Metrics.control-md; horizontal-stretch: 0;
+                            if root.tray-available : BarChip {
+                                icon: @image-url("../assets/icons/tray.svg"); has-icon: true;
+                                a11y: @tr("Hide to tray");
+                                clicked => { root.dismiss-menu(); root.hide-to-tray-clicked(); }
                             }
-                            BarChip {
-                                icon: root.bar-form == 0 ? @image-url("../assets/icons/minimize.svg") : @image-url("../assets/icons/maximize.svg");
-                                has-icon: true;
-                                a11y: root.bar-form == 0 ? @tr("Compact reader mode") : @tr("Expand the bar");
-                                press-feedback: root.bar-form == 0 || root.bar-form == 1;
-                                clicked => { root.dismiss-menu(); root.compact-toggle-clicked(); }
-                            }
-                            more-chip := MoreChip {
-                                active: root.menu-open; accent: Theme.accent;
-                                menu-opened(x, y) => { root.menu-opened(x, y); }
-                            }
+                        }
+                        BarChip {
+                            icon: root.bar-form == 0 ? @image-url("../assets/icons/minimize.svg") : @image-url("../assets/icons/maximize.svg");
+                            has-icon: true;
+                            a11y: root.bar-form == 0 ? @tr("Compact reader mode") : @tr("Expand the bar");
+                            press-feedback: root.bar-form == 0 || root.bar-form == 1;
+                            clicked => { root.dismiss-menu(); root.compact-toggle-clicked(); }
+                        }
+                        more-chip := MoreChip {
+                            active: root.menu-open; accent: Theme.accent;
+                            menu-opened(x, y) => { root.menu-opened(x, y); }
                         }
                     }
                 }
@@ -1038,10 +1053,13 @@ export component OverlayBarWindow inherits Window {
                 HorizontalLayout {
                     height: Metrics.control-md; spacing: BarSpec.gap; padding-left: Metrics.space-xs;
                     if root.bar-form == 2 || ((root.bar-form == 0 || root.bar-form == 1)
-                        && (root.stealth-fault || root.status-tone == StatusTone.warning || root.status-tone == StatusTone.danger)) : Text {
+                        && (root.stealth-fault || root.status-tone == StatusTone.info
+                            || root.status-tone == StatusTone.warning || root.status-tone == StatusTone.danger)) : Text {
                         text: root.presented-status;
                         font-size: Metrics.font-label; font-weight: 600;
-                        color: root.stealth-fault || root.status-tone == StatusTone.ok
+                        color: !root.stealth-fault && root.status-tone == StatusTone.info
+                            ? Theme.on-tint(Theme.accent)
+                            : root.stealth-fault || root.status-tone == StatusTone.ok
                             || root.status-tone == StatusTone.warning || root.status-tone == StatusTone.danger
                             ? Theme.on-tint(root.pill-color) : Theme.text-secondary;
                         vertical-alignment: center;
@@ -1052,7 +1070,8 @@ export component OverlayBarWindow inherits Window {
                     if (root.bar-form == 0 || root.bar-form == 1) && root.timer-active
                         && !root.session-paused && root.last-transcript-line == ""
                         && !root.stealth-fault && root.status-tone != StatusTone.warning
-                        && root.status-tone != StatusTone.danger : Text {
+                        && root.status-tone != StatusTone.danger
+                        && root.status-tone != StatusTone.info : Text {
                         text: @tr("listening…");
                         font-size: Metrics.font-label; color: Theme.text-muted;
                         vertical-alignment: center; horizontal-stretch: 0;
