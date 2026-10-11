@@ -586,7 +586,8 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
                             // once so the capsules hold the mini form's chips before
                             // their preferred widths are read.
                             assert_eq!(
-                                ElementHandle::find_by_accessible_label(bar, labels.stealth).count(),
+                                ElementHandle::find_by_accessible_label(bar, labels.stealth)
+                                    .count(),
                                 1,
                                 "mini form must show exactly one stealth chip"
                             );
