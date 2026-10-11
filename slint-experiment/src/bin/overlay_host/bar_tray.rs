@@ -481,6 +481,8 @@ pub(super) fn reevaluate_bar_monitor(overlay: &OverlayBarWindow, cfg: &config::S
 /// left-of-centre). Poll every 50 ms (≤ ~0.6 s) until the rect width matches the
 /// requested size in native geometry units (DPI-scaled pixels on Windows,
 /// logical points on macOS), then position by the ACTUAL width.
+// `resize_work` is consumed only by the Windows placement path.
+#[cfg_attr(not(windows), allow(clippy::only_used_in_recursion))]
 fn recenter_when_sized(
     weak: slint::Weak<OverlayBarWindow>,
     target_w_logical: f32,
