@@ -33,7 +33,10 @@ mod tests {
             assert_eq!(mode_from_flags(flags.0, flags.1), mode);
         }
         assert_eq!(mode_from_flags(true, true), 0);
-        assert_eq!(flags_from_mode(mode_from_flags(true, true)), Some((true, false)));
+        assert_eq!(
+            flags_from_mode(mode_from_flags(true, true)),
+            Some((true, false))
+        );
         assert_eq!(flags_from_mode(-1), None);
         assert_eq!(flags_from_mode(3), None);
     }

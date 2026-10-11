@@ -111,7 +111,11 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
             labels.ask,
             labels.grab,
             "1:07:31",
-            if labels.russian { "По вопросам" } else { "On questions" },
+            if labels.russian {
+                "По вопросам"
+            } else {
+                "On questions"
+            },
             labels.expand,
             labels.more,
         ]
@@ -120,7 +124,11 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
             labels.ask,
             labels.grab,
             "1:07:31",
-            if labels.russian { "По вопросам" } else { "On questions" },
+            if labels.russian {
+                "По вопросам"
+            } else {
+                "On questions"
+            },
             labels.write,
             labels.compact,
             labels.more,
@@ -175,23 +183,56 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
                         .map(|name| element(bar, name).size().width)
                         .collect();
                     bar.window().set_size(LogicalSize::new(width, height));
-                    assert_eq!(bar.window().size().width as f32, width, "mode/deep must not resize bar");
-                    assert_eq!(if compact { spec.get_compact_width() } else { spec.get_full_width() }, width);
+                    assert_eq!(
+                        bar.window().size().width as f32,
+                        width,
+                        "mode/deep must not resize bar"
+                    );
+                    assert_eq!(
+                        if compact {
+                            spec.get_compact_width()
+                        } else {
+                            spec.get_full_width()
+                        },
+                        width
+                    );
                     if deep {
                         let item = element(bar, labels.deep_lock);
                         let pos = item.absolute_position();
                         let size = item.size();
                         assert_eq!(size.width, 70.0);
-                        let status = element(bar, if labels.russian { "[!] скрытность недоступна" } else { "[!] stealth unavailable" });
-                        assert!(status.absolute_position().x + status.size().width <= pos.x, "AI off must follow status without overlap");
-                        assert!(pos.y >= 34.0 && pos.y + size.height <= height, "AI off outside footer");
-                        assert!(pos.x >= 0.0 && pos.x + size.width <= width, "AI off outside bar");
+                        let status = element(
+                            bar,
+                            if labels.russian {
+                                "[!] скрытность недоступна"
+                            } else {
+                                "[!] stealth unavailable"
+                            },
+                        );
+                        assert!(
+                            status.absolute_position().x + status.size().width <= pos.x,
+                            "AI off must follow status without overlap"
+                        );
+                        assert!(
+                            pos.y >= 34.0 && pos.y + size.height <= height,
+                            "AI off outside footer"
+                        );
+                        assert!(
+                            pos.x >= 0.0 && pos.x + size.width <= width,
+                            "AI off outside bar"
+                        );
                     } else {
-                        assert_eq!(ElementHandle::find_by_accessible_label(bar, labels.deep_lock).count(), 0);
+                        assert_eq!(
+                            ElementHandle::find_by_accessible_label(bar, labels.deep_lock).count(),
+                            0
+                        );
                     }
                     let items: Vec<ElementHandle> =
                         names.iter().map(|name| element(bar, name)).collect();
-                    assert!(bar.get_autotile_word_fits(), "auto-tiles word clipped: compact={compact}, mode={mode}");
+                    assert!(
+                        bar.get_autotile_word_fits(),
+                        "auto-tiles word clipped: compact={compact}, mode={mode}"
+                    );
                     assert!(bar.get_all_regions_fit(), "capsule overflow: compact={compact}, mode={mode}, tiles={count}, recording={recording}");
                     for ((name, item), natural_width) in names.iter().zip(&items).zip(natural) {
                         assert_top_bounds(item, width, name);
@@ -311,14 +352,7 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
 
 fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
     let ids = [
-        "capture",
-        "restore",
-        "archive",
-        "summary",
-        "kb",
-        "settings",
-        "help",
-        "tray",
+        "capture", "restore", "archive", "summary", "kb", "settings", "help", "tray",
     ];
     let names = if russian {
         [
@@ -352,7 +386,10 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
     bar.set_autotile_mode(2);
     bar.set_tray_available(true);
     for (iteration, count) in [0, 3, 8].into_iter().enumerate() {
-        let state = format!("language={}, pins={count}, iteration={iteration}", if russian { "ru" } else { "en" });
+        let state = format!(
+            "language={}, pins={count}, iteration={iteration}",
+            if russian { "ru" } else { "en" }
+        );
         bar.set_pins(slint::ModelRc::new(slint::VecModel::from(
             ids[..count]
                 .iter()
@@ -390,12 +427,22 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
         for name in &names[..count] {
             let name = *name;
             let matching: Vec<_> = ElementHandle::find_by_accessible_label(bar, name).collect();
-            assert_eq!(matching.len(), 1, "label={name}, full bar, {state}: one pinned action");
+            assert_eq!(
+                matching.len(),
+                1,
+                "label={name}, full bar, {state}: one pinned action"
+            );
             let item = &matching[0];
             let pos = item.absolute_position();
             let size = item.size();
-            assert_eq!(size.width, 26.0, "label={name}, full bar, {state}: fixed bare pin width");
-            assert_eq!(size.height, 22.0, "label={name}, full bar, {state}: fixed bare pin height");
+            assert_eq!(
+                size.width, 26.0,
+                "label={name}, full bar, {state}: fixed bare pin width"
+            );
+            assert_eq!(
+                size.height, 22.0,
+                "label={name}, full bar, {state}: fixed bare pin height"
+            );
             assert!(
                 pos.y >= 34.0 && pos.y + size.height <= height,
                 "label={name}, full bar, {state}: pin escaped bottom row"
@@ -406,7 +453,19 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
             );
             right = pos.x + size.width;
         }
-        assert_eq!(ElementHandle::find_by_accessible_label(bar, if russian { "Агрессивные авто-тайлы" } else { "Aggressive auto-tile" }).count(), 0, "label=Aggressive auto-tile, full bar, {state}: legacy flame is removed");
+        assert_eq!(
+            ElementHandle::find_by_accessible_label(
+                bar,
+                if russian {
+                    "Агрессивные авто-тайлы"
+                } else {
+                    "Aggressive auto-tile"
+                }
+            )
+            .count(),
+            0,
+            "label=Aggressive auto-tile, full bar, {state}: legacy flame is removed"
+        );
         for (id, legacy_label) in [("restore", "Restore last tile")] {
             let legacy_label = if russian {
                 "Вернуть последний тайл"
@@ -445,8 +504,11 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
                 "label={name}, id={id}, compact bar, {state}: only the built-in tray action may remain"
             );
             for item in &matching {
-                assert_top_bounds(item, bar.global::<ui::BarSpec>().get_compact_width(),
-                    &format!("label={name}, compact bar, {state}"));
+                assert_top_bounds(
+                    item,
+                    bar.global::<ui::BarSpec>().get_compact_width(),
+                    &format!("label={name}, compact bar, {state}"),
+                );
             }
         }
         bar.set_compact_bar(false);

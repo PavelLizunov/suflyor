@@ -92,9 +92,15 @@ fn menu_is_exported_and_every_action_uses_one_fixed_column_grid() {
             "More keycap, form=menu, language=en/ru, all shortcut rows: missing prototype contract {contract}"
         );
     }
-    assert_eq!(key.matches("border-radius:").count(), 1, "More menu keycap, all rows, en/ru: exactly one radius binding");
     assert_eq!(
-        source("ui/metrics.slint").matches("out property <length> radius-keycap: 5px;").count(),
+        key.matches("border-radius:").count(),
+        1,
+        "More menu keycap, all rows, en/ru: exactly one radius binding"
+    );
+    assert_eq!(
+        source("ui/metrics.slint")
+            .matches("out property <length> radius-keycap: 5px;")
+            .count(),
         1,
         "More menu keycap, all rows, en/ru: rectangular 5px token is declared once"
     );
@@ -143,11 +149,13 @@ fn menu_is_exported_and_every_action_uses_one_fixed_column_grid() {
             .lines()
             .find(|line| line.contains(&format!("id: \"{id}\"")))
             .unwrap();
-        assert!(row.contains(if matches!(id, "unload_ai" | "restart" | "quit") {
-            "pinnable: false"
-        } else {
-            "pinnable: true"
-        }));
+        assert!(
+            row.contains(if matches!(id, "unload_ai" | "restart" | "quit") {
+                "pinnable: false"
+            } else {
+                "pinnable: true"
+            })
+        );
     }
 }
 
@@ -237,7 +245,9 @@ fn menu_and_pins_dispatch_existing_callbacks_and_persist_only_the_pin_list() {
     assert!(!pinnable.contains("\"restart\""));
     assert!(!pinnable.contains("\"quit\""));
     assert!(host.contains("const MAX_PINS: usize = 8;"));
-    assert!(host.contains("PINNABLE_IDS.contains(&id.as_str()) && !pins.contains(id) && pins.len() < MAX_PINS"));
+    assert!(host.contains(
+        "PINNABLE_IDS.contains(&id.as_str()) && !pins.contains(id) && pins.len() < MAX_PINS"
+    ));
     assert!(host.contains("\"unload_ai\" if bar.get_lock_menu_managed()"));
     assert!(host.contains("if bar.get_deep_lock() { 0 } else { 2 }"));
     assert!(host.contains("pins_model(&cfg.read().bar_pins)"));

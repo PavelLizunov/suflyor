@@ -143,19 +143,40 @@ fn rows_select_pins_do_not_select_and_danger_actions_require_yes() {
             "menu action must dismiss: {id}"
         );
     }
-    assert_eq!(ElementHandle::find_by_accessible_label(&menu, "Auto-tiles on every line").count(), 0);
-    assert_eq!(ElementHandle::find_by_accessible_label(&menu, "Unload local AI. pin").count(), 0);
+    assert_eq!(
+        ElementHandle::find_by_accessible_label(&menu, "Auto-tiles on every line").count(),
+        0
+    );
+    assert_eq!(
+        ElementHandle::find_by_accessible_label(&menu, "Unload local AI. pin").count(),
+        0
+    );
     menu.set_deep_lock(true);
-    assert_eq!(ElementHandle::find_by_accessible_label(&menu, "Unload local AI").count(), 0);
+    assert_eq!(
+        ElementHandle::find_by_accessible_label(&menu, "Unload local AI").count(),
+        0
+    );
     menu.show().expect("show load row");
     activate(&menu, "Load local AI");
-    assert_eq!(actions.borrow().last().map(String::as_str), Some("unload_ai"));
+    assert_eq!(
+        actions.borrow().last().map(String::as_str),
+        Some("unload_ai")
+    );
     assert!(!menu.window().is_visible());
-    assert_eq!(ElementHandle::find_by_accessible_label(&menu, "Load local AI. pin").count(), 0);
+    assert_eq!(
+        ElementHandle::find_by_accessible_label(&menu, "Load local AI. pin").count(),
+        0
+    );
     menu.set_lock_menu_managed(false);
-    assert_eq!(ElementHandle::find_by_accessible_label(&menu, "Load local AI").count(), 0);
+    assert_eq!(
+        ElementHandle::find_by_accessible_label(&menu, "Load local AI").count(),
+        0
+    );
     menu.set_deep_lock(false);
-    assert_eq!(ElementHandle::find_by_accessible_label(&menu, "Unload local AI").count(), 0);
+    assert_eq!(
+        ElementHandle::find_by_accessible_label(&menu, "Unload local AI").count(),
+        0
+    );
     menu.set_tray_available(false);
     assert_eq!(
         ElementHandle::find_by_accessible_label(&menu, "Hide to tray").count(),
@@ -236,7 +257,9 @@ fn bar_actions_dismiss_more_and_compact_changes_cannot_keep_it_open() {
             .expect("hide from shared bar dismissal callback");
         weak.upgrade().unwrap().set_menu_open(false);
     });
-    let opening_state = Rc::new(RefCell::new(String::from("More, language=en, fixture setup")));
+    let opening_state = Rc::new(RefCell::new(String::from(
+        "More, language=en, fixture setup",
+    )));
     let state_for_open = opening_state.clone();
     let weak = bar.as_weak();
     let menu_for_open = menu.as_weak();
@@ -247,7 +270,11 @@ fn bar_actions_dismiss_more_and_compact_changes_cannot_keep_it_open() {
             bar.invoke_menu_dismissed();
         } else {
             menu.show().expect("show from more chip");
-            assert!(menu.window().is_visible(), "show() returned with More hidden inside opening callback: {}", state_for_open.borrow());
+            assert!(
+                menu.window().is_visible(),
+                "show() returned with More hidden inside opening callback: {}",
+                state_for_open.borrow()
+            );
             bar.set_menu_open(true);
         }
     });
@@ -258,7 +285,8 @@ fn bar_actions_dismiss_more_and_compact_changes_cannot_keep_it_open() {
     bar.on_pin_activated(move |id| {
         assert!(
             !menu_for_pin.upgrade().unwrap().window().is_visible(),
-            "pin id={id} must dismiss before dispatch: {}", state_for_pin.borrow()
+            "pin id={id} must dismiss before dispatch: {}",
+            state_for_pin.borrow()
         );
         pinned_for_callback.borrow_mut().push(id.to_string());
     });
@@ -277,8 +305,14 @@ fn bar_actions_dismiss_more_and_compact_changes_cannot_keep_it_open() {
         // Settle the form BEFORE opening More; a pending form dismissal must
         // not race the next action while the headless fixture has no loop.
         slint::platform::update_timers_and_animations();
-        assert!(!menu.window().is_visible(), "label=More, form setup must leave menu hidden: language=en, compact={compact}");
-        assert!(!bar.get_menu_open(), "label=More, form setup must clear active chip: language=en, compact={compact}");
+        assert!(
+            !menu.window().is_visible(),
+            "label=More, form setup must leave menu hidden: language=en, compact={compact}"
+        );
+        assert!(
+            !bar.get_menu_open(),
+            "label=More, form setup must clear active chip: language=en, compact={compact}"
+        );
         let mut labels = vec![
             "Stealth (hide from capture)",
             "Silent: no automatic tiles",
@@ -304,17 +338,38 @@ fn bar_actions_dismiss_more_and_compact_changes_cannot_keep_it_open() {
             ]);
         }
         for (iteration, label) in labels.into_iter().enumerate() {
-            let state = format!("label={label}, language=en, compact={compact}, iteration={iteration}");
+            let state =
+                format!("label={label}, language=en, compact={compact}, iteration={iteration}");
             *opening_state.borrow_mut() = state.clone();
-            assert!(!menu.window().is_visible(), "previous action left More visible: {state}");
-            assert!(!bar.get_menu_open(), "previous action left More chip active: {state}");
+            assert!(
+                !menu.window().is_visible(),
+                "previous action left More visible: {state}"
+            );
+            assert!(
+                !bar.get_menu_open(),
+                "previous action left More chip active: {state}"
+            );
             let targets: Vec<_> = ElementHandle::find_by_accessible_label(&bar, "More").collect();
-            assert_eq!(targets.len(), 1, "More must have one target before action: {state}");
+            assert_eq!(
+                targets.len(),
+                1,
+                "More must have one target before action: {state}"
+            );
             let dismissals_before = dismissals.get();
             targets[0].invoke_accessible_default_action();
-            assert_eq!(dismissals.get(), dismissals_before, "opening More must not run a pending form dismissal: {state}");
-            assert!(menu.window().is_visible(), "More must show before bar action: {state}");
-            assert!(bar.get_menu_open(), "More must activate chip before bar action: {state}");
+            assert_eq!(
+                dismissals.get(),
+                dismissals_before,
+                "opening More must not run a pending form dismissal: {state}"
+            );
+            assert!(
+                menu.window().is_visible(),
+                "More must show before bar action: {state}"
+            );
+            assert!(
+                bar.get_menu_open(),
+                "More must activate chip before bar action: {state}"
+            );
             menu.set_confirmation("quit".into());
             let targets: Vec<_> = ElementHandle::find_by_accessible_label(&bar, label).collect();
             assert_eq!(targets.len(), 1, "bar action must have one target: {state}");
@@ -327,41 +382,84 @@ fn bar_actions_dismiss_more_and_compact_changes_cannot_keep_it_open() {
                 !bar.get_menu_open(),
                 "bar action must clear active chip: {state}"
             );
-            assert_eq!(menu.get_confirmation().as_str(), "", "bar action must clear confirmation: {state}");
+            assert_eq!(
+                menu.get_confirmation().as_str(),
+                "",
+                "bar action must clear confirmation: {state}"
+            );
         }
         // Clicking More itself toggles rather than running the generic dismiss first.
-        *opening_state.borrow_mut() = format!("label=More toggle, language=en, compact={compact}, iteration=1");
+        *opening_state.borrow_mut() =
+            format!("label=More toggle, language=en, compact={compact}, iteration=1");
         let more = ElementHandle::find_by_accessible_label(&bar, "More")
             .next()
             .unwrap();
         more.invoke_accessible_default_action();
-        assert!(menu.window().is_visible(), "More toggle first click: language=en, compact={compact}, iteration=1");
-        assert!(bar.get_menu_open(), "More toggle first click activates chip: language=en, compact={compact}, iteration=1");
+        assert!(
+            menu.window().is_visible(),
+            "More toggle first click: language=en, compact={compact}, iteration=1"
+        );
+        assert!(
+            bar.get_menu_open(),
+            "More toggle first click activates chip: language=en, compact={compact}, iteration=1"
+        );
         more.invoke_accessible_default_action();
-        assert!(!menu.window().is_visible(), "More toggle second click: language=en, compact={compact}, iteration=2");
-        assert!(!bar.get_menu_open(), "More toggle second click clears chip: language=en, compact={compact}, iteration=2");
+        assert!(
+            !menu.window().is_visible(),
+            "More toggle second click: language=en, compact={compact}, iteration=2"
+        );
+        assert!(
+            !bar.get_menu_open(),
+            "More toggle second click clears chip: language=en, compact={compact}, iteration=2"
+        );
     }
-    assert_eq!(&*pinned.borrow(), &["archive"], "Session archive pin dispatch: language=en, full/compact action iterations complete");
+    assert_eq!(
+        &*pinned.borrow(),
+        &["archive"],
+        "Session archive pin dispatch: language=en, full/compact action iterations complete"
+    );
     for (iteration, compact) in [false, true].into_iter().enumerate() {
-        let state = format!("label=More, language=en, target compact={compact}, iteration={iteration}");
+        let state =
+            format!("label=More, language=en, target compact={compact}, iteration={iteration}");
         *opening_state.borrow_mut() = state.clone();
         ElementHandle::find_by_accessible_label(&bar, "More")
             .next()
             .unwrap()
             .invoke_accessible_default_action();
-        assert_ne!(bar.get_compact_bar(), compact, "external form test must actually change compact-bar: {state}");
-        assert!(menu.window().is_visible(), "More visible before external form change: {state}");
-        assert!(bar.get_menu_open(), "More chip active before external form change: {state}");
+        assert_ne!(
+            bar.get_compact_bar(),
+            compact,
+            "external form test must actually change compact-bar: {state}"
+        );
+        assert!(
+            menu.window().is_visible(),
+            "More visible before external form change: {state}"
+        );
+        assert!(
+            bar.get_menu_open(),
+            "More chip active before external form change: {state}"
+        );
         menu.set_confirmation("quit".into());
         let dismissals_before = dismissals.get();
         bar.set_compact_bar(compact);
         slint::platform::update_timers_and_animations();
-        assert_eq!(dismissals.get(), dismissals_before + 1, "external form change must run exactly one dismissal: {state}");
-        assert!(!bar.get_menu_open(), "property change must clear menu-open: {state}");
+        assert_eq!(
+            dismissals.get(),
+            dismissals_before + 1,
+            "external form change must run exactly one dismissal: {state}"
+        );
+        assert!(
+            !bar.get_menu_open(),
+            "property change must clear menu-open: {state}"
+        );
         assert!(
             !menu.window().is_visible(),
             "external compact/full change must dismiss: {state}"
         );
-        assert_eq!(menu.get_confirmation().as_str(), "", "external form change must clear confirmation: {state}");
+        assert_eq!(
+            menu.get_confirmation().as_str(),
+            "",
+            "external form change must clear confirmation: {state}"
+        );
     }
 }

@@ -24,9 +24,8 @@ fn lock_chip_icon_has_an_explicit_vertical_center() {
     assert!(lock_icon.contains("width: 14px;"));
     assert!(lock_icon.contains("height: 14px;"));
     assert!(lock_chip.contains("root.mode == 2 ? @image-url(\"../assets/icons/flame.svg\")"));
-    assert!(
-        lock_chip.contains("property <color> accent: root.mode == 2 ? Theme.cat-orange : Theme.warning;")
-    );
+    assert!(lock_chip
+        .contains("property <color> accent: root.mode == 2 ? Theme.cat-orange : Theme.warning;"));
     assert!(lock_chip.contains("running: root.locked;"));
     assert!(lock_chip.contains("interval: 90ms;"));
     assert!(lock_icon.contains("duration: 85ms;"));
@@ -34,9 +33,9 @@ fn lock_chip_icon_has_an_explicit_vertical_center() {
     assert!(lock_chip.contains("property <bool> locked: root.mode == 0;"));
     assert!(lock_chip.contains("property <bool> unlocked: root.mode == 1;"));
     assert!(lock_chip.contains("? Theme.tint(accent)"));
-    assert!(lock_icon.contains(
-        "transform-rotation: root.locked ? (root.phase ? 7deg : -7deg) : 0deg;"
-    ));
+    assert!(
+        lock_icon.contains("transform-rotation: root.locked ? (root.phase ? 7deg : -7deg) : 0deg;")
+    );
 
     // HorizontalLayout centers only horizontally; explicitly center the SVG.
     assert!(

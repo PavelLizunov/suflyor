@@ -37,8 +37,11 @@ fn hide_action_is_guarded_in_the_compact_window_capsule() {
     // Restrict each lookup to its actual braces, not the rest of the file:
     // a tray chip moved outside either guard must fail this contract.
     fn block<'a>(source: &'a str, opening: &str) -> &'a str {
-        let rest = source.split_once(opening)
-            .unwrap_or_else(|| panic!("Hide to tray, compact window capsule, en/ru: missing {opening}"))
+        let rest = source
+            .split_once(opening)
+            .unwrap_or_else(|| {
+                panic!("Hide to tray, compact window capsule, en/ru: missing {opening}")
+            })
             .1;
         let mut depth = 1;
         for (offset, ch) in rest.char_indices() {
@@ -46,7 +49,9 @@ fn hide_action_is_guarded_in_the_compact_window_capsule() {
                 '{' => depth += 1,
                 '}' => {
                     depth -= 1;
-                    if depth == 0 { return &rest[..offset]; }
+                    if depth == 0 {
+                        return &rest[..offset];
+                    }
                 }
                 _ => {}
             }
@@ -73,13 +78,30 @@ fn hide_action_is_guarded_in_the_compact_window_capsule() {
         compact_slot.contains("width: 26px;"),
         "Hide to tray, compact window capsule, en/ru: reserve the 26px tray slot"
     );
-    assert!(tray_chip.contains("icons/tray.svg"), "Hide to tray, compact window capsule, en/ru: tray icon");
-    assert!(tray_chip.contains("@tr(\"Hide to tray\")"), "Hide to tray, compact window capsule, en/ru: translated label");
-    assert_eq!(bar.matches("root.hide-to-tray-clicked();").count(), 1, "Hide to tray, compact window capsule, en/ru: one direct hide dispatch");
+    assert!(
+        tray_chip.contains("icons/tray.svg"),
+        "Hide to tray, compact window capsule, en/ru: tray icon"
+    );
+    assert!(
+        tray_chip.contains("@tr(\"Hide to tray\")"),
+        "Hide to tray, compact window capsule, en/ru: translated label"
+    );
+    assert_eq!(
+        bar.matches("root.hide-to-tray-clicked();").count(),
+        1,
+        "Hide to tray, compact window capsule, en/ru: one direct hide dispatch"
+    );
     // pin-icon has the same asset as its fallback; that is not a second
     // built-in tray chip. Count the chip inside its guarded capsule instead.
-    assert_eq!(tray_chip.matches("icons/tray.svg").count(), 1, "Hide to tray, compact window capsule, en/ru: one built-in tray icon");
-    assert!(bar.contains("callback menu-opened(length, length);"), "More, both bar forms, en/ru: menu callback remains available");
+    assert_eq!(
+        tray_chip.matches("icons/tray.svg").count(),
+        1,
+        "Hide to tray, compact window capsule, en/ru: one built-in tray icon"
+    );
+    assert!(
+        bar.contains("callback menu-opened(length, length);"),
+        "More, both bar forms, en/ru: menu callback remains available"
+    );
 }
 
 #[test]
