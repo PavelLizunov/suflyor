@@ -27,3 +27,8 @@
 **Vulnerability:** `save()` in `config.rs` saved `config.json` via default `std::fs::write`, which on Unix/POSIX targets created files subject to default umask permissions (`0644`/`0664`), leaving plain-text secrets and bearer tokens in `config.json` readable by other local system users.
 **Learning:** While `credentials.json` had explicit `0o600` permissions on POSIX, `config.json` also holds sensitive API keys and tokens (`ai_bearer`, `groq_api_key`, `hermes_bridge_token`) but relied on default file creation options.
 **Prevention:** Always enforce owner-only permissions (`0o600`) when creating temporary files before atomic renames for any file containing sensitive API keys or credentials on POSIX platforms.
+
+## 2026-10-10 - World-Readable Summary & Debrief Sidecar File Permissions on POSIX
+**Vulnerability:** `save_in()` and `save_debrief_in()` in `conspect.rs` created `conspects/` (`*.json`) and `debriefs/` (`*.txt`) sidecars via default `std::fs::create_dir_all` and `std::fs::write`, leaving meeting transcripts, summaries, and coaching notes subject to default umask permissions (`0644`/`0755`) on Unix/POSIX targets.
+**Learning:** While `sessions/` journals and `config.json` enforced owner-restricted file permissions (`0o600`/`0o700`), sidecar files holding meeting transcripts and AI summaries relied on standard `std::fs` calls, exposing sensitive meeting content to other local system users.
+**Prevention:** Always use `crate::paths::ensure_private_dir` and `crate::paths::write_private` when creating directories or writing files under the data root to enforce owner-only (`0o600`/`0o700`) permissions on POSIX targets.

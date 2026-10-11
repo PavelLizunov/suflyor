@@ -2768,7 +2768,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                 copied.as_ref().map(|s| s.chars().count()).unwrap_or(0)
                             );
                             restore_text_clipboard(saved.as_ref());
-                            if let Some(text) = copied {
+                            if let Some(text) = copied.filter(|text| !text.trim().is_empty()) {
                                 // Spawn a visible tile showing the text + 🔊/⏯/📋/✕,
                                 // which auto-starts the read-aloud.
                                 spawn_text_tile(
@@ -2779,6 +2779,27 @@ fn main() -> Result<(), slint::PlatformError> {
                                     (&events_sa1, &cfg_sa1, &slint_rt_sa1, &rt_sa1),
                                     &tiles_sa1,
                                     &overlay_sa1,
+                                );
+                            } else {
+                                // The key must visibly react: say that nothing was
+                                // selected instead of doing nothing.
+                                let nothing_selected = if is_ru {
+                                    "Нет выделенного текста. Выделите текст в любом окне и нажмите Shift+Alt+1."
+                                } else {
+                                    "No text is selected. Select text in any window and press Shift+Alt+1."
+                                };
+                                let _ = events_sa1.spawn_tile_full(
+                                    TileSpec {
+                                        question: title.clone(),
+                                        answer: nothing_selected.into(),
+                                        source: "read_aloud_error".into(),
+                                        is_translation: false,
+                                        highlights: vec![],
+                                        summary_session: None,
+                                    },
+                                    MonitorHint::Auto,
+                                    false,
+                                    TileKind::Error,
                                 );
                             }
                         });

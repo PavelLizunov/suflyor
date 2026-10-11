@@ -99,6 +99,9 @@ export component ArchiveWindow inherits Window {
     // header indicator; the per-row "↻ Summary" button fires the request.
     in-out property <bool> retranscribe-busy: false;
     in-out property <string> retranscribe-status: "";
+    // A message for a request that could not start or finish (nothing to name
+    // a session from, a delete that failed). Shown until the next search.
+    in-out property <string> notice: "";
     // True when STT resolves to the cloud (Groq). Drives the egress note below:
     // "↻ Summary" then re-uploads this session's SAVED audio off-box, so we warn
     // (mirrors the Vision panel's "Screenshots are sent to the cloud." note).
@@ -258,6 +261,7 @@ export component ArchiveWindow inherits Window {
                     placeholder-text: @tr("search transcript + AI answers…");
                     text <=> root.query;
                     edited(t) => {
+                        root.notice = "";
                         root.query-changed(t);
                         root.selected-index = 0;
                     }
@@ -280,6 +284,14 @@ export component ArchiveWindow inherits Window {
                     color: Theme.accent;
                     horizontal-alignment: center;
                     wrap: word-wrap;
+                }
+                if !root.retranscribe-busy && root.notice != "" : Text {
+                    text: root.notice;
+                    font-size: Metrics.font-label;
+                    color: Theme.warning;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                    accessible-role: text;
                 }
 
                 // ── Cloud-STT egress note (only when "Summary" would upload) ──

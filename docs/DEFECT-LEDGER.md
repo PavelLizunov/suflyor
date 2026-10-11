@@ -245,6 +245,12 @@ Scenario: the host's modules are declared with `#[path]` inside a file that is p
 Found by: the worker's `cargo fmt` on 2026-10-11 changed nothing in a new file with an over-long line under `overlay_host/`, while it reformatted files outside it.
 Fix plan: a gate step that runs `rustfmt --check --edition 2021` on the files under `src/bin/overlay_host/`, after one formatting commit.
 
+### D-033 Four messages of the session archive are written to a line that is not drawn   Severity: P3   Status: Open
+Evidence: slint-experiment/ui/archive.slint:277 - `if root.retranscribe-busy : Text {` is the only place that shows `retranscribe-status`; slint-experiment/src/bin/overlay_host/aux_windows/archive.rs:372 - `p.set_retranscribe_status(SharedString::from("Активную сессию удалить нельзя"));` with `retranscribe-busy` false (also :425 a failed delete, :527 not enough data for a summary, :695 an empty saved summary; master 4134f93)
+Scenario: the user deletes the running session, or a delete fails, or asks for a summary that cannot be built: the handler returns after setting a text nobody sees, and the button looks dead. "Regenerate name" has three more silent returns (no transcript, a cloud provider, no name from the AI).
+Found by: read in source on 2026-10-11 after "Regenerate name" on a session without a transcript showed nothing in a live run on windows-worker. The four messages were not reproduced live.
+Fix plan: a notice line of its own, shown when no job runs, in both languages.
+
 ## Imported from the Grok audit (docs/audit-grok/, master 37c1230)
 
 The 14 reports hold 119 numbered findings. Each was checked against the source at 37c1230 on 2026-10-10 by a second model (pi, gpt-sol-latest, read-only tools, one run per report) with the instruction to quote the line it read; a script then checked that each quoted line exists at the cited path (91 of the first 115 rows matched on both citations, 21 on one, 2 on none, 1 had no citation). Result: 42 confirmed, 64 partial (the code is as described, the consequence is overstated or mitigated), 8 refuted, 5 need a run of the program.
