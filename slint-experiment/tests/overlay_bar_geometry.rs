@@ -28,6 +28,7 @@ struct Labels {
     expand: &'static str,
     more: &'static str,
     tray: &'static str,
+    stealth: &'static str,
     app_ram: &'static str,
     you: &'static str,
     them: &'static str,
@@ -45,6 +46,7 @@ const ENGLISH: Labels = Labels {
     expand: "Expand the bar",
     more: "More",
     tray: "Hide to tray",
+    stealth: "Stealth (hide from capture)",
     app_ram: "App RAM",
     you: "you:",
     them: "them:",
@@ -61,6 +63,7 @@ const RUSSIAN: Labels = Labels {
     expand: "Развернуть бар",
     more: "Ещё",
     tray: "Свернуть в трей",
+    stealth: "Скрытность (не показывать при захвате экрана)",
     app_ram: "RAM приложения",
     you: "вы:",
     them: "собеседник:",
@@ -81,6 +84,155 @@ fn assert_top_bounds(item: &ElementHandle, width: f32, name: &str) {
         pos.x >= 0.0 && pos.x + size.width <= width,
         "{name} escaped the bar"
     );
+}
+
+fn assert_form_contract(bar: &ui::OverlayBarWindow, labels: &Labels, form: i32, state: &str) {
+    let spec = bar.global::<ui::BarSpec>();
+    let (width, declared) = match form {
+        0 => (
+            spec.get_full_width(),
+            [
+                spec.get_full_state(),
+                spec.get_full_voice(),
+                spec.get_full_session(),
+                spec.get_full_tiles(),
+                spec.get_full_window(),
+            ],
+        ),
+        1 => (
+            spec.get_compact_width(),
+            [
+                spec.get_compact_state(),
+                spec.get_compact_voice(),
+                spec.get_compact_session(),
+                spec.get_compact_tiles(),
+                spec.get_compact_window(),
+            ],
+        ),
+        2 => (
+            spec.get_mini_width(),
+            [
+                0.0,
+                spec.get_mini_voice(),
+                spec.get_mini_session(),
+                spec.get_mini_tiles(),
+                spec.get_mini_window(),
+            ],
+        ),
+        _ => panic!("unsupported bar form: {form}"),
+    };
+    let stealth: Vec<_> = ElementHandle::find_by_accessible_label(bar, labels.stealth).collect();
+    assert_eq!(
+        stealth.len(),
+        1,
+        "exactly one stealth chip: form={form}, language={}, {state}",
+        labels.russian,
+    );
+    assert_top_bounds(
+        &stealth[0],
+        width,
+        &format!("label={}, form={form}, {state}", labels.stealth),
+    );
+    assert_eq!(
+        stealth[0].size().width,
+        if form == 0 { 70.0 } else { 26.0 },
+        "stealth chip width: form={form}, {state}"
+    );
+    if form == 2 {
+        assert_eq!(
+            ElementHandle::find_by_accessible_label(bar, labels.tray).count(),
+            0,
+            "mini must not instantiate tray: language={}, {state}",
+            labels.russian,
+        );
+        for label in [labels.expand, labels.more] {
+            assert_eq!(
+                ElementHandle::find_by_accessible_label(bar, label).count(),
+                1,
+                "mini window action must be unique: label={label}, language={}, {state}",
+                labels.russian,
+            );
+        }
+    }
+    // Mini has no state capsule. The existing mini-prefixed accessors expose
+    // the other four named capsules in every form, not just the mini form.
+    for (index, (capsule, preferred)) in [
+        ("state", bar.get_state_content_width()),
+        ("voice", bar.get_mini_voice_content_width()),
+        ("session", bar.get_mini_session_content_width()),
+        ("tiles", bar.get_mini_tiles_content_width()),
+        ("window", bar.get_mini_window_content_width()),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if form == 2 && index == 0 {
+            continue;
+        }
+        assert_eq!(
+            preferred, declared[index],
+            "{capsule} preferred/declared width mismatch: form={form}, language={}, {state}",
+            labels.russian,
+        );
+    }
+}
+
+fn assert_form_states(bar: &ui::OverlayBarWindow, labels: &Labels) {
+    let spec = bar.global::<ui::BarSpec>();
+    // Include a tray pin: mini must expose neither it nor the compact tray chip.
+    bar.set_pins(slint::ModelRc::new(slint::VecModel::from(vec![
+        slint::SharedString::from("tray"),
+    ])));
+    for compact in [false, true] {
+        bar.set_compact_bar(compact);
+        // Exercise both entry from compact and return from mini.
+        for form in [0, 1, 2, 1, 0] {
+            bar.set_bar_form(form);
+            let width = match form {
+                0 => spec.get_full_width(),
+                1 => spec.get_compact_width(),
+                2 => spec.get_mini_width(),
+                _ => panic!("unsupported bar form: {form}"),
+            };
+            bar.window()
+                .set_size(LogicalSize::new(width, spec.get_height()));
+            for active in [false, true] {
+                bar.set_stealth_active(active);
+                for fault in [false, true] {
+                    bar.set_stealth_fault(fault);
+                    for tray in [false, true] {
+                        bar.set_tray_available(tray);
+                        for timer in [false, true] {
+                            bar.set_timer_active(timer);
+                            for mode in [0, 1, 2] {
+                                bar.set_autotile_mode(mode);
+                                // The testing backend has no event loop. Settle
+                                // conditional children before reading geometry.
+                                slint::platform::update_timers_and_animations();
+                                assert_form_contract(
+                                    bar,
+                                    labels,
+                                    form,
+                                    &format!("compact={compact}, active={active}, fault={fault}, tray={tray}, timer={timer}, mode={mode}"),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    bar.set_pins(slint::ModelRc::new(
+        slint::VecModel::<slint::SharedString>::default(),
+    ));
+    bar.set_stealth_active(false);
+    bar.set_stealth_fault(false);
+    bar.set_tray_available(false);
+    bar.set_timer_active(false);
+    bar.set_autotile_mode(1);
+    bar.set_compact_bar(false);
+    bar.set_bar_form(0);
+    slint::platform::update_timers_and_animations();
 }
 
 fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
@@ -107,6 +259,7 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
     assert_eq!(spec.get_compact_width(), 586.0);
     assert!(spec.get_full_width() > spec.get_compact_width());
     bar.window().set_size(LogicalSize::new(width, height));
+    slint::platform::update_timers_and_animations();
     let stable_names = if compact {
         vec![
             labels.ask,
@@ -179,6 +332,7 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
                     names.push(labels.more);
                     bar.window()
                         .set_size(LogicalSize::new(width + 300.0, height));
+                    slint::platform::update_timers_and_animations();
                     let natural: Vec<f32> = names
                         .iter()
                         .map(|name| element(bar, name).size().width)
@@ -235,6 +389,12 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
                         "auto-tiles word clipped: compact={compact}, mode={mode}"
                     );
                     assert!(bar.get_all_regions_fit(), "capsule overflow: compact={compact}, mode={mode}, tiles={count}, recording={recording}");
+                    assert_form_contract(
+                        bar,
+                        labels,
+                        i32::from(compact),
+                        &format!("mode={mode}, tiles={count}, recording={recording}, deep={deep}"),
+                    );
                     for ((name, item), natural_width) in names.iter().zip(&items).zip(natural) {
                         assert_top_bounds(item, width, name);
                         assert_eq!(item.size().width, natural_width, "{name} was compressed");
@@ -340,6 +500,8 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
     let window_x = element(bar, window_label).absolute_position().x;
     bar.set_tray_available(false);
     bar.set_timer_active(false);
+    slint::platform::update_timers_and_animations();
+    assert_form_contract(bar, labels, i32::from(compact), "empty tray/pause slots");
     assert_eq!(
         element(bar, window_label).absolute_position().x,
         window_x,
@@ -374,11 +536,6 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
     ])));
     bar.set_compact_bar(false); // Mini must work even with the full preference.
     bar.set_bar_form(2);
-    let stealth = if labels.russian {
-        "Скрытность (не показывать при захвате экрана)"
-    } else {
-        "Stealth (hide from capture)"
-    };
     for fault in [false, true] {
         bar.set_stealth_fault(fault);
         for tone in [
@@ -424,6 +581,7 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
                         for (source, speaker) in [("mic", labels.you), ("sys", labels.them)] {
                             bar.set_last_transcript_source(source.into());
                             bar.window().set_size(LogicalSize::new(width, height));
+                            slint::platform::update_timers_and_animations();
                             assert_eq!(bar.window().size().width as f32, width);
                             assert!(
                                 bar.get_all_regions_fit(),
@@ -442,41 +600,19 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
                                 bar.get_mini_window_content_width(),
                                 spec.get_mini_window(),
                             );
-                            for (capsule, preferred, declared) in [
-                                (
-                                    "voice",
-                                    bar.get_mini_voice_content_width(),
-                                    spec.get_mini_voice(),
-                                ),
-                                (
-                                    "session",
-                                    bar.get_mini_session_content_width(),
-                                    spec.get_mini_session(),
-                                ),
-                                (
-                                    "tiles",
-                                    bar.get_mini_tiles_content_width(),
-                                    spec.get_mini_tiles(),
-                                ),
-                                (
-                                    "window",
-                                    bar.get_mini_window_content_width(),
-                                    spec.get_mini_window(),
-                                ),
-                            ] {
-                                assert_eq!(
-                                    preferred, declared,
-                                    "mini {capsule} content/spec mismatch: language={}, fault={fault}, mode={mode}, recording={recording}, deep={deep}",
-                                    labels.russian,
-                                );
-                            }
+                            assert_form_contract(
+                                bar,
+                                labels,
+                                2,
+                                &format!("fault={fault}, mode={mode}, recording={recording}, deep={deep}, source={source}"),
+                            );
                             assert!(bar.get_autotile_word_fits());
                             let top_names = [
                                 labels.ask,
                                 labels.grab,
                                 "1:07:31",
                                 pause,
-                                stealth,
+                                labels.stealth,
                                 switch,
                                 labels.expand,
                                 labels.more,
@@ -585,6 +721,7 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
     ] {
         bar.set_bar_form(form);
         bar.window().set_size(LogicalSize::new(form_width, height));
+        slint::platform::update_timers_and_animations();
         let mascot = element(bar, &mascot_label);
         let pos = mascot.absolute_position();
         let size = mascot.size();
@@ -651,6 +788,7 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
                 .collect::<Vec<_>>(),
         )));
         bar.window().set_size(LogicalSize::new(width, height));
+        slint::platform::update_timers_and_animations();
         assert_eq!(
             bar.window().size().width as f32,
             width,
@@ -739,6 +877,7 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
             bar.global::<ui::BarSpec>().get_compact_width(),
             height,
         ));
+        slint::platform::update_timers_and_animations();
         assert_eq!(
             ElementHandle::find_by_accessible_label(bar, hint).count(),
             0,
@@ -769,6 +908,7 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
         }
         bar.set_compact_bar(false);
         bar.set_bar_form(0);
+        slint::platform::update_timers_and_animations();
     }
     bar.set_pins(slint::ModelRc::new(
         slint::VecModel::<slint::SharedString>::default(),
@@ -786,12 +926,14 @@ fn capsules_stay_inside_spec_sizes_in_english_and_russian() {
     assert_layout(&english, &ENGLISH, true);
     assert_mini(&english, &ENGLISH);
     assert_pins(&english, false);
+    assert_form_states(&english, &ENGLISH);
     slint::select_bundled_translation("ru").expect("select Russian translation");
     let russian = ui::OverlayBarWindow::new().expect("create Russian bar");
     assert_layout(&russian, &RUSSIAN, false);
     assert_layout(&russian, &RUSSIAN, true);
     assert_mini(&russian, &RUSSIAN);
     assert_pins(&russian, true);
+    assert_form_states(&russian, &RUSSIAN);
 }
 
 #[test]
@@ -865,7 +1007,7 @@ fn record_indicator_reserves_an_empty_idle_cell_and_keeps_active_shapes() {
         "mini retains swipe lock gesture"
     );
     assert!(
-        source.contains("press-feedback: root.bar-form != 2;"),
+        source.contains("press-feedback: root.bar-form == 0 || root.bar-form == 1;"),
         "unsatisfied mini expand must not flash"
     );
 }

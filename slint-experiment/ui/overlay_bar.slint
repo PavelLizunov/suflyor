@@ -550,7 +550,8 @@ export component OverlayBarWindow inherits Window {
     preferred-height: BarSpec.height;
     min-width: root.bootstrap-mode ? 440px : (root.bar-form == 2 ? BarSpec.mini-width : root.bar-form == 1 ? BarSpec.compact-width : BarSpec.full-width);
     out property <bool> autotile-word-fits: autotile-chip.fits;
-    // Raw capsule evidence; the mini test reads these with bar-form == 2.
+    // Raw capsule evidence for every form; retain the mini-prefixed accessors.
+    out property <length> state-content-width: state-capsule.content-width;
     out property <bool> mini-voice-fits: voice-capsule.fits;
     out property <bool> mini-session-fits: session-capsule.fits;
     out property <bool> mini-tiles-fits: tiles-capsule.fits;
@@ -857,9 +858,9 @@ export component OverlayBarWindow inherits Window {
                 Rectangle {
                     height: 26px;
                     state-capsule := Capsule {
-                        visible: root.bar-form != 2;
+                        visible: root.bar-form == 0 || root.bar-form == 1;
                         width: root.bar-form == 2 ? 0px : root.bar-form == 1 ? BarSpec.compact-state : BarSpec.full-state;
-                        if root.bar-form != 2 : BarChip {
+                        if root.bar-form == 0 || root.bar-form == 1 : BarChip {
                             width: root.bar-form == 1 ? 26px : 70px;
                             icon: @image-url("../assets/icons/stealth.svg"); has-icon: true;
                             label: root.bar-form == 1 ? "" : root.stealth-fault ? @tr("visible!")
@@ -931,6 +932,7 @@ export component OverlayBarWindow inherits Window {
                         }
                         tiles-capsule := Capsule {
                             width: root.bar-form == 2 ? BarSpec.mini-tiles : root.bar-form == 1 ? BarSpec.compact-tiles : BarSpec.full-tiles;
+                            // Mini has no state capsule: keep its stealth chip here.
                             if root.bar-form == 2 : BarChip {
                                 icon: @image-url("../assets/icons/stealth.svg"); has-icon: true;
                                 a11y: @tr("Stealth (hide from capture)");
@@ -940,8 +942,8 @@ export component OverlayBarWindow inherits Window {
                                 clicked => { root.dismiss-menu(); root.stealth-toggle-clicked(); }
                             }
                             autotile-chip := AutotileChip {
-                                width: root.bar-form != 0 ? 26px : 96px;
-                                tight: root.bar-form != 0;
+                                width: root.bar-form == 0 ? 96px : 26px;
+                                tight: root.bar-form == 1 || root.bar-form == 2;
                                 mode: root.autotile-mode;
                                 menu-opened(x, y) => { root.dismiss-menu(); root.lock-menu-opened(x, y); }
                             }
@@ -970,6 +972,7 @@ export component OverlayBarWindow inherits Window {
                         Rectangle { horizontal-stretch: 1; min-width: BarSpec.spring; }
                         window-capsule := Capsule {
                             width: root.bar-form == 2 ? BarSpec.mini-window : root.bar-form == 1 ? BarSpec.compact-window : BarSpec.full-window;
+                            // Only compact reserves a tray slot; mini has expand + More.
                             if root.bar-form == 1 : Rectangle {
                                 width: 26px; height: Metrics.control-md; horizontal-stretch: 0;
                                 if root.tray-available : BarChip {
@@ -979,10 +982,10 @@ export component OverlayBarWindow inherits Window {
                                 }
                             }
                             BarChip {
-                                icon: root.bar-form != 0 ? @image-url("../assets/icons/maximize.svg") : @image-url("../assets/icons/minimize.svg");
+                                icon: root.bar-form == 0 ? @image-url("../assets/icons/minimize.svg") : @image-url("../assets/icons/maximize.svg");
                                 has-icon: true;
-                                a11y: root.bar-form != 0 ? @tr("Expand the bar") : @tr("Compact reader mode");
-                                press-feedback: root.bar-form != 2;
+                                a11y: root.bar-form == 0 ? @tr("Compact reader mode") : @tr("Expand the bar");
+                                press-feedback: root.bar-form == 0 || root.bar-form == 1;
                                 clicked => { root.dismiss-menu(); root.compact-toggle-clicked(); }
                             }
                             more-chip := MoreChip {
@@ -995,7 +998,8 @@ export component OverlayBarWindow inherits Window {
                 // Bottom row: mini always includes the status, without pins or hints.
                 HorizontalLayout {
                     height: Metrics.control-md; spacing: BarSpec.gap; padding-left: Metrics.space-xs;
-                    if root.bar-form == 2 || root.stealth-fault || root.status-tone == StatusTone.warning || root.status-tone == StatusTone.danger : Text {
+                    if root.bar-form == 2 || ((root.bar-form == 0 || root.bar-form == 1)
+                        && (root.stealth-fault || root.status-tone == StatusTone.warning || root.status-tone == StatusTone.danger)) : Text {
                         text: root.presented-status;
                         font-size: Metrics.font-label; font-weight: 600;
                         color: root.stealth-fault || root.status-tone == StatusTone.ok
@@ -1013,7 +1017,7 @@ export component OverlayBarWindow inherits Window {
                         tint: Theme.on-tint(Theme.danger); weight: 600;
                         clicked => { root.dismiss-menu(); root.local-ai-mode-selected(0); }
                     }
-                    if root.timer-active && root.session-name != "" && root.bar-form != 2 : Text {
+                    if root.timer-active && root.session-name != "" && (root.bar-form == 0 || root.bar-form == 1) : Text {
                         text: root.session-name;
                         font-size: Metrics.font-label; font-weight: 600;
                         color: Theme.text-secondary; vertical-alignment: center;
@@ -1037,12 +1041,12 @@ export component OverlayBarWindow inherits Window {
                         a11y: @tr("Restore last tile");
                         clicked => { root.dismiss-menu(); root.restore-tile-clicked(); }
                     }
-                    if root.app-memory != "" && root.bar-form != 2 : Text {
+                    if root.app-memory != "" && (root.bar-form == 0 || root.bar-form == 1) : Text {
                         text: @tr("App RAM") + " " + root.app-memory;
                         font-size: Metrics.font-caption; color: Theme.text-muted;
                         vertical-alignment: center; horizontal-stretch: 0;
                     }
-                    if root.mlx-memory != "" && root.bar-form != 2 : Text {
+                    if root.mlx-memory != "" && (root.bar-form == 0 || root.bar-form == 1) : Text {
                         text: "MLX" + " " + root.mlx-memory;
                         font-size: Metrics.font-caption; color: Theme.text-muted;
                         vertical-alignment: center; horizontal-stretch: 0;
