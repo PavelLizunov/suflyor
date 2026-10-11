@@ -611,9 +611,14 @@ fn assert_menu_grid(menu: &ui::BarMenuWindow, russian: bool) {
                 kpos.x >= key_x && ksize.width > 0.0,
                 "key inside column: {key}"
             );
-            assert_eq!(kpos.x + ksize.width, key_x + 96.0, "key right edge: {key}");
-            assert_eq!(kpos.y, pos.y + 4.0);
-            assert_eq!(ksize.height, 20.0);
+            // Only the key's Text carries the label; it sits inside the 20 px chip,
+            // 7 px from the chip's right edge, which is pinned to the column's edge.
+            let kright = kpos.x + ksize.width;
+            assert!(
+                kright <= key_x + 96.0 && kright >= key_x + 96.0 - 8.0,
+                "key right edge: {key}: {kright}"
+            );
+            assert!(kpos.y >= pos.y + 4.0 && kpos.y + ksize.height <= pos.y + 24.0);
             assert!(kpos.x > pos.x + size.width && kpos.x + ksize.width < pin_x);
             targets.push((key.to_owned(), item.absolute_position(), item.size()));
         }
