@@ -124,18 +124,12 @@ component Chip inherits Rectangle {
     }
 }
 
-// Lock chip (v0.28) — toggles "listening mode" (config.suppress_tiles): auto AI tiles stop
-// popping (handy while recording a game — a tile would sit on top of it). When ACTIVE the
-// padlock TREMBLES so the user understands tiles are being held back on purpose — «где тайлы?»
-// → the shaking lock answers. Uses a raw Image (not IconSlot) so it can rotate.
+// Auto-tiles choices share their icons and semantic colours with the bar switch.
 export component LockModeMenuRow inherits Rectangle {
     in property <string> label;
     in property <bool> current: false;
-    // The selector is a compact traffic light: neutral unlocked, amber
-    // listening, red unloaded.  The colour stays on the row icon even before
-    // selection so the consequence of each choice is apparent.
     in property <color> mode-color: Theme.text-secondary;
-    in property <bool> unlocked: false;
+    in property <image> icon;
     callback clicked();
 
     accessible-action-default => { root.clicked(); }
@@ -154,7 +148,7 @@ export component LockModeMenuRow inherits Rectangle {
         padding-right: Metrics.space-sm;
         spacing: Metrics.space-sm;
         Image {
-            source: root.unlocked ? @image-url("../assets/icons/unlock.svg") : @image-url("../assets/icons/lock.svg");
+            source: root.icon;
             colorize: root.mode-color;
             width: 14px;
             height: 14px;
@@ -180,31 +174,28 @@ export component LockModeMenuRow inherits Rectangle {
     }
 }
 
-component LockChip inherits Rectangle {
-    in property <bool> locked: false;
-    in property <bool> unlocked: !root.locked;
-    // Deep lock (managed-local third state, v0.37): implies `locked`, turns
-    // the chip red and STOPS the tremble — an unloaded server is a firm,
-    // static state, distinct from the shaking "tiles held back" listening mode.
-    in property <bool> deep: false;
-    in property <string> a11y;
-    in property <bool> managed: false;
-    // Compact mode is icon-only; the full bar keeps the short deep-lock label.
+component AutotileChip inherits Rectangle {
+    out property <bool> fits: lay.preferred-width <= self.width;
     in property <bool> tight: false;
-    // 0 = normal, 1 = listening, 2 = deep. Rust owns the durable transition.
-    in property <int> mode: 0;
-    in property <color> accent: root.deep ? Theme.danger : Theme.warning;
-    callback mode-selected(int);
+    // Rust owns persistence; suppression wins over a stored every-line flag.
+    in property <int> mode: 1;
+    property <bool> locked: root.mode == 0;
+    property <bool> unlocked: root.mode == 1;
+    property <color> accent: root.mode == 2 ? Theme.cat-orange : Theme.warning;
+    property <string> label: root.mode == 0 ? @tr("silent")
+        : root.mode == 2 ? @tr("everything") : @tr("questions");
+    property <string> a11y: root.mode == 0 ? @tr("Silent: no automatic tiles")
+        : root.mode == 2 ? @tr("On every line") : @tr("On questions");
     callback menu-opened(length, length);
     property <bool> phase: false;
 
     accessible-role: button;
-    accessible-label: root.deep ? @tr("Local AI unloaded") : a11y;
+    accessible-label: root.a11y;
     accessible-checkable: true;
-    accessible-checked: locked;
+    accessible-checked: root.mode != 1;
     accessible-action-default => { root.menu-opened(root.absolute-position.x + root.width, root.absolute-position.y + root.height); }
-    background: locked
-        ? accent.with-alpha(0.18)
+    background: root.mode != 1
+        ? Theme.tint(accent)
         : (ta.pressed
             ? accent.with-alpha(0.34)
             : (ta.has-hover ? Theme.border-strong.with-alpha(0.22) : transparent));
@@ -216,39 +207,38 @@ component LockChip inherits Rectangle {
     horizontal-stretch: 0;
     animate background { duration: 80ms; }
 
-    // Trembles only while locked in LISTENING mode: flip `phase` every 90ms and
-    // let `animate` swing the padlock between +7° and -7°, so it visibly shakes;
-    // at rest (unlocked) it sits flat, and a DEEP lock holds it still.
+    // Preserve the listening-mode tremble, independently of unloaded AI.
     Timer {
         interval: 90ms;
-        running: root.locked && !root.deep;
+        running: root.locked;
         triggered => {
             root.phase = !root.phase;
         }
     }
-    HorizontalLayout {
+    lay := HorizontalLayout {
         padding-left: Metrics.space-xs;
         padding-right: Metrics.space-xs;
         spacing: Metrics.space-xs;
         alignment: center;
 
         Image {
-            source: root.unlocked ? @image-url("../assets/icons/unlock.svg") : @image-url("../assets/icons/lock.svg");
-            colorize: root.locked ? root.accent : Theme.text-secondary;
+            source: root.mode == 2 ? @image-url("../assets/icons/flame.svg")
+                : root.unlocked ? @image-url("../assets/icons/unlock.svg") : @image-url("../assets/icons/lock.svg");
+            colorize: root.mode != 1 ? Theme.on-tint(root.accent) : Theme.text-secondary;
             width: 14px;
             height: 14px;
             y: (parent.height - self.height) / 2;
             // transform-rotation pivots around the element centre by default → a clean wobble.
-            transform-rotation: root.locked && !root.deep ? (root.phase ? 7deg : -7deg) : 0deg;
+            transform-rotation: root.locked ? (root.phase ? 7deg : -7deg) : 0deg;
             animate transform-rotation {
                 duration: 85ms;
                 easing: ease-in-out;
             }
         }
-        if root.deep && !root.tight : Text {
-            text: @tr("AI off");
+        if !root.tight : Text {
+            text: root.label;
             font-size: Metrics.font-label;
-            color: root.accent;
+            color: root.mode != 1 ? Theme.on-tint(root.accent) : Theme.text-secondary;
             vertical-alignment: center;
         }
     }
@@ -337,6 +327,7 @@ component PinChip inherits Rectangle {
     in property <string> a11y;
     in property <color> tint: Theme.text-secondary;
     in property <bool> action-enabled: true;
+    in property <int> weight: 400;
     callback clicked();
     width: root.label == "" ? 26px : 86px;
     height: 22px;
@@ -349,7 +340,7 @@ component PinChip inherits Rectangle {
         alignment: center; spacing: Metrics.space-xs;
         IconSlot { icon: root.icon; tint: root.tint; }
         if root.label != "" : Text {
-            text: root.label; color: root.tint; font-size: Metrics.font-caption;
+            text: root.label; color: root.tint; font-size: Metrics.font-caption; font-weight: root.weight;
             accessible-label: ""; // The parent exposes the single action label.
             vertical-alignment: center; overflow: elide; min-width: 0px;
         }
@@ -552,6 +543,7 @@ export component OverlayBarWindow inherits Window {
     preferred-width: root.bootstrap-mode ? 560px : (root.compact-bar ? BarSpec.compact-width : BarSpec.full-width);
     preferred-height: BarSpec.height;
     min-width: root.bootstrap-mode ? 440px : (root.compact-bar ? BarSpec.compact-width : BarSpec.full-width);
+    out property <bool> autotile-word-fits: autotile-chip.fits;
     out property <bool> all-regions-fit: root.bootstrap-mode || (state-capsule.fits
         && voice-capsule.fits && session-capsule.fits && tiles-capsule.fits && window-capsule.fits);
     in-out property <bool> menu-open: false;
@@ -565,7 +557,6 @@ export component OverlayBarWindow inherits Window {
     callback pin-activated(string);
     pure function pin-icon(id: string) -> image {
         return id == "capture" ? @image-url("../assets/icons/camera.svg")
-            : id == "aggressive" ? @image-url("../assets/icons/flame.svg")
             : id == "restore" ? @image-url("../assets/icons/restore.svg")
             : id == "archive" ? @image-url("../assets/icons/archive.svg")
             : id == "summary" ? @image-url("../assets/icons/summary.svg")
@@ -576,7 +567,6 @@ export component OverlayBarWindow inherits Window {
     }
     pure function pin-label(id: string) -> string {
         return id == "capture" ? @tr("Ask about a screenshot")
-            : id == "aggressive" ? @tr("Auto-tiles on every line")
             : id == "restore" ? @tr("Restore closed tile")
             : id == "archive" ? @tr("Session archive")
             : id == "summary" ? @tr("Meeting summary")
@@ -651,12 +641,10 @@ export component OverlayBarWindow inherits Window {
     // One bounded recovery slot for a read-aloud tile closed by mistake.
     in-out property <bool> can-restore-tile: false;
 
-    // Phase E6 v10 — aggressive (every-line) auto-tile mode flag.
-    // When true, the bar shows the "🔥 auto" chip lit; user can
-    // toggle to spawn a tile on every transcript line (vs. only on
-    // Question/Keyword triggers). Backend already supports it via
-    // cfg.auto_tile_every_line; this just surfaces the switch.
-    in-out property <bool> aggressive-active: false;
+    // Compatibility flags derived from the selected auto-tiles mode.
+    in-out property <int> autotile-mode: 1;
+    callback autotile-state-refreshed();
+    in-out property <bool> aggressive-active: root.autotile-mode == 2;
     // E10.2 — stealth on/off, so the 🎯 chip lights up + reflects restored state.
     in-out property <bool> stealth-active: false;
     changed stealth-active => {
@@ -755,17 +743,13 @@ export component OverlayBarWindow inherits Window {
     // The hide action is exposed only after Windows accepted the tray icon;
     // otherwise hiding the bar would remove the only restore surface.
     in property <bool> tray-available: false;
-    // v0.28 — "listening mode" (config.suppress_tiles): the bar lock chip toggles this; when
-    // true, auto AI tiles are suppressed (slint_session::maybe_spawn_auto_tile early-returns).
-    in-out property <bool> suppress-tiles: false;
-    // v0.37 — deep lock (managed-local only): the lock chip's third state —
-    // the app-owned llama-server is unloaded and managed requests are refused.
+    in-out property <bool> suppress-tiles: root.autotile-mode == 0;
+    // Independent managed-local lifecycle state: AI is unloaded and requests refused.
     // Implies suppress-tiles (Rust keeps the two consistent).
     in-out property <bool> deep-lock: false;
     // Runtime-testable state that directly drives the lock chip's rendered icon.
-    out property <bool> lock-icon-unlocked: !root.suppress-tiles && !root.deep-lock;
-    // Localized per-state lock-chip description (a11y label; there is no
-    // hover-tooltip surface). Rust rebuilds it on transitions + language switch.
+    out property <bool> lock-icon-unlocked: root.autotile-mode == 1;
+    // Existing long deep-state description for the unloaded-AI indicator.
     in property <string> lock-a11y: "";
     in property <bool> lock-menu-managed: false;
 
@@ -788,8 +772,8 @@ export component OverlayBarWindow inherits Window {
     callback restore-tile-clicked();
     callback capture-clicked(); // 📷 screenshot -> vision (same as F8)
     callback stealth-toggle-clicked();
-    callback aggressive-toggle-clicked();
-    callback lock-mode-selected(int); // 0=normal, 1=listening, 2=unload local AI
+    callback autotile-mode-selected(int); // 0=silent, 1=questions, 2=every line
+    callback local-ai-mode-selected(int); // 0=load, 1=load silent, 2=unload, 3=load every line, 4=load questions
     callback open-settings-clicked();
     callback help-clicked();   // 🆘 chip / F1 → open the help window
     callback archive-clicked(); // 🗄 chip / F7 → open the session archive
@@ -923,13 +907,10 @@ export component OverlayBarWindow inherits Window {
                     }
                     tiles-capsule := Capsule {
                         width: root.compact-bar ? BarSpec.compact-tiles : BarSpec.full-tiles;
-                        LockChip {
-                            width: root.compact-bar ? 26px : 76px;
-                            locked: root.suppress-tiles; unlocked: root.lock-icon-unlocked;
-                            deep: root.deep-lock; a11y: root.lock-a11y;
-                            managed: root.lock-menu-managed; tight: root.compact-bar;
-                            mode: root.deep-lock ? 2 : (root.suppress-tiles ? 1 : 0);
-                            mode-selected(mode) => { root.dismiss-menu(); root.lock-mode-selected(mode); }
+                        autotile-chip := AutotileChip {
+                            width: root.compact-bar ? 26px : 96px;
+                            tight: root.compact-bar;
+                            mode: root.autotile-mode;
                             menu-opened(x, y) => { root.dismiss-menu(); root.lock-menu-opened(x, y); }
                         }
                         if !root.compact-bar : BarChip {
@@ -986,6 +967,13 @@ export component OverlayBarWindow inherits Window {
                         color: Theme.on-tint(root.pill-color); vertical-alignment: center;
                         overflow: elide; max-width: parent.width / 2; horizontal-stretch: 0;
                     }
+                    if root.deep-lock : PinChip {
+                        width: 70px;
+                        icon: @image-url("../assets/icons/lock.svg");
+                        label: @tr("AI off"); a11y: root.lock-a11y;
+                        tint: Theme.on-tint(Theme.danger); weight: 600;
+                        clicked => { root.dismiss-menu(); root.local-ai-mode-selected(0); }
+                    }
                     if root.timer-active && root.session-name != "" : Text {
                         text: root.session-name;
                         font-size: Metrics.font-label; font-weight: 600;
@@ -1008,11 +996,6 @@ export component OverlayBarWindow inherits Window {
                         a11y: @tr("Restore last tile");
                         clicked => { root.dismiss-menu(); root.restore-tile-clicked(); }
                     }
-                    if !root.compact-bar && root.aggressive-active && !root.is-pinned("aggressive") : PinChip {
-                        icon: @image-url("../assets/icons/flame.svg");
-                        a11y: @tr("Aggressive auto-tile"); tint: Theme.cat-orange;
-                        clicked => { root.dismiss-menu(); root.aggressive-toggle-clicked(); }
-                    }
                     if root.app-memory != "" : Text {
                         text: @tr("App RAM") + " " + root.app-memory;
                         font-size: Metrics.font-caption; color: Theme.text-muted;
@@ -1029,8 +1012,7 @@ export component OverlayBarWindow inherits Window {
                             icon: root.pin-icon(id); a11y: root.pin-label(id);
                             action-enabled: (id != "restore" || root.can-restore-tile)
                                 && (id != "tray" || root.tray-available);
-                            tint: id == "aggressive" && root.aggressive-active ? Theme.cat-orange
-                                : (id == "archive" && root.archive-open)
+                            tint: (id == "archive" && root.archive-open)
                                     || (id == "settings" && root.settings-open)
                                     || (id == "help" && root.help-open)
                                     || (id == "summary" && root.summary-busy) ? Theme.accent : Theme.text-secondary;

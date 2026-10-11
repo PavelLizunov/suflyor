@@ -354,7 +354,9 @@ fn capsule_bar_uses_the_owner_approved_russian_words() {
         ("them:", "собеседник:"),
         ("More", "Ещё"),
         ("AI off", "AI выкл"),
-        ("Local AI unloaded", "Локальный AI выгружен"),
+        ("silent", "молчат"),
+        ("questions", "вопросы"),
+        ("everything", "на всё"),
     ] {
         assert!(
             bar.contains(&format!("@tr(\"{english}\")")),
@@ -370,6 +372,18 @@ fn capsule_bar_uses_the_owner_approved_russian_words() {
         ("New tile, {} open", "Новый тайл, открыто: {}"),
     ] {
         assert!(bar.contains(&format!("@tr(\"{english}\", root.open-tiles)")));
+        assert!(po.contains(&format!("msgid \"{english}\"\nmsgstr \"{russian}\"")));
+    }
+    let menu = fs::read_to_string(root.join("ui/lock_mode_menu.slint")).expect("read auto-tiles menu");
+    let more = fs::read_to_string(root.join("ui/bar_menu.slint")).expect("read More menu");
+    for (english, russian, source) in [
+        ("Silent: no automatic tiles", "Молчат: сами не появляются", &menu),
+        ("On questions", "По вопросам", &menu),
+        ("On every line", "На каждую реплику", &menu),
+        ("Unload local AI", "Выгрузить локальный AI", &more),
+        ("Load local AI", "Загрузить локальный AI", &more),
+    ] {
+        assert!(source.contains(&format!("@tr(\"{english}\")")));
         assert!(po.contains(&format!("msgid \"{english}\"\nmsgstr \"{russian}\"")));
     }
     assert!(!po.contains("msgid \"+ tile ({})\""));

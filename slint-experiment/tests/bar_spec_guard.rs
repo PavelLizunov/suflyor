@@ -42,7 +42,7 @@ fn bar_spec_exists_and_widths_sum_every_region() {
     assert_eq!(expression(&spec, "height").trim(), "64px");
     assert_eq!(
         expression(&spec, "full-tiles").trim(),
-        "76px + 92px + 22px + 26px + 3 * 2px + 2 * 2px"
+        "96px + 92px + 22px + 26px + 3 * 2px + 2 * 2px"
     );
     assert_eq!(expression(&spec, "compact-tiles").trim(), "26px + 2 * 2px");
     let index = read("ui/index.slint");

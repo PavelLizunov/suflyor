@@ -11,12 +11,12 @@ mod ui {
 }
 
 #[test]
-fn lock_chip_opens_visible_menu_and_unlocked_row_selects() {
+fn auto_tiles_chip_opens_menu_in_every_state_and_each_row_selects() {
     i_slint_backend_testing::init_no_event_loop();
 
     let bar = ui::OverlayBarWindow::new().expect("create bar");
     let menu = Rc::new(ui::LockModeMenuWindow::new().expect("create lock menu"));
-    bar.set_lock_a11y("Lock mode".into());
+    bar.set_lock_a11y("Deep AI hint".into());
     assert!(bar.get_lock_icon_unlocked());
 
     let menu_for_open = menu.clone();
@@ -43,9 +43,17 @@ fn lock_chip_opens_visible_menu_and_unlocked_row_selects() {
         bar.window()
             .set_size(LogicalSize::new(width, spec.get_height()));
         for mode in [0, 1, 2] {
-            bar.set_suppress_tiles(mode != 0);
+            bar.set_autotile_mode(mode);
             bar.set_deep_lock(mode == 2);
-            let lock_chip = ElementHandle::find_by_accessible_label(&bar, "Lock mode")
+            let label = match mode {
+                0 => "Silent: no automatic tiles",
+                2 => "On every line",
+                _ => "On questions",
+            };
+            assert_eq!(bar.get_suppress_tiles(), mode == 0);
+            assert_eq!(bar.get_aggressive_active(), mode == 2);
+            assert_eq!(bar.get_lock_icon_unlocked(), mode == 1);
+            let lock_chip = ElementHandle::find_by_accessible_label(&bar, label)
                 .next()
                 .expect("find lock chip by accessibility label");
             lock_chip.invoke_accessible_default_action();
@@ -64,7 +72,7 @@ fn lock_chip_opens_visible_menu_and_unlocked_row_selects() {
         assert_eq!(more_anchor.get(), (pos.x + size.width, pos.y + size.height));
     }
 
-    bar.set_suppress_tiles(true);
+    bar.set_autotile_mode(0);
     assert!(
         !bar.get_lock_icon_unlocked(),
         "the runtime property driving the image must switch away from unlock.svg"
@@ -77,16 +85,28 @@ fn lock_chip_opens_visible_menu_and_unlocked_row_selects() {
         selected_for_callback.set(mode);
         menu_for_callback.hide().expect("hide lock menu");
     });
-    menu.show().expect("show menu before selecting unlocked");
-    assert!(menu.window().is_visible());
-    let unlocked = ElementHandle::find_by_accessible_label(menu.as_ref(), "Unlocked")
-        .next()
-        .expect("find unlocked menu row");
-    unlocked.invoke_accessible_default_action();
-
-    assert_eq!(selected.get(), 0);
-    assert!(
-        !menu.window().is_visible(),
-        "selection must dismiss the menu"
-    );
+    for current in [0, 1, 2] {
+        menu.set_mode(current);
+        for (mode, label) in [(0, "Silent: no automatic tiles"), (1, "On questions"), (2, "On every line")] {
+            menu.show().expect("show menu before selecting");
+            assert!(menu.window().is_visible());
+            let row = ElementHandle::find_by_accessible_label(menu.as_ref(), label)
+                .next().expect("find auto-tiles row");
+            row.invoke_accessible_default_action();
+            assert_eq!(selected.get(), mode);
+            assert!(!menu.window().is_visible(), "selection must dismiss menu");
+        }
+    }
+    let loaded = Rc::new(Cell::new(-1));
+    let loaded_for_callback = loaded.clone();
+    bar.on_local_ai_mode_selected(move |mode| loaded_for_callback.set(mode));
+    for compact in [false, true] {
+        bar.set_compact_bar(compact);
+        bar.set_deep_lock(true);
+        ElementHandle::find_by_accessible_label(&bar, "Deep AI hint").next()
+            .expect("AI-off action").invoke_accessible_default_action();
+        assert_eq!(loaded.get(), 0, "indicator requests old unlocked lifecycle");
+        bar.set_deep_lock(false);
+        assert_eq!(ElementHandle::find_by_accessible_label(&bar, "Deep AI hint").count(), 0);
+    }
 }

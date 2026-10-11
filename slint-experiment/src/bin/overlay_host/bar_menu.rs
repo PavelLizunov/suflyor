@@ -1,7 +1,7 @@
 use super::*;
 
 const PINNABLE_IDS: &[&str] = &[
-    "capture", "aggressive", "restore", "archive", "summary", "kb", "settings", "help", "tray",
+    "capture", "restore", "archive", "summary", "kb", "settings", "help", "tray",
 ];
 const MAX_PINS: usize = 8;
 
@@ -27,7 +27,8 @@ fn pins_model(ids: &[String]) -> ModelRc<SharedString> {
 
 fn refresh_menu(menu: &BarMenuWindow, bar: &OverlayBarWindow) {
     menu.set_pins(bar.get_pins());
-    menu.set_aggressive_active(bar.get_aggressive_active());
+    menu.set_lock_menu_managed(bar.get_lock_menu_managed());
+    menu.set_deep_lock(bar.get_deep_lock());
     menu.set_can_restore_tile(bar.get_can_restore_tile());
     menu.set_tray_available(bar.get_tray_available());
     menu.set_settings_open(bar.get_settings_open());
@@ -55,7 +56,7 @@ fn close_menu(
 fn dispatch_bar_action(bar: &OverlayBarWindow, id: &str, kb: &dyn Fn()) {
     match id {
         "capture" => bar.invoke_capture_clicked(),
-        "aggressive" => bar.invoke_aggressive_toggle_clicked(),
+        "unload_ai" if bar.get_lock_menu_managed() => bar.invoke_local_ai_mode_selected(if bar.get_deep_lock() { 0 } else { 2 }),
         "restore" if bar.get_can_restore_tile() => bar.invoke_restore_tile_clicked(),
         "archive" => bar.invoke_archive_clicked(),
         "summary" => bar.invoke_summary_clicked(),
@@ -253,11 +254,9 @@ pub(super) fn wire_bar_menu(
             let scale = bar.window().scale_factor().max(0.1);
             #[cfg(target_os = "macos")]
             let scale = 1.0_f32;
-            let logical_height = if bar.get_tray_available() {
-                386.0
-            } else {
-                358.0
-            };
+            let logical_height = 330.0
+                + if bar.get_tray_available() { 28.0 } else { 0.0 }
+                + if bar.get_lock_menu_managed() { 28.0 } else { 0.0 };
             menu.window()
                 .set_size(slint::LogicalSize::new(408.0, logical_height));
             let width = (408.0 * scale).round() as i32;
@@ -336,4 +335,23 @@ pub(super) fn wire_bar_menu(
         }
     });
     poll
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+    use super::visible_pins;
+
+    #[test]
+    fn old_aggressive_and_lifecycle_ids_are_unknown_pins() {
+        let ids = [
+            "aggressive", "unload_ai", "capture", "capture", "unknown", "restore",
+            "archive", "summary", "kb", "settings", "help", "tray", "restart", "quit",
+        ].into_iter().map(str::to_string).collect::<Vec<_>>();
+        assert_eq!(visible_pins(&ids), [
+            "capture", "restore", "archive", "summary", "kb", "settings", "help", "tray",
+        ].into_iter().map(str::to_string).collect::<Vec<_>>());
+        assert_eq!(ids[0], "aggressive", "filtering must not modify persisted ids");
+        assert_eq!(ids[1], "unload_ai");
+    }
 }

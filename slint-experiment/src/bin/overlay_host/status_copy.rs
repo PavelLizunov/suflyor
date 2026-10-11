@@ -221,15 +221,19 @@ pub(super) fn manual_tile_failure(heading: &str, category: &str, is_ru: bool) ->
     }
 }
 
-/// Push the lock-chip UI state (suppress / deep / localized a11y) from the
-/// LIVE config. Called on every chip transition AND on a live language switch
-/// (the per-state description is Rust-built, so @tr does not refresh it).
+/// Refresh auto-tiles and the independent unloaded-AI indicator from live config.
+/// Retain the helper name for existing Settings/import/language callers.
 pub(super) fn refresh_lock_chip(o: &OverlayBarWindow, cfg: &config::SharedConfig) {
     let snap = cfg.read();
     let managed = overlay_backend::deep_lock::cfg_is_managed_local(&snap);
-    o.set_suppress_tiles(snap.suppress_tiles);
-    // Cloud and external/Ollama keep the original two-state visual even when a
-    // dormant managed-local deep lock is persisted for a later provider switch.
+    let mode = slint_replay::autotile::mode_from_flags(snap.suppress_tiles, snap.auto_tile_every_line);
+    o.set_autotile_mode(mode);
+    if let Some((suppress, every_line)) = slint_replay::autotile::flags_from_mode(mode) {
+        o.set_suppress_tiles(suppress);
+        o.set_aggressive_active(every_line);
+    }
+    // Hide managed-local lifecycle state on cloud/external providers, retaining
+    // a dormant deep lock for a later switch back to the owned endpoint.
     o.set_deep_lock(managed && snap.deep_lock);
     o.set_lock_menu_managed(managed);
     o.set_lock_a11y(SharedString::from(overlay_backend::deep_lock::state_hint(
@@ -238,6 +242,7 @@ pub(super) fn refresh_lock_chip(o: &OverlayBarWindow, cfg: &config::SharedConfig
         snap.suppress_tiles,
         snap.deep_lock,
     )));
+    o.invoke_autotile_state_refreshed();
 }
 
 #[cfg(test)]

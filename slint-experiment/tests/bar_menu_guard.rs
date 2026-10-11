@@ -120,7 +120,6 @@ fn menu_is_exported_and_every_action_uses_one_fixed_column_grid() {
     let mut last = 0;
     for id in [
         "capture",
-        "aggressive",
         "restore",
         "archive",
         "summary",
@@ -128,6 +127,7 @@ fn menu_is_exported_and_every_action_uses_one_fixed_column_grid() {
         "settings",
         "help",
         "tray",
+        "unload_ai",
         "restart",
         "quit",
     ] {
@@ -138,7 +138,7 @@ fn menu_is_exported_and_every_action_uses_one_fixed_column_grid() {
             .lines()
             .find(|line| line.contains(&format!("id: \"{id}\"")))
             .unwrap();
-        assert!(row.contains(if matches!(id, "restart" | "quit") {
+        assert!(row.contains(if matches!(id, "unload_ai" | "restart" | "quit") {
             "pinnable: false"
         } else {
             "pinnable: true"
@@ -165,7 +165,8 @@ fn confirmation_and_pin_controls_stay_inside_their_rows() {
         "root.inactive-ticks >= 40",
         "Key.Escape",
         "if (root.confirmation != \"\") { root.confirmation = \"\"; }",
-        "if r.id != \"tray\" || root.tray-available",
+        "r.id != \"tray\" || root.tray-available",
+        "r.id != \"unload_ai\" || root.lock-menu-managed",
         "r.id != \"restore\" || root.can-restore-tile",
     ] {
         assert!(menu.contains(contract), "missing menu contract: {contract}");
@@ -184,7 +185,7 @@ fn menu_and_pins_dispatch_existing_callbacks_and_persist_only_the_pin_list() {
         .contains("bar_menu::wire_bar_menu(&overlay, &bar_menu, &cfg, &palette, &tiles, &state)"));
     for (id, invocation) in [
         ("capture", "invoke_capture_clicked"),
-        ("aggressive", "invoke_aggressive_toggle_clicked"),
+        ("unload_ai", "invoke_local_ai_mode_selected"),
         ("restore", "invoke_restore_tile_clicked"),
         ("archive", "invoke_archive_clicked"),
         ("summary", "invoke_summary_clicked"),
@@ -226,9 +227,14 @@ fn menu_and_pins_dispatch_existing_callbacks_and_persist_only_the_pin_list() {
         .split_once("];")
         .unwrap()
         .0;
+    assert!(!pinnable.contains("\"aggressive\""));
+    assert!(!pinnable.contains("\"unload_ai\""));
     assert!(!pinnable.contains("\"restart\""));
     assert!(!pinnable.contains("\"quit\""));
     assert!(host.contains("const MAX_PINS: usize = 8;"));
+    assert!(host.contains("PINNABLE_IDS.contains(&id.as_str()) && !pins.contains(id) && pins.len() < MAX_PINS"));
+    assert!(host.contains("\"unload_ai\" if bar.get_lock_menu_managed()"));
+    assert!(host.contains("if bar.get_deep_lock() { 0 } else { 2 }"));
     assert!(host.contains("pins_model(&cfg.read().bar_pins)"));
     assert!(host.contains("candidate = c.bar_pins.clone()"));
     assert!(host.contains("candidate.retain(|pin| pin != id.as_str())"));
@@ -246,7 +252,8 @@ fn menu_and_pins_dispatch_existing_callbacks_and_persist_only_the_pin_list() {
         .0;
     for property in [
         "pins",
-        "aggressive_active",
+        "lock_menu_managed",
+        "deep_lock",
         "can_restore_tile",
         "tray_available",
         "settings_open",
@@ -300,7 +307,8 @@ fn native_lifecycle_matches_lock_menu_and_the_bottom_row_stays_bare() {
     assert!(bar.contains("if root.pins.length == 0 : PinChip"));
     assert!(bar.contains("for id in root.pins : PinChip"));
     assert!(bar.contains("!root.is-pinned(\"restore\")"));
-    assert!(bar.contains("!root.is-pinned(\"aggressive\")"));
+    assert!(!bar.contains("!root.is-pinned(\"aggressive\")"));
+    assert!(!source("ui/bar_menu.slint").contains("id: \"aggressive\""));
     let chip = bar
         .split_once("component PinChip")
         .unwrap()

@@ -22,13 +22,13 @@ fn rows_select_pins_do_not_select_and_danger_actions_require_yes() {
     i_slint_backend_testing::init_no_event_loop();
     let menu = ui::BarMenuWindow::new().expect("create More menu");
     menu.set_tray_available(true);
+    menu.set_lock_menu_managed(true);
     menu.window().set_size(LogicalSize::new(408.0, 386.0));
     menu.show().expect("show menu");
     let mut name_x = None;
     let mut pin_x = None;
     for label in [
         "Ask about a screenshot",
-        "Auto-tiles on every line",
         "Restore closed tile",
         "Session archive",
         "Meeting summary",
@@ -36,6 +36,7 @@ fn rows_select_pins_do_not_select_and_danger_actions_require_yes() {
         "Settings",
         "Help",
         "Hide to tray",
+        "Unload local AI",
         "Restart",
         "Quit",
     ] {
@@ -65,7 +66,6 @@ fn rows_select_pins_do_not_select_and_danger_actions_require_yes() {
     }
     for label in [
         "Ask about a screenshot",
-        "Auto-tiles on every line",
         "Restore closed tile",
         "Session archive",
         "Meeting summary",
@@ -126,7 +126,7 @@ fn rows_select_pins_do_not_select_and_danger_actions_require_yes() {
     menu.set_can_restore_tile(true);
     for (label, id) in [
         ("Ask about a screenshot", "capture"),
-        ("Auto-tiles on every line", "aggressive"),
+        ("Unload local AI", "unload_ai"),
         ("Restore closed tile", "restore"),
         ("Session archive", "archive"),
         ("Meeting summary", "summary"),
@@ -143,6 +143,19 @@ fn rows_select_pins_do_not_select_and_danger_actions_require_yes() {
             "menu action must dismiss: {id}"
         );
     }
+    assert_eq!(ElementHandle::find_by_accessible_label(&menu, "Auto-tiles on every line").count(), 0);
+    assert_eq!(ElementHandle::find_by_accessible_label(&menu, "Unload local AI. pin").count(), 0);
+    menu.set_deep_lock(true);
+    assert_eq!(ElementHandle::find_by_accessible_label(&menu, "Unload local AI").count(), 0);
+    menu.show().expect("show load row");
+    activate(&menu, "Load local AI");
+    assert_eq!(actions.borrow().last().map(String::as_str), Some("unload_ai"));
+    assert!(!menu.window().is_visible());
+    assert_eq!(ElementHandle::find_by_accessible_label(&menu, "Load local AI. pin").count(), 0);
+    menu.set_lock_menu_managed(false);
+    assert_eq!(ElementHandle::find_by_accessible_label(&menu, "Load local AI").count(), 0);
+    menu.set_deep_lock(false);
+    assert_eq!(ElementHandle::find_by_accessible_label(&menu, "Unload local AI").count(), 0);
     menu.set_tray_available(false);
     assert_eq!(
         ElementHandle::find_by_accessible_label(&menu, "Hide to tray").count(),
@@ -199,10 +212,11 @@ fn bar_actions_dismiss_more_and_compact_changes_cannot_keep_it_open() {
     i_slint_backend_testing::init_no_event_loop();
     let bar = ui::OverlayBarWindow::new().expect("create bar");
     let menu = Rc::new(ui::BarMenuWindow::new().expect("create More menu"));
-    bar.set_lock_a11y("Lock mode".into());
+    bar.set_lock_a11y("Deep AI hint".into());
+    bar.set_deep_lock(true);
     bar.set_tray_available(true);
     bar.set_can_restore_tile(true);
-    bar.set_aggressive_active(true);
+    bar.set_autotile_mode(0);
     bar.set_timer_active(true);
     bar.set_open_tiles(1);
     bar.set_pins(ModelRc::new(VecModel::from(vec![SharedString::from(
@@ -254,7 +268,8 @@ fn bar_actions_dismiss_more_and_compact_changes_cannot_keep_it_open() {
             .set_size(LogicalSize::new(width, spec.get_height()));
         let mut labels = vec![
             "Stealth (hide from capture)",
-            "Lock mode",
+            "Silent: no automatic tiles",
+            "Deep AI hint",
             if compact {
                 "Expand the bar"
             } else {
@@ -272,7 +287,6 @@ fn bar_actions_dismiss_more_and_compact_changes_cannot_keep_it_open() {
                 "close all",
                 "Write a question",
                 "Restore last tile",
-                "Aggressive auto-tile",
                 "Session archive",
             ]);
         }

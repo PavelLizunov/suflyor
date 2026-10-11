@@ -3731,46 +3731,8 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // ===== Aggressive auto-tile toggle =====
-    // Phase E6 v10 — surface backend's cfg.auto_tile_every_line as a
-    // bar-level switch. Reads current value into chip state at startup,
-    // then toggles on click + persists to config.json. The backend
-    // detector pipeline in slint_session already honours this flag
-    // (every_line=true → MAX_TILES_PER_MIN_AGGRESSIVE=20).
-    {
-        let cfg_for_agg = cfg.clone();
-        let weak_for_agg = overlay.as_weak();
-        // Sync initial state from cfg.
-        if let Some(o) = weak_for_agg.upgrade() {
-            o.set_aggressive_active(cfg_for_agg.read().auto_tile_every_line);
-        }
-        overlay.on_aggressive_toggle_clicked(move || {
-            let new_state = {
-                let mut c = cfg_for_agg.write();
-                c.auto_tile_every_line = !c.auto_tile_every_line;
-                let _ = overlay_backend::config::save(&c);
-                c.auto_tile_every_line
-            };
-            diag!("[overlay-host] aggressive auto-tile -> {new_state}");
-            if let Some(o) = weak_for_agg.upgrade() {
-                o.set_aggressive_active(new_state);
-            }
-        });
-    }
-
-    // 🔒 Lock tiles (listening mode) + DEEP LOCK (v0.37, managed-local only).
-    // The bar lock chip mirrors config.suppress_tiles — the SAME field the
-    // Settings "listening mode" checkbox and slint_session::maybe_spawn_auto_tile
-    // read, so toggling here suppresses/resumes auto AI tiles live (no restart,
-    // no extra flag). The chip trembles while active so their absence reads as
-    // deliberate.
-    //
-    // For the app-managed llama-server the SAME chip is three-state (see
-    // overlay_backend::deep_lock): listening mode -> deep lock (unload the
-    // app-owned :8080 server owner-aware to free RAM/VRAM) -> the next click
-    // starts the selected model back up and only a CONFIRMED ready releases
-    // the lock. Cloud / external Ollama keep the legacy two-state toggle —
-    // external processes are never stopped.
+    // Auto-tiles uses the existing native menu. Local AI lifecycle is separate;
+    // its owner-aware stop, strict readiness and durable deep-lock guard remain.
     {
         // The menu must be its own native window: PopupWindow is clipped by the
         // intentionally 64px-high overlay bar on winit/Win32.
@@ -3854,7 +3816,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     diag!("[overlay-host] lock-menu event=error stage=hide-selection error={e}");
                 }
                 if let Some(bar) = weak.upgrade() {
-                    bar.invoke_lock_mode_selected(mode);
+                    bar.invoke_autotile_mode_selected(mode);
                 } else {
                     diag!("[overlay-host] lock-menu event=error stage=select reason=bar-dropped");
                 }
@@ -3902,14 +3864,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 };
                 let snap = cfg_for_menu.read();
                 let managed = overlay_backend::deep_lock::cfg_is_managed_local(&snap);
-                let mode = if managed && snap.deep_lock {
-                    2
-                } else if snap.suppress_tiles {
-                    1
-                } else {
-                    0
-                };
-                menu.set_managed(managed);
+                let mode = slint_replay::autotile::mode_from_flags(snap.suppress_tiles, snap.auto_tile_every_line);
                 menu.set_mode(mode);
                 menu.global::<ui::Theme>()
                     .set_scheme(clamp_scheme(snap.color_scheme));
@@ -3950,8 +3905,8 @@ fn main() -> Result<(), slint::PlatformError> {
                 let scale = bar.window().scale_factor().max(0.1);
                 #[cfg(target_os = "macos")]
                 let scale = 1.0_f32;
-                let menu_width = (210.0 * scale).round() as i32;
-                let menu_height = ((if managed { 106.0 } else { 74.0 }) * scale).round() as i32;
+                let menu_width = (320.0 * scale).round() as i32;
+                let menu_height = (106.0 * scale).round() as i32;
                 let anchor_x = bar_left + (anchor_x * scale) as i32;
                 let anchor_y = bar_top + (anchor_y * scale) as i32;
                 let monitor = enum_monitors()
@@ -4057,6 +4012,17 @@ fn main() -> Result<(), slint::PlatformError> {
             });
         }
 
+        {
+            let settings = settings.clone();
+            let weak = overlay.as_weak();
+            overlay.on_autotile_state_refreshed(move || {
+                if let (Some(bar), Ok(slot)) = (weak.upgrade(), settings.try_borrow()) {
+                    if let Some(win) = slot.as_ref() {
+                        win.set_suppress_tiles(bar.get_suppress_tiles());
+                    }
+                }
+            });
+        }
         let cfg_for_lock = cfg.clone();
         let state_for_lock = state.clone();
         let events_for_lock = events.clone();
@@ -4066,12 +4032,48 @@ fn main() -> Result<(), slint::PlatformError> {
         if let Some(o) = weak_for_lock.upgrade() {
             refresh_lock_chip(&o, &cfg_for_lock);
         }
-        overlay.on_lock_mode_selected(move |mode| {
+        {
+            let cfg = cfg.clone();
+            let weak = overlay.as_weak();
+            let busy = lock_transition_busy.clone();
+            overlay.on_autotile_mode_selected(move |mode| {
+                let Some((suppress, every_line)) = slint_replay::autotile::flags_from_mode(mode) else {
+                    return;
+                };
+                let Some(bar) = weak.upgrade() else { return };
+                if busy.load(std::sync::atomic::Ordering::Acquire) {
+                    refresh_lock_chip(&bar, &cfg);
+                    return;
+                }
+                let deep_managed = {
+                    let c = cfg.read();
+                    c.deep_lock && overlay_backend::deep_lock::cfg_is_managed_local(&c)
+                };
+                if !suppress && deep_managed {
+                    // Never release suppression before the managed model is ready.
+                    bar.invoke_local_ai_mode_selected(if every_line { 3 } else { 4 });
+                    return;
+                }
+                {
+                    let mut c = cfg.write();
+                    let previous = (c.suppress_tiles, c.auto_tile_every_line);
+                    c.suppress_tiles = suppress;
+                    c.auto_tile_every_line = every_line;
+                    if let Err(e) = overlay_backend::config::save(&c) {
+                        (c.suppress_tiles, c.auto_tile_every_line) = previous;
+                        eprintln!("[overlay-host] auto-tiles save failed: {e:#}");
+                    }
+                }
+                refresh_lock_chip(&bar, &cfg);
+            });
+        }
+        overlay.on_local_ai_mode_selected(move |mode| {
             use overlay_backend::deep_lock::{LockAction, LockMode, LockStatus};
             let requested = match mode {
                 1 => LockMode::Listening,
                 2 => LockMode::Deep,
-                _ => LockMode::Normal,
+                0 | 3 | 4 => LockMode::Normal,
+                _ => return,
             };
             let action = {
                 let c = cfg_for_lock.read();
@@ -4117,7 +4119,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         c.suppress_tiles = true;
                         let _ = overlay_backend::config::save(&c);
                     }
-                    eprintln!("[overlay-host] listening mode on (one more click deep-locks)");
+                    eprintln!("[overlay-host] automatic tiles suppressed");
                     if let Some(o) = weak_for_lock.upgrade() {
                         refresh_lock_chip(&o, &cfg_for_lock);
                         let ru = cfg_for_lock.read().ui_is_ru();
@@ -4148,9 +4150,8 @@ fn main() -> Result<(), slint::PlatformError> {
                         match overlay_backend::config::save(&c) {
                             Ok(()) => true,
                             Err(e) => {
-                                // Listening mode was already on. If the durable
-                                // lock cannot be recorded, do not unload the
-                                // server and leave the two states consistent.
+                                // If the durable lock cannot be recorded, do not
+                                // unload the server; suppression remains safe.
                                 c.deep_lock = false;
                                 eprintln!(
                                     "[overlay-host] deep lock save failed; server left running: {e:#}"
@@ -4250,6 +4251,11 @@ fn main() -> Result<(), slint::PlatformError> {
                     );
                     // Deep -> Listening reloads the model but keeps tile suppression.
                     let target_listening = requested == LockMode::Listening;
+                    let target_every_line = match mode {
+                        3 => true,
+                        4 => false,
+                        _ => cfg_for_lock.read().auto_tile_every_line,
+                    };
                     let state_unlock = state_for_lock.clone();
                     let cfg_unlock = cfg_for_lock.clone();
                     let weak_unlock = weak_for_lock.clone();
@@ -4271,6 +4277,8 @@ fn main() -> Result<(), slint::PlatformError> {
                                 let mut config = cfg_unlock.write();
                                 config.deep_lock = false;
                                 config.suppress_tiles = target_listening;
+                                let previous_every_line = config.auto_tile_every_line;
+                                config.auto_tile_every_line = target_every_line;
                                 match overlay_backend::config::save(&config) {
                                     Ok(()) => {
                                         overlay_backend::deep_lock::set_deep_lock_active(false);
@@ -4283,6 +4291,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                     Err(_) => {
                                         config.deep_lock = true;
                                         config.suppress_tiles = true;
+                                        config.auto_tile_every_line = previous_every_line;
                                         overlay_backend::mlx_runtime::stop();
                                         None
                                     }
@@ -4375,6 +4384,8 @@ fn main() -> Result<(), slint::PlatformError> {
                             );
                             c.deep_lock = false;
                             c.suppress_tiles = target_listening;
+                            let previous_every_line = c.auto_tile_every_line;
+                            c.auto_tile_every_line = target_every_line;
                             match overlay_backend::config::save(&c) {
                                 Ok(()) => {
                                     overlay_backend::deep_lock::set_deep_lock_active(false);
@@ -4383,6 +4394,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                 Err(e) => {
                                     c.deep_lock = true;
                                     c.suppress_tiles = true;
+                                    c.auto_tile_every_line = previous_every_line;
                                     eprintln!(
                                         "[overlay-host] deep lock release save failed; lock kept: {e:#}"
                                     );

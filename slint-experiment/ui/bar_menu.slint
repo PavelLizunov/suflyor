@@ -11,13 +11,14 @@ export component BarMenuWindow inherits Window {
     background: transparent;
     title: @tr("More");
     preferred-width: 408px;
-    preferred-height: root.tray-available ? 386px : 358px;
+    preferred-height: 330px + (root.tray-available ? 28px : 0px) + (root.lock-menu-managed ? 28px : 0px);
     property <bool> widgets-light: Theme.is-light;
     init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
 
     in property <[string]> pins;
-    in property <bool> aggressive-active;
+    in property <bool> lock-menu-managed;
+    in property <bool> deep-lock;
     in property <bool> can-restore-tile;
     in property <bool> tray-available;
     in property <bool> settings-open;
@@ -39,7 +40,6 @@ export component BarMenuWindow inherits Window {
     property <[MenuRow]> rows: [
         { name: @tr("TILES"), head: true },
         { id: "capture", icon: @image-url("../assets/icons/camera.svg"), name: @tr("Ask about a screenshot"), key: "F8", pinnable: true },
-        { id: "aggressive", icon: @image-url("../assets/icons/flame.svg"), name: @tr("Auto-tiles on every line"), pinnable: true, active: root.aggressive-active },
         { id: "restore", icon: @image-url("../assets/icons/restore.svg"), name: @tr("Restore closed tile"), pinnable: true },
         { name: @tr("MEETING"), head: true },
         { id: "archive", icon: @image-url("../assets/icons/archive.svg"), name: @tr("Session archive"), key: "F7", pinnable: true, active: root.archive-open },
@@ -49,6 +49,7 @@ export component BarMenuWindow inherits Window {
         { id: "settings", icon: @image-url("../assets/icons/gear.svg"), name: @tr("Settings"), pinnable: true, active: root.settings-open },
         { id: "help", icon: @image-url("../assets/icons/sos.svg"), name: @tr("Help"), key: "F1", pinnable: true, active: root.help-open },
         { id: "tray", icon: @image-url("../assets/icons/tray.svg"), name: @tr("Hide to tray"), pinnable: true },
+        { id: "unload_ai", icon: @image-url("../assets/icons/lock.svg"), name: root.deep-lock ? @tr("Load local AI") : @tr("Unload local AI"), pinnable: false, active: root.deep-lock },
         { id: "restart", icon: @image-url("../assets/icons/restart.svg"), name: @tr("Restart"), pinnable: false },
         { id: "quit", icon: @image-url("../assets/icons/x.svg"), name: @tr("Quit"), pinnable: false },
     ];
@@ -101,7 +102,7 @@ export component BarMenuWindow inherits Window {
                 alignment: start;
                 for r in root.rows : VerticalLayout {
                     alignment: start;
-                    if r.id != "tray" || root.tray-available : Rectangle {
+                    if (r.id != "tray" || root.tray-available) && (r.id != "unload_ai" || root.lock-menu-managed) : Rectangle {
                         property <bool> pinned: !r.head && root.is-pinned(r.id);
                         height: r.head ? 22px : 28px;
                         opacity: r.id == "restore" && !root.can-restore-tile ? 0.35 : 1;
@@ -140,8 +141,8 @@ export component BarMenuWindow inherits Window {
                                 horizontal-stretch: 1; min-width: 0px;
                                 accessible-role: button;
                                 accessible-label: r.name;
-                                accessible-checkable: r.id == "aggressive";
-                                accessible-checked: r.id == "aggressive" && root.aggressive-active;
+                                accessible-checkable: r.id == "unload_ai";
+                                accessible-checked: r.id == "unload_ai" && root.deep-lock;
                                 accessible-action-default => { root.choose(r.id); }
                                 row-name := Text {
                                     x: 0px; y: 0px;

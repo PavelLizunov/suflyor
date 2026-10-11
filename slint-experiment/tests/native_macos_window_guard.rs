@@ -23,7 +23,7 @@ fn production_macos_window_uses_the_proven_minimal_appkit_bridge() {
         .split_once("overlay.on_lock_menu_opened")
         .expect("lock menu open handler")
         .1
-        .split_once("overlay.on_lock_mode_selected")
+        .split_once("overlay.on_autotile_mode_selected")
         .expect("lock menu selection handler follows open handler")
         .0;
     let maximize = tiles

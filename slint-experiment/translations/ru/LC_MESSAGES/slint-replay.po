@@ -1312,8 +1312,11 @@ msgstr "Стоимость сессии (только cloud; локально б
 msgid "Stealth: hide the overlay from screen capture / share"
 msgstr "Stealth: скрыть overlay от захвата/шеринга экрана"
 
-msgid "Aggressive auto-tiles (answer more often)"
-msgstr "Агрессивные авто-тайлы (отвечать чаще)"
+msgid "Auto-tiles: silent, on questions, or on every line"
+msgstr "Автотайлы: молчат, по вопросам или на каждую реплику"
+
+msgid "AI off: load the local model"
+msgstr "AI выкл: загрузить локальную модель"
 
 msgid "Write a question as text"
 msgstr "Написать вопрос текстом"
@@ -1936,27 +1939,36 @@ msgstr "Текстовый вопрос suflyor (Slint)"
 msgid "Retry"
 msgstr "Повторить"
 
-msgid "Local AI unloaded"
-msgstr "Локальный AI выгружен"
-
-# Full capsule deep-lock state; compact mode is icon-only.
+# Bare unloaded-AI indicator in both bar forms.
 msgid "AI off"
 msgstr "AI выкл"
 
 msgid "Current"
 msgstr "Текущий"
 
-msgid "Unlocked"
-msgstr "Разблокировано"
+msgid "silent"
+msgstr "молчат"
 
-msgid "Listening"
-msgstr "Прослушивание"
+msgid "questions"
+msgstr "вопросы"
+
+msgid "everything"
+msgstr "на всё"
+
+msgid "Silent: no automatic tiles"
+msgstr "Молчат: сами не появляются"
+
+msgid "On questions"
+msgstr "По вопросам"
+
+msgid "On every line"
+msgstr "На каждую реплику"
 
 msgid "Unload local AI"
-msgstr "Выгрузить локальный ИИ"
+msgstr "Выгрузить локальный AI"
 
-msgid "Lock mode"
-msgstr "Режим блокировки"
+msgid "Load local AI"
+msgstr "Загрузить локальный AI"
 
 # RC13 — direct AI providers.
 msgid "Custom OpenAI-compatible bridge"
@@ -2336,9 +2348,6 @@ msgstr "Приостановить сессию"
 msgid "Stealth (hide from capture)"
 msgstr "Скрытность (не показывать при захвате экрана)"
 
-msgid "Aggressive auto-tile"
-msgstr "Агрессивные авто-тайлы"
-
 msgid "Write a question"
 msgstr "Написать вопрос"
 
@@ -2440,9 +2449,6 @@ msgstr "ПРИЛОЖЕНИЕ"
 
 msgid "Ask about a screenshot"
 msgstr "Вопрос по снимку экрана"
-
-msgid "Auto-tiles on every line"
-msgstr "Автотайлы на всё"
 
 msgid "Restore closed tile"
 msgstr "Вернуть закрытый тайл"

@@ -17,6 +17,7 @@ fn element(bar: &ui::OverlayBarWindow, label: &str) -> ElementHandle {
 }
 
 struct Labels {
+    russian: bool,
     ask: &'static str,
     grab: &'static str,
     close_all: &'static str,
@@ -33,11 +34,12 @@ struct Labels {
 }
 
 const ENGLISH: Labels = Labels {
+    russian: false,
     ask: "ask",
     grab: "grab",
     close_all: "close all",
     tile: "New tile, {} open",
-    deep_lock: "Local AI unloaded",
+    deep_lock: "Deep AI hint",
     write: "Write a question",
     compact: "Compact reader mode",
     expand: "Expand the bar",
@@ -48,11 +50,12 @@ const ENGLISH: Labels = Labels {
     them: "them:",
 };
 const RUSSIAN: Labels = Labels {
+    russian: true,
     ask: "спросить",
     grab: "захватить",
     close_all: "закрыть все",
     tile: "Новый тайл, открыто: {}",
-    deep_lock: "Локальный AI выгружен",
+    deep_lock: "Deep AI hint",
     write: "Написать вопрос",
     compact: "Компактный режим чтения",
     expand: "Развернуть бар",
@@ -82,8 +85,8 @@ fn assert_top_bounds(item: &ElementHandle, width: f32, name: &str) {
 
 fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
     bar.set_compact_bar(compact);
-    bar.set_lock_a11y("Lock mode".into());
-    bar.set_suppress_tiles(false);
+    bar.set_lock_a11y(labels.deep_lock.into());
+    bar.set_autotile_mode(1);
     bar.set_deep_lock(false);
     bar.set_timer_active(true);
     bar.set_timer_label("1:07:31".into());
@@ -97,9 +100,9 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
     };
     let height = spec.get_height();
     assert_eq!(height, 64.0);
-    assert_eq!(spec.get_full_tiles(), 226.0);
+    assert_eq!(spec.get_full_tiles(), 246.0);
     assert_eq!(spec.get_compact_tiles(), 30.0);
-    assert_eq!(spec.get_full_width(), 854.0);
+    assert_eq!(spec.get_full_width(), 874.0);
     assert_eq!(spec.get_compact_width(), 586.0);
     assert!(spec.get_full_width() > spec.get_compact_width());
     bar.window().set_size(LogicalSize::new(width, height));
@@ -108,7 +111,7 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
             labels.ask,
             labels.grab,
             "1:07:31",
-            "Lock mode",
+            if labels.russian { "По вопросам" } else { "On questions" },
             labels.expand,
             labels.more,
         ]
@@ -117,7 +120,7 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
             labels.ask,
             labels.grab,
             "1:07:31",
-            "Lock mode",
+            if labels.russian { "По вопросам" } else { "On questions" },
             labels.write,
             labels.compact,
             labels.more,
@@ -131,77 +134,99 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
     for count in [0, 1, 2, 99, 128, 999] {
         bar.set_open_tiles(count);
         for mode in [0, 1, 2] {
-            bar.set_suppress_tiles(mode != 0);
-            bar.set_deep_lock(mode == 2);
-            for recording in [false, true] {
-                bar.set_mic_recording(recording);
-                bar.set_sys_recording(recording);
-                bar.set_session_paused(recording);
-                bar.set_menu_open(recording);
-                // Armed confirmations must no longer expand or hide bar controls.
-                bar.set_quit_armed(recording);
-                bar.set_restart_armed(recording);
-                let lock_label = if mode == 2 {
-                    labels.deep_lock
-                } else {
-                    "Lock mode"
-                };
-                let mut names = vec![labels.ask, labels.grab, "1:07:31", lock_label];
-                let tile_label = labels.tile.replace("{}", &count.to_string());
-                if !compact {
-                    names.push(&tile_label);
-                    if count > 0 {
-                        names.push(labels.close_all);
-                    }
-                    names.push(labels.write);
-                    names.push(labels.compact);
-                } else {
-                    names.push(labels.tray);
-                    names.push(labels.expand);
-                }
-                names.push(labels.more);
-                bar.window()
-                    .set_size(LogicalSize::new(width + 300.0, height));
-                let natural: Vec<f32> = names
-                    .iter()
-                    .map(|name| element(bar, name).size().width)
-                    .collect();
-                bar.window().set_size(LogicalSize::new(width, height));
-                let items: Vec<ElementHandle> =
-                    names.iter().map(|name| element(bar, name)).collect();
-                assert!(bar.get_all_regions_fit(), "capsule overflow: compact={compact}, mode={mode}, tiles={count}, recording={recording}");
-                for ((name, item), natural_width) in names.iter().zip(&items).zip(natural) {
-                    assert_top_bounds(item, width, name);
-                    assert_eq!(item.size().width, natural_width, "{name} was compressed");
-                }
-                for pair in items.windows(2) {
-                    assert!(
-                        pair[0].absolute_position().x + pair[0].size().width
-                            <= pair[1].absolute_position().x,
-                        "capsule controls overlap: compact={compact}, mode={mode}, tiles={count}"
-                    );
-                }
-                for (name, x) in stable_names.iter().zip(&stable_x) {
-                    let name = if *name == "Lock mode" {
-                        lock_label
-                    } else {
-                        *name
+            bar.set_autotile_mode(mode);
+            for deep in [false, true] {
+                bar.set_deep_lock(deep);
+                for recording in [false, true] {
+                    bar.set_mic_recording(recording);
+                    bar.set_sys_recording(recording);
+                    bar.set_session_paused(recording);
+                    bar.set_menu_open(recording);
+                    // Armed confirmations must no longer expand or hide bar controls.
+                    bar.set_quit_armed(recording);
+                    bar.set_restart_armed(recording);
+                    let russian = labels.russian;
+                    let lock_label = match (russian, mode) {
+                        (true, 0) => "Молчат: сами не появляются",
+                        (true, 2) => "На каждую реплику",
+                        (true, _) => "По вопросам",
+                        (false, 0) => "Silent: no automatic tiles",
+                        (false, 2) => "On every line",
+                        (false, _) => "On questions",
                     };
+                    let mut names = vec![labels.ask, labels.grab, "1:07:31", lock_label];
+                    let tile_label = labels.tile.replace("{}", &count.to_string());
+                    if !compact {
+                        names.push(&tile_label);
+                        if count > 0 {
+                            names.push(labels.close_all);
+                        }
+                        names.push(labels.write);
+                        names.push(labels.compact);
+                    } else {
+                        names.push(labels.tray);
+                        names.push(labels.expand);
+                    }
+                    names.push(labels.more);
+                    bar.window()
+                        .set_size(LogicalSize::new(width + 300.0, height));
+                    let natural: Vec<f32> = names
+                        .iter()
+                        .map(|name| element(bar, name).size().width)
+                        .collect();
+                    bar.window().set_size(LogicalSize::new(width, height));
+                    assert_eq!(bar.window().size().width as f32, width, "mode/deep must not resize bar");
+                    assert_eq!(if compact { spec.get_compact_width() } else { spec.get_full_width() }, width);
+                    if deep {
+                        let item = element(bar, labels.deep_lock);
+                        let pos = item.absolute_position();
+                        let size = item.size();
+                        assert_eq!(size.width, 70.0);
+                        let status = element(bar, if labels.russian { "[!] скрытность недоступна" } else { "[!] stealth unavailable" });
+                        assert!(status.absolute_position().x + status.size().width <= pos.x, "AI off must follow status without overlap");
+                        assert!(pos.y >= 34.0 && pos.y + size.height <= height, "AI off outside footer");
+                        assert!(pos.x >= 0.0 && pos.x + size.width <= width, "AI off outside bar");
+                    } else {
+                        assert_eq!(ElementHandle::find_by_accessible_label(bar, labels.deep_lock).count(), 0);
+                    }
+                    let items: Vec<ElementHandle> =
+                        names.iter().map(|name| element(bar, name)).collect();
+                    assert!(bar.get_autotile_word_fits(), "auto-tiles word clipped: compact={compact}, mode={mode}");
+                    assert!(bar.get_all_regions_fit(), "capsule overflow: compact={compact}, mode={mode}, tiles={count}, recording={recording}");
+                    for ((name, item), natural_width) in names.iter().zip(&items).zip(natural) {
+                        assert_top_bounds(item, width, name);
+                        assert_eq!(item.size().width, natural_width, "{name} was compressed");
+                    }
+                    for pair in items.windows(2) {
+                        assert!(
+                            pair[0].absolute_position().x + pair[0].size().width
+                                <= pair[1].absolute_position().x,
+                            "capsule controls overlap: compact={compact}, mode={mode}, tiles={count}"
+                        );
+                    }
+                    for (name, x) in stable_names.iter().zip(&stable_x) {
+                        let name = if *name == "On questions" || *name == "По вопросам" {
+                            lock_label
+                        } else {
+                            *name
+                        };
+                        assert_eq!(
+                            element(bar, name).absolute_position().x,
+                            *x,
+                            "{name} moved on a state change"
+                        );
+                    }
+                    assert_eq!(element(bar, labels.ask).size().width, 102.0);
+                    assert_eq!(element(bar, labels.grab).size().width, 108.0);
                     assert_eq!(
-                        element(bar, name).absolute_position().x,
-                        *x,
-                        "{name} moved on a state change"
+                        element(bar, lock_label).size().width,
+                        if compact { 26.0 } else { 96.0 }
                     );
                 }
-                assert_eq!(element(bar, labels.ask).size().width, 102.0);
-                assert_eq!(element(bar, labels.grab).size().width, 108.0);
-                assert_eq!(
-                    element(bar, lock_label).size().width,
-                    if compact { 26.0 } else { 76.0 }
-                );
             }
         }
     }
+    bar.set_deep_lock(false);
     bar.set_quit_armed(false);
     bar.set_restart_armed(false);
     bar.set_mic_recording(false);
@@ -287,35 +312,35 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
 fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
     let ids = [
         "capture",
-        "aggressive",
         "restore",
         "archive",
         "summary",
         "kb",
         "settings",
         "help",
+        "tray",
     ];
     let names = if russian {
         [
             "Вопрос по снимку экрана",
-            "Автотайлы на всё",
             "Вернуть закрытый тайл",
             "Архив сессий",
             "Итог встречи",
             "База знаний",
             "Настройки",
             "Справка",
+            "Свернуть в трей",
         ]
     } else {
         [
             "Ask about a screenshot",
-            "Auto-tiles on every line",
             "Restore closed tile",
             "Session archive",
             "Meeting summary",
             "Knowledge base",
             "Settings",
             "Help",
+            "Hide to tray",
         ]
     };
     let hint = if russian { "закрепить" } else { "pin" };
@@ -324,7 +349,8 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
     bar.set_compact_bar(false);
     bar.set_last_transcript_line("PIN GEOMETRY TRANSCRIPT".into());
     bar.set_can_restore_tile(true);
-    bar.set_aggressive_active(true);
+    bar.set_autotile_mode(2);
+    bar.set_tray_available(true);
     for count in [0, 3, 8] {
         bar.set_pins(slint::ModelRc::new(slint::VecModel::from(
             ids[..count]
@@ -379,16 +405,10 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
             );
             right = pos.x + size.width;
         }
-        for (id, legacy_label) in [
-            ("restore", "Restore last tile"),
-            ("aggressive", "Aggressive auto-tile"),
-        ] {
+        assert_eq!(ElementHandle::find_by_accessible_label(bar, if russian { "Агрессивные авто-тайлы" } else { "Aggressive auto-tile" }).count(), 0, "legacy flame is removed");
+        for (id, legacy_label) in [("restore", "Restore last tile")] {
             let legacy_label = if russian {
-                if id == "restore" {
-                    "Вернуть последний тайл"
-                } else {
-                    "Агрессивные авто-тайлы"
-                }
+                "Вернуть последний тайл"
             } else {
                 legacy_label
             };
@@ -421,7 +441,7 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
         slint::VecModel::<slint::SharedString>::default(),
     ));
     bar.set_can_restore_tile(false);
-    bar.set_aggressive_active(false);
+    bar.set_autotile_mode(1);
     bar.set_last_transcript_line("".into());
 }
 
