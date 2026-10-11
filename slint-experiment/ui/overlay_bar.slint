@@ -871,6 +871,8 @@ export component OverlayBarWindow inherits Window {
                 Rectangle {
                     height: 26px;
                     state-capsule := Capsule {
+                        // A sized child of a plain Rectangle is centred unless placed.
+                        x: 0px; y: 0px;
                         visible: root.bar-form == 0 || root.bar-form == 1;
                         width: root.bar-form == 2 ? 0px : root.bar-form == 1 ? BarSpec.compact-state : BarSpec.full-state;
                         if root.bar-form == 0 || root.bar-form == 1 : BarChip {
