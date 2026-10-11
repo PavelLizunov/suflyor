@@ -4553,6 +4553,8 @@ fn main() -> Result<(), slint::PlatformError> {
         });
         let weak_for_move = overlay.as_weak();
         overlay.on_drag_moved(move || {
+            #[cfg(windows)]
+            begin_bar_position_drag();
             if let Some(o) = weak_for_move.upgrade() {
                 if let Ok(hwnd) = grab_hwnd(o.window()) {
                     drag_update(hwnd);

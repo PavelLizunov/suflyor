@@ -8,7 +8,9 @@ use overlay_backend::config;
 use slint::{ComponentHandle, SharedString, Timer};
 use slint_replay::bar_form::{effective_form, BarForm};
 #[cfg(windows)]
-use slint_replay::bar_form::{bar_rect_inside_any, saved_bar_position, BarPositionTracker};
+use slint_replay::bar_form::{
+    bar_position_after_monitor_change, bar_rect_inside_any, saved_bar_position, BarPositionTracker,
+};
 #[cfg(windows)]
 use slint_replay::win32::{work_area_for_window, MonitorRect};
 use crate::ui::{OverlayBarWindow, TrayMenuWindow};
@@ -121,8 +123,10 @@ thread_local! {
     // Log entry into TooNarrow, not every periodic sample of the same condition.
     static BAR_TOO_NARROW: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static BAR_POSITION_TRACKER: RefCell<BarPositionTracker> = RefCell::new(BarPositionTracker::default());
-    // Outer Some: startup sizing is pending. Inner None: use today's centring.
-    static BAR_STARTUP_POSITION: std::cell::Cell<Option<Option<(i32, i32)>>> = const { std::cell::Cell::new(None) };
+    static BAR_LAST_WORK_AREA: std::cell::Cell<Option<(i32, i32, i32, i32)>> = const { std::cell::Cell::new(None) };
+    // Outer Some: positioning after sizing is pending. Inner None: startup centring.
+    // A saved offset from a monitor change must also survive the deferred resize.
+    static BAR_PENDING_POSITION: std::cell::Cell<Option<Option<(i32, i32)>>> = const { std::cell::Cell::new(None) };
 }
 
 #[cfg(windows)]
@@ -131,7 +135,7 @@ pub(super) static BAR_DRAG_ACTIVE: AtomicBool = AtomicBool::new(false);
 #[cfg(windows)]
 pub(super) fn begin_bar_position_drag() {
     BAR_DRAG_ACTIVE.store(true, Ordering::Relaxed);
-    BAR_STARTUP_POSITION.with(|position| position.set(None));
+    BAR_PENDING_POSITION.with(|position| position.set(None));
     BAR_POSITION_TRACKER.with(|tracker| tracker.borrow_mut().user_drag());
 }
 
@@ -148,6 +152,11 @@ fn bar_drag_in_progress() -> bool {
 #[cfg(windows)]
 fn forget_bar_position_sample() {
     BAR_POSITION_TRACKER.with(|tracker| tracker.borrow_mut().programmatic_move());
+}
+
+#[cfg(windows)]
+fn work_area_bounds(work: MonitorRect) -> (i32, i32, i32, i32) {
+    (work.left, work.top, work.right, work.bottom)
 }
 
 #[cfg(windows)]
@@ -294,11 +303,11 @@ pub(super) fn reevaluate_bar_monitor(overlay: &OverlayBarWindow, cfg: &config::S
     // Do not resize/recover under a held drag, including a stationary hold.
     if bar_drag_in_progress() {
         BAR_POSITION_TRACKER.with(|tracker| {
-            tracker.borrow_mut().observe((0, 0, 0, 0), true);
+            tracker.borrow_mut().observe((0, 0, 0, 0), true, false);
         });
         return;
     }
-    BAR_STARTUP_POSITION.with(|position| position.set(None));
+    BAR_PENDING_POSITION.with(|position| position.set(None));
     let form = apply_bar_size(overlay, overlay.get_compact_bar());
     let Ok(hwnd) = grab_hwnd(overlay.window()) else {
         forget_bar_position_sample();
@@ -316,11 +325,52 @@ pub(super) fn reevaluate_bar_monitor(overlay: &OverlayBarWindow, cfg: &config::S
         .into_iter()
         .filter_map(|monitor| monitor_work_area(monitor).map(|work| (monitor, work)))
         .collect();
+    let current_work = work_area_for_window(hwnd).or_else(primary_bar_work_area);
+    if let Some((monitor, work)) = monitors.iter().find(|(_, work)| {
+        current_work.is_some_and(|current| work_area_bounds(current) == work_area_bounds(*work))
+    }) {
+        let bounds = work_area_bounds(*work);
+        let changed = BAR_LAST_WORK_AREA.with(|last| {
+            last.replace(Some(bounds)).is_some_and(|previous| previous != bounds)
+        });
+        if changed {
+            let key = monitor_key(*monitor);
+            let saved_offset = cfg.read().bar_positions.iter()
+                .find(|saved| saved.monitor == key)
+                .map(|saved| (saved.x, saved.y));
+            BAR_PENDING_POSITION.with(|position| position.set(saved_offset.map(Some)));
+            forget_bar_position_sample();
+            // Native geometry can still have the OLD width until set_size lands.
+            // Clamp against the selected form, then reapply after deferred sizing.
+            let spec = overlay.global::<crate::ui::BarSpec>();
+            let scale = overlay.window().scale_factor().max(0.1);
+            let logical_width = match overlay.get_bar_form() {
+                0 => spec.get_full_width(),
+                1 => spec.get_compact_width(),
+                _ => spec.get_mini_width(),
+            };
+            let form_rect = (
+                x,
+                y,
+                (logical_width * scale).round() as i32,
+                (spec.get_height() * scale).round() as i32,
+            );
+            let (nx, ny) = bar_position_after_monitor_change(saved_offset, *work, form_rect);
+            if (x, y) != (nx, ny) {
+                set_platform_window_position(overlay.window(), nx, ny);
+                if let Err(error) = move_window_pos_only(hwnd, nx, ny) {
+                    eprintln!("[overlay-host] bar monitor restore move failed: {error}");
+                }
+            }
+            // Never sample an app-made monitor restore as a user preference.
+            return;
+        }
+    }
     let works: Vec<_> = monitors.iter().map(|(_, work)| *work).collect();
     let contained = bar_rect_inside_any(rect, &works);
     if contained && form != BarForm::TooNarrow {
         let should_save =
-            BAR_POSITION_TRACKER.with(|tracker| tracker.borrow_mut().observe(rect, false));
+            BAR_POSITION_TRACKER.with(|tracker| tracker.borrow_mut().observe(rect, false, false));
         if should_save {
             // Only an unambiguous, fully containing work area gets a key.
             if let Some((monitor, work)) = monitors
@@ -356,7 +406,7 @@ pub(super) fn reevaluate_bar_monitor(overlay: &OverlayBarWindow, cfg: &config::S
         return;
     }
     // Recovery is never a user preference, even on the following stable ticks.
-    BAR_STARTUP_POSITION.with(|position| position.set(None));
+    BAR_PENDING_POSITION.with(|position| position.set(None));
     forget_bar_position_sample();
     let work = work_area_for_window(hwnd).or_else(primary_bar_work_area);
     let (nx, ny) = work.map_or((60, 24), |work| clamped_bar_position(work, rect));
@@ -370,8 +420,9 @@ pub(super) fn reevaluate_bar_monitor(overlay: &OverlayBarWindow, cfg: &config::S
     }
 }
 
-/// Keep the bar's left edge (clamped on Windows) for its NEW width, once the
-/// OS window has actually reached that size. `set_size` is applied on a later
+/// Keep the bar's left edge (clamped on Windows) for its NEW width on the same
+/// work area, or apply a pending restored offset after a monitor change, once
+/// the OS window has actually reached that size. `set_size` is applied on a later
 /// event-loop cycle, and at STARTUP the HWND isn't realized for ~200 ms, so a
 /// single fixed delay raced the resize/pin (it left a startup-compact bar
 /// left-of-centre). Poll every 50 ms (≤ ~0.6 s) until the rect width matches the
@@ -392,7 +443,7 @@ fn recenter_when_sized(
         }
         #[cfg(windows)]
         if bar_drag_in_progress() {
-            BAR_POSITION_TRACKER.with(|tracker| tracker.borrow_mut().user_drag());
+            forget_bar_position_sample();
             return;
         }
         let spec = o.global::<crate::ui::BarSpec>();
@@ -420,12 +471,19 @@ fn recenter_when_sized(
             return;
         }
         #[cfg(windows)]
+        if resize_work.zip(bar_work_area(&o)).is_some_and(|(requested, current)| {
+            work_area_bounds(requested) != work_area_bounds(current)
+        }) {
+            forget_bar_position_sample();
+            return; // A monitor change superseded this deferred resize.
+        }
+        #[cfg(windows)]
         let (x, y) = resize_work.or_else(|| bar_work_area(&o)).map_or((60, 24), |work| {
             match get_window_rect(hwnd) {
                 Ok(rect @ (x, y, width, height))
                     if (x != -32000 || y != -32000) && width > 0 && height > 0 =>
                 {
-                    match BAR_STARTUP_POSITION.with(|position| position.take()) {
+                    match BAR_PENDING_POSITION.with(|position| position.take()) {
                         Some(Some(offset)) => saved_bar_position(offset, work, width, height),
                         Some(None) => {
                             let scale = o.window().scale_factor().max(0.1);
@@ -720,7 +778,7 @@ pub(super) fn apply_overlay_hwnd(
         #[cfg(windows)]
         let form = apply_bar_size(o, o.get_compact_bar());
         #[cfg(windows)]
-        BAR_STARTUP_POSITION.with(|position| position.set(Some(None)));
+        BAR_PENDING_POSITION.with(|position| position.set(Some(None)));
         #[cfg(windows)]
         let (x, y) = primary_bar_work_area().map_or((60, 24), |work| {
             let (_, _, width, height) = get_window_rect(hwnd).unwrap_or((0, 0, 0, 0));
@@ -763,7 +821,7 @@ pub(super) fn apply_overlay_hwnd(
                         && move_window_pos_only(hwnd, rx, ry).is_ok()
                     {
                         set_platform_window_position(o.window(), rx, ry);
-                        BAR_STARTUP_POSITION.with(|position| {
+                        BAR_PENDING_POSITION.with(|position| {
                             position.set(Some(Some((saved.x, saved.y))));
                         });
                         forget_bar_position_sample();

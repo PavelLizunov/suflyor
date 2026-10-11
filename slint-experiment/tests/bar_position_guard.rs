@@ -53,7 +53,7 @@ fn saving_is_sampled_hidden_and_drag_guarded_and_recovery_is_not_a_preference() 
         "BAR_TRAY_HIDDEN.load(Ordering::Relaxed)",
         "!overlay.window().is_visible()",
         "bar_drag_in_progress()",
-        "tracker.borrow_mut().observe(rect, false)",
+        "tracker.borrow_mut().observe(rect, false, false)",
         "if should_save",
         "saved == &position",
         "c.bar_positions.retain(",
@@ -64,13 +64,40 @@ fn saving_is_sampled_hidden_and_drag_guarded_and_recovery_is_not_a_preference() 
     ] {
         assert!(check.contains(required), "position sampling lost {required}");
     }
+    let monitor_change = check.split_once("if changed {").expect("monitor change branch").1
+        .split_once("let works:").expect("sampling boundary").0;
+    for required in [
+        "let key = monitor_key(*monitor);",
+        "find(|saved| saved.monitor == key)",
+        "bar_position_after_monitor_change(saved_offset, *work, form_rect)",
+        "(logical_width * scale).round() as i32",
+        "(spec.get_height() * scale).round() as i32",
+        "BAR_PENDING_POSITION.with(|position| position.set(saved_offset.map(Some)))",
+        "forget_bar_position_sample();",
+        "return;",
+    ] {
+        assert!(monitor_change.contains(required), "monitor restore lost {required}");
+    }
+    assert!(check.contains("last.replace(Some(bounds)).is_some_and(|previous| previous != bounds)"));
+    assert!(!monitor_change.contains("config::save"));
+    assert!(!monitor_change.contains("user_drag()"));
     let recovery = check.split_once("// Recovery is never a user preference").unwrap().1;
     assert!(recovery.contains("forget_bar_position_sample();"));
     assert!(!recovery.contains("config::save"));
     let host = read("src/bin/overlay_host_windows.rs");
     let drag = host.split_once("overlay.on_drag_start_requested(move || {").unwrap().1
         .split_once("// ===== Quit").unwrap().0;
-    assert!(drag.contains("begin_bar_position_drag();"));
+    let (start, moved) = drag.split_once("overlay.on_drag_moved(move || {")
+        .expect("bar drag move callback");
+    assert!(start.contains("begin_bar_position_drag();"));
+    assert!(moved.contains("begin_bar_position_drag();"));
+    let tracker = read("src/bar_form.rs");
+    let observe = tracker.split_once("pub fn observe(").expect("position tracker").1
+        .split_once("pub fn saved(").expect("save acknowledgement").0;
+    assert!(observe.contains("should_save_bar_position(self.dragged_since_save, stable, dragging_now, hidden)"));
+    assert!(!observe.contains("self.user_drag()"));
+    assert!(tracker.contains("dragged_since_save && stable && !dragging_now && !hidden"));
+    assert!(tracker.contains("self.dragged_since_save = false;"));
     assert!(!drag.contains("config::save"));
     assert!(source.contains("GetAsyncKeyState(i32::from(VK_LBUTTON.0)) < 0"));
     let resize = source.split_once("fn recenter_when_sized(").unwrap().1
@@ -79,4 +106,7 @@ fn saving_is_sampled_hidden_and_drag_guarded_and_recovery_is_not_a_preference() 
     assert!(resize.contains("None => clamped_bar_position(work, rect)"));
     assert!(resize.contains("Some(Some(offset)) => saved_bar_position(offset, work, width, height)"));
     assert!(resize.contains("if selected_width != target_w_logical"));
+    assert!(resize.contains("work_area_bounds(requested) != work_area_bounds(current)"));
+    assert!(resize.contains("match BAR_PENDING_POSITION.with(|position| position.take())"));
+    assert!(!resize.contains("user_drag()"));
 }
