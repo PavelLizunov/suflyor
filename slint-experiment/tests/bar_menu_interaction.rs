@@ -214,7 +214,10 @@ fn rows_select_pins_do_not_select_and_danger_actions_require_yes() {
         assert_eq!(no.size().width, 78.0);
         assert_eq!(yes.size().height, 24.0);
         assert_eq!(no.size().height, 24.0);
-        assert_eq!(yes.absolute_position().y, question.absolute_position().y + 2.0);
+        assert_eq!(
+            yes.absolute_position().y,
+            question.absolute_position().y + 2.0
+        );
         assert_eq!(no.absolute_position().y, yes.absolute_position().y);
         assert_eq!(no.absolute_position().x, pin_x.unwrap());
         assert_eq!(
@@ -245,11 +248,14 @@ fn pin_save_failure_footer_is_bilingual_temporary_and_does_not_dispatch() {
         slint::select_bundled_translation(language).expect("select menu language");
         let menu = ui::BarMenuWindow::new().expect("create menu error fixture");
         menu.set_can_restore_tile(true);
-        menu.set_pins(ModelRc::new(VecModel::from(vec![SharedString::from("archive")])));
+        menu.set_pins(ModelRc::new(VecModel::from(vec![SharedString::from(
+            "archive",
+        )])));
         let weak = menu.as_weak();
         menu.on_footer_resized(move || {
             let menu = weak.upgrade().expect("live fixture");
-            menu.window().set_size(LogicalSize::new(408.0, 330.0 + menu.get_footer_height()));
+            menu.window()
+                .set_size(LogicalSize::new(408.0, 330.0 + menu.get_footer_height()));
         });
         let actions = Rc::new(Cell::new(0));
         let count = actions.clone();
@@ -258,29 +264,55 @@ fn pin_save_failure_footer_is_bilingual_temporary_and_does_not_dispatch() {
         menu.on_pin_toggled(move |_| weak.upgrade().unwrap().invoke_pin_save_failed());
         menu.window().set_size(LogicalSize::new(408.0, 330.0));
         menu.show().expect("show footer fixture");
-        assert_eq!(ElementHandle::find_by_accessible_label(&menu, error).count(), 0);
+        assert_eq!(
+            ElementHandle::find_by_accessible_label(&menu, error).count(),
+            0
+        );
         assert_eq!(menu.get_footer_height(), 0.0);
-        let pin_label = if language == "ru" { "Настройки. закрепить" } else { "Settings. pin" };
+        let pin_label = if language == "ru" {
+            "Настройки. закрепить"
+        } else {
+            "Settings. pin"
+        };
         activate(&menu, pin_label);
         slint::platform::update_timers_and_animations();
-        assert_eq!(ElementHandle::find_by_accessible_label(&menu, error).count(), 1);
+        assert_eq!(
+            ElementHandle::find_by_accessible_label(&menu, error).count(),
+            1
+        );
         assert_eq!(menu.get_footer_height(), 24.0);
-        let footer = ElementHandle::find_by_accessible_label(&menu, error).next().unwrap();
+        let footer = ElementHandle::find_by_accessible_label(&menu, error)
+            .next()
+            .unwrap();
         assert_eq!(footer.size().height, 24.0);
         assert!(footer.absolute_position().y + footer.size().height <= 354.0);
         assert_eq!(actions.get(), 0, "failure is not an action");
-        assert_eq!(menu.get_pins().row_count(), 1, "failed save keeps the old model");
+        assert_eq!(
+            menu.get_pins().row_count(),
+            1,
+            "failed save keeps the old model"
+        );
         assert!(menu.window().is_visible(), "save failure stays in the menu");
-        let pin = ElementHandle::find_by_accessible_label(&menu, pin_label).next().unwrap();
+        let pin = ElementHandle::find_by_accessible_label(&menu, pin_label)
+            .next()
+            .unwrap();
         assert_eq!(pin.size().height, 24.0);
         assert_eq!(pin.size().width, 78.0);
-        let quit = if language == "ru" { "Выйти" } else { "Quit" };
+        let quit = if language == "ru" {
+            "Выйти"
+        } else {
+            "Quit"
+        };
         let yes_label = if language == "ru" { "Да" } else { "Yes" };
         let no_label = if language == "ru" { "Нет" } else { "No" };
         activate(&menu, quit);
         assert!(ElementHandle::find_by_accessible_label(&menu, yes_label).count() > 0);
-        let yes = ElementHandle::find_by_accessible_label(&menu, yes_label).next().unwrap();
-        let no = ElementHandle::find_by_accessible_label(&menu, no_label).next().unwrap();
+        let yes = ElementHandle::find_by_accessible_label(&menu, yes_label)
+            .next()
+            .unwrap();
+        let no = ElementHandle::find_by_accessible_label(&menu, no_label)
+            .next()
+            .unwrap();
         assert_eq!(yes.size().height, 24.0);
         assert_eq!(no.size().height, 24.0);
         assert_eq!(yes.size().width, 96.0);

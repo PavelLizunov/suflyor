@@ -73,10 +73,7 @@ pub fn bar_position_after_monitor_change(
     work: crate::win32::MonitorRect,
     (x, y, width, height): (i32, i32, i32, i32),
 ) -> (i32, i32) {
-    let offset = saved_offset.unwrap_or((
-        x.saturating_sub(work.left),
-        y.saturating_sub(work.top),
-    ));
+    let offset = saved_offset.unwrap_or((x.saturating_sub(work.left), y.saturating_sub(work.top)));
     saved_bar_position(offset, work, width, height)
 }
 
@@ -262,7 +259,10 @@ mod tests {
         assert!(!tracker.observe(moved, true, false));
         assert!(!tracker.observe(moved, false, false));
         assert!(tracker.observe(moved, false, false));
-        assert!(tracker.observe(moved, false, false), "failed save can retry");
+        assert!(
+            tracker.observe(moved, false, false),
+            "failed save can retry"
+        );
         tracker.saved(moved);
         assert!(!tracker.observe(moved, false, false));
         tracker.programmatic_move();
@@ -316,11 +316,8 @@ mod tests {
         let small_rect = (clamped.0, clamped.1, 586, 64);
         assert!(!tracker.observe(small_rect, false, false));
         assert!(!tracker.observe(small_rect, false, false));
-        let restored = bar_position_after_monitor_change(
-            Some(saved),
-            large,
-            (clamped.0, clamped.1, 874, 64),
-        );
+        let restored =
+            bar_position_after_monitor_change(Some(saved), large, (clamped.0, clamped.1, 874, 64));
         assert_eq!(restored, saved);
         tracker.programmatic_move();
         assert!(!tracker.observe(user_rect, false, false));

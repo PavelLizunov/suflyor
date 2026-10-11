@@ -1946,8 +1946,16 @@ fn old_config_without_bar_pins_loads_as_empty() {
 fn bar_positions_round_trip_preserves_physical_offsets_and_monitor_order() {
     let cfg = Config {
         bar_positions: vec![
-            BarPosition { monitor: "1920x1080@0,0".into(), x: 123, y: 24 },
-            BarPosition { monitor: "1200x1920@-1200,0".into(), x: -5, y: 321 },
+            BarPosition {
+                monitor: "1920x1080@0,0".into(),
+                x: 123,
+                y: 24,
+            },
+            BarPosition {
+                monitor: "1200x1920@-1200,0".into(),
+                x: -5,
+                y: 321,
+            },
         ],
         ..Config::defaults()
     };
@@ -1958,7 +1966,8 @@ fn bar_positions_round_trip_preserves_physical_offsets_and_monitor_order() {
 
 #[test]
 fn old_config_without_bar_positions_loads_as_empty() {
-    let parsed: Config = serde_json::from_str(r#"{"compact_bar":true,"bar_pins":["capture"]}"#).unwrap();
+    let parsed: Config =
+        serde_json::from_str(r#"{"compact_bar":true,"bar_pins":["capture"]}"#).unwrap();
     assert!(parsed.compact_bar);
     assert_eq!(parsed.bar_pins, ["capture"]);
     assert!(parsed.bar_positions.is_empty());
@@ -1967,9 +1976,13 @@ fn old_config_without_bar_positions_loads_as_empty() {
 
 #[test]
 fn bar_positions_discard_oldest_entries_above_eight() {
-    let positions: Vec<_> = (0..10).map(|index| BarPosition {
-        monitor: format!("monitor-{index}"), x: index, y: 24,
-    }).collect();
+    let positions: Vec<_> = (0..10)
+        .map(|index| BarPosition {
+            monitor: format!("monitor-{index}"),
+            x: index,
+            y: 24,
+        })
+        .collect();
     let json = serde_json::json!({ "bar_positions": positions });
     let parsed: Config = serde_json::from_value(json).unwrap();
     assert_eq!(parsed.bar_positions, positions[2..]);

@@ -933,8 +933,16 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
 }
 
 fn assert_audit_states(bar: &ui::OverlayBarWindow, labels: &Labels) {
-    let start = if labels.russian { "Начать сессию" } else { "Start the session" };
-    let listening = if labels.russian { "слушаю…" } else { "listening…" };
+    let start = if labels.russian {
+        "Начать сессию"
+    } else {
+        "Start the session"
+    };
+    let listening = if labels.russian {
+        "слушаю…"
+    } else {
+        "listening…"
+    };
     let toggles = std::rc::Rc::new(std::cell::Cell::new(0));
     let toggles_for_callback = toggles.clone();
     bar.on_timer_toggle_clicked(move || toggles_for_callback.set(toggles_for_callback.get() + 1));
@@ -951,14 +959,22 @@ fn assert_audit_states(bar: &ui::OverlayBarWindow, labels: &Labels) {
             1 => spec.get_compact_width(),
             _ => spec.get_mini_width(),
         };
-        bar.window().set_size(LogicalSize::new(width, spec.get_height()));
+        bar.window()
+            .set_size(LogicalSize::new(width, spec.get_height()));
         for active in [false, true] {
             bar.set_timer_active(active);
             let timer_label = if active { labels.stop } else { start };
-            assert_eq!(ElementHandle::find_by_accessible_label(bar, timer_label).count(), 1);
+            assert_eq!(
+                ElementHandle::find_by_accessible_label(bar, timer_label).count(),
+                1
+            );
             let before = toggles.get();
             element(bar, timer_label).invoke_accessible_default_action();
-            assert_eq!(toggles.get(), before + 1, "timer accessible dispatch: form={form}");
+            assert_eq!(
+                toggles.get(),
+                before + 1,
+                "timer accessible dispatch: form={form}"
+            );
             for paused in [false, true] {
                 bar.set_session_paused(paused);
                 for transcript in ["", "AUDIT TRANSCRIPT"] {
@@ -975,9 +991,17 @@ fn assert_audit_states(bar: &ui::OverlayBarWindow, labels: &Labels) {
                             bar.set_status_tone(tone);
                             slint::platform::update_timers_and_animations();
                             // Drain conditional children before layout-derived reads.
-                            let count = ElementHandle::find_by_accessible_label(bar, listening).count();
-                            let expected = form != 2 && active && !paused && transcript.is_empty()
-                                && !fault && !matches!(tone, ui::StatusTone::Warning | ui::StatusTone::Danger);
+                            let count =
+                                ElementHandle::find_by_accessible_label(bar, listening).count();
+                            let expected = form != 2
+                                && active
+                                && !paused
+                                && transcript.is_empty()
+                                && !fault
+                                && !matches!(
+                                    tone,
+                                    ui::StatusTone::Warning | ui::StatusTone::Danger
+                                );
                             assert_eq!(count, usize::from(expected), "listening: form={form}, active={active}, paused={paused}, transcript={transcript}, fault={fault}, tone={tone:?}");
                             if expected {
                                 let cue = element(bar, listening);
@@ -986,9 +1010,20 @@ fn assert_audit_states(bar: &ui::OverlayBarWindow, labels: &Labels) {
                                 assert!(pos.y >= 34.0 && pos.y + size.height <= spec.get_height());
                                 assert!(pos.x >= 0.0 && pos.x + size.width <= width);
                             }
-                            assert_eq!(ElementHandle::find_by_accessible_label(bar, labels.ask).count(), 1);
-                            assert_eq!(ElementHandle::find_by_accessible_label(bar, labels.grab).count(), 1);
-                            assert_form_contract(bar, labels, form, "audit cue and accessible labels");
+                            assert_eq!(
+                                ElementHandle::find_by_accessible_label(bar, labels.ask).count(),
+                                1
+                            );
+                            assert_eq!(
+                                ElementHandle::find_by_accessible_label(bar, labels.grab).count(),
+                                1
+                            );
+                            assert_form_contract(
+                                bar,
+                                labels,
+                                form,
+                                "audit cue and accessible labels",
+                            );
                         }
                     }
                 }

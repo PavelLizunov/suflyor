@@ -34,7 +34,9 @@ pub struct BarPosition {
     pub y: i32,
 }
 
-fn deserialize_bar_positions<'de, D>(deserializer: D) -> std::result::Result<Vec<BarPosition>, D::Error>
+fn deserialize_bar_positions<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Vec<BarPosition>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {

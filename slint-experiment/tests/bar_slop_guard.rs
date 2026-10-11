@@ -9,13 +9,22 @@ fn source(path: &str) -> String {
 }
 
 fn section<'a>(src: &'a str, start: &str, end: &str) -> &'a str {
-    src.split_once(start).expect(start).1.split_once(end).expect(end).0
+    src.split_once(start)
+        .expect(start)
+        .1
+        .split_once(end)
+        .expect(end)
+        .0
 }
 
 #[test]
 fn stealth_fault_is_the_only_new_blink_and_both_chip_sites_share_its_phase() {
     let bar = source("ui/overlay_bar.slint");
-    let fault = section(&bar, "in-out property <bool> stealth-fault:", "property <string> presented-status:");
+    let fault = section(
+        &bar,
+        "in-out property <bool> stealth-fault:",
+        "property <string> presented-status:",
+    );
     for binding in [
         "interval: 420ms;",
         "running: root.stealth-fault;",
@@ -24,7 +33,11 @@ fn stealth_fault_is_the_only_new_blink_and_both_chip_sites_share_its_phase() {
     ] {
         assert!(fault.contains(binding), "fault timer: {binding}");
     }
-    assert_eq!(bar.matches("Timer {").count(), 2, "only auto-tiles and fault timers");
+    assert_eq!(
+        bar.matches("Timer {").count(),
+        2,
+        "only auto-tiles and fault timers"
+    );
     assert!(bar.contains("interval: 90ms;\n        running: root.locked;"));
     assert!(bar.contains("root.stealth-fault ? Theme.danger : root.status-color"));
     assert!(bar.contains("border-color: root.stealth-fault ? Theme.danger : root.status-color;"));
@@ -35,14 +48,24 @@ fn stealth_fault_is_the_only_new_blink_and_both_chip_sites_share_its_phase() {
         "fault-outline: root.stealth-fault && !root.stealth-fault-phase;",
         "accent: root.stealth-fault ? Theme.danger : Theme.cat-pink;",
     ] {
-        assert_eq!(bar.matches(binding).count(), 2, "full/compact and mini: {binding}");
+        assert_eq!(
+            bar.matches(binding).count(),
+            2,
+            "full/compact and mini: {binding}"
+        );
     }
     let chip = section(&bar, "component BarChip", "component PinChip");
-    assert!(chip.contains("background: root.fault-outline ? transparent : root.solid ? root.accent"));
+    assert!(
+        chip.contains("background: root.fault-outline ? transparent : root.solid ? root.accent")
+    );
     assert!(chip.contains("border-width: root.fault-outline ? Metrics.border-thin : 0px;"));
     assert!(chip.contains("duration: root.solid || root.fault-outline ? 0ms : 80ms;"));
     assert_eq!(chip.matches("root.solid ? Theme.bg-surface").count(), 2);
-    assert_eq!(chip.matches("root.fault-outline || active ? Theme.on-tint(accent)").count(), 2);
+    assert_eq!(
+        chip.matches("root.fault-outline || active ? Theme.on-tint(accent)")
+            .count(),
+        2
+    );
     assert!(bar.contains("root.stealth-fault ? @tr(\"visible!\")"));
     // The word is not conditional on the blink phase; compact/mini remain icon-only.
     assert!(!bar.contains("root.stealth-fault-phase ? @tr"));
@@ -61,7 +84,11 @@ fn small_text_uses_readable_tokens_and_the_pin_hint_is_not_dimmed() {
     assert!(record.contains("font-weight: 600;"));
     assert!(record.contains("background: recording ? Theme.danger.with-alpha(0.2) : transparent;"));
     assert!(record.contains("tint: root.recording ? Theme.danger : Theme.text-secondary;"));
-    let lock_row = section(&bar, "export component LockModeMenuRow", "component AutotileChip");
+    let lock_row = section(
+        &bar,
+        "export component LockModeMenuRow",
+        "component AutotileChip",
+    );
     assert!(lock_row.contains("color: root.current ? Theme.on-tint(root.mode-color)"));
     assert!(lock_row.contains("color: Theme.on-tint(root.mode-color);"));
     let bootstrap_chip = section(&bar, "component Chip", "export component LockModeMenuRow");
@@ -81,10 +108,22 @@ fn menu_feedback_targets_and_confirmation_keep_the_grid() {
     ] {
         assert!(menu.contains(binding), "menu feedback: {binding}");
     }
-    assert_eq!(menu.matches("height: 24px; x: 0px; y: (parent.height - self.height) / 2;").count(), 3);
-    assert_eq!(menu.matches("width: parent.width; border-radius: Metrics.radius-field;").count(), 3);
+    assert_eq!(
+        menu.matches("height: 24px; x: 0px; y: (parent.height - self.height) / 2;")
+            .count(),
+        3
+    );
+    assert_eq!(
+        menu.matches("width: parent.width; border-radius: Metrics.radius-field;")
+            .count(),
+        3
+    );
     assert!(source("ui/metrics.slint").contains("radius-field: 8px;"));
-    let yes = section(&menu, "if root.confirmation == r.id : Rectangle {", "if root.confirmation != r.id");
+    let yes = section(
+        &menu,
+        "if root.confirmation == r.id : Rectangle {",
+        "if root.confirmation != r.id",
+    );
     assert!(yes.contains("background: Theme.danger;"));
     assert!(yes.contains("text: @tr(\"Yes\"); color: Theme.bg-surface;"));
     let no = section(&menu, "width: root.col-pin;", "if r.pinnable");
@@ -113,10 +152,20 @@ fn save_failure_keeps_rollback_and_shows_a_timed_translated_footer() {
         assert!(menu.contains(binding), "save error footer: {binding}");
     }
     let timer = section(&menu, "pin-save-failed =>", "callback action");
-    assert!(timer.contains("interval: 100ms;"), "40 ticks = about four seconds");
+    assert!(
+        timer.contains("interval: 100ms;"),
+        "40 ticks = about four seconds"
+    );
     let host = source("src/bin/overlay_host/bar_menu.rs");
-    let failure = section(&host, "if let Err(e) = overlay_backend::config::save(&c)", "pins_model(&c.bar_pins)");
-    assert!(failure.find("c.bar_pins = previous;").unwrap() < failure.find("menu.invoke_pin_save_failed();").unwrap());
+    let failure = section(
+        &host,
+        "if let Err(e) = overlay_backend::config::save(&c)",
+        "pins_model(&c.bar_pins)",
+    );
+    assert!(
+        failure.find("c.bar_pins = previous;").unwrap()
+            < failure.find("menu.invoke_pin_save_failed();").unwrap()
+    );
     assert!(failure.contains("return;"));
     assert!(host.contains("menu.on_footer_resized"));
     assert!(host.contains("pos.y.clamp(work.top, max_y)"));
@@ -127,33 +176,62 @@ fn save_failure_keeps_rollback_and_shows_a_timed_translated_footer() {
 #[test]
 fn listening_and_accessible_copy_are_bilingual_and_restore_has_one_name() {
     let bar = source("ui/overlay_bar.slint");
-    let cue = section(&bar, "if (root.bar-form == 0 || root.bar-form == 1) && root.timer-active", "if root.deep-lock");
+    let cue = section(
+        &bar,
+        "if (root.bar-form == 0 || root.bar-form == 1) && root.timer-active",
+        "if root.deep-lock",
+    );
     for binding in [
-        "!root.session-paused", "root.last-transcript-line == \"\"",
-        "!root.stealth-fault", "root.status-tone != StatusTone.warning",
-        "root.status-tone != StatusTone.danger", "@tr(\"listening…\")",
+        "!root.session-paused",
+        "root.last-transcript-line == \"\"",
+        "!root.stealth-fault",
+        "root.status-tone != StatusTone.warning",
+        "root.status-tone != StatusTone.danger",
+        "@tr(\"listening…\")",
         "font-size: Metrics.font-label; color: Theme.text-muted;",
     ] {
         assert!(cue.contains(binding), "listening condition: {binding}");
     }
     let po = source("translations/ru/LC_MESSAGES/slint-replay.po");
     for (en, ru) in [
-        ("Hold to ask with your voice", "Удерживайте: вопрос своим голосом"),
-        ("Hold to ask about what they said", "Удерживайте: вопрос по словам собеседника"),
+        (
+            "Hold to ask with your voice",
+            "Удерживайте: вопрос своим голосом",
+        ),
+        (
+            "Hold to ask about what they said",
+            "Удерживайте: вопрос по словам собеседника",
+        ),
         ("Start the session", "Начать сессию"),
         ("Stop the session", "Остановить сессию"),
         ("listening…", "слушаю…"),
-        ("Could not save. Try again.", "Не удалось сохранить. Повторите."),
+        (
+            "Could not save. Try again.",
+            "Не удалось сохранить. Повторите.",
+        ),
         ("Restore closed tile", "Вернуть закрытый тайл"),
         ("Expand the bar", "Развернуть панель"),
     ] {
-        assert!(po.contains(&format!("msgid \"{en}\"\nmsgstr \"{ru}\"")), "translation: {en}");
+        assert!(
+            po.contains(&format!("msgid \"{en}\"\nmsgstr \"{ru}\"")),
+            "translation: {en}"
+        );
     }
-    assert!(bar.contains("a11y: root.timer-active ? @tr(\"Stop the session\") : @tr(\"Start the session\");"));
-    assert!(bar.contains("label: root.timer-active ? root.timer-label : @tr(\"start\"); mono: true;"));
+    assert!(bar.contains(
+        "a11y: root.timer-active ? @tr(\"Stop the session\") : @tr(\"Start the session\");"
+    ));
+    assert!(
+        bar.contains("label: root.timer-active ? root.timer-label : @tr(\"start\"); mono: true;")
+    );
     assert!(bar.contains("label: root.bar-form == 2 ? \"\" : @tr(\"ask\")"));
     assert!(bar.contains("label: root.bar-form == 2 ? \"\" : @tr(\"grab\")"));
-    for old in ["Развернуть бар", "двигать бар", "на баре", "Иконки бара", "превращает бар"] {
+    for old in [
+        "Развернуть бар",
+        "двигать бар",
+        "на баре",
+        "Иконки бара",
+        "превращает бар",
+    ] {
         assert!(!po.contains(old), "bar terminology: {old}");
     }
     assert!(!po.contains("msgid \"Restore last tile\""));
