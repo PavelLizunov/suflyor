@@ -27,7 +27,13 @@ fn lock_icon_is_vertically_centred_in_its_fixed_chip() {
         lock_chip.contains("border-width: 0px;"),
         "the capsule owns the outline"
     );
-    assert!(ui.contains("width: root.compact-bar ? 76px : 164px;"));
+    assert!(ui.contains("width: root.compact-bar ? 26px : 76px;"));
     assert!(ui.contains("tight: root.compact-bar;"));
-    assert!(lock_chip.contains("root.tight ? @tr(\"AI off\") : @tr(\"Local AI unloaded\")"));
+    assert!(lock_chip.contains("min-width: 26px;"));
+    assert!(!lock_chip.contains("min-width: 30px;"));
+    assert!(lock_chip.contains("if root.deep && !root.tight : Text {"));
+    assert!(lock_chip.contains("text: @tr(\"AI off\");"));
+    assert!(!lock_chip.contains("text: root.tight ?"));
+    assert!(!lock_chip.contains("text: @tr(\"Local AI unloaded\")"));
+    assert!(lock_chip.contains("accessible-label: root.deep ? @tr(\"Local AI unloaded\") : a11y;"));
 }

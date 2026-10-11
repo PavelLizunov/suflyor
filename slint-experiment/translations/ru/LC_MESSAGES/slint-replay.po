@@ -47,8 +47,11 @@ msgstr "старт"
 msgid "🧠 {}"
 msgstr "🧠 {}"
 
-msgid "+ tile ({})"
-msgstr "+ тайл ({})"
+msgid "tile · {}"
+msgstr "тайл · {}"
+
+msgid "New tile, {} open"
+msgstr "Новый тайл, открыто: {}"
 
 # #110 — bulk-close all open tiles.
 msgid "close all"
@@ -1936,9 +1939,9 @@ msgstr "Повторить"
 msgid "Local AI unloaded"
 msgstr "Локальный AI выгружен"
 
-# Compact capsule deep-lock state.
+# Full capsule deep-lock state; compact mode is icon-only.
 msgid "AI off"
-msgstr "AI выкл."
+msgstr "AI выкл"
 
 msgid "Current"
 msgstr "Текущий"

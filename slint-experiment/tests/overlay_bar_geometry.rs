@@ -21,6 +21,7 @@ struct Labels {
     grab: &'static str,
     close_all: &'static str,
     tile: &'static str,
+    deep_lock: &'static str,
     write: &'static str,
     compact: &'static str,
     expand: &'static str,
@@ -35,7 +36,8 @@ const ENGLISH: Labels = Labels {
     ask: "ask",
     grab: "grab",
     close_all: "close all",
-    tile: "+ tile",
+    tile: "New tile, {} open",
+    deep_lock: "Local AI unloaded",
     write: "Write a question",
     compact: "Compact reader mode",
     expand: "Expand the bar",
@@ -49,7 +51,8 @@ const RUSSIAN: Labels = Labels {
     ask: "спросить",
     grab: "захватить",
     close_all: "закрыть все",
-    tile: "+ тайл",
+    tile: "Новый тайл, открыто: {}",
+    deep_lock: "Локальный AI выгружен",
     write: "Написать вопрос",
     compact: "Компактный режим чтения",
     expand: "Развернуть бар",
@@ -80,6 +83,8 @@ fn assert_top_bounds(item: &ElementHandle, width: f32, name: &str) {
 fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
     bar.set_compact_bar(compact);
     bar.set_lock_a11y("Lock mode".into());
+    bar.set_suppress_tiles(false);
+    bar.set_deep_lock(false);
     bar.set_timer_active(true);
     bar.set_timer_label("1:07:31".into());
     bar.set_stealth_fault(true);
@@ -92,6 +97,10 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
     };
     let height = spec.get_height();
     assert_eq!(height, 64.0);
+    assert_eq!(spec.get_full_tiles(), 226.0);
+    assert_eq!(spec.get_compact_tiles(), 30.0);
+    assert_eq!(spec.get_full_width(), 854.0);
+    assert_eq!(spec.get_compact_width(), 586.0);
     assert!(spec.get_full_width() > spec.get_compact_width());
     bar.window().set_size(LogicalSize::new(width, height));
     let stable_names = if compact {
@@ -132,8 +141,13 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
                 // Armed confirmations must no longer expand or hide bar controls.
                 bar.set_quit_armed(recording);
                 bar.set_restart_armed(recording);
-                let mut names = vec![labels.ask, labels.grab, "1:07:31", "Lock mode"];
-                let tile_label = format!("{} ({count})", labels.tile);
+                let lock_label = if mode == 2 {
+                    labels.deep_lock
+                } else {
+                    "Lock mode"
+                };
+                let mut names = vec![labels.ask, labels.grab, "1:07:31", lock_label];
+                let tile_label = labels.tile.replace("{}", &count.to_string());
                 if !compact {
                     names.push(&tile_label);
                     if count > 0 {
@@ -168,6 +182,11 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
                     );
                 }
                 for (name, x) in stable_names.iter().zip(&stable_x) {
+                    let name = if *name == "Lock mode" {
+                        lock_label
+                    } else {
+                        *name
+                    };
                     assert_eq!(
                         element(bar, name).absolute_position().x,
                         *x,
@@ -177,8 +196,8 @@ fn assert_layout(bar: &ui::OverlayBarWindow, labels: &Labels, compact: bool) {
                 assert_eq!(element(bar, labels.ask).size().width, 102.0);
                 assert_eq!(element(bar, labels.grab).size().width, 108.0);
                 assert_eq!(
-                    element(bar, "Lock mode").size().width,
-                    if compact { 76.0 } else { 164.0 }
+                    element(bar, lock_label).size().width,
+                    if compact { 26.0 } else { 76.0 }
                 );
             }
         }
@@ -348,11 +367,67 @@ fn capsules_stay_inside_spec_sizes_in_english_and_russian() {
 }
 
 #[test]
+fn record_indicator_reserves_an_empty_idle_cell_and_keeps_active_shapes() {
+    let source =
+        fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("ui/overlay_bar.slint"))
+            .expect("read overlay bar source");
+    let record = source
+        .split_once("component RecordBtn inherits Rectangle {")
+        .expect("RecordBtn component")
+        .1
+        .split_once("// ===== Main overlay bar =====")
+        .expect("RecordBtn boundary")
+        .0;
+    let indicator = record
+        .split_once("// Reserve the cell while idle;")
+        .expect("unconditional indicator slot")
+        .1
+        .split_once("if root.has-icon : IconSlot {")
+        .expect("source icon follows indicator")
+        .0;
+    assert!(indicator.contains("Rectangle {"));
+    assert!(
+        !indicator.contains("if "),
+        "idle cell must remain in the layout"
+    );
+    for binding in [
+        "width: 8px;",
+        "height: 8px;",
+        "horizontal-stretch: 0;",
+        "border-radius: root.locked ? 0px : 4px;",
+        "y: (parent.height - self.height) / 2;",
+        "background: root.recording ? Theme.danger : transparent;",
+        "border-width: 0px;",
+    ] {
+        assert!(
+            indicator.contains(binding),
+            "missing indicator binding: {binding}"
+        );
+    }
+    assert!(
+        !indicator.contains("border-color:"),
+        "idle cell must not draw a ring"
+    );
+    assert!(!indicator.contains("visible:"), "idle cell must not collapse");
+    assert!(record.contains("if (!self.recording) {\n            self.locked = false;"));
+}
+
+#[test]
 fn tile_counter_keeps_text_and_close_all_uses_a_reserved_icon_slot() {
     let source =
         fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("ui/overlay_bar.slint"))
             .expect("read overlay bar source");
-    assert!(source.contains("label: @tr(\"+ tile ({})\", root.open-tiles);"));
+    let tile_chip = source
+        .split_once("width: 92px;")
+        .expect("fixed tile counter slot")
+        .1
+        .split_once("clicked => { root.spawn-tile-clicked(); }")
+        .expect("tile action")
+        .0;
+    assert!(tile_chip.contains("icon: @image-url(\"../assets/icons/plus.svg\"); has-icon: true;"));
+    assert!(tile_chip.contains("label: @tr(\"tile · {}\", root.open-tiles);"));
+    assert!(tile_chip.contains("a11y: @tr(\"New tile, {} open\", root.open-tiles);"));
+    assert!(!source.contains("@tr(\"+ tile ({})\""));
     assert!(source.contains("if root.open-tiles > 0 : BarChip"));
     assert!(source.contains("a11y: @tr(\"close all\");"));
     assert!(!source.contains("label: @tr(\"close all\");"));

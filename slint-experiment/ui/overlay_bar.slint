@@ -189,7 +189,7 @@ component LockChip inherits Rectangle {
     in property <bool> deep: false;
     in property <string> a11y;
     in property <bool> managed: false;
-    // Compact mode keeps only the short deep-lock label.
+    // Compact mode is icon-only; the full bar keeps the short deep-lock label.
     in property <bool> tight: false;
     // 0 = normal, 1 = listening, 2 = deep. Rust owns the durable transition.
     in property <int> mode: 0;
@@ -199,7 +199,7 @@ component LockChip inherits Rectangle {
     property <bool> phase: false;
 
     accessible-role: button;
-    accessible-label: a11y;
+    accessible-label: root.deep ? @tr("Local AI unloaded") : a11y;
     accessible-checkable: true;
     accessible-checked: locked;
     accessible-action-default => { root.menu-opened(root.absolute-position.x + root.width, root.absolute-position.y + root.height); }
@@ -212,7 +212,7 @@ component LockChip inherits Rectangle {
     border-width: 0px;
     border-radius: Metrics.radius-control;
     height: Metrics.control-md;
-    min-width: 30px;
+    min-width: 26px;
     horizontal-stretch: 0;
     animate background { duration: 80ms; }
 
@@ -245,8 +245,8 @@ component LockChip inherits Rectangle {
                 easing: ease-in-out;
             }
         }
-        if root.deep : Text {
-            text: root.tight ? @tr("AI off") : @tr("Local AI unloaded");
+        if root.deep && !root.tight : Text {
+            text: @tr("AI off");
             font-size: Metrics.font-label;
             color: root.accent;
             vertical-alignment: center;
@@ -456,15 +456,15 @@ component RecordBtn inherits Rectangle {
         padding-left: Metrics.space-xs;
         padding-right: Metrics.space-xs;
         spacing: 2px;
-        // Neutral ring idle; filled red while recording, square while locked.
+        // Reserve the cell while idle; filled red while recording, square while locked.
         Rectangle {
             width: 8px;
             height: 8px;
+            horizontal-stretch: 0;
             border-radius: root.locked ? 0px : 4px;
             y: (parent.height - self.height) / 2;
             background: root.recording ? Theme.danger : transparent;
-            border-width: root.recording ? 0px : 1px;
-            border-color: Theme.border-strong;
+            border-width: 0px;
         }
         if root.has-icon : IconSlot {
             icon: root.icon;
@@ -638,7 +638,7 @@ export component OverlayBarWindow inherits Window {
     in-out property <int> tiles-spawned: 0;
 
     // #B1 — LIVE count of currently-open tiles (Rust keeps this in sync with
-    // the TileWindows vec on every spawn/close). Drives the "+ tile (N)" label
+    // the TileWindows vec on every spawn/close). Drives the "tile · N" label
     // and gates the "close all" chip, so closing tiles via their own X buttons
     // updates the bar (tiles-spawned is a CUMULATIVE counter and must NOT be
     // used for these — it never decrements except on close-all).
@@ -718,7 +718,7 @@ export component OverlayBarWindow inherits Window {
     in-out property <bool> restart-armed: false;
     // v0.8.2 (M1 fix) — true while EITHER inline confirm (quit / restart) is
     // showing. The confirm expands the action row inline, so we hide the
-    // secondary right-cluster chips (close-all / + tile / 📷 / ⚙) while it's
+    // secondary right-cluster chips (close-all / tile counter / 📷 / ⚙) while it's
     // up, keeping the row inside the fixed 1080px bar. Before this, RU
     // "Перезапустить? Да Нет" + the "close all" chip + the wide "⚠ AI
     // недоступен" status pushed "Нет" (cancel) off the right edge — exactly in
@@ -918,7 +918,7 @@ export component OverlayBarWindow inherits Window {
                     tiles-capsule := Capsule {
                         width: root.compact-bar ? BarSpec.compact-tiles : BarSpec.full-tiles;
                         LockChip {
-                            width: root.compact-bar ? 76px : 164px;
+                            width: root.compact-bar ? 26px : 76px;
                             locked: root.suppress-tiles; unlocked: root.lock-icon-unlocked;
                             deep: root.deep-lock; a11y: root.lock-a11y;
                             managed: root.lock-menu-managed; tight: root.compact-bar;
@@ -928,7 +928,9 @@ export component OverlayBarWindow inherits Window {
                         }
                         if !root.compact-bar : BarChip {
                             width: 92px;
-                            label: @tr("+ tile ({})", root.open-tiles);
+                            icon: @image-url("../assets/icons/plus.svg"); has-icon: true;
+                            label: @tr("tile · {}", root.open-tiles);
+                            a11y: @tr("New tile, {} open", root.open-tiles);
                             clicked => { root.spawn-tile-clicked(); }
                         }
                         if !root.compact-bar : Rectangle {
