@@ -52,7 +52,12 @@ fn auto_tiles_and_ai_off_have_distinct_fixed_slots() {
         .0;
     assert!(!bare.contains("border-width"));
     // At rest a second-row chip has no fill: the only background is hover/press feedback.
-    assert_eq!(bare.matches("background:").count(), 1, "one background binding");
+    assert_eq!(
+        bare.matches("background:").count(),
+        1,
+        "one background binding"
+    );
     assert!(bare.contains("background: pin-touch.pressed ? Theme.tint(Theme.accent)"));
-    assert!(bare.contains(": pin-touch.has-hover ? Theme.border-strong.with-alpha(0.22) : transparent;"));
+    assert!(bare
+        .contains(": pin-touch.has-hover ? Theme.border-strong.with-alpha(0.22) : transparent;"));
 }
