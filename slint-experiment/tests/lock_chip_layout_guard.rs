@@ -12,14 +12,21 @@ fn lock_icon_is_vertically_centred_in_its_fixed_chip() {
     let lock_chip = ui
         .split("component LockChip inherits Rectangle {")
         .nth(1)
-        .and_then(|source| source.split_once("// Capsule children").map(|(chip, _)| chip))
+        .and_then(|source| {
+            source
+                .split_once("// Capsule children")
+                .map(|(chip, _)| chip)
+        })
         .expect("find LockChip component");
 
     assert!(
         lock_chip.contains("y: (parent.height - self.height) / 2;"),
         "LockChip's lock image must stay vertically centred when the deep-lock label is visible"
     );
-    assert!(lock_chip.contains("border-width: 0px;"), "the capsule owns the outline");
+    assert!(
+        lock_chip.contains("border-width: 0px;"),
+        "the capsule owns the outline"
+    );
     assert!(ui.contains("width: root.compact-bar ? 76px : 164px;"));
     assert!(ui.contains("tight: root.compact-bar;"));
     assert!(lock_chip.contains("root.tight ? @tr(\"AI off\") : @tr(\"Local AI unloaded\")"));

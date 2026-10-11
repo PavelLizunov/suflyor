@@ -52,7 +52,10 @@ fn hide_action_is_guarded_in_the_compact_window_capsule() {
         .split_once("clicked => { root.hide-to-tray-clicked(); }")
         .expect("guarded tray click")
         .0;
-    assert!(compact_slot.contains("width: 26px;"), "reserve the tray slot");
+    assert!(
+        compact_slot.contains("width: 26px;"),
+        "reserve the tray slot"
+    );
     assert!(tray_chip.contains("icons/tray.svg"));
     assert!(tray_chip.contains("@tr(\"Hide to tray\")"));
     assert_eq!(bar.matches("root.hide-to-tray-clicked();").count(), 1);

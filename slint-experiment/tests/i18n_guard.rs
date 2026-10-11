@@ -355,13 +355,23 @@ fn capsule_bar_uses_the_owner_approved_russian_words() {
     let po = fs::read_to_string(root.join("translations/ru/LC_MESSAGES/slint-replay.po"))
         .expect("read Russian translations");
     for (english, russian) in [
-        ("hidden", "скрыт"), ("visible", "виден"), ("visible!", "виден!"),
-        ("you:", "вы:"), ("them:", "собеседник:"), ("More", "Ещё"),
-        ("AI off", "AI выкл."), ("Local AI unloaded", "Локальный AI выгружен"),
+        ("hidden", "скрыт"),
+        ("visible", "виден"),
+        ("visible!", "виден!"),
+        ("you:", "вы:"),
+        ("them:", "собеседник:"),
+        ("More", "Ещё"),
+        ("AI off", "AI выкл."),
+        ("Local AI unloaded", "Локальный AI выгружен"),
     ] {
-        assert!(bar.contains(&format!("@tr(\"{english}\")")), "missing bar label: {english}");
-        assert!(po.contains(&format!("msgid \"{english}\"\nmsgstr \"{russian}\"")),
-            "wrong capsule bar translation: {english}");
+        assert!(
+            bar.contains(&format!("@tr(\"{english}\")")),
+            "missing bar label: {english}"
+        );
+        assert!(
+            po.contains(&format!("msgid \"{english}\"\nmsgstr \"{russian}\"")),
+            "wrong capsule bar translation: {english}"
+        );
     }
 }
 

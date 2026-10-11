@@ -48,14 +48,24 @@ fn bar_spec_exists_and_widths_sum_every_region() {
 #[test]
 fn bar_colours_are_tokens_outside_the_unchanged_bootstrap_section() {
     let bar = read("ui/overlay_bar.slint");
-    let normal = bar.split_once("// First honest production surface").expect("bootstrap boundary").0;
+    let normal = bar
+        .split_once("// First honest production surface")
+        .expect("bootstrap boundary")
+        .0;
     for (line, code) in normal.lines().enumerate() {
         let code = code.split("//").next().unwrap_or("");
         let bytes = code.as_bytes();
         for (offset, byte) in bytes.iter().enumerate() {
             if *byte == b'#' {
-                assert!(bytes[offset + 1..].iter().take_while(|byte| byte.is_ascii_hexdigit()).count() < 6,
-                    "raw hex colour in overlay_bar.slint:{}", line + 1);
+                assert!(
+                    bytes[offset + 1..]
+                        .iter()
+                        .take_while(|byte| byte.is_ascii_hexdigit())
+                        .count()
+                        < 6,
+                    "raw hex colour in overlay_bar.slint:{}",
+                    line + 1
+                );
             }
         }
     }
@@ -66,8 +76,13 @@ fn native_size_and_capsule_fit_evidence_use_the_spec() {
     let host = read("src/bin/overlay_host/bar_tray.rs");
     assert!(!host.contains("1280.0"));
     assert!(!host.contains("680.0"));
-    let sizing = host.split_once("fn apply_bar_size(").expect("sizing helper").1
-        .split_once("fn recenter_when_sized(").expect("next helper").0;
+    let sizing = host
+        .split_once("fn apply_bar_size(")
+        .expect("sizing helper")
+        .1
+        .split_once("fn recenter_when_sized(")
+        .expect("next helper")
+        .0;
     assert!(!sizing.contains("64.0"));
     assert!(sizing.contains("overlay.global::<crate::ui::BarSpec>()"));
     for getter in ["get_full_width()", "get_compact_width()", "get_height()"] {
@@ -78,11 +93,18 @@ fn native_size_and_capsule_fit_evidence_use_the_spec() {
     assert!(bar.contains("preferred-height: BarSpec.height;"));
     assert!(bar.contains("min-width: root.bootstrap-mode ? 440px : (root.compact-bar ? BarSpec.compact-width : BarSpec.full-width);"));
     assert!(bar.contains("out property <bool> fits: lay.preferred-width <= self.width;"));
-    let fit = bar.split_once("out property <bool> all-regions-fit:").expect("fit accessor").1
-        .split_once(';').expect("terminated fit binding").0;
+    let fit = bar
+        .split_once("out property <bool> all-regions-fit:")
+        .expect("fit accessor")
+        .1
+        .split_once(';')
+        .expect("terminated fit binding")
+        .0;
     for region in ["state", "voice", "session", "tiles", "window"] {
         assert!(fit.contains(&format!("{region}-capsule.fits")));
         assert!(bar.contains(&format!("{region}-capsule := Capsule {{")));
-        assert!(bar.contains(&format!("width: root.compact-bar ? BarSpec.compact-{region} : BarSpec.full-{region};")));
+        assert!(bar.contains(&format!(
+            "width: root.compact-bar ? BarSpec.compact-{region} : BarSpec.full-{region};"
+        )));
     }
 }
