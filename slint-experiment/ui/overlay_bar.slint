@@ -378,6 +378,7 @@ component MoreChip inherits Rectangle {
 }
 
 component Capsule inherits Rectangle {
+    out property <length> content-width: lay.preferred-width;
     out property <bool> fits: lay.preferred-width <= self.width;
     height: 26px;
     border-radius: Metrics.radius-control;
@@ -447,9 +448,11 @@ component RecordBtn inherits Rectangle {
     }
 
     HorizontalLayout {
+        // Mini: 4 + 8 + 18 + 4 = 34px; the 14px glyph has 2px inset.
+        // Zero spacing avoids gaps contributed by absent label/tail cells.
         padding-left: Metrics.space-xs;
         padding-right: Metrics.space-xs;
-        spacing: 2px;
+        spacing: root.icon-only ? 0px : 2px;
         // Reserve the cell while idle; filled red while recording, square while locked.
         Rectangle {
             width: 8px;
@@ -464,7 +467,7 @@ component RecordBtn inherits Rectangle {
             icon: root.icon;
             tint: root.recording ? Theme.danger : Theme.text-secondary;
             glyph-size: 14px;
-            slot-width: 14px;
+            slot-width: root.icon-only ? 18px : 14px;
             slot-height: 22px;
         }
         if !root.icon-only : Text {
@@ -547,6 +550,15 @@ export component OverlayBarWindow inherits Window {
     preferred-height: BarSpec.height;
     min-width: root.bootstrap-mode ? 440px : (root.bar-form == 2 ? BarSpec.mini-width : root.bar-form == 1 ? BarSpec.compact-width : BarSpec.full-width);
     out property <bool> autotile-word-fits: autotile-chip.fits;
+    // Raw capsule evidence; the mini test reads these with bar-form == 2.
+    out property <bool> mini-voice-fits: voice-capsule.fits;
+    out property <bool> mini-session-fits: session-capsule.fits;
+    out property <bool> mini-tiles-fits: tiles-capsule.fits;
+    out property <bool> mini-window-fits: window-capsule.fits;
+    out property <length> mini-voice-content-width: voice-capsule.content-width;
+    out property <length> mini-session-content-width: session-capsule.content-width;
+    out property <length> mini-tiles-content-width: tiles-capsule.content-width;
+    out property <length> mini-window-content-width: window-capsule.content-width;
     out property <bool> all-regions-fit: root.bootstrap-mode || ((root.bar-form == 2 || state-capsule.fits)
         && voice-capsule.fits && session-capsule.fits && tiles-capsule.fits && window-capsule.fits);
     in-out property <bool> menu-open: false;

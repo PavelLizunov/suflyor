@@ -425,7 +425,51 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
                             bar.set_last_transcript_source(source.into());
                             bar.window().set_size(LogicalSize::new(width, height));
                             assert_eq!(bar.window().size().width as f32, width);
-                            assert!(bar.get_all_regions_fit(), "mini capsule overflow: language={}, fault={fault}, mode={mode}, recording={recording}, deep={deep}", labels.russian);
+                            assert!(
+                                bar.get_all_regions_fit(),
+                                "mini capsule overflow: language={}, fault={fault}, mode={mode}, recording={recording}, deep={deep}; fits: voice={}, session={}, tiles={}, window={}; preferred/declared px: voice={}/{}, session={}/{}, tiles={}/{}, window={}/{}",
+                                labels.russian,
+                                bar.get_mini_voice_fits(),
+                                bar.get_mini_session_fits(),
+                                bar.get_mini_tiles_fits(),
+                                bar.get_mini_window_fits(),
+                                bar.get_mini_voice_content_width(),
+                                spec.get_mini_voice(),
+                                bar.get_mini_session_content_width(),
+                                spec.get_mini_session(),
+                                bar.get_mini_tiles_content_width(),
+                                spec.get_mini_tiles(),
+                                bar.get_mini_window_content_width(),
+                                spec.get_mini_window(),
+                            );
+                            for (capsule, preferred, declared) in [
+                                (
+                                    "voice",
+                                    bar.get_mini_voice_content_width(),
+                                    spec.get_mini_voice(),
+                                ),
+                                (
+                                    "session",
+                                    bar.get_mini_session_content_width(),
+                                    spec.get_mini_session(),
+                                ),
+                                (
+                                    "tiles",
+                                    bar.get_mini_tiles_content_width(),
+                                    spec.get_mini_tiles(),
+                                ),
+                                (
+                                    "window",
+                                    bar.get_mini_window_content_width(),
+                                    spec.get_mini_window(),
+                                ),
+                            ] {
+                                assert_eq!(
+                                    preferred, declared,
+                                    "mini {capsule} content/spec mismatch: language={}, fault={fault}, mode={mode}, recording={recording}, deep={deep}",
+                                    labels.russian,
+                                );
+                            }
                             assert!(bar.get_autotile_word_fits());
                             let top_names = [
                                 labels.ask,
@@ -798,6 +842,14 @@ fn record_indicator_reserves_an_empty_idle_cell_and_keeps_active_shapes() {
     );
     assert!(record.contains("if (!self.recording) {\n            self.locked = false;"));
     assert!(record.contains("in property <bool> icon-only: false;"));
+    for binding in [
+        "padding-left: Metrics.space-xs;",
+        "padding-right: Metrics.space-xs;",
+        "spacing: root.icon-only ? 0px : 2px;",
+        "slot-width: root.icon-only ? 18px : 14px;",
+    ] {
+        assert!(record.contains(binding), "mini record geometry: {binding}");
+    }
     assert!(record.contains("accessible-label: root.a11y;"));
     assert!(
         record.contains("if !root.icon-only : Text {"),
