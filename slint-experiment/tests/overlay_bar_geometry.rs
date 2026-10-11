@@ -466,11 +466,12 @@ fn assert_pins(bar: &ui::OverlayBarWindow, russian: bool) {
             0,
             "label=Aggressive auto-tile, full bar, {state}: legacy flame is removed"
         );
-        for (id, legacy_label) in [("restore", "Restore last tile")] {
+        {
+            let id = "restore";
             let legacy_label = if russian {
                 "Вернуть последний тайл"
             } else {
-                legacy_label
+                "Restore last tile"
             };
             assert_eq!(
                 ElementHandle::find_by_accessible_label(bar, legacy_label).count(),
