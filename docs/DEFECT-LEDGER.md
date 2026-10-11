@@ -233,11 +233,12 @@ Scenario: the English interface shows Russian status lines in Updates, local AI,
 Found by: script over the sources on 2026-10-11; the wizard and tile cases were also seen live.
 Fix plan: one helper per module in the style of `status_copy.rs` and `tile_text.rs`, and a guard test that fails on a literal with letters passed to a setter. The same pass can replace the 118 `[ok]` / `[err]` / `[--]` markers by a state the UI draws.
 
-### D-031 Shift+Alt+1 with no selected text does nothing visible   Severity: P3   Status: Open
+### D-031 Shift+Alt+1 with no selected text does nothing visible   Severity: P3   Status: Closed
 Evidence: log of the run: `Shift+Alt+1 — read selection (clipboard)` then `sa1: copied 0 chars from selection`; no window, no status change
 Scenario: the user presses the read-aloud key with nothing selected (or in an application that does not answer Ctrl+C) and cannot tell whether the key works.
 Found by: the 13-key pass on windows-worker on 2026-10-11.
 Fix plan: a short status on the bar, as the other keys that cannot act already do.
+Closed by: #251, master 84a4173939f2f165d6e99e389dd4eb4dfdff1550; not released yet
 
 ### D-032 `cargo fmt --check` does not see the modules of `overlay_host/`   Severity: P3   Status: Open
 Evidence: slint-experiment/src/bin/overlay_host/status_copy.rs:196 - a 109-character function signature, `pub(super) fn manual_tile_placeholder(deep_locked: bool, has_transcript: bool, is_ru: bool) -> &'static str {`, which rustfmt would wrap (master 1161c72); slint-experiment/src/bin/overlay_host.rs:19 - `include!("overlay_host_windows.rs");`
@@ -245,11 +246,12 @@ Scenario: the host's modules are declared with `#[path]` inside a file that is p
 Found by: the worker's `cargo fmt` on 2026-10-11 changed nothing in a new file with an over-long line under `overlay_host/`, while it reformatted files outside it.
 Fix plan: a gate step that runs `rustfmt --check --edition 2021` on the files under `src/bin/overlay_host/`, after one formatting commit.
 
-### D-033 Four messages of the session archive are written to a line that is not drawn   Severity: P3   Status: Open
+### D-033 Four messages of the session archive are written to a line that is not drawn   Severity: P3   Status: Closed
 Evidence: slint-experiment/ui/archive.slint:277 - `if root.retranscribe-busy : Text {` is the only place that shows `retranscribe-status`; slint-experiment/src/bin/overlay_host/aux_windows/archive.rs:372 - `p.set_retranscribe_status(SharedString::from("Активную сессию удалить нельзя"));` with `retranscribe-busy` false (also :425 a failed delete, :527 not enough data for a summary, :695 an empty saved summary; master 4134f93)
 Scenario: the user deletes the running session, or a delete fails, or asks for a summary that cannot be built: the handler returns after setting a text nobody sees, and the button looks dead. "Regenerate name" has three more silent returns (no transcript, a cloud provider, no name from the AI).
 Found by: read in source on 2026-10-11 after "Regenerate name" on a session without a transcript showed nothing in a live run on windows-worker. The four messages were not reproduced live.
 Fix plan: a notice line of its own, shown when no job runs, in both languages.
+Closed by: #251, master 84a4173939f2f165d6e99e389dd4eb4dfdff1550; not released yet
 
 ## Imported from the Grok audit (docs/audit-grok/, master 37c1230)
 
