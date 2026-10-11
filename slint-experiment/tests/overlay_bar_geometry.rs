@@ -582,6 +582,14 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
                             bar.set_last_transcript_source(source.into());
                             bar.window().set_size(LogicalSize::new(width, height));
                             slint::platform::update_timers_and_animations();
+                            // Conditional children are created lazily: walk the tree
+                            // once so the capsules hold the mini form's chips before
+                            // their preferred widths are read.
+                            assert_eq!(
+                                ElementHandle::find_by_accessible_label(bar, labels.stealth).count(),
+                                1,
+                                "mini form must show exactly one stealth chip"
+                            );
                             assert_eq!(bar.window().size().width as f32, width);
                             assert!(
                                 bar.get_all_regions_fit(),
