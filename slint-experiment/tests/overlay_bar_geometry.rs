@@ -374,14 +374,28 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
     ])));
     bar.set_compact_bar(false); // Mini must work even with the full preference.
     bar.set_bar_form(2);
-    let stealth = if labels.russian { "Скрытность (не показывать при захвате экрана)" } else { "Stealth (hide from capture)" };
+    let stealth = if labels.russian {
+        "Скрытность (не показывать при захвате экрана)"
+    } else {
+        "Stealth (hide from capture)"
+    };
     for fault in [false, true] {
         bar.set_stealth_fault(fault);
-        for tone in [ui::StatusTone::Neutral, ui::StatusTone::Ok, ui::StatusTone::Warning, ui::StatusTone::Danger, ui::StatusTone::Info] {
+        for tone in [
+            ui::StatusTone::Neutral,
+            ui::StatusTone::Ok,
+            ui::StatusTone::Warning,
+            ui::StatusTone::Danger,
+            ui::StatusTone::Info,
+        ] {
             bar.set_status_tone(tone);
             bar.set_status_text("STATUS".into());
             let status = if fault {
-                if labels.russian { "[!] скрытность недоступна" } else { "[!] stealth unavailable" }
+                if labels.russian {
+                    "[!] скрытность недоступна"
+                } else {
+                    "[!] stealth unavailable"
+                }
             } else {
                 "STATUS"
             };
@@ -413,30 +427,62 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
                             assert_eq!(bar.window().size().width as f32, width);
                             assert!(bar.get_all_regions_fit(), "mini capsule overflow: language={}, fault={fault}, mode={mode}, recording={recording}, deep={deep}", labels.russian);
                             assert!(bar.get_autotile_word_fits());
-                            let top_names = [labels.ask, labels.grab, "1:07:31", pause, stealth, switch, labels.expand, labels.more];
-                            let top: Vec<_> = top_names.iter().map(|name| element(bar, name)).collect();
+                            let top_names = [
+                                labels.ask,
+                                labels.grab,
+                                "1:07:31",
+                                pause,
+                                stealth,
+                                switch,
+                                labels.expand,
+                                labels.more,
+                            ];
+                            let top: Vec<_> =
+                                top_names.iter().map(|name| element(bar, name)).collect();
                             for (name, item) in top_names.iter().zip(&top) {
                                 assert_top_bounds(item, width, name);
                             }
                             for pair in top.windows(2) {
-                                assert!(pair[0].absolute_position().x + pair[0].size().width <= pair[1].absolute_position().x, "mini top controls overlap");
+                                assert!(
+                                    pair[0].absolute_position().x + pair[0].size().width
+                                        <= pair[1].absolute_position().x,
+                                    "mini top controls overlap"
+                                );
                             }
                             for name in [labels.ask, labels.grab] {
-                                assert_eq!(element(bar, name).size().width, 34.0, "mini voice icon width");
+                                assert_eq!(
+                                    element(bar, name).size().width,
+                                    34.0,
+                                    "mini voice icon width"
+                                );
                             }
                             assert_eq!(element(bar, switch).size().width, 26.0);
                             let mut footer_names = vec![status];
-                            if deep { footer_names.push(labels.deep_lock); }
+                            if deep {
+                                footer_names.push(labels.deep_lock);
+                            }
                             footer_names.extend([speaker, "MINI TRANSCRIPT"]);
-                            let footer: Vec<_> = footer_names.iter().map(|name| element(bar, name)).collect();
+                            let footer: Vec<_> =
+                                footer_names.iter().map(|name| element(bar, name)).collect();
                             for (name, item) in footer_names.iter().zip(&footer) {
                                 let pos = item.absolute_position();
                                 let size = item.size();
-                                assert!(pos.y >= 34.0 && pos.y + size.height <= height, "{name} escaped mini footer");
-                                assert!(pos.x >= spec.get_pad() + spec.get_badge() && pos.x + size.width <= width, "{name} escaped mini bounds");
+                                assert!(
+                                    pos.y >= 34.0 && pos.y + size.height <= height,
+                                    "{name} escaped mini footer"
+                                );
+                                assert!(
+                                    pos.x >= spec.get_pad() + spec.get_badge()
+                                        && pos.x + size.width <= width,
+                                    "{name} escaped mini bounds"
+                                );
                             }
                             for pair in footer.windows(2) {
-                                assert!(pair[0].absolute_position().x + pair[0].size().width <= pair[1].absolute_position().x, "mini footer overlaps");
+                                assert!(
+                                    pair[0].absolute_position().x + pair[0].size().width
+                                        <= pair[1].absolute_position().x,
+                                    "mini footer overlaps"
+                                );
                             }
                         }
                     }
@@ -444,10 +490,32 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
             }
         }
     }
-    for hidden in [labels.tray, labels.write, labels.compact, "HIDDEN SESSION", "MLX HIDDEN MLX RAM", if labels.russian { "закрепить" } else { "pin" }, if labels.russian { "Архив сессий" } else { "Session archive" }] {
-        assert_eq!(ElementHandle::find_by_accessible_label(bar, hidden).count(), 0, "mini must not expose {hidden}");
+    for hidden in [
+        labels.tray,
+        labels.write,
+        labels.compact,
+        "HIDDEN SESSION",
+        "MLX HIDDEN MLX RAM",
+        if labels.russian {
+            "закрепить"
+        } else {
+            "pin"
+        },
+        if labels.russian {
+            "Архив сессий"
+        } else {
+            "Session archive"
+        },
+    ] {
+        assert_eq!(
+            ElementHandle::find_by_accessible_label(bar, hidden).count(),
+            0,
+            "mini must not expose {hidden}"
+        );
     }
-    bar.set_pins(slint::ModelRc::new(slint::VecModel::<slint::SharedString>::default()));
+    bar.set_pins(slint::ModelRc::new(
+        slint::VecModel::<slint::SharedString>::default(),
+    ));
     bar.set_app_memory("".into());
     bar.set_mlx_memory("".into());
     bar.set_session_name("".into());
@@ -457,16 +525,32 @@ fn assert_mini(bar: &ui::OverlayBarWindow, labels: &Labels) {
     bar.set_sys_recording(false);
     bar.set_stealth_fault(false);
     bar.set_status_text("STATUS".into());
-    let mascot_label = format!("STATUS. {}", if labels.russian { "Перетащить = двигать бар; показывает состояние" } else { "Drag to move the bar; shows the live state" });
+    let mascot_label = format!(
+        "STATUS. {}",
+        if labels.russian {
+            "Перетащить = двигать бар; показывает состояние"
+        } else {
+            "Drag to move the bar; shows the live state"
+        }
+    );
     let mut mascot_position = None;
-    for (form, form_width) in [(0, spec.get_full_width()), (1, spec.get_compact_width()), (2, width)] {
+    for (form, form_width) in [
+        (0, spec.get_full_width()),
+        (1, spec.get_compact_width()),
+        (2, width),
+    ] {
         bar.set_bar_form(form);
         bar.window().set_size(LogicalSize::new(form_width, height));
         let mascot = element(bar, &mascot_label);
         let pos = mascot.absolute_position();
         let size = mascot.size();
         assert_eq!((size.width, size.height), (48.0, 48.0));
-        assert!(pos.x >= 0.0 && pos.y >= 0.0 && pos.x + size.width <= form_width && pos.y + size.height <= height);
+        assert!(
+            pos.x >= 0.0
+                && pos.y >= 0.0
+                && pos.x + size.width <= form_width
+                && pos.y + size.height <= height
+        );
         if let Some(expected) = mascot_position {
             assert_eq!((pos.x, pos.y), expected, "form={form} moved mascot");
         } else {
@@ -715,11 +799,23 @@ fn record_indicator_reserves_an_empty_idle_cell_and_keeps_active_shapes() {
     assert!(record.contains("if (!self.recording) {\n            self.locked = false;"));
     assert!(record.contains("in property <bool> icon-only: false;"));
     assert!(record.contains("accessible-label: root.a11y;"));
-    assert!(record.contains("if !root.icon-only : Text {"), "mini has no text cell");
-    assert!(record.contains("if !root.icon-only : IconSlot {"), "mini has no tail slot");
+    assert!(
+        record.contains("if !root.icon-only : Text {"),
+        "mini has no text cell"
+    );
+    assert!(
+        record.contains("if !root.icon-only : IconSlot {"),
+        "mini has no tail slot"
+    );
     assert!(record.contains("background: recording ? Theme.danger.with-alpha(0.2) : transparent;"));
-    assert!(record.contains("root.press-y - self.mouse-y > root.lock-dy"), "mini retains swipe lock gesture");
-    assert!(source.contains("press-feedback: root.bar-form != 2;"), "unsatisfied mini expand must not flash");
+    assert!(
+        record.contains("root.press-y - self.mouse-y > root.lock-dy"),
+        "mini retains swipe lock gesture"
+    );
+    assert!(
+        source.contains("press-feedback: root.bar-form != 2;"),
+        "unsatisfied mini expand must not flash"
+    );
 }
 
 #[test]

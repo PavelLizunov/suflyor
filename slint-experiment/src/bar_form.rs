@@ -52,12 +52,32 @@ mod tests {
     const MINI_SESSION: f32 = FULL_SESSION;
     const MINI_TILES: f32 = 26.0 + 26.0 + 2.0 + 2.0 * 2.0;
     const MINI_WINDOW: f32 = FULL_WINDOW;
-    const FULL: f32 = BADGE + 3.0 * PAD + FULL_STATE + FULL_VOICE + FULL_SESSION
-        + FULL_TILES + FULL_WINDOW + 5.0 * GAP + SPRING;
-    const COMPACT: f32 = BADGE + 3.0 * PAD + COMPACT_STATE + COMPACT_VOICE
-        + COMPACT_SESSION + COMPACT_TILES + COMPACT_WINDOW + 5.0 * GAP + SPRING;
-    const MINI: f32 = BADGE + 3.0 * PAD + MINI_VOICE + MINI_SESSION + MINI_TILES
-        + MINI_WINDOW + 4.0 * GAP + SPRING;
+    const FULL: f32 = BADGE
+        + 3.0 * PAD
+        + FULL_STATE
+        + FULL_VOICE
+        + FULL_SESSION
+        + FULL_TILES
+        + FULL_WINDOW
+        + 5.0 * GAP
+        + SPRING;
+    const COMPACT: f32 = BADGE
+        + 3.0 * PAD
+        + COMPACT_STATE
+        + COMPACT_VOICE
+        + COMPACT_SESSION
+        + COMPACT_TILES
+        + COMPACT_WINDOW
+        + 5.0 * GAP
+        + SPRING;
+    const MINI: f32 = BADGE
+        + 3.0 * PAD
+        + MINI_VOICE
+        + MINI_SESSION
+        + MINI_TILES
+        + MINI_WINDOW
+        + 4.0 * GAP
+        + SPRING;
     const MARGIN: f32 = 20.0;
 
     fn choose(compact: bool, width: f32) -> BarForm {
@@ -79,7 +99,11 @@ mod tests {
             (400.0, BarForm::TooNarrow, BarForm::TooNarrow),
         ] {
             assert_eq!(choose(false, width), expanded, "full preference at {width}");
-            assert_eq!(choose(true, width), compact, "compact preference at {width}");
+            assert_eq!(
+                choose(true, width),
+                compact,
+                "compact preference at {width}"
+            );
         }
         assert_eq!(choose(false, 1920.0 / 1.75), BarForm::Full);
     }
@@ -88,7 +112,15 @@ mod tests {
     fn exact_fit_and_one_pixel_below_each_boundary() {
         for preference in [false, true] {
             for (width, at, below) in [
-                (FULL, if preference { BarForm::Compact } else { BarForm::Full }, BarForm::Compact),
+                (
+                    FULL,
+                    if preference {
+                        BarForm::Compact
+                    } else {
+                        BarForm::Full
+                    },
+                    BarForm::Compact,
+                ),
                 (COMPACT, BarForm::Compact, BarForm::Mini),
                 (MINI, BarForm::Mini, BarForm::TooNarrow),
             ] {
@@ -109,27 +141,46 @@ mod tests {
             .split_once(';')
             .expect("terminated BarSpec expression")
             .0;
-        expression.split('+').map(|term| {
-            term.split('*').map(|factor| {
-                let factor = factor.trim().trim_end_matches("px");
-                factor.parse::<f32>().unwrap_or_else(|_| spec_value(source, factor))
-            }).product::<f32>()
-        }).sum()
+        expression
+            .split('+')
+            .map(|term| {
+                term.split('*')
+                    .map(|factor| {
+                        let factor = factor.trim().trim_end_matches("px");
+                        factor
+                            .parse::<f32>()
+                            .unwrap_or_else(|_| spec_value(source, factor))
+                    })
+                    .product::<f32>()
+            })
+            .sum()
     }
 
     #[test]
     fn named_constants_match_every_spec_region_and_computed_total() {
         let spec = include_str!("../ui/bar_spec.slint");
         for (name, value) in [
-            ("pad", PAD), ("badge", BADGE), ("gap", GAP), ("spring", SPRING),
-            ("full-state", FULL_STATE), ("full-voice", FULL_VOICE),
-            ("full-session", FULL_SESSION), ("full-tiles", FULL_TILES),
-            ("full-window", FULL_WINDOW), ("compact-state", COMPACT_STATE),
-            ("compact-voice", COMPACT_VOICE), ("compact-session", COMPACT_SESSION),
-            ("compact-tiles", COMPACT_TILES), ("compact-window", COMPACT_WINDOW),
-            ("mini-voice", MINI_VOICE), ("mini-session", MINI_SESSION),
-            ("mini-tiles", MINI_TILES), ("mini-window", MINI_WINDOW),
-            ("full-width", FULL), ("compact-width", COMPACT), ("mini-width", MINI),
+            ("pad", PAD),
+            ("badge", BADGE),
+            ("gap", GAP),
+            ("spring", SPRING),
+            ("full-state", FULL_STATE),
+            ("full-voice", FULL_VOICE),
+            ("full-session", FULL_SESSION),
+            ("full-tiles", FULL_TILES),
+            ("full-window", FULL_WINDOW),
+            ("compact-state", COMPACT_STATE),
+            ("compact-voice", COMPACT_VOICE),
+            ("compact-session", COMPACT_SESSION),
+            ("compact-tiles", COMPACT_TILES),
+            ("compact-window", COMPACT_WINDOW),
+            ("mini-voice", MINI_VOICE),
+            ("mini-session", MINI_SESSION),
+            ("mini-tiles", MINI_TILES),
+            ("mini-window", MINI_WINDOW),
+            ("full-width", FULL),
+            ("compact-width", COMPACT),
+            ("mini-width", MINI),
         ] {
             assert_eq!(spec_value(spec, name), value, "BarSpec drift: {name}");
         }
