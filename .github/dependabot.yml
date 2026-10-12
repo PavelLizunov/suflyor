@@ -24,6 +24,15 @@ updates:
       slint-deps:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    # Slint stays on 1.17: with 1.18.1 the mouse wheel cannot reach the end of
+    # Settings > AI providers (docs/DEFECT-LEDGER.md, D-018).
+    ignore:
+      - dependency-name: "slint"
+        versions: [">=1.18"]
+      - dependency-name: "slint-build"
+        versions: [">=1.18"]
+      - dependency-name: "i-slint-backend-testing"
+        versions: [">=1.18"]
 
   - package-ecosystem: cargo
     directory: "/suflyor-tts"
@@ -34,3 +43,8 @@ updates:
       tts-deps:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    # The required checks fail with 1.13.8 (pull request 199); 1.13.6 and 1.13.7
+    # were not tried. The update is done by hand.
+    ignore:
+      - dependency-name: "sherpa-onnx"
+        versions: ["1.13.6", "1.13.7", "1.13.8"]
