@@ -517,11 +517,11 @@ fn publish_availability(available: bool) {
 
 fn request_tray_menu() {
     let previous = TRAY_MENU_LAST_REQUEST_MS.load(Ordering::Acquire);
-    if menu_request_blocked(
-        TRAY_MENU_REQUEST_PENDING.load(Ordering::Acquire),
-        previous,
-        tray_clock_ms(),
-    ) {
+    // A normally dismissed menu (`return_focus`) clears the pending flag, so
+    // the next click opens at once; only twins of a pending request are dropped.
+    if TRAY_MENU_REQUEST_PENDING.load(Ordering::Acquire)
+        && is_duplicate_menu_request(previous, tray_clock_ms())
+    {
         return;
     }
     let mut point = POINT::default();
@@ -538,10 +538,6 @@ fn request_tray_menu() {
     if TRAY_MENU_REQUEST_PENDING.load(Ordering::Acquire) {
         TRAY_MENU_LAST_REQUEST_MS.store(tray_clock_ms(), Ordering::Release);
     }
-}
-
-fn menu_request_blocked(pending: bool, previous_ms: u64, now_ms: u64) -> bool {
-    pending && is_duplicate_menu_request(previous_ms, now_ms)
 }
 
 fn is_duplicate_menu_request(previous_ms: u64, now_ms: u64) -> bool {
@@ -588,14 +584,6 @@ mod tests {
         assert!(!is_duplicate_menu_request(1_000, 60_000));
         // A clock that went backwards reads as a twin, never as an underflow.
         assert!(is_duplicate_menu_request(1_000, 999));
-    }
-
-    #[test]
-    fn normal_dismissal_allows_immediate_reopen_but_pending_twins_do_not() {
-        assert!(menu_request_blocked(true, 1_000, 1_001));
-        assert!(!menu_request_blocked(false, 1_000, 1_001));
-        assert!(!menu_request_blocked(true, 1_000, 1_250));
-        assert!(!menu_request_blocked(true, 1_000, 60_000));
     }
 
     #[test]
