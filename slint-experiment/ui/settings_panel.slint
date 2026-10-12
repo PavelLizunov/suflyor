@@ -24,7 +24,8 @@ import { CloseButton } from "controls.slint";
 import {
     IconSlot, BrandHeaderMark, DarkCheck, SettingsCard,
     SettingsComboBox, SettingsLineEdit, SettingsSlider,
-    NavGroupHeader, NavItem
+    NavGroupHeader, NavItem,
+    WrapBlock,
 } from "settings_controls.slint";
 export { DarkCheck }
 
@@ -1316,7 +1317,7 @@ export component SettingsWindow inherits Window {
                         // No voices yet → offer the download (like the local-AI
                         // model installer — heavy data installs via a button, not
                         // bundled in the app installer).
-                        if !root.tts-available : VerticalLayout {
+                        if !root.tts-available : WrapBlock {
                             spacing: 6px;
                             vertical-stretch: 0;
                             Text {
@@ -1350,7 +1351,7 @@ export component SettingsWindow inherits Window {
                             wrap: word-wrap;
                         }
                         }
-                        if root.tts-engine-index == 1 : VerticalLayout {
+                        if root.tts-engine-index == 1 : WrapBlock {
                             spacing: 6px;
                             // The Tera install status grows to multiple lines. Keep this
                             // section at its natural height so the following speed picker
@@ -1616,7 +1617,7 @@ export component SettingsWindow inherits Window {
                     }
                     if root.active-tab == 6 : VerticalLayout {
                         spacing: 10px;
-                        if !Platform.is-macos : VerticalLayout {
+                        if !Platform.is-macos : WrapBlock {
                             spacing: 6px;
                             Button {
                                 text: root.audio-devices-loading ? @tr("Loading audio devices...") : @tr("Refresh devices");
@@ -2252,7 +2253,7 @@ export component SettingsWindow inherits Window {
                         Rectangle { background: Theme.border; height: 1px; }
 
                         // ============================ CLOUD ============================
-                        if root.ai-provider-index == 0 : VerticalLayout {
+                        if root.ai-provider-index == 0 : WrapBlock {
                             spacing: Metrics.space-sm;
                             vertical-stretch: 0;
                             Text {
@@ -2391,7 +2392,7 @@ export component SettingsWindow inherits Window {
                         }
 
                         // ============================ ANTHROPIC ============================
-                        if root.ai-provider-index == 3 : VerticalLayout {
+                        if root.ai-provider-index == 3 : WrapBlock {
                             spacing: Metrics.space-sm;
                             vertical-stretch: 0;
                             Text { text: @tr("Anthropic Messages API"); font-size: Metrics.font-body; font-weight: 700; color: Theme.text-primary; }
@@ -2427,7 +2428,7 @@ export component SettingsWindow inherits Window {
                         }
 
                         // ============================ CODEX SUBSCRIPTION ============================
-                        if !Platform.is-macos && root.ai-provider-index == 4 : VerticalLayout {
+                        if !Platform.is-macos && root.ai-provider-index == 4 : WrapBlock {
                             spacing: Metrics.space-sm;
                             vertical-stretch: 0;
                             Text { text: @tr("Codex safe models (ChatGPT subscription)"); font-size: Metrics.font-body; font-weight: 700; color: Theme.text-primary; }
@@ -2668,7 +2669,7 @@ export component SettingsWindow inherits Window {
                                     root.ai-local-thinking-changed(v);
                                 }
                             }
-                            if !Platform.is-macos : VerticalLayout {
+                            if !Platform.is-macos : WrapBlock {
                             spacing: 6px;
                             // ----- bundled local model: 4B / 12B / 26B -----
                             Rectangle { background: Theme.border; height: 1px; }
@@ -2789,7 +2790,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
-                            if root.managed-local-server : VerticalLayout {
+                            if root.managed-local-server : WrapBlock {
                                 spacing: 6px;
                                 vertical-stretch: 0;
                                 Text {
@@ -2929,7 +2930,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.accent;
                                 wrap: word-wrap;
                             }
-                            if !Platform.is-macos : VerticalLayout {
+                            if !Platform.is-macos : WrapBlock {
                                 spacing: 6px;
                                 // ----- one-click in-app local-AI installer -----
                                 Rectangle { background: Theme.border; height: 1px; }
@@ -3059,7 +3060,7 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
-                        if !Platform.is-macos : VerticalLayout {
+                        if !Platform.is-macos : WrapBlock {
                             spacing: 6px;
                             // Local OCR engine (Tesseract) for Shift+Alt+2 / Ctrl+F8
                             // text recognition. Installed on demand (~53 MB), not
@@ -3335,7 +3336,7 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        if !Platform.is-macos && root.vision-provider-index == 6 : VerticalLayout {
+                        if !Platform.is-macos && root.vision-provider-index == 6 : WrapBlock {
                             spacing: Metrics.space-sm;
                             Text {
                                 text: @tr("Choose a separate Codex model for screenshots. Only account models that advertise image input are shown.");
@@ -3849,7 +3850,7 @@ export component SettingsWindow inherits Window {
                             }
                         }
 
-                        if root.stt-provider-index == 0 : VerticalLayout {
+                        if root.stt-provider-index == 0 : WrapBlock {
                         spacing: 6px;
                         Rectangle { background: Theme.border; height: 1px; }
 
