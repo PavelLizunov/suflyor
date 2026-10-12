@@ -29,6 +29,15 @@ not prove that the bar works for a person. The revert is one commit; the branch 
 #253 stays in Git for reference. Any new bar work starts from the owner's list of what broke
 and is shown to the owner as an installable build before it reaches master.
 
+## Regressions against v0.38.0 (2026-10-12)
+
+The owner works on stable `v0.38.0` and treats everything after it as suspect. A review of
+`v0.38.0..HEAD` plus a function-by-function script comparison of the split modules found
+regressions from rc.3 and rc.4; `docs/release-notes-v0.38.1-rc.7.md` lists the ones restored.
+Slint is 1.17.1 again (ledger D-018 reopened). Owner decisions of that day: no design work;
+the fast gate for every change and prerelease, the full gate only before a stable release;
+before a build is shown, every scrolling surface is scrolled to its end with a real mouse wheel.
+
 ## State of master after the hygiene pass (2026-10-10)
 
 The sixteen pull requests of the 2026-10-08 to 2026-10-10 pass are on master through the

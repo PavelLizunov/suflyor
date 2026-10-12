@@ -142,13 +142,14 @@ Addition 2026-10-10: in the Russian interface the bar's accessibility labels are
 Partly fixed by pull request #240, on master through #243 (checkable state for the toggle chips, a role and state for the Settings navigation entries, the bar labels through `@tr`). The delete confirmation buttons of the archive are not covered.
 Closed by:
 
-### D-018 The app exits at startup on a machine without OpenGL   Severity: P2   Status: Closed
+### D-018 The app exits at startup on a machine without OpenGL   Severity: P2   Status: Open
 Evidence: slint-experiment/src/bin/overlay_host_windows.rs:722 - `let _ = slint::BackendSelector::new()` with `.backend_name("winit".into())` and no renderer fallback
 Scenario: on Winbrat (a virtual machine without a GL driver) `overlay-host.exe` logs its startup, registers hotkeys and then ends with "Error: Failed to initialize OpenGL driver: Could not locate glCreateShader symbol". No window appears and nothing tells the user why. With the environment variable `SLINT_BACKEND=winit-software` the same binary starts and works. A user on a virtual desktop or with a broken GPU driver gets a program that silently does not open.
 Found by: the first start of the QA build of 8cf4904 on windows-worker on 2026-10-09; the software renderer was confirmed as the workaround in the same session.
 Fix plan: on that error, retry with the software renderer and log the fallback.
 Fixed by pull request #241 (Slint 1.18.1). Seen on windows-worker: the 1.18.1 build starts without `SLINT_BACKEND=winit-software`, where the 1.17.1 build exits.
 Closed by: #241, merged through #243, master 4fc4fe286ce531525f4ccdf0ec5b48a856e56f83
+Reopened 2026-10-12: Slint is back at 1.17.1 because 1.18.1 cuts off the end of a scrolled Settings tab (the content height of a conditional block with word-wrapped text is under-reported; upstream names this limit in slint-ui/slint pull request 13124). With the same code, the real mouse wheel reaches the last control of "AI providers" on 1.17.1 and stops 63 px short on 1.18.1. The fix plan above (retry with the software renderer) is open again.
 
 ### D-019 `mask_host` keeps query values, fragments and a host behind extra slashes   Severity: P2   Status: Closed
 Evidence: overlay-backend/src/config.rs:1927 - `format!("{scheme}***{port}{path}")` (and overlay-backend/src/config/tests.rs:1744 - a test that expects `"http://***:18902?token=secret123"`)
