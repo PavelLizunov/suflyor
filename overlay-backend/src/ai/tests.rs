@@ -190,11 +190,10 @@ fn drain_normalizes_crlf_sse_frames() {
 #[tokio::test]
 async fn exclusive_completion_finishes_with_caller_owned_permits() {
     let _queue_guard = STREAM_TEST_LOCK.lock().await;
-    let permits =
-        tokio::time::timeout(std::time::Duration::from_secs(30), acquire_exclusive_ai())
-            .await
-            .unwrap()
-            .unwrap();
+    let permits = tokio::time::timeout(std::time::Duration::from_secs(30), acquire_exclusive_ai())
+        .await
+        .unwrap()
+        .unwrap();
     // An invalid URL fails request construction without opening any socket.
     // Still exercise all retries while BOTH permits belong to the caller.
     let err = tokio::time::timeout(
@@ -211,11 +210,10 @@ async fn exclusive_completion_finishes_with_caller_owned_permits() {
 #[tokio::test]
 async fn ordinary_completion_waits_for_a_permit() {
     let _queue_guard = STREAM_TEST_LOCK.lock().await;
-    let permits =
-        tokio::time::timeout(std::time::Duration::from_secs(30), acquire_exclusive_ai())
-            .await
-            .unwrap()
-            .unwrap();
+    let permits = tokio::time::timeout(std::time::Duration::from_secs(30), acquire_exclusive_ai())
+        .await
+        .unwrap()
+        .unwrap();
     let result = tokio::time::timeout(
         std::time::Duration::from_millis(100),
         complete(":invalid", "", "m", Vec::new(), 8),
@@ -727,11 +725,10 @@ async fn complete_with_usage_defaults_finish_reason_to_stop_when_absent() {
 #[tokio::test]
 async fn deep_lock_guard_refuses_every_managed_sender() {
     let _queue_guard = STREAM_TEST_LOCK.lock().await;
-    let permits =
-        tokio::time::timeout(std::time::Duration::from_secs(30), acquire_exclusive_ai())
-            .await
-            .unwrap()
-            .unwrap();
+    let permits = tokio::time::timeout(std::time::Duration::from_secs(30), acquire_exclusive_ai())
+        .await
+        .unwrap()
+        .unwrap();
     struct ResetDeepLock;
     impl Drop for ResetDeepLock {
         fn drop(&mut self) {

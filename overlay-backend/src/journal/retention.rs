@@ -93,6 +93,9 @@ mod tests {
             }
         });
         assert_eq!(deleted, 1);
-        assert_eq!(attempted, [PathBuf::from("3.jsonl"), PathBuf::from("4.jsonl")]);
+        assert_eq!(
+            attempted,
+            [PathBuf::from("3.jsonl"), PathBuf::from("4.jsonl")]
+        );
     }
 }
