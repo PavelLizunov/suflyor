@@ -988,10 +988,9 @@ pub(crate) fn open_settings(
     {
         let cfg_c = cfg.clone();
         let weak_suppress = win.as_weak();
-        let overlay = overlay_weak.clone();
         win.on_suppress_tiles_changed(move |on| {
             // Deep lock implies suppression — while it is active the checkbox
-            // can't release tiles (the AI load action is the way out). Snap the
+            // can't release tiles (the chip is the only way out). Snap the
             // control back so the UI never lies about the state.
             let deep_managed = {
                 let c = cfg_c.read();
@@ -1006,10 +1005,6 @@ pub(crate) fn open_settings(
             let mut c = cfg_c.write();
             c.suppress_tiles = on;
             let _ = overlay_backend::config::save(&c);
-            drop(c);
-            if let Some(o) = overlay.upgrade() {
-                crate::refresh_lock_chip(&o, &cfg_c);
-            }
         });
     }
     {

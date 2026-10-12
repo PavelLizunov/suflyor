@@ -160,8 +160,7 @@ def find_window(spec):
     all_windows = windows()
     name = spec.lower()
     if name == "bar":
-        # The bar is 64 px high in all three forms (full 874, compact 586, mini 408).
-        bars = [w for w in all_windows if w["visible"] and w["width"] >= 300 and w["height"] <= 200]
+        bars = [w for w in all_windows if w["visible"] and w["width"] >= 600 and w["height"] <= 200]
         if bars:
             return bars[0]
     elif name in KNOWN_WINDOWS:

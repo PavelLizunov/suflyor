@@ -26,26 +26,6 @@ use snippets::default_snippets;
 /// NOT need a bump — `#[serde(default)]` already loads old files.
 const CURRENT_CONFIG_VERSION: u32 = 2;
 
-/// Bar origin relative to a monitor's work area, in physical pixels.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct BarPosition {
-    pub monitor: String,
-    pub x: i32,
-    pub y: i32,
-}
-
-fn deserialize_bar_positions<'de, D>(
-    deserializer: D,
-) -> std::result::Result<Vec<BarPosition>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let mut positions = Vec::<BarPosition>::deserialize(deserializer)?;
-    let excess = positions.len().saturating_sub(8);
-    drop(positions.drain(..excess));
-    Ok(positions)
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Config {
@@ -439,14 +419,6 @@ pub struct Config {
     #[serde(default)]
     pub compact_bar: bool,
 
-    /// Ordered action ids pinned to the full bar; empty for older configurations.
-    #[serde(default)]
-    pub bar_pins: Vec<String>,
-
-    /// Oldest first; retain at most eight monitor positions.
-    #[serde(default, deserialize_with = "deserialize_bar_positions")]
-    pub bar_positions: Vec<BarPosition>,
-
     // NOTE: the legacy `hotkey_*` (F9/F10/F11/F12) and `manual_ask_mode` and
     // `custom_css` fields were REMOVED (P1.3). They were dead config that never
     // matched runtime behaviour — the app uses FIXED hotkeys (F1/F3/F4/F6/F8/F9/
@@ -728,8 +700,6 @@ impl Config {
             suppress_tiles: false,
             deep_lock: false,
             compact_bar: false,
-            bar_pins: Vec::new(),
-            bar_positions: Vec::new(),
             tile_body_opacity: default_tile_body_opacity(),
         }
     }

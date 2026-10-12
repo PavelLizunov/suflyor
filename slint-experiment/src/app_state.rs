@@ -241,7 +241,7 @@ pub fn classify_ai_error(msg: &str) -> &'static str {
     // a bridge outage. High-level sites swap in the localized notice; this
     // English string is the fallback for any path that only classifies.
     if overlay_backend::deep_lock::is_blocked_error(msg) {
-        return "Local AI is deep-locked (click AI off on the bar to load it)";
+        return "Local AI is deep-locked (unlock from the bar's lock chip)";
     }
     let lower = msg.to_lowercase();
     if lower.contains("codex security policy stopped this answer") {
@@ -275,9 +275,6 @@ pub fn ai_error_text(category: &'static str, is_ru: bool) -> &'static str {
         return category;
     }
     match category {
-        "Local AI is deep-locked (click AI off on the bar to load it)" => {
-            "Локальный AI выгружен (нажмите AI выкл на баре, чтобы загрузить его)"
-        }
         "Codex security policy stopped this answer" => {
             "Политика безопасности Codex остановила этот ответ"
         }
@@ -479,10 +476,6 @@ mod tests {
     #[test]
     fn classify_ai_error_table() {
         let cases: &[(&str, &str)] = &[
-            (
-                "local AI is deep-locked",
-                "Local AI is deep-locked (click AI off on the bar to load it)",
-            ),
             (
                 "error sending request for url (http://192.168.0.142:18902/v1/chat/completions): operation timed out",
                 "AI bridge timed out",

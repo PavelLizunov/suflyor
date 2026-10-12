@@ -7,11 +7,12 @@ import { LockModeMenuRow } from "overlay_bar.slint";
 export component LockModeMenuWindow inherits Window {
     no-frame: true;
     always-on-top: true;
-    title: @tr("Auto-tiles");
+    title: @tr("Lock mode");
     background: transparent;
-    preferred-width: 320px;
-    preferred-height: 106px;
-    in property <int> mode: 1;
+    preferred-width: 210px;
+    preferred-height: root.managed ? 106px : 74px;
+    in property <bool> managed: false;
+    in property <int> mode: 0;
     callback mode-selected(int);
     callback dismissed();
     forward-focus: scope;
@@ -33,24 +34,22 @@ export component LockModeMenuWindow inherits Window {
                 padding: Metrics.space-xs;
                 spacing: 2px;
                 LockModeMenuRow {
-                    label: @tr("Silent: no automatic tiles");
+                    label: @tr("Unlocked");
                     current: root.mode == 0;
-                    mode-color: Theme.warning;
-                    icon: @image-url("../assets/icons/lock.svg");
+                    mode-color: Theme.text-secondary;
+                    unlocked: true;
                     clicked => { root.mode-selected(0); }
                 }
                 LockModeMenuRow {
-                    label: @tr("On questions");
+                    label: @tr("Listening");
                     current: root.mode == 1;
-                    mode-color: Theme.text-secondary;
-                    icon: @image-url("../assets/icons/unlock.svg");
+                    mode-color: Theme.warning;
                     clicked => { root.mode-selected(1); }
                 }
-                LockModeMenuRow {
-                    label: @tr("On every line");
+                if root.managed : LockModeMenuRow {
+                    label: @tr("Unload local AI");
                     current: root.mode == 2;
-                    mode-color: Theme.cat-orange;
-                    icon: @image-url("../assets/icons/flame.svg");
+                    mode-color: Theme.danger;
                     clicked => { root.mode-selected(2); }
                 }
             }

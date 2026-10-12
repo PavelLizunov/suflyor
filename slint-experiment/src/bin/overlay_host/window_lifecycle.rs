@@ -520,8 +520,6 @@ pub(crate) struct WindowRegistry {
     /// Transient lock-mode menu. Although short-lived, it can reveal the local
     /// AI state, so a live stealth/theme switch must reach it too.
     pub lock_menu: Rc<RefCell<Option<Rc<LockModeMenuWindow>>>>,
-    /// More menu follows live stealth and theme changes like the lock menu.
-    pub bar_menu: Rc<RefCell<Option<Rc<crate::ui::BarMenuWindow>>>>,
 }
 
 impl WindowRegistry {
@@ -616,11 +614,6 @@ impl WindowRegistry {
                 apply_stealth_one(hwnd, on);
             }
         }
-        if let Some(menu) = self.bar_menu.borrow().as_ref() {
-            if let Ok(hwnd) = grab_hwnd(menu.window()) {
-                apply_stealth_one(hwnd, on);
-            }
-        }
     }
 
     /// Re-skin EVERY open registry window to `scheme` (Theme is a per-window
@@ -657,9 +650,6 @@ impl WindowRegistry {
         }
         if let Some(menu) = self.lock_menu.borrow().as_ref() {
             apply_scheme_lock_menu(menu, scheme);
-        }
-        if let Some(menu) = self.bar_menu.borrow().as_ref() {
-            menu.global::<ui::Theme>().set_scheme(clamp_scheme(scheme));
         }
     }
 

@@ -46,8 +46,8 @@ msgstr ""
 msgid "ask"
 msgstr "спросить"
 
-msgid "tile · {}"
-msgstr "тайл · {}"
+msgid "+ tile ({})"
+msgstr "+ тайл ({})"
 ```
 
 Catalog entries are organized into visual section headers corresponding to `.slint` files (e.g., `# === overlay_bar.slint ===`, `# === tile.slint ===`, `# === palette.slint ===`, `# === settings_panel.slint ===`).
