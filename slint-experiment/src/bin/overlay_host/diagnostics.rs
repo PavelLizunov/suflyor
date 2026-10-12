@@ -171,8 +171,8 @@ fn next_scheme_before_query(token: &str) -> Option<usize> {
 
 /// Redact credentials from diagnostic outputs and log exports so exported files and reports
 /// never leak API keys or authorization tokens: a labelled value (`Bearer <token>` in any ASCII
-/// case and after any run of spaces, tabs, `:` or `=`, quoted or not; an `x-api-key` header)
-/// and a provider key recognised by its prefix (`gsk_`, `sk-`, `xai-`, `nvapi-`).
+/// case and after any run of spaces, tabs, `:` or `=`, quoted or not; `x-api-key`, `api_key`, `api-key`,
+/// `apikey` headers/fields) and a provider key recognised by its prefix (`gsk_`, `sk-`, `xai-`, `nvapi-`).
 pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
@@ -221,8 +221,18 @@ fn labelled_secret(rest: &str, mid_word: bool) -> Option<(&'static str, usize)> 
     if let Some(len) = labelled_secret_len(rest, "bearer") {
         return Some(("Bearer <redacted>", len));
     }
-    let len = labelled_secret_len(rest, "x-api-key")?;
-    Some(("x-api-key: <redacted>", len))
+    if let Some(len) = labelled_secret_len(rest, "x-api-key") {
+        return Some(("x-api-key: <redacted>", len));
+    }
+    // SECURITY: Redact generic API key labels (api_key, api-key, apikey) so un-prefixed secrets in logs/reports are masked
+    if let Some(len) = labelled_secret_len(rest, "api_key") {
+        return Some(("api_key: <redacted>", len));
+    }
+    if let Some(len) = labelled_secret_len(rest, "api-key") {
+        return Some(("api-key: <redacted>", len));
+    }
+    let len = labelled_secret_len(rest, "apikey")?;
+    Some(("apikey: <redacted>", len))
 }
 
 /// Byte length of `label`, what separates it from its value, and the value. Between the two
@@ -1089,6 +1099,23 @@ mod tests {
         ] {
             let redacted = redact_secrets(sample);
             assert!(!redacted.contains("secret_value_123"), "leaked from {sample:?}: {redacted}");
+        }
+    }
+
+    #[test]
+    fn redact_secrets_masks_api_key_variants() {
+        for sample in [
+            "api_key: secret_value_123",
+            "api_key=secret_value_123",
+            "api-key: secret_value_123",
+            "apikey: secret_value_123",
+            "\"api_key\": \"secret_value_123\"",
+        ] {
+            let redacted = redact_secrets(sample);
+            assert!(
+                !redacted.contains("secret_value_123"),
+                "leaked from {sample:?}: {redacted}"
+            );
         }
     }
 
