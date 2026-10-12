@@ -4296,6 +4296,7 @@ dependencies = [
  "getrandom 0.2.17",
  "hound",
  "log",
+ "ort",
  "parking_lot",
  "reqwest",
  "rusqlite",
