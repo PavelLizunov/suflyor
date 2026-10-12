@@ -86,7 +86,7 @@ t 'targeted: no all-targets' fail grep -q -- --all-targets <<< "$targeted"
 t 'targeted: overlay compile' pass grep -Fq 'check --locked --manifest-path $manifest --bin overlay-host' <<< "$targeted"
 t 'targeted: unit tests only' pass grep -Fq 'test --locked --manifest-path $manifest --lib --bin overlay-host' <<< "$targeted"
 t 'targeted: one shared guard list' pass test "$(grep -Fc 'codex_copy_guard' "$native")" -eq 1
-t 'targeted: locked other tests' pass grep -Eq '^[[:space:]]*& \$cargo test --locked --manifest-path \$manifest[[:space:]]*$' <<< "$targeted"
+t 'targeted: other crates run their tests' pass grep -Eq '^[[:space:]]*& \$cargo test --manifest-path \$manifest[[:space:]]*$' <<< "$targeted"
 t 'CI: three full-only clippy steps' pass test "$(awk '/- name: .* clippy -D warnings/ {getline; if ($0 ~ /if: needs.changes.outputs.full == '\''true'\''/) n++} END {print n+0}' "$CI")" -eq 3
 t 'CI: fast Slint unit tests' pass grep -Fq 'cargo test --locked --manifest-path slint-experiment/Cargo.toml --lib --bin overlay-host' "$CI"
 t 'CI: full Slint tests guarded' pass test "$(awk '/- name: slint test \(full suite/ {getline; if ($0 ~ /if: needs.changes.outputs.full == '\''true'\''/) n++} END {print n+0}' "$CI")" -eq 1
