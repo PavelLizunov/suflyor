@@ -177,9 +177,9 @@ static TASKBAR_CREATED_MESSAGE: AtomicU32 = AtomicU32::new(0);
 static TRAY_HWND: AtomicIsize = AtomicIsize::new(0);
 static TRAY_ICON_VISIBLE: AtomicBool = AtomicBool::new(false);
 /// Explorer versions disagree on whether a right click arrives as the v4
-/// `WM_CONTEXTMENU`, legacy `WM_RBUTTONUP`, or both. Pending requests suppress
-/// twin events until completion or the bounded recovery deadline.
-static TRAY_MENU_REQUEST_PENDING: AtomicBool = AtomicBool::new(false);
+/// `WM_CONTEXTMENU`, legacy `WM_RBUTTONUP`, or both. The time of the last
+/// handled request (0 = none yet) tells the twin event of one click from a new
+/// click, so every variant opens exactly one menu.
 static TRAY_MENU_LAST_REQUEST_MS: AtomicU64 = AtomicU64::new(0);
 /// Twin events of one click are queued together and handled back to back.
 /// Anything later is a new click and must open the menu again: a menu that
@@ -343,7 +343,6 @@ pub fn show_icon() -> Result<(), String> {
 /// Remove the notification icon once the bar is visible again. The hidden
 /// message window stays alive so a later explicit hide can add the icon anew.
 pub fn hide_icon() {
-    TRAY_MENU_REQUEST_PENDING.store(false, Ordering::Release);
     if !TRAY_ICON_VISIBLE.swap(false, Ordering::SeqCst) {
         return;
     }
@@ -367,7 +366,6 @@ pub fn hide_icon() {
 /// custom tray menu has completed. Windows explicitly requires NIM_SETFOCUS
 /// after the UI operation, not while the styled Slint menu is opening.
 pub fn return_focus() {
-    TRAY_MENU_REQUEST_PENDING.store(false, Ordering::Release);
     if !TRAY_ICON_VISIBLE.load(Ordering::SeqCst) {
         return;
     }
@@ -517,27 +515,20 @@ fn publish_availability(available: bool) {
 
 fn request_tray_menu() {
     let previous = TRAY_MENU_LAST_REQUEST_MS.load(Ordering::Acquire);
-    // A normally dismissed menu (`return_focus`) clears the pending flag, so
-    // the next click opens at once; only twins of a pending request are dropped.
-    if TRAY_MENU_REQUEST_PENDING.load(Ordering::Acquire)
-        && is_duplicate_menu_request(previous, tray_clock_ms())
-    {
+    if is_duplicate_menu_request(previous, tray_clock_ms()) {
         return;
     }
     let mut point = POINT::default();
     if unsafe { GetCursorPos(&mut point) }.is_err() {
         return;
     }
-    TRAY_MENU_LAST_REQUEST_MS.store(tray_clock_ms(), Ordering::Release);
-    TRAY_MENU_REQUEST_PENDING.store(true, Ordering::Release);
     dispatch_from_ctx(TrayAction::OpenMenu {
         x: point.x,
         y: point.y,
     });
-    // Stamp after construction, but never re-arm a synchronously dismissed menu.
-    if TRAY_MENU_REQUEST_PENDING.load(Ordering::Acquire) {
-        TRAY_MENU_LAST_REQUEST_MS.store(tray_clock_ms(), Ordering::Release);
-    }
+    // Stamp after the menu was built: the twin event is already queued and is
+    // handled right after this returns, however long the build took.
+    TRAY_MENU_LAST_REQUEST_MS.store(tray_clock_ms(), Ordering::Release);
 }
 
 fn is_duplicate_menu_request(previous_ms: u64, now_ms: u64) -> bool {

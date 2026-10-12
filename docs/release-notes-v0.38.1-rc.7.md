@@ -15,7 +15,6 @@ This release candidate restores behaviour of v0.38.0 that the release candidates
 - **Session journals**: a failed deletion of an old journal can no longer make the size limit delete recent sessions.
 - **A start that is refused** because system audio is busy keeps the transcript of the previous session, so its summary can still be made.
 - **Audio devices in Settings**: one device that cannot be read no longer hides the others.
-- **Tray menu**: a right click directly after closing the menu opens it again.
 
 ## Kept from after v0.38.1-rc.5
 
@@ -24,6 +23,7 @@ This release candidate restores behaviour of v0.38.0 that the release candidates
 ## Known, not fixed here
 
 - macOS, Settings > AI providers: the installed state and the buttons can belong to another local model than the selected one, and "Enable for text" changes a separately chosen Vision provider.
+- Tray menu: a right click within a quarter of a second after the previous menu was requested is ignored.
 - Auto-tiles miss a very short question that follows a statement in the same line (for example "... Как же?").
 
 ## Installers
