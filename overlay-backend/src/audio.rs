@@ -90,15 +90,8 @@ pub fn list_devices() -> Result<DeviceList> {
     wasapi::initialize_mta().ok().map(|_| ()).unwrap_or(());
 
     Ok(DeviceList {
-        outputs: device_names_or_empty(&Direction::Render, enumerate(&Direction::Render)),
-        inputs: device_names_or_empty(&Direction::Capture, enumerate(&Direction::Capture)),
-    })
-}
-
-fn device_names_or_empty(dir: &Direction, names: Result<Vec<String>>) -> Vec<String> {
-    names.unwrap_or_else(|_| {
-        log::warn!("audio: {dir:?} device collection unavailable");
-        Vec::new()
+        outputs: enumerate(&Direction::Render).context("enumerate output devices")?,
+        inputs: enumerate(&Direction::Capture).context("enumerate input devices")?,
     })
 }
 
@@ -860,7 +853,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn partial_device_enumeration_keeps_healthy_inputs_and_outputs() {
+    fn a_failing_endpoint_does_not_hide_healthy_devices() {
         let inputs = collect_healthy_device_names(
             &Direction::Capture,
             [
@@ -871,22 +864,11 @@ mod tests {
             .into_iter(),
         );
         assert_eq!(inputs, ["Mic A", "Mic B"]);
-        let list = DeviceList {
-            outputs: device_names_or_empty(&Direction::Render, Err(anyhow!("collection failed"))),
-            inputs: device_names_or_empty(&Direction::Capture, Ok(inputs)),
-        };
-        assert!(list.outputs.is_empty());
-        assert_eq!(list.inputs, ["Mic A", "Mic B"]);
         let outputs = collect_healthy_device_names(
             &Direction::Render,
             [Err(anyhow!("name unavailable")), Ok("Speakers".to_string())].into_iter(),
         );
         assert_eq!(outputs, ["Speakers"]);
-        assert_eq!(
-            device_names_or_empty(&Direction::Render, Ok(outputs)),
-            ["Speakers"],
-        );
-        assert!(device_names_or_empty(&Direction::Capture, Err(anyhow!("failed"))).is_empty());
     }
 
     #[test]
