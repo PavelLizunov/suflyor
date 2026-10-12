@@ -1150,6 +1150,27 @@ mod copy_tests {
     }
 
     #[test]
+    fn typed_request_thread_copy_contains_only_the_typed_question() {
+        for screenshot in [None, Some("data:image/png;base64,AA==")] {
+            let mut messages = ai::build_request(
+                "",
+                "en",
+                &["[System] prior conversation".into()],
+                screenshot,
+                Some("What is a mutex?"),
+            );
+            messages.push(msg("assistant", "It protects shared state."));
+            messages.push(msg("user", "And a semaphore?"));
+            messages.push(msg("assistant", "It limits concurrency."));
+            assert_eq!(
+                format_convo_copy(&messages, ""),
+                "You: What is a mutex?\n\nAssistant: It protects shared state.\n\n\
+                 You: And a semaphore?\n\nAssistant: It limits concurrency.",
+            );
+        }
+    }
+
+    #[test]
     fn copy_question_strips_transcript_wrapper() {
         let raw = "Транскрипт последних реплик:\n[СОБЕСЕДНИК] arc raiders?\n\n\
                    Помоги ответить: что такое arc raiders";

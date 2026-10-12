@@ -270,16 +270,35 @@ pub fn start_session_with_recovery(
     start_session_inner(events, cfg, rt, Some(recovered_from))
 }
 
-fn start_session_inner(
-    events: Arc<dyn RuntimeEvents>,
-    cfg: SharedConfig,
-    rt: SharedSlintRuntime,
-    recovered_from: Option<String>,
-) -> Result<()> {
-    // ===== 1. Stop any prior session + reset state =====
+fn prepare_session_start(rt: &SharedSlintRuntime) -> Result<SystemAudioSessionStartGuard> {
+    // A restart must release its previous capture before claiming ownership.
     let prior_capture = {
-        let mut s = lock(&rt);
-        let prior_cap = s.capture.take(); // Drop signals capture thread to stop.
+        let mut s = lock(rt);
+        let capture = s.capture.take();
+        if capture.is_some() {
+            s.system_audio_collector = None;
+            if let Some(h) = s.transcript_task.take() {
+                h.abort();
+            }
+            if let Some(h) = s.ai_task.take() {
+                h.abort();
+            }
+            if let Some(h) = s.health_task.take() {
+                h.abort();
+            }
+        }
+        capture
+    };
+    if prior_capture.is_some() {
+        drop(prior_capture);
+        release_system_audio_session();
+        stt::reset_gigaam_cache();
+    }
+    let system_audio_owner = SystemAudioSessionStartGuard::acquire()?;
+
+    // A rejected start leaves the stopped session's Summary source intact.
+    {
+        let mut s = lock(rt);
         s.system_audio_collector = None;
         s.transcript.clear();
         // v0.12.0 — the Summary accumulator resets at session START (not
@@ -339,16 +358,18 @@ fn start_session_inner(
             // event; we replicate that pattern in stop_session, not here.)
             drop(j);
         }
-        prior_cap
-    };
-
-    if prior_capture.is_some() {
-        drop(prior_capture);
-        release_system_audio_session();
-        stt::reset_gigaam_cache();
     }
+    Ok(system_audio_owner)
+}
 
-    let mut system_audio_owner = SystemAudioSessionStartGuard::acquire()?;
+fn start_session_inner(
+    events: Arc<dyn RuntimeEvents>,
+    cfg: SharedConfig,
+    rt: SharedSlintRuntime,
+    recovered_from: Option<String>,
+) -> Result<()> {
+    // ===== 1. Stop any prior session + reset state =====
+    let mut system_audio_owner = prepare_session_start(&rt)?;
 
     // Tell the UI cost is back to zero (chips depending on session_usd
     // get a chance to reset). Pre-port React side did the same.
@@ -1704,6 +1725,55 @@ fn log_info(msg: &str) {
 mod tests {
     use super::*;
 
+    static SYSTEM_AUDIO_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn rejected_session_start_preserves_previous_transcript_and_bookkeeping() {
+        let _guard = SYSTEM_AUDIO_TEST_LOCK.lock().unwrap();
+        SYSTEM_AUDIO_SESSION_STUCK.store(false, Ordering::Release);
+        SYSTEM_AUDIO_OWNER.store(SYSTEM_AUDIO_OWNER_NONE, Ordering::Release);
+        let rt = crate::runtime_state::shared_runtime();
+        {
+            let mut state = lock(&rt);
+            let line = TranscriptLine {
+                source: AudioSource::System,
+                text: "Previous session transcript".into(),
+                timestamp_ms: 123,
+            };
+            state.transcript.push_back(line.clone());
+            state.full_transcript.push_back(line);
+            state.full_transcript_truncated = true;
+            state.session_name = Some("Previous session".into());
+            state.session_cost_microcents = 42;
+            state.session_gen = 7;
+            state.paused = true;
+        }
+        let aux = try_acquire_system_audio_aux().unwrap();
+        assert!(prepare_session_start(&rt).is_err());
+        {
+            let state = lock(&rt);
+            assert_eq!(state.transcript.len(), 1);
+            assert_eq!(state.full_transcript.len(), 1);
+            assert_eq!(state.full_transcript[0].text, "Previous session transcript");
+            assert!(state.full_transcript_truncated);
+            assert_eq!(state.session_name.as_deref(), Some("Previous session"));
+            assert_eq!(state.session_cost_microcents, 42);
+            assert_eq!(state.session_gen, 7);
+            assert!(state.paused);
+        }
+        drop(aux);
+        let owner = prepare_session_start(&rt).unwrap();
+        let state = lock(&rt);
+        assert!(state.transcript.is_empty());
+        assert!(state.full_transcript.is_empty());
+        assert!(!state.full_transcript_truncated);
+        assert_eq!(state.session_cost_microcents, 0);
+        assert_eq!(state.session_gen, 8);
+        assert!(!state.paused);
+        drop(state);
+        drop(owner);
+    }
+
     #[test]
     fn auto_tile_permit_is_single_flight_per_session() {
         let state = AtomicU64::new(0);
@@ -1794,6 +1864,7 @@ mod tests {
 
     #[test]
     fn system_audio_owner_is_atomic_between_session_and_auxiliary_capture() {
+        let _guard = SYSTEM_AUDIO_TEST_LOCK.lock().unwrap();
         SYSTEM_AUDIO_SESSION_STUCK.store(false, Ordering::Release);
         SYSTEM_AUDIO_OWNER.store(SYSTEM_AUDIO_OWNER_NONE, Ordering::Release);
 
@@ -1813,6 +1884,7 @@ mod tests {
 
     #[test]
     fn session_restart_releases_prior_owner_and_reacquires() {
+        let _guard = SYSTEM_AUDIO_TEST_LOCK.lock().unwrap();
         SYSTEM_AUDIO_SESSION_STUCK.store(false, Ordering::Release);
         SYSTEM_AUDIO_OWNER.store(SYSTEM_AUDIO_OWNER_NONE, Ordering::Release);
 

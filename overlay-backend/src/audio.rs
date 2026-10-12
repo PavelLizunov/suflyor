@@ -90,23 +90,45 @@ pub fn list_devices() -> Result<DeviceList> {
     wasapi::initialize_mta().ok().map(|_| ()).unwrap_or(());
 
     Ok(DeviceList {
-        outputs: enumerate(&Direction::Render).context("enumerate output devices")?,
-        inputs: enumerate(&Direction::Capture).context("enumerate input devices")?,
+        outputs: device_names_or_empty(&Direction::Render, enumerate(&Direction::Render)),
+        inputs: device_names_or_empty(&Direction::Capture, enumerate(&Direction::Capture)),
     })
+}
+
+fn device_names_or_empty(dir: &Direction, names: Result<Vec<String>>) -> Vec<String> {
+    names.unwrap_or_else(|_| {
+        log::warn!("audio: {dir:?} device collection unavailable");
+        Vec::new()
+    })
+}
+
+fn collect_healthy_device_names(
+    dir: &Direction,
+    names: impl Iterator<Item = Result<String>>,
+) -> Vec<String> {
+    names
+        .filter_map(|name| match name {
+            Ok(name) => Some(name),
+            Err(_) => {
+                log::warn!("audio: skipping unavailable {dir:?} endpoint");
+                None
+            }
+        })
+        .collect()
 }
 
 fn enumerate(dir: &Direction) -> Result<Vec<String>> {
     let coll = device_collection(dir)?;
     let n = coll.get_nbr_devices()?;
-    let mut v = Vec::with_capacity(n as usize);
-    for i in 0..n {
-        let device = coll.get_device_at_index(i).context("read audio endpoint")?;
-        v.push(
+    let v = collect_healthy_device_names(
+        dir,
+        (0..n).map(|i| {
+            let device = coll.get_device_at_index(i).context("read audio endpoint")?;
             device
                 .get_friendlyname()
-                .context("read audio endpoint name")?,
-        );
-    }
+                .context("read audio endpoint name")
+        }),
+    );
     // Warn on duplicate friendly names: find_device_by_name matches on friendly
     // name only, so two identically-named endpoints (e.g. two identical USB
     // headsets) resolve to whichever WASAPI enumerates first — not stable across
@@ -836,6 +858,36 @@ fn resample_and_quantise(input: &[f32], ratio: f64) -> Vec<i16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn partial_device_enumeration_keeps_healthy_inputs_and_outputs() {
+        let inputs = collect_healthy_device_names(
+            &Direction::Capture,
+            [
+                Ok("Mic A".to_string()),
+                Err(anyhow!("endpoint unavailable")),
+                Ok("Mic B".to_string()),
+            ]
+            .into_iter(),
+        );
+        assert_eq!(inputs, ["Mic A", "Mic B"]);
+        let list = DeviceList {
+            outputs: device_names_or_empty(&Direction::Render, Err(anyhow!("collection failed"))),
+            inputs: device_names_or_empty(&Direction::Capture, Ok(inputs)),
+        };
+        assert!(list.outputs.is_empty());
+        assert_eq!(list.inputs, ["Mic A", "Mic B"]);
+        let outputs = collect_healthy_device_names(
+            &Direction::Render,
+            [Err(anyhow!("name unavailable")), Ok("Speakers".to_string())].into_iter(),
+        );
+        assert_eq!(outputs, ["Speakers"]);
+        assert_eq!(
+            device_names_or_empty(&Direction::Render, Ok(outputs)),
+            ["Speakers"],
+        );
+        assert!(device_names_or_empty(&Direction::Capture, Err(anyhow!("failed"))).is_empty());
+    }
 
     #[test]
     fn rms_dbfs_silence_and_full_scale() {

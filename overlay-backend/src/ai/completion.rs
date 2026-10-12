@@ -1,6 +1,6 @@
 use super::control::{
-    acquire_exclusive_ai, apply_local_no_think, apply_managed_gemma_sampler, apply_prompt_cache,
-    http_client, resolve_managed_mlx_endpoint, transport_failure_kind, AI_SEMAPHORE, PROMPT_CACHE,
+    apply_local_no_think, apply_managed_gemma_sampler, apply_prompt_cache, http_client,
+    resolve_managed_mlx_endpoint, transport_failure_kind, AI_SEMAPHORE, PROMPT_CACHE,
 };
 use super::pricing::TokenUsage;
 use super::provider;
@@ -113,18 +113,62 @@ pub async fn complete_endpoint(
     .map(|(text, _)| text)
 }
 
-pub async fn complete_exclusive(
+/// Complete under the two permits already held by `ManagedPrepSession`.
+pub(crate) async fn complete_exclusive(
     base_url: &str,
     bearer: &str,
     model: &str,
     messages: Vec<ChatMessage>,
     max_tokens: u32,
 ) -> Result<String> {
-    let _permit = acquire_exclusive_ai().await?;
-    complete(base_url, bearer, model, messages, max_tokens).await
+    complete_with_usage_unlocked(
+        AiProtocol::OpenAiCompatible,
+        base_url,
+        bearer,
+        model,
+        messages,
+        max_tokens,
+        true,
+    )
+    .await
+    .map(|(text, _)| text)
 }
 
 pub(crate) async fn complete_with_usage_inner(
+    protocol: AiProtocol,
+    base_url: &str,
+    bearer: &str,
+    model: &str,
+    messages: Vec<ChatMessage>,
+    max_tokens: u32,
+    force_no_think: bool,
+) -> Result<(String, TokenUsage)> {
+    check_deep_lock(base_url)?;
+    // Keep the permit through retries, as in v0.38.0.
+    let _permit = AI_SEMAPHORE
+        .acquire()
+        .await
+        .map_err(|_| anyhow!("AI request queue closed"))?;
+    complete_with_usage_unlocked(
+        protocol,
+        base_url,
+        bearer,
+        model,
+        messages,
+        max_tokens,
+        force_no_think,
+    )
+    .await
+}
+
+fn check_deep_lock(base_url: &str) -> Result<()> {
+    if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), base_url) {
+        return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
+    }
+    Ok(())
+}
+
+async fn complete_with_usage_unlocked(
     protocol: AiProtocol,
     base_url: &str,
     bearer: &str,
@@ -137,6 +181,7 @@ pub(crate) async fn complete_with_usage_inner(
     let mut last_err = None;
 
     for attempt in 1..=MAX_ATTEMPTS {
+        check_deep_lock(base_url)?;
         let (endpoint, _mlx_lease) = resolve_managed_mlx_endpoint(AiEndpoint {
             protocol,
             base_url: base_url.to_string(),
@@ -147,7 +192,7 @@ pub(crate) async fn complete_with_usage_inner(
         })
         .await?;
 
-        let _permit = AI_SEMAPHORE.acquire().await.ok();
+        check_deep_lock(&endpoint.base_url)?;
         match complete_once(
             endpoint.protocol,
             &endpoint.base_url,
@@ -186,6 +231,9 @@ pub(crate) async fn complete_with_usage_inner(
 }
 
 pub fn is_permanent_ai_error(msg: &str) -> bool {
+    if crate::deep_lock::is_blocked_error(msg) {
+        return true;
+    }
     if let Some(rest) = msg.split("HTTP ").nth(1) {
         let code: u16 = rest
             .chars()

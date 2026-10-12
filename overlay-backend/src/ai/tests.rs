@@ -187,6 +187,75 @@ fn drain_normalizes_crlf_sse_frames() {
     assert!(bytes.is_empty());
 }
 
+#[tokio::test]
+async fn exclusive_completion_finishes_with_caller_owned_permits() {
+    let _queue_guard = STREAM_TEST_LOCK.lock().await;
+    let permits =
+        tokio::time::timeout(std::time::Duration::from_secs(30), acquire_exclusive_ai())
+            .await
+            .unwrap()
+            .unwrap();
+    // An invalid URL fails request construction without opening any socket.
+    // Still exercise all retries while BOTH permits belong to the caller.
+    let err = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        complete_exclusive(":invalid", "", "m", Vec::new(), 8),
+    )
+    .await
+    .expect("exclusive completion must not acquire another permit")
+    .unwrap_err();
+    assert_eq!(err.to_string(), "AI connection error (request)");
+    drop(permits);
+}
+
+#[tokio::test]
+async fn ordinary_completion_waits_for_a_permit() {
+    let _queue_guard = STREAM_TEST_LOCK.lock().await;
+    let permits =
+        tokio::time::timeout(std::time::Duration::from_secs(30), acquire_exclusive_ai())
+            .await
+            .unwrap()
+            .unwrap();
+    let result = tokio::time::timeout(
+        std::time::Duration::from_millis(100),
+        complete(":invalid", "", "m", Vec::new(), 8),
+    )
+    .await;
+    assert!(
+        result.is_err(),
+        "ordinary completion must not bypass the queue",
+    );
+    drop(permits);
+}
+
+#[test]
+fn text_only_requests_use_text_content_for_followup_reframing() {
+    for question in [None, Some("What is a mutex?")] {
+        let messages = build_request("", "en", &["A prior topic".into()], None, question);
+        assert!(matches!(&messages[1].content, MessageContent::Text(_)));
+    }
+    let vision = build_request("", "en", &[], Some("data:image/png;base64,AA=="), None);
+    assert!(matches!(&vision[1].content, MessageContent::Parts(_)));
+}
+
+#[test]
+fn typed_question_restores_copyable_wrapper_without_instruction_trailer() {
+    let messages = build_request("", "en", &[], None, Some("What is a mutex?"));
+    match &messages[1].content {
+        MessageContent::Text(text) => assert_eq!(text, "Помоги ответить: What is a mutex?\n"),
+        other => panic!("expected plain typed question, got {other:?}"),
+    }
+}
+
+#[test]
+fn deliberate_deep_lock_error_is_permanent_even_with_http_context() {
+    assert!(is_permanent_ai_error(crate::deep_lock::BLOCKED_ERROR));
+    assert!(is_permanent_ai_error(&format!(
+        "HTTP 503: {}",
+        crate::deep_lock::BLOCKED_ERROR,
+    )));
+}
+
 // ── Smoke check on build_request shape ──
 
 #[test]
@@ -657,6 +726,19 @@ async fn complete_with_usage_defaults_finish_reason_to_stop_when_absent() {
 /// the process-wide flag would race across parallel #[tokio::test]s.
 #[tokio::test]
 async fn deep_lock_guard_refuses_every_managed_sender() {
+    let _queue_guard = STREAM_TEST_LOCK.lock().await;
+    let permits =
+        tokio::time::timeout(std::time::Duration::from_secs(30), acquire_exclusive_ai())
+            .await
+            .unwrap()
+            .unwrap();
+    struct ResetDeepLock;
+    impl Drop for ResetDeepLock {
+        fn drop(&mut self) {
+            crate::deep_lock::set_deep_lock_active(false);
+        }
+    }
+    let _reset = ResetDeepLock;
     crate::deep_lock::set_deep_lock_active(true);
     let managed = crate::local_ai::LLAMA_BASE_URL.to_string();
 
@@ -668,14 +750,31 @@ async fn deep_lock_guard_refuses_every_managed_sender() {
     let err = list_models(&managed, "").await.unwrap_err();
     assert!(crate::deep_lock::is_blocked_error(&err.to_string()));
 
-    let err = complete(&managed, "", "m", Vec::new(), 8)
-        .await
-        .unwrap_err();
+    let err = tokio::time::timeout(
+        std::time::Duration::from_millis(250),
+        complete(&managed, "", "m", Vec::new(), 8),
+    )
+    .await
+    .expect("deep lock must be checked before queueing")
+    .unwrap_err();
     assert!(crate::deep_lock::is_blocked_error(&err.to_string()));
 
-    let err = complete_with_usage(&managed, "", "m", Vec::new(), 8)
-        .await
-        .unwrap_err();
+    let err = tokio::time::timeout(
+        std::time::Duration::from_millis(250),
+        complete_with_usage(&managed, "", "m", Vec::new(), 8),
+    )
+    .await
+    .expect("deep-locked usage calls must not queue or retry")
+    .unwrap_err();
+    assert!(crate::deep_lock::is_blocked_error(&err.to_string()));
+
+    let err = tokio::time::timeout(
+        std::time::Duration::from_millis(250),
+        complete_exclusive(&managed, "", "m", Vec::new(), 8),
+    )
+    .await
+    .expect("deep-locked exclusive calls must not queue or retry")
+    .unwrap_err();
     assert!(crate::deep_lock::is_blocked_error(&err.to_string()));
 
     let err = count_chat_tokens(&managed, "", "m", &[]).await.unwrap_err();
@@ -708,5 +807,5 @@ async fn deep_lock_guard_refuses_every_managed_sender() {
         "non-managed endpoints must bypass the deep-lock guard"
     );
 
-    crate::deep_lock::set_deep_lock_active(false);
+    drop(permits);
 }
