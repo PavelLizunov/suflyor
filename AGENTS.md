@@ -107,8 +107,9 @@ The diff classifier is `scripts/git-gate-native.ps1`. Run it on
   `knowledge/AGENTS.md` edit remains documentation. GitHub's separate fast-path
   classifier also treats paths under `docs/` as docs-only.
 - **Targeted:** every normal development change and every prerelease, including
-  multi-crate and cross-cutting work. Run only the smallest fmt, Clippy, tests,
-  compile seams, and live checks that cover the affected files/platforms.
+  multi-crate and cross-cutting work. Run fast fmt/compile/tests without Clippy:
+  Slint uses overlay-host check, lib/bin unit tests and shared static guards;
+  other affected crates run their tests. Keep required live checks.
 - **Full:** only when publishing an owner-authorized stable release. Invoke
   `scripts/git-gate-native.ps1 ... -Full` / `scripts/ci.ps1` explicitly and run
   the stable release's required platform gates. Never auto-promote a normal
