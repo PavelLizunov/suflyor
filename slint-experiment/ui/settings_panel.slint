@@ -981,6 +981,8 @@ export component SettingsWindow inherits Window {
                             ] : HorizontalLayout {
                                 padding: Metrics.space-xs;
                                 spacing: Metrics.space-md;
+                                // A description that wraps to two lines grows its row.
+                                min-height: hotkey-description.preferred-height + 2 * Metrics.space-xs;
                                 Text {
                                     text: Platform.is-macos ? (
                                         entry[0] == "Ctrl+F8" ? @tr("Control+F8") :
@@ -993,7 +995,7 @@ export component SettingsWindow inherits Window {
                                     color: Theme.accent;
                                     width: 92px;
                                 }
-                                Text {
+                                hotkey-description := Text {
                                     text: entry[1];
                                     font-size: Metrics.font-label;
                                     color: Theme.text-secondary;
@@ -1847,12 +1849,15 @@ export component SettingsWindow inherits Window {
                                 padding-top: Metrics.space-sm;
                                 padding-bottom: Metrics.space-sm;
                                 spacing: 10px;
-                                Rectangle {
-                                    width: 10px;
-                                    height: 10px;
-                                    border-radius: 5px;
-                                    y: (parent.height - self.height) / 2;
-                                    background: row.installed ? Theme.success : Theme.border-strong;
+                                // A layout ignores `y`; the wrapper centres the dot on the row.
+                                VerticalLayout {
+                                    alignment: center;
+                                    Rectangle {
+                                        width: 10px;
+                                        height: 10px;
+                                        border-radius: 5px;
+                                        background: row.installed ? Theme.success : Theme.border-strong;
+                                    }
                                 }
                                 VerticalLayout {
                                     alignment: center;
@@ -3240,14 +3245,16 @@ export component SettingsWindow inherits Window {
                             color: Theme.warning;
                             wrap: word-wrap;
                         }
+                        // The wrapped text is a direct child of the page layout: inside the conditional
+                        // block below its second line was not counted and the next control overlapped.
+                        if root.vision-provider-index == 2 : Text {
+                            text: @tr("Screenshots are sent to the cloud. Leave a field blank to reuse the text bridge's value.");
+                            font-size: Metrics.font-caption;
+                            color: Theme.warning;
+                            wrap: word-wrap;
+                        }
                         if root.vision-provider-index == 2 : VerticalLayout {
                             spacing: Metrics.space-sm;
-                            Text {
-                                text: @tr("Screenshots are sent to the cloud. Leave a field blank to reuse the text bridge's value.");
-                                font-size: Metrics.font-caption;
-                                color: Theme.warning;
-                                wrap: word-wrap;
-                            }
                             HorizontalLayout {
                                 spacing: 6px;
                                 SettingsLineEdit {
@@ -3277,14 +3284,16 @@ export component SettingsWindow inherits Window {
                                 Button { text: @tr("Save"); clicked => { root.vision-model-save(root.vision-model-input); } }
                             }
                         }
+                        // The wrapped text is a direct child of the page layout: inside the conditional
+                        // block below its second line was not counted and the next control overlapped.
+                        if root.vision-provider-index == 3 : Text {
+                            text: @tr("A 2nd local OpenAI-compatible server running a vision model (e.g. Qwen2-VL). Blank = reuse the text-local server.");
+                            font-size: Metrics.font-caption;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
                         if root.vision-provider-index == 3 : VerticalLayout {
                             spacing: Metrics.space-sm;
-                            Text {
-                                text: @tr("A 2nd local OpenAI-compatible server running a vision model (e.g. Qwen2-VL). Blank = reuse the text-local server.");
-                                font-size: Metrics.font-caption;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
                             HorizontalLayout {
                                 spacing: 6px;
                                 SettingsLineEdit {

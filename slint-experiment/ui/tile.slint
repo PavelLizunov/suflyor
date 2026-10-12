@@ -377,26 +377,31 @@ export component TileWindow inherits Window {
                         width: parent.width - 17px;
                     }
                 }
-                if root.source-label != "" : Rectangle {
-                    background: transparent;
-                    border-color: Theme.border-strong;
-                    border-width: 1px;
-                    border-radius: Metrics.radius-field;
-                    height: 20px;
+                // The layout centres the 20px pill on the 30px row; a fixed-height
+                // child placed directly in the row sits at its top.
+                if root.source-label != "" : VerticalLayout {
+                    alignment: center;
                     horizontal-stretch: 0;
                     // Cap + elide: a long source-label (e.g. a full local-model .gguf path)
                     // must NOT push the fixed-width header buttons — including Close — off the
                     // right edge. Bounded here so the window controls always stay visible.
                     max-width: 150px;
-                    HorizontalLayout {
-                        padding-left: 6px;
-                        padding-right: 6px;
-                        Text {
-                            text: root.source-label;
-                            font-size: Metrics.font-caption;
-                            color: Theme.text-muted;
-                            vertical-alignment: center;
-                            overflow: elide;
+                    Rectangle {
+                        background: transparent;
+                        border-color: Theme.border-strong;
+                        border-width: 1px;
+                        border-radius: Metrics.radius-field;
+                        height: 20px;
+                        HorizontalLayout {
+                            padding-left: 6px;
+                            padding-right: 6px;
+                            Text {
+                                text: root.source-label;
+                                font-size: Metrics.font-caption;
+                                color: Theme.text-muted;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
                         }
                     }
                 }
