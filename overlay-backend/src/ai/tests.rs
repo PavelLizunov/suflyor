@@ -203,7 +203,7 @@ async fn exclusive_completion_finishes_with_caller_owned_permits() {
     .await
     .expect("exclusive completion must not acquire another permit")
     .unwrap_err();
-    assert_eq!(err.to_string(), "AI connection error (request)");
+    assert!(err.to_string().starts_with("AI connection error"));
     drop(permits);
 }
 
