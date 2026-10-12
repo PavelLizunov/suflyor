@@ -1,6 +1,8 @@
 # Agent-agnostic selective git gate used by .githooks/pre-commit and pre-push.
-# Normal development and prereleases use docs/targeted checks. Full CI is
-# explicit and reserved for publishing an owner-authorized stable release:
+# Docs use diff/syntax checks; commit hooks also check affected-crate fmt.
+# Development/prereleases use fast targeted fmt/compile/tests (Slint unit tests
+# + static guards, no Clippy).
+# Full CI (Clippy + all tests) is explicit for an owner-authorized stable release:
 #   powershell -File scripts/git-gate-native.ps1 push -Full
 param(
     [ValidateSet('commit', 'push', 'manual', 'classify')]
@@ -152,9 +154,21 @@ foreach ($crate in $affectedCrates) {
     $slintUiOnly = $crate -eq 'slint-experiment' -and
         @($crateFiles | Where-Object { $_ -match '\.(rs|toml|lock)$' -or $_ -match '/build\.rs$' }).Count -eq 0
 
-    if ($slintUiOnly) {
+    if ($crate -eq 'slint-experiment') {
         Run 'slint UI compile check' {
             & $cargo check --locked --manifest-path $manifest --bin overlay-host
+        }
+        if (-not $slintUiOnly) {
+            # Build only unit-test binaries before staging their DirectML.dll.
+            Run 'slint unit tests build' {
+                & $cargo test --locked --manifest-path $manifest --lib --bin overlay-host --no-run
+            }
+            Run 'slint stage DirectML' {
+                & (Join-Path $PSScriptRoot 'stage-directml.ps1') -CrateDir (Join-Path $root $crate)
+            }
+            Run 'slint unit tests' {
+                & $cargo test --locked --manifest-path $manifest --lib --bin overlay-host
+            }
         }
         $guards = @(
             'codex_copy_guard', 'i18n_guard', 'icon_guard',
@@ -177,9 +191,6 @@ foreach ($crate in $affectedCrates) {
         }
     }
     else {
-        Run "$crate clippy" {
-            & $cargo clippy --manifest-path $manifest --all-targets -- -D warnings
-        }
         # Build first: DirectML.dll appears in target\debug only after the
         # build, and the test executables need it beside them.
         Run "$crate test build" {

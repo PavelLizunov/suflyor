@@ -109,7 +109,7 @@ lives in BOTH `slint-experiment/Cargo.toml` and `scripts/slint-installer.nsi`
 
 ## Methodology — verification before commit (adopted from vpnctl, 2026-05-26)
 
-### Current selective gate policy (2026-08-15)
+### Current selective gate policy (2026-10-12)
 
 This section and `AGENTS.md` override older blanket wording below that says to
 run every layer or the full five-crate gate before every commit.
@@ -118,16 +118,17 @@ Run `powershell scripts/git-gate-native.ps1 manual`. The shared native script
 and Git hooks classify the diff as:
 
 - **Docs:** diff/whitespace validation, no Rust build.
-- **Targeted:** fmt, clippy, and tests for one affected crate. A UI-only diff
-  gets the overlay compile/static guards plus the live Slint-MCP evidence.
-- **Full:** multiple crates, dependencies/lockfiles, build/installer/CI/gate
-  infrastructure, or high-risk audio, recovery/persistence, credentials,
-  networking, update, and cross-cutting runtime paths. Stable releases always
-  require `scripts/ci.ps1`.
+- **Targeted:** fast fmt/compile/tests for affected crates, without Clippy,
+  for every normal change and prerelease, including multi-crate/high-risk work.
+  Slint Rust changes use overlay-host check, lib/bin unit tests and the shared
+  static guards; other crates run their tests. A UI-only diff gets the overlay
+  compile/static guards plus the live Slint-MCP evidence.
+- **Full:** only before an owner-authorized stable release, explicitly with
+  `-Full` / `scripts/ci.ps1` (Clippy and all tests).
 
-A version-only RC bump does not force Full. Use `-Full` whenever risk is
-uncertain. The selected cargo gate must run on Winbrat or required GitHub CI
-when the owner's workstation is not an authorized build/test host.
+RC/prerelease bumps and uncertain risk do not force Full. The selected cargo
+gate must run on Winbrat or required GitHub CI when the owner's workstation
+is not an authorized build/test host.
 
 **Why this exists:** the v0.0.67 → v0.1.2 attempt was a 33-release marathon
 where static checks (clippy + cargo test) passed every release but the user
