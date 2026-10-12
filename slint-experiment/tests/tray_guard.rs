@@ -5,7 +5,7 @@
 //! (`src/tray.rs`); this file pins the CROSS-FILE contracts that a partial
 //! edit could silently break:
 //!
-//! - the bar callback remains available, with a guarded compact-only action,
+//! - the bar action exists in BOTH layouts (wide + compact),
 //! - tray Pause/Resume/Stop route through the EXISTING bar callbacks instead
 //!   of re-implementing session lifecycle,
 //! - tray Quit uses the existing clean `quit_event_loop` path,
@@ -23,7 +23,7 @@ fn read(root: &Path, rel: &str) -> String {
 }
 
 #[test]
-fn hide_action_is_guarded_in_the_compact_window_capsule() {
+fn hide_action_present_in_both_bar_layouts() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let bar = read(root, "ui/overlay_bar.slint");
     assert!(
@@ -34,74 +34,13 @@ fn hide_action_is_guarded_in_the_compact_window_capsule() {
         bar.contains("in property <bool> tray-available: false;"),
         "the hide action must stay unavailable until tray installation succeeds"
     );
-    // Restrict each lookup to its actual braces, not the rest of the file:
-    // a tray chip moved outside either guard must fail this contract.
-    fn block<'a>(source: &'a str, opening: &str) -> &'a str {
-        let rest = source
-            .split_once(opening)
-            .unwrap_or_else(|| {
-                panic!("Hide to tray, compact window capsule, en/ru: missing {opening}")
-            })
-            .1;
-        let mut depth = 1;
-        for (offset, ch) in rest.char_indices() {
-            match ch {
-                '{' => depth += 1,
-                '}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return &rest[..offset];
-                    }
-                }
-                _ => {}
-            }
-        }
-        panic!("Hide to tray, compact window capsule, en/ru: unclosed {opening}");
-    }
-    let window_capsule = block(&bar, "window-capsule := Capsule {");
-    let compact_slot = block(window_capsule, "if root.bar-form == 1 : Rectangle {");
-    let tray_chip = block(compact_slot, "if root.tray-available : BarChip {");
-    let click = tray_chip
-        .split_once("clicked => {")
-        .expect("Hide to tray, compact window capsule, en/ru: guarded tray click")
-        .1;
-    let click = click
-        .split_once('}')
-        .expect("Hide to tray, compact window capsule, en/ru: click handler boundary")
-        .0;
+    let invokes = bar.matches("root.hide-to-tray-clicked();").count();
     assert_eq!(
-        click.split_whitespace().collect::<Vec<_>>(),
-        ["root.dismiss-menu();", "root.hide-to-tray-clicked();"],
-        "Hide to tray, compact window capsule, en/ru: dismiss More before dispatching hide"
+        invokes, 2,
+        "hide-to-tray must be wired in BOTH the wide and compact layouts"
     );
-    assert!(
-        compact_slot.contains("width: 26px;"),
-        "Hide to tray, compact window capsule, en/ru: reserve the 26px tray slot"
-    );
-    assert!(
-        tray_chip.contains("icons/tray.svg"),
-        "Hide to tray, compact window capsule, en/ru: tray icon"
-    );
-    assert!(
-        tray_chip.contains("@tr(\"Hide to tray\")"),
-        "Hide to tray, compact window capsule, en/ru: translated label"
-    );
-    assert_eq!(
-        bar.matches("root.hide-to-tray-clicked();").count(),
-        1,
-        "Hide to tray, compact window capsule, en/ru: one direct hide dispatch"
-    );
-    // pin-icon has the same asset as its fallback; that is not a second
-    // built-in tray chip. Count the chip inside its guarded capsule instead.
-    assert_eq!(
-        tray_chip.matches("icons/tray.svg").count(),
-        1,
-        "Hide to tray, compact window capsule, en/ru: one built-in tray icon"
-    );
-    assert!(
-        bar.contains("callback menu-opened(length, length);"),
-        "More, both bar forms, en/ru: menu callback remains available"
-    );
+    let icons = bar.matches("icons/tray.svg").count();
+    assert_eq!(icons, 2, "both layouts use the shared tray icon");
 }
 
 #[test]

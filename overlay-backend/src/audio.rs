@@ -95,18 +95,33 @@ pub fn list_devices() -> Result<DeviceList> {
     })
 }
 
+fn collect_healthy_device_names(
+    dir: &Direction,
+    names: impl Iterator<Item = Result<String>>,
+) -> Vec<String> {
+    names
+        .filter_map(|name| match name {
+            Ok(name) => Some(name),
+            Err(_) => {
+                log::warn!("audio: skipping unavailable {dir:?} endpoint");
+                None
+            }
+        })
+        .collect()
+}
+
 fn enumerate(dir: &Direction) -> Result<Vec<String>> {
     let coll = device_collection(dir)?;
     let n = coll.get_nbr_devices()?;
-    let mut v = Vec::with_capacity(n as usize);
-    for i in 0..n {
-        let device = coll.get_device_at_index(i).context("read audio endpoint")?;
-        v.push(
+    let v = collect_healthy_device_names(
+        dir,
+        (0..n).map(|i| {
+            let device = coll.get_device_at_index(i).context("read audio endpoint")?;
             device
                 .get_friendlyname()
-                .context("read audio endpoint name")?,
-        );
-    }
+                .context("read audio endpoint name")
+        }),
+    );
     // Warn on duplicate friendly names: find_device_by_name matches on friendly
     // name only, so two identically-named endpoints (e.g. two identical USB
     // headsets) resolve to whichever WASAPI enumerates first — not stable across
@@ -836,6 +851,25 @@ fn resample_and_quantise(input: &[f32], ratio: f64) -> Vec<i16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failing_endpoint_does_not_hide_healthy_devices() {
+        let inputs = collect_healthy_device_names(
+            &Direction::Capture,
+            [
+                Ok("Mic A".to_string()),
+                Err(anyhow!("endpoint unavailable")),
+                Ok("Mic B".to_string()),
+            ]
+            .into_iter(),
+        );
+        assert_eq!(inputs, ["Mic A", "Mic B"]);
+        let outputs = collect_healthy_device_names(
+            &Direction::Render,
+            [Err(anyhow!("name unavailable")), Ok("Speakers".to_string())].into_iter(),
+        );
+        assert_eq!(outputs, ["Speakers"]);
+    }
 
     #[test]
     fn rms_dbfs_silence_and_full_scale() {

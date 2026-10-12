@@ -22,26 +22,38 @@ pub fn prune_old_sessions_with_size_cap(dir: &Path, keep: usize, max_bytes: u64)
         let size = meta.len();
         entries.push((mtime, size, path));
     }
+    Ok(prune_entries(entries, keep, max_bytes, |path| {
+        std::fs::remove_file(path)
+    }))
+}
+
+fn prune_entries(
+    mut entries: Vec<(SystemTime, u64, PathBuf)>,
+    keep: usize,
+    max_bytes: u64,
+    mut remove: impl FnMut(&Path) -> std::io::Result<()>,
+) -> usize {
     entries.sort_by_key(|e| std::cmp::Reverse(e.0));
 
     let mut deleted = 0usize;
     for (_, _, path) in entries.iter().skip(keep) {
-        if let Err(e) = std::fs::remove_file(path) {
+        if let Err(e) = remove(path) {
             log::warn!("failed to prune old session {}: {e}", path.display());
         } else {
             deleted += 1;
         }
     }
 
-    if max_bytes > 0 && entries.len() > deleted {
-        let remaining_count = entries.len().saturating_sub(deleted);
-        let mut total: u64 = entries.iter().take(remaining_count).map(|e| e.1).sum();
+    entries.truncate(keep);
+
+    if max_bytes > 0 {
+        let mut total: u64 = entries.iter().map(|e| e.1).sum();
         if total > max_bytes {
-            for (_, size, path) in entries.iter().take(remaining_count).rev() {
+            for (_, size, path) in entries.iter().rev() {
                 if total <= max_bytes {
                     break;
                 }
-                if let Err(e) = std::fs::remove_file(path) {
+                if let Err(e) = remove(path) {
                     log::warn!("failed to prune session for size {}: {e}", path.display());
                 } else {
                     total = total.saturating_sub(*size);
@@ -51,5 +63,39 @@ pub fn prune_old_sessions_with_size_cap(dir: &Path, keep: usize, max_bytes: u64)
         }
     }
 
-    Ok(deleted)
+    deleted
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failed_count_prune_does_not_delete_recent_sessions_for_size() {
+        let entries = [0, 10, 20, 100, 1]
+            .into_iter()
+            .enumerate()
+            .map(|(i, size)| {
+                (
+                    SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(5 - i as u64),
+                    size,
+                    PathBuf::from(format!("{i}.jsonl")),
+                )
+            })
+            .collect();
+        let mut attempted = Vec::new();
+        let deleted = prune_entries(entries, 3, 50, |path| {
+            attempted.push(path.to_path_buf());
+            if path == Path::new("4.jsonl") {
+                Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied))
+            } else {
+                Ok(())
+            }
+        });
+        assert_eq!(deleted, 1);
+        assert_eq!(
+            attempted,
+            [PathBuf::from("3.jsonl"), PathBuf::from("4.jsonl")]
+        );
+    }
 }

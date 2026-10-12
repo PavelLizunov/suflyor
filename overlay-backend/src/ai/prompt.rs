@@ -94,32 +94,34 @@ pub fn build_request(
     }
 
     if let Some(q) = user_question {
-        prompt.push_str(&format!("Вопрос пользователя:\n{q}\n\n"));
-    }
-
-    if let Some(data_url) = screenshot_data_url {
-        parts.push(ContentPart::ImageUrl {
-            image_url: ImageUrl {
-                url: data_url.to_string(),
-            },
-        });
-        prompt.push_str(
-            "К сообщению приложен скриншот текущего экрана пользователя. \
-             Если вопрос касается содержимого экрана — опирайся на него.",
-        );
+        prompt.push_str("Помоги ответить: ");
+        prompt.push_str(q);
+        prompt.push('\n');
     } else {
         prompt.push_str(
-            "Подскажи пользователю краткий, ёмкий и полезный ответ на последний вопрос/тему.",
+            "На основе последнего вопроса в транскрипте предложи краткий ответ, \
+             который я могу дать. Используй пункты если уместно. Не больше 120 слов.",
         );
     }
+    parts.push(ContentPart::Text { text: prompt });
 
-    if !prompt.is_empty() {
-        parts.push(ContentPart::Text { text: prompt });
+    if let Some(url) = screenshot_data_url {
+        parts.push(ContentPart::ImageUrl {
+            image_url: ImageUrl { url: url.into() },
+        });
     }
 
     messages.push(ChatMessage {
         role: "user".into(),
-        content: MessageContent::Parts(parts),
+        content: if parts.len() == 1 {
+            if let ContentPart::Text { text } = &parts[0] {
+                MessageContent::Text(text.clone())
+            } else {
+                MessageContent::Parts(parts)
+            }
+        } else {
+            MessageContent::Parts(parts)
+        },
     });
 
     messages

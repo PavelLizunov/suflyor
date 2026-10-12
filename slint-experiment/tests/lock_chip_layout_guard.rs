@@ -1,63 +1,22 @@
-//! Keep the auto-tiles switch fixed and the independent AI-off item bare.
-#![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
+//! Keep the deep-lock icon vertically centred when its status label expands the chip.
+#![allow(clippy::expect_used, clippy::panic)]
 
 use std::fs;
 use std::path::Path;
 
 #[test]
-fn auto_tiles_and_ai_off_have_distinct_fixed_slots() {
+fn lock_icon_is_vertically_centred_in_its_expanding_chip() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let ui = fs::read_to_string(root.join("ui/overlay_bar.slint")).expect("read bar");
-    let chip = ui
-        .split_once("component AutotileChip inherits Rectangle {")
-        .expect("chip")
-        .1
-        .split_once("// Capsule children")
-        .expect("chip boundary")
-        .0;
-    assert!(chip.contains("y: (parent.height - self.height) / 2;"));
-    assert!(chip.contains("border-width: 0px;"), "capsule owns outline");
-    assert!(ui.contains("width: root.bar-form == 0 ? 96px : 26px;"));
-    assert!(ui.contains("tight: root.bar-form == 1 || root.bar-form == 2;"));
-    assert!(chip.contains("min-width: 26px;"));
-    assert!(!chip.contains("min-width: 30px;"));
-    assert!(chip.contains("if !root.tight : Text {"));
-    assert!(chip.contains("text: root.label;"));
+    let ui =
+        fs::read_to_string(root.join("ui/overlay_bar.slint")).expect("read ui/overlay_bar.slint");
+    let lock_chip = ui
+        .split("component LockChip inherits Rectangle {")
+        .nth(1)
+        .and_then(|source| source.split("// Active-indicator chip:").next())
+        .expect("find LockChip component");
+
     assert!(
-        !chip.contains("root.deep"),
-        "unloaded AI must not replace the switch"
+        lock_chip.contains("y: (parent.height - self.height) / 2;"),
+        "LockChip's lock image must stay vertically centred when the deep-lock label is visible"
     );
-    for word in ["silent", "questions", "everything"] {
-        assert!(chip.contains(&format!("@tr(\"{word}\")")));
-    }
-    let indicator = ui
-        .split_once("if root.deep-lock : PinChip {")
-        .expect("AI off")
-        .1
-        .split_once("if root.timer-active && root.session-name")
-        .expect("next footer item")
-        .0;
-    assert!(indicator.contains("width: 70px;"));
-    assert!(indicator.contains("@image-url(\"../assets/icons/lock.svg\")"));
-    assert!(indicator.contains("label: @tr(\"AI off\"); a11y: root.lock-a11y;"));
-    assert!(indicator.contains("tint: Theme.on-tint(Theme.danger); weight: 600;"));
-    assert!(indicator.contains("root.local-ai-mode-selected(0)"));
-    assert!(!indicator.contains("compact-bar"), "present in both forms");
-    let bare = ui
-        .split_once("component PinChip")
-        .expect("bare chip")
-        .1
-        .split_once("component MoreChip")
-        .expect("bare boundary")
-        .0;
-    assert!(!bare.contains("border-width"));
-    // At rest a second-row chip has no fill: the only background is hover/press feedback.
-    assert_eq!(
-        bare.matches("background:").count(),
-        1,
-        "one background binding"
-    );
-    assert!(bare.contains("background: pin-touch.pressed ? Theme.tint(Theme.accent)"));
-    assert!(bare
-        .contains(": pin-touch.has-hover ? Theme.border-strong.with-alpha(0.22) : transparent;"));
 }

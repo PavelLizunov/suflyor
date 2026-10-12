@@ -1,12 +1,12 @@
 # Codex handoff — master
 
-Updated 2026-10-11 (open-work section only; the rest dates from 2026-09-01). Read `AGENTS.md` before acting.
+Updated 2026-10-12 (operational state and open-work section only; the rest dates from 2026-09-01). Read `AGENTS.md` before acting.
 
 ## Current operational state — master
 
 - Branch: `master`
 - Latest published stable release: `v0.38.0`
-- Latest published prerelease: `v0.38.1-rc.6` (the bar redesign; `docs/release-notes-v0.38.1-rc.6.md`)
+- Latest published prerelease: `v0.38.1-rc.7` (the bar of rc.5; see the note below)
 - Active master handoff: none
 - Post-release maintenance may be newer than the stable tag; inspect Git before acting.
 
@@ -19,46 +19,24 @@ Operational note: Windows jobs follow
 because SSH or a terminal disconnected. macOS builds and live QA run only on
 `mm4`; Windows compilation and the repository gate run only on `winbrat`.
 
-## The bar redesign (2026-10-11, design phase D-3, released in v0.38.1-rc.6)
+## Bar redesign withdrawn (2026-10-12)
 
-The overlay bar was rebuilt on the branch `claude/bar-capsules`: capsule layout around the
-mascot, sizes declared in `slint-experiment/ui/bar_spec.slint`, three forms (full 874,
-compact 586, mini 408) chosen by the monitor's work-area width (`src/bar_form.rs`), a "more"
-menu window (`ui/bar_menu.slint`, `src/bin/overlay_host/bar_menu.rs`) with pinning to the
-second row (`bar_pins`), one auto-tiles switch over the existing `suppress_tiles` and
-`auto_tile_every_line` flags (`src/autotile.rs`), and the bar's position remembered per
-monitor (`bar_positions`). The owner approved the look and the composition step by step from
-Slint renders; the code was written by gpt-sol workers from briefs and built, gated and
-checked live by the lead.
+Pull request #253 (capsule bar, released as `v0.38.1-rc.6`) is reverted on master. The owner
+tested rc.6 in real use and rejected it: lost and moved functions, empty areas that cannot be
+clicked, no drag handle, errors in the Russian text, and a bar that does not match the menus
+and the tiles. The gate, 1122 tests and the capture matrix had all passed, so those checks do
+not prove that the bar works for a person. The revert is one commit; the branch history of
+#253 stays in Git for reference. Any new bar work starts from the owner's list of what broke
+and is shown to the owner as an installable build before it reaches master.
 
-Checked on the Windows worker at the gated commit: the gate (47 test binaries, 1122 tests,
-0 failed), every action of the old bar through its new route (25 cases plus tray, restart
-and quit), 13 global hotkeys with a stand-in AI endpoint, both languages in four schemes,
-form selection by changing the display resolution, position memory with a real mouse drag.
+## Regressions against v0.38.0 (2026-10-12)
 
-Not checked live, because the worker has no audio device, no local model and runs at 100 %
-scale: a session with real audio, the hold-to-record gestures, the stealth-failure blink, the
-"AI off" indicator, Windows scale above 100 %, a second monitor, the mini form at true size,
-macOS beyond CI compilation. The release notes ask the owner to check these first.
-
-Lessons that cost time and belong in every future UI task:
-
-- A green gate is not a look. From step 4a the state capsule (stealth, mic, system audio)
-  was drawn under the session capsule and every test passed; it was found on a capture.
-  In Slint a child with an explicit size inside a non-layout parent is centred unless `x`
-  and `y` are set. `tests/overlay_bar_geometry.rs` now checks order, separation and
-  hit-testing in all three forms. Look at a capture of every form after each step.
-- In testing-backend tests, create a component before `select_bundled_translation`, and walk
-  the element tree after changing a property that drives `if` children before reading
-  positions or layout-derived properties.
-- The Slint MCP list keeps closed windows as visible, and a check that starts a new process
-  takes the focus and closes a popup. Test focus-sensitive windows from one interactive
-  script that both clicks and enumerates windows.
-
-Open after this work: keyboard navigation and visible focus for the bar and its menus
-(audit finding, owner decision pending), hotkey rebinding in the "more" menu (design approved,
-not started), the tile redesign (Slint prototype shown to the owner, no code), ledger D-034
-to D-050 (defects of the tile, the transcript and the archive found by code maps, none fixed).
+The owner works on stable `v0.38.0` and treats everything after it as suspect. A review of
+`v0.38.0..HEAD` plus a function-by-function script comparison of the split modules found
+regressions from rc.3 and rc.4; `docs/release-notes-v0.38.1-rc.7.md` lists the ones restored.
+Slint is 1.17.1 again (ledger D-018 reopened). Owner decisions of that day: no design work;
+the fast gate for every change and prerelease, the full gate only before a stable release;
+before a build is shown, every scrolling surface is scrolled to its end with a real mouse wheel.
 
 ## State of master after the hygiene pass (2026-10-10)
 
