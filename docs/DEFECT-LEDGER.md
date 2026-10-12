@@ -232,6 +232,7 @@ Evidence: slint-experiment/src/bin/overlay_host/settings_updates.rs:47 - `set_up
 Scenario: the English interface shows Russian status lines in Updates, local AI, Hermes, diagnostics, memory and the transcript window; the Russian interface shows English ones in the connection tests, import and export, and the wizard (`[err] no Groq API key set`). A comment in transcript.rs says Rust-built Russian is allowed, so part of this is a recorded choice, not an oversight.
 Found by: script over the sources on 2026-10-11; the wizard and tile cases were also seen live.
 Fix plan: one helper per module in the style of `status_copy.rs` and `tile_text.rs`, and a guard test that fails on a literal with letters passed to a setter. The same pass can replace the 118 `[ok]` / `[err]` / `[--]` markers by a state the UI draws.
+Addition 2026-10-11 (T6/R5/A6): the code-level map of the tile, transcript and archive windows finds the same defect; a second independent reading confirms it. These additional cases have NOT been reproduced live. Evidence at master 2a7c08d3165243093c15c637d2c9cd19f59be4d7: slint-experiment/src/bin/overlay_host/tile_followup.rs:235,267,275,282,696 sets status literals without a locale check; slint-experiment/src/bin/overlay_host_windows.rs:3102 and slint-experiment/src/bin/overlay_host/tile_controller.rs:849 do the same, and slint-experiment/ui/tile.slint:395 displays `root.source-label` unchanged. slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs:542,574 sets Russian speaker labels, and :658,707,1092,1100 sets speaker-detection status or error text without a locale check. slint-experiment/src/bin/overlay_host/aux_windows/archive.rs:573,594,626-629,726 builds summary status, error text and titles in one language. The selected interface language does not change these strings. Extend the module language helpers; the transcript error styling is a separate defect, D-049.
 
 ### D-031 Shift+Alt+1 with no selected text does nothing visible   Severity: P3   Status: Closed
 Evidence: log of the run: `Shift+Alt+1 — read selection (clipboard)` then `sa1: copied 0 chars from selection`; no window, no status change
@@ -252,6 +253,110 @@ Scenario: the user deletes the running session, or a delete fails, or asks for a
 Found by: read in source on 2026-10-11 after "Regenerate name" on a session without a transcript showed nothing in a live run on windows-worker. The four messages were not reproduced live.
 Fix plan: a notice line of its own, shown when no job runs, in both languages.
 Closed by: #251, master 84a4173939f2f165d6e99e389dd4eb4dfdff1550; not released yet
+
+### D-034 Failed memory saves dismiss the tile and transcript editors   Severity: P2   Status: Open
+Evidence: slint-experiment/src/bin/overlay_host/tile_copy.rs:324 - `let _ = store_note(verbatim, None, "none");` discards the failure returned at :351-360; :450-458 clears marks after saving, and :563-565 clears pending capture and text regardless of success. slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs:149-175,221-223 calls the same helper and clears the editor state. slint-experiment/ui/tile.slint:898 shows the editor only while a mark or pending capture exists.
+Scenario: the user approves an edited memory note while the store cannot open or write. The save fails, but the editor closes and the approved edits are no longer available there for retry.
+Found by: code-level map of the tile and transcript windows on 2026-10-11 (T2/R3); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: return save success from the shared helper and clear marks, pending capture and edited text only after success in both windows.
+
+### D-035 A failed initial push-to-talk transcription leaves the tile busy   Severity: P2   Status: Open
+Evidence: slint-experiment/src/bin/overlay_host/tile_ptt.rs:144 - `tile.set_followup_busy(true);`; :311-344 calls `ptt_tile_error` and returns for empty recognition or an STT error, but the helper at :54-71 does not clear busy. The per-tile stream sink is constructed only at :398. slint-experiment/src/bin/overlay_host/tile_controller.rs:821-851 clears only the shared streaming slot on session stop.
+Scenario: the first push-to-talk request recognizes no speech or fails transcription. The tile shows an error but follow-up remains disabled; stopping the session does not repair this independent tile through the shared-slot handler.
+Found by: code-level map of the tile window on 2026-10-11 (T4); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: clear follow-up busy in `ptt_tile_error` on every transcription failure.
+
+### D-036 Copy all omits transcript utterances beyond the display limit   Severity: P2   Status: Open
+Evidence: slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs:453 - `const TRANSCRIPT_DISPLAY_CAP: usize = 2000;`; :1249 applies the cap before :1260 builds `utts_display`, which :1301,1338 passes to the action handlers. The copy handler at :275-289 formats only that vector. slint-experiment/ui/transcript.slint:846 says to use Copy all for the full transcript.
+Scenario: a session contains more than 2,000 utterances. Copy all exports only the display subset, despite the footer promising the full transcript. The remaining utterances stay in storage but are omitted from this export.
+Found by: code-level map of the transcript window on 2026-10-11 (R1); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: pass the full utterance vector separately to Copy all while retaining the display-vector mapping for checked rows and playback.
+
+### D-037 Direct tile creation bypasses the sixteen-window limit   Severity: P2   Status: Open
+Evidence: slint-experiment/src/bin/overlay_host_windows.rs:1922,1925-1929 defines the sixteen-tile cap and applies it only after receiving a queued request. slint-experiment/src/bin/overlay_host/tile_ask.rs:541, slint-experiment/src/bin/overlay_host/read_aloud.rs:163 and slint-experiment/src/bin/overlay_host/aux_windows/archive.rs:932 push tiles directly. slint-experiment/src/bin/overlay_host/window_lifecycle.rs:439-449 updates the count without eviction.
+Scenario: the user opens tiles through direct creation paths. The live window count can exceed sixteen without evicting the oldest tile. A freeze is not established.
+Found by: code-level map of the tile window on 2026-10-11 (T1); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: apply the existing eviction policy at every tile registration through a shared registration path.
+
+### D-038 Busy tile menu actions close the menu without acting   Severity: P2   Status: Open
+Evidence: slint-experiment/ui/tile.slint:60-92 gives menu rows no disabled state; :495-518 shows Regenerate and Smart cloud but suppresses their callbacks while `followup-busy`, then closes the popup. slint-experiment/src/bin/overlay_host/tile_ask.rs:424,506 and slint-experiment/src/bin/overlay_host/tile_followup.rs:353 allow busy tiles to expose these actions.
+Scenario: the user opens the menu while an answer is in progress and clicks Regenerate or Smart cloud. The row looks actionable, but the popup closes without dispatching the request.
+Found by: code-level map of the tile window on 2026-10-11 (T3); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: bind disabled appearance and interaction to follow-up busy instead of silently accepting the click.
+
+### D-039 Whole-answer selection cannot request memory capture   Severity: P2   Status: Open
+Evidence: slint-experiment/ui/tile.slint:877-892 uses a read-only `TextEdit` with copy and select-all handling but no capture callback. slint-experiment/ui/controls.slint:131-139 connects Add selection to memory only in `SelectableText`. slint-experiment/src/bin/overlay_host/tile_copy.rs:482-484 supports the whole-answer buffer through a negative block index.
+Scenario: the user selects text across answer blocks in whole-answer selection mode. The selected text can be copied, but the field has no action that sends it to the memory approval editor.
+Found by: code-level map of the tile window on 2026-10-11 (T5); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: connect the field's selection offsets to the existing capture callback with the whole-answer block index.
+
+### D-040 Tile views hide wide code and the tail of selection text   Severity: P2   Status: Open
+Evidence: slint-experiment/ui/tile.slint:781 clips the code container and :833 uses `wrap: no-wrap`; slint-experiment/src/bin/overlay_host/tile_window.rs:161 expands the tile to 800 pixels wide. slint-experiment/src/bin/overlay_host/tile_copy.rs:626 sets a 12,000-byte limit, applied at :648-652. The separate code-copy handler at :290-317 copies the complete code string.
+Scenario: code lines exceed the expanded tile width, or the whole-answer selection buffer exceeds 12,000 bytes. The views omit the code's right edge or the selection tail. The selection buffer appends an ellipsis, but does not state its limit; complete code remains available through code-block copy. Permanent source-data loss is not established.
+Found by: code-level map of the tile window on 2026-10-11 (T8); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: add horizontal code scrolling and state the selection-buffer limit without truncating the underlying answer.
+
+### D-041 Long transcript utterances have no expansion action   Severity: P2   Status: Open
+Evidence: slint-experiment/ui/transcript.slint:698-699 caps each row at 120 pixels and clips it; :754-797 provides text selection and marking but no expansion action. slint-experiment/ui/controls.slint:118 sizes `SelectableText` to its preferred text height. slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs:1260,1272 retains the utterance text for the display and copy paths.
+Scenario: an utterance needs more than 120 pixels of height. Its ending is hidden in the transcript row, with no way to expand that row, although the text remains copyable.
+Found by: code-level map of the transcript window on 2026-10-11 (R2); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: offer row expansion or a scrollable utterance detail view.
+
+### D-042 Transcript audio controls silently reject loading and initial seeking   Severity: P2   Status: Open
+Evidence: overlay-backend/src/session_audio.rs:124 checks file existence, while :89-93 requires at least one readable recording channel. slint-experiment/src/bin/overlay_host/transcript_player.rs:438 returns false on load failure. slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs:373-380 has no failure branch for Play, and :398 wires seeking directly to `seek_fraction`. slint-experiment/src/bin/overlay_host/transcript_player.rs:475-482 seeks only when a player already exists.
+Scenario: recording files exist but neither channel is readable, or the user seeks before the player loads. Play or seek does nothing without an explanation; the Play failure does not clear the audio-available state. One readable channel is enough for loading, so a single unreadable channel does not establish this failure.
+Found by: code-level map of the transcript window on 2026-10-11 (R4); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: show a load failure and ensure the session player exists before seeking.
+
+### D-043 Transcript copy feedback acknowledges both actions   Severity: P2   Status: Open
+Evidence: slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs:32 sets one `copied` flag and :36 clears it. slint-experiment/ui/transcript.slint:330,355 uses that flag for both Copy all and Copy selected. slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs:310-311 returns without feedback when no rows are checked.
+Scenario: either copy action succeeds and both buttons say Copied, including the action the user did not perform. Copy selected remains clickable with no checked rows and then gives no feedback.
+Found by: code-level map of the transcript window on 2026-10-11 (R6); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: track acknowledgment per copy action and disable Copy selected when no rows are checked.
+
+### D-044 Archive query failures appear as empty results   Severity: P2   Status: Open
+Evidence: slint-experiment/src/bin/overlay_host/aux_windows/archive.rs:137,187,198 converts list and search failures to empty vectors with `unwrap_or_default()`. slint-experiment/ui/archive.slint:87,95 starts with empty results and unavailable false; :325-328 displays the empty-state message. slint-experiment/src/bin/overlay_host/aux_windows/archive.rs:154-155 separately marks a failed store open unavailable.
+Scenario: an archive list or search query fails, or the initial list is still loading. The window reports no archived sessions or no matches rather than a query error or loading state. A store-open failure is handled separately and is not part of this claim.
+Found by: code-level map of the archive window on 2026-10-11 (A1); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: distinguish loading, query failure and successful empty results.
+
+### D-045 Archive browsing stops at 300 sessions without a notice   Severity: P2   Status: Open
+Evidence: slint-experiment/src/bin/overlay_host/aux_windows/archive.rs:107 sets `ARCHIVE_LIST_CAP` to 300; :138 counts every session, :144 caps displayed rows, and :158 sets the heading to the full count. :187-191 reapplies the cap when the search field is empty. slint-experiment/ui/archive.slint:318-552 has no overflow notice or paging action.
+Scenario: the archive contains more than 300 sessions. The heading counts them all, but browsing shows only the first 300 and gives no explanation for the missing rows. Search remains available.
+Found by: code-level map of the archive window on 2026-10-11 (A2); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: disclose the browsing limit and offer paging or guidance to find older sessions with search.
+
+### D-046 Archive name generation allows overlapping jobs   Severity: P2   Status: Open
+Evidence: slint-experiment/ui/archive.slint:396-400 leaves Regenerate name enabled during generation. slint-experiment/src/bin/overlay_host/aux_windows/archive.rs:346-347 spawns a request on every eligible click and :361-365 saves its result. slint-experiment/src/session_namer.rs:187-211 runs the completion without a generation latch.
+Scenario: the user requests a new name more than once before a prior request finishes. Jobs overlap and their completion order determines the saved name, so an earlier request can overwrite a later result.
+Found by: code-level map of the archive window on 2026-10-11 (A3, generation); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: latch name generation for the session and disable its action until that job ends.
+
+### D-047 A failed archive rename dismisses the editor   Severity: P2   Status: Open
+Evidence: overlay-backend/src/session_names.rs:95-101 logs persistence failure without returning it. slint-experiment/src/bin/overlay_host/aux_windows/archive.rs:278-288 calls that helper, sets `renaming-index` to -1 and refetches the list. :1063 reads the displayed name back from storage.
+Scenario: the user submits a typed session name and the write fails. The editor closes without reporting failure and the row reloads its stored name, leaving no editing state for retry.
+Found by: code-level map of the archive window on 2026-10-11 (A3, rename); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: propagate persistence failure and retain the rename editor and typed name until saving succeeds.
+
+### D-048 Archive retranscription does not update the transcript view   Severity: P2   Status: Open
+Evidence: overlay-backend/src/re_transcribe.rs:277-281 returns fresh transcript lines, and :298-305 passes them to summary generation. overlay-backend/src/runtime.rs:275-359 persists summary sources in a conspect, not catalog utterances. slint-experiment/src/bin/overlay_host/aux_windows/archive.rs:651 refreshes archive rows, but :503-507 still opens the transcript from catalog utterances.
+Scenario: retranscription builds a summary from fresh recognition. Opening the session transcript afterward still shows the prior catalog utterances, so the summary and transcript view use different sources. This does not establish that the summary is incorrect.
+Found by: code-level map of the archive window on 2026-10-11 (A5); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: preserve and expose a versioned retranscript without overwriting the original live timestamps.
+
+### D-049 Transcript speaker errors use the progress text style   Severity: P3   Status: Open
+Evidence: slint-experiment/src/bin/overlay_host/aux_windows/transcript.rs:658,707 sends speaker-detection failures to `diar-status`. slint-experiment/ui/transcript.slint:557-562 draws the same status property for progress and errors with `color: Theme.text-muted` and no failure state.
+Scenario: speaker detection fails or its result cannot be saved. The error appears with the same style as progress rather than a failure state. The untranslated text is part of D-030, not a second localization entry.
+Found by: code-level map of the transcript window on 2026-10-11 (R5, styling); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: expose a failure state separately from progress and bind its text style to the theme's failure role.
+
+### D-050 Archive Delete text bypasses theme foreground roles   Severity: P3   Status: Open
+Evidence: slint-experiment/ui/archive.slint:625-627 uses `Theme.danger` for the Delete background, but :635 sets its text to `#ffffff`. slint-experiment/ui/theme.slint:48 changes the danger colour by scheme.
+Scenario: the user changes the theme scheme. Delete keeps white text on every danger fill instead of using a theme-owned foreground role. A contrast failure is not measured.
+Found by: code-level map of the archive window on 2026-10-11 (A6, colour); confirmed by a second independent reading and citation checks against master 2a7c08d3165243093c15c637d2c9cd19f59be4d7. NOT reproduced live.
+Fix plan: use a reviewed danger-foreground role for the button text.
+
+Needs a live check (not defect entries): T7 - render minimum-size tiles in both locales at high DPI with editor, player and dialog visible, then exercise the controls; R7 - render the transcript at 480 by 320 in both locales at high DPI with eight speakers, warning, status, editor and player, then check scrolling and hit targets; A7 - start a disposable session during pending reindex and inspect whether its active row and stale delete guard become reachable, without deleting it; A8 - render the archive at 480-pixel width in both locales at high DPI with all row actions and a long confirmation title, then check the action hit targets.
 
 ## Imported from the Grok audit (docs/audit-grok/, master 37c1230)
 

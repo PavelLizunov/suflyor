@@ -1,12 +1,12 @@
 # Codex handoff — master
 
-Updated 2026-10-11 (open-work section only; the rest dates from 2026-09-01). Read `AGENTS.md` before acting.
+Updated 2026-10-12 (operational state and open-work section only; the rest dates from 2026-09-01). Read `AGENTS.md` before acting.
 
 ## Current operational state — master
 
 - Branch: `master`
 - Latest published stable release: `v0.38.0`
-- Latest published prerelease: `v0.38.1-rc.5`
+- Latest published prerelease: `v0.38.1-rc.7` (the bar of rc.5; see the note below)
 - Active master handoff: none
 - Post-release maintenance may be newer than the stable tag; inspect Git before acting.
 
@@ -18,6 +18,16 @@ Operational note: Windows jobs follow
 [`docs/winbrat-recovery.md`](winbrat-recovery.md). Never start a duplicate job
 because SSH or a terminal disconnected. macOS builds and live QA run only on
 `mm4`; Windows compilation and the repository gate run only on `winbrat`.
+
+## Bar redesign withdrawn (2026-10-12)
+
+Pull request #253 (capsule bar, released as `v0.38.1-rc.6`) is reverted on master. The owner
+tested rc.6 in real use and rejected it: lost and moved functions, empty areas that cannot be
+clicked, no drag handle, errors in the Russian text, and a bar that does not match the menus
+and the tiles. The gate, 1122 tests and the capture matrix had all passed, so those checks do
+not prove that the bar works for a person. The revert is one commit; the branch history of
+#253 stays in Git for reference. Any new bar work starts from the owner's list of what broke
+and is shown to the owner as an installable build before it reaches master.
 
 ## State of master after the hygiene pass (2026-10-10)
 
