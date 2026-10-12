@@ -25,6 +25,7 @@ import {
     IconSlot, BrandHeaderMark, DarkCheck, SettingsCard,
     SettingsComboBox, SettingsLineEdit, SettingsSlider,
     NavGroupHeader, NavItem
+    WrapBlock,
 } from "settings_controls.slint";
 export { DarkCheck }
 
@@ -2668,7 +2669,7 @@ export component SettingsWindow inherits Window {
                                     root.ai-local-thinking-changed(v);
                                 }
                             }
-                            if !Platform.is-macos : VerticalLayout {
+                            if !Platform.is-macos : WrapBlock {
                             spacing: 6px;
                             // ----- bundled local model: 4B / 12B / 26B -----
                             Rectangle { background: Theme.border; height: 1px; }
@@ -2789,7 +2790,7 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
-                            if root.managed-local-server : VerticalLayout {
+                            if root.managed-local-server : WrapBlock {
                                 spacing: 6px;
                                 vertical-stretch: 0;
                                 Text {
@@ -3335,7 +3336,7 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        if !Platform.is-macos && root.vision-provider-index == 6 : VerticalLayout {
+                        if !Platform.is-macos && root.vision-provider-index == 6 : WrapBlock {
                             spacing: Metrics.space-sm;
                             Text {
                                 text: @tr("Choose a separate Codex model for screenshots. Only account models that advertise image input are shown.");

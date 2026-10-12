@@ -113,6 +113,20 @@ export component SettingsCard inherits Rectangle {
     }
 }
 
+// A conditional or repeated group of rows that contains wrapped text. A plain
+// VerticalLayout in that place reports the height of its text as one line, so
+// the control after the group overlaps it; the binding below reads the height
+// at the real width, as SettingsCard does.
+export component WrapBlock inherits Rectangle {
+    in property <length> spacing: Metrics.space-sm;
+    min-height: block-content.preferred-height;
+    preferred-height: block-content.preferred-height;
+    block-content := VerticalLayout {
+        spacing: root.spacing;
+        @children
+    }
+}
+
 export component SettingsComboBox inherits ComboBox {
     height: 32px;
 }
