@@ -84,7 +84,8 @@ wasapi = "0.25"
 # Local Whisper goes through the existing reqwest client (whisper.cpp server),
 # so we deliberately DON'T enable the whisper-cpp feature (avoids a libclang
 # build-dep on the whole project).
-transcribe-rs = { version = "0.3.11", default-features = false, features = ["onnx", "ort-directml"] }
+transcribe-rs = { version = "=0.3.11", default-features = false, features = ["onnx", "ort-directml"] }
+ort = "=2.0.0-rc.9"
 
 # Text-to-speech (tts.rs, read-aloud feature) — Windows SAPI 5 ISpVoice via the
 # official Win32 binding, feature-gated to just the Speech + COM namespaces it
@@ -113,7 +114,8 @@ windows-core = "0.62"
 # The same in-process GigaAM-v3 model runs on Apple Silicon through ONNX
 # Runtime's Core ML execution provider, with CPU as the built-in fallback.
 [target.'cfg(target_os = "macos")'.dependencies]
-transcribe-rs = { version = "0.3.11", default-features = false, features = ["onnx", "ort-coreml"] }
+transcribe-rs = { version = "=0.3.11", default-features = false, features = ["onnx", "ort-coreml"] }
+ort = "=2.0.0-rc.9"
 
 # macOS-only BUILD dependency — compiles the tiny Objective-C AVAudioEngine
 # microphone bridge (native/macos/mic_capture.m) via build.rs. No new runtime
