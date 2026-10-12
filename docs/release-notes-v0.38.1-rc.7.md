@@ -14,7 +14,7 @@ The owner tested v0.38.1-rc.6 in real use and rejected it: some functions stoppe
 
 ## Kept from after v0.38.1-rc.5
 
-- The archive shows the result of saving and deleting a session (pull request #251).
+- A request that cannot act says so: the archive shows its notices, and Shift+Alt+1 without a selection reports that nothing is selected (pull request #251).
 
 ## Installers
 
