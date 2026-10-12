@@ -654,7 +654,7 @@ export component TileWindow inherits Window {
             if !root.select-mode : ScrollView {
                 vertical-stretch: 1;
                 horizontal-stretch: 1;
-                content-width: self.width;
+                viewport-width: self.width;
                 min-height: 0px; // RS2: scroll inside the fixed tile, never grow the window (see below)
                 VerticalLayout {
                     spacing: Metrics.space-xs;
