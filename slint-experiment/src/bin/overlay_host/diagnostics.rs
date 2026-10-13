@@ -221,8 +221,20 @@ fn labelled_secret(rest: &str, mid_word: bool) -> Option<(&'static str, usize)> 
     if let Some(len) = labelled_secret_len(rest, "bearer") {
         return Some(("Bearer <redacted>", len));
     }
-    let len = labelled_secret_len(rest, "x-api-key")?;
-    Some(("x-api-key: <redacted>", len))
+    if let Some(len) = labelled_secret_len(rest, "x-api-key") {
+        return Some(("x-api-key: <redacted>", len));
+    }
+    if let Some(len) = labelled_secret_len(rest, "api_key") {
+        return Some(("api_key: <redacted>", len));
+    }
+    if let Some(len) = labelled_secret_len(rest, "api-key") {
+        return Some(("api-key: <redacted>", len));
+    }
+    if let Some(len) = labelled_secret_len(rest, "groq_api_key") {
+        return Some(("groq_api_key: <redacted>", len));
+    }
+    let len = labelled_secret_len(rest, "password")?;
+    Some(("password: <redacted>", len))
 }
 
 /// Byte length of `label`, what separates it from its value, and the value. Between the two
@@ -1089,6 +1101,21 @@ mod tests {
         ] {
             let redacted = redact_secrets(sample);
             assert!(!redacted.contains("secret_value_123"), "leaked from {sample:?}: {redacted}");
+        }
+    }
+
+    #[test]
+    fn redact_secrets_masks_additional_credential_labels() {
+        for (sample, expected_sub) in [
+            ("api_key: secret_value_123", "api_key: <redacted>"),
+            ("api_key=\"secret_value_123\"", "api_key: <redacted>"),
+            ("api-key=secret_value_123", "api-key: <redacted>"),
+            ("groq_api_key: secret_value_123", "groq_api_key: <redacted>"),
+            ("password: secret_value_123", "password: <redacted>"),
+        ] {
+            let redacted = redact_secrets(sample);
+            assert!(!redacted.contains("secret_value_123"), "leaked from {sample:?}: {redacted}");
+            assert!(redacted.contains(expected_sub), "missing mask in {sample:?}: {redacted}");
         }
     }
 
