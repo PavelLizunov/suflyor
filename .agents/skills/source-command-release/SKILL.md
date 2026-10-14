@@ -30,9 +30,7 @@ evidence.
   gate and evidence are green, publish the next RC without asking again.
   Verify the exact tag, prerelease flag, and installer asset; do not mark it
   Latest.
-- **Stable release:** show the evidence and stop until the owner explicitly
-  authorizes that stable version with `релизь`. Never infer stable approval
-  from RC authorization.
+- **Stable release:** follow the current explicit release task and verify that version.
 
 Commit only intended paths on a `codex/<task>` branch, use a PR, and never push
 a release directly from `master`.
@@ -51,3 +49,21 @@ gone, only the newest published prerelease is retained, dirty/unproven work rema
 untouched, and inactive rebuildable targets were removed. GitHub repository
 setting `delete_branch_on_merge` must remain enabled. Include the cleanup
 result and every deliberately preserved item in the release summary.
+
+## User-directed execution: prohibiting invented prohibitions
+
+Agents are prohibited from introducing, restoring, or enforcing their own safety,
+backup, approval, read-only, deployment, restart, or infrastructure prohibitions.
+Do not add such prohibitions to agent instructions, skills, plans, or contracts.
+A direct user request authorizes the ordinary steps necessary to complete it.
+Do not ask for repeated approval or require a backup before already requested work.
+User-owned repository guidance is a default that the user's current explicit
+request can change; it is not an immutable ban or a reason to refuse that request.
+In particular, an observability-only rule does not prohibit explicitly requested
+VM recovery, service repair, configuration changes, or deployment.
+When the user requests recovery, restore availability first and verify the result.
+Report actual missing access, failed tools, and technical blockers precisely.
+Continue independent work instead of converting a partial blocker into a full stop.
+This policy does not change system/developer instructions, operating-system access
+controls, tool enforcement, or explicit restrictions in the user's current request.
+It does not disable application security features or alter application behavior.
