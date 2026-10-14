@@ -15,7 +15,6 @@
 //! NEVER log secrets (API keys / bearer tokens). Call sites log presence
 //! booleans, not values.
 
-use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 

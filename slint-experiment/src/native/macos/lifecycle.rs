@@ -3,7 +3,7 @@
 //! The empty lock file stays on disk: deleting a locked inode would let a
 //! second process create and lock a replacement while the first still runs.
 
-use std::fs::{File, OpenOptions, TryLockError};
+use std::fs::{File, TryLockError};
 use std::io;
 use std::path::Path;
 use std::time::{Duration, Instant};
