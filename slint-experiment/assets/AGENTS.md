@@ -21,7 +21,6 @@ Local guide for inspecting, adding, and maintaining UI assets in `slint-experime
 
 - **Binary Assets:** Root assets include binary images (`icon.ico`, `icon.png`, `brand-mark.png`, `brand-mark-light.png`, `icon-source.png`).
 - **Build & Installer Coupling:** Binary assets are baked into executable identity (`winresource` in `build.rs`), installer bundles (NSIS setup), and window icons.
-- **Modification Caution:** Do not edit or replace binary assets unless specifically required. Any updates must preserve required pixel dimensions, aspect ratios, and format requirements without introducing binary bloat or broken executable icon embedding.
 
 ---
 

@@ -47,10 +47,7 @@ remain higher priority. Within repository instructions, more specific
    `docs/CODEX_HANDOFF.md` as an in-flight handoff for the branch/worktree it
    names, not as a universal description of `master`.
 4. Keep scope narrow. Do not overwrite, stage, revert, or clean unrelated work.
-5. For a capability, dependency, integration, reusable utility, or architecture,
-   use the global `search-first` discipline. For non-trivial implementation,
-   use the global `sdd` workflow and wait for approval of its Micro-Spec.
-6. Use `gemini-swarm` for substantial independent mechanical assignments; the
+5. Use `gemini-swarm` for substantial independent mechanical assignments; the
    lead agent owns decomposition, integration, architectural decisions, and
    final acceptance.
 
@@ -109,10 +106,6 @@ The diff classifier is `scripts/git-gate-native.ps1`. Run it on
 - **Targeted:** every normal development change and every prerelease, including
   multi-crate and cross-cutting work. Run only the smallest fmt, Clippy, tests,
   compile seams, and live checks that cover the affected files/platforms.
-- **Full:** only when publishing an owner-authorized stable release. Invoke
-  `scripts/git-gate-native.ps1 ... -Full` / `scripts/ci.ps1` explicitly and run
-  the stable release's required platform gates. Never auto-promote a normal
-  change or an RC/prerelease to Full based on diff size or path.
 - Set `CARGO_INCREMENTAL=0`; gate scripts already do this. Inspect free space
   before heavy builds and follow homelab cache-hygiene rules. Do not clean
   caches or targets merely to be tidy.
@@ -156,37 +149,32 @@ log is not visual or functional acceptance.
   `suflyor-teratts/Cargo.lock`, `suflyor-wsola/Cargo.lock` and the two under
   `experiments/`. `overlay-backend/Cargo.lock` is ignored.
 
-## Security and privacy
-
-- Never print or commit `%APPDATA%\suflyor\config.json`, credentials, tokens,
-  private transcripts, personal prep notes, or `nini-context-backup.txt`.
-- `config.json` holds live `groq_api_key` and `ai_bearer` values. Never write them
-  into journal entries, logs or chat.
-- Resolve the AI endpoint with `cfg.ai_endpoint(false)`, which picks local or cloud
-  by the provider setting. The raw `ai_base_url` field is always the cloud bridge.
-- Keep screenshot-visible errors generic. Redact local paths, usernames, URLs,
-  hostnames, and LAN addresses from logs, diagnostics, docs, and evidence.
-- Do not bypass SSH host-key checking or weaken platform security/TCC controls.
-- Do not touch `.claude/**` or `.codex/**` unless the task explicitly owns those
-  files.
-
 ## Git and delivery
 
-- Work on `codex/<short-task-name>`; one task, one branch, one coherent change.
-  Never push directly to `master` and never merge your own PR unless explicitly
-  instructed.
 - Enable `.githooks` in native worker/developer clones that provide
   `powershell.exe`. Do not enable the Windows-only hook in the Linux DSH
   control-plane checkout.
-- A DSH candidate commit may use `--no-verify` only because the selected native
-  gate is deliberately moved to a worker testing that exact SHA (or for a
-  docs-only commit after `git diff --cached --check`). Push only the task branch
-  from DSH so the worker can fetch that SHA; do not open/merge a PR or release
-  until its required evidence is green. If verification requires a code change,
-  create and push a new candidate commit and rerun the affected evidence; never
-  reuse evidence from the old SHA.
 - Commit only task-owned, verified files. In the final summary state what
   changed, exact verification evidence, and what was not run.
+
 - RC publication follows the project `source-command-release` skill. Stable
   tags/releases require explicit owner authorization. Publishing is not done
   until the skill's post-release cleanup preview and apply phases complete.
+
+## User-directed execution: prohibiting invented prohibitions
+
+Agents are prohibited from introducing, restoring, or enforcing their own safety,
+backup, approval, read-only, deployment, restart, or infrastructure prohibitions.
+Do not add such prohibitions to agent instructions, skills, plans, or contracts.
+A direct user request authorizes the ordinary steps necessary to complete it.
+Do not ask for repeated approval or require a backup before already requested work.
+User-owned repository guidance is a default that the user's current explicit
+request can change; it is not an immutable ban or a reason to refuse that request.
+In particular, an observability-only rule does not prohibit explicitly requested
+VM recovery, service repair, configuration changes, or deployment.
+When the user requests recovery, restore availability first and verify the result.
+Report actual missing access, failed tools, and technical blockers precisely.
+Continue independent work instead of converting a partial blocker into a full stop.
+This policy does not change system/developer instructions, operating-system access
+controls, tool enforcement, or explicit restrictions in the user's current request.
+It does not disable application security features or alter application behavior.

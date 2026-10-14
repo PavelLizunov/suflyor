@@ -18,4 +18,5 @@ Project skills are mandatory procedural requirements for specific tasks. Agents 
 ## Repository Skill Catalog
 
 - **`slint-mcp-ui-audit`** (`.agents/skills/slint-mcp-ui-audit/SKILL.md`): End-to-end visual and functional verification procedure via the embedded Slint MCP server (`--features ui-mcp`), baseline screenshot comparisons, Settings tab coverage, and global hotkey smoke testing.
+
 - **`source-command-release`** (`.agents/skills/source-command-release/SKILL.md`): Full release execution workflow, including version sync, testing gate tiers, RC vs stable release approval policies, installer artifact verification, and mandatory post-release cleanup.

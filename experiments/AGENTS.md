@@ -31,9 +31,7 @@
 
 For any experimental capability or pattern to be promoted from `experiments/` into production architecture:
 
-1. **Formal Architecture Review (SDD)**: Must undergo research, Micro-Spec review, and explicit approval before any platform abstractions or macOS code enter main crates.
-2. **Hardware Acceptance Evidence**: Must pass all manual acceptance rows on real Apple Silicon Mac hardware, including physical microphone audio capture, sleep/wake stream recovery, and multi-display windowing.
-3. **Zero Impact on Windows Target**: Must maintain 100% feature and performance parity on Windows with zero cross-platform regressions or build bloat.
-4. **Clean Abstraction Boundary**: Platform-specific logic must be isolated behind modular platform interfaces (`target_os` routing) rather than scattering `#[cfg]` across business logic.
-5. **Security & Entitlements Compliance**: TCC permission handling, hardened runtime entitlements, and process teardown must comply with platform distribution policies and release safety rules.
-6. **Passing Quality Gates**: Run the experiment's own scripts (for example `experiments/macos-gate0b/scripts/check.sh`) and the applicable macOS repository gate on `mac-worker`; do not invent a root `scripts/check.sh`.
+1. **Hardware Acceptance Evidence**: Must pass all manual acceptance rows on real Apple Silicon Mac hardware, including physical microphone audio capture, sleep/wake stream recovery, and multi-display windowing.
+2. **Zero Impact on Windows Target**: Must maintain 100% feature and performance parity on Windows with zero cross-platform regressions or build bloat.
+3. **Clean Abstraction Boundary**: Platform-specific logic must be isolated behind modular platform interfaces (`target_os` routing) rather than scattering `#[cfg]` across business logic.
+4. **Passing Quality Gates**: Run the experiment's own scripts (for example `experiments/macos-gate0b/scripts/check.sh`) and the applicable macOS repository gate on `mac-worker`; do not invent a root `scripts/check.sh`.

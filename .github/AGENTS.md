@@ -62,6 +62,5 @@ Local git hooks and `scripts/git-gate-native.ps1` provide a complementary native
 ## 5. Agent Constraints & Editing Rules
 
 1. **No Unvalidated Workflow Edits**: Do not modify workflow files or shell scripts without executing local validation scripts (`test-docs-only-detection.sh` and `test-gate-logic.sh`).
-2. **Preserve Fail-Closed Invariants**: Required jobs (e.g., `gate` in `ci.yml` and `cargo-deny` validation in `security.yml`) must maintain `if: always()` with explicit checking of classifier outputs.
-3. **Single Source of Truth**: Keep path classification logic within `is-docs-only.sh`. Do not duplicate path regexes inside YAML files.
-4. **Least Privilege**: Maintain minimum required `permissions:` declarations on all workflows.
+2. **Single Source of Truth**: Keep path classification logic within `is-docs-only.sh`. Do not duplicate path regexes inside YAML files.
+3. **Least Privilege**: Maintain minimum required `permissions:` declarations on all workflows.

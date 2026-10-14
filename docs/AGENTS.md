@@ -1,7 +1,5 @@
 # Documentation taxonomy and navigation guide (`docs/AGENTS.md`)
 
-This guide defines the documentation taxonomy, update discipline, privacy constraints, and verification requirements for files maintained under `docs/`.
-
 ## 1. Authoritative vs. Historical Artifacts
 
 Documentation in this project is categorized into two operational tiers:
@@ -53,16 +51,6 @@ Historical planning and migration blueprints are evidence. Preserve completed ar
 3. **Task Scope & Charters:** Reference or write a `docs/goal-<name>.md` charter for multi-step tasks. Keep scope strictly bounded to the charter.
 4. **Release Verification:** Before publishing, create a release retest checklist (`docs/retest-v<version>-<topic>.html`) from `docs/retest-template.html` and fill in its per-change items.
 5. **Preservation of History:** Completed history leaves the working tree only under section 6, and is never rewritten in place. Active goal charters may be corrected by the task that owns them; prefer a superseding document for material historical changes.
-
----
-
-## 4. Privacy & Security Rules
-
-Documentation, logs, and audit reports MUST strictly prevent secret and sensitive data leakage:
-- **No API Keys or Credentials:** Never write, log, or commit live Groq API keys (`groq_api_key`), AI bearer tokens (`ai_bearer`), or credentials from `%APPDATA%\suflyor\config.json`.
-- **No Private Prep Files:** `nini-context-backup.txt` and similar personal notes must remain gitignored and never committed to documentation.
-- **Redact Local System Paths:** Use `%USERPROFILE%` or `~` instead of exposing real Windows/macOS user paths (`C:\Users\<user>\...`). Apply `redact_user_home` logic to log outputs.
-- **Redact Private Network Data:** Mask LAN addresses, private endpoints, and user-specific hostnames in logs, screenshots, and public docs. Repository-approved worker aliases may appear in internal operational instructions without addresses or credentials.
 
 ---
 

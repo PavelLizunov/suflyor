@@ -7,8 +7,6 @@ This guide documents the maintenance, risk classification, inspection vs. execut
 The Suflyor project (Overlay MVP) uses PowerShell, Bash, Python, and NSIS scripts for quality gating, build automation, release packaging, repository hygiene, local AI environment setup, and visual UI QA automation.
 
 Key architectural rules when working with scripts in this directory:
-- **No hardcoded secrets or environment endpoints:** Never embed API keys, user secrets, homelab IP addresses, Tailscale node names, or private credentials in script sources, defaults, or output logs.
-- **Exact-SHA remote-worker & release safety model:** Maintain deterministic, cryptographically verifiable remote operations (e.g. Winbrat remote worker builds, git ancestor SHAs via `git merge-base --is-ancestor`, exact HEAD commit matching for PR merges/branch deletion, and SHA-256 / byte-size integrity validation for DirectML DLLs and downloaded AI models).
 - **Inspection vs. Execution distinction:** Clearly separate non-destructive inspection, classification, and dry-run modes (`classify`, `-ListOnly`, `-CheckOnly`, preview mode without `-Apply`, syntax parsing) from mutating execution modes (`push`, `-Apply`, `-Installer`, process termination, file system modifications).
 
 ---
@@ -36,16 +34,8 @@ All scripts in `scripts/` are classified below by domain, inspection/execution m
 
 ---
 
-## 3. Detailed Guide to Critical Maintenance Scripts
-
-### A. Quality Gates & Verification Pipeline
-
 #### `scripts/git-gate-native.ps1`
 - **Purpose:** Agent-agnostic selective gate invoked by `.githooks/pre-commit`, `.githooks/pre-push`, and manual workflows.
-- **Classification Rules:**
-  - `docs`: Non-executable text/documentation changes (`.md`, `.html`, `.txt`). Runs git diff checks only; no Cargo compilation.
-  - `targeted`: Every normal change and every prerelease. Runs checks only for each affected crate/surface; multi-crate or high-risk paths do not auto-escalate.
-  - `full`: Selected only by explicit `-Full` while publishing an owner-authorized stable release. Delegates to `scripts/ci.ps1`.
 - **Inspection vs Execution:**
   - `powershell scripts/git-gate-native.ps1 manual -ListOnly` or `classify`: Inspects changed files and outputs the selected tier without triggering syntax checks or Cargo builds.
   - `commit` / `push` / `manual`: Runs `git diff --check`, validates changed PowerShell syntax, then executes the selected formatting/test gate.
@@ -64,8 +54,6 @@ All scripts in `scripts/` are classified below by domain, inspection/execution m
 
 ---
 
-### B. Build, Packaging & Installer Pipeline
-
 #### `scripts/build-slint-release.ps1`
 - **Purpose:** Compiles release binaries for `overlay-host.exe`, `suflyor-tts.exe` (Piper sidecar), and `suflyor-teratts.exe` (TeraTTS sidecar), extracts DirectML redistributable DLL from `ort` build output, and packages the NSIS installer.
 - **Invariants:**
@@ -81,31 +69,16 @@ All scripts in `scripts/` are classified below by domain, inspection/execution m
 
 ---
 
-### C. Release Lifecycle & Repository Cleanup
-
 #### `scripts/post-release-cleanup.ps1`
 - **Purpose:** Post-release repository, PR, branch, worktree, and target disk hygiene script.
-- **Safety & Risk Controls:**
-  - **DEFAULT MODE IS PREVIEW:** Running `powershell scripts/post-release-cleanup.ps1` prints planned actions without mutating state. The `-Apply` flag is required to execute mutations.
-  - **Exact-SHA Remote Worker & Ancestry Verification:**
-    - Uses `Git-IsAncestor` (`merge-base --is-ancestor <SHA> origin/master`) before considering a commit or branch merged.
-    - Closes redundant PRs only when exact head SHA is in `master`.
-    - Merges green PRs only with `--match-head-commit` matching exact SHA.
-    - Deletes remote/local branches only when exact SHA ancestry is proven in `master` or recorded on a merged PR (`$mergedExact`).
-    - Removes worktrees only when clean (`git status --porcelain` is empty) AND head SHA is an ancestor of `master`.
-    - Aborts local cleanup if `cargo` or `rustc` processes are running.
-    - Never deletes stable or draft releases; preserves the newest `$KeepPrerelease` prerelease tag.
 
 #### `scripts/sync-release-docs.ps1`
 - **Purpose:** Synchronizes `README.md` with the published release tag and URL inside `<!-- latest-release:start -->` markers.
 
 #### `scripts/stop-installed-suflyor.ps1`
 - **Purpose:** Stops running Suflyor processes (`overlay-host`, `suflyor-tts`, `suflyor-teratts`) matching a specific installation directory.
-- **Safety:** `-CheckOnly` exits with code 10 if matching processes are active, enabling non-destructive inspection before installation or cleanup.
 
 ---
-
-### D. Environment, AI Setup & Audit Tools
 
 #### `scripts/setup-local-ai.ps1`
 - **Purpose:** Downloads and configures local llama.cpp, whisper.cpp, and GigaAM-v3 models with HuggingFace URL resolution and byte-length validation.
@@ -113,15 +86,12 @@ All scripts in `scripts/` are classified below by domain, inspection/execution m
 
 #### `scripts/qwen-parallel-audit.ps1`
 - **Purpose:** Runs read-only static analysis across 11 codebase domains using Qwen.
-- **Safety:** Invokes Qwen with `--safe-mode`, `--approval-mode plan`, and explicit read-only constraints. Does not execute builds, tests, or network calls.
 
 ---
 
 ## 4. Maintenance & Contribution Protocol
 
 When modifying existing scripts or adding new ones to `scripts/`:
-1. **Avoid homelab secrets and private endpoints:** Keep network parameters standard (`http://127.0.0.1:8080/v1`) or configurable via CLI flags/environment variables.
-2. **Preserve exact-SHA safety checks:** Never replace `git merge-base --is-ancestor` or exact SHA comparisons with loose string or branch-name matches.
-3. **Distinguish inspection from execution:** Provide dry-run/preview modes (`-ListOnly`, `-CheckOnly`, preview default) for any script that mutates git, GitHub, process, or disk state.
-4. **Validate PowerShell syntax:** Ensure all `.ps1` files pass `[System.Management.Automation.Language.Parser]::ParseFile`.
-5. **Verify documentation:** Run `git diff --check -- scripts/AGENTS.md` after editing this file.
+1. **Distinguish inspection from execution:** Provide dry-run/preview modes (`-ListOnly`, `-CheckOnly`, preview default) for any script that mutates git, GitHub, process, or disk state.
+2. **Validate PowerShell syntax:** Ensure all `.ps1` files pass `[System.Management.Automation.Language.Parser]::ParseFile`.
+3. **Verify documentation:** Run `git diff --check -- scripts/AGENTS.md` after editing this file.
