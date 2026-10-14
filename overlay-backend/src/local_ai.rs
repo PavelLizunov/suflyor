@@ -2283,6 +2283,12 @@ fn pick_llama(assets: &[GhAsset], _gpu: GpuKind) -> Result<LlamaPick> {
             version: None,
         })
     }
+
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let _ = assets;
+        bail!("no llama build asset for this platform")
+    }
 }
 
 /// Parse the CUDA version from a whisper cuBLAS asset name, e.g.

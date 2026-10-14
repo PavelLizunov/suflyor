@@ -42,7 +42,7 @@ pub enum PlatformFeature {
     SelfReplacingUpdater,
 }
 
-/// Query platform capabilities for macOS vs Windows.
+/// Query platform capabilities for macOS vs Windows vs other platforms.
 #[must_use]
 pub fn platform_capability(feature: PlatformFeature) -> CapabilityState {
     #[cfg(target_os = "macos")]
@@ -67,6 +67,12 @@ pub fn platform_capability(feature: PlatformFeature) -> CapabilityState {
         | PlatformFeature::GigaamGpu
         | PlatformFeature::HermesInstaller
         | PlatformFeature::SelfReplacingUpdater => CapabilityState::Available,
+    }
+
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let _ = feature;
+        CapabilityState::Unsupported(CapabilityReason::NotSupportedOnPlatform)
     }
 }
 
@@ -141,6 +147,7 @@ mod tests {
 
     #[test]
     fn platform_capability_reports_correct_states() {
+        #[cfg(any(windows, target_os = "macos"))]
         assert_eq!(
             platform_capability(PlatformFeature::Microphone),
             CapabilityState::Available
@@ -148,6 +155,11 @@ mod tests {
         #[cfg(target_os = "macos")]
         assert_eq!(
             platform_capability(PlatformFeature::ExternalStealth),
+            CapabilityState::Unsupported(CapabilityReason::NotSupportedOnPlatform)
+        );
+        #[cfg(not(any(windows, target_os = "macos")))]
+        assert_eq!(
+            platform_capability(PlatformFeature::Microphone),
             CapabilityState::Unsupported(CapabilityReason::NotSupportedOnPlatform)
         );
     }

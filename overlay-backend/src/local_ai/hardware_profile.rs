@@ -1,6 +1,7 @@
 #[cfg(windows)]
 use std::path::PathBuf;
 
+#[allow(unused_imports)]
 use super::{run_capture, GIB};
 
 /// Confirmed hardware matrix supplied by the owner. Values outside the matrix
@@ -176,6 +177,10 @@ pub(super) fn detect_gpu() -> GpuKind {
             GpuKind::None
         }
     }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        GpuKind::None
+    }
 }
 
 /// True if the Vulkan loader (`vulkan-1.dll`) is present in System32 — required for
@@ -294,6 +299,10 @@ pub(super) fn detected_hardware_model_profile(force_cpu: bool) -> HardwareModelP
             "local-ai hardware discovery: raw_vram_gib={raw_vram:?} raw_ram_gib={raw_ram:?}"
         );
         hardware_profile_from_discovery(force_cpu, raw_vram, raw_ram)
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        HardwareModelProfile::Unknown
     }
 }
 

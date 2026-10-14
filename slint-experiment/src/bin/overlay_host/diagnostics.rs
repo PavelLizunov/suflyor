@@ -820,7 +820,7 @@ fn collect_redacted_log() -> std::io::Result<std::path::PathBuf> {
     let redacted = redact_secrets(&redact_user_home(&redact_ipv4(&redact_urls(&raw))));
     let dir = dirs::desktop_dir().unwrap_or(root);
     let out = dir.join("suflyor-log.txt");
-    std::fs::write(&out, redacted)?;
+    overlay_backend::paths::write_private(&out, redacted.as_bytes())?;
     Ok(out)
 }
 
