@@ -1952,6 +1952,17 @@ pub(crate) fn refresh_now_answering(win: &SettingsWindow, cfg: &overlay_backend:
             && !win.get_strata_adopted()
             && !win.get_strata_external())
     {
+        // Nothing runs yet: no model name that is not there.
+        win.set_now_title(SharedString::from(if ru {
+            "Модель ещё не выбрана"
+        } else {
+            "No model yet"
+        }));
+        win.set_now_detail(SharedString::from(if ru {
+            "Выберите или скачайте модель ниже."
+        } else {
+            "Pick or download one below."
+        }));
         win.set_now_state(4);
         return;
     }

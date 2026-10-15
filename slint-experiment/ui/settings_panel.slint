@@ -385,6 +385,11 @@ export component SettingsWindow inherits Window {
     in-out property <int> local-strata-job: -1;
     in-out property <string> local-choice-status: "";
     callback builtin-model-use(int);
+    // Which groups of the model list have rows (an empty group shows no header).
+    property <bool> local-has-on-pc: (root.llama-installed && (root.legacy-model-present || root.fallback-model-present || root.quality-model-present))
+        || root.ai-local-custom-active || root.strata-installed || root.found-models.length > 0;
+    property <bool> local-has-download: !root.llama-installed || root.local-ai-installing || !root.strata-installed
+        || !root.legacy-model-present || !root.fallback-model-present || !root.quality-model-present;
     callback now-refresh-requested();
     in-out property <bool> llama-installed: false;
     in-out property <bool> local-more-open: false;
@@ -2663,7 +2668,15 @@ export component SettingsWindow inherits Window {
                                     title: @tr("Now answering");
                                     HorizontalLayout {
                                         spacing: Metrics.space-sm;
-                                        Text { text: root.now-title; font-size: Metrics.font-body; font-weight: 700; color: Theme.text-primary; wrap: word-wrap; horizontal-stretch: 1; }
+                                        VerticalLayout {
+                                            horizontal-stretch: 1;
+                                            alignment: center;
+                                            spacing: Metrics.space-xs;
+                                            Text { text: root.now-title; font-size: Metrics.font-body; font-weight: 700; color: Theme.text-primary; wrap: word-wrap; }
+                                            Text { text: root.now-detail; font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                        }
+                                        VerticalLayout {
+                                        alignment: center;
                                         now-pill := Rectangle {
                                             property <int> state: root.strata-busy || root.builtin-busy ? 2 : root.now-state;
                                             property <color> tone: self.state == 1 ? Theme.success : self.state == 2 ? Theme.warning : self.state == 3 ? Theme.danger : Theme.text-muted;
@@ -2674,15 +2687,19 @@ export component SettingsWindow inherits Window {
                                             pill := HorizontalLayout {
                                                 padding: Metrics.space-xs;
                                                 Text {
+                                                    vertical-alignment: center;
                                                     text: now-pill.state == 1 ? @tr("Working") : now-pill.state == 2 ? @tr("Starting/Loading") : now-pill.state == 3 ? @tr("Not answering") : now-pill.state == 4 ? @tr("Not set up") : @tr("Checking…");
                                                     color: now-pill.tone;
                                                     font-size: Metrics.font-caption;
                                                 }
                                             }
                                         }
-                                        Button { text: @tr("Check"); clicked => { root.ai-local-test-clicked(); } }
+                                        }
+                                        VerticalLayout {
+                                            alignment: center;
+                                            Button { height: 30px; text: @tr("Check"); clicked => { root.ai-local-test-clicked(); } }
+                                        }
                                     }
-                                    Text { text: root.now-detail; font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                                     if root.ai-local-test-result != "" : Text { text: root.ai-local-test-result; font-size: Metrics.font-label; color: Theme.text-secondary; wrap: word-wrap; }
                                     if root.now-notice != "" : Text { text: root.now-notice; font-size: Metrics.font-caption; color: Theme.warning; wrap: word-wrap; }
                                 }
@@ -2690,7 +2707,7 @@ export component SettingsWindow inherits Window {
                                     title: @tr("Choose a model");
                                     Text { text: root.local-hardware-line; font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                                     for group in [0, 1] : WrapBlock {
-                                        Text { text: (group == 0 ? @tr("On this PC") : @tr("Available to download")).to-uppercase(); font-size: Metrics.font-label; font-weight: 700; color: Theme.text-secondary; }
+                                        if group == 0 ? root.local-has-on-pc : root.local-has-download : Text { text: (group == 0 ? @tr("On this PC") : @tr("Available to download")).to-uppercase(); font-size: Metrics.font-label; font-weight: 700; color: Theme.text-secondary; }
                                         if group == 1 && (!root.llama-installed || root.local-ai-installing) : LocalModelRow {
                                             title: @tr("Built-in engine + Gemma 4 12B");
                                             detail: root.local-ai-installing ? root.local-ai-status : @tr("llama.cpp · about 7 GB with speech components");
@@ -2708,7 +2725,7 @@ export component SettingsWindow inherits Window {
                                             chip: "";
                                             chip-tone: 0;
                                             active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 0 && root.legacy-model-present;
-                                            action: self.active ? @tr("Active") : root.legacy-model-present ? @tr("Use") : @tr("Download");
+                                            action: self.active ? @tr("In use") : root.legacy-model-present ? @tr("Use") : @tr("Download model");
                                             action-enabled: !self.active && !root.builtin-busy && !root.strata-busy;
                                             busy: root.quality-downloading && root.local-download-profile == 0;
                                             progress-visible: true;
@@ -2726,7 +2743,7 @@ export component SettingsWindow inherits Window {
                                             chip: @tr("recommended");
                                             chip-tone: 1;
                                             active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 1 && root.fallback-model-present;
-                                            action: self.active ? @tr("Active") : root.fallback-model-present ? @tr("Use") : @tr("Download");
+                                            action: self.active ? @tr("In use") : root.fallback-model-present ? @tr("Use") : @tr("Download model");
                                             action-enabled: !self.active && !root.builtin-busy && !root.strata-busy;
                                             busy: root.quality-downloading && root.local-download-profile == 1;
                                             progress-visible: true;
@@ -2744,7 +2761,7 @@ export component SettingsWindow inherits Window {
                                             chip: !root.quality-selection-allowed ? @tr("heavy for this PC") : "";
                                             chip-tone: 2;
                                             active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 2 && root.quality-model-present;
-                                            action: self.active ? @tr("Active") : root.quality-model-present ? @tr("Use") : @tr("Download");
+                                            action: self.active ? @tr("In use") : root.quality-model-present ? @tr("Use") : @tr("Download model");
                                             action-enabled: !self.active && !root.builtin-busy && !root.strata-busy;
                                             busy: root.quality-downloading && root.local-download-profile == 2;
                                             progress-visible: true;
@@ -2765,12 +2782,12 @@ export component SettingsWindow inherits Window {
                                             action-clicked => { root.choose-custom-gguf-clicked(); }
                                         }
                                         if (group == 0 ? root.strata-installed : !root.strata-installed) : LocalModelRow {
-                                            title: @tr("Suflyor's Strata");
+                                            title: @tr("Qwen3.8-Flash-Next IQ2_XS");
                                             detail: root.strata-busy && root.local-strata-job == 0 ? root.strata-status : root.strata-installed ? @tr("Strata engine · installed") : @tr("Strata engine · ~72 GB download");
                                             chip: !root.strata-hardware-fits ? @tr("needs 48 GB RAM") : "";
                                             chip-tone: 2;
                                             active: root.strata-active && !root.strata-adopted && !root.strata-external && root.strata-installed;
-                                            action: root.strata-busy ? @tr("Working…") : self.active && root.strata-running ? @tr("Active") : self.active ? @tr("Start") : root.strata-installed ? @tr("Use") : @tr("Download");
+                                            action: root.strata-busy ? @tr("Working…") : self.active && root.strata-running ? @tr("In use") : self.active ? @tr("Start") : root.strata-installed ? @tr("Use") : @tr("Download model");
                                             action-enabled: !(self.active && root.strata-running) && !root.strata-busy && !root.builtin-busy;
                                             busy: root.strata-busy && root.local-strata-job == 0;
                                             action-clicked => { if root.strata-installed { root.strata-choose(true); } else { root.strata-install-clicked(); } }
@@ -2781,7 +2798,7 @@ export component SettingsWindow inherits Window {
                                                 title: m.title;
                                                 detail: m.kind == 1 && root.strata-busy && root.local-strata-job == 1 ? root.strata-status : m.detail;
                                                 active: m.kind == 1 ? root.strata-active && root.strata-adopted : m.active;
-                                                action: m.kind == 1 ? (root.strata-busy ? @tr("Working…") : self.active && root.strata-running ? @tr("Active") : self.active ? @tr("Start") : @tr("Use")) : (self.active ? @tr("In use") : @tr("Connect"));
+                                                action: m.kind == 1 ? (root.strata-busy ? @tr("Working…") : self.active && root.strata-running ? @tr("In use") : self.active ? @tr("Start") : @tr("Use")) : (self.active ? @tr("In use") : @tr("Connect"));
                                                 action-enabled: !(m.kind == 1 && self.active && root.strata-running) && !(m.kind == 0 && self.active) && !root.strata-busy && !root.builtin-busy;
                                                 busy: m.kind == 1 && root.strata-busy && root.local-strata-job == 1;
                                                 action-clicked => { root.found-model-use(i); }

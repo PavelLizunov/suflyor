@@ -2612,13 +2612,11 @@ msgid "On this PC"
 msgstr "На этом ПК"
 
 msgid "Starting/Loading"
-msgstr "Запуск / загрузка"
+msgstr "Загружается"
 
 msgid "Strata folder…"
 msgstr "Папка Strata…"
 
-msgid "Suflyor's Strata"
-msgstr "Strata от Suflyor"
 
 msgid "The model looks things up when it needs to. Web queries go to DuckDuckGo."
 msgstr "Модель ищет информацию, когда это нужно. Веб-запросы отправляются в DuckDuckGo."
