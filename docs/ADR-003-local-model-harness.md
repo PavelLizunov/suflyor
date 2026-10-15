@@ -175,8 +175,10 @@ P4 (Strata) started on 2026-10-15 at the owner's request, before P1-P3; see
   plain path, and only an explicit refusal (400/422/500/501 naming tools)
   keeps that server off tools until the app restarts.
 - It runs only for the local provider (`is_local` OpenAI-compatible
-  endpoints) and only after the user turns on "Model tools" in Settings
-  (`ai_agent_tools`, default off). Cloud providers keep the plain path.
+  endpoints) while "Model tools" is on (`ai_agent_tools`). Decided on
+  2026-10-15: on by default, because the knowledge base and personal memory
+  never leave the PC; a server without tool support answers the plain way.
+  Cloud providers keep the plain path (they have their own tool features).
 - Tools (`overlay-backend/src/ai/tools.rs`): `kb_search`; with the second
   switch `ai_web_search` (default off) also `web_search` and `open_url`.
   Web search uses DuckDuckGo's lite page without a key: its full HTML page
@@ -185,7 +187,10 @@ P4 (Strata) started on 2026-10-15 at the owner's request, before P1-P3; see
   PC, the LAN or Tailscale's 100.64/10 range are refused. The web client's
   own DNS resolver keeps only public addresses and the connection uses them,
   so a redirect to a private name or a rebinding DNS answer is refused too.
-  The model is asked to name its sources. `memory_recall` is not built yet.
+  The model is asked to name its sources. `memory_recall` searches the
+  user's approved personal memory with the same ranking the meeting context
+  uses (`memory::recall`), so the model can reach facts beyond the eight
+  that go into every prompt.
 - While a tool runs, the tile's header chip says "AI · ищет…" and the tile
   body shows the lookup ("Ищу в интернете: <query>"); the next part of the
   answer replaces that line.
@@ -215,6 +220,13 @@ P4 (Strata) started on 2026-10-15 at the owner's request, before P1-P3; see
     Downloads and Documents, two levels deep.
   - Starting Strata uses a server that already answers on :8090 (a Strata
     the user started) instead of reporting a busy port.
+
+- Deep lock covers Strata like the built-in engine: requests to :8090 are
+  refused while locked, entering the lock stops the Strata this app started
+  (a Strata the user started stays, like a foreign :8080), and unlocking
+  starts the engine in use again (or uses a Strata that still answers).
+- The Qwen licence: the model page link stays next to Download; Suflyor does
+  not ship the weights, Strata's own setup downloads them.
 
 ### Checked live on the Windows worker (2026-10-15, no NVIDIA GPU)
 

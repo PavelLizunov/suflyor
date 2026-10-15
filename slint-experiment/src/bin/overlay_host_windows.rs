@@ -4289,6 +4289,11 @@ fn main() -> Result<(), slint::PlatformError> {
                                     "[overlay-host] deep lock: :8080 is held by a foreign process — left alive"
                                 );
                             }
+                            // Strata holds the GPU the same way. Only the server
+                            // this app started stops; a Strata the user started
+                            // stays (the request guard blocks our traffic to it).
+                            overlay_backend::local_ai::abort_strata_start();
+                            overlay_backend::local_ai::stop_strata();
                         }
                         // Reap exited server handles so kill-on-quit tracking
                         // stays honest.
@@ -4413,6 +4418,9 @@ fn main() -> Result<(), slint::PlatformError> {
                             return;
                         }
                         let root = overlay_backend::local_ai::default_root();
+                        let unlock_strata = overlay_backend::local_ai::is_managed_strata_endpoint(
+                            &cfg_unlock.read().ai_local_base_url,
+                        );
                         let choice = {
                             let mut c = cfg_unlock.write();
                             // Repair a stale persisted tier before selecting the
@@ -4437,6 +4445,31 @@ fn main() -> Result<(), slint::PlatformError> {
                         let (outcome, started) = match
                             overlay_backend::local_ai::blocking_acquire_lifecycle(&lifecycle_lock)
                         {
+                            // The engine in use comes back: Strata (or a Strata
+                            // the user started, still answering) or llama.cpp.
+                            Some(guard) if unlock_strata => {
+                                let no_cancel = std::sync::atomic::AtomicBool::new(false);
+                                let start = if overlay_backend::local_ai::strata_reachable()
+                                    && !overlay_backend::local_ai::strata_running()
+                                {
+                                    overlay_backend::local_ai::use_running_strata(&root)
+                                } else {
+                                    overlay_backend::local_ai::start_strata(
+                                        &root,
+                                        &no_cancel,
+                                        &|_| {},
+                                    )
+                                };
+                                drop(guard);
+                                (
+                                    if start == overlay_backend::local_ai::StrataStart::Ready {
+                                        overlay_backend::local_ai::ModelSwitch::Switched
+                                    } else {
+                                        overlay_backend::local_ai::ModelSwitch::FailedToStart
+                                    },
+                                    Vec::new(),
+                                )
+                            }
                             Some(guard) => {
                                 let result =
                                     overlay_backend::local_ai::restart_llama_server_for_unlock(

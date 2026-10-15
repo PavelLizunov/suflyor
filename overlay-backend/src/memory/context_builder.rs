@@ -189,6 +189,19 @@ pub fn context_for_meeting(base: &str, query: Option<&str>) -> String {
     merge_context(base, &block)
 }
 
+/// The approved memory items that match `query`, best first (at most
+/// [`MAX_ITEMS`]): the model's `memory_recall` tool. Empty when nothing
+/// matches or the store does not open. A small indexed read; callers keep it
+/// off async threads.
+#[must_use]
+pub fn recall(query: &str) -> Vec<MemoryItem> {
+    open_default_store()
+        .ok()
+        .and_then(|store| store.list_memory_items("default", false, -1).ok())
+        .and_then(|items| rank_by_relevance(query, &items))
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]

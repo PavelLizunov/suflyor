@@ -28,6 +28,7 @@ pub(crate) fn web_enabled() -> bool {
 }
 
 pub const KB_SEARCH: &str = "kb_search";
+pub const MEMORY_RECALL: &str = "memory_recall";
 pub const WEB_SEARCH: &str = "web_search";
 pub const OPEN_URL: &str = "open_url";
 
@@ -52,6 +53,17 @@ pub(crate) fn definitions(web: bool, today: &str) -> Value {
             "parameters": {
                 "type": "object",
                 "properties": { "query": { "type": "string", "description": "A term or short phrase" } },
+                "required": ["query"]
+            }
+        }
+    }), json!({
+        "type": "function",
+        "function": {
+            "name": MEMORY_RECALL,
+            "description": "Search the user's personal memory: facts they approved about people, projects, terms and themselves. Use it when the question names someone or something the user may have told the app before.",
+            "parameters": {
+                "type": "object",
+                "properties": { "query": { "type": "string", "description": "A name, term or short phrase" } },
                 "required": ["query"]
             }
         }
@@ -123,6 +135,12 @@ pub(crate) async fn run(name: &str, arguments: &str) -> String {
             Some(q) => kb_search(&q),
             None => "error: \"query\" is required".to_string(),
         },
+        MEMORY_RECALL => match text_arg("query") {
+            Some(q) => tokio::task::spawn_blocking(move || memory_recall(&q))
+                .await
+                .unwrap_or_else(|_| "error: memory could not be read".to_string()),
+            None => "error: \"query\" is required".to_string(),
+        },
         WEB_SEARCH if web_enabled() => match text_arg("query") {
             Some(q) => web_search(&q)
                 .await
@@ -149,6 +167,21 @@ fn kb_search(query: &str) -> String {
         .map(|e| format!("## {}\n{}", e.heading, cap_chars(e.body.trim(), 700)))
         .collect::<Vec<_>>()
         .join("\n\n")
+}
+
+fn memory_recall(query: &str) -> String {
+    let items = crate::memory::recall(query);
+    if items.is_empty() {
+        return "Nothing about this in personal memory.".to_string();
+    }
+    items
+        .iter()
+        .map(|it| match &it.entity {
+            Some(e) if !e.trim().is_empty() => format!("- {}: {}", e.trim(), it.text.trim()),
+            _ => format!("- {}", it.text.trim()),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Resolves names for the web tools and keeps only public addresses. The
@@ -654,10 +687,13 @@ mod tests {
                 .map(|t| t["function"]["name"].as_str().unwrap().to_string())
                 .collect::<Vec<_>>()
         };
-        assert_eq!(names(definitions(false, "2026-10-15")), [KB_SEARCH]);
+        assert_eq!(
+            names(definitions(false, "2026-10-15")),
+            [KB_SEARCH, MEMORY_RECALL]
+        );
         assert_eq!(
             names(definitions(true, "2026-10-15")),
-            [KB_SEARCH, WEB_SEARCH, OPEN_URL]
+            [KB_SEARCH, MEMORY_RECALL, WEB_SEARCH, OPEN_URL]
         );
     }
 
