@@ -169,9 +169,11 @@ P4 (Strata) started on 2026-10-15 at the owner's request, before P1-P3; see
   each step offers the tools and streams text to the tile; `tool_calls`
   deltas are collected by index, the calls run, and the next step asks again.
   At most 4 tool steps and 60 s of tool time; the step after that offers no
-  tools. Each tool has 20 s and its result is capped at 4000 characters. The
-  first request is the capability probe: an HTTP error there marks the server
-  and the answer goes through the plain path.
+  tools. Each tool has 20 s and its result is capped at 4000 characters; a
+  closed tile stops the running and the queued calls. The first request is
+  the capability probe: an HTTP error there sends the answer through the
+  plain path, and only an explicit refusal (400/422/500/501 naming tools)
+  keeps that server off tools until the app restarts.
 - It runs only for the local provider (`is_local` OpenAI-compatible
   endpoints) and only after the user turns on "Model tools" in Settings
   (`ai_agent_tools`, default off). Cloud providers keep the plain path.
@@ -180,10 +182,13 @@ P4 (Strata) started on 2026-10-15 at the owner's request, before P1-P3; see
   Web search uses DuckDuckGo's lite page without a key: its full HTML page
   returned a captcha to scripted requests on 2026-10-15, the lite page did
   not. `open_url` opens only public http(s) hosts: names and addresses on this
-  PC, the LAN or Tailscale's 100.64/10 range are refused, after redirects and
-  after DNS too. `memory_recall` is not built yet.
-- The tile's state label shows the running tool ("AI · ищет в интернете:
-  <query>"); the answer text does not change.
+  PC, the LAN or Tailscale's 100.64/10 range are refused. The web client's
+  own DNS resolver keeps only public addresses and the connection uses them,
+  so a redirect to a private name or a rebinding DNS answer is refused too.
+  The model is asked to name its sources. `memory_recall` is not built yet.
+- While a tool runs, the tile's header chip says "AI · ищет…" and the tile
+  body shows the lookup ("Ищу в интернете: <query>"); the next part of the
+  answer replaces that line.
 - Thinking is not switched off for tool steps yet: one streamed request serves
   both the tool choice and the answer.
 - A Strata installed before Suflyor: Strata's own setup lists the folders it
@@ -192,10 +197,27 @@ P4 (Strata) started on 2026-10-15 at the owner's request, before P1-P3; see
   the newest usable model config (`.venv`, `serve/server.py`, a
   `strata-<model>.json` with `exe` and `args`). "Find my Strata folder…"
   picks one by hand. Choosing it saves `ai_strata_dir` and
-  `ai_strata_config` (machine-local, not exported) and starts that server on
-  :8090 with its own config. Nothing is downloaded. A model the user already
+  `ai_strata_config` (machine-local: a full profile export leaves them out)
+  and starts that server on :8090 with its own config. Nothing is
+  downloaded. A moved or deleted folder falls back to Suflyor's own install. A model the user already
   runs may be a fine-tune; its licence is the user's (decision 5 covers only
   what Suflyor offers to download).
+
+### Checked live on the Windows worker (2026-10-15, no NVIDIA GPU)
+
+- A stand-in "existing Strata" (real `.venv`, `serve/server.py` that answers
+  `/health` like Strata and forwards to llama.cpp b11632 with
+  Qwen2.5-1.5B-Instruct Q4_K_M on the CPU) listed in Strata's
+  `settings.json`: Settings showed "Ваша Strata · Strata-0.1.40", "Use"
+  started `.venv\Scripts\python.exe serve\server.py --engine strata
+  --config ...\strata-swift-iq3_s.json --port 8090` and saved the choice.
+- A typed question ("latest stable Rust?") with tools and web on: the model
+  called `web_search`, DuckDuckGo lite answered from the worker (1123
+  characters of results), the tile showed the lookup and then the answer.
+  The 1.5B model put the beta's date on the stable release: the search
+  works, the answer quality is the model's.
+- Not checked: the real Strata engine and Qwen3.8-Flash-Next tool calls
+  (needs the target PC), the folder picker (a native dialog).
 
 ## Verification rules
 
