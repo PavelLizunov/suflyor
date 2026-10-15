@@ -415,7 +415,10 @@ mod tests {
 
     #[test]
     fn only_an_explicit_tool_refusal_disables_tools() {
-        assert!(rejects_tools(400, r#"{"error":"model does not support tools"}"#));
+        assert!(rejects_tools(
+            400,
+            r#"{"error":"model does not support tools"}"#
+        ));
         assert!(rejects_tools(500, "tools param requires --jinja flag"));
         assert!(!rejects_tools(503, "Loading model"));
         assert!(!rejects_tools(429, "tools: too many requests"));

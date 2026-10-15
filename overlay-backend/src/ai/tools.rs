@@ -448,9 +448,7 @@ pub(crate) fn html_to_text(html: &str) -> String {
             continue;
         }
         if lower[lt..].starts_with("<!--") {
-            i = lower[lt..]
-                .find("-->")
-                .map_or(html.len(), |p| lt + p + 3);
+            i = lower[lt..].find("-->").map_or(html.len(), |p| lt + p + 3);
             continue;
         }
         let raw = ["script", "style", "noscript", "svg", "head", "template"]
