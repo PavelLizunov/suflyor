@@ -1541,15 +1541,30 @@ fn strata_progress_line(p: &overlay_backend::local_ai::Progress, ru: bool) -> St
     }
 }
 
-/// Refresh the engine choice controls from the saved config.
-pub(crate) fn refresh_local_engine_controls(
+/// Refresh what the engine panels show about each engine from the saved
+/// config, without moving the panel the user is looking at.
+pub(crate) fn refresh_local_engine_state(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::Config,
 ) {
     let root = overlay_backend::local_ai::default_root();
+    win.set_llama_installed(overlay_backend::local_ai::llama_engine_installed(&root));
+    win.set_strata_installed(overlay_backend::local_ai::strata_installed(&root));
+    win.set_strata_active(overlay_backend::local_ai::is_managed_strata_endpoint(
+        &cfg.ai_local_base_url,
+    ));
+}
+
+/// On Settings open: refresh the engine state and show the panel of the
+/// engine in use (or of a Strata job that still runs, the only place with its
+/// Cancel button).
+pub(crate) fn refresh_local_engine_controls(
+    win: &SettingsWindow,
+    cfg: &overlay_backend::config::Config,
+) {
+    refresh_local_engine_state(win, cfg);
     let strata_active = overlay_backend::local_ai::is_managed_strata_endpoint(&cfg.ai_local_base_url);
     let llama_active = overlay_backend::local_ai::is_managed_llama_endpoint(&cfg.ai_local_base_url);
-    // A Strata job keeps its panel, the only place with its Cancel button.
     win.set_local_engine_index(if win.get_strata_busy() || strata_active {
         1
     } else if llama_active {
@@ -1557,9 +1572,6 @@ pub(crate) fn refresh_local_engine_controls(
     } else {
         2
     });
-    win.set_llama_installed(overlay_backend::local_ai::llama_engine_installed(&root));
-    win.set_strata_installed(overlay_backend::local_ai::strata_installed(&root));
-    win.set_strata_active(strata_active);
 }
 
 /// Wire the Strata engine and the engine switch (built-in llama.cpp or Strata).
@@ -1883,8 +1895,11 @@ pub(crate) fn wire_strata(
                         // list, vision and the lock chip from the saved config.
                         w.invoke_ai_local_base_url_save(SharedString::from(saved_url));
                         let c = cfg_done.read();
-                        refresh_local_engine_controls(&w, &c);
+                        refresh_local_engine_state(&w, &c);
                         refresh_local_context_controls(&w, &c);
+                        // Stay on the panel of the engine the user asked for:
+                        // its status line explains the outcome.
+                        w.set_local_engine_index(if to_strata { 1 } else { 0 });
                     }
                     if let Some(o) = overlay_t.upgrade() {
                         o.set_active_stack(SharedString::from(active_stack_label(

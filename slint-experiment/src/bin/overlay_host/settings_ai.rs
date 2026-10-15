@@ -43,7 +43,7 @@
 //! `diag!` macro / `populate_token_status` / the `overlay_backend` config + ai
 //! helpers). That is intentional for the move; imports narrow in a later pass.
 use super::{
-    active_stack_label, populate_token_status, refresh_local_engine_controls, refresh_lock_chip,
+    active_stack_label, populate_token_status, refresh_local_engine_state, refresh_lock_chip,
     ComponentHandle, ModelRc, OverlayBarWindow, SettingsWindow, SharedString, VecModel,
 };
 use slint::Model;
@@ -1224,7 +1224,7 @@ pub(crate) fn wire_ai_settings(
                     &vision_provider,
                 ));
                 refresh_local_model_resource_warning(&w, root, saved_base_url, model);
-                refresh_local_engine_controls(&w, &cfg_c.read());
+                refresh_local_engine_state(&w, &cfg_c.read());
             }
             // #E10.1 — re-query models against the new URL.
             fetch_models(weak.clone(), cfg_c.clone(), ModelTarget::Local);

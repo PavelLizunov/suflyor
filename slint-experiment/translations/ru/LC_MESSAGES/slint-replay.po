@@ -2491,3 +2491,9 @@ msgstr "Движок llama.cpp {}. Приложение раз в неделю �
 
 msgid "Qwen3.8-Flash-Next IQ2_XS"
 msgstr "Qwen3.8-Flash-Next IQ2_XS"
+
+msgid "Engine llama.cpp. The app checks it weekly and verifies a new build before replacing the current one."
+msgstr "Движок llama.cpp. Приложение раз в неделю ищет обновления и испытывает новую сборку, прежде чем заменить текущую."
+
+msgid "Download model"
+msgstr "Скачать"

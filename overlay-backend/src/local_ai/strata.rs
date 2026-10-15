@@ -132,17 +132,20 @@ impl StrataHardware {
         let ram = self
             .ram_gib
             .map_or_else(|| "?".to_string(), |v| v.to_string());
-        let vram = self
-            .vram_gib
-            .map_or_else(|| "?".to_string(), |v| v.to_string());
+        let gpu = match (self.vram_gib, ru) {
+            (Some(vram), true) => format!("видеокарта NVIDIA {vram} ГБ"),
+            (Some(vram), false) => format!("NVIDIA GPU {vram} GB"),
+            (None, true) => "видеокарта NVIDIA не найдена".to_string(),
+            (None, false) => "no NVIDIA GPU found".to_string(),
+        };
         match (ru, self.meets_recommendation()) {
-            (true, true) => format!("Этот ПК: {ram} ГБ RAM, GPU NVIDIA {vram} ГБ — подходит."),
+            (true, true) => format!("Этот ПК: {ram} ГБ RAM, {gpu} — подходит."),
             (true, false) => format!(
-                "Этот ПК: {ram} ГБ RAM, GPU NVIDIA {vram} ГБ. Нужно от {STRATA_MIN_RAM_GIB} ГБ RAM и от {STRATA_MIN_VRAM_GIB} ГБ VRAM: модель может не запуститься или работать очень медленно."
+                "Этот ПК: {ram} ГБ RAM, {gpu}. Нужно от {STRATA_MIN_RAM_GIB} ГБ RAM и от {STRATA_MIN_VRAM_GIB} ГБ VRAM: модель может не запуститься или работать очень медленно."
             ),
-            (false, true) => format!("This PC: {ram} GB RAM, NVIDIA GPU {vram} GB — fits."),
+            (false, true) => format!("This PC: {ram} GB RAM, {gpu} — fits."),
             (false, false) => format!(
-                "This PC: {ram} GB RAM, NVIDIA GPU {vram} GB. Strata needs {STRATA_MIN_RAM_GIB} GB RAM and {STRATA_MIN_VRAM_GIB} GB VRAM or more: the model may not start or may run very slowly."
+                "This PC: {ram} GB RAM, {gpu}. Strata needs {STRATA_MIN_RAM_GIB} GB RAM and {STRATA_MIN_VRAM_GIB} GB VRAM or more: the model may not start or may run very slowly."
             ),
         }
     }
@@ -664,6 +667,12 @@ mod tests {
         }
         .meets_recommendation());
         assert!(fits.describe(false).contains("fits"));
+        assert!(StrataHardware {
+            ram_gib: Some(16),
+            vram_gib: None
+        }
+        .describe(false)
+        .contains("no NVIDIA GPU found"));
     }
 
     #[test]

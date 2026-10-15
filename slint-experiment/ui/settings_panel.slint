@@ -2592,10 +2592,11 @@ export component SettingsWindow inherits Window {
                                     @tr("Strata (Qwen3.8-Flash-Next)"),
                                     @tr("Other server (URL)"),
                                 ];
-                                current-index: root.local-engine-index;
+                                // Two-way: Rust moves the panel after a switch, the
+                                // user moves it here.
+                                current-index <=> root.local-engine-index;
                                 enabled: !root.builtin-busy && !root.strata-busy;
                                 selected => {
-                                    root.local-engine-index = self.current-index;
                                     root.local-more-open = false;
                                 }
                             }
@@ -2641,7 +2642,7 @@ export component SettingsWindow inherits Window {
                                     title: @tr("Fast (4B)");
                                     detail: @tr("Gemma 4 E4B · 4.6 GiB · ~6 GiB VRAM");
                                     active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 0 && root.legacy-model-present;
-                                    action: self.active ? @tr("Active") : root.legacy-model-present ? @tr("Use") : @tr("Download");
+                                    action: self.active ? @tr("Active") : root.legacy-model-present ? @tr("Use") : @tr("Download model");
                                     action-enabled: root.managed-local-server && !self.active && !root.builtin-busy;
                                     action-clicked => {
                                         if root.legacy-model-present {
@@ -2655,7 +2656,7 @@ export component SettingsWindow inherits Window {
                                     title: @tr("Balanced (12B QAT)");
                                     detail: @tr("Gemma 4 12B · 6.3 GiB · ~9.5 GiB VRAM · recommended");
                                     active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 1 && root.fallback-model-present;
-                                    action: self.active ? @tr("Active") : root.fallback-model-present ? @tr("Use") : @tr("Download");
+                                    action: self.active ? @tr("Active") : root.fallback-model-present ? @tr("Use") : @tr("Download model");
                                     action-enabled: root.managed-local-server && !self.active && !root.builtin-busy;
                                     action-clicked => {
                                         if root.fallback-model-present {
@@ -2669,7 +2670,7 @@ export component SettingsWindow inherits Window {
                                     title: @tr("Maximum (26B-A4B)");
                                     detail: @tr("Gemma 4 26B-A4B · 9.8 GiB · ~12 GiB VRAM");
                                     active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 2 && root.quality-model-present;
-                                    action: self.active ? @tr("Active") : root.quality-model-present ? @tr("Use") : @tr("Download");
+                                    action: self.active ? @tr("Active") : root.quality-model-present ? @tr("Use") : @tr("Download model");
                                     action-enabled: root.managed-local-server && !self.active && !root.builtin-busy;
                                     action-clicked => {
                                         if root.quality-model-present {
@@ -2696,14 +2697,14 @@ export component SettingsWindow inherits Window {
                                     wrap: word-wrap;
                                 }
                             }
-                            if !Platform.is-macos && root.local-engine-index == 0 && (root.builtin-status != "" || root.local-model-resource-warning != "") : WrapBlock {
+                            if !Platform.is-macos && root.local-engine-index == 0 && (root.builtin-status != "" || (root.llama-installed && root.local-model-resource-warning != "")) : WrapBlock {
                                 if root.builtin-status != "" : Text {
                                     text: root.builtin-status;
                                     font-size: Metrics.font-label;
                                     color: Theme.accent;
                                     wrap: word-wrap;
                                 }
-                                if root.local-model-resource-warning != "" : Text {
+                                if root.llama-installed && root.local-model-resource-warning != "" : Text {
                                     text: root.local-model-resource-warning;
                                     font-size: Metrics.font-label;
                                     color: Theme.warning;
@@ -2866,7 +2867,7 @@ export component SettingsWindow inherits Window {
                                     root.ai-local-vision-changed(v);
                                 }
                             }
-                            if !Platform.is-macos && root.local-engine-index == 0 && root.managed-local-server && !root.ai-local-vision-available : WrapBlock {
+                            if !Platform.is-macos && root.local-engine-index == 0 && root.llama-installed && root.managed-local-server && !root.ai-local-vision-available : WrapBlock {
                                 Text {
                                     text: root.ai-local-model-profile-index != 2
                                         ? @tr("Local Vision requires the installed 12B model and its projector. Use the separate Vision section below for cloud or another server.")
@@ -2980,7 +2981,7 @@ export component SettingsWindow inherits Window {
                                 Text {
                                     text: root.engine-build != ""
                                         ? @tr("Engine llama.cpp {}. The app checks it weekly and verifies a new build before replacing the current one.", root.engine-build)
-                                        : @tr("The app checks it weekly and verifies a new build before replacing the current one.");
+                                        : @tr("Engine llama.cpp. The app checks it weekly and verifies a new build before replacing the current one.");
                                     font-size: Metrics.font-label;
                                     color: Theme.text-muted;
                                     wrap: word-wrap;
