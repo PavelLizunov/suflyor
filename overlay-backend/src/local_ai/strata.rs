@@ -54,6 +54,9 @@ const STRATA_DISK_BYTES: u64 = 76 * GIB;
 pub const STRATA_MIN_RAM_GIB: u64 = 48;
 /// 8 GB cards start, slowly; Strata's documentation asks for 12 GB.
 pub const STRATA_MIN_VRAM_GIB: u64 = 12;
+/// Prefix of the error when Strata's own setup stops on a check it prints as
+/// `[X] ...` (no NVIDIA driver, too little RAM): the UI shows that line.
+pub const STRATA_SETUP_STOPPED: &str = "Strata setup stopped: ";
 /// The first start loads 35-55 GB into RAM; later starts take 30-90 s.
 const STRATA_READY_BUDGET: Duration = Duration::from_secs(600);
 
@@ -241,6 +244,7 @@ fn run_setup(dir: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> Result<(
 
     let mut log = std::fs::File::create(dir.join("suflyor-setup.log")).ok();
     let mut tail: Vec<String> = Vec::new();
+    let mut stopped_on: Option<String> = None;
     let status = loop {
         if cancel.load(Ordering::Relaxed) {
             terminate_child_tree(child);
@@ -250,6 +254,9 @@ fn run_setup(dir: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> Result<(
             Ok(line) => {
                 if let Some(file) = log.as_mut() {
                     let _ = writeln!(file, "{line}");
+                }
+                if let Some(reason) = setup_stop_reason(&line) {
+                    stopped_on = Some(reason);
                 }
                 on(Progress::Step(line.clone()));
                 tail.push(line);
@@ -267,6 +274,9 @@ fn run_setup(dir: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> Result<(
                 if let Some(file) = log.as_mut() {
                     let _ = writeln!(file, "{line}");
                 }
+                if let Some(reason) = setup_stop_reason(&line) {
+                    stopped_on = Some(reason);
+                }
                 tail.push(line);
             }
             break status;
@@ -275,6 +285,11 @@ fn run_setup(dir: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> Result<(
     // Not joined: a process the setup left behind could hold a pipe open; the
     // readers end when the last writer closes it.
     drop(readers);
+    // START-HERE.bat ends with `pause` after a failure, so its exit code can be
+    // 0; the `[X]` line is the reliable sign.
+    if let Some(reason) = stopped_on {
+        bail!("{STRATA_SETUP_STOPPED}{reason}");
+    }
     if !status.success() {
         let last = tail
             .iter()
@@ -342,6 +357,15 @@ impl LineSplitter {
         self.pending.clear();
         line
     }
+}
+
+/// Strata's setup prints a failed check as `[X]  <reason>`.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn setup_stop_reason(line: &str) -> Option<String> {
+    line.strip_prefix("[X]")
+        .map(str::trim)
+        .filter(|reason| !reason.is_empty())
+        .map(str::to_owned)
 }
 
 /// Drop ANSI escape sequences, trim, and cap the length for a status line.
@@ -626,6 +650,16 @@ mod tests {
         assert_eq!(lines, vec!["step 1", "12%", "13%"]);
         assert_eq!(s.push(b"ial\n"), vec!["partial"]);
         assert_eq!(s.finish(), None);
+    }
+
+    #[test]
+    fn setup_stop_reason_reads_the_failed_check() {
+        assert_eq!(
+            setup_stop_reason("[X]  no NVIDIA GPU found (nvidia-smi did not answer)").as_deref(),
+            Some("no NVIDIA GPU found (nvidia-smi did not answer)")
+        );
+        assert_eq!(setup_stop_reason("=== Step 1: checking your PC ==="), None);
+        assert_eq!(setup_stop_reason("[X]"), None);
     }
 
     #[test]

@@ -1641,29 +1641,44 @@ pub(crate) fn wire_strata(
                     eprintln!("[overlay-host] Strata install failed: {e:#}");
                 }
                 let installed = overlay_backend::local_ai::strata_installed(&root);
-                // Generic text: setup errors can carry paths, and Settings may
-                // be screen-shared.
+                // A failed check of Strata's own setup (no NVIDIA driver, too
+                // little RAM) is the one detail the user needs to act on.
+                let stopped = res.as_ref().err().and_then(|e| {
+                    e.to_string()
+                        .strip_prefix(overlay_backend::local_ai::STRATA_SETUP_STOPPED)
+                        .map(str::to_owned)
+                });
+                // Otherwise generic text: setup errors can carry paths, and
+                // Settings may be screen-shared.
                 let msg = match &res {
-                    Ok(()) if ru => "Strata установлена. Нажмите «Использовать», чтобы запустить её.",
-                    Ok(()) => "Strata is installed. Press Use to start it.",
+                    Err(_) if stopped.is_some() => {
+                        let reason = stopped.clone().unwrap_or_default();
+                        if ru {
+                            format!("Установка Strata остановлена: {reason}")
+                        } else {
+                            format!("Strata setup stopped: {reason}")
+                        }
+                    }
+                    Ok(()) if ru => "Strata установлена. Нажмите «Использовать», чтобы запустить её.".to_string(),
+                    Ok(()) => "Strata is installed. Press Use to start it.".to_string(),
                     Err(e) if e.to_string().contains(overlay_backend::local_ai::CANCEL_SENTINEL) => {
                         if ru {
-                            "Отменено. Повторный запуск продолжит загрузку."
+                            "Отменено. Повторный запуск продолжит загрузку.".to_string()
                         } else {
-                            "Cancelled. Installing again resumes the download."
+                            "Cancelled. Installing again resumes the download.".to_string()
                         }
                     }
                     Err(e) if e.to_string().contains("not enough free disk space") => {
                         if ru {
-                            "Недостаточно места на диске: Strata нужно около 80 ГБ."
+                            "Недостаточно места на диске: Strata нужно около 80 ГБ.".to_string()
                         } else {
-                            "Not enough free disk space: Strata needs about 80 GB."
+                            "Not enough free disk space: Strata needs about 80 GB.".to_string()
                         }
                     }
                     Err(_) if ru => {
-                        "Установка Strata не удалась. Подробности — в suflyor-setup.log в папке Strata."
+                        "Установка Strata не удалась. Подробности — в suflyor-setup.log в папке Strata.".to_string()
                     }
-                    Err(_) => "Strata setup failed. Details are in suflyor-setup.log in the Strata folder.",
+                    Err(_) => "Strata setup failed. Details are in suflyor-setup.log in the Strata folder.".to_string(),
                 };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_t.upgrade() {
