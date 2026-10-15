@@ -16,13 +16,17 @@ pub struct RunningServer {
     pub base_url: String,
     /// Chat models it serves; embedding models are left out.
     pub models: Vec<String>,
+    /// Its `/health` says it is Strata with the model loaded.
+    pub strata_ready: bool,
 }
 
 impl RunningServer {
-    /// The local provider already points at this server.
+    /// The local provider already points at this server and at a model it
+    /// serves.
     #[must_use]
-    pub fn is_current(&self, base_url: &str) -> bool {
+    pub fn is_current(&self, base_url: &str, model: &str) -> bool {
         super::is_loopback_v1_on_port(base_url, &self.port.to_string())
+            && self.models.iter().any(|m| m == model)
     }
 
     /// The model to use: the saved one when this server has it, else its first.
@@ -47,7 +51,7 @@ const KNOWN_PORTS: &[(u16, &str)] = &[
     (4891, "GPT4All"),
     (5000, "text-generation-webui"),
     (8000, ""),
-    (8090, "Strata"),
+    (8090, ""),
 ];
 
 fn chat_models(body: &str) -> Vec<String> {
@@ -78,20 +82,29 @@ fn probe(port: u16, name: &str) -> Option<RunningServer> {
         return None;
     }
     // Strata's /health carries `loaded`, whatever port it runs on.
-    let strata = curl_success_body(&[
+    let health = curl_success_body(&[
         "-f",
         "-sS",
         "--max-time",
         "2",
         &format!("http://127.0.0.1:{port}/health"),
     ])
-    .and_then(|b| serde_json::from_str::<serde_json::Value>(&b).ok())
-    .is_some_and(|h| h.get("loaded").is_some());
+    .and_then(|b| serde_json::from_str::<serde_json::Value>(&b).ok());
+    let loaded = health
+        .as_ref()
+        .and_then(|h| h.get("loaded"))
+        .map(|l| l.as_bool() == Some(true));
+    // :8090 is the Strata engine's port: the app treats it as Strata, so a
+    // server there is listed only when it is a Strata with its model loaded.
+    if port == 8090 && loaded != Some(true) {
+        return None;
+    }
     Some(RunningServer {
-        name: if strata { "Strata" } else { name }.to_string(),
+        name: if loaded.is_some() { "Strata" } else { name }.to_string(),
         port,
         base_url,
         models,
+        strata_ready: loaded == Some(true),
     })
 }
 
@@ -131,9 +144,12 @@ mod tests {
             port: 11434,
             base_url: "http://127.0.0.1:11434/v1".into(),
             models: vec!["qwen3:8b".into(), "llama3.2".into()],
+            strata_ready: false,
         };
-        assert!(server.is_current("http://localhost:11434/v1/"));
-        assert!(!server.is_current("http://127.0.0.1:8080/v1"));
+        assert!(server.is_current("http://localhost:11434/v1/", "llama3.2"));
+        // The saved model is gone from the server: not in use.
+        assert!(!server.is_current("http://127.0.0.1:11434/v1", "gemma"));
+        assert!(!server.is_current("http://127.0.0.1:8080/v1", "llama3.2"));
         assert_eq!(server.pick_model("llama3.2"), "llama3.2");
         assert_eq!(server.pick_model("gemma"), "qwen3:8b");
     }
@@ -151,7 +167,7 @@ mod tests {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         std::thread::spawn(move || {
-            for stream in listener.incoming().take(2) {
+            for stream in listener.incoming().take(3) {
                 let mut stream = stream.unwrap();
                 let mut buf = [0u8; 1024];
                 let n = stream.read(&mut buf).unwrap();
@@ -172,5 +188,6 @@ mod tests {
         assert_eq!(found.name, "Ollama");
         assert_eq!(found.base_url, format!("http://127.0.0.1:{port}/v1"));
         assert_eq!(found.models, vec!["qwen3:8b"]);
+        assert!(!found.strata_ready);
     }
 }

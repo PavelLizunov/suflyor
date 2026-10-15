@@ -1577,18 +1577,11 @@ static FOUND_SERVERS: std::sync::Mutex<Vec<overlay_backend::local_ai::RunningSer
 #[cfg(windows)]
 static FOUND_STRATA_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// The servers that get their own row: a Strata on :8090 is the found
-/// Strata's row when there is one.
-fn listed_servers(has_strata_row: bool) -> Vec<overlay_backend::local_ai::RunningServer> {
+fn listed_servers() -> Vec<overlay_backend::local_ai::RunningServer> {
     FOUND_SERVERS
         .lock()
         .unwrap_or_else(|p| p.into_inner())
-        .iter()
-        .filter(|s| {
-            !(has_strata_row && overlay_backend::local_ai::is_managed_strata_endpoint(&s.base_url))
-        })
-        .cloned()
-        .collect()
+        .clone()
 }
 
 /// The "Already on this PC" rows: the found Strata, then running servers.
@@ -1617,7 +1610,7 @@ fn show_found_models(win: &SettingsWindow, cfg: &overlay_backend::config::Config
             active: false,
         });
     }
-    for server in listed_servers(strata.is_some()) {
+    for server in listed_servers() {
         let name = if server.name.is_empty() {
             if ru { "Сервер" } else { "Server" }.to_string()
         } else {
@@ -1638,7 +1631,10 @@ fn show_found_models(win: &SettingsWindow, cfg: &overlay_backend::config::Config
                 format!(" · {more} more models")
             });
         }
-        let current = server.is_current(&cfg.ai_local_base_url);
+        // A Strata on :8090 is in use through the chosen folder's row when
+        // one is chosen.
+        let current = server.is_current(&cfg.ai_local_base_url, &cfg.ai_local_model)
+            && !(server.strata_ready && overlay_backend::local_ai::adopted_strata().is_some());
         rows.push(super::FoundModel {
             title: SharedString::from(server.pick_model(&cfg.ai_local_model)),
             detail: SharedString::from(detail),
@@ -1649,30 +1645,22 @@ fn show_found_models(win: &SettingsWindow, cfg: &overlay_backend::config::Config
     win.set_found_models(super::ModelRc::new(super::VecModel::from(rows)));
 }
 
-/// Look for running model servers and, unless one is chosen, a Strata
-/// folder; off the UI thread, the result lands on it.
+/// A folder scan in flight: "Search again" does not start a second one.
 #[cfg(windows)]
-pub(crate) fn search_found_models(
-    win: &SettingsWindow,
-    cfg: &overlay_backend::config::SharedConfig,
-) {
+static STRATA_SCANNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Look for running model servers and, unless one is chosen, a Strata
+/// folder, off the UI thread. Each result lands on the UI thread on its own:
+/// a slow disk does not hold back the servers.
+#[cfg(windows)]
+pub(crate) fn search_found_models(win: &SettingsWindow, cfg: &overlay_backend::config::SharedConfig) {
     if win.get_found_models_searching() {
         return;
     }
     win.set_found_models_searching(true);
-    let generation = FOUND_STRATA_GEN.load(std::sync::atomic::Ordering::SeqCst);
-    let look_for_strata = overlay_backend::local_ai::adopted_strata().is_none();
     let weak = win.as_weak();
     let cfg_t = cfg.clone();
     std::thread::spawn(move || {
-        let strata_search = look_for_strata.then(|| {
-            std::thread::spawn(|| {
-                let root = overlay_backend::local_ai::default_root();
-                overlay_backend::local_ai::find_existing_strata(&root)
-                    .into_iter()
-                    .next()
-            })
-        });
         let servers: Vec<_> = overlay_backend::local_ai::find_running_servers()
             .into_iter()
             // Suflyor's own Strata already has its row in the Strata panel.
@@ -1681,25 +1669,42 @@ pub(crate) fn search_found_models(
                     && overlay_backend::local_ai::is_managed_strata_endpoint(&s.base_url))
             })
             .collect();
-        let strata = strata_search.and_then(|h| h.join().ok().flatten());
         let _ = slint::invoke_from_event_loop(move || {
             let Some(w) = weak.upgrade() else { return };
             w.set_found_models_searching(false);
             *FOUND_SERVERS.lock().unwrap_or_else(|p| p.into_inner()) = servers;
-            if look_for_strata
-                && !w.get_strata_adopted()
-                && FOUND_STRATA_GEN.load(std::sync::atomic::Ordering::SeqCst) == generation
-            {
-                *FOUND_STRATA.lock().unwrap_or_else(|p| p.into_inner()) = strata;
-            }
             let c = cfg_t.read();
             show_found_models(&w, &c);
-            let ru = c.ui_is_ru();
-            w.set_found_models_note(SharedString::from(if ru {
+            w.set_found_models_note(SharedString::from(if c.ui_is_ru() {
                 "На этом ПК не найдено запущенных моделей и папок Strata."
             } else {
                 "No running models or Strata folders found on this PC."
             }));
+        });
+    });
+    if overlay_backend::local_ai::adopted_strata().is_some()
+        || STRATA_SCANNING.swap(true, std::sync::atomic::Ordering::SeqCst)
+    {
+        return;
+    }
+    let generation = FOUND_STRATA_GEN.load(std::sync::atomic::Ordering::SeqCst);
+    let weak = win.as_weak();
+    let cfg_t = cfg.clone();
+    std::thread::spawn(move || {
+        let root = overlay_backend::local_ai::default_root();
+        let strata = overlay_backend::local_ai::find_existing_strata(&root)
+            .into_iter()
+            .next();
+        STRATA_SCANNING.store(false, std::sync::atomic::Ordering::SeqCst);
+        let _ = slint::invoke_from_event_loop(move || {
+            let Some(w) = weak.upgrade() else { return };
+            if w.get_strata_adopted()
+                || FOUND_STRATA_GEN.load(std::sync::atomic::Ordering::SeqCst) != generation
+            {
+                return;
+            }
+            *FOUND_STRATA.lock().unwrap_or_else(|p| p.into_inner()) = strata;
+            show_found_models(&w, &cfg_t.read());
         });
     });
 }
@@ -1829,9 +1834,18 @@ pub(crate) fn wire_strata(
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
+        let state_c = state.clone();
         win.on_found_model_use(move |index| {
             let Some(w) = weak.upgrade() else { return };
-            if w.get_strata_busy() || w.get_model_switching() {
+            // A running install, download or switch owns the engine.
+            if w.get_strata_busy()
+                || w.get_model_switching()
+                || state_c
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .local_ai_busy
+                    .load(std::sync::atomic::Ordering::SeqCst)
+            {
                 return;
             }
             let has_strata_row = FOUND_STRATA
@@ -1848,13 +1862,15 @@ pub(crate) fn wire_strata(
                 }
                 index -= 1;
             }
-            let Some(server) = listed_servers(has_strata_row).get(index).cloned() else {
+            let Some(server) = listed_servers().get(index).cloned() else {
                 return;
             };
-            // A Strata the user started on :8090: the Strata engine picks up
-            // a server that already answers there.
-            if overlay_backend::local_ai::is_managed_strata_endpoint(&server.base_url) {
-                w.invoke_local_engine_activate(1);
+            // A Strata the user started on :8090: use it as the Strata engine
+            // (3 = the running one, nothing is started).
+            if server.strata_ready
+                && overlay_backend::local_ai::is_managed_strata_endpoint(&server.base_url)
+            {
+                w.invoke_local_engine_activate(3);
                 return;
             }
             let leaving_builtin = {
@@ -1869,8 +1885,26 @@ pub(crate) fn wire_strata(
             w.set_local_engine_index(2);
             w.invoke_ai_local_base_url_save(SharedString::from(server.base_url.clone()));
             // The built-in engine holds the GPU and RAM the other server needs.
+            // Under the lifecycle lock (a running summary or a switch keeps
+            // it), and only while the choice still stands.
             if leaving_builtin {
-                std::thread::spawn(|| {
+                let lifecycle_lock = state_c
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .local_ai_lock
+                    .clone();
+                let cfg_t = cfg_c.clone();
+                std::thread::spawn(move || {
+                    let Some(_guard) =
+                        overlay_backend::local_ai::blocking_acquire_lifecycle(&lifecycle_lock)
+                    else {
+                        return;
+                    };
+                    if overlay_backend::local_ai::is_managed_llama_endpoint(
+                        &cfg_t.read().ai_local_base_url,
+                    ) {
+                        return;
+                    }
                     let root = overlay_backend::local_ai::default_root();
                     let _ = overlay_backend::local_ai::free_llama_port(&root);
                 });
@@ -2049,7 +2083,9 @@ pub(crate) fn wire_strata(
             }) else {
                 return;
             };
-            let to_strata = index == 1;
+            // 1 = start Strata, 3 = use the Strata already running on :8090.
+            let to_strata = index == 1 || index == 3;
+            let running_strata = index == 3;
             if to_strata {
                 w.set_strata_busy(true);
                 w.set_strata_status(SharedString::from(if ru {
@@ -2126,7 +2162,11 @@ pub(crate) fn wire_strata(
                             });
                         }
                     };
-                    let outcome = overlay_backend::local_ai::start_strata(&root, &cancel, &on);
+                    let outcome = if running_strata {
+                        overlay_backend::local_ai::use_running_strata(&root)
+                    } else {
+                        overlay_backend::local_ai::start_strata(&root, &cancel, &on)
+                    };
                     strata_ready = outcome == overlay_backend::local_ai::StrataStart::Ready;
                     if strata_ready {
                         let model = overlay_backend::local_ai::served_strata_model()

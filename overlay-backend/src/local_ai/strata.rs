@@ -270,7 +270,13 @@ fn strata_folders_under(base: &Path, depth: u8, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(base) else {
         return;
     };
-    for path in entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
+    // Real folders only: a link or junction may point at a slow or missing
+    // network share.
+    for path in entries
+        .flatten()
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .map(|e| e.path())
+    {
         if looks_like_strata(&path) {
             out.push(path);
             continue;
@@ -825,10 +831,6 @@ fn launch_strata(root: &Path) -> Result<Child> {
 /// is stopped; restoring the previous engine is the caller's decision.
 pub fn start_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> StrataStart {
     if !strata_installed(root) {
-        // Nothing to start, but a Strata the user started may answer.
-        if !strata_running() && strata_answers() {
-            return StrataStart::Ready;
-        }
         return StrataStart::NotInstalled;
     }
     let (_, config) = active_location(root);
@@ -842,11 +844,6 @@ pub fn start_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> 
     }
     stop_strata();
     if strata_reachable() {
-        // A Strata the user started answers here already: use it.
-        if strata_answers() {
-            log::info!("strata: using the server already running on :{STRATA_PORT}");
-            return StrataStart::Ready;
-        }
         return StrataStart::PortBusy;
     }
     let had_llama = llama_reachable();
@@ -896,6 +893,24 @@ pub fn start_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> 
     log::warn!("strata: not ready within {STRATA_READY_BUDGET:?}");
     stop_strata();
     StrataStart::FailedToStart
+}
+
+/// Use a Strata the user started on :8090 instead of starting one: frees
+/// the built-in engine (both need the GPU), then checks that it answers.
+/// Callers hold the lifecycle lock.
+#[must_use]
+pub fn use_running_strata(root: &Path) -> StrataStart {
+    if !strata_answers() {
+        return if strata_reachable() {
+            StrataStart::PortBusy
+        } else {
+            StrataStart::FailedToStart
+        };
+    }
+    // Owner-aware: a foreign :8080 listener stays; only ours is stopped.
+    let _ = free_llama_port(root);
+    log::info!("strata: using the server already running on :{STRATA_PORT}");
+    StrataStart::Ready
 }
 
 /// Point the local provider at Strata after a confirmed start.

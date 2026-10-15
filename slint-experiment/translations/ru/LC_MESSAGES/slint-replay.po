@@ -2525,8 +2525,8 @@ msgstr "Уже есть на этом ПК"
 msgid "Search again"
 msgstr "Искать снова"
 
-msgid "Connected"
-msgstr "Подключено"
+msgid "In use"
+msgstr "Используется"
 
 msgid "Connect"
 msgstr "Подключить"

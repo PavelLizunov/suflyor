@@ -2648,7 +2648,7 @@ export component SettingsWindow inherits Window {
                                             : self.active && root.strata-running ? @tr("Active")
                                             : self.active ? @tr("Start")
                                             : @tr("Use"))
-                                        : (self.active ? @tr("Connected") : @tr("Connect"));
+                                        : (self.active ? @tr("In use") : @tr("Connect"));
                                     action-enabled: !(m.kind == 1 && self.active && root.strata-running)
                                         && !(m.kind == 0 && self.active)
                                         && !root.strata-busy && !root.builtin-busy;
