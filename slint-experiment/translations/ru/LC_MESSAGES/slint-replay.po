@@ -2687,3 +2687,6 @@ msgstr "Мост доступен с других устройств — исп�
 
 msgid "LFM Open License v1.0 has commercial-use conditions. Review the license before commercial use. Russian response quality is not guaranteed."
 msgstr "В LFM Open License v1.0 есть условия коммерческого использования. Перед коммерческим применением изучите лицензию. Качество ответов на русском языке не гарантируется."
+
+msgid "Searches the knowledge base and personal memory"
+msgstr "Ищет в базе знаний и личной памяти"

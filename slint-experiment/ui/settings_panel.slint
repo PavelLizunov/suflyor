@@ -2841,7 +2841,7 @@ export component SettingsWindow inherits Window {
                                 SettingsCard {
                                     title: @tr("What the model can do");
                                     DarkCheck { text: @tr("Local model reasoning/thinking (slower, off = faster)"); checked <=> root.ai-local-thinking; toggled(v) => { root.ai-local-thinking-changed(v); } }
-                                    DarkCheck { text: @tr("Model tools: search the knowledge base"); checked <=> root.ai-agent-tools; toggled(v) => { root.ai-agent-tools-changed(v); } }
+                                    DarkCheck { text: @tr("Searches the knowledge base and personal memory"); checked <=> root.ai-agent-tools; toggled(v) => { root.ai-agent-tools-changed(v); } }
                                     HorizontalLayout {
                                         padding-left: Metrics.space-sm;
                                         DarkCheck { text: @tr("Also search the web (DuckDuckGo)"); checked <=> root.ai-web-search; enabled: root.ai-agent-tools; toggled(v) => { root.ai-web-search-changed(v); } }
@@ -3057,7 +3057,7 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             if Platform.is-macos : DarkCheck {
-                                text: @tr("Model tools: search the knowledge base");
+                                text: @tr("Searches the knowledge base and personal memory");
                                 checked <=> root.ai-agent-tools;
                                 toggled(v) => {
                                     root.ai-agent-tools-changed(v);
