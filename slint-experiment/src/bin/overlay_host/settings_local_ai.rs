@@ -1762,6 +1762,7 @@ pub(crate) fn wire_strata(
                 };
                 let msg: String;
                 let mut started = Vec::new();
+                let mut strata_ready = false;
                 if to_strata {
                     let on = {
                         let weak_p = weak_t.clone();
@@ -1779,7 +1780,8 @@ pub(crate) fn wire_strata(
                         }
                     };
                     let outcome = overlay_backend::local_ai::start_strata(&root, &cancel, &on);
-                    if outcome == overlay_backend::local_ai::StrataStart::Ready {
+                    strata_ready = outcome == overlay_backend::local_ai::StrataStart::Ready;
+                    if strata_ready {
                         let model = overlay_backend::local_ai::served_strata_model()
                             .unwrap_or_else(|| "strata".to_string());
                         let mut c = cfg_t.write();
@@ -1886,6 +1888,7 @@ pub(crate) fn wire_strata(
                     if let Some(w) = weak_done.upgrade() {
                         w.set_strata_busy(false);
                         w.set_model_switching(false);
+                        w.set_strata_running(strata_ready);
                         if to_strata {
                             w.set_strata_status(SharedString::from(msg));
                         } else {

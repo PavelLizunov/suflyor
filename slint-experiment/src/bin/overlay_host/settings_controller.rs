@@ -1812,6 +1812,13 @@ pub(crate) fn populate_token_status(
         let ru = c.ui_is_ru();
         let hardware_weak = win.as_weak();
         std::thread::spawn(move || {
+            let running = overlay_backend::local_ai::strata_reachable();
+            let running_weak = hardware_weak.clone();
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(w) = running_weak.upgrade() {
+                    w.set_strata_running(running);
+                }
+            });
             let hw = overlay_backend::local_ai::StrataHardware::detect();
             let note = hw.describe(ru);
             let fits = hw.meets_recommendation();

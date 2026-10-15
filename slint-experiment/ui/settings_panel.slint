@@ -366,6 +366,9 @@ export component SettingsWindow inherits Window {
     in-out property <bool> local-more-open: false;
     in-out property <bool> strata-installed: false;
     in-out property <bool> strata-active: false;
+    // Checked off the UI thread on open and after a switch: the saved engine
+    // can be Strata while its server is down.
+    in-out property <bool> strata-running: false;
     in-out property <bool> strata-busy: false;
     in-out property <string> strata-status: "";
     in-out property <string> strata-hardware-note: "";
@@ -2756,10 +2759,11 @@ export component SettingsWindow inherits Window {
                                         ? @tr("Strata engine · installed")
                                         : @tr("Strata engine · ~72 GB download");
                                     active: root.strata-active;
-                                    action: self.active ? @tr("Active")
-                                        : root.strata-busy ? @tr("Working…")
+                                    action: root.strata-busy ? @tr("Working…")
+                                        : self.active && root.strata-running ? @tr("Active")
+                                        : self.active ? @tr("Start")
                                         : root.strata-installed ? @tr("Use") : @tr("Install");
-                                    action-enabled: !self.active && !root.strata-busy && !root.builtin-busy;
+                                    action-enabled: !(self.active && root.strata-running) && !root.strata-busy && !root.builtin-busy;
                                     action-clicked => {
                                         if root.strata-installed {
                                             root.local-engine-activate(1);
@@ -2777,6 +2781,12 @@ export component SettingsWindow inherits Window {
                                         mouse-cursor: pointer;
                                         clicked => { root.strata-license-clicked(); }
                                     }
+                                }
+                                if root.strata-active && !root.strata-running && !root.strata-busy && root.strata-status == "" : Text {
+                                    text: @tr("Strata is the selected engine but is not answering. Press Start.");
+                                    font-size: Metrics.font-label;
+                                    color: Theme.warning;
+                                    wrap: word-wrap;
                                 }
                                 if root.strata-status != "" : Text {
                                     text: root.strata-status;
