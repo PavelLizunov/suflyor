@@ -3088,6 +3088,17 @@ fn spawn_hidden(exe: &str, args: &[&str]) -> Result<Child> {
         .with_context(|| format!("spawn {exe}"))
 }
 
+/// Spawn a prepared command without a console window and tie it to the app's
+/// lifetime job. Child modules (Strata) build their own command lines, but
+/// spawning stays here.
+fn spawn_owned(cmd: &mut Command) -> Result<Child> {
+    crate::download::no_window(cmd);
+    let child = cmd.spawn().context("spawn a local AI process")?;
+    #[cfg(windows)]
+    assign_to_lifetime_job(&child);
+    Ok(child)
+}
+
 /// Launch a hidden server process (kept alive; returned to the caller).
 fn launch_hidden(exe: &Path, args: &[&str]) -> Result<Child> {
     let exe_s = exe.to_string_lossy().to_string();

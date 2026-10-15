@@ -23,7 +23,7 @@ use anyhow::{bail, Context, Result};
 use super::{
     curl_resumable, curl_success_body, detect_nvidia_memory_mib, ensure_disk_space, extract_zip,
     free_llama_port, is_loopback_v1_on_port, is_reachable, llama_reachable,
-    llama_reply_has_text_content, pinned_file_matches, terminate_child_tree,
+    llama_reply_has_text_content, pinned_file_matches, spawn_owned, terminate_child_tree,
     wait_for_nvidia_vram_release, Progress, GIB,
 };
 
@@ -226,9 +226,7 @@ fn run_setup(dir: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> Result<(
     .stdin(Stdio::null())
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());
-    crate::download::no_window(&mut cmd);
-    let mut child = cmd.spawn().context("start Strata setup")?;
-    super::assign_to_lifetime_job(&child);
+    let mut child = spawn_owned(&mut cmd).context("start Strata setup")?;
 
     let (tx, rx) = mpsc::channel::<String>();
     let mut readers = Vec::new();
@@ -529,11 +527,7 @@ fn launch_strata(root: &Path) -> Result<Child> {
         .stdin(Stdio::null())
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(log_err));
-    crate::download::no_window(&mut cmd);
-    let child = cmd.spawn().context("start the Strata server")?;
-    #[cfg(windows)]
-    super::assign_to_lifetime_job(&child);
-    Ok(child)
+    spawn_owned(&mut cmd).context("start the Strata server")
 }
 
 /// Start Strata and wait until it answers. Stops the managed llama.cpp first,
