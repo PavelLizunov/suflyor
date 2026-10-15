@@ -33,9 +33,10 @@ fn macos_reports_builtin_apple_vision_without_tesseract_install_actions() {
     assert!(settings
         .contains("cfg!(target_os = \"macos\") || overlay_backend::ocr_install::is_installed()"));
     assert!(vision.contains("#[cfg(windows)]\n    {\n        let weak = win.as_weak();\n        win.on_ocr_install_clicked"));
-    assert!(ui.contains("if Platform.is-macos : Text"));
-    assert!(ui.contains("Apple Vision is built into macOS; no download is required."));
-    assert!(ui.contains("if !Platform.is-macos : WrapBlock"));
+    // OCR is installed only from its Components row, whose macOS detail is
+    // "Apple Vision" (checked above); no other Settings tab offers Tesseract.
+    assert!(!ui.contains("root.ocr-install-clicked()"));
+    assert!(ui.contains("root.component-install(idx)"));
 }
 
 #[test]

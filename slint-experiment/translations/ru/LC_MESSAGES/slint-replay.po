@@ -2530,3 +2530,36 @@ msgstr "Используется"
 
 msgid "Connect"
 msgstr "Подключить"
+
+msgid "Screenshots (F8)"
+msgstr "Скриншоты (F8)"
+
+msgid "Where answers come from"
+msgstr "Откуда брать ответы"
+
+msgid "Your server or bridge (OpenAI-compatible)"
+msgstr "Свой сервер или мост (OpenAI-совместимый)"
+
+msgid "Model on this PC"
+msgstr "Модель на этом ПК"
+
+msgid "ChatGPT via Codex (experimental)"
+msgstr "ChatGPT через Codex (экспериментально)"
+
+msgid "Same as the answer model"
+msgstr "Та же, что отвечает"
+
+msgid "Same as the answer model (unavailable)"
+msgstr "Та же, что отвечает (недоступно)"
+
+msgid "Which model looks at F8 screenshots. It is separate from the answer model: a local model can keep answering while images go to a model that understands them."
+msgstr "Какая модель смотрит скриншоты F8. Она отдельная от модели ответов: локальная модель продолжает отвечать, а картинки уходят в модель, которая их понимает."
+
+msgid "Screenshots use the OpenAI API connection and model set in AI providers. The answer and screenshot models stay independent."
+msgstr "Скриншоты идут через подключение и модель OpenAI API из вкладки AI-провайдеры. Модели для ответов и скриншотов выбираются независимо."
+
+msgid "Screenshots use the Anthropic API connection and model set in AI providers. The answer and screenshot models stay independent."
+msgstr "Скриншоты идут через подключение и модель Anthropic API из вкладки AI-провайдеры. Модели для ответов и скриншотов выбираются независимо."
+
+msgid "Speaker detection"
+msgstr "Определение говорящих"

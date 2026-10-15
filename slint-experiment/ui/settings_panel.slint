@@ -779,6 +779,11 @@ export component SettingsWindow inherits Window {
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
                 }
                 NavItem {
+                    label: @tr("Screenshots (F8)"); icon: @image-url("../assets/icons/camera.svg"); tab-index: 17;
+                    active: root.active-tab == 17;
+                    chosen(i) => { root.active-tab = i; root.tab-selected(i); }
+                }
+                NavItem {
                     label: @tr("STT"); icon: @image-url("../assets/icons/stt.svg"); tab-index: 12;
                     active: root.active-tab == 12;
                     chosen(i) => { root.active-tab = i; root.tab-selected(i); }
@@ -2003,6 +2008,34 @@ export component SettingsWindow inherits Window {
                             }
                         }
                         }
+                        SettingsCard {
+                            title: @tr("Speaker detection");
+                        Text {
+                            text: @tr("Speaker detection separates who spoke in the call's system audio (the «Determine speakers» button in the transcript window). Needs two models (~32 MB).");
+                            font-size: Metrics.font-label;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        if !root.diar-models-installed : HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: root.diar-installing ? @tr("Installing…") : @tr("Install speaker models");
+                                enabled: !root.diar-installing;
+                                clicked => { root.diar-install-clicked(); }
+                            }
+                        }
+                        if root.diar-models-installed && root.diar-install-status == "" : Text {
+                            text: @tr("Speaker models are installed.");
+                            font-size: Metrics.font-label;
+                            color: Theme.text-secondary;
+                        }
+                        if root.diar-install-status != "" : Text {
+                            text: root.diar-install-status;
+                            font-size: Metrics.font-label;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        }
                     }
                     if root.active-tab == 7 : VerticalLayout {
                         spacing: 10px;
@@ -2191,9 +2224,8 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 11 : VerticalLayout {
                         spacing: 10px;
                         SettingsCard {
-                            title: @tr("AI providers");
                         Text {
-                            text: @tr("Where do live answers come from? Pick a type, then configure it.");
+                            text: @tr("Where answers come from");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -2201,17 +2233,17 @@ export component SettingsWindow inherits Window {
                         // ===== TYPE selector — gates everything below =====
                         SettingsComboBox {
                             model: Platform.is-macos ? [
-                                @tr("Custom OpenAI-compatible bridge"),
-                                @tr("Local OpenAI-compatible"),
+                                @tr("Your server or bridge (OpenAI-compatible)"),
+                                @tr("Model on this PC"),
                                 @tr("OpenAI API (Responses)"),
                                 @tr("Anthropic API (Messages)"),
                                 @tr("Managed MLX (Apple silicon)"),
                             ] : [
-                                @tr("Custom OpenAI-compatible bridge"),
-                                @tr("Local OpenAI-compatible"),
+                                @tr("Your server or bridge (OpenAI-compatible)"),
+                                @tr("Model on this PC"),
                                 @tr("OpenAI API (Responses)"),
                                 @tr("Anthropic API (Messages)"),
-                                @tr("Codex safe models (ChatGPT, experimental)"),
+                                @tr("ChatGPT via Codex (experimental)"),
                             ];
                             current-index: root.ai-provider-index;
                             selected => {
@@ -3139,130 +3171,38 @@ export component SettingsWindow inherits Window {
                             }
                         }
 
-                        Rectangle { background: Theme.border; height: 1px; }
-                        // Text OUTER + TouchArea INNER: a TouchArea is NOT a layout
-                        // and doesn't constrain its child's width, so the old
-                        // TouchArea>Text rendered this hint on ONE line that ran off
-                        // the card edge (clipped — "…перезагрузк"). With the Text
-                        // outer, the card's VerticalLayout constrains its width and
-                        // word-wrap finally kicks in.
-                        Text {
-                            text: @tr("Tip: Save writes to suflyor/config.json in application configuration folder. Restart binary to re-load.");
-                            font-size: Metrics.font-caption;
-                            color: Theme.accent;
-                            wrap: word-wrap;
-                            TouchArea {
-                                mouse-cursor: pointer;
-                                clicked => { root.open-data-folder-clicked(); }
-                            }
                         }
-
-                        // ===================== VISION (screenshots · F8) =====================
-                        Rectangle { background: Theme.border; height: 2px; }
+                    }
+                    if root.active-tab == 17 : VerticalLayout {
+                        spacing: 10px;
+                        SettingsCard {
                         Text {
-                            text: @tr("Vision (screenshots · F8)");
-                            font-size: Metrics.font-body;
-                            font-weight: 700;
-                            color: Theme.text-primary;
-                        }
-                        Text {
-                            text: @tr("Where F8 screenshots are analysed. SEPARATE from the text model above — a local text model can keep answering while images go to a vision-capable model.");
+                            text: @tr("Which model looks at F8 screenshots. It is separate from the answer model: a local model can keep answering while images go to a model that understands them.");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        if Platform.is-macos : Text {
-                            text: @tr("Text recognition (OCR) - Apple Vision is built into macOS; no download is required.");
-                            font-size: Metrics.font-label;
-                            color: Theme.text-secondary;
-                            wrap: word-wrap;
-                        }
-                        if !Platform.is-macos : WrapBlock {
-                            spacing: 6px;
-                            // Local OCR engine (Tesseract) for Shift+Alt+2 / Ctrl+F8
-                            // text recognition. Installed on demand (~53 MB), not
-                            // bundled in the app installer.
-                            Text {
-                                text: @tr("Text recognition (OCR) — Shift+Alt+2 reads on-screen text aloud / copies it via a local engine. Without it, OCR falls back to the slower vision model.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            if !root.ocr-installed : HorizontalLayout {
-                                alignment: start;
-                                Button {
-                                    text: root.ocr-installing ? @tr("Installing…") : @tr("Install text recognition (OCR)");
-                                    enabled: !root.ocr-installing;
-                                    clicked => { root.ocr-install-clicked(); }
-                                }
-                            }
-                            if root.ocr-installed && root.ocr-install-phase == 0 : Text {
-                                text: @tr("Text recognition is installed.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                            }
-                            if root.ocr-install-phase != 0 : Text {
-                                text: root.ocr-install-phase == 1 ? @tr("Preparing…")
-                                    : root.ocr-install-phase == 2 ? @tr("Downloading the engine (~53 MB)…")
-                                    : root.ocr-install-phase == 3 ? @tr("Verifying…")
-                                    : root.ocr-install-phase == 4 ? @tr("Unpacking…")
-                                    : root.ocr-install-phase == 5 ? @tr("Text recognition already installed")
-                                    : root.ocr-install-phase == 6 ? @tr("Text recognition installed")
-                                    : @tr("Couldn't install text recognition — check the connection and retry.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                                wrap: word-wrap;
-                            }
-                        }
-                        // ── Speaker-diarization models (for «Определить говорящих») ──
-                        Rectangle { background: Theme.border; height: 1px; }
-                        Text {
-                            text: @tr("Speaker detection separates who spoke in the call's system audio (the «Determine speakers» button in the transcript window). Needs two models (~32 MB).");
-                            font-size: Metrics.font-label;
-                            color: Theme.text-secondary;
-                            wrap: word-wrap;
-                        }
-                        if !root.diar-models-installed : HorizontalLayout {
-                            alignment: start;
-                            Button {
-                                text: root.diar-installing ? @tr("Installing…") : @tr("Install speaker models");
-                                enabled: !root.diar-installing;
-                                clicked => { root.diar-install-clicked(); }
-                            }
-                        }
-                        if root.diar-models-installed && root.diar-install-status == "" : Text {
-                            text: @tr("Speaker models are installed.");
-                            font-size: Metrics.font-label;
-                            color: Theme.text-secondary;
-                        }
-                        if root.diar-install-status != "" : Text {
-                            text: root.diar-install-status;
-                            font-size: Metrics.font-label;
-                            color: Theme.text-secondary;
-                            wrap: word-wrap;
-                        }
-                        Rectangle { background: Theme.border; height: 1px; }
                         SettingsComboBox {
                             model: Platform.is-macos ? [
                                 @tr("Off"),
                                 root.vision-same-available
-                                    ? @tr("Same as text model above")
-                                    : @tr("Same as text model above (unavailable)"),
-                                @tr("Custom OpenAI-compatible bridge"),
-                                @tr("Local OpenAI-compatible"),
+                                    ? @tr("Same as the answer model")
+                                    : @tr("Same as the answer model (unavailable)"),
+                                @tr("Your server or bridge (OpenAI-compatible)"),
+                                @tr("Model on this PC"),
                                 @tr("OpenAI API (Responses)"),
                                 @tr("Anthropic API (Messages)"),
                                 @tr("Managed MLX (Apple silicon)"),
                             ] : [
                                 @tr("Off"),
                                 root.vision-same-available
-                                    ? @tr("Same as text model above")
-                                    : @tr("Same as text model above (unavailable)"),
-                                @tr("Custom OpenAI-compatible bridge"),
-                                @tr("Local OpenAI-compatible"),
+                                    ? @tr("Same as the answer model")
+                                    : @tr("Same as the answer model (unavailable)"),
+                                @tr("Your server or bridge (OpenAI-compatible)"),
+                                @tr("Model on this PC"),
                                 @tr("OpenAI API (Responses)"),
                                 @tr("Anthropic API (Messages)"),
-                                @tr("Codex safe models (ChatGPT, experimental)"),
+                                @tr("ChatGPT via Codex (experimental)"),
                             ];
                             current-index: root.vision-provider-index;
                             selected => {
@@ -3442,13 +3382,13 @@ export component SettingsWindow inherits Window {
                             }
                         }
                         if root.vision-provider-index == 4 : Text {
-                            text: @tr("Vision uses the OpenAI API connection and model configured in AI providers above. Text and vision selections remain independent.");
+                            text: @tr("Screenshots use the OpenAI API connection and model set in AI providers. The answer and screenshot models stay independent.");
                             font-size: Metrics.font-caption;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         if root.vision-provider-index == 5 : Text {
-                            text: @tr("Vision uses the Anthropic API connection and model configured in AI providers above. Text and vision selections remain independent.");
+                            text: @tr("Screenshots use the Anthropic API connection and model set in AI providers. The answer and screenshot models stay independent.");
                             font-size: Metrics.font-caption;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -4293,6 +4233,7 @@ export component SettingsWindow inherits Window {
                idx == 13 ? @tr("Diagnostics") :
                idx == 14 ? @tr("Memory") :
                idx == 16 ? @tr("Hermes") :
+               idx == 17 ? @tr("Screenshots (F8)") :
                "—";
     }
 }
