@@ -32,7 +32,7 @@ macro_rules! diag {
 }
 
 use ui::{
-    ArchiveRow, ArchiveWindow, CaptureOverlay, ComponentRow, HelpWindow, LockModeMenuWindow,
+    ArchiveRow, ArchiveWindow, CaptureOverlay, ComponentRow, FoundModel, HelpWindow, LockModeMenuWindow,
     MarkdownBlock, MemoryRow, OverlayBarWindow, PaletteResult, PaletteWindow, RecoverOfferWindow,
     SettingsWindow, SpeakerRow, TextAskWindow, TileWindow, TranscriptLine, TranscriptWindow,
     TrayMenuWindow, WizardWindow,

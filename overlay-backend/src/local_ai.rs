@@ -29,11 +29,13 @@ use serde::Deserialize;
 mod hardware_profile;
 mod model_choice;
 mod model_state;
+mod running;
 mod strata;
 
 pub use hardware_profile::*;
 pub use model_choice::*;
 pub use model_state::*;
+pub use running::*;
 pub use strata::*;
 
 // ---- pinned model coordinates (HuggingFace) + exact sizes (integrity) -------

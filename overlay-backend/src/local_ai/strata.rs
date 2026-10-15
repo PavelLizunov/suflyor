@@ -230,9 +230,95 @@ fn strata_settings_file() -> Option<PathBuf> {
     }
 }
 
+/// Fixed drive roots (`C:\`, `D:\`…). Network and removable drives are left
+/// out: listing them can hang or wake a disk.
+#[cfg(windows)]
+fn fixed_drives() -> Vec<PathBuf> {
+    use windows::core::PCWSTR;
+    use windows::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};
+    const DRIVE_FIXED: u32 = 3;
+    // SAFETY: no arguments; returns a bit mask of drive letters.
+    let mask = unsafe { GetLogicalDrives() };
+    (0..26u8)
+        .filter(|i| mask & (1 << i) != 0)
+        .map(|i| format!("{}:\\", char::from(b'A' + i)))
+        .filter(|root| {
+            let wide: Vec<u16> = root.encode_utf16().chain(std::iter::once(0)).collect();
+            // SAFETY: `wide` is a NUL-terminated UTF-16 path that outlives the call.
+            unsafe { GetDriveTypeW(PCWSTR(wide.as_ptr())) == DRIVE_FIXED }
+        })
+        .map(PathBuf::from)
+        .collect()
+}
+
+#[cfg(not(windows))]
+fn fixed_drives() -> Vec<PathBuf> {
+    Vec::new()
+}
+
+/// A folder that may hold Strata: named `Strata…`, or with Strata's server
+/// script inside.
+fn looks_like_strata(path: &Path) -> bool {
+    path.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+        n.to_ascii_lowercase().starts_with("strata") && !n.eq_ignore_ascii_case("strata-data")
+    }) || path.join("serve").join("server.py").is_file()
+}
+
+/// Strata-looking folders in `base` and, with `depth` 2, one level below
+/// (`D:\AI\Strata`). Folders the user does not keep programs in are skipped.
+fn strata_folders_under(base: &Path, depth: u8, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(base) else {
+        return;
+    };
+    for path in entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
+        if looks_like_strata(&path) {
+            out.push(path);
+            continue;
+        }
+        let skip = path.file_name().and_then(|n| n.to_str()).is_none_or(|n| {
+            n.starts_with(['$', '.'])
+                || [
+                    "windows",
+                    "programdata",
+                    "appdata",
+                    "node_modules",
+                    "system volume information",
+                ]
+                .contains(&n.to_ascii_lowercase().as_str())
+        });
+        if depth > 1 && !skip {
+            strata_folders_under(&path, depth - 1, out);
+        }
+    }
+}
+
+/// Where people unpack a downloaded Strata: the drive roots and a folder
+/// below them, the home folder, Desktop, Downloads and Documents.
+fn usual_strata_folders() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for drive in fixed_drives() {
+        strata_folders_under(&drive, 2, &mut out);
+    }
+    if let Some(home) = dirs::home_dir() {
+        strata_folders_under(&home, 2, &mut out);
+    }
+    for dir in [
+        dirs::desktop_dir(),
+        dirs::download_dir(),
+        dirs::document_dir(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        strata_folders_under(&dir, 2, &mut out);
+    }
+    out
+}
+
 /// Strata installs on this PC other than Suflyor's own: the folders Strata's
-/// own setup remembered, and `Strata*` folders next to them and next to its
-/// data folder. Reads a few small files; callers keep it off the UI thread.
+/// own setup remembered, `Strata*` folders next to them and next to its data
+/// folder, then the usual places on fixed drives (two folder levels deep).
+/// Lists a few hundred folders; callers keep it off the UI thread.
 #[must_use]
 pub fn find_existing_strata(root: &Path) -> Vec<FoundStrata> {
     let settings = strata_settings_file()
@@ -266,6 +352,7 @@ pub fn find_existing_strata(root: &Path) -> Vec<FoundStrata> {
             }));
         }
     }
+    folders.extend(usual_strata_folders());
     let own = strata_dir(root);
     let mut seen = Vec::new();
     let mut found = Vec::new();
@@ -738,6 +825,10 @@ fn launch_strata(root: &Path) -> Result<Child> {
 /// is stopped; restoring the previous engine is the caller's decision.
 pub fn start_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> StrataStart {
     if !strata_installed(root) {
+        // Nothing to start, but a Strata the user started may answer.
+        if !strata_running() && strata_answers() {
+            return StrataStart::Ready;
+        }
         return StrataStart::NotInstalled;
     }
     let (_, config) = active_location(root);
@@ -751,6 +842,11 @@ pub fn start_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> 
     }
     stop_strata();
     if strata_reachable() {
+        // A Strata the user started answers here already: use it.
+        if strata_answers() {
+            log::info!("strata: using the server already running on :{STRATA_PORT}");
+            return StrataStart::Ready;
+        }
         return StrataStart::PortBusy;
     }
     let had_llama = llama_reachable();

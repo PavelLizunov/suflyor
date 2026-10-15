@@ -47,6 +47,15 @@ export struct MemoryRow {
 // Onboarding «Компоненты» hub — one row per on-demand component (engine /
 // local model / STT / voices / OCR). Built in Rust from
 // `overlay_backend::components::status`.
+// A model already on this PC (Settings > AI providers > Local model): a
+// running server (kind 0, "Connect") or a Strata folder (kind 1, "Use").
+export struct FoundModel {
+    title: string,
+    detail: string,
+    kind: int,
+    active: bool,
+}
+
 export struct ComponentRow {
     name: string,
     detail: string,
@@ -373,8 +382,13 @@ export component SettingsWindow inherits Window {
     // A Strata the user installed before: the chosen one, or the one found
     // on this PC. `strata-adopted`: that install is the one that starts.
     in-out property <bool> strata-adopted: false;
-    in-out property <string> strata-found-title: "";
-    in-out property <string> strata-found-detail: "";
+    // Running servers and Strata folders found on this PC, and the search
+    // line ("Searching…" / "Nothing found").
+    in-out property <[FoundModel]> found-models: [];
+    in-out property <string> found-models-note: "";
+    in-out property <bool> found-models-searching: false;
+    callback found-model-use(int);
+    callback found-models-search();
     // Checked off the UI thread on open and after a switch: the saved engine
     // can be Strata while its server is down.
     in-out property <bool> strata-running: false;
@@ -2603,6 +2617,44 @@ export component SettingsWindow inherits Window {
                                 font-weight: 700;
                                 color: Theme.text-primary;
                             }
+                            // ----- models already on this PC -----
+                            if !Platform.is-macos : HorizontalLayout {
+                                spacing: Metrics.space-sm;
+                                Text {
+                                    text: root.found-models-searching ? @tr("Looking for models on this PC…")
+                                        : root.found-models.length > 0 ? @tr("Already on this PC")
+                                        : root.found-models-note;
+                                    font-size: Metrics.font-label;
+                                    color: Theme.text-secondary;
+                                    vertical-alignment: center;
+                                    wrap: word-wrap;
+                                    horizontal-stretch: 1;
+                                }
+                                Button {
+                                    height: 28px;
+                                    text: @tr("Search again");
+                                    enabled: !root.found-models-searching;
+                                    clicked => { root.found-models-search(); }
+                                }
+                            }
+                            if !Platform.is-macos : VerticalLayout {
+                                spacing: Metrics.space-xs;
+                                for m[i] in root.found-models : ModelChoiceRow {
+                                    title: m.title;
+                                    detail: m.detail;
+                                    active: m.kind == 1 ? root.strata-active && root.strata-adopted : m.active;
+                                    action: m.kind == 1
+                                        ? (root.strata-busy ? @tr("Working…")
+                                            : self.active && root.strata-running ? @tr("Active")
+                                            : self.active ? @tr("Start")
+                                            : @tr("Use"))
+                                        : (self.active ? @tr("Connected") : @tr("Connect"));
+                                    action-enabled: !(m.kind == 1 && self.active && root.strata-running)
+                                        && !(m.kind == 0 && self.active)
+                                        && !root.strata-busy && !root.builtin-busy;
+                                    action-clicked => { root.found-model-use(i); }
+                                }
+                            }
                             if !Platform.is-macos : SettingsComboBox {
                                 model: [
                                     @tr("Built-in engine (llama.cpp)"),
@@ -2786,19 +2838,8 @@ export component SettingsWindow inherits Window {
                                         }
                                     }
                                 }
-                                // A Strata installed before Suflyor: its models are
-                                // already on disk, nothing is downloaded.
-                                if root.strata-found-title != "" : ModelChoiceRow {
-                                    title: root.strata-found-title;
-                                    detail: @tr("Your Strata · {}", root.strata-found-detail);
-                                    active: root.strata-active && root.strata-adopted;
-                                    action: root.strata-busy ? @tr("Working…")
-                                        : self.active && root.strata-running ? @tr("Active")
-                                        : self.active ? @tr("Start")
-                                        : @tr("Use");
-                                    action-enabled: !(self.active && root.strata-running) && !root.strata-busy && !root.builtin-busy;
-                                    action-clicked => { root.strata-choose(false); }
-                                }
+                                // A Strata installed before Suflyor is listed under
+                                // "Already on this PC" above.
                                 HorizontalLayout {
                                     alignment: start;
                                     Button {

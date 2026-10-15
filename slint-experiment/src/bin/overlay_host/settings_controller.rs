@@ -1805,6 +1805,8 @@ pub(crate) fn populate_token_status(
         overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url);
     win.set_managed_local_server(managed_local_server);
     refresh_local_engine_controls(win, &c);
+    #[cfg(windows)]
+    super::search_found_models(win, cfg);
     // RAM/VRAM discovery runs PowerShell and nvidia-smi: off the UI thread.
     win.set_strata_hardware_note(SharedString::from(""));
     #[cfg(windows)]
