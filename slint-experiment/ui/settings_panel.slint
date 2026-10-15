@@ -1138,7 +1138,6 @@ export component SettingsWindow inherits Window {
                         }
                         Rectangle { height: 4px; }
                         HorizontalLayout {
-                            alignment: start;
                             spacing: Metrics.space-sm;
                             Button {
                                 text: @tr("Check all");
@@ -1154,6 +1153,7 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: root.diag-copied ? @tr("copied") : "";
+                                horizontal-stretch: 0;
                                 font-size: Metrics.font-label;
                                 font-weight: 700;
                                 color: Theme.success;
@@ -1171,14 +1171,12 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                         }
                         HorizontalLayout {
-                            alignment: start;
                             Button {
                                 text: @tr("Check & repair database");
                                 clicked => { root.db-repair-clicked(); }
                             }
                         }
                         HorizontalLayout {
-                            alignment: start;
                             // Destructive → 2-click confirm; backend backs up first.
                             Button {
                                 text: root.db-clear-armed == "queue"
@@ -1195,7 +1193,6 @@ export component SettingsWindow inherits Window {
                             }
                         }
                         HorizontalLayout {
-                            alignment: start;
                             Button {
                                 text: root.db-clear-armed == "memory"
                                     ? @tr("Tap again — clear approved memory")
@@ -1294,7 +1291,6 @@ export component SettingsWindow inherits Window {
                             if !Platform.is-macos : SettingsRow {
                                 label: @tr("Setup");
                                 HorizontalLayout {
-                                    alignment: start;
                                     Button {
                                         text: @tr("Run setup wizard");
                                         clicked => { root.open-wizard-clicked(); }
@@ -1364,7 +1360,6 @@ export component SettingsWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             HorizontalLayout {
-                                alignment: start;
                                 height: 32px;
                                 Button {
                                     text: root.tts-installing ? @tr("Installing…") : @tr("Install voices");
@@ -1476,7 +1471,6 @@ export component SettingsWindow inherits Window {
                         }
                         // Quick test of the current voice + speed.
                         HorizontalLayout {
-                            alignment: start;
                             height: 32px;
                             Button {
                                 text: @tr("Test voice");
@@ -1504,7 +1498,6 @@ export component SettingsWindow inherits Window {
                         }
                         HorizontalLayout {
                             spacing: Metrics.space-sm;
-                            alignment: start;
                             Button {
                                 text: root.update-checking
                                     ? @tr("Checking…")
@@ -1563,14 +1556,12 @@ export component SettingsWindow inherits Window {
                             }
                         }
                         HorizontalLayout {
-                            alignment: start;
                             Button {
                                 text: @tr("Export settings (incl. keys)…");
                                 clicked => { root.export-profile-clicked(); }
                             }
                         }
                         HorizontalLayout {
-                            alignment: start;
                             Button {
                                 text: @tr("Import settings…");
                                 clicked => { root.import-profile-clicked(); }
@@ -1588,14 +1579,12 @@ export component SettingsWindow inherits Window {
                             wrap: word-wrap;
                         }
                         HorizontalLayout {
-                            alignment: start;
                             Button {
                                 text: @tr("Export server settings…");
                                 clicked => { root.export-server-settings-clicked(); }
                             }
                         }
                         HorizontalLayout {
-                            alignment: start;
                             Button {
                                 text: @tr("Import server settings…");
                                 clicked => { root.import-server-settings-clicked(); }
@@ -1649,7 +1638,6 @@ export component SettingsWindow inherits Window {
                                 }
                                 HorizontalLayout {
                                     spacing: 6px;
-                                    alignment: start;
                                     Button {
                                         text: @tr("Apply server settings");
                                         primary: true;
@@ -1742,7 +1730,6 @@ export component SettingsWindow inherits Window {
                             wrap: word-wrap;
                         }
                         HorizontalLayout {
-                            alignment: start;
                             Button {
                                 text: @tr("Test microphone (3s record)");
                                 enabled: Platform.is-macos || (!root.audio-devices-loading && !root.audio-devices-failed && !root.mic-device-missing && !root.mic-devices-empty);
@@ -1831,7 +1818,6 @@ export component SettingsWindow inherits Window {
                             wrap: word-wrap;
                         }
                         HorizontalLayout {
-                            alignment: start;
                             Button {
                                 text: @tr("Open recordings folder");
                                 clicked => { root.open-recordings-clicked(); }
@@ -2083,7 +2069,6 @@ export component SettingsWindow inherits Window {
                                 vertical-stretch: 1;
                             }
                             HorizontalLayout {
-                                alignment: start;
                                 vertical-stretch: 0;
                                 Button {
                                     text: @tr("Save words");
@@ -2102,7 +2087,6 @@ export component SettingsWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             HorizontalLayout {
-                                alignment: start;
                                 Button {
                                     text: @tr("Open search (F4)");
                                     clicked => { root.kb-open-clicked(); }
@@ -2155,7 +2139,6 @@ export component SettingsWindow inherits Window {
                         }
                         HorizontalLayout {
                             spacing: 6px;
-                            alignment: start;
                             vertical-stretch: 0;
                             height: 32px;
                             Button {
@@ -2192,7 +2175,6 @@ export component SettingsWindow inherits Window {
                         }
                         HorizontalLayout {
                             spacing: Metrics.space-sm;
-                            alignment: start;
                             vertical-stretch: 0;
                             height: 32px;
                             // Phase E6 v43 — voice dictation toggle.
@@ -2874,7 +2856,6 @@ export component SettingsWindow inherits Window {
                                 }
                                 if root.llama-installed && root.managed-local-server : SettingsCard {
                                     HorizontalLayout {
-                                        alignment: start;
                                         Button { text: @tr("Fine tuning"); clicked => { root.local-more-open = !root.local-more-open; } }
                                     }
                                     if root.local-more-open : WrapBlock {
@@ -2920,7 +2901,6 @@ export component SettingsWindow inherits Window {
                                                 wrap: word-wrap;
                                             }
                                             HorizontalLayout {
-                                                alignment: start;
                                                 Button {
                                                     height: 30px;
                                                     text: root.model-switching ? @tr("Applying…") : @tr("Apply context");
@@ -2942,7 +2922,6 @@ export component SettingsWindow inherits Window {
                                         }
                                         HorizontalLayout {
                                             spacing: Metrics.space-sm;
-                                            alignment: start;
                                             Button {
                                                 height: 30px;
                                                 text: root.engine-updating ? @tr("Updating…") : @tr("Update engine");
@@ -3425,7 +3404,6 @@ export component SettingsWindow inherits Window {
                                 toggled(v) => { root.hermes-bridge-toggled(v); }
                             }
                             HorizontalLayout {
-                                alignment: start;
                                 Button {
                                     text: @tr("Install plugin in Hermes");
                                     clicked => { root.hermes-plugin-install(); }
@@ -3438,7 +3416,6 @@ export component SettingsWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             HorizontalLayout {
-                                alignment: start;
                                 spacing: Metrics.space-sm;
                                 Button {
                                     text: @tr("Get key from local Hermes");
@@ -3462,7 +3439,6 @@ export component SettingsWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             HorizontalLayout {
-                                alignment: start;
                                 Button {
                                     text: @tr("Fine tuning");
                                     clicked => { root.hermes-more-open = !root.hermes-more-open; }
@@ -3524,7 +3500,6 @@ export component SettingsWindow inherits Window {
                                     }
                                 }
                                 HorizontalLayout {
-                                    alignment: start;
                                     Button {
                                         text: @tr("Save");
                                         clicked => {
@@ -3564,7 +3539,6 @@ export component SettingsWindow inherits Window {
                                     }
                                 }
                                 HorizontalLayout {
-                                    alignment: start;
                                     Button {
                                         text: @tr("Save");
                                         clicked => {
@@ -3832,7 +3806,6 @@ export component SettingsWindow inherits Window {
                             }
                         }
                         HorizontalLayout {
-                            alignment: start;
                             Button {
                                 text: @tr("Get Groq API Key (console.groq.com)");
                                 clicked => { root.open-groq-keys-clicked(); }
@@ -3845,7 +3818,6 @@ export component SettingsWindow inherits Window {
                         // ----- Connection test (Phase E6 v27) -----
                         HorizontalLayout {
                             spacing: 6px;
-                            alignment: start;
                             vertical-stretch: 0;
                             height: 32px;
                             Button {
@@ -3898,13 +3870,13 @@ export component SettingsWindow inherits Window {
                         }
                         HorizontalLayout {
                             spacing: Metrics.space-sm;
-                            alignment: start;
                             Button {
                                 text: @tr("Extract from recent sessions");
                                 clicked => { root.memory-extract(); }
                             }
                             if root.memory-status != "" : Text {
                                 text: root.memory-status;
+                                horizontal-stretch: 0;
                                 font-size: Metrics.font-label;
                                 color: Theme.accent;
                                 vertical-alignment: center;
