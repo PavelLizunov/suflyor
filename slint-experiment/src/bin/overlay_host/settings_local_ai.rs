@@ -1632,6 +1632,8 @@ fn show_found_models(win: &SettingsWindow, cfg: &overlay_backend::config::Config
         if more > 0 {
             detail.push_str(&if ru {
                 format!(" · ещё моделей: {more}")
+            } else if more == 1 {
+                " · 1 more model".to_string()
             } else {
                 format!(" · {more} more models")
             });

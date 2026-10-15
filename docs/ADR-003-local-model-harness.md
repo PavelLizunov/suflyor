@@ -202,6 +202,19 @@ P4 (Strata) started on 2026-10-15 at the owner's request, before P1-P3; see
   downloaded. A moved or deleted folder falls back to Suflyor's own install. A model the user already
   runs may be a fine-tune; its licence is the user's (decision 5 covers only
   what Suflyor offers to download).
+- "Already on this PC" (above the engine choice) lists what Settings finds
+  on open or on "Search again", without a folder dialog:
+  - servers that answer `/v1/models` on the usual loopback ports
+    (`overlay-backend/src/local_ai/running.rs`: Ollama 11434, LM Studio 1234,
+    Jan 1337, KoboldCpp 5001, GPT4All 4891, text-generation-webui 5000, 8000,
+    Strata 8090; :8080 is the built-in engine's and is skipped). "Connect"
+    saves the URL and a model, stops Suflyor's own llama.cpp (it holds the
+    GPU) and runs the connection test.
+  - Strata folders: besides `settings.json`, folders named `Strata*` or
+    holding `serve/server.py` on fixed drives, in the home folder, Desktop,
+    Downloads and Documents, two levels deep.
+  - Starting Strata uses a server that already answers on :8090 (a Strata
+    the user started) instead of reporting a busy port.
 
 ### Checked live on the Windows worker (2026-10-15, no NVIDIA GPU)
 
@@ -216,8 +229,14 @@ P4 (Strata) started on 2026-10-15 at the owner's request, before P1-P3; see
   characters of results), the tile showed the lookup and then the answer.
   The 1.5B model put the beta's date on the stable release: the search
   works, the answer quality is the model's.
+- "Already on this PC": a stand-in Strata folder in Downloads (not in
+  `settings.json`) and a stand-in server on :11434 were both listed on
+  Settings open; "Connect" saved `http://127.0.0.1:11434/v1` with its first
+  model and the connection test answered HTTP 200. With both removed,
+  "Search again" said that nothing was found.
 - Not checked: the real Strata engine and Qwen3.8-Flash-Next tool calls
-  (needs the target PC), the folder picker (a native dialog).
+  (needs the target PC), the folder picker (a native dialog), real Ollama
+  and LM Studio (the stand-in answered their API shape).
 
 ## Verification rules
 
