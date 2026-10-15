@@ -2763,3 +2763,6 @@ msgstr "не проверен"
 
 msgid "{} entries: glossary, commands and patterns. They ship with the app."
 msgstr "{} записей: глоссарий, команды и шаблоны. Входят в приложение."
+
+msgid "Entries: {}. Glossary, commands and patterns ship with the app."
+msgstr "Записей: {}. Глоссарий, команды и шаблоны входят в приложение."

@@ -1250,13 +1250,11 @@ export component SettingsWindow inherits Window {
                                     horizontal-stretch: 1;
                                     selected(v) => { root.tile-monitor-changed(self.current-index); }
                                 }
-                                WrapBlock {
-                                    Text {
-                                        text: @tr("Which monitor new answer tiles appear on.");
-                                        font-size: Metrics.font-caption;
-                                        color: Theme.text-muted;
-                                        wrap: word-wrap;
-                                    }
+                                Text {
+                                    text: @tr("Which monitor new answer tiles appear on.");
+                                    font-size: Metrics.font-caption;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
                                 }
                             }
                             SettingsRow {
@@ -1273,13 +1271,11 @@ export component SettingsWindow inherits Window {
                                     font-size: Metrics.font-caption;
                                     color: Theme.text-secondary;
                                 }
-                                WrapBlock {
-                                    Text {
-                                        text: @tr("Lower values let you see the meeting through tiles. 100% = opaque, 50% = half-transparent.");
-                                        font-size: Metrics.font-caption;
-                                        color: Theme.text-muted;
-                                        wrap: word-wrap;
-                                    }
+                                Text {
+                                    text: @tr("Lower values let you see the meeting through tiles. 100% = opaque, 50% = half-transparent.");
+                                    font-size: Metrics.font-caption;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
                                 }
                             }
                             SettingsRow {
@@ -2036,13 +2032,11 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 7 : VerticalLayout {
                         spacing: 10px;
                         SettingsCard {
-                            WrapBlock {
-                                Text {
-                                    text: @tr("Trigger words in the transcript create answer tiles.");
-                                    font-size: Metrics.font-label;
-                                    color: Theme.text-muted;
-                                    wrap: word-wrap;
-                                }
+                            Text {
+                                text: @tr("Trigger words in the transcript create answer tiles.");
+                                font-size: Metrics.font-label;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
                             }
                             DarkCheck {
                                 text: @tr("Enable auto-tile detector");
@@ -2058,21 +2052,17 @@ export component SettingsWindow inherits Window {
                                     root.suppress-tiles-changed(v);
                                 }
                             }
-                            WrapBlock {
-                                Text {
-                                    text: @tr("Only auto-tiles are muted; manual asks still work.");
-                                    font-size: Metrics.font-label;
-                                    color: Theme.text-muted;
-                                    wrap: word-wrap;
-                                }
+                            Text {
+                                text: @tr("Only auto-tiles are muted; manual asks still work.");
+                                font-size: Metrics.font-label;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
                             }
-                            WrapBlock {
-                                Text {
-                                    text: @tr("Separate words with spaces; questions also trigger.");
-                                    font-size: Metrics.font-label;
-                                    color: Theme.text-muted;
-                                    wrap: word-wrap;
-                                }
+                            Text {
+                                text: @tr("Separate words with spaces; questions also trigger.");
+                                font-size: Metrics.font-label;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
                             }
                             TextEdit {
                                 wrap: word-wrap;
@@ -2093,7 +2083,7 @@ export component SettingsWindow inherits Window {
                         spacing: Metrics.space-md;
                         SettingsCard {
                             Text {
-                                text: @tr("{} entries: glossary, commands and patterns. They ship with the app.", root.kb-entry-count);
+                                text: @tr("Entries: {}. Glossary, commands and patterns ship with the app.", root.kb-entry-count);
                                 font-size: Metrics.font-label;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
@@ -2110,13 +2100,11 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 10 : VerticalLayout {
                         spacing: 10px;
                         SettingsCard {
-                        WrapBlock {
-                            Text {
-                                text: @tr("Persistent context sent with every AI request — your role, focus areas, vocabulary. Saved to config; applied to new AI calls immediately.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
+                        Text {
+                            text: @tr("Persistent context sent with every AI request — your role, focus areas, vocabulary. Saved to config; applied to new AI calls immediately.");
+                            font-size: Metrics.font-label;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
                         }
                         // Phase F — multi-profile picker. Row 1: select; row 2:
                         // add/rename/delete (split rows so the buttons never clip).
@@ -3436,6 +3424,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 alignment: start;
+                                spacing: Metrics.space-sm;
                                 Button {
                                     text: @tr("Get key from local Hermes");
                                     clicked => { root.hermes-api-setup(); }
