@@ -97,7 +97,9 @@ pub(crate) fn status_detail(name: &str, arguments: &str) -> String {
             .unwrap_or_default();
     }
     cap_chars(
-        args.get("query").and_then(Value::as_str).unwrap_or_default(),
+        args.get("query")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
         80,
     )
 }
@@ -267,7 +269,10 @@ fn redirect_target(href: &str) -> String {
     let Ok(url) = reqwest::Url::parse(&absolute) else {
         return String::new();
     };
-    if url.host_str().is_some_and(|h| h.ends_with("duckduckgo.com")) {
+    if url
+        .host_str()
+        .is_some_and(|h| h.ends_with("duckduckgo.com"))
+    {
         return url
             .query_pairs()
             .find(|(k, _)| k == "uddg")
@@ -410,7 +415,10 @@ pub(crate) fn html_to_text(html: &str) -> String {
                     .find(&close)
                     .map(|p| lt + p + close.len())
                     .unwrap_or(html.len());
-                i = lower[i..].find('>').map(|p| i + p + 1).unwrap_or(html.len());
+                i = lower[i..]
+                    .find('>')
+                    .map(|p| i + p + 1)
+                    .unwrap_or(html.len());
                 skipped = true;
                 break;
             }
@@ -426,10 +434,15 @@ pub(crate) fn html_to_text(html: &str) -> String {
                 .unwrap_or(html.len());
             continue;
         }
-        let block = ["<p", "<br", "<div", "<li", "<h1", "<h2", "<h3", "<h4", "<tr"]
-            .iter()
-            .any(|t| lower[lt..].starts_with(t));
-        i = lower[lt..].find('>').map(|p| lt + p + 1).unwrap_or(html.len());
+        let block = [
+            "<p", "<br", "<div", "<li", "<h1", "<h2", "<h3", "<h4", "<tr",
+        ]
+        .iter()
+        .any(|t| lower[lt..].starts_with(t));
+        i = lower[lt..]
+            .find('>')
+            .map(|p| lt + p + 1)
+            .unwrap_or(html.len());
         out.push(if block { '\n' } else { ' ' });
     }
     collapse_ws(&decode_entities(&out))
@@ -622,6 +635,9 @@ mod tests {
         assert_eq!(civil_from_days(0), (1970, 1, 1));
         assert_eq!(civil_from_days(20_741), (2026, 10, 15));
         assert_eq!(cap_chars("абвгд", 3), "абв…");
-        assert_eq!(decode_entities("a &#x41; &#66; &bogus; &"), "a A B &bogus; &");
+        assert_eq!(
+            decode_entities("a &#x41; &#66; &bogus; &"),
+            "a A B &bogus; &"
+        );
     }
 }

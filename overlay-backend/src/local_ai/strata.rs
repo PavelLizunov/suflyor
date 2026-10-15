@@ -239,7 +239,10 @@ pub fn find_existing_strata(root: &Path) -> Vec<FoundStrata> {
         .filter_map(serde_json::Value::as_str)
         .map(PathBuf::from)
         .collect();
-    let mut parents: Vec<PathBuf> = folders.iter().filter_map(|f| f.parent().map(Path::to_path_buf)).collect();
+    let mut parents: Vec<PathBuf> = folders
+        .iter()
+        .filter_map(|f| f.parent().map(Path::to_path_buf))
+        .collect();
     if let Some(data) = settings.get("data_dir").and_then(serde_json::Value::as_str) {
         if let Some(parent) = Path::new(data).parent() {
             parents.push(parent.to_path_buf());
@@ -249,9 +252,10 @@ pub fn find_existing_strata(root: &Path) -> Vec<FoundStrata> {
         if let Ok(entries) = std::fs::read_dir(&parent) {
             folders.extend(entries.flatten().map(|e| e.path()).filter(|p| {
                 p.is_dir()
-                    && p.file_name()
-                        .and_then(|n| n.to_str())
-                        .is_some_and(|n| n.to_ascii_lowercase().starts_with("strata") && !n.eq_ignore_ascii_case("strata-data"))
+                    && p.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+                        n.to_ascii_lowercase().starts_with("strata")
+                            && !n.eq_ignore_ascii_case("strata-data")
+                    })
             }));
         }
     }
@@ -884,8 +888,16 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("serve")).unwrap();
         std::fs::write(dir.join("serve").join("server.py"), b"").unwrap();
-        std::fs::write(dir.join("strata-iq3_s.json"), br#"{"exe":"strata.exe","args":[],"model_name":"swift-1.5"}"#).unwrap();
-        std::fs::write(dir.join("strata-iq3_s.shared-settings.json"), br#"{"exe":"x","args":[]}"#).unwrap();
+        std::fs::write(
+            dir.join("strata-iq3_s.json"),
+            br#"{"exe":"strata.exe","args":[],"model_name":"swift-1.5"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("strata-iq3_s.shared-settings.json"),
+            br#"{"exe":"x","args":[]}"#,
+        )
+        .unwrap();
         std::fs::write(dir.join("strata-notes.json"), b"{}").unwrap();
         // No venv yet: not usable.
         assert!(strata_in_folder(&dir).is_empty());
@@ -895,7 +907,11 @@ mod tests {
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].model, "swift-1.5");
         assert_eq!(found[0].config, dir.join("strata-iq3_s.json"));
-        std::fs::write(dir.join("strata-iq2_xs.json"), "\u{feff}{\"exe\":\"strata.exe\",\"args\":[]}").unwrap();
+        std::fs::write(
+            dir.join("strata-iq2_xs.json"),
+            "\u{feff}{\"exe\":\"strata.exe\",\"args\":[]}",
+        )
+        .unwrap();
         assert!(strata_in_folder(&dir).iter().any(|f| f.model == "IQ2_XS"));
         let _ = std::fs::remove_dir_all(&dir);
     }

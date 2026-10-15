@@ -169,9 +169,7 @@ pub(crate) async fn stream_agent(
             "{}/chat/completions",
             endpoint.base_url.trim_end_matches('/')
         );
-        let mut request = http_client()
-            .post(&url)
-            .timeout(Duration::from_secs(120));
+        let mut request = http_client().post(&url).timeout(Duration::from_secs(120));
         if !endpoint.bearer.is_empty() {
             request = request.bearer_auth(&endpoint.bearer);
         }
@@ -192,8 +190,7 @@ pub(crate) async fn stream_agent(
             );
             // The first request is the capability probe: a server without
             // tool support answers the plain way from now on.
-            if step == 0 && offer_tools && (status.is_client_error() || status.is_server_error())
-            {
+            if step == 0 && offer_tools && (status.is_client_error() || status.is_server_error()) {
                 mark_no_tools(&endpoint.base_url);
                 return super::stream::stream_plain(
                     endpoint,
@@ -232,12 +229,10 @@ pub(crate) async fn stream_agent(
                         detail: tools::status_detail(&call.name, &call.arguments),
                     })
                     .await;
-                let result = tokio::time::timeout(
-                    TOOL_TIMEOUT,
-                    tools::run(&call.name, &call.arguments),
-                )
-                .await
-                .unwrap_or_else(|_| "error: the tool did not finish in time".to_string());
+                let result =
+                    tokio::time::timeout(TOOL_TIMEOUT, tools::run(&call.name, &call.arguments))
+                        .await
+                        .unwrap_or_else(|_| "error: the tool did not finish in time".to_string());
                 log::info!(
                     "AI agent tool {} -> {} chars",
                     call.name,
@@ -329,7 +324,10 @@ async fn read_step(
                 {
                     out.server_tps = Some(rate);
                 }
-                if let Some(n) = v.pointer("/usage/completion_tokens").and_then(Value::as_u64) {
+                if let Some(n) = v
+                    .pointer("/usage/completion_tokens")
+                    .and_then(Value::as_u64)
+                {
                     out.completion_tokens = Some(n);
                 }
                 let choice = v.pointer("/choices/0");
