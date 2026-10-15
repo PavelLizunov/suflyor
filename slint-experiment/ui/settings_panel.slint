@@ -942,6 +942,10 @@ export component SettingsWindow inherits Window {
                 VerticalLayout {
                     padding: Metrics.space-lg;
                     spacing: Metrics.space-md;
+                    // A short tab keeps its natural height: the free space stays
+                    // below it instead of being spread between captions and
+                    // stretching buttons inside the cards.
+                    alignment: start;
 
                     // Header
                     Text {
