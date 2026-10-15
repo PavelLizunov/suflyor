@@ -1140,18 +1140,27 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             spacing: Metrics.space-sm;
                             Button {
+                                min-width: 0px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
                                 text: @tr("Check all");
                                 clicked => { root.diagnostics-check-all-clicked(); }
                             }
                             Button {
+                                min-width: 0px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
                                 text: @tr("Copy report");
                                 clicked => { root.diagnostics-copy-report-clicked(); }
                             }
                             Button {
+                                min-width: 0px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
                                 text: @tr("Collect logs");
                                 clicked => { root.diagnostics-collect-logs-clicked(); }
                             }
-                            Text {
+                            if root.diag-copied : Text {
                                 text: root.diag-copied ? @tr("copied") : "";
                                 horizontal-stretch: 0;
                                 font-size: Metrics.font-label;
@@ -1639,11 +1648,17 @@ export component SettingsWindow inherits Window {
                                 HorizontalLayout {
                                     spacing: 6px;
                                     Button {
+                                        min-width: 0px;
+                                        preferred-width: 0px;
+                                        horizontal-stretch: 1;
                                         text: @tr("Apply server settings");
                                         primary: true;
                                         clicked => { root.apply-server-settings-clicked(); }
                                     }
                                     Button {
+                                        min-width: 0px;
+                                        preferred-width: 0px;
+                                        horizontal-stretch: 1;
                                         text: @tr("Cancel");
                                         clicked => { root.cancel-server-settings-clicked(); }
                                     }
@@ -2142,6 +2157,9 @@ export component SettingsWindow inherits Window {
                             vertical-stretch: 0;
                             height: 32px;
                             Button {
+                                min-width: 0px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
                                 text: @tr("Add profile");
                                 clicked => {
                                     root.profile-add(root.profile-name-input);
@@ -2149,6 +2167,9 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             Button {
+                                min-width: 0px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
                                 text: @tr("Rename");
                                 enabled: root.active-profile-index >= 0 && root.profile-name-input != "";
                                 clicked => {
@@ -2157,6 +2178,9 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             Button {
+                                min-width: 0px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
                                 text: @tr("Delete");
                                 enabled: root.active-profile-index >= 0;
                                 clicked => {
@@ -2179,17 +2203,26 @@ export component SettingsWindow inherits Window {
                             height: 32px;
                             // Phase E6 v43 — voice dictation toggle.
                             Button {
+                                min-width: 0px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
                                 text: root.context-dictating
                                     ? @tr("Stop recording")
                                     : @tr("Dictate");
                                 clicked => { root.context-dictate-clicked(); }
                             }
                             Button {
+                                min-width: 0px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
                                 text: @tr("Save context");
                                 clicked => { root.meeting-context-save(root.meeting-context-input); }
                             }
                             // Phase E6 v43 — structure the context via AI.
                             Button {
+                                min-width: 0px;
+                                preferred-width: 0px;
+                                horizontal-stretch: 1;
                                 text: root.context-processing
                                     ? @tr("Structuring…")
                                     : @tr("Structure via AI");
@@ -3418,10 +3451,16 @@ export component SettingsWindow inherits Window {
                             HorizontalLayout {
                                 spacing: Metrics.space-sm;
                                 Button {
+                                    min-width: 0px;
+                                    preferred-width: 0px;
+                                    horizontal-stretch: 1;
                                     text: @tr("Get key from local Hermes");
                                     clicked => { root.hermes-api-setup(); }
                                 }
                                 Button {
+                                    min-width: 0px;
+                                    preferred-width: 0px;
+                                    horizontal-stretch: 1;
                                     text: @tr("Check");
                                     clicked => { root.hermes-api-test(); }
                                 }
