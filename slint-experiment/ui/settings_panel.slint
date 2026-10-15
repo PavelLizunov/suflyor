@@ -2036,7 +2036,8 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Trigger words in the transcript create answer tiles.");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-muted;
-                                wrap: word-wrap;
+                                overflow: elide;
+                                vertical-stretch: 0;
                             }
                             DarkCheck {
                                 text: @tr("Enable auto-tile detector");
@@ -2056,22 +2057,26 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Only auto-tiles are muted; manual asks still work.");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-muted;
-                                wrap: word-wrap;
+                                overflow: elide;
+                                vertical-stretch: 0;
                             }
                             Text {
                                 text: @tr("Separate words with spaces; questions also trigger.");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-muted;
-                                wrap: word-wrap;
+                                overflow: elide;
+                                vertical-stretch: 0;
                             }
                             TextEdit {
                                 wrap: word-wrap;
                                 text <=> root.trigger-keywords-input;
                                 placeholder-text: @tr("how, why, what is, explain");
-                                height: 150px;
+                                min-height: 150px;
+                                vertical-stretch: 1;
                             }
                             HorizontalLayout {
                                 alignment: start;
+                                vertical-stretch: 0;
                                 Button {
                                     text: @tr("Save words");
                                     clicked => { root.trigger-keywords-save(root.trigger-keywords-input); }
@@ -2105,6 +2110,7 @@ export component SettingsWindow inherits Window {
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                             wrap: word-wrap;
+                            vertical-stretch: 0;
                         }
                         // Phase F — multi-profile picker. Row 1: select; row 2:
                         // add/rename/delete (split rows so the buttons never clip).
@@ -2172,7 +2178,8 @@ export component SettingsWindow inherits Window {
                         TextEdit {
                             text <=> root.meeting-context-input;
                             wrap: word-wrap;
-                            height: 220px;
+                            min-height: 220px;
+                            vertical-stretch: 1;
                             placeholder-text: @tr("e.g. SRE interview; brief answers, AWS examples.");
                         }
                         HorizontalLayout {
