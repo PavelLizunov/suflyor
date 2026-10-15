@@ -17,7 +17,7 @@ fn settings_source() -> String {
 #[test]
 fn tera_install_controls_keep_natural_height_before_speed_picker() {
     let source = settings_source();
-    let marker = "if root.tts-engine-index == 1 : VerticalLayout {";
+    let marker = "if root.tts-engine-index == 1 : WrapBlock {";
     let tera_start = source
         .find(marker)
         .expect("Tera settings section must exist");
