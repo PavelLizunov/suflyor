@@ -1658,6 +1658,9 @@ fn portable_config_bytes(cfg: &Config) -> Result<Vec<u8>> {
     let mut value = serde_json::to_value(cfg).context("serialize config value")?;
     if let Some(fields) = value.as_object_mut() {
         fields.remove("deep_lock");
+        // Folders on this PC: another PC has its own Strata, or none.
+        fields.remove("ai_strata_dir");
+        fields.remove("ai_strata_config");
     }
     serde_json::to_vec_pretty(&value).context("serialize portable config")
 }
@@ -1729,7 +1732,7 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     next.ai_agent_tools = imported.ai_agent_tools;
     next.ai_web_search = imported.ai_web_search;
     // NOTE: ai_strata_dir/ai_strata_config are deliberately NOT transferred:
-    // they are folders on THIS PC, like ai_local_custom_gguf.
+    // they are folders on THIS PC. A full profile export leaves them out too.
     // Vision channel (separate endpoint).
     next.vision_provider = imported.vision_provider;
     next.vision_base_url = imported.vision_base_url;

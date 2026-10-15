@@ -385,7 +385,7 @@ export component SettingsWindow inherits Window {
     callback local-engine-activate(int);
     callback strata-install-clicked();
     callback strata-license-clicked();
-    // true: Suflyor's own install starts; false: the found one.
+    // Start Strata from Suflyor's own install (true) or the found one (false).
     callback strata-choose(bool);
     callback strata-find-folder-clicked();
     // One status line, one progress bar and one Cancel for every built-in
@@ -2781,7 +2781,6 @@ export component SettingsWindow inherits Window {
                                     action-clicked => {
                                         if root.strata-installed {
                                             root.strata-choose(true);
-                                            root.local-engine-activate(1);
                                         } else {
                                             root.strata-install-clicked();
                                         }
@@ -2798,10 +2797,7 @@ export component SettingsWindow inherits Window {
                                         : self.active ? @tr("Start")
                                         : @tr("Use");
                                     action-enabled: !(self.active && root.strata-running) && !root.strata-busy && !root.builtin-busy;
-                                    action-clicked => {
-                                        root.strata-choose(false);
-                                        root.local-engine-activate(1);
-                                    }
+                                    action-clicked => { root.strata-choose(false); }
                                 }
                                 HorizontalLayout {
                                     alignment: start;

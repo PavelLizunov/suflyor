@@ -61,7 +61,7 @@ pub(crate) fn definitions(web: bool, today: &str) -> Value {
             "type": "function",
             "function": {
                 "name": WEB_SEARCH,
-                "description": format!("Search the web. Use it for fresh facts, news, prices, versions, or anything you are not sure about. Returns titles, links and short snippets. Today is {today}."),
+                "description": format!("Search the web. Use it for fresh facts, news, prices, versions, or anything you are not sure about. Returns titles, links and short snippets; name the sources you use in the answer. Today is {today}."),
                 "parameters": {
                     "type": "object",
                     "properties": { "query": { "type": "string", "description": "What to search for, in the language that fits the topic" } },
@@ -151,6 +151,36 @@ fn kb_search(query: &str) -> String {
         .join("\n\n")
 }
 
+/// Resolves names for the web tools and keeps only public addresses. The
+/// connection uses the addresses checked here, so neither a redirect to a
+/// name on the home network nor a DNS answer that changes between a check
+/// and the connection reaches this PC or the LAN. Address literals never
+/// reach a resolver: `public_url` checks those.
+struct PublicOnlyResolver;
+
+impl reqwest::dns::Resolve for PublicOnlyResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let host = name.as_str().to_string();
+        Box::pin(async move {
+            let addrs = tokio::task::spawn_blocking(move || {
+                use std::net::ToSocketAddrs;
+                (host.as_str(), 0)
+                    .to_socket_addrs()
+                    .map(Iterator::collect::<Vec<_>>)
+            })
+            .await
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })??;
+            let public: Vec<std::net::SocketAddr> =
+                addrs.into_iter().filter(|a| public_ip(a.ip())).collect();
+            if public.is_empty() {
+                return Err("the name resolves only to private addresses".into());
+            }
+            let addrs: reqwest::dns::Addrs = Box::new(public.into_iter());
+            Ok(addrs)
+        })
+    }
+}
+
 fn web_client() -> reqwest::Client {
     static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
     CLIENT
@@ -158,6 +188,7 @@ fn web_client() -> reqwest::Client {
             reqwest::Client::builder()
                 .user_agent(USER_AGENT)
                 .timeout(WEB_TIMEOUT)
+                .dns_resolver(std::sync::Arc::new(PublicOnlyResolver))
                 // A redirect may not lead to this PC or the home network.
                 .redirect(reqwest::redirect::Policy::custom(|attempt| {
                     if attempt.previous().len() >= 5 || !public_url(attempt.url()) {
@@ -287,21 +318,7 @@ async fn open_url(raw: &str) -> anyhow::Result<String> {
     if !public_url(&url) {
         anyhow::bail!("only public http and https pages can be opened");
     }
-    let host = url.host_str().unwrap_or_default().to_string();
-    let port = url.port_or_known_default().unwrap_or(443);
-    // A public name that resolves to this PC or the home network is refused too.
-    let private = tokio::task::spawn_blocking(move || {
-        use std::net::ToSocketAddrs;
-        (host.as_str(), port)
-            .to_socket_addrs()
-            .map(|addrs| addrs.into_iter().any(|a| !public_ip(a.ip())))
-            .unwrap_or(false)
-    })
-    .await
-    .unwrap_or(true);
-    if private {
-        anyhow::bail!("the page is on a private network");
-    }
+    // Names are checked by the client's resolver (`PublicOnlyResolver`).
     let mut resp = web_client().get(url).send().await?;
     if !resp.status().is_success() {
         anyhow::bail!("HTTP {}", resp.status().as_u16());
@@ -388,6 +405,30 @@ fn public_ip(ip: std::net::IpAddr) -> bool {
     }
 }
 
+/// Where a tag that starts at `lt` ends (after its `>`), skipping `>`
+/// inside quoted attribute values.
+fn tag_end(html: &str, lt: usize) -> usize {
+    let mut quote: Option<u8> = None;
+    for (i, b) in html.bytes().enumerate().skip(lt + 1) {
+        match quote {
+            Some(q) if b == q => quote = None,
+            Some(_) => {}
+            None if b == b'"' || b == b'\'' => quote = Some(b),
+            None if b == b'>' => return i + 1,
+            None => {}
+        }
+    }
+    html.len()
+}
+
+/// `<` starts markup only before a letter, `/`, `!` or `?`; otherwise it is
+/// text, as in `x < 5`.
+fn starts_markup(rest: &str) -> bool {
+    rest.as_bytes()
+        .get(1)
+        .is_some_and(|b| b.is_ascii_alphabetic() || matches!(b, b'/' | b'!' | b'?'))
+}
+
 /// Visible text of an HTML page: scripts, styles and the head are dropped,
 /// tags become spaces, entities are decoded and whitespace is collapsed.
 pub(crate) fn html_to_text(html: &str) -> String {
@@ -401,37 +442,34 @@ pub(crate) fn html_to_text(html: &str) -> String {
             break;
         };
         out.push_str(&html[i..lt]);
-        let mut skipped = false;
-        for tag in ["script", "style", "noscript", "svg", "head", "template"] {
-            let open = format!("<{tag}");
-            if lower[lt..].starts_with(&open)
-                && lower[lt + open.len()..]
-                    .chars()
-                    .next()
-                    .is_some_and(|c| c == '>' || c.is_ascii_whitespace())
-            {
-                let close = format!("</{tag}");
-                i = lower[lt..]
-                    .find(&close)
-                    .map(|p| lt + p + close.len())
-                    .unwrap_or(html.len());
-                i = lower[i..]
-                    .find('>')
-                    .map(|p| i + p + 1)
-                    .unwrap_or(html.len());
-                skipped = true;
-                break;
-            }
-        }
-        if skipped {
-            out.push(' ');
+        if !starts_markup(&lower[lt..]) {
+            out.push('<');
+            i = lt + 1;
             continue;
         }
         if lower[lt..].starts_with("<!--") {
             i = lower[lt..]
                 .find("-->")
-                .map(|p| lt + p + 3)
-                .unwrap_or(html.len());
+                .map_or(html.len(), |p| lt + p + 3);
+            continue;
+        }
+        let raw = ["script", "style", "noscript", "svg", "head", "template"]
+            .into_iter()
+            .find(|tag| {
+                lower[lt + 1..].starts_with(tag)
+                    && lower[lt + 1 + tag.len()..]
+                        .chars()
+                        .next()
+                        .is_some_and(|c| c == '>' || c == '/' || c.is_ascii_whitespace())
+            });
+        if let Some(tag) = raw {
+            // Everything up to the closing tag is not page text.
+            let close = format!("</{tag}");
+            i = match lower[lt..].find(&close) {
+                Some(p) => tag_end(&lower, lt + p),
+                None => html.len(),
+            };
+            out.push(' ');
             continue;
         }
         let block = [
@@ -439,10 +477,7 @@ pub(crate) fn html_to_text(html: &str) -> String {
         ]
         .iter()
         .any(|t| lower[lt..].starts_with(t));
-        i = lower[lt..]
-            .find('>')
-            .map(|p| lt + p + 1)
-            .unwrap_or(html.len());
+        i = tag_end(&lower, lt);
         out.push(if block { '\n' } else { ' ' });
     }
     collapse_ws(&decode_entities(&out))
@@ -580,6 +615,21 @@ mod tests {
             <script>var x = '<p>no</p>';</script><h1>Title</h1><p>One &amp; two</p>\
             <!-- hidden --><p>Цена: 5&nbsp;₽</p></body></html>";
         assert_eq!(html_to_text(html), "Title\nOne & two\nЦена: 5 ₽");
+    }
+
+    #[test]
+    fn quoted_angle_brackets_and_text_comparisons_survive() {
+        assert_eq!(html_to_text(r#"<p title="a > b">Hello</p>"#), "Hello");
+        assert_eq!(html_to_text("<p>if x < 5 then y</p>"), "if x < 5 then y");
+        assert_eq!(html_to_text("<div x-data='{ a: 1 > 0 }'>ok</div>"), "ok");
+        assert_eq!(html_to_text("a<script>if (a > b) {}</script >b"), "a b");
+    }
+
+    #[tokio::test]
+    async fn the_web_resolver_refuses_private_names() {
+        use reqwest::dns::Resolve;
+        let name: reqwest::dns::Name = "localhost".parse().unwrap();
+        assert!(PublicOnlyResolver.resolve(name).await.is_err());
     }
 
     #[test]

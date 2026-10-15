@@ -256,15 +256,16 @@ impl RuntimeEvents for PttStreamSink {
         match evt {
             ai::AiEvent::Start { .. } => self.bridge.inc_ai_in_flight(),
             ai::AiEvent::Tool { name, detail } => {
-                let label = crate::tile_text::tool_label(
-                    &name,
-                    &detail,
-                    self.bridge.cfg.read().ui_is_ru(),
-                );
+                let ru = self.bridge.cfg.read().ui_is_ru();
+                let body = {
+                    let st = self.state.lock().unwrap_or_else(|p| p.into_inner());
+                    tool_status_body(&st.prefix, &st.accumulated, &name, &detail, ru)
+                };
                 let weak = self.tile.clone();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(t) = weak.upgrade() {
-                        t.set_source_label(SharedString::from(label));
+                        t.set_source_label(SharedString::from(crate::tile_text::tool_label(ru)));
+                        t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks_streaming(&body))));
                     }
                 });
             }
@@ -440,6 +441,17 @@ pub(crate) struct OverlayBarBridge {
     pub(crate) last_tile_render: std::sync::Mutex<std::time::Instant>,
     /// Last time a cap event spawned a visible notice tile.
     pub(crate) last_cap_notice: std::sync::Mutex<std::time::Instant>,
+}
+
+/// The streaming body with a line saying which lookup runs; the next delta
+/// re-renders `prefix + accumulated` and the line goes away.
+fn tool_status_body(prefix: &str, accumulated: &str, name: &str, detail: &str, ru: bool) -> String {
+    let line = crate::tile_text::tool_body(name, detail, ru);
+    if accumulated.trim().is_empty() {
+        format!("{prefix}{line}")
+    } else {
+        format!("{prefix}{accumulated}\n\n{line}")
+    }
 }
 
 /// Per-streaming-tile state: weak handle + accumulated answer text.
@@ -732,9 +744,8 @@ impl OverlayBarBridge {
                 }
             }
             ai::AiEvent::Tool { name, detail } => {
-                let label =
-                    crate::tile_text::tool_label(&name, &detail, self.cfg.read().ui_is_ru());
-                let weak = {
+                let ru = self.cfg.read().ui_is_ru();
+                let (weak, body) = {
                     let slot = match self.current_streaming.lock() {
                         Ok(g) => g,
                         Err(p) => p.into_inner(),
@@ -742,11 +753,15 @@ impl OverlayBarBridge {
                     let Some(stream) = slot.as_ref() else {
                         return;
                     };
-                    stream.weak.clone()
+                    (
+                        stream.weak.clone(),
+                        tool_status_body(&stream.prefix, &stream.accumulated, &name, &detail, ru),
+                    )
                 };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(tile) = weak.upgrade() {
-                        tile.set_source_label(SharedString::from(label));
+                        tile.set_source_label(SharedString::from(crate::tile_text::tool_label(ru)));
+                        tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks_streaming(&body))));
                     }
                 });
             }

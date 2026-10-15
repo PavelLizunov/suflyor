@@ -105,10 +105,7 @@ pub fn own_strata_installed(root: &Path) -> bool {
 /// is still usable, or else Suflyor's own install.
 #[must_use]
 pub fn strata_installed(root: &Path) -> bool {
-    match adopted_strata() {
-        Some(found) => found.usable(),
-        None => own_strata_installed(root),
-    }
+    adopted_strata().is_some() || own_strata_installed(root)
 }
 
 // ---- a Strata the user installed before ------------------------------------
@@ -148,9 +145,15 @@ pub fn set_adopted_strata(dir: &str, config: &str) {
     *ADOPTED.lock().unwrap_or_else(|p| p.into_inner()) = found;
 }
 
+/// The chosen Strata while its folder is still usable. A moved or deleted
+/// folder, or paths from another PC's profile, fall back to Suflyor's own.
 #[must_use]
 pub fn adopted_strata() -> Option<FoundStrata> {
-    ADOPTED.lock().unwrap_or_else(|p| p.into_inner()).clone()
+    ADOPTED
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone()
+        .filter(FoundStrata::usable)
 }
 
 /// A Strata model run config is a JSON object with `exe` and `args`; the
@@ -162,8 +165,7 @@ fn model_config_name(path: &Path) -> Option<String> {
     if tag.ends_with(".shared-settings") {
         return None;
     }
-    let text = std::fs::read_to_string(path).ok()?;
-    let cfg: serde_json::Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).ok()?;
+    let cfg = parse_json_file(&std::fs::read_to_string(path).ok()?);
     if cfg.get("exe").and_then(serde_json::Value::as_str).is_none()
         || !cfg.get("args").is_some_and(serde_json::Value::is_array)
     {
@@ -175,6 +177,12 @@ fn model_config_name(path: &Path) -> Option<String> {
             .filter(|n| !n.trim().is_empty())
             .map_or_else(|| tag.to_ascii_uppercase(), str::to_owned),
     )
+}
+
+/// JSON a user may have saved from Notepad (with a UTF-8 BOM); Null when
+/// it does not parse.
+fn parse_json_file(text: &str) -> serde_json::Value {
+    serde_json::from_str(text.trim_start_matches('\u{feff}')).unwrap_or(serde_json::Value::Null)
 }
 
 /// The usable model configs of one Strata folder, newest first.
@@ -227,10 +235,9 @@ fn strata_settings_file() -> Option<PathBuf> {
 /// data folder. Reads a few small files; callers keep it off the UI thread.
 #[must_use]
 pub fn find_existing_strata(root: &Path) -> Vec<FoundStrata> {
-    let settings: serde_json::Value = strata_settings_file()
+    let settings = strata_settings_file()
         .and_then(|p| std::fs::read_to_string(p).ok())
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or(serde_json::Value::Null);
+        .map_or(serde_json::Value::Null, |t| parse_json_file(&t));
     let mut folders: Vec<PathBuf> = settings
         .get("installs")
         .and_then(serde_json::Value::as_array)
@@ -914,6 +921,13 @@ mod tests {
         .unwrap();
         assert!(strata_in_folder(&dir).iter().any(|f| f.model == "IQ2_XS"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn json_files_may_start_with_a_bom() {
+        let v = parse_json_file("\u{feff}{\"installs\":[\"C:\\\\S\"]}");
+        assert_eq!(v["installs"][0], "C:\\S");
+        assert!(parse_json_file("not json").is_null());
     }
 
     #[test]

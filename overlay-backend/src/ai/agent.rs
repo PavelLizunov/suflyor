@@ -45,6 +45,13 @@ pub(crate) fn applies(endpoint: &AiEndpoint) -> bool {
             .contains(&endpoint.base_url)
 }
 
+/// The server said it cannot take `tools` (llama.cpp without `--jinja`,
+/// Ollama with a model that has no tool template), as opposed to being busy
+/// or refusing the credentials.
+fn rejects_tools(status: u16, body: &str) -> bool {
+    matches!(status, 400 | 422 | 500 | 501) && body.to_ascii_lowercase().contains("tool")
+}
+
 fn mark_no_tools(base_url: &str) {
     let mut list = NO_TOOLS.lock().unwrap_or_else(|p| p.into_inner());
     if !list.iter().any(|u| u == base_url) {
@@ -183,15 +190,19 @@ pub(crate) async fn stream_agent(
         };
         if !resp.status().is_success() {
             let status = resp.status();
-            let len = resp.text().await.map(|b| b.len()).unwrap_or(0);
+            let error_body = resp.text().await.unwrap_or_default();
             log::warn!(
                 "{}",
-                crate::http_log::http_error_line("AI agent", status.as_u16(), len)
+                crate::http_log::http_error_line("AI agent", status.as_u16(), error_body.len())
             );
-            // The first request is the capability probe: a server without
-            // tool support answers the plain way from now on.
+            // The first request is the capability probe: it falls back to the
+            // plain path, and a server that says it has no tool support is
+            // not offered tools again. A busy or loading server is asked
+            // with tools next time.
             if step == 0 && offer_tools && (status.is_client_error() || status.is_server_error()) {
-                mark_no_tools(&endpoint.base_url);
+                if rejects_tools(status.as_u16(), &error_body) {
+                    mark_no_tools(&endpoint.base_url);
+                }
                 return super::stream::stream_plain(
                     endpoint,
                     messages,
@@ -223,16 +234,24 @@ pub(crate) async fn stream_agent(
             }
             history.push(assistant);
             for call in &outcome.calls {
-                let _ = tx
+                // A closed tile stops the loop: no further lookup leaves the PC.
+                if tx
                     .send(AiEvent::Tool {
                         name: call.name.clone(),
                         detail: tools::status_detail(&call.name, &call.arguments),
                     })
-                    .await;
-                let result =
-                    tokio::time::timeout(TOOL_TIMEOUT, tools::run(&call.name, &call.arguments))
-                        .await
-                        .unwrap_or_else(|_| "error: the tool did not finish in time".to_string());
+                    .await
+                    .is_err()
+                {
+                    return Ok(());
+                }
+                let result = tokio::select! {
+                    biased;
+                    () = tx.closed() => return Ok(()),
+                    r = tokio::time::timeout(TOOL_TIMEOUT, tools::run(&call.name, &call.arguments)) => {
+                        r.unwrap_or_else(|_| "error: the tool did not finish in time".to_string())
+                    }
+                };
                 log::info!(
                     "AI agent tool {} -> {} chars",
                     call.name,
@@ -392,6 +411,16 @@ mod tests {
         assert_eq!(calls[0].arguments, r#"{"query":"rust"}"#);
         assert_eq!(calls[1].id, "call_2_1");
         assert_eq!(calls[1].arguments, r#"{"query":"tokio"}"#);
+    }
+
+    #[test]
+    fn only_an_explicit_tool_refusal_disables_tools() {
+        assert!(rejects_tools(400, r#"{"error":"model does not support tools"}"#));
+        assert!(rejects_tools(500, "tools param requires --jinja flag"));
+        assert!(!rejects_tools(503, "Loading model"));
+        assert!(!rejects_tools(429, "tools: too many requests"));
+        assert!(!rejects_tools(401, "unauthorized"));
+        assert!(!rejects_tools(400, "context too long"));
     }
 
     #[test]
