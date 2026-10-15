@@ -1056,7 +1056,7 @@ pub(crate) fn open_settings(
                 || (endpoint.requires_bearer() && endpoint.bearer.is_empty())
             {
                 w.set_meeting_context_result(SharedString::from(
-                    "[--] AI мост не настроен (вкладка AI мост)",
+                    "[--] AI не настроен (вкладка AI-провайдеры)",
                 ));
                 return;
             }
@@ -1330,52 +1330,52 @@ pub(crate) fn component_row_copy(
             if ru {
                 (
                     "Движок (llama.cpp)",
-                    "Настройки → AI → AI мост → «Обновить движок»",
+                    "Настройки → AI-провайдеры → Тонкая настройка",
                 )
             } else {
                 (
                     "Engine (llama.cpp)",
-                    "Settings → AI → AI bridge → Update engine",
+                    "Settings → AI providers → Fine tuning",
                 )
             }
         }
         ComponentKind::LocalModel => {
             if ru {
                 (
-                    "Локальная модель ИИ",
-                    "Настройки → AI → AI мост → «Установить локальный ИИ»",
+                    "Локальная модель AI",
+                    "Настройки → AI-провайдеры → Выбрать модель",
                 )
             } else {
                 (
                     "Local AI model",
-                    "Settings → AI → AI bridge → Install local AI",
+                    "Settings → AI providers → Choose a model",
                 )
             }
         }
         ComponentKind::Stt => {
             if ru {
-                ("Распознавание речи (STT)", "Настройки → AI → STT")
+                ("Распознавание речи (STT)", "Настройки → STT")
             } else {
-                ("Speech recognition (STT)", "Settings → AI → STT")
+                ("Speech recognition (STT)", "Settings → STT")
             }
         }
         ComponentKind::Voices => {
             if ru {
-                ("Голоса (TTS)", "Настройки → AI → TTS → «Установить голоса»")
+                ("Голоса (TTS)", "Устанавливаются здесь или в Настройки → TTS")
             } else {
-                ("Voices (TTS)", "Settings → AI → TTS → Install voices")
+                ("Voices (TTS)", "Install here or in Settings → TTS")
             }
         }
         ComponentKind::Ocr => {
             if ru {
                 (
                     "Распознавание текста (OCR)",
-                    "Настройки → AI → AI мост → Vision → «Установить OCR»",
+                    "Устанавливается здесь, около 53 МБ",
                 )
             } else {
                 (
                     "Text recognition (OCR)",
-                    "Settings → AI → AI bridge → Vision → Install OCR",
+                    "Installs here, about 53 MB",
                 )
             }
         }
@@ -1439,7 +1439,7 @@ pub(crate) fn populate_component_rows(
             // «Открыть» jump target for the heavy components (their full installer
             // with progress + cancel lives in a dedicated panel); -1 = inline.
             let jump_tab: i32 = match c.kind {
-                ComponentKind::Engine | ComponentKind::LocalModel => 11, // AI мост
+                ComponentKind::Engine | ComponentKind::LocalModel => 11, // AI providers
                 ComponentKind::Stt => 12,                                // STT
                 ComponentKind::Voices | ComponentKind::Ocr => -1,
             };

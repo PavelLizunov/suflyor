@@ -2563,3 +2563,6 @@ msgstr "Скриншоты идут через подключение и мод�
 
 msgid "Speaker detection"
 msgstr "Определение говорящих"
+
+msgid "What is installed for AI without the internet. Each part downloads on demand: here or in the tab named under it."
+msgstr "Что установлено для AI без интернета. Каждая часть скачивается по запросу: здесь или во вкладке, указанной под ней."
