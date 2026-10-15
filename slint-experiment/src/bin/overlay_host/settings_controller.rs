@@ -1774,6 +1774,20 @@ pub(crate) fn populate_token_status(
     win.set_ai_local_test_result(blank());
     win.set_strata_status(blank());
     win.set_local_more_open(false);
+    win.set_now_title(blank());
+    win.set_now_detail(blank());
+    win.set_now_notice(blank());
+    win.set_now_state(4);
+    win.set_local_hardware_line(blank());
+    win.set_local_connect_open(false);
+    win.set_local_connect_auto(true);
+    if !win.get_quality_downloading() {
+        win.set_local_download_profile(-1);
+    }
+    if !win.get_strata_busy() {
+        win.set_local_strata_job(-1);
+    }
+    win.set_local_choice_status(blank());
     win.set_ai_bridge_test_result(blank());
     win.set_stt_test_result(blank());
     win.set_mic_test_result(blank());
@@ -1823,9 +1837,11 @@ pub(crate) fn populate_token_status(
             });
             let hw = overlay_backend::local_ai::StrataHardware::detect();
             let note = hw.describe(ru);
+            let short = hw.describe_short(ru);
             let fits = hw.meets_recommendation();
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(w) = hardware_weak.upgrade() {
+                    w.set_local_hardware_line(SharedString::from(short));
                     w.set_strata_hardware_note(SharedString::from(note));
                     w.set_strata_hardware_fits(fits);
                 }

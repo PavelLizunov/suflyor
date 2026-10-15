@@ -2566,3 +2566,86 @@ msgstr "Определение говорящих"
 
 msgid "What is installed for AI without the internet. Each part downloads on demand: here or in the tab named under it."
 msgstr "Что установлено для AI без интернета. Каждая часть скачивается по запросу: здесь или во вкладке, указанной под ней."
+
+# Local model cards
+
+msgid ".gguf file…"
+msgstr "Файл .gguf…"
+
+msgid "Available to download"
+msgstr "Можно скачать"
+
+msgid "Built-in engine + Gemma 4 12B"
+msgstr "Встроенный движок + Gemma 4 12B"
+
+msgid "Check"
+msgstr "Проверить"
+
+msgid "Choose a model"
+msgstr "Выберите модель"
+
+msgid "Connect by address…"
+msgstr "Подключить по адресу…"
+
+msgid "Fine tuning"
+msgstr "Тонкая настройка"
+
+msgid "Gemma 4 12B · 6.3 GB"
+msgstr "Gemma 4 12B · 6,3 ГБ"
+
+msgid "Gemma 4 26B-A4B · 9.8 GB"
+msgstr "Gemma 4 26B-A4B · 9,8 ГБ"
+
+msgid "Gemma 4 E4B · 4.6 GB"
+msgstr "Gemma 4 E4B · 4,6 ГБ"
+
+msgid "Not answering"
+msgstr "Не отвечает"
+
+msgid "Not set up"
+msgstr "Не настроено"
+
+msgid "Now answering"
+msgstr "Сейчас отвечает"
+
+msgid "On this PC"
+msgstr "На этом ПК"
+
+msgid "Starting/Loading"
+msgstr "Запуск / загрузка"
+
+msgid "Strata folder…"
+msgstr "Папка Strata…"
+
+msgid "Suflyor's Strata"
+msgstr "Strata от Suflyor"
+
+msgid "The model looks things up when it needs to. Web queries go to DuckDuckGo."
+msgstr "Модель ищет информацию, когда это нужно. Веб-запросы отправляются в DuckDuckGo."
+
+msgid "What the model can do"
+msgstr "Возможности модели"
+
+msgid "Working"
+msgstr "Работает"
+
+msgid "Your GGUF file"
+msgstr "Ваш файл GGUF"
+
+msgid "heavy for this PC"
+msgstr "тяжело для этого ПК"
+
+msgid "llama.cpp · about 7 GB with speech components"
+msgstr "llama.cpp · около 7 ГБ с речевыми компонентами"
+
+msgid "needs 48 GB RAM"
+msgstr "нужно 48 ГБ RAM"
+
+msgid "recommended"
+msgstr "рекомендуется"
+
+msgid "Clear saved token"
+msgstr "Удалить сохранённый токен"
+
+msgid "Local images need the installed 12B model and its projector. For the cloud or another server, use the Screenshots (F8) tab."
+msgstr "Для картинок локально нужна установленная модель 12B и её проектор. Для облака или другого сервера используйте вкладку «Скриншоты (F8)»."

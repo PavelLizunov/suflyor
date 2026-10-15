@@ -101,6 +101,33 @@ fn every_transient_status_prop_is_reset_on_reopen() {
     );
 }
 
+#[test]
+fn local_model_cards_reset_their_non_status_state_on_reopen() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let rs = fs::read_to_string(root.join("src/bin/overlay_host/settings_controller.rs"))
+        .expect("read settings_controller.rs");
+    let body = populate_body(&rs);
+    for setter in [
+        "set_now_title(",
+        "set_now_detail(",
+        "set_now_state(",
+        "set_now_notice(",
+        "set_local_hardware_line(",
+        "set_local_connect_open(",
+        "set_local_connect_auto(",
+        "set_local_download_profile(",
+        "set_local_strata_job(",
+        "set_local_choice_status(",
+    ] {
+        assert!(
+            body.contains(setter),
+            "missing local model card reset: {setter}"
+        );
+    }
+    assert!(body.contains("if !win.get_quality_downloading()"));
+    assert!(body.contains("if !win.get_strata_busy()"));
+}
+
 /// Sanity: the parser actually found the known transient props (so a future
 /// refactor that breaks the scan can't make the guard vacuously pass).
 #[test]

@@ -1258,6 +1258,7 @@ pub(crate) fn wire_ai_settings(
                 c.ai_local_base_url.clone()
             };
             if let Some(w) = weak.upgrade() {
+                refresh_local_engine_state(&w, &cfg_c.read());
                 refresh_local_model_resource_warning(
                     &w,
                     overlay_backend::local_ai::default_root(),
@@ -1337,7 +1338,9 @@ pub(crate) fn wire_ai_settings(
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            w.set_ai_local_test_result(SharedString::from("Проверка…"));
+            #[cfg(windows)]
+            let generation = super::settings_local_ai::begin_now_check(&w);
+            w.set_ai_local_test_result(SharedString::from(if cfg_c.read().ui_is_ru() { "Проверка…" } else { "Checking…" }));
             let (base_url, bearer, model, ui_is_ru) = {
                 let c = cfg_c.read();
                 (
@@ -1349,6 +1352,7 @@ pub(crate) fn wire_ai_settings(
             };
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
+                let mut working = false;
                 let msg = match tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
@@ -1357,7 +1361,10 @@ pub(crate) fn wire_ai_settings(
                         match rt.block_on(overlay_backend::ai::test_connection(
                             base_url, bearer, model,
                         )) {
-                            Ok(s) => format!("[ok] {s}"),
+                            Ok(s) => {
+                                working = true;
+                                format!("[ok] {s}")
+                            }
                             // A deep-locked managed server: the specific
                             // localized notice instead of a misleading "server
                             // not answering".
@@ -1380,19 +1387,22 @@ pub(crate) fn wire_ai_settings(
                             Err(e) => {
                                 let es = e.to_string().to_lowercase();
                                 if es.contains("503") || es.contains("loading") {
-                                    "Сервер запускает модель — подождите ~10 с и повторите."
-                                        .to_string()
+                                    if ui_is_ru { "Сервер запускает модель — подождите ~10 с и повторите." } else { "The server is loading the model — wait about 10 seconds and try again." }.to_string()
                                 } else {
-                                    "[--] Локальный сервер не отвечает — проверьте, что он запущен."
-                                        .to_string()
+                                    if ui_is_ru { "[--] Локальный сервер не отвечает — проверьте, что он запущен." } else { "[--] The local server is not answering — check that it is running." }.to_string()
                                 }
                             }
                         }
                     }
-                    Err(e) => format!("[--] runtime: {e}"),
+                    Err(_) => if ui_is_ru { "Не удалось проверить подключение." } else { "Could not check the connection." }.to_string(),
                 };
                 let _ = slint::invoke_from_event_loop(move || {
+                    #[cfg(windows)]
+                    if !super::settings_local_ai::now_check_is_current(generation) {
+                        return;
+                    }
                     if let Some(w) = weak_res.upgrade() {
+                        w.set_now_state(if working { 1 } else { 3 });
                         w.set_ai_local_test_result(SharedString::from(msg));
                     }
                 });
