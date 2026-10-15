@@ -415,6 +415,48 @@ impl StrataHardware {
                 .is_some_and(|vram| vram >= STRATA_MIN_VRAM_GIB)
     }
 
+    /// Compact Settings caption; call on the hardware-discovery thread.
+    #[must_use]
+    pub fn describe_short(self, ru: bool) -> String {
+        let ram = self
+            .ram_gib
+            .map_or_else(|| "?".to_string(), |v| v.to_string());
+        let name = self.vram_gib.and_then(|_| {
+            let out = super::run_capture(
+                "nvidia-smi",
+                &[
+                    "--query-gpu=name,memory.total",
+                    "--format=csv,noheader,nounits",
+                ],
+            )
+            .ok()?;
+            if !out.status.success() {
+                return None;
+            }
+            String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .filter_map(|line| {
+                    let (name, memory) = line.rsplit_once(',')?;
+                    Some((name.trim().to_string(), memory.trim().parse::<u64>().ok()?))
+                })
+                .max_by_key(|(_, memory)| *memory)
+                .map(|(name, _)| name)
+        });
+        let gpu = match (self.vram_gib, ru) {
+            (Some(vram), true) => format!("{} с {vram} ГБ", name.as_deref().unwrap_or("NVIDIA")),
+            (Some(vram), false) => {
+                format!("{} with {vram} GB", name.as_deref().unwrap_or("NVIDIA GPU"))
+            }
+            (None, true) => "нет видеокарты NVIDIA".to_string(),
+            (None, false) => "no NVIDIA graphics card".to_string(),
+        };
+        if ru {
+            format!("Этот ПК: {ram} ГБ RAM, {gpu}")
+        } else {
+            format!("This PC: {ram} GB RAM, {gpu}")
+        }
+    }
+
     #[must_use]
     pub fn describe(self, ru: bool) -> String {
         let ram = self
@@ -1058,6 +1100,18 @@ mod tests {
             vram_gib: None
         }
         .meets_recommendation());
+        let no_gpu = StrataHardware {
+            ram_gib: Some(16),
+            vram_gib: None,
+        };
+        assert_eq!(
+            no_gpu.describe_short(false),
+            "This PC: 16 GB RAM, no NVIDIA graphics card"
+        );
+        assert_eq!(
+            no_gpu.describe_short(true),
+            "Этот ПК: 16 ГБ RAM, нет видеокарты NVIDIA"
+        );
         assert!(fits.describe(false).contains("fits"));
         assert!(StrataHardware {
             ram_gib: Some(16),

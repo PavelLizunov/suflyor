@@ -173,6 +173,92 @@ export component ModelChoiceRow inherits Rectangle {
     }
 }
 
+// A single grid for installed models, downloads and discovered servers.
+export component LocalModelRow inherits Rectangle {
+    in property <string> title;
+    in property <string> detail;
+    in property <string> chip;
+    // 0 neutral, 1 good, 2 warning.
+    in property <int> chip-tone: 0;
+    in property <string> action;
+    in property <bool> active: false;
+    in property <bool> action-enabled: true;
+    in property <bool> busy: false;
+    in property <bool> progress-visible: false;
+    in property <float> progress: 0;
+    callback action-clicked();
+    callback cancel-clicked();
+    horizontal-stretch: 1;
+    min-height: content.preferred-height;
+    preferred-height: content.preferred-height;
+    border-radius: Metrics.radius-field;
+    background: root.active ? Theme.accent-subtle : transparent;
+    content := VerticalLayout {
+        padding: Metrics.space-xs;
+        spacing: Metrics.space-xs;
+        HorizontalLayout {
+            spacing: Metrics.space-sm;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: Metrics.space-xs;
+                Text {
+                    text: root.title;
+                    font-size: Metrics.font-body;
+                    font-weight: root.active ? 700 : 400;
+                    color: Theme.text-primary;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: root.detail;
+                    font-size: Metrics.font-caption;
+                    color: Theme.text-muted;
+                    wrap: word-wrap;
+                }
+            }
+            Text {
+                width: 96px;
+                horizontal-stretch: 0;
+                text: root.chip;
+                font-size: Metrics.font-caption;
+                color: root.chip-tone == 1 ? Theme.success : root.chip-tone == 2 ? Theme.warning : Theme.text-muted;
+                wrap: word-wrap;
+                vertical-alignment: center;
+            }
+            Button {
+                width: 132px;
+                height: 30px;
+                y: (parent.height - self.height) / 2;
+                text: root.action;
+                enabled: root.action-enabled;
+                clicked => { root.action-clicked(); }
+            }
+        }
+        if root.busy : HorizontalLayout {
+            spacing: Metrics.space-sm;
+            if root.progress-visible : Rectangle {
+                horizontal-stretch: 1;
+                height: 6px;
+                y: (parent.height - self.height) / 2;
+                border-radius: Metrics.radius-field;
+                background: Theme.border;
+                Rectangle {
+                    height: parent.height;
+                    width: parent.width * clamp(root.progress, 0, 1);
+                    border-radius: Metrics.radius-field;
+                    background: Theme.accent;
+                }
+            }
+            if !root.progress-visible : Rectangle { horizontal-stretch: 1; }
+            Button {
+                width: 132px;
+                height: 30px;
+                text: @tr("Cancel");
+                clicked => { root.cancel-clicked(); }
+            }
+        }
+    }
+}
+
 export component SettingsComboBox inherits ComboBox {
     height: 32px;
 }

@@ -53,12 +53,87 @@ fn macos_settings_hide_windows_only_setup_and_managed_local_actions() {
     assert!(ui.contains(
         "if !Platform.is-macos : SettingsCard {\n                            title: @tr(\"Setup\")"
     ));
-    // The engine choice and every managed-engine panel are Windows-only; macOS
-    // shows only the server fields for the local provider.
-    assert!(ui.contains("if !Platform.is-macos : SettingsComboBox {\n                                model: [\n                                    @tr(\"Built-in engine (llama.cpp)\")"));
-    assert!(ui.contains("if !Platform.is-macos && root.local-engine-index == 0 && root.llama-installed : WrapBlock {"));
-    assert!(ui.contains("if !Platform.is-macos && root.local-engine-index == 1 : WrapBlock {"));
-    assert!(ui.contains("if Platform.is-macos || root.local-engine-index == 2 : WrapBlock {"));
+    let local = ui
+        .split_once("// ============================ LOCAL")
+        .unwrap()
+        .1;
+    let (windows, macos) = local
+        .split_once("if Platform.is-macos : WrapBlock {")
+        .unwrap();
+    assert!(windows.contains("if !Platform.is-macos : WrapBlock {"));
+    for title in [
+        "Now answering",
+        "Choose a model",
+        "What the model can do",
+        "Fine tuning",
+    ] {
+        assert!(windows.contains(&format!("@tr(\"{title}\")")));
+        assert!(!macos
+            .split_once("// Text OUTER")
+            .unwrap()
+            .0
+            .contains(&format!("@tr(\"{title}\")")));
+    }
+    let windows_block = windows
+        .split_once("if !Platform.is-macos : WrapBlock {")
+        .unwrap()
+        .1;
+    let mut depth = 1;
+    let mut closing = None;
+    for (index, ch) in windows_block.char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => depth -= 1,
+            _ => {}
+        }
+        if depth == 0 {
+            closing = Some(index + 1);
+            break;
+        }
+    }
+    assert!(
+        windows_block[closing.expect("Windows wrapper closes")..]
+            .trim()
+            .is_empty(),
+        "all model cards must stay within the Windows wrapper"
+    );
+    assert_eq!(
+        depth, 0,
+        "Windows-only model card wrapper must close before macOS fields"
+    );
+    assert!(windows.contains("LocalModelRow {"));
+    assert!(!windows.contains("current-index <=> root.local-engine-index"));
+    let server = macos.split_once("// ----- switches").unwrap().0;
+    assert!(server.contains("text <=> root.ai-local-base-url-input"));
+    assert!(server.contains("text <=> root.ai-local-bearer-input"));
+    assert!(server.contains("model: root.ai-local-models"));
+    assert!(server.contains("root.ai-local-models-refresh();"));
+    assert!(!server.contains("LocalModelRow {"));
+}
+
+#[test]
+fn local_model_cards_keep_jobs_actions_and_async_checks_reachable() {
+    let ui = read("ui/settings_panel.slint");
+    let controls = read("ui/settings_controls.slint");
+    let local = read("src/bin/overlay_host/settings_local_ai.rs");
+    let ai = read("src/bin/overlay_host/settings_ai.rs");
+    assert!(ui.contains("(!root.llama-installed || root.local-ai-installing)"));
+    assert!(ui.contains("root.ai-local-bearer-save(\"\")"));
+    assert!(ui.contains("root.local-connect-auto = false"));
+    for profile in 0..=2 {
+        assert!(ui.contains(&format!("root.local-download-profile == {profile}")));
+        assert!(ui.contains(&format!("root.builtin-model-use({profile})")));
+    }
+    for width in ["width: 96px", "width: 132px", "height: 30px", "height: 6px"] {
+        assert!(controls.contains(width));
+    }
+    assert!(local.contains("std::time::Duration::from_secs(3)"));
+    assert!(local.contains("overlay_backend::ai::list_models(&base, &bearer)"));
+    assert!(local.contains("if w.get_ai_local_test_result().is_empty()"));
+    assert!(local.contains("PENDING_BUILTIN_CHOICE"));
+    assert!(local.contains("w.invoke_local_engine_activate(0)"));
+    assert!(ai.contains("now_check_is_current(generation)"));
+    assert!(ai.contains("w.set_now_state(if working { 1 } else { 3 })"));
 }
 
 #[test]
