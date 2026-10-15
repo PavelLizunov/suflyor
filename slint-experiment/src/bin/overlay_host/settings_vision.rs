@@ -11,8 +11,7 @@
 //! same bodies, byte-for-byte identical behavior. `open_settings` now only
 //! CALLS `wire_vision_settings(&win, cfg)` at the same spot.
 //!
-//! SECURITY (unchanged by this mechanical move): the vision test-result tile
-//! keeps its GENERIC messages (`[ok] …` / `[err] …` / `[--] vision is off`) so
+//! SECURITY: the vision test-result tile keeps generic messages so
 //! no `base_url` / LAN IP leaks into a screen-shared Settings window. The
 //! endpoint resolves via `cfg.vision_endpoint()` exactly as before.
 //!
@@ -83,10 +82,7 @@ pub(crate) fn wire_vision_settings(
                     current.ai_provider == "mlx",
                 )
             };
-            if leaving_mlx
-                && !text_uses_mlx
-                && !overlay_backend::mlx_runtime::stop_if_idle()
-            {
+            if leaving_mlx && !text_uses_mlx && !overlay_backend::mlx_runtime::stop_if_idle() {
                 if let Some(window) = weak.upgrade() {
                     window.set_vision_provider_index(6);
                 }
@@ -215,13 +211,21 @@ pub(crate) fn wire_vision_settings(
         let weak = win.as_weak();
         win.on_vision_test_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
-            w.set_vision_test_result(SharedString::from("testing…"));
             let (ep, ui_is_ru) = {
                 let c = cfg_c.read();
                 (c.vision_endpoint(), c.ui_is_ru())
             };
+            w.set_vision_test_result(SharedString::from(if ui_is_ru {
+                "Проверка…"
+            } else {
+                "Checking…"
+            }));
             let Some(ep) = ep else {
-                w.set_vision_test_result(SharedString::from("[--] vision is off"));
+                w.set_vision_test_result(SharedString::from(if ui_is_ru {
+                    "Анализ скриншотов выключен"
+                } else {
+                    "Screenshot analysis is off"
+                }));
                 return;
             };
             let weak_res = w.as_weak();
@@ -232,17 +236,34 @@ pub(crate) fn wire_vision_settings(
                 {
                     Ok(rt) => {
                         match rt.block_on(overlay_backend::vision::test_connection_endpoint(ep)) {
-                            Ok(s) => format!("[ok] {s}"),
+                            Ok(_) => {
+                                if ui_is_ru {
+                                    "Подключение работает".to_string()
+                                } else {
+                                    "Connection works".to_string()
+                                }
+                            }
                             Err(e) => {
                                 let chain = format!("{e:#}");
-                                overlay_backend::deep_lock::blocked_test_result(ui_is_ru, &chain)
-                                    .unwrap_or_else(|| {
-                                        format!("[err] {chain}").chars().take(90).collect()
-                                    })
+                                if overlay_backend::deep_lock::is_blocked_error(&chain) {
+                                    overlay_backend::deep_lock::blocked_notice(ui_is_ru).to_string()
+                                } else {
+                                    if ui_is_ru {
+                                        "Не удалось проверить подключение"
+                                    } else {
+                                        "Could not verify the connection"
+                                    }
+                                    .to_string()
+                                }
                             }
                         }
                     }
-                    Err(e) => format!("[err] runtime: {e}"),
+                    Err(_) => if ui_is_ru {
+                        "Не удалось запустить проверку"
+                    } else {
+                        "Could not start the check"
+                    }
+                    .to_string(),
                 };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_res.upgrade() {

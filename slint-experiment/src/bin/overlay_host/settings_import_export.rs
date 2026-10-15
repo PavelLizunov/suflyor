@@ -58,6 +58,7 @@ pub(crate) fn wire_import_export(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_export_server_settings_clicked(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let snapshot = cfg_c.read().clone();
             let picked = rfd::FileDialog::new()
                 .set_title("Export server settings (AI/STT only — contains API keys)")
@@ -69,7 +70,13 @@ pub(crate) fn wire_import_export(
                 None => "export cancelled".to_string(),
                 Some(path) => {
                     match overlay_backend::config::export_server_settings_to(&path, &snapshot) {
-                        Ok(()) => format!("[ok] server settings exported to {}", path.display()),
+                        Ok(()) => {
+                            if ru {
+                                format!("Настройки сервера экспортированы в {}", path.display())
+                            } else {
+                                format!("Server settings exported to {}", path.display())
+                            }
+                        }
                         Err(e) => {
                             // Generic + log: the error chain can carry a path /
                             // internals into this screen-shared field (audit Q8).
@@ -135,6 +142,7 @@ pub(crate) fn wire_import_export(
         let pending = pending.clone();
         let overlay = overlay_weak.clone();
         win.on_apply_server_settings_clicked(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let Some(w) = weak.upgrade() else { return };
             let Some(imported) = pending.borrow_mut().take() else {
                 w.set_server_preview_ready(false);
@@ -154,7 +162,7 @@ pub(crate) fn wire_import_export(
                         refresh_lock_chip(&o, &cfg_c);
                     }
                     let _ = msg_refresh_after_import(&w, &cfg_c);
-                    "[ok] server settings applied (AI/STT providers, URLs, models, keys). Local profiles, devices, UI and snippets kept; the local GigaAM model path was kept from this PC. Restart for full effect.".to_string()
+                    if ru { "Настройки сервера применены. Профили, устройства, интерфейс, фрагменты и путь к GigaAM сохранены. Для полного применения перезапустите приложение." } else { "Server settings applied. Local profiles, devices, UI, snippets and the GigaAM path were kept. Restart the app for full effect." }.to_string()
                 }
                 Err(e) => {
                     eprintln!("[overlay-host] server settings apply/save failed: {e:#}");
@@ -247,7 +255,10 @@ mod tests {
             "local GigaAM model path kept from this PC ({home}\\suflyor-local-ai\\gigaam-v3); the imported file's path ({home}\\imported\\gigaam-v3) is NOT applied"
         );
         let redacted = redact_user_home(&sample);
-        assert!(!redacted.contains("alice"), "leaked OS username in preview: {redacted}");
+        assert!(
+            !redacted.contains("alice"),
+            "leaked OS username in preview: {redacted}"
+        );
         assert!(redacted.contains("%USERPROFILE%"));
     }
 }

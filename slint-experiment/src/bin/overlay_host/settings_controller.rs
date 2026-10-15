@@ -355,8 +355,9 @@ pub(crate) fn open_settings(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_mic_test_clicked(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let Some(w) = weak.upgrade() else { return };
-            w.set_mic_test_result(SharedString::from("recording 3s…"));
+            w.set_mic_test_result(SharedString::from(if ru { "Запись 3 с…" } else { "Recording for 3s…" }));
             let device = cfg_c.read().mic_device.clone();
             let weak_for_result = w.as_weak();
             // Blocking WASAPI record off the UI thread; post result back.
@@ -366,12 +367,12 @@ pub(crate) fn open_settings(
                 // both). Report busy instead of recording.
                 let mic_guard = try_acquire_mic();
                 let msg = if mic_guard.is_none() {
-                    "[!] mic busy — close PTT / dictation and retry".to_string()
+                    if ru { "Микрофон занят — завершите голосовой ввод и повторите" } else { "Microphone busy — finish voice input and retry" }.to_string()
                 } else {
                     let result = overlay_backend::audio::record_mic_blocking(3000, device);
                     drop(mic_guard); // release before processing (RAII: also on panic)
                     match result {
-                        Ok(samples) if samples.is_empty() => "no audio captured".to_string(),
+                        Ok(samples) if samples.is_empty() => if ru { "Звук не записан" } else { "No audio captured" }.to_string(),
                         Ok(samples) => {
                             // RMS energy + a -45 dBFS speech threshold (silent room
                             // is < -55 dBFS). Shared helper with the diagnostics tab
@@ -379,11 +380,11 @@ pub(crate) fn open_settings(
                             // was the old peak==0 check passing on any tiny noise.
                             let dbfs = overlay_backend::audio::rms_dbfs(&samples);
                             if dbfs < -45.0 {
-                                format!(
-                                    "[!] too quiet ({dbfs:.0} dBFS) — say something / check mic"
-                                )
+                                if ru { format!("Слишком тихо ({dbfs:.0} dBFS) — скажите что-нибудь или проверьте микрофон"
+                                ) } else { format!("Too quiet ({dbfs:.0} dBFS) — speak or check the microphone"
+                                ) }
                             } else {
-                                format!("[ok] heard you ({dbfs:.0} dBFS RMS)")
+                                if ru { format!("Голос слышен ({dbfs:.0} dBFS RMS)") } else { format!("Heard you ({dbfs:.0} dBFS RMS)") }
                             }
                         }
                         Err(e) => format!("error: {e}"),
@@ -444,7 +445,7 @@ pub(crate) fn open_settings(
         } else {
             false
         };
-        // I1 — the tab status line shows the EFFECTIVE state ("[!] stealth
+        // I1 — the tab status line shows the EFFECTIVE state ("Capture hiding
         // unavailable" on a failed exclusion), never the intent alone. The
         // Slint `@tr` ternary combines this flag with the toggle intent.
         if let Some(w) = weak_stealth_status.upgrade() {
@@ -586,6 +587,14 @@ pub(crate) fn open_settings(
                 populate_tile_monitors(&w, &snap);
                 populate_component_rows(&w, &snap);
                 populate_tts_voices(&w, &snap);
+                w.set_diag_summary(SharedString::from(
+                    super::diagnostics::settings_readiness_summary(&snap),
+                ));
+                let [ai, groq, openai, anthropic] = key_presence_statuses(&snap);
+                w.set_ai_bearer_status(SharedString::from(ai));
+                w.set_groq_api_key_status(SharedString::from(groq));
+                w.set_openai_key_status(SharedString::from(openai));
+                w.set_anthropic_key_status(SharedString::from(anthropic));
                 w.set_hermes_bridge_status(SharedString::from(
                     crate::settings_hermes::current_bridge_status(
                         &snap.hermes_bridge_host,
@@ -683,6 +692,7 @@ pub(crate) fn open_settings(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_export_profile_clicked(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let snapshot = cfg_c.read().clone();
             let picked = rfd::FileDialog::new()
                 .set_title("Export suflyor settings (contains API keys)")
@@ -693,7 +703,13 @@ pub(crate) fn open_settings(
             let msg = match picked {
                 None => "export cancelled".to_string(),
                 Some(path) => match overlay_backend::config::export_to(&path, &snapshot) {
-                    Ok(()) => format!("[ok] exported to {}", path.display()),
+                    Ok(()) => {
+                        if ru {
+                            format!("Настройки экспортированы в {}", path.display())
+                        } else {
+                            format!("Settings exported to {}", path.display())
+                        }
+                    }
                     Err(e) => format!("[err] {e:#}"),
                 },
             };
@@ -753,6 +769,7 @@ pub(crate) fn open_settings(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_meeting_context_save(move |text| {
+            let ru = cfg_c.read().ui_is_ru();
             {
                 let mut c = cfg_c.write();
                 // Phase F — also mirror into the active profile so the picker
@@ -761,7 +778,11 @@ pub(crate) fn open_settings(
                 if let Err(e) = overlay_backend::config::save(&c) {
                     eprintln!("[overlay-host] meeting_context save failed: {e:#}");
                     if let Some(w) = weak.upgrade() {
-                        w.set_meeting_context_result(SharedString::from("[err] save failed"));
+                        w.set_meeting_context_result(SharedString::from(if ru {
+                            "Не удалось сохранить"
+                        } else {
+                            "Could not save"
+                        }));
                     }
                     return;
                 }
@@ -769,9 +790,11 @@ pub(crate) fn open_settings(
             let chars = text.chars().count();
             eprintln!("[overlay-host] meeting_context saved ({chars} chars)");
             if let Some(w) = weak.upgrade() {
-                w.set_meeting_context_result(SharedString::from(format!(
-                    "[ok] saved ({chars} chars)"
-                )));
+                w.set_meeting_context_result(SharedString::from(if ru {
+                    format!("Сохранено ({chars} символов)")
+                } else {
+                    format!("Saved ({chars} characters)")
+                }));
             }
         });
     }
@@ -799,6 +822,7 @@ pub(crate) fn open_settings(
         let weak = win.as_weak();
         win.on_profile_add(move |name| {
             let mut c = cfg_c.write();
+            let ru = c.ui_is_ru();
             let added = c.add_profile(name.as_str()).is_some();
             let saved = if added {
                 overlay_backend::config::save(&c)
@@ -808,12 +832,24 @@ pub(crate) fn open_settings(
             if let Some(w) = weak.upgrade() {
                 refresh_profiles(&w, &c);
                 w.set_meeting_context_result(SharedString::from(if !added {
-                    "[--] пустое или занятое имя"
+                    if ru {
+                        "Имя пустое или уже занято"
+                    } else {
+                        "Name is empty or already in use"
+                    }
                 } else if let Err(e) = &saved {
                     eprintln!("[overlay-host] profile add save failed: {e:#}");
-                    "[err] не удалось сохранить — проверьте диск"
+                    if ru {
+                        "Не удалось сохранить — проверьте диск"
+                    } else {
+                        "Could not save — check the disk"
+                    }
                 } else {
-                    "[ok] профиль добавлен"
+                    if ru {
+                        "Профиль добавлен"
+                    } else {
+                        "Profile added"
+                    }
                 }));
             }
         });
@@ -823,6 +859,7 @@ pub(crate) fn open_settings(
         let weak = win.as_weak();
         win.on_profile_rename(move |name| {
             let mut c = cfg_c.write();
+            let ru = c.ui_is_ru();
             let ok = c.rename_active_profile(name.as_str());
             let saved = if ok {
                 overlay_backend::config::save(&c)
@@ -832,12 +869,24 @@ pub(crate) fn open_settings(
             if let Some(w) = weak.upgrade() {
                 refresh_profiles(&w, &c);
                 w.set_meeting_context_result(SharedString::from(if !ok {
-                    "[--] пустое или занятое имя"
+                    if ru {
+                        "Имя пустое или уже занято"
+                    } else {
+                        "Name is empty or already in use"
+                    }
                 } else if let Err(e) = &saved {
                     eprintln!("[overlay-host] profile rename save failed: {e:#}");
-                    "[err] не удалось сохранить — проверьте диск"
+                    if ru {
+                        "Не удалось сохранить — проверьте диск"
+                    } else {
+                        "Could not save — check the disk"
+                    }
                 } else {
-                    "[ok] переименовано"
+                    if ru {
+                        "Профиль переименован"
+                    } else {
+                        "Profile renamed"
+                    }
                 }));
             }
         });
@@ -847,6 +896,7 @@ pub(crate) fn open_settings(
         let weak = win.as_weak();
         win.on_profile_delete(move || {
             let mut c = cfg_c.write();
+            let ru = c.ui_is_ru();
             c.delete_active_profile();
             // Confirm-without-verify was the v0.18 "Готово when not done" class:
             // report success ONLY if the save actually persisted, else the profile
@@ -855,10 +905,20 @@ pub(crate) fn open_settings(
             if let Some(w) = weak.upgrade() {
                 refresh_profiles(&w, &c);
                 w.set_meeting_context_result(SharedString::from(match &saved {
-                    Ok(()) => "[ok] профиль удалён",
+                    Ok(()) => {
+                        if ru {
+                            "Профиль удалён"
+                        } else {
+                            "Profile deleted"
+                        }
+                    }
                     Err(e) => {
                         eprintln!("[overlay-host] profile delete save failed: {e:#}");
-                        "[err] не удалось сохранить — проверьте диск"
+                        if ru {
+                            "Не удалось сохранить — проверьте диск"
+                        } else {
+                            "Could not save — check the disk"
+                        }
                     }
                 }));
             }
@@ -1033,14 +1093,17 @@ pub(crate) fn open_settings(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_context_process_clicked(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let Some(w) = weak.upgrade() else {
                 return;
             };
             let current = w.get_meeting_context_input().to_string();
             if current.trim().is_empty() {
-                w.set_meeting_context_result(SharedString::from(
-                    "[--] пусто — нечего обрабатывать",
-                ));
+                w.set_meeting_context_result(SharedString::from(if ru {
+                    "Пусто — нечего обрабатывать"
+                } else {
+                    "Nothing to process yet"
+                }));
                 return;
             }
             let endpoint = {
@@ -1055,13 +1118,19 @@ pub(crate) fn open_settings(
                 || endpoint.model.is_empty()
                 || (endpoint.requires_bearer() && endpoint.bearer.is_empty())
             {
-                w.set_meeting_context_result(SharedString::from(
-                    "[--] AI не настроен (вкладка AI-провайдеры)",
-                ));
+                w.set_meeting_context_result(SharedString::from(if ru {
+                    "AI не настроен — откройте AI-провайдеры"
+                } else {
+                    "AI is not set up — open AI providers"
+                }));
                 return;
             }
             w.set_context_processing(true);
-            w.set_meeting_context_result(SharedString::from("обработка через AI…"));
+            w.set_meeting_context_result(SharedString::from(if ru {
+                "Обработка через AI…"
+            } else {
+                "Processing with AI…"
+            }));
             let weak2 = w.as_weak();
             let cfg_err = cfg_c.clone();
             // Off-thread with a local current-thread runtime (reqwest is
@@ -1104,23 +1173,28 @@ pub(crate) fn open_settings(
                             w.set_meeting_context_input(SharedString::from(
                                 text.trim().to_string(),
                             ));
-                            w.set_meeting_context_result(SharedString::from(
-                                "[ok] обработано — проверь и нажми «Сохранить контекст»",
-                            ));
+                            w.set_meeting_context_result(SharedString::from(if ru {
+                                "Обработано — проверьте и нажмите «Сохранить контекст»"
+                            } else {
+                                "Processed — review and press Save context"
+                            }));
                         }
-                        Ok(_) => w.set_meeting_context_result(SharedString::from(
-                            "[--] AI вернул пустой ответ",
-                        )),
+                        Ok(_) => w.set_meeting_context_result(SharedString::from(if ru {
+                            "AI вернул пустой ответ"
+                        } else {
+                            "AI returned an empty answer"
+                        })),
                         Err(e) => {
                             let msg =
                                 if overlay_backend::deep_lock::is_blocked_error(&e.to_string()) {
                                     let ru = cfg_err.read().ui_is_ru();
-                                    format!(
-                                        "[--] {}",
-                                        overlay_backend::deep_lock::blocked_notice(ru)
-                                    )
+                                    overlay_backend::deep_lock::blocked_notice(ru).to_string()
                                 } else {
-                                    format!("[--] ошибка AI: {e}")
+                                    if ru {
+                                        format!("Ошибка AI: {e}")
+                                    } else {
+                                        format!("AI error: {e}")
+                                    }
                                 };
                             w.set_meeting_context_result(SharedString::from(msg));
                         }
@@ -1141,6 +1215,7 @@ pub(crate) fn open_settings(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_context_dictate_clicked(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let Some(w) = weak.upgrade() else {
                 return;
             };
@@ -1148,7 +1223,11 @@ pub(crate) fn open_settings(
             if let Some(stop) = dictate_stop.borrow_mut().take() {
                 stop.store(true, Ordering::Release);
                 w.set_context_dictating(false);
-                w.set_meeting_context_result(SharedString::from("расшифровка…"));
+                w.set_meeting_context_result(SharedString::from(if ru {
+                    "Расшифровка…"
+                } else {
+                    "Transcribing…"
+                }));
                 return;
             }
             // Toggle ON: start a new recording.
@@ -1173,21 +1252,31 @@ pub(crate) fn open_settings(
                 )
             };
             if !stt_is_local && groq_key.is_empty() {
-                w.set_meeting_context_result(SharedString::from(
-                    "[--] ключ Groq не задан (вкладка STT)",
-                ));
+                w.set_meeting_context_result(SharedString::from(if ru {
+                    "Ключ Groq не задан — откройте STT"
+                } else {
+                    "No Groq key yet — open STT"
+                }));
                 return;
             }
             // M2 — single-mic guard (shared with PTT-mic + voice follow-up).
             let Some(mic_guard) = try_acquire_mic() else {
-                w.set_meeting_context_result(SharedString::from("[--] микрофон занят"));
+                w.set_meeting_context_result(SharedString::from(if ru {
+                    "Микрофон занят"
+                } else {
+                    "Microphone busy"
+                }));
                 return;
             };
             let stop = Arc::new(AtomicBool::new(false));
             *dictate_stop.borrow_mut() = Some(stop.clone());
             spawn_ptt_watchdog(stop.clone());
             w.set_context_dictating(true);
-            w.set_meeting_context_result(SharedString::from("запись… (нажми «Остановить»)"));
+            w.set_meeting_context_result(SharedString::from(if ru {
+                "Запись… (нажмите «Остановить»)"
+            } else {
+                "Recording… (press Stop)"
+            }));
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
                 let pcm =
@@ -1224,9 +1313,11 @@ pub(crate) fn open_settings(
                     w.set_context_dictating(false);
                     let trimmed = text.trim();
                     if trimmed.is_empty() {
-                        w.set_meeting_context_result(SharedString::from(
-                            "[--] ничего не распознано",
-                        ));
+                        w.set_meeting_context_result(SharedString::from(if ru {
+                            "Ничего не распознано"
+                        } else {
+                            "No speech recognized"
+                        }));
                         return;
                     }
                     let cur = w.get_meeting_context_input().to_string();
@@ -1236,9 +1327,11 @@ pub(crate) fn open_settings(
                         format!("{cur} {trimmed}")
                     };
                     w.set_meeting_context_input(SharedString::from(joined));
-                    w.set_meeting_context_result(SharedString::from(
-                        "[ok] добавлено — проверь и нажми «Сохранить контекст»",
-                    ));
+                    w.set_meeting_context_result(SharedString::from(if ru {
+                        "Добавлено — проверьте и нажмите «Сохранить контекст»"
+                    } else {
+                        "Added — review and press Save context"
+                    }));
                 });
             });
         });
@@ -1314,7 +1407,12 @@ pub(crate) fn msg_refresh_after_import(
     cfg: &overlay_backend::config::SharedConfig,
 ) -> String {
     populate_token_status(win, cfg);
-    "[ok] imported — restart binary for full effect".to_string()
+    if cfg.read().ui_is_ru() {
+        "Настройки импортированы — перезапустите приложение для полного применения"
+    } else {
+        "Settings imported — restart the app for full effect"
+    }
+    .to_string()
 }
 
 /// EN/RU copy for the Components hub rows (name + where-to-install hint).
@@ -1408,10 +1506,10 @@ pub(crate) fn populate_component_rows(
                     ComponentKind::Stt => {
                         c.installed = match snap.stt_provider.as_str() {
                             "cloud" => !snap.groq_api_key.trim().is_empty(),
-                            "gigaam" => super::settings_stt::installed_gigaam_dir(
-                                &snap.stt_gigaam_dir,
-                            )
-                            .is_some(),
+                            "gigaam" => {
+                                super::settings_stt::installed_gigaam_dir(&snap.stt_gigaam_dir)
+                                    .is_some()
+                            }
                             "whisper" => !snap.stt_whisper_url.trim().is_empty(),
                             _ => false,
                         };
@@ -1609,10 +1707,49 @@ pub(crate) fn populate_tts_voices(win: &SettingsWindow, c: &overlay_backend::con
     win.set_tts_rate_index(preset_for_tts_rate(c.tts_rate));
 }
 
+fn key_presence_statuses(c: &overlay_backend::config::Config) -> [&'static str; 4] {
+    let ru = c.ui_is_ru();
+    // Show key presence only; Settings can be screen-shared.
+    let ai_status = match (c.ai_bearer.is_empty(), ru) {
+        (true, true) => "Токен не задан",
+        (true, false) => "No token yet",
+        (false, true) => "Токен сохранён",
+        (false, false) => "Token saved",
+    };
+    let groq_status = match (c.groq_api_key.is_empty(), ru) {
+        (true, true) => "Ключ Groq не задан",
+        (true, false) => "No Groq key yet",
+        (false, true) => "Ключ Groq сохранён",
+        (false, false) => "Groq key saved",
+    };
+    let protected_status = |slot| match overlay_backend::credentials::read(slot) {
+        Ok(Some(secret)) if !secret.is_empty() => {
+            if ru {
+                "Ключ сохранён в защищённом хранилище"
+            } else {
+                "Key stored securely"
+            }
+        }
+        _ => {
+            if ru {
+                "Ключ не задан"
+            } else {
+                "No key yet"
+            }
+        }
+    };
+    [
+        ai_status,
+        groq_status,
+        protected_status(overlay_backend::credentials::SecretSlot::OpenAi),
+        protected_status(overlay_backend::credentials::SecretSlot::Anthropic),
+    ]
+}
+
 /// Populate the Settings window's token-status display properties
 /// from the current `cfg`. Phase E6 — gives the user a way to SEE
 /// whether ai_bearer / groq_api_key are configured without leaking
-/// the values themselves (shows length + first 3 chars as fingerprint).
+/// the values themselves (shows presence only).
 pub(crate) fn populate_token_status(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
@@ -1621,37 +1758,12 @@ pub(crate) fn populate_token_status(
     win.set_tts_test_status(SharedString::from(""));
     let codex_login_busy = win.get_codex_auth_busy();
     invalidate_codex_snapshot_ui();
-    // Phase E6 v18 — ASCII status prefixes ("[ok]" / "[--]") instead of
-    // Unicode ✓ / ❌ which Slint+skia rendered as missing-glyph boxes
-    // on the user's font fallback. Same root cause as the Close button
-    // fix in settings_panel.slint and the quit chip fix in cycle 15.
     let c = cfg.read();
-    let ai_status = if c.ai_bearer.is_empty() {
-        "[--] not set".to_string()
-    } else {
-        let len = c.ai_bearer.chars().count();
-        // #134: do NOT echo the key's leading chars into the UI — Settings is
-        // captured on screen-share unless stealth is on. Show presence only.
-        format!("[ok] set ({len} chars)")
-    };
-    let groq_status = if c.groq_api_key.is_empty() {
-        "[--] not set".to_string()
-    } else {
-        let len = c.groq_api_key.chars().count();
-        format!("[ok] set ({len} chars)")
-    };
+    let [ai_status, groq_status, openai_status, anthropic_status] = key_presence_statuses(&c);
     win.set_ai_bearer_status(SharedString::from(ai_status));
     win.set_groq_api_key_status(SharedString::from(groq_status));
-    let protected_status = |slot| match overlay_backend::credentials::read(slot) {
-        Ok(Some(secret)) if !secret.is_empty() => "[ok] stored securely",
-        _ => "[--] not set",
-    };
-    win.set_openai_key_status(SharedString::from(protected_status(
-        overlay_backend::credentials::SecretSlot::OpenAi,
-    )));
-    win.set_anthropic_key_status(SharedString::from(protected_status(
-        overlay_backend::credentials::SecretSlot::Anthropic,
-    )));
+    win.set_openai_key_status(SharedString::from(openai_status));
+    win.set_anthropic_key_status(SharedString::from(anthropic_status));
     if !codex_login_busy {
         win.set_codex_auth_status(SharedString::from(if c.ui_is_ru() {
             "Проверка официального Codex app-server..."

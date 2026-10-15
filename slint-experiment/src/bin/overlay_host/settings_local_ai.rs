@@ -1818,8 +1818,7 @@ pub(crate) fn now_check_is_current(generation: u64) -> bool {
 }
 
 /// No credentials, URL path, query or fragment in the screen-shared caption.
-#[cfg(any(windows, test))]
-fn now_endpoint_authority(base: &str) -> String {
+pub(crate) fn now_endpoint_authority(base: &str) -> String {
     let authority = base
         .trim()
         .strip_prefix("http://")

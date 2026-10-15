@@ -40,6 +40,11 @@ fn tera_install_controls_keep_natural_height_before_speed_picker() {
             && tera.contains(": (root.tera-install-phase != 0 ? 128px : 108px);"),
         "Tera status and install controls need their own reserved vertical space, including the installed voice row"
     );
+    assert!(
+        tera.contains("if !root.tts-available || root.tera-installing : HorizontalLayout"),
+        "installed models must not leave a disabled Install model button"
+    );
+    assert!(tera.contains("enabled: !root.tera-installing && !root.tts-available;"));
     let install = tera
         .find("@tr(\"Install model\")")
         .expect("install button must exist");

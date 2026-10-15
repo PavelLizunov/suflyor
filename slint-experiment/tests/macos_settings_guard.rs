@@ -217,8 +217,7 @@ fn macos_provider_catalogs_and_components_keep_platform_indices_honest() {
     ));
 
     assert_eq!(
-        ui.matches("@tr(\"Version: {} (suflyor / Slint)\", root.app-version)")
-            .count(),
+        ui.matches("@tr(\"Version: {}\", root.app-version)").count(),
         1,
         "ui/settings_panel.slint must contain exactly one Version text line"
     );
@@ -230,7 +229,7 @@ fn macos_provider_catalogs_and_components_keep_platform_indices_honest() {
         .expect("Backup card content marker must follow its title")
         .0;
     assert!(
-        backup.contains("@tr(\"Version: {} (suflyor / Slint)\", root.app-version)"),
+        backup.contains("@tr(\"Version: {}\", root.app-version)"),
         "Version text must be inside the platform-neutral Backup card"
     );
 }

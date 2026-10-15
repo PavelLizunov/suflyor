@@ -194,8 +194,13 @@ pub(crate) fn wire_hermes_settings(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_hermes_plugin_install(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let Some(w) = weak.upgrade() else { return };
-            w.set_hermes_plugin_install_status(SharedString::from("устанавливаю…"));
+            w.set_hermes_plugin_install_status(SharedString::from(if ru {
+                "Установка…"
+            } else {
+                "Installing…"
+            }));
             // The .env write needs a real token — mint on first use, exactly
             // like the enable-toggle does.
             let (host, port, token, bridge_on) = {
@@ -216,9 +221,29 @@ pub(crate) fn wire_hermes_settings(
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
                 let msg = match overlay_backend::hermes_install::install_plugin(&url, &token) {
-                    Ok(s) if bridge_on => s,
-                    Ok(s) => format!("{s} · и включи «Мост для Hermes» выше"),
-                    Err(e) => format!("ошибка: {e}"),
+                    Ok(s) => {
+                        let status = if ru {
+                            s
+                        } else if s.starts_with("файлы установлены") {
+                            "Plugin files installed. Enable suflyor manually in Hermes config.yaml, then restart Hermes.".to_string()
+                        } else {
+                            "Plugin installed and enabled — restart Hermes".to_string()
+                        };
+                        if bridge_on {
+                            status
+                        } else if ru {
+                            format!("{status} · включите «Мост для Hermes» выше")
+                        } else {
+                            format!("{status} · enable the Hermes bridge above")
+                        }
+                    }
+                    Err(e) => {
+                        if ru {
+                            format!("Ошибка: {e}")
+                        } else {
+                            format!("Error: {e}")
+                        }
+                    }
                 };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_res.upgrade() {
@@ -273,8 +298,13 @@ pub(crate) fn wire_hermes_settings(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_hermes_api_setup(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let Some(w) = weak.upgrade() else { return };
-            w.set_hermes_api_setup_status(SharedString::from("настраиваю…"));
+            w.set_hermes_api_setup_status(SharedString::from(if ru {
+                "Настройка…"
+            } else {
+                "Setting up…"
+            }));
             let cfg_save = cfg_c.clone();
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
@@ -290,15 +320,25 @@ pub(crate) fn wire_hermes_settings(
                             }
                             w.set_hermes_api_key(SharedString::from(key));
                             w.set_hermes_api_setup_status(SharedString::from(if changed {
-                                "готово: API-сервер включён, ключ создан и вписан — перезапусти Hermes"
+                                if ru {
+                                    "API-сервер включён, ключ сохранён — перезапустите Hermes"
+                                } else {
+                                    "API server enabled, key saved — restart Hermes"
+                                }
                             } else {
-                                "готово: ключ взят из Hermes и вписан сюда"
+                                if ru {
+                                    "Ключ из Hermes сохранён"
+                                } else {
+                                    "Key from Hermes saved"
+                                }
                             }));
                         }
                         Err(e) => {
-                            w.set_hermes_api_setup_status(SharedString::from(format!(
-                                "ошибка: {e}"
-                            )));
+                            w.set_hermes_api_setup_status(SharedString::from(if ru {
+                                format!("Ошибка: {e}")
+                            } else {
+                                format!("Error: {e}")
+                            }));
                         }
                     }
                 });
@@ -314,10 +354,13 @@ pub(crate) fn wire_hermes_settings(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_hermes_api_test(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let Some(w) = weak.upgrade() else { return };
-            w.set_hermes_api_test_result(SharedString::from(
-                "проверка… (агентный вызов — до пары минут)",
-            ));
+            w.set_hermes_api_test_result(SharedString::from(if ru {
+                "Проверка… (может занять пару минут)"
+            } else {
+                "Checking… (may take a couple of minutes)"
+            }));
             let (url, key) = {
                 let c = cfg_c.read();
                 (c.hermes_api_url.clone(), c.hermes_api_key.clone())
@@ -341,7 +384,12 @@ pub(crate) fn wire_hermes_settings(
                         messages,
                         16,
                     )) {
-                        Ok(_) => "[ok] агент ответил".to_string(),
+                        Ok(_) => if ru {
+                            "Агент ответил"
+                        } else {
+                            "Agent replied"
+                        }
+                        .to_string(),
                         Err(e) => format!("[err] {e:#}").chars().take(90).collect(),
                     },
                     Err(e) => format!("[err] runtime: {e}"),
@@ -360,13 +408,22 @@ pub(crate) fn wire_hermes_settings(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_hermes_prepare_profile(move |seed| {
+            let ru = cfg_c.read().ui_is_ru();
             let seed = seed.trim().to_string();
             let Some(w) = weak.upgrade() else { return };
             if seed.is_empty() {
-                w.set_hermes_profile_status(SharedString::from("впиши вводную (компания/роль)"));
+                w.set_hermes_profile_status(SharedString::from(if ru {
+                    "Введите компанию и роль"
+                } else {
+                    "Enter the company and role"
+                }));
                 return;
             }
-            w.set_hermes_profile_status(SharedString::from("Hermes готовит профиль… (это долго)"));
+            w.set_hermes_profile_status(SharedString::from(if ru {
+                "Hermes готовит профиль… (это может занять время)"
+            } else {
+                "Hermes is preparing a profile… (this may take a while)"
+            }));
             let (url, key) = {
                 let c = cfg_c.read();
                 (c.hermes_api_url.clone(), c.hermes_api_key.clone())
@@ -391,7 +448,7 @@ pub(crate) fn wire_hermes_settings(
 }
 
 /// Off-thread: ask Hermes to research `seed` into a call-profile context, then
-/// upsert it as a new ACTIVE profile in config. Returns an RU status line.
+/// upsert it as a new ACTIVE profile in config. Returns a localized status line.
 /// `profile_name` is derived from the seed's first line (capped), so re-prepping
 /// the same seed updates the same profile instead of piling up duplicates.
 fn run_prepare_profile(
@@ -400,6 +457,7 @@ fn run_prepare_profile(
     seed: &str,
     cfg: &overlay_backend::config::SharedConfig,
 ) -> String {
+    let ru = cfg.read().ui_is_ru();
     let prompt = format!(
         "Ты помогаешь подготовиться к рабочему созвону/собеседованию. По вводной ниже \
          собери КОМПАКТНУЮ справку-контекст (на русском), которую ассистент будет \
@@ -415,7 +473,13 @@ fn run_prepare_profile(
         .build()
     {
         Ok(rt) => rt,
-        Err(e) => return format!("ошибка runtime: {e}"),
+        Err(e) => {
+            return if ru {
+                format!("Не удалось запустить обработку: {e}")
+            } else {
+                format!("Could not start processing: {e}")
+            }
+        }
     };
     // Non-streaming collect; big token budget (the qwen-kit handoff: a thinking
     // model needs ≥3000 or content comes back empty). Generous — this is slow.
@@ -438,10 +502,26 @@ fn run_prepare_profile(
             c.active_profile = Some(name.clone());
             c.meeting_context = text;
             let _ = overlay_backend::config::save(&c);
-            format!("готово: профиль «{name}» создан и активен")
+            if ru {
+                format!("Профиль «{name}» создан и активен")
+            } else {
+                format!("Profile {name} created and active")
+            }
         }
-        Ok(_) => "Hermes вернул пустой ответ (модель не дала контент)".to_string(),
-        Err(e) => format!("ошибка Hermes: {e:#}").chars().take(120).collect(),
+        Ok(_) => if ru {
+            "Hermes вернул пустой ответ"
+        } else {
+            "Hermes returned an empty answer"
+        }
+        .to_string(),
+        Err(e) => if ru {
+            format!("Ошибка Hermes: {e:#}")
+        } else {
+            format!("Hermes error: {e:#}")
+        }
+        .chars()
+        .take(120)
+        .collect(),
     }
 }
 

@@ -128,6 +128,71 @@ fn local_model_cards_reset_their_non_status_state_on_reopen() {
     assert!(body.contains("if !win.get_strata_busy()"));
 }
 
+#[test]
+fn tab_changes_reset_the_shared_content_scroll() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let ui = fs::read_to_string(root.join("ui/settings_panel.slint")).unwrap();
+    assert!(ui.contains("content-scroll := ScrollView {"));
+    assert!(ui.contains("changed active-tab => { content-scroll.viewport-y = 0; }"));
+    for title in [
+        "Profile + context",
+        "Coaching",
+        "STT",
+        "Auto-tiles",
+        "Knowledge base",
+        "Hotkeys",
+        "Updates",
+        "Diagnostics",
+        "Components",
+    ] {
+        assert!(!ui.contains(&format!("title: @tr(\"{title}\");")));
+    }
+    assert!(!ui.contains("Tip: Save writes"));
+}
+
+#[test]
+fn component_actions_have_equal_width_and_hermes_has_no_primary_action() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let ui = fs::read_to_string(root.join("ui/settings_panel.slint")).unwrap();
+    let components = ui
+        .split_once("if root.active-tab == 15 : VerticalLayout {")
+        .unwrap()
+        .1
+        .split_once("if root.active-tab == 7 : VerticalLayout {")
+        .unwrap()
+        .0;
+    for label in ["Open", "Install"] {
+        assert!(components.contains(&format!(
+            "width: 132px;\n                                        text: @tr(\"{label}\");"
+        )));
+    }
+    let hermes = ui
+        .split_once("if root.active-tab == 16 : VerticalLayout {")
+        .unwrap()
+        .1
+        .split_once("if root.active-tab == 12 : VerticalLayout {")
+        .unwrap()
+        .0;
+    assert!(!hermes.contains("primary: true"));
+}
+
+#[test]
+fn language_changes_refresh_key_presence_without_resetting_other_results() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let rs = fs::read_to_string(root.join("src/bin/overlay_host/settings_controller.rs")).unwrap();
+    let language = rs
+        .split_once("win.on_language_selected")
+        .unwrap()
+        .1
+        .split_once("// Colour-scheme switch")
+        .unwrap()
+        .0;
+    assert!(language.contains("key_presence_statuses(&snap)"));
+    assert!(language.contains("set_groq_api_key_status(SharedString::from(groq))"));
+    assert!(!language.contains("populate_token_status("));
+    assert!(populate_body(&rs).contains("key_presence_statuses(&c)"));
+}
+
 /// Sanity: the parser actually found the known transient props (so a future
 /// refactor that breaks the scan can't make the guard vacuously pass).
 #[test]

@@ -32,9 +32,7 @@
 //! `on_check_updates_clicked`, `on_install_update_clicked`), and the STT /
 //! Vision blocks (already extracted to their own modules).
 //!
-//! SECURITY (unchanged by this mechanical move): the AI bridge / local
-//! test-result tiles keep their GENERIC messages (`[ok] …` / `[err] …` capped
-//! at 90 chars for the bridge, `[--] …` for the local test) so no `base_url` /
+//! SECURITY: the AI bridge / local tests keep generic messages so no `base_url` /
 //! LAN IP leaks into a screen-shared Settings window. `ai_base_url` saves log
 //! presence (char count) only, never the value.
 //!
@@ -146,8 +144,8 @@ fn copy_codex_user_code<E>(
 fn codex_copy_status(result: CodexCopyResult, is_ru: bool) -> &'static str {
     match (result, is_ru) {
         (CodexCopyResult::Empty, _) => "",
-        (CodexCopyResult::Copied, true) => "[ok] Код скопирован",
-        (CodexCopyResult::Copied, false) => "[ok] Code copied",
+        (CodexCopyResult::Copied, true) => "Код скопирован",
+        (CodexCopyResult::Copied, false) => "Code copied",
         (CodexCopyResult::Failed, true) => "[err] Не удалось скопировать",
         (CodexCopyResult::Failed, false) => "[err] Copy failed",
     }
@@ -178,22 +176,20 @@ fn codex_account_label(
     use overlay_backend::codex_subscription::AccountState;
     match state {
         AccountState::NotInstalled if is_ru => {
-            "[--] Codex app-server не найден — установите официальный Codex".into()
+            "Codex app-server не найден — установите официальный Codex".into()
         }
-        AccountState::NotInstalled => {
-            "[--] Codex app-server not found — install official Codex".into()
-        }
-        AccountState::SignedOut if is_ru => "[--] выход выполнен".into(),
-        AccountState::SignedOut => "[--] signed out".into(),
-        AccountState::SignInRequired if is_ru => "[--] требуется вход".into(),
-        AccountState::SignInRequired => "[--] sign-in required".into(),
+        AccountState::NotInstalled => "Codex app-server not found — install official Codex".into(),
+        AccountState::SignedOut if is_ru => "выход выполнен".into(),
+        AccountState::SignedOut => "signed out".into(),
+        AccountState::SignInRequired if is_ru => "требуется вход".into(),
+        AccountState::SignInRequired => "sign-in required".into(),
         AccountState::SignedIn { plan } if is_ru => plan.as_ref().map_or_else(
-            || "[ok] вход через ChatGPT выполнен".into(),
-            |plan| format!("[ok] вход через ChatGPT выполнен ({plan})"),
+            || "вход через ChatGPT выполнен".into(),
+            |plan| format!("вход через ChatGPT выполнен ({plan})"),
         ),
         AccountState::SignedIn { plan } => plan.as_ref().map_or_else(
-            || "[ok] signed in with ChatGPT".into(),
-            |plan| format!("[ok] signed in with ChatGPT ({plan})"),
+            || "signed in with ChatGPT".into(),
+            |plan| format!("signed in with ChatGPT ({plan})"),
         ),
         AccountState::Error if is_ru => "[err] не удалось проверить аккаунт Codex".into(),
         AccountState::Error => "[err] could not query the Codex account".into(),
@@ -941,9 +937,9 @@ pub(crate) fn wire_ai_settings(
                                 window.set_codex_user_code(SharedString::default());
                                 window.set_codex_copy_status(SharedString::default());
                                 window.set_codex_auth_status(SharedString::from(if is_ru {
-                                    "[--] вход не завершён — повторите подключение"
+                                    "вход не завершён — повторите подключение"
                                 } else {
-                                    "[--] sign-in not completed — connect again"
+                                    "sign-in not completed — connect again"
                                 }));
                             }
                             LoginEvent::Error => {
@@ -1361,9 +1357,9 @@ pub(crate) fn wire_ai_settings(
                         match rt.block_on(overlay_backend::ai::test_connection(
                             base_url, bearer, model,
                         )) {
-                            Ok(s) => {
+                            Ok(_) => {
                                 working = true;
-                                format!("[ok] {s}")
+                                if ui_is_ru { "Подключение работает" } else { "Connection works" }.to_string()
                             }
                             // A deep-locked managed server: the specific
                             // localized notice instead of a misleading "server
@@ -1371,10 +1367,7 @@ pub(crate) fn wire_ai_settings(
                             Err(e)
                                 if overlay_backend::deep_lock::is_blocked_error(&e.to_string()) =>
                             {
-                                format!(
-                                    "[--] {}",
-                                    overlay_backend::deep_lock::blocked_notice(ui_is_ru)
-                                )
+                                overlay_backend::deep_lock::blocked_notice(ui_is_ru).to_string()
                             }
                             // UI-audit 2026-06-13: do NOT echo the raw error body
                             // into the panel. A starting llama-server returns the
@@ -1389,7 +1382,7 @@ pub(crate) fn wire_ai_settings(
                                 if es.contains("503") || es.contains("loading") {
                                     if ui_is_ru { "Сервер запускает модель — подождите ~10 с и повторите." } else { "The server is loading the model — wait about 10 seconds and try again." }.to_string()
                                 } else {
-                                    if ui_is_ru { "[--] Локальный сервер не отвечает — проверьте, что он запущен." } else { "[--] The local server is not answering — check that it is running." }.to_string()
+                                    if ui_is_ru { "Локальный сервер не отвечает — проверьте, что он запущен." } else { "The local server is not answering — check that it is running." }.to_string()
                                 }
                             }
                         }
@@ -1413,13 +1406,18 @@ pub(crate) fn wire_ai_settings(
     // Phase E6 v27 — AI bridge connection test. Off-thread (local
     // current-thread tokio runtime) so the blocking HTTP round-trip
     // doesn't freeze the UI; result posted back via invoke_from_
-    // event_loop. ASCII status prefixes (no ✓/✗ missing-glyphs).
+    // event_loop with plain localized success copy.
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_ai_bridge_test_clicked(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let Some(w) = weak.upgrade() else { return };
-            w.set_ai_bridge_test_result(SharedString::from("testing…"));
+            w.set_ai_bridge_test_result(SharedString::from(if ru {
+                "Проверка…"
+            } else {
+                "Checking…"
+            }));
             let endpoint = cfg_c.read().ai_endpoint(false);
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
@@ -1429,7 +1427,12 @@ pub(crate) fn wire_ai_settings(
                 {
                     Ok(rt) => {
                         match rt.block_on(overlay_backend::ai::test_connection_endpoint(endpoint)) {
-                            Ok(s) => format!("[ok] {s}"),
+                            Ok(_) => if ru {
+                                "Подключение работает"
+                            } else {
+                                "Connection works"
+                            }
+                            .to_string(),
                             Err(e) => format!("[err] {e:#}").chars().take(90).collect(),
                         }
                     }
@@ -1569,11 +1572,11 @@ mod tests {
     fn codex_copy_feedback_is_short_generic_and_localized() {
         assert_eq!(
             codex_copy_status(CodexCopyResult::Copied, false),
-            "[ok] Code copied"
+            "Code copied"
         );
         assert_eq!(
             codex_copy_status(CodexCopyResult::Copied, true),
-            "[ok] Код скопирован"
+            "Код скопирован"
         );
         assert_eq!(
             codex_copy_status(CodexCopyResult::Failed, false),

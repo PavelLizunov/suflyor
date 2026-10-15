@@ -2647,3 +2647,43 @@ msgstr "Удалить сохранённый токен"
 
 msgid "Local images need the installed 12B model and its projector. For the cloud or another server, use the Screenshots (F8) tab."
 msgstr "Для картинок локально нужна установленная модель 12B и её проектор. Для облака или другого сервера используйте вкладку «Скриншоты (F8)»."
+
+# Settings plain-language copy
+msgid "Hides the overlay from screen capture and sharing (Print Screen, Teams, Meet, OBS)."
+msgstr "Скрывает оверлей при захвате экрана и демонстрации (Print Screen, Teams, Meet, OBS)."
+
+msgid "On, hidden from capture"
+msgstr "Включён, скрыт от захвата"
+
+msgid "Capture hiding unavailable"
+msgstr "Скрытие от захвата недоступно"
+
+msgid "Experimental neural voice TeraTTS v2 (RU and EN). Downloads about 370 MB on demand. Until it is installed, reading uses Piper; speaker detection always uses Piper."
+msgstr "Экспериментальный нейроголос TeraTTS v2 (RU и EN). По запросу загружает около 370 МБ. До установки для чтения используется Piper; определение говорящих всегда использует Piper."
+
+msgid "Version: {}"
+msgstr "Версия: {}"
+
+msgid "The file includes your API keys. Keep it private. Import replaces the current settings."
+msgstr "Файл содержит ваши API-ключи. Храните его в тайне. Импорт заменяет текущие настройки."
+
+msgid "Pick the microphone. The list comes from Windows."
+msgstr "Выберите микрофон. Список устройств предоставлен Windows."
+
+msgid "The knowledge base ships with the app: glossary, commands and patterns."
+msgstr "База знаний входит в приложение: глоссарий, команды и шаблоны."
+
+msgid "Screenshot → AI explains it"
+msgstr "Скриншот → AI объясняет содержимое"
+
+msgid "Session journals store transcripts and AI answers for the archive (F7). When the disk limit is exceeded, the oldest journals are deleted even if the count limit is not reached:"
+msgstr "Журналы сессий хранят транскрипты и ответы AI для архива (F7). При превышении лимита места старейшие журналы удаляются, даже если лимит количества не достигнут:"
+
+msgid "Edited by AI"
+msgstr "Отредактировано AI"
+
+msgid "Bridge is reachable off this machine — use a trusted network (Tailscale) only; a token is required."
+msgstr "Мост доступен с других устройств — используйте только доверенную сеть (Tailscale); токен обязателен."
+
+msgid "LFM Open License v1.0 has commercial-use conditions. Review the license before commercial use. Russian response quality is not guaranteed."
+msgstr "В LFM Open License v1.0 есть условия коммерческого использования. Перед коммерческим применением изучите лицензию. Качество ответов на русском языке не гарантируется."
