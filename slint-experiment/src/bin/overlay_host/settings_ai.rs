@@ -43,8 +43,8 @@
 //! `diag!` macro / `populate_token_status` / the `overlay_backend` config + ai
 //! helpers). That is intentional for the move; imports narrow in a later pass.
 use super::{
-    active_stack_label, populate_token_status, refresh_lock_chip, ComponentHandle, ModelRc,
-    OverlayBarWindow, SettingsWindow, SharedString, VecModel,
+    active_stack_label, populate_token_status, refresh_local_engine_controls, refresh_lock_chip,
+    ComponentHandle, ModelRc, OverlayBarWindow, SettingsWindow, SharedString, VecModel,
 };
 use slint::Model;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -1168,6 +1168,12 @@ pub(crate) fn wire_ai_settings(
         win.on_ai_local_base_url_save(move |v| {
             let base_url = v.trim().to_string();
             let root = overlay_backend::local_ai::default_root();
+            // Strata pins tens of GB of RAM; leaving it for another server stops it.
+            if !overlay_backend::local_ai::is_managed_strata_endpoint(&base_url)
+                && overlay_backend::local_ai::strata_running()
+            {
+                std::thread::spawn(overlay_backend::local_ai::stop_strata);
+            }
             let (
                 managed,
                 quality,
@@ -1217,6 +1223,7 @@ pub(crate) fn wire_ai_settings(
                     &vision_provider,
                 ));
                 refresh_local_model_resource_warning(&w, root, saved_base_url, model);
+                refresh_local_engine_controls(&w, &cfg_c.read());
             }
             // #E10.1 — re-query models against the new URL.
             fetch_models(weak.clone(), cfg_c.clone(), ModelTarget::Local);

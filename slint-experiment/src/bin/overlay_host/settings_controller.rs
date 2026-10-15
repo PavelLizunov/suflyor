@@ -56,6 +56,8 @@ use super::open_wizard;
 #[cfg(windows)]
 use super::wire_local_ai;
 #[cfg(windows)]
+use super::wire_strata;
+#[cfg(windows)]
 use super::wire_updates;
 use super::{
     active_stack_label, ai, apply_bar_stealth, apply_scheme_bar, apply_scheme_settings, audio,
@@ -63,6 +65,7 @@ use super::{
     global_stealth_effective, grab_hwnd, invalidate_codex_snapshot_ui, make_transparent_tile,
     parse_tile_monitor_pin, populate_diagnostics, present_window_stealth_aware,
     preset_for_tts_rate, refresh_codex_account_status, refresh_local_context_controls,
+    refresh_local_engine_controls,
     refresh_local_model_resource_warning, set_always_on_top, set_global_scheme, set_global_stealth,
     set_global_tile_monitor, set_global_tile_opacity, spawn_ptt_watchdog, stt, stt_provider_index,
     try_acquire_mic, ui, wire_ai_settings, wire_diagnostics, wire_import_export, wire_memory,
@@ -490,6 +493,8 @@ pub(crate) fn open_settings(
     // this only CALLs install(); the sequence is byte-for-byte unchanged.
     #[cfg(windows)]
     wire_local_ai(&win, cfg, state, overlay_weak);
+    #[cfg(windows)]
+    wire_strata(&win, cfg, state, overlay_weak);
 
     // Phase E6 v20 — tile opacity slider. Persists to config AND
     // applies to all currently-visible tiles via tiles_ref.
@@ -1767,6 +1772,8 @@ pub(crate) fn populate_token_status(
     win.set_local_ai_gpu(blank());
     win.set_local_ai_on_gpu(false);
     win.set_ai_local_test_result(blank());
+    win.set_strata_status(blank());
+    win.set_local_more_open(false);
     win.set_ai_bridge_test_result(blank());
     win.set_stt_test_result(blank());
     win.set_mic_test_result(blank());
@@ -1797,6 +1804,25 @@ pub(crate) fn populate_token_status(
     let managed_local_server =
         overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url);
     win.set_managed_local_server(managed_local_server);
+    refresh_local_engine_controls(win, &c);
+    // RAM/VRAM discovery runs PowerShell and nvidia-smi: off the UI thread.
+    win.set_strata_hardware_note(SharedString::from(""));
+    #[cfg(windows)]
+    {
+        let ru = c.ui_is_ru();
+        let hardware_weak = win.as_weak();
+        std::thread::spawn(move || {
+            let hw = overlay_backend::local_ai::StrataHardware::detect();
+            let note = hw.describe(ru);
+            let fits = hw.meets_recommendation();
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(w) = hardware_weak.upgrade() {
+                    w.set_strata_hardware_note(SharedString::from(note));
+                    w.set_strata_hardware_fits(fits);
+                }
+            });
+        });
+    }
     // VRAM/RAM discovery can use WMI/DXGI, so never do it on the UI thread.
     // Keep 26B controls disabled until the exact owner-approved pair is known.
     win.set_quality_selection_allowed(false);

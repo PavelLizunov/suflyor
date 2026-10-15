@@ -35,7 +35,7 @@ fn macos_reports_builtin_apple_vision_without_tesseract_install_actions() {
     assert!(vision.contains("#[cfg(windows)]\n    {\n        let weak = win.as_weak();\n        win.on_ocr_install_clicked"));
     assert!(ui.contains("if Platform.is-macos : Text"));
     assert!(ui.contains("Apple Vision is built into macOS; no download is required."));
-    assert!(ui.contains("if !Platform.is-macos : VerticalLayout"));
+    assert!(ui.contains("if !Platform.is-macos : WrapBlock"));
 }
 
 #[test]
@@ -53,10 +53,12 @@ fn macos_settings_hide_windows_only_setup_and_managed_local_actions() {
     assert!(ui.contains(
         "if !Platform.is-macos : SettingsCard {\n                            title: @tr(\"Setup\")"
     ));
-    assert!(ui.contains("if !Platform.is-macos && root.ai-provider-index == 1 : SettingsCard {\n                            title: @tr(\"Engine (llama.cpp)\")"));
-    assert!(ui.contains(
-        "if !Platform.is-macos : VerticalLayout {\n                            spacing: 6px;"
-    ));
+    // The engine choice and every managed-engine panel are Windows-only; macOS
+    // shows only the server fields for the local provider.
+    assert!(ui.contains("if !Platform.is-macos : SettingsComboBox {\n                                model: [\n                                    @tr(\"Built-in engine (llama.cpp)\")"));
+    assert!(ui.contains("if !Platform.is-macos && root.local-engine-index == 0 && root.llama-installed : WrapBlock {"));
+    assert!(ui.contains("if !Platform.is-macos && root.local-engine-index == 1 : WrapBlock {"));
+    assert!(ui.contains("if Platform.is-macos || root.local-engine-index == 2 : WrapBlock {"));
 }
 
 #[test]
@@ -81,7 +83,7 @@ fn macos_provider_catalogs_and_components_keep_platform_indices_honest() {
     assert!(settings.contains("if cfg!(target_os = \"macos\") { 1 } else { 3 }"));
     assert!(settings.contains("c.detail = \"Apple Vision\".into()"));
     assert!(settings.contains("\"whisper\" => !snap.stt_whisper_url.trim().is_empty()"));
-    assert!(ui.contains("if !Platform.is-macos && root.ai-provider-index == 4 : VerticalLayout"));
+    assert!(ui.contains("if !Platform.is-macos && root.ai-provider-index == 4 : WrapBlock"));
     assert!(
         ui.contains("if !Platform.is-macos && root.vision-provider-index == 6 : VerticalLayout")
     );

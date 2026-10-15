@@ -2424,3 +2424,70 @@ msgstr "Удалить сессию"
 
 msgid "View transcript"
 msgstr "Открыть расшифровку"
+
+# Local engine choice and Strata (ADR-003, P4)
+msgid "Built-in engine (llama.cpp)"
+msgstr "Встроенный движок (llama.cpp)"
+
+msgid "Strata (Qwen3.8-Flash-Next)"
+msgstr "Strata (Qwen3.8-Flash-Next)"
+
+msgid "Other server (URL)"
+msgstr "Другой сервер (URL)"
+
+msgid "The built-in engine is not installed yet. The installer downloads llama.cpp, the recommended 12B model and the speech components; partial downloads resume."
+msgstr "Встроенный движок ещё не установлен. Установщик скачает llama.cpp, рекомендуемую модель 12B и компоненты речи; прерванные загрузки продолжаются."
+
+msgid "The built-in engine is installed but not in use."
+msgstr "Встроенный движок установлен, но сейчас не используется."
+
+msgid "Use the built-in engine"
+msgstr "Использовать встроенный движок"
+
+msgid "Gemma 4 E4B · 4.6 GiB · ~6 GiB VRAM"
+msgstr "Gemma 4 E4B · 4,6 ГиБ · ~6 ГиБ VRAM"
+
+msgid "Use"
+msgstr "Использовать"
+
+msgid "Gemma 4 12B · 6.3 GiB · ~9.5 GiB VRAM · recommended"
+msgstr "Gemma 4 12B · 6,3 ГиБ · ~9,5 ГиБ VRAM · рекомендуется"
+
+msgid "Gemma 4 26B-A4B · 9.8 GiB · ~12 GiB VRAM"
+msgstr "Gemma 4 26B-A4B · 9,8 ГиБ · ~12 ГиБ VRAM"
+
+msgid "A trusted local .gguf file; runs text-only"
+msgstr "Свой проверенный файл .gguf; работает только с текстом"
+
+msgid "Strata runs the large Qwen3.8-Flash-Next model on the graphics card and system RAM. It needs 48 GB of RAM, an NVIDIA RTX 20-series or newer card with 12 GB and about 80 GB of free disk. While the model loads (1-3 minutes) the PC can be slow."
+msgstr "Strata запускает большую модель Qwen3.8-Flash-Next на видеокарте и в оперативной памяти. Нужно от 48 ГБ RAM, видеокарта NVIDIA RTX 20-й серии или новее с 12 ГБ и около 80 ГБ свободного места. Пока модель загружается (1–3 минуты), ПК может подтормаживать."
+
+msgid "Strata engine · installed"
+msgstr "Движок Strata · установлен"
+
+msgid "Strata engine · ~72 GB download"
+msgstr "Движок Strata · загрузка ~72 ГБ"
+
+msgid "Working…"
+msgstr "Выполняется…"
+
+msgid "Model licence: Qwen. Open the model page"
+msgstr "Лицензия модели: Qwen. Открыть страницу модели"
+
+msgid "Any OpenAI-compatible server, such as Ollama or LM Studio. Save its URL to use it."
+msgstr "Любой OpenAI-совместимый сервер, например Ollama или LM Studio. Сохраните его URL, чтобы использовать."
+
+msgid "local URL — http://127.0.0.1:11434/v1 (Ollama)"
+msgstr "локальный URL — http://127.0.0.1:11434/v1 (Ollama)"
+
+msgid "Hide extra settings"
+msgstr "Скрыть дополнительные настройки"
+
+msgid "More settings…"
+msgstr "Дополнительные настройки…"
+
+msgid "Engine llama.cpp {}. The app checks it weekly and verifies a new build before replacing the current one."
+msgstr "Движок llama.cpp {}. Приложение раз в неделю ищет обновления и испытывает новую сборку, прежде чем заменить текущую."
+
+msgid "Qwen3.8-Flash-Next IQ2_XS"
+msgstr "Qwen3.8-Flash-Next IQ2_XS"

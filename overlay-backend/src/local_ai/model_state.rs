@@ -222,6 +222,10 @@ pub fn repair_managed_model_state_after_verification(
 /// and matching projector state instead of trusting the persisted UI flag.
 #[must_use]
 pub fn local_vision_available(cfg: &crate::config::Config, root: &Path) -> bool {
+    // Strata is installed without its image encoder.
+    if super::is_managed_strata_endpoint(&cfg.ai_local_base_url) {
+        return false;
+    }
     !is_managed_llama_endpoint(&cfg.ai_local_base_url)
         || (cfg.ai_local_custom_gguf.trim().is_empty()
             && managed_model_vision_capable(

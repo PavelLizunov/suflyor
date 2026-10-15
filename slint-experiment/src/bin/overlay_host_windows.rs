@@ -1109,6 +1109,34 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                 }
             }
+            // Strata as the local engine: start it once at boot. It needs the
+            // whole GPU, so it runs only while the saved local URL is its own.
+            {
+                let want_strata = {
+                    let c = cfg_w.read();
+                    c.ai_provider == "local"
+                        && !c.deep_lock
+                        && overlay_backend::local_ai::is_managed_strata_endpoint(
+                            &c.ai_local_base_url,
+                        )
+                };
+                if want_strata {
+                    let lifecycle_lock = {
+                        let s = state_w.lock().unwrap_or_else(|p| p.into_inner());
+                        s.local_ai_lock.clone()
+                    };
+                    let Some(guard) =
+                        overlay_backend::local_ai::blocking_acquire_lifecycle(&lifecycle_lock)
+                    else {
+                        return;
+                    };
+                    let no_cancel = std::sync::atomic::AtomicBool::new(false);
+                    let outcome =
+                        overlay_backend::local_ai::start_strata(&root, &no_cancel, &|_| {});
+                    drop(guard);
+                    diag!("Strata boot start: {outcome:?}");
+                }
+            }
             // v0.18.2 — keep llama.cpp fresh: a throttled (weekly) auto-update of
             // the engine so the local model stays fast and 12B vision (gemma4uv)
             // works without the user ever touching it. Runs ONCE at boot, BEHIND
@@ -1121,7 +1149,12 @@ fn main() -> Result<(), slint::PlatformError> {
             // auto-update too (a real swap stops :8080, and the watchdog below
             // won't bring it back while locked). Not marking the check done, so
             // the first unlocked boot catches up.
+            // The update check loads the 12B on the GPU; skip it while Strata
+            // holds the GPU. The first boot on the built-in engine catches up.
             if !cfg_w.read().deep_lock
+                && !overlay_backend::local_ai::is_managed_strata_endpoint(
+                    &cfg_w.read().ai_local_base_url,
+                )
                 && overlay_backend::local_ai::should_check_engine_update(&root)
             {
                 let lifecycle_lock = {
@@ -1154,6 +1187,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 overlay_backend::local_ai::mark_engine_update_checked(&root);
             }
             let mut watchdog = WatchdogState::default();
+            let mut strata_watchdog = WatchdogState::default();
             loop {
                 let (want_llama, choice) = {
                     let c = cfg_w.read();
@@ -1308,6 +1342,45 @@ fn main() -> Result<(), slint::PlatformError> {
                                     }
                                 }
                                 // _ai_guard drops here → lifecycle lock released.
+                            }
+                        }
+                    }
+                }
+                let want_strata = {
+                    let c = cfg_w.read();
+                    c.ai_provider == "local"
+                        && !c.deep_lock
+                        && overlay_backend::local_ai::is_managed_strata_endpoint(
+                            &c.ai_local_base_url,
+                        )
+                };
+                if want_strata {
+                    if overlay_backend::local_ai::strata_reachable() {
+                        strata_watchdog.note_reachable();
+                    } else if strata_watchdog.should_restart(
+                        std::time::Instant::now(),
+                        std::time::Duration::from_secs(WATCHDOG_COOLDOWN_SECS),
+                        WATCHDOG_MAX_FAILS,
+                    ) {
+                        let lifecycle_lock = {
+                            let s = state_w.lock().unwrap_or_else(|p| p.into_inner());
+                            s.local_ai_lock.clone()
+                        };
+                        // A Settings switch owns the lifecycle: skip this tick.
+                        if let Ok(_ai_guard) = lifecycle_lock.try_acquire_owned() {
+                            if !overlay_backend::local_ai::strata_reachable() {
+                                diag!("Strata :8090 not answering — restarting it");
+                                let no_cancel = std::sync::atomic::AtomicBool::new(false);
+                                let outcome = overlay_backend::local_ai::start_strata(
+                                    &root,
+                                    &no_cancel,
+                                    &|_| {},
+                                );
+                                strata_watchdog.note_attempt(
+                                    std::time::Instant::now(),
+                                    outcome == overlay_backend::local_ai::StrataStart::Ready,
+                                );
+                                diag!("Strata restart: {outcome:?}");
                             }
                         }
                     }

@@ -25,7 +25,7 @@ import {
     IconSlot, BrandHeaderMark, DarkCheck, SettingsCard,
     SettingsComboBox, SettingsLineEdit, SettingsSlider,
     NavGroupHeader, NavItem,
-    WrapBlock,
+    WrapBlock, ModelChoiceRow,
 } from "settings_controls.slint";
 export { DarkCheck }
 
@@ -358,6 +358,31 @@ export component SettingsWindow inherits Window {
     in-out property <bool> local-ai-on-gpu: false;
     callback install-local-ai-clicked();
     callback cancel-local-ai-clicked();
+    // Local engine shown in Settings: 0 = built-in llama.cpp, 1 = Strata,
+    // 2 = another OpenAI-compatible server. The combo only picks the panel;
+    // a button in that panel switches the engine.
+    in-out property <int> local-engine-index: 0;
+    in-out property <bool> llama-installed: false;
+    in-out property <bool> local-more-open: false;
+    in-out property <bool> strata-installed: false;
+    in-out property <bool> strata-active: false;
+    in-out property <bool> strata-busy: false;
+    in-out property <string> strata-status: "";
+    in-out property <string> strata-hardware-note: "";
+    in-out property <bool> strata-hardware-fits: true;
+    callback local-engine-activate(int);
+    callback strata-install-clicked();
+    callback strata-license-clicked();
+    // One status line, one progress bar and one Cancel for every built-in
+    // engine job (install, download, switch, projector, engine update).
+    property <bool> builtin-busy: root.local-ai-installing || root.quality-downloading || root.model-switching || root.vision12b-downloading || root.engine-updating;
+    property <string> builtin-status: root.local-ai-installing ? root.local-ai-status
+        : root.engine-updating ? root.engine-update-status
+        : root.vision12b-downloading ? root.vision12b-status
+        : root.quality-status != "" ? root.quality-status
+        : root.local-ai-status != "" ? root.local-ai-status
+        : root.vision12b-status != "" ? root.vision12b-status
+        : root.engine-update-status;
 
     // Phase E6 v20 — tile body opacity (50..100%). Slider on Stealth
     // tab; Rust writes to cfg.tile_body_opacity + applies to spawning
@@ -2550,6 +2575,9 @@ export component SettingsWindow inherits Window {
                         }
 
                         // ============================ LOCAL ============================
+                        // One engine panel at a time. Windows offers the built-in
+                        // llama.cpp, Strata and another server; macOS has only the
+                        // server fields (its managed engine is MLX above).
                         if root.ai-provider-index == 1 : VerticalLayout {
                             spacing: Metrics.space-sm;
                             vertical-stretch: 0;
@@ -2559,61 +2587,279 @@ export component SettingsWindow inherits Window {
                                 font-weight: 700;
                                 color: Theme.text-primary;
                             }
-                            HorizontalLayout {
-                                spacing: 6px;
-                                SettingsLineEdit {
-                                    placeholder-text: @tr("local URL — http://127.0.0.1:8080/v1 (llama.cpp)");
-                                    text <=> root.ai-local-base-url-input;
+                            if !Platform.is-macos : SettingsComboBox {
+                                model: [
+                                    @tr("Built-in engine (llama.cpp)"),
+                                    @tr("Strata (Qwen3.8-Flash-Next)"),
+                                    @tr("Other server (URL)"),
+                                ];
+                                current-index: root.local-engine-index;
+                                enabled: !root.builtin-busy && !root.strata-busy;
+                                selected => {
+                                    root.local-engine-index = self.current-index;
+                                    root.local-more-open = false;
+                                }
+                            }
+
+                            // ----- built-in llama.cpp -----
+                            if !Platform.is-macos && root.local-engine-index == 0 && !root.llama-installed : WrapBlock {
+                                Text {
+                                    text: @tr("The built-in engine is not installed yet. The installer downloads llama.cpp, the recommended 12B model and the speech components; partial downloads resume.");
+                                    font-size: Metrics.font-label;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                }
+                                HorizontalLayout {
+                                    alignment: start;
+                                    Button {
+                                        height: 32px;
+                                        text: root.local-ai-installing ? @tr("Installing…") : @tr("Install local AI");
+                                        enabled: !root.builtin-busy && !root.strata-busy;
+                                        clicked => { root.install-local-ai-clicked(); }
+                                    }
+                                }
+                            }
+                            if !Platform.is-macos && root.local-engine-index == 0 && root.llama-installed && !root.managed-local-server : WrapBlock {
+                                Text {
+                                    text: @tr("The built-in engine is installed but not in use.");
+                                    font-size: Metrics.font-label;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                }
+                                HorizontalLayout {
+                                    alignment: start;
+                                    Button {
+                                        height: 32px;
+                                        text: @tr("Use the built-in engine");
+                                        enabled: !root.builtin-busy && !root.strata-busy;
+                                        clicked => { root.local-engine-activate(0); }
+                                    }
+                                }
+                            }
+                            if !Platform.is-macos && root.local-engine-index == 0 && root.llama-installed : WrapBlock {
+                                spacing: Metrics.space-xs;
+                                ModelChoiceRow {
+                                    title: @tr("Fast (4B)");
+                                    detail: @tr("Gemma 4 E4B · 4.6 GiB · ~6 GiB VRAM");
+                                    active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 0;
+                                    action: self.active ? @tr("Active") : root.legacy-model-present ? @tr("Use") : @tr("Download");
+                                    action-enabled: root.managed-local-server && !self.active && !root.builtin-busy;
+                                    action-clicked => {
+                                        if root.legacy-model-present {
+                                            root.model-profile-changed(0);
+                                        } else {
+                                            root.download-model-clicked(0);
+                                        }
+                                    }
+                                }
+                                ModelChoiceRow {
+                                    title: @tr("Balanced (12B QAT)");
+                                    detail: @tr("Gemma 4 12B · 6.3 GiB · ~9.5 GiB VRAM · recommended");
+                                    active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 1;
+                                    action: self.active ? @tr("Active") : root.fallback-model-present ? @tr("Use") : @tr("Download");
+                                    action-enabled: root.managed-local-server && !self.active && !root.builtin-busy;
+                                    action-clicked => {
+                                        if root.fallback-model-present {
+                                            root.model-profile-changed(1);
+                                        } else {
+                                            root.download-model-clicked(1);
+                                        }
+                                    }
+                                }
+                                ModelChoiceRow {
+                                    title: @tr("Maximum (26B-A4B)");
+                                    detail: @tr("Gemma 4 26B-A4B · 9.8 GiB · ~12 GiB VRAM");
+                                    active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 2;
+                                    action: self.active ? @tr("Active") : root.quality-model-present ? @tr("Use") : @tr("Download");
+                                    action-enabled: root.managed-local-server && !self.active && !root.builtin-busy;
+                                    action-clicked => {
+                                        if root.quality-model-present {
+                                            root.model-profile-changed(2);
+                                        } else {
+                                            root.download-model-clicked(2);
+                                        }
+                                    }
+                                }
+                                ModelChoiceRow {
+                                    title: @tr("Your GGUF model");
+                                    detail: root.ai-local-custom-active
+                                        ? root.ai-local-custom-model-name
+                                        : @tr("A trusted local .gguf file; runs text-only");
+                                    active: root.managed-local-server && root.ai-local-custom-active;
+                                    action: @tr("Choose GGUF…");
+                                    action-enabled: root.managed-local-server && !root.builtin-busy;
+                                    action-clicked => { root.choose-custom-gguf-clicked(); }
+                                }
+                                if !root.quality-selection-allowed && root.managed-local-server : Text {
+                                    text: @tr("Hardware not in the confirmed matrix. The model may exceed VRAM, spill into system RAM, run very slowly, or fail. You accept this risk.");
+                                    font-size: Metrics.font-caption;
+                                    color: Theme.warning;
+                                    wrap: word-wrap;
+                                }
+                            }
+                            if !Platform.is-macos && root.local-engine-index == 0 && (root.builtin-status != "" || root.local-model-resource-warning != "") : WrapBlock {
+                                if root.builtin-status != "" : Text {
+                                    text: root.builtin-status;
+                                    font-size: Metrics.font-label;
+                                    color: Theme.accent;
+                                    wrap: word-wrap;
+                                }
+                                if root.local-model-resource-warning != "" : Text {
+                                    text: root.local-model-resource-warning;
+                                    font-size: Metrics.font-label;
+                                    color: Theme.warning;
+                                    wrap: word-wrap;
+                                }
+                            }
+                            if !Platform.is-macos && root.local-engine-index == 0 && (root.local-ai-installing || root.quality-downloading || root.vision12b-downloading) : HorizontalLayout {
+                                spacing: Metrics.space-sm;
+                                vertical-stretch: 0;
+                                Rectangle {
                                     horizontal-stretch: 1;
+                                    height: 6px;
+                                    y: (parent.height - self.height) / 2;
+                                    border-radius: 3px;
+                                    background: Theme.border;
+                                    Rectangle {
+                                        x: 0;
+                                        y: 0;
+                                        height: parent.height;
+                                        width: parent.width * (root.local-ai-installing ? root.local-ai-progress : root.quality-progress);
+                                        border-radius: 3px;
+                                        background: Theme.accent;
+                                    }
                                 }
                                 Button {
-                                    text: @tr("Save");
-                                    clicked => {
-                                        root.ai-local-base-url-save(root.ai-local-base-url-input);
+                                    height: 30px;
+                                    text: @tr("Cancel");
+                                    clicked => { root.cancel-local-ai-clicked(); }
+                                }
+                            }
+
+                            // ----- Strata -----
+                            if !Platform.is-macos && root.local-engine-index == 1 : WrapBlock {
+                                Text {
+                                    text: @tr("Strata runs the large Qwen3.8-Flash-Next model on the graphics card and system RAM. It needs 48 GB of RAM, an NVIDIA RTX 20-series or newer card with 12 GB and about 80 GB of free disk. While the model loads (1-3 minutes) the PC can be slow.");
+                                    font-size: Metrics.font-label;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                }
+                                if root.strata-hardware-note != "" : Text {
+                                    text: root.strata-hardware-note;
+                                    font-size: Metrics.font-caption;
+                                    color: root.strata-hardware-fits ? Theme.text-secondary : Theme.warning;
+                                    wrap: word-wrap;
+                                }
+                                ModelChoiceRow {
+                                    title: @tr("Qwen3.8-Flash-Next IQ2_XS");
+                                    detail: root.strata-installed
+                                        ? @tr("Strata engine · installed")
+                                        : @tr("Strata engine · ~72 GB download");
+                                    active: root.strata-active;
+                                    action: self.active ? @tr("Active")
+                                        : root.strata-busy ? @tr("Working…")
+                                        : root.strata-installed ? @tr("Use") : @tr("Install");
+                                    action-enabled: !self.active && !root.strata-busy && !root.builtin-busy;
+                                    action-clicked => {
+                                        if root.strata-installed {
+                                            root.local-engine-activate(1);
+                                        } else {
+                                            root.strata-install-clicked();
+                                        }
+                                    }
+                                }
+                                Text {
+                                    text: @tr("Model licence: Qwen. Open the model page");
+                                    font-size: Metrics.font-caption;
+                                    color: Theme.accent;
+                                    wrap: word-wrap;
+                                    TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => { root.strata-license-clicked(); }
+                                    }
+                                }
+                                if root.strata-status != "" : Text {
+                                    text: root.strata-status;
+                                    font-size: Metrics.font-label;
+                                    color: Theme.accent;
+                                    wrap: word-wrap;
+                                }
+                                if root.strata-busy : HorizontalLayout {
+                                    alignment: start;
+                                    Button {
+                                        height: 30px;
+                                        text: @tr("Cancel");
+                                        clicked => { root.cancel-local-ai-clicked(); }
                                     }
                                 }
                             }
-                            HorizontalLayout {
-                                spacing: 6px;
-                                SettingsComboBox {
-                                    model: root.ai-local-models;
-                                    current-index: root.ai-local-model-index;
-                                    horizontal-stretch: 1;
-                                    selected => {
-                                        root.ai-local-model-index = self.current-index;
-                                        root.ai-local-model-selected(self.current-value);
+
+                            // ----- another OpenAI-compatible server -----
+                            if Platform.is-macos || root.local-engine-index == 2 : WrapBlock {
+                                Text {
+                                    text: @tr("Any OpenAI-compatible server, such as Ollama or LM Studio. Save its URL to use it.");
+                                    font-size: Metrics.font-label;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    SettingsLineEdit {
+                                        placeholder-text: @tr("local URL — http://127.0.0.1:11434/v1 (Ollama)");
+                                        text <=> root.ai-local-base-url-input;
+                                        horizontal-stretch: 1;
+                                    }
+                                    Button {
+                                        text: @tr("Save");
+                                        clicked => {
+                                            root.ai-local-base-url-save(root.ai-local-base-url-input);
+                                        }
                                     }
                                 }
-                                Button {
-                                    text: @tr("refresh");
-                                    clicked => {
-                                        root.ai-local-models-refresh();
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    SettingsComboBox {
+                                        model: root.ai-local-models;
+                                        current-index: root.ai-local-model-index;
+                                        horizontal-stretch: 1;
+                                        selected => {
+                                            root.ai-local-model-index = self.current-index;
+                                            root.ai-local-model-selected(self.current-value);
+                                        }
+                                    }
+                                    Button {
+                                        text: @tr("refresh");
+                                        clicked => {
+                                            root.ai-local-models-refresh();
+                                        }
+                                    }
+                                }
+                                if root.ai-local-models.length == 0 : Text {
+                                    text: @tr("No models found — start the local server, then press refresh.");
+                                    font-size: Metrics.font-caption;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    SettingsLineEdit {
+                                        placeholder-text: @tr("local server bearer token (optional)");
+                                        text <=> root.ai-local-bearer-input;
+                                        input-type: password;
+                                        horizontal-stretch: 1;
+                                    }
+                                    Button {
+                                        text: @tr("Save");
+                                        clicked => {
+                                            root.ai-local-bearer-save(root.ai-local-bearer-input);
+                                            root.ai-local-bearer-input = "";
+                                        }
                                     }
                                 }
                             }
-                            if root.ai-local-models.length == 0 : Text {
-                                text: @tr("No models found — start the local server, then press refresh.");
-                                font-size: Metrics.font-caption;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            HorizontalLayout {
-                                spacing: 6px;
-                                SettingsLineEdit {
-                                    placeholder-text: @tr("local server bearer token (optional)");
-                                    text <=> root.ai-local-bearer-input;
-                                    input-type: password;
-                                    horizontal-stretch: 1;
-                                }
-                                Button {
-                                    text: @tr("Save");
-                                    clicked => {
-                                        root.ai-local-bearer-save(root.ai-local-bearer-input);
-                                        root.ai-local-bearer-input = "";
-                                    }
-                                }
-                            }
-                            DarkCheck {
+
+                            // ----- switches shared by every engine -----
+                            if Platform.is-macos || root.local-engine-index != 1 : DarkCheck {
                                 text: @tr("Local model supports images (vision)");
                                 checked <=> root.ai-local-vision;
                                 enabled: root.ai-local-vision-available;
@@ -2621,46 +2867,30 @@ export component SettingsWindow inherits Window {
                                     root.ai-local-vision-changed(v);
                                 }
                             }
-                            if !Platform.is-macos && root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index != 2 : Text {
-                                text: @tr("Local Vision requires the installed 12B model and its projector. Use the separate Vision section below for cloud or another server.");
-                                font-size: Metrics.font-caption;
-                                color: Theme.warning;
-                                wrap: word-wrap;
-                            }
-                            if !Platform.is-macos && root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index == 2 : Text {
-                                text: root.quality-vision-supported
-                                    ? @tr("Vision for 26B requires its matching ~1.1 GiB projector.")
-                                    : @tr("Update the local engine before installing Vision for 26B.");
-                                font-size: Metrics.font-caption;
-                                color: Theme.warning;
-                                wrap: word-wrap;
-                            }
-                            if !Platform.is-macos && root.managed-local-server && !root.ai-local-vision-available && root.ai-local-model-profile-index == 2 && root.quality-vision-supported : HorizontalLayout {
-                                spacing: 6px;
-                                vertical-stretch: 0;
-                                Button {
-                                    height: 32px;
-                                    text: root.vision12b-downloading
-                                        ? @tr("Installing Vision…")
-                                        : @tr("Install Vision for 26B (~1.1 GiB)");
-                                    enabled: !root.vision12b-downloading && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
-                                    clicked => {
-                                        root.download-vision12b-clicked();
+                            if !Platform.is-macos && root.local-engine-index == 0 && root.managed-local-server && !root.ai-local-vision-available : WrapBlock {
+                                Text {
+                                    text: root.ai-local-model-profile-index != 2
+                                        ? @tr("Local Vision requires the installed 12B model and its projector. Use the separate Vision section below for cloud or another server.")
+                                        : root.quality-vision-supported
+                                        ? @tr("Vision for 26B requires its matching ~1.1 GiB projector.")
+                                        : @tr("Update the local engine before installing Vision for 26B.");
+                                    font-size: Metrics.font-caption;
+                                    color: Theme.warning;
+                                    wrap: word-wrap;
+                                }
+                                if root.ai-local-model-profile-index == 2 && root.quality-vision-supported : HorizontalLayout {
+                                    alignment: start;
+                                    Button {
+                                        height: 30px;
+                                        text: root.vision12b-downloading
+                                            ? @tr("Installing Vision…")
+                                            : @tr("Install Vision for 26B (~1.1 GiB)");
+                                        enabled: !root.builtin-busy;
+                                        clicked => {
+                                            root.download-vision12b-clicked();
+                                        }
                                     }
                                 }
-                                if root.vision12b-downloading : Button {
-                                    height: 32px;
-                                    text: @tr("Cancel");
-                                    clicked => {
-                                        root.cancel-local-ai-clicked();
-                                    }
-                                }
-                            }
-                            if !Platform.is-macos && root.vision12b-status != "" : Text {
-                                text: root.vision12b-status;
-                                font-size: Metrics.font-label;
-                                color: Theme.accent;
-                                wrap: word-wrap;
                             }
                             DarkCheck {
                                 text: @tr("Local model reasoning/thinking (slower, off = faster)");
@@ -2669,356 +2899,130 @@ export component SettingsWindow inherits Window {
                                     root.ai-local-thinking-changed(v);
                                 }
                             }
-                            if !Platform.is-macos : WrapBlock {
-                            spacing: 6px;
-                            // ----- bundled local model: 4B / 12B / 26B -----
-                            Rectangle { background: Theme.border; height: 1px; }
-                            Text {
-                                text: @tr("Choose the local model explicitly. Estimated total VRAM at Auto (model + context + runtime): 4B ~6 GiB, 12B ~9.5 GiB, 26B ~12 GiB.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            // Model names plus the translated selected marker do
-                            // not fit one row at the window's supported widths.
-                            VerticalLayout {
-                                spacing: 6px;
-                                vertical-stretch: 0;
+                            if Platform.is-macos || root.local-engine-index != 0 : HorizontalLayout {
+                                alignment: start;
                                 Button {
-                                    height: 32px;
-                                    text: @tr("Fast (4B)") + " - " +
-                                        (!root.ai-local-custom-active && root.ai-local-model-profile-index == 0 ? @tr("Active") :
-                                         root.legacy-model-present ? @tr("Installed") : @tr("Download"));
-                                    enabled: root.managed-local-server && (root.ai-local-custom-active || root.ai-local-model-profile-index != 0 || !root.legacy-model-present) && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.vision12b-downloading;
-                                    clicked => {
-                                        if root.legacy-model-present {
-                                            root.model-profile-changed(0);
-                                        } else {
-                                            root.download-model-clicked(0);
-                                        }
-                                    }
-                                }
-                                Button {
-                                    height: 32px;
-                                    text: @tr("Balanced (12B QAT)") + " - " +
-                                        (!root.ai-local-custom-active && root.ai-local-model-profile-index == 1 ? @tr("Active") :
-                                         root.fallback-model-present ? @tr("Installed") : @tr("Download"));
-                                    enabled: root.managed-local-server && (root.ai-local-custom-active || root.ai-local-model-profile-index != 1 || !root.fallback-model-present) && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.vision12b-downloading;
-                                    clicked => {
-                                        if root.fallback-model-present {
-                                            root.model-profile-changed(1);
-                                        } else {
-                                            root.download-model-clicked(1);
-                                        }
-                                    }
-                                }
-                                Button {
-                                    height: 32px;
-                                    text: @tr("Maximum (26B-A4B)") + " - " +
-                                        (!root.ai-local-custom-active && root.ai-local-model-profile-index == 2 ? @tr("Active") :
-                                         root.quality-model-present ? @tr("Installed") : @tr("Download"));
-                                    enabled: root.managed-local-server && (root.ai-local-custom-active || root.ai-local-model-profile-index != 2 || !root.quality-model-present) && !root.quality-downloading && !root.model-switching && !root.local-ai-installing && !root.vision12b-downloading;
-                                    clicked => {
-                                        if root.quality-model-present {
-                                            root.model-profile-changed(2);
-                                        } else {
-                                            root.download-model-clicked(2);
-                                        }
-                                    }
-                                }
-                            }
-                            if !root.quality-selection-allowed && root.managed-local-server : Text {
-                                text: @tr("Hardware not in the confirmed matrix. The model may exceed VRAM, spill into system RAM, run very slowly, or fail. You accept this risk.");
-                                font-size: Metrics.font-caption;
-                                color: Theme.warning;
-                                wrap: word-wrap;
-                            }
-                            if root.quality-downloading : HorizontalLayout {
-                                spacing: 6px;
-                                vertical-stretch: 0;
-                                Button {
-                                    text: @tr("Cancel");
-                                    clicked => {
-                                        root.cancel-local-ai-clicked();
-                                    }
-                                }
-                            }
-                            Rectangle { background: Theme.border; height: 1px; }
-                            Text {
-                                text: @tr("Your GGUF model");
-                                font-size: Metrics.font-label;
-                                font-weight: 700;
-                                color: Theme.text-primary;
-                            }
-                            Text {
-                                text: root.ai-local-custom-active
-                                    ? @tr("Active: {}", root.ai-local-custom-model-name)
-                                    : @tr("No user model selected");
-                                font-size: Metrics.font-caption;
-                                color: root.ai-local-custom-active ? Theme.accent : Theme.text-muted;
-                                overflow: elide;
-                            }
-                            HorizontalLayout {
-                                spacing: 6px;
-                                vertical-stretch: 0;
-                                Button {
-                                    height: 32px;
-                                    text: @tr("Choose GGUF…");
-                                    enabled: root.managed-local-server && !root.quality-downloading && !root.model-switching && !root.local-ai-installing;
-                                    clicked => {
-                                        root.choose-custom-gguf-clicked();
-                                    }
-                                }
-                                if root.ai-local-custom-active : Button {
-                                    height: 32px;
-                                    text: @tr("Use recommended 12B");
-                                    enabled: root.fallback-model-present && !root.model-switching;
-                                    clicked => {
-                                        root.model-profile-changed(1);
-                                    }
-                                }
-                            }
-                            Text {
-                                text: @tr("Choose a trusted local GGUF file. User models run text-only; memory requirements are unknown.");
-                                font-size: Metrics.font-caption;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            if !root.managed-local-server : Text {
-                                text: @tr("Bundled 4B/12B/26B controls manage only Suflyor's own llama.cpp endpoint.");
-                                font-size: Metrics.font-caption;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            if root.managed-local-server : WrapBlock {
-                                spacing: 6px;
-                                vertical-stretch: 0;
-                                Text {
-                                    text: @tr("Context window");
-                                    font-size: Metrics.font-label;
-                                    font-weight: 700;
-                                    color: Theme.text-primary;
-                                }
-                                SettingsSlider {
-                                    height: 20px;
-                                    // The visual range is 1..6; backend/config
-                                    // remain 0..5. The thumb can never reach zero,
-                                    // which avoids Fluent's blurry endpoint state.
-                                    minimum: 0.99;
-                                    maximum: root.ai-local-context-max-k >= 96 ? 6.01 :
-                                        root.ai-local-context-max-k >= 64 ? 5.01 :
-                                        root.ai-local-context-max-k >= 32 ? 4.01 :
-                                        root.ai-local-context-max-k >= 16 ? 3.01 : 2.01;
-                                    value: root.ai-local-context-preview-index + 1;
-                                    enabled: !root.model-switching && !root.local-ai-installing;
-                                    changed(v) => {
-                                        root.ai-local-context-preview-changed(v - 1);
-                                    }
-                                }
-                                HorizontalLayout {
-                                    Text {
-                                        text: @tr("Auto");
-                                        font-size: 9px;
-                                        color: Theme.text-muted;
-                                        horizontal-stretch: 1;
-                                    }
-                                    Text {
-                                        text: @tr("8K");
-                                        font-size: 9px;
-                                        color: Theme.text-muted;
-                                        horizontal-stretch: 1;
-                                        horizontal-alignment: center;
-                                    }
-                                    if root.ai-local-context-max-k >= 16 : Text {
-                                        text: @tr("16K");
-                                        font-size: 9px;
-                                        color: Theme.text-muted;
-                                        horizontal-stretch: 1;
-                                        horizontal-alignment: center;
-                                    }
-                                    if root.ai-local-context-max-k >= 32 : Text {
-                                        text: @tr("32K");
-                                        font-size: 9px;
-                                        color: Theme.text-muted;
-                                        horizontal-stretch: 1;
-                                        horizontal-alignment: center;
-                                    }
-                                    if root.ai-local-context-max-k >= 64 : Text {
-                                        text: @tr("64K");
-                                        font-size: 9px;
-                                        color: Theme.text-muted;
-                                        horizontal-stretch: 1;
-                                        horizontal-alignment: center;
-                                    }
-                                    if root.ai-local-context-max-k >= 96 : Text {
-                                        text: @tr("96K");
-                                        font-size: 9px;
-                                        color: Theme.text-muted;
-                                        horizontal-stretch: 1;
-                                        horizontal-alignment: right;
-                                    }
-                                }
-                                Text {
-                                    text: root.ai-local-context-preview-index == 0
-                                        ? @tr("Selected: Auto ({}K)", root.ai-local-context-auto-k)
-                                        : @tr("Selected: {}K", root.ai-local-context-preview-index == 1 ? 8 :
-                                            root.ai-local-context-preview-index == 2 ? 16 :
-                                            root.ai-local-context-preview-index == 3 ? 32 :
-                                            root.ai-local-context-preview-index == 4 ? 64 : 96);
-                                    font-size: Metrics.font-caption;
-                                    color: Theme.text-muted;
-                                    wrap: word-wrap;
-                                }
-                                Text {
-                                    text: root.ai-local-context-vram-hint;
-                                    font-size: Metrics.font-caption;
-                                    color: Theme.text-muted;
-                                    wrap: word-wrap;
-                                }
-                                Button {
-                                    height: 32px;
-                                    text: root.model-switching ? @tr("Applying…") : @tr("Apply context");
-                                    enabled: root.ai-local-context-preview-index != root.ai-local-context-index && !root.model-switching && !root.local-ai-installing;
-                                    clicked => {
-                                        root.ai-local-context-changed(root.ai-local-context-preview-index);
-                                    }
-                                }
-                            }
-                            Text {
-                                text: root.local-model-resource-warning;
-                                font-size: Metrics.font-label;
-                                color: Theme.warning;
-                                wrap: word-wrap;
-                            }
-                            if root.quality-status != "" : Text {
-                                text: root.quality-status;
-                                font-size: Metrics.font-label;
-                                color: Theme.accent;
-                                wrap: word-wrap;
-                            }
-                            if root.quality-downloading : Rectangle {
-                                height: 6px;
-                                border-radius: 3px;
-                                background: Theme.border;
-                                Rectangle {
-                                    x: 0;
-                                    y: 0;
-                                    height: parent.height;
-                                    width: parent.width * root.quality-progress;
-                                    border-radius: 3px;
-                                    background: Theme.accent;
-                                }
-                            }
-                            }
-                            HorizontalLayout {
-                                spacing: 6px;
-                                height: 32px;
-                                Button {
+                                    height: 30px;
                                     text: @tr("Test local connection");
-                                    clicked => {
-                                        root.ai-local-test-clicked();
-                                    }
+                                    clicked => { root.ai-local-test-clicked(); }
                                 }
                             }
-                            // UI-audit 2026-06-13: the test result is its OWN
-                            // row with word-wrap — inside the HorizontalLayout
-                            // above (no wrap) a long error (e.g. the raw 503
-                            // "Loading model" body) stretched the whole window.
-                            if root.ai-local-test-result != "" : Text {
+                            if (Platform.is-macos || root.local-engine-index != 0) && root.ai-local-test-result != "" : Text {
                                 text: root.ai-local-test-result;
                                 font-size: Metrics.font-label;
                                 color: Theme.accent;
                                 wrap: word-wrap;
                             }
-                            if !Platform.is-macos : WrapBlock {
-                                spacing: 6px;
-                                // ----- one-click in-app local-AI installer -----
+
+                            // ----- rarely used built-in settings -----
+                            if !Platform.is-macos && root.local-engine-index == 0 && root.llama-installed : HorizontalLayout {
+                                alignment: start;
+                                Button {
+                                    height: 30px;
+                                    text: root.local-more-open ? @tr("Hide extra settings") : @tr("More settings…");
+                                    clicked => { root.local-more-open = !root.local-more-open; }
+                                }
+                            }
+                            if !Platform.is-macos && root.local-engine-index == 0 && root.llama-installed && root.local-more-open : WrapBlock {
+                                Rectangle { background: Theme.border; height: 1px; }
+                                if root.managed-local-server : WrapBlock {
+                                    spacing: 6px;
+                                    Text {
+                                        text: @tr("Context window");
+                                        font-size: Metrics.font-label;
+                                        font-weight: 700;
+                                        color: Theme.text-primary;
+                                    }
+                                    SettingsSlider {
+                                        // The visual range is 1..6; backend/config
+                                        // remain 0..5. The thumb can never reach zero,
+                                        // which avoids Fluent's blurry endpoint state.
+                                        minimum: 0.99;
+                                        maximum: root.ai-local-context-max-k >= 96 ? 6.01 :
+                                            root.ai-local-context-max-k >= 64 ? 5.01 :
+                                            root.ai-local-context-max-k >= 32 ? 4.01 :
+                                            root.ai-local-context-max-k >= 16 ? 3.01 : 2.01;
+                                        value: root.ai-local-context-preview-index + 1;
+                                        enabled: !root.builtin-busy;
+                                        changed(v) => {
+                                            root.ai-local-context-preview-changed(v - 1);
+                                        }
+                                    }
+                                    Text {
+                                        text: root.ai-local-context-preview-index == 0
+                                            ? @tr("Selected: Auto ({}K)", root.ai-local-context-auto-k)
+                                            : @tr("Selected: {}K", root.ai-local-context-preview-index == 1 ? 8 :
+                                                root.ai-local-context-preview-index == 2 ? 16 :
+                                                root.ai-local-context-preview-index == 3 ? 32 :
+                                                root.ai-local-context-preview-index == 4 ? 64 : 96);
+                                        font-size: Metrics.font-caption;
+                                        color: Theme.text-muted;
+                                        wrap: word-wrap;
+                                    }
+                                    Text {
+                                        text: root.ai-local-context-vram-hint;
+                                        font-size: Metrics.font-caption;
+                                        color: Theme.text-muted;
+                                        wrap: word-wrap;
+                                    }
+                                    HorizontalLayout {
+                                        alignment: start;
+                                        Button {
+                                            height: 30px;
+                                            text: root.model-switching ? @tr("Applying…") : @tr("Apply context");
+                                            enabled: root.ai-local-context-preview-index != root.ai-local-context-index && !root.builtin-busy;
+                                            clicked => {
+                                                root.ai-local-context-changed(root.ai-local-context-preview-index);
+                                            }
+                                        }
+                                    }
+                                }
                                 Rectangle { background: Theme.border; height: 1px; }
                                 Text {
-                                    text: @tr("Installs or completes the local stack: llama.cpp, the 12B fallback, speech components, and 26B on supported hardware. Complete verified files are reused; partial downloads resume. The optional 4B profile is kept when already present.");
+                                    text: root.engine-build != ""
+                                        ? @tr("Engine llama.cpp {}. The app checks it weekly and verifies a new build before replacing the current one.", root.engine-build)
+                                        : @tr("The app checks it weekly and verifies a new build before replacing the current one.");
                                     font-size: Metrics.font-label;
                                     color: Theme.text-muted;
                                     wrap: word-wrap;
                                 }
                                 HorizontalLayout {
                                     spacing: 6px;
-                                    height: 32px;
+                                    alignment: start;
                                     Button {
+                                        height: 30px;
+                                        text: root.engine-updating ? @tr("Updating…") : @tr("Update engine");
+                                        enabled: !root.builtin-busy;
+                                        clicked => { root.update-engine-clicked(); }
+                                    }
+                                    Button {
+                                        height: 30px;
                                         text: root.local-ai-installing ? @tr("Installing…") : @tr("Install / complete local AI");
-                                        enabled: !root.local-ai-installing && !root.quality-downloading && !root.model-switching && !root.engine-updating && !root.vision12b-downloading;
-                                        clicked => {
-                                            root.install-local-ai-clicked();
-                                        }
-                                    }
-                                    if root.local-ai-installing : Button {
-                                        text: @tr("Cancel");
-                                        clicked => {
-                                            root.cancel-local-ai-clicked();
-                                        }
-                                    }
-                                    if root.local-ai-gpu != "" : Text {
-                                        text: root.local-ai-gpu;
-                                        font-size: Metrics.font-label;
-                                        color: root.local-ai-on-gpu ? Theme.success : Theme.warning;
-                                        vertical-alignment: center;
-                                        wrap: word-wrap;
-                                        horizontal-stretch: 1;
+                                        enabled: !root.builtin-busy && !root.strata-busy;
+                                        clicked => { root.install-local-ai-clicked(); }
                                     }
                                 }
-                                if root.local-ai-status != "" : Text {
-                                    text: root.local-ai-status;
+                                if root.local-ai-gpu != "" : Text {
+                                    text: root.local-ai-gpu;
+                                    font-size: Metrics.font-label;
+                                    color: root.local-ai-on-gpu ? Theme.success : Theme.warning;
+                                    wrap: word-wrap;
+                                }
+                                Rectangle { background: Theme.border; height: 1px; }
+                                HorizontalLayout {
+                                    alignment: start;
+                                    Button {
+                                        height: 30px;
+                                        text: @tr("Test local connection");
+                                        clicked => { root.ai-local-test-clicked(); }
+                                    }
+                                }
+                                if root.ai-local-test-result != "" : Text {
+                                    text: root.ai-local-test-result;
                                     font-size: Metrics.font-label;
                                     color: Theme.accent;
                                     wrap: word-wrap;
                                 }
-                                if root.local-ai-installing : Rectangle {
-                                    height: 6px;
-                                    border-radius: 3px;
-                                    background: Theme.border;
-                                    Rectangle {
-                                        x: 0;
-                                        y: 0;
-                                        height: parent.height;
-                                        width: parent.width * root.local-ai-progress;
-                                        border-radius: 3px;
-                                        background: Theme.accent;
-                                    }
-                                }
-                            }
-                        }
-
-                        // Keep engine maintenance in its own card. The local-AI
-                        // card is intentionally long and Slint can under-report
-                        // the final conditional rows when sizing its ScrollView.
-                        if !Platform.is-macos && root.ai-provider-index == 1 : SettingsCard {
-                            title: @tr("Engine (llama.cpp)");
-                            Text {
-                                text: @tr("The app checks it weekly and verifies a new build before replacing the current one.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            HorizontalLayout {
-                                spacing: 6px;
-                                Button {
-                                    text: root.engine-updating ? @tr("Updating…") : @tr("Update engine");
-                                    enabled: !root.engine-updating && !root.local-ai-installing && !root.quality-downloading && !root.model-switching && !root.vision12b-downloading;
-                                    clicked => {
-                                        root.update-engine-clicked();
-                                    }
-                                }
-                                if root.engine-build != "" : Text {
-                                    text: @tr("Installed: {}", root.engine-build);
-                                    font-size: Metrics.font-label;
-                                    color: Theme.text-muted;
-                                    vertical-alignment: center;
-                                }
-                            }
-                            if root.engine-update-status != "" : Text {
-                                text: root.engine-update-status;
-                                font-size: Metrics.font-label;
-                                color: Theme.accent;
-                                wrap: word-wrap;
                             }
                         }
 
