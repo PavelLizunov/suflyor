@@ -2228,7 +2228,6 @@ export component SettingsWindow inherits Window {
                             text: @tr("Where answers come from");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
-                            wrap: word-wrap;
                         }
                         // ===== TYPE selector — gates everything below =====
                         SettingsComboBox {
@@ -3297,7 +3296,8 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
-                        if !root.vision-same-available : Text {
+                        // Only while that option is the selected one.
+                        if !root.vision-same-available && root.vision-provider-index == 1 : Text {
                             text: @tr("Same as text model is unavailable because the selected text model does not declare image input. Choose another Vision provider or model.");
                             font-size: Metrics.font-caption;
                             color: Theme.warning;
