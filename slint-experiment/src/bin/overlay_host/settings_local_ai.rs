@@ -1549,10 +1549,11 @@ pub(crate) fn refresh_local_engine_controls(
     let root = overlay_backend::local_ai::default_root();
     let strata_active = overlay_backend::local_ai::is_managed_strata_endpoint(&cfg.ai_local_base_url);
     let llama_active = overlay_backend::local_ai::is_managed_llama_endpoint(&cfg.ai_local_base_url);
-    win.set_local_engine_index(if llama_active {
-        0
-    } else if strata_active {
+    // A Strata job keeps its panel, the only place with its Cancel button.
+    win.set_local_engine_index(if win.get_strata_busy() || strata_active {
         1
+    } else if llama_active {
+        0
     } else {
         2
     });
@@ -1717,6 +1718,11 @@ pub(crate) fn wire_strata(
             std::thread::spawn(move || {
                 let _busy_guard = busy_guard;
                 let root = overlay_backend::local_ai::default_root();
+                // A boot or watchdog start of Strata may hold the lock while
+                // the model loads; the user's choice wins.
+                if !to_strata {
+                    overlay_backend::local_ai::abort_strata_start();
+                }
                 // Holding the lifecycle lock keeps the llama watchdog from
                 // restarting :8080 behind the switch.
                 let lifecycle_lock = {

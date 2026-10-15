@@ -1235,8 +1235,17 @@ fn main() -> Result<(), slint::PlatformError> {
                             let guard = lifecycle_lock.try_acquire_owned().ok();
                             if let Some(_ai_guard) = guard {
                                 // Re-check UNDER the lock — a manual op may have
-                                // brought :8080 up between our probe and the lock.
-                                if !overlay_backend::local_ai::llama_reachable() {
+                                // brought :8080 up between our probe and the lock,
+                                // or switched the local engine to Strata.
+                                let still_wanted = {
+                                    let c = cfg_w.read();
+                                    c.ai_provider == "local"
+                                        && !c.deep_lock
+                                        && overlay_backend::local_ai::is_managed_llama_endpoint(
+                                            &c.ai_local_base_url,
+                                        )
+                                };
+                                if still_wanted && !overlay_backend::local_ai::llama_reachable() {
                                     diag!(
                                         "local AI :8080 not answering — auto-(re)starting llama-server"
                                     );
@@ -1368,7 +1377,17 @@ fn main() -> Result<(), slint::PlatformError> {
                         };
                         // A Settings switch owns the lifecycle: skip this tick.
                         if let Ok(_ai_guard) = lifecycle_lock.try_acquire_owned() {
-                            if !overlay_backend::local_ai::strata_reachable() {
+                            // Re-check under the lock: a Settings switch may have
+                            // moved the local engine away from Strata meanwhile.
+                            let still_wanted = {
+                                let c = cfg_w.read();
+                                c.ai_provider == "local"
+                                    && !c.deep_lock
+                                    && overlay_backend::local_ai::is_managed_strata_endpoint(
+                                        &c.ai_local_base_url,
+                                    )
+                            };
+                            if still_wanted && !overlay_backend::local_ai::strata_reachable() {
                                 diag!("Strata :8090 not answering — restarting it");
                                 let no_cancel = std::sync::atomic::AtomicBool::new(false);
                                 let outcome = overlay_backend::local_ai::start_strata(

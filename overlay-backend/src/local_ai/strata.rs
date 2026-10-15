@@ -58,6 +58,15 @@ pub const STRATA_MIN_VRAM_GIB: u64 = 12;
 const STRATA_READY_BUDGET: Duration = Duration::from_secs(600);
 
 static STRATA_CHILD: Mutex<Option<Child>> = Mutex::new(None);
+/// Set by a Settings switch that is waiting for the lifecycle lock, so a
+/// boot or watchdog start of Strata (which holds that lock while the model
+/// loads) gives up instead of making the user wait up to ten minutes.
+static STRATA_START_ABORT: AtomicBool = AtomicBool::new(false);
+
+/// Ask a Strata start that is still loading to stop.
+pub fn abort_strata_start() {
+    STRATA_START_ABORT.store(true, Ordering::Relaxed);
+}
 
 #[must_use]
 pub fn strata_dir(root: &Path) -> PathBuf {
@@ -147,9 +156,11 @@ impl StrataHardware {
 pub fn install_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> Result<()> {
     let base = root.join("strata");
     std::fs::create_dir_all(&base).with_context(|| format!("create {}", base.display()))?;
-    ensure_disk_space(&base, STRATA_DISK_BYTES, on)?;
     let dir = strata_dir(root);
     if !dir.join("START-HERE.bat").is_file() {
+        // Only a fresh install: a resumed one already holds part of the model
+        // files, possibly in a data folder on another drive.
+        ensure_disk_space(&base, STRATA_DISK_BYTES, on)?;
         let zip = base.join(format!("strata-{STRATA_VERSION}.zip"));
         on(Progress::Step(format!(
             "Downloading Strata {STRATA_VERSION}"
@@ -522,6 +533,7 @@ pub fn start_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> 
     if had_llama && !wait_for_nvidia_vram_release(used_vram, Duration::from_secs(10)) {
         log::warn!("strata: VRAM did not release after stopping llama-server");
     }
+    STRATA_START_ABORT.store(false, Ordering::Relaxed);
     on(Progress::Step("Starting Strata".to_string()));
     let child = match launch_strata(root) {
         Ok(child) => child,
@@ -533,7 +545,7 @@ pub fn start_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> 
     *STRATA_CHILD.lock().unwrap_or_else(|p| p.into_inner()) = Some(child);
     let started = Instant::now();
     while started.elapsed() < STRATA_READY_BUDGET {
-        if cancel.load(Ordering::Relaxed) {
+        if cancel.load(Ordering::Relaxed) || STRATA_START_ABORT.load(Ordering::Relaxed) {
             stop_strata();
             return StrataStart::Cancelled;
         }

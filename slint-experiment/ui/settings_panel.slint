@@ -374,15 +374,14 @@ export component SettingsWindow inherits Window {
     callback strata-install-clicked();
     callback strata-license-clicked();
     // One status line, one progress bar and one Cancel for every built-in
-    // engine job (install, download, switch, projector, engine update).
+    // engine job (install, download, switch, projector, engine update). The
+    // line shows the newest message of whichever job wrote last.
     property <bool> builtin-busy: root.local-ai-installing || root.quality-downloading || root.model-switching || root.vision12b-downloading || root.engine-updating;
-    property <string> builtin-status: root.local-ai-installing ? root.local-ai-status
-        : root.engine-updating ? root.engine-update-status
-        : root.vision12b-downloading ? root.vision12b-status
-        : root.quality-status != "" ? root.quality-status
-        : root.local-ai-status != "" ? root.local-ai-status
-        : root.vision12b-status != "" ? root.vision12b-status
-        : root.engine-update-status;
+    property <string> builtin-status: "";
+    changed quality-status => { root.builtin-status = root.quality-status; }
+    changed local-ai-status => { root.builtin-status = root.local-ai-status; }
+    changed vision12b-status => { root.builtin-status = root.vision12b-status; }
+    changed engine-update-status => { root.builtin-status = root.engine-update-status; }
 
     // Phase E6 v20 — tile body opacity (50..100%). Slider on Stealth
     // tab; Rust writes to cfg.tile_body_opacity + applies to spawning
@@ -2641,7 +2640,7 @@ export component SettingsWindow inherits Window {
                                 ModelChoiceRow {
                                     title: @tr("Fast (4B)");
                                     detail: @tr("Gemma 4 E4B · 4.6 GiB · ~6 GiB VRAM");
-                                    active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 0;
+                                    active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 0 && root.legacy-model-present;
                                     action: self.active ? @tr("Active") : root.legacy-model-present ? @tr("Use") : @tr("Download");
                                     action-enabled: root.managed-local-server && !self.active && !root.builtin-busy;
                                     action-clicked => {
@@ -2655,7 +2654,7 @@ export component SettingsWindow inherits Window {
                                 ModelChoiceRow {
                                     title: @tr("Balanced (12B QAT)");
                                     detail: @tr("Gemma 4 12B · 6.3 GiB · ~9.5 GiB VRAM · recommended");
-                                    active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 1;
+                                    active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 1 && root.fallback-model-present;
                                     action: self.active ? @tr("Active") : root.fallback-model-present ? @tr("Use") : @tr("Download");
                                     action-enabled: root.managed-local-server && !self.active && !root.builtin-busy;
                                     action-clicked => {
@@ -2669,7 +2668,7 @@ export component SettingsWindow inherits Window {
                                 ModelChoiceRow {
                                     title: @tr("Maximum (26B-A4B)");
                                     detail: @tr("Gemma 4 26B-A4B · 9.8 GiB · ~12 GiB VRAM");
-                                    active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 2;
+                                    active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 2 && root.quality-model-present;
                                     action: self.active ? @tr("Active") : root.quality-model-present ? @tr("Use") : @tr("Download");
                                     action-enabled: root.managed-local-server && !self.active && !root.builtin-busy;
                                     action-clicked => {
@@ -2915,7 +2914,7 @@ export component SettingsWindow inherits Window {
                             }
 
                             // ----- rarely used built-in settings -----
-                            if !Platform.is-macos && root.local-engine-index == 0 && root.llama-installed : HorizontalLayout {
+                            if !Platform.is-macos && root.local-engine-index == 0 && root.llama-installed && root.managed-local-server : HorizontalLayout {
                                 alignment: start;
                                 Button {
                                     height: 30px;
@@ -2923,7 +2922,7 @@ export component SettingsWindow inherits Window {
                                     clicked => { root.local-more-open = !root.local-more-open; }
                                 }
                             }
-                            if !Platform.is-macos && root.local-engine-index == 0 && root.llama-installed && root.local-more-open : WrapBlock {
+                            if !Platform.is-macos && root.local-engine-index == 0 && root.llama-installed && root.managed-local-server && root.local-more-open : WrapBlock {
                                 Rectangle { background: Theme.border; height: 1px; }
                                 if root.managed-local-server : WrapBlock {
                                     spacing: 6px;

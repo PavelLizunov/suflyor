@@ -1172,6 +1172,7 @@ pub(crate) fn wire_ai_settings(
             if !overlay_backend::local_ai::is_managed_strata_endpoint(&base_url)
                 && overlay_backend::local_ai::strata_running()
             {
+                overlay_backend::local_ai::abort_strata_start();
                 std::thread::spawn(overlay_backend::local_ai::stop_strata);
             }
             let (

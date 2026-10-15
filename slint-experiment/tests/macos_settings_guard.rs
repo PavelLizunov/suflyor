@@ -85,9 +85,9 @@ fn macos_provider_catalogs_and_components_keep_platform_indices_honest() {
     assert!(settings.contains("\"whisper\" => !snap.stt_whisper_url.trim().is_empty()"));
     assert!(ui.contains("if !Platform.is-macos && root.ai-provider-index == 4 : WrapBlock"));
     assert!(
-        ui.contains("if !Platform.is-macos && root.vision-provider-index == 6 : VerticalLayout")
+        ui.contains("if !Platform.is-macos && root.vision-provider-index == 6 : WrapBlock")
     );
-    assert!(ui.contains("if root.stt-provider-index == 0 : VerticalLayout"));
+    assert!(ui.contains("if root.stt-provider-index == 0 : WrapBlock"));
     assert!(ui.contains("if Platform.is-macos && root.ai-provider-index < 0 : Text"));
     assert!(ui.contains("if Platform.is-macos && root.vision-provider-index < 0 : Text"));
     assert!(ui.contains("@tr(\"Use Apple Core ML — faster on Apple Silicon\")"));
@@ -169,7 +169,7 @@ fn model_dropdowns_keep_selected_indices_across_provider_switches() {
         "root.ai-model-index = self.current-index;\n                                        root.ai-model-selected(self.current-value);"
     ));
     assert!(ui.contains(
-        "root.ai-local-model-index = self.current-index;\n                                        root.ai-local-model-selected(self.current-value);"
+        "root.ai-local-model-index = self.current-index;\n                                            root.ai-local-model-selected(self.current-value);"
     ));
 }
 
