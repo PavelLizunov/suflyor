@@ -897,7 +897,11 @@ async fn agent_runs_a_tool_call_then_streams_the_answer() {
         .iter()
         .map(|t| t["function"]["name"].as_str().unwrap())
         .collect();
-    assert_eq!(names, ["kb_search"], "web tools stay off until allowed");
+    assert_eq!(
+        names,
+        ["kb_search", "memory_recall"],
+        "web tools stay off until allowed"
+    );
     let second: Value = serde_json::from_str(&bodies.recv().unwrap()).unwrap();
     let msgs = second["messages"].as_array().unwrap();
     assert_eq!(msgs[1]["role"], "assistant");

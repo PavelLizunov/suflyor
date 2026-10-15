@@ -130,8 +130,9 @@ pub struct Config {
     #[serde(default)]
     pub ai_local_thinking: bool,
     /// The local model may call read-only tools while it answers: the
-    /// knowledge base, and the web when `ai_web_search` is on (ADR-003).
-    #[serde(default)]
+    /// knowledge base and personal memory, and the web when `ai_web_search`
+    /// is on (ADR-003). On by default: these tools never leave the PC.
+    #[serde(default = "default_true")]
     pub ai_agent_tools: bool,
     /// With `ai_agent_tools`: web search (DuckDuckGo) and page reading. The
     /// model's queries leave the PC, so this is a separate opt-in.
@@ -659,7 +660,7 @@ impl Config {
             ai_local_prep_model: String::new(),
             ai_local_vision: false,
             ai_local_thinking: false,
-            ai_agent_tools: false,
+            ai_agent_tools: true,
             ai_web_search: false,
             ai_strata_dir: String::new(),
             ai_strata_config: String::new(),
@@ -1130,6 +1131,10 @@ impl Config {
     pub fn stt_is_local(&self) -> bool {
         matches!(self.stt_provider.as_str(), "gigaam" | "whisper")
     }
+}
+
+const fn default_true() -> bool {
+    true
 }
 
 fn default_ai_provider() -> String {

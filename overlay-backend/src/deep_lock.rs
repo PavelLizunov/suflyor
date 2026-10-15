@@ -45,12 +45,14 @@ pub fn is_blocked_error(msg: &str) -> bool {
 }
 
 /// Pure guard predicate used by [`crate::ai`]: block only when the deep lock
-/// is active AND the target is the app-managed loopback llama endpoint. Cloud,
-/// external Ollama, whisper :8081 and any other URL pass through untouched.
+/// is active AND the target is an app-managed engine (loopback llama.cpp,
+/// Strata on :8090, MLX). Cloud, external Ollama, whisper :8081 and any other
+/// URL pass through untouched.
 #[must_use]
 pub fn endpoint_blocked(deep_lock: bool, base_url: &str) -> bool {
     deep_lock
         && (crate::local_ai::is_managed_llama_endpoint(base_url)
+            || crate::local_ai::is_managed_strata_endpoint(base_url)
             || crate::mlx_runtime::is_owned_endpoint(base_url))
 }
 
@@ -66,7 +68,8 @@ pub const fn lifecycle_launch_allowed(deep_lock: bool, explicit_unlock: bool) ->
 #[must_use]
 pub fn cfg_is_managed_local(cfg: &crate::config::Config) -> bool {
     (cfg.ai_provider == "local"
-        && crate::local_ai::is_managed_llama_endpoint(&cfg.ai_local_base_url))
+        && (crate::local_ai::is_managed_llama_endpoint(&cfg.ai_local_base_url)
+            || crate::local_ai::is_managed_strata_endpoint(&cfg.ai_local_base_url)))
         || (cfg.ai_provider == "mlx" && cfg!(target_os = "macos"))
 }
 
@@ -275,6 +278,14 @@ mod tests {
             "local",
             "http://127.0.0.1:8080/v1"
         )));
+        // Strata on its own loopback port is an app-managed engine too.
+        assert!(cfg_is_managed_local(&cfg(
+            "local",
+            "http://127.0.0.1:8090/v1"
+        )));
+        assert!(endpoint_blocked(true, "http://127.0.0.1:8090/v1"));
+        assert!(!endpoint_blocked(false, "http://127.0.0.1:8090/v1"));
+        assert!(!endpoint_blocked(true, "http://127.0.0.1:11434/v1"));
         // External Ollama on the same provider stays two-state.
         assert!(!cfg_is_managed_local(&cfg(
             "local",

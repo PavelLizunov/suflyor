@@ -105,11 +105,12 @@ pub(crate) fn tool_label(is_ru: bool) -> &'static str {
 /// Body line under the answer while the model uses a tool: what it looks
 /// up, and where. The next part of the answer replaces it.
 pub(crate) fn tool_body(name: &str, detail: &str, is_ru: bool) -> String {
-    use overlay_backend::ai::tools::{KB_SEARCH, OPEN_URL, WEB_SEARCH};
+    use overlay_backend::ai::tools::{KB_SEARCH, MEMORY_RECALL, OPEN_URL, WEB_SEARCH};
     let (ru, en) = match name {
         WEB_SEARCH => ("Ищу в интернете", "Searching the web"),
         OPEN_URL => ("Читаю страницу", "Reading a page"),
         KB_SEARCH => ("Ищу в базе знаний", "Searching the knowledge base"),
+        MEMORY_RECALL => ("Вспоминаю из памяти", "Checking personal memory"),
         _ => ("Использую инструмент", "Using a tool"),
     };
     let head = if is_ru { ru } else { en };
