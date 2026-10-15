@@ -113,6 +113,30 @@ export component SettingsCard inherits Rectangle {
     }
 }
 
+// Fixed label column with a stretching control and optional captions.
+export component SettingsRow inherits Rectangle {
+    in property <string> label;
+    horizontal-stretch: 1;
+    min-height: row.preferred-height;
+    preferred-height: row.preferred-height;
+    row := HorizontalLayout {
+        spacing: Metrics.space-sm;
+        Text {
+            text: root.label;
+            width: 132px;
+            horizontal-stretch: 0;
+            font-size: Metrics.font-label;
+            color: Theme.text-secondary;
+            vertical-alignment: center;
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: Metrics.space-xs;
+            @children
+        }
+    }
+}
+
 // A conditional or repeated group of rows that contains wrapped text. A plain
 // VerticalLayout in that place reports the height of its text as one line, so
 // the control after the group overlaps it; the binding below reads the height

@@ -52,7 +52,7 @@ fn macos_settings_hide_windows_only_setup_and_managed_local_actions() {
         settings.contains("#[cfg(windows)]\n    wire_local_ai(&win, cfg, state, overlay_weak);")
     );
     assert!(ui.contains(
-        "if !Platform.is-macos : SettingsCard {\n                            title: @tr(\"Setup\")"
+        "if !Platform.is-macos : SettingsRow {\n                                label: @tr(\"Setup\")"
     ));
     let local = ui
         .split_once("// ============================ LOCAL")
@@ -222,8 +222,8 @@ fn macos_provider_catalogs_and_components_keep_platform_indices_honest() {
         "ui/settings_panel.slint must contain exactly one Version text line"
     );
     let backup = ui
-        .split_once("title: @tr(\"Backup / transfer settings\");")
-        .expect("Backup / transfer settings card title must exist in UI")
+        .split_once("title: @tr(\"Backup and transfer\");")
+        .expect("Backup and transfer card title must exist in UI")
         .1
         .split_once("// Phase E6 v28")
         .expect("Backup card content marker must follow its title")

@@ -472,6 +472,27 @@ pub(crate) fn open_settings(
         });
     }
 
+    {
+        let cfg = cfg.clone();
+        let weak = win.as_weak();
+        win.on_backup_status_requested(move || {
+            if let Some(win) = weak.upgrade() {
+                populate_backup_status(&win, &cfg.read());
+            }
+        });
+    }
+
+    // Use the same palette and shared state as F4.
+    {
+        let palette = registry.palette.clone();
+        let tiles = tiles_ref.clone();
+        let state = state.clone();
+        let overlay = overlay_weak.clone();
+        win.on_kb_open_clicked(move || {
+            super::open_palette(&palette, &tiles, &state, &overlay);
+        });
+    }
+
     // ===== AI: cloud bridge + local server (provider switch, token/url/model
     // saves, dropdown refresh, prompt-cache toggle, bridge + local tests) =====
     // Extracted to settings_ai.rs (P1 domain split) — wired verbatim there
@@ -1746,6 +1767,24 @@ fn key_presence_statuses(c: &overlay_backend::config::Config) -> [&'static str; 
     ]
 }
 
+// Only secrets included in the portable config, not OS-protected credentials.
+fn populate_backup_status(win: &SettingsWindow, c: &overlay_backend::config::Config) {
+    win.set_backup_has_secrets(
+        [
+            &c.ai_bearer,
+            &c.ai_local_bearer,
+            &c.vision_bearer,
+            &c.vision_local_bearer,
+            &c.groq_api_key,
+            &c.stt_whisper_bearer,
+            &c.hermes_bridge_token,
+            &c.hermes_api_key,
+        ]
+        .iter()
+        .any(|value| !value.trim().is_empty()),
+    );
+}
+
 /// Populate the Settings window's token-status display properties
 /// from the current `cfg`. Phase E6 — gives the user a way to SEE
 /// whether ai_bearer / groq_api_key are configured without leaking
@@ -1755,10 +1794,13 @@ pub(crate) fn populate_token_status(
     cfg: &overlay_backend::config::SharedConfig,
 ) {
     settings_mlx::populate(win);
+    win.set_hermes_more_open(false);
+    win.set_kb_entry_count(overlay_backend::kb::all().len() as i32);
     win.set_tts_test_status(SharedString::from(""));
     let codex_login_busy = win.get_codex_auth_busy();
     invalidate_codex_snapshot_ui();
     let c = cfg.read();
+    populate_backup_status(win, &c);
     let [ai_status, groq_status, openai_status, anthropic_status] = key_presence_statuses(&c);
     win.set_ai_bearer_status(SharedString::from(ai_status));
     win.set_groq_api_key_status(SharedString::from(groq_status));

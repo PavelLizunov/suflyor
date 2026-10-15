@@ -583,7 +583,7 @@ msgid "Session journals — the transcripts + AI answers behind the archive (F7)
 msgstr "Журналы сессий — транскрипты и ответы ИИ, на которых работает архив (F7). При превышении потолка по МБ старейшие журналы удаляются, даже если лимит по количеству не достигнут:"
 
 msgid "Journals to keep (0 = unlimited):"
-msgstr "Хранить журналов (0 = без лимита):"
+msgstr "Сколько журналов хранить (0 = без лимита):"
 
 msgid "Journal disk cap, MB (0 = unlimited):"
 msgstr "Потолок журналов на диске, МБ (0 = без лимита):"
@@ -2690,3 +2690,76 @@ msgstr "В LFM Open License v1.0 есть условия коммерческо�
 
 msgid "Searches the knowledge base and personal memory"
 msgstr "Ищет в базе знаний и личной памяти"
+
+# Settings layout and grouping
+msgid "After installing the plugin or getting a key, restart Hermes."
+msgstr "После установки плагина или получения ключа перезапустите Hermes."
+
+msgid "Ask Hermes to search calls, suggest memories and manage profiles. Prepare a call profile below to guide live AI answers."
+msgstr "Hermes ищет звонки, предлагает факты для памяти и управляет профилями. Подготовьте профиль звонка ниже, чтобы AI учитывал его в ответах."
+
+msgid "Backup and transfer"
+msgstr "Резервная копия и перенос"
+
+msgid "Bridge: {}. API: {}"
+msgstr "Мост: {}. API: {}"
+
+msgid "Changes apply at the next capture start; restart an active session."
+msgstr "Изменения — со следующего захвата; текущую сессию перезапустите."
+
+msgid "Get key from local Hermes"
+msgstr "Взять ключ из локального Hermes"
+
+msgid "Import replaces the current settings."
+msgstr "Импорт заменяет текущие настройки."
+
+msgid "Install plugin in Hermes"
+msgstr "Установить плагин в Hermes"
+
+msgid "Keep logs (0 = no limit):"
+msgstr "Сколько журналов хранить (0 = без лимита):"
+
+msgid "Keys included. Keep private; import replaces settings."
+msgstr "В файле ключи. Не передавайте; импорт заменит настройки."
+
+msgid "Logs disk cap, MB (0 = no limit):"
+msgstr "Лимит журналов, МБ (0 = без лимита):"
+
+msgid "Logs store transcripts and AI answers for the archive (F7). The disk cap removes the oldest logs first."
+msgstr "Журналы хранят транскрипты и ответы AI для архива (F7). При превышении лимита места сначала удаляются старые."
+
+msgid "Only auto-tiles are muted; manual asks still work."
+msgstr "Скрыты лишь авто-тайлы; ручные запросы работают."
+
+msgid "Open search (F4)"
+msgstr "Открыть поиск (F4)"
+
+msgid "Record call audio (mic + system)"
+msgstr "Записывать звук звонка (микрофон + система)"
+
+msgid "Save words"
+msgstr "Сохранить слова"
+
+msgid "Separate words with spaces; questions also trigger."
+msgstr "Слова — через пробел; вопросы тоже создают тайл."
+
+msgid "Token (plugin installation writes it into Hermes):"
+msgstr "Токен (установка плагина запишет его в Hermes):"
+
+msgid "Trigger words in the transcript create answer tiles."
+msgstr "Слова-триггеры в транскрипте создают тайлы ответов."
+
+msgid "Warning:"
+msgstr "Внимание:"
+
+msgid "e.g. SRE interview; brief answers, AWS examples."
+msgstr "Например: SRE; кратко, примеры AWS."
+
+msgid "how, why, what is, explain"
+msgstr "как, почему, что такое, объясни"
+
+msgid "not checked"
+msgstr "не проверен"
+
+msgid "{} entries: glossary, commands and patterns. They ship with the app."
+msgstr "{} записей: глоссарий, команды и шаблоны. Входят в приложение."

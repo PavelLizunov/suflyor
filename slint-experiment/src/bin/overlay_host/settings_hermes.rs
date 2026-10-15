@@ -319,6 +319,7 @@ pub(crate) fn wire_hermes_settings(
                                 let _ = overlay_backend::config::save(&c);
                             }
                             w.set_hermes_api_key(SharedString::from(key));
+                            w.invoke_backup_status_requested();
                             w.set_hermes_api_setup_status(SharedString::from(if changed {
                                 if ru {
                                     "API-сервер включён, ключ сохранён — перезапустите Hermes"

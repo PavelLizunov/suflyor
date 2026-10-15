@@ -25,7 +25,7 @@ import {
     IconSlot, BrandHeaderMark, DarkCheck, SettingsCard,
     SettingsComboBox, SettingsLineEdit, SettingsSlider,
     NavGroupHeader, NavItem,
-    WrapBlock, LocalModelRow,
+    WrapBlock, LocalModelRow, SettingsRow,
 } from "settings_controls.slint";
 export { DarkCheck }
 
@@ -101,8 +101,11 @@ export component SettingsWindow inherits Window {
 
     // 10 is "Profile + context", the first entry of the navigation list.
     in-out property <int> active-tab: 10;
-    changed active-tab => { content-scroll.viewport-y = 0; }
-    // Tile-placement monitor picker (tab 0). Items + selected index are filled by
+    changed active-tab => {
+        content-scroll.viewport-y = 0;
+        if root.active-tab == 4 { root.backup-status-requested(); }
+    }
+    // Tile-placement monitor picker (Interface). Items + selected index are filled by
     // the Rust controller from enum_monitors() on open; the card hides when there
     // is only one display.
     in-out property <[string]> tile-monitors: [];
@@ -138,6 +141,10 @@ export component SettingsWindow inherits Window {
     in-out property <int> memory-editing-id: -1;
     in-out property <string> memory-edit-text: "";
     callback memory-edit-save(int, string);
+    in-out property <int> kb-entry-count: 0;
+    callback kb-open-clicked();
+    in-out property <bool> backup-has-secrets: false;
+    callback backup-status-requested();
     // Persisted cross-window toggles (driven by overlay-host).
     in-out property <bool> always-on-top-toggle: true;
     in-out property <bool> stealth-toggle: false;
@@ -186,6 +193,7 @@ export component SettingsWindow inherits Window {
 
     // ТЗ 2026-07-09 — Hermes integration tab (settings_hermes.rs).
     // Bridge (Hermes → suflyor): loopback server the local agent reads from.
+    in-out property <bool> hermes-more-open: false;
     in-out property <bool> hermes-bridge-enabled: false;
     in-out property <string> hermes-bridge-port: "8654";
     in-out property <string> hermes-bridge-token: "";
@@ -981,27 +989,6 @@ export component SettingsWindow inherits Window {
                                 wrap: word-wrap;
                             }
                         }
-                        SettingsCard {
-                            title: @tr("Tile opacity");
-                            // Phase E6 v20 — tile opacity slider.
-                            Text {
-                                text: @tr("Tile opacity ({}%)", Math.round(root.tile-body-opacity * 100));
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                            }
-                            Text {
-                                text: @tr("Lower values let you see the meeting through tiles. 100% = opaque, 50% = half-transparent.");
-                                font-size: Metrics.font-caption;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            SettingsSlider {
-                                minimum: 0.5;
-                                maximum: 1.0;
-                                value <=> root.tile-body-opacity;
-                                changed(v) => { root.tile-body-opacity-changed(v); }
-                            }
-                        }
                     }
                     if root.active-tab == 1 : VerticalLayout {
                         spacing: 10px;
@@ -1244,104 +1231,74 @@ export component SettingsWindow inherits Window {
                         }
                     }
                     if root.active-tab == 3 : VerticalLayout {
-                        spacing: 10px;
+                        spacing: Metrics.space-md;
                         SettingsCard {
-                            title: @tr("Language");
-                            Text {
-                                text: @tr("Interface language — switches all UI text on the fly.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            HorizontalLayout {
-                                spacing: Metrics.space-sm;
-                                Text {
-                                    text: @tr("Language:");
-                                    font-size: Metrics.font-label;
-                                    color: Theme.text-secondary;
-                                    vertical-alignment: center;
-                                }
+                            SettingsRow {
+                                label: @tr("Language");
                                 SettingsComboBox {
-                                    // Language names are themselves untranslated identifiers
-                                    // (each appears in its own language as a self-label).
                                     model: ["Русский", "English"];
-                                    // Phase E6 v38 — reflect the actual saved
-                                    // language (0=ru, 1=en) and fire a callback
-                                    // on change. Previously hardcoded index 0
-                                    // with no handler → the dropdown looked set
-                                    // to Russian but switching did nothing.
                                     current-index: root.ui-language-index;
-                                    selected => {
-                                        root.language-selected(self.current-index);
+                                    horizontal-stretch: 1;
+                                    selected => { root.language-selected(self.current-index); }
+                                }
+                            }
+                            if root.tile-monitors.length > 1 : SettingsRow {
+                                label: @tr("Tile placement");
+                                SettingsComboBox {
+                                    model: root.tile-monitors;
+                                    current-index <=> root.tile-monitor-index;
+                                    horizontal-stretch: 1;
+                                    selected(v) => { root.tile-monitor-changed(self.current-index); }
+                                }
+                                WrapBlock {
+                                    Text {
+                                        text: @tr("Which monitor new answer tiles appear on.");
+                                        font-size: Metrics.font-caption;
+                                        color: Theme.text-muted;
+                                        wrap: word-wrap;
                                     }
                                 }
                             }
-                        }
-                        // Tile-placement monitor picker — only meaningful with 2+
-                        // displays, so the whole card hides on a single monitor.
-                        // Lives in Interface (next to display/language) as the
-                        // natural home for "which screen do tiles appear on".
-                        if root.tile-monitors.length > 1 : SettingsCard {
-                            title: @tr("Tile placement");
-                            Text {
-                                text: @tr("Which monitor new answer tiles appear on.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            SettingsComboBox {
-                                height: 32px;
-                                model: root.tile-monitors;
-                                current-index <=> root.tile-monitor-index;
-                                selected(v) => { root.tile-monitor-changed(self.current-index); }
-                            }
-                        }
-                        SettingsCard {
-                            title: @tr("Colour scheme");
-                            // Colour-scheme picker — switches the design tokens
-                            // (theme.slint) live across every window. Fixes the
-                            // recurring dark-on-dark complaints by letting the user
-                            // pick the contrast they like.
-                            Text {
-                                text: @tr("Colour scheme — recolours the whole app instantly.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            HorizontalLayout {
-                                spacing: Metrics.space-sm;
-                                Text {
-                                    text: @tr("Scheme:");
-                                    font-size: Metrics.font-label;
-                                    color: Theme.text-secondary;
-                                    vertical-alignment: center;
+                            SettingsRow {
+                                label: @tr("Tile opacity");
+                                SettingsSlider {
+                                    minimum: 0.5;
+                                    maximum: 1.0;
+                                    value <=> root.tile-body-opacity;
+                                    horizontal-stretch: 1;
+                                    changed(v) => { root.tile-body-opacity-changed(v); }
                                 }
+                                Text {
+                                    text: @tr("Tile opacity ({}%)", Math.round(root.tile-body-opacity * 100));
+                                    font-size: Metrics.font-caption;
+                                    color: Theme.text-secondary;
+                                }
+                                WrapBlock {
+                                    Text {
+                                        text: @tr("Lower values let you see the meeting through tiles. 100% = opaque, 50% = half-transparent.");
+                                        font-size: Metrics.font-caption;
+                                        color: Theme.text-muted;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                            }
+                            SettingsRow {
+                                label: @tr("Colour scheme");
                                 SettingsComboBox {
-                                    // Self-labelled scheme names (proper nouns —
-                                    // left untranslated so they read the same in
-                                    // both languages).
                                     model: ["Glacier", "Graphite", "Obsidian", "Light Frost"];
                                     current-index: root.color-scheme-index;
-                                    selected => {
-                                        root.color-scheme-selected(self.current-index);
-                                    }
+                                    horizontal-stretch: 1;
+                                    selected => { root.color-scheme-selected(self.current-index); }
                                 }
                             }
-                        }
-                        if !Platform.is-macos : SettingsCard {
-                            title: @tr("Setup");
-                            // First-run setup wizard — relaunchable any time.
-                            Text {
-                                text: @tr("Re-run the guided first-time setup.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            HorizontalLayout {
-                                alignment: start;
-                                Button {
-                                    text: @tr("Run setup wizard");
-                                    clicked => { root.open-wizard-clicked(); }
+                            if !Platform.is-macos : SettingsRow {
+                                label: @tr("Setup");
+                                HorizontalLayout {
+                                    alignment: start;
+                                    Button {
+                                        text: @tr("Run setup wizard");
+                                        clicked => { root.open-wizard-clicked(); }
+                                    }
                                 }
                             }
                         }
@@ -1537,6 +1494,7 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 4 : VerticalLayout {
                         spacing: 10px;
                         if !Platform.is-macos : SettingsCard {
+                        title: @tr("Updates");
                         Text {
                             text: @tr("Check GitHub for a newer release. If one is found you can download + install it in one click (the app restarts).");
                             font-size: Metrics.font-label;
@@ -1544,7 +1502,8 @@ export component SettingsWindow inherits Window {
                             wrap: word-wrap;
                         }
                         HorizontalLayout {
-                            spacing: 6px;
+                            spacing: Metrics.space-sm;
+                            alignment: start;
                             Button {
                                 text: root.update-checking
                                     ? @tr("Checking…")
@@ -1573,7 +1532,7 @@ export component SettingsWindow inherits Window {
                         }
 
                         SettingsCard {
-                            title: @tr("Backup / transfer settings");
+                            title: @tr("Backup and transfer");
                         Text {
                             text: @tr("Version: {}", root.app-version);
                             font-size: Metrics.font-caption;
@@ -1582,20 +1541,35 @@ export component SettingsWindow inherits Window {
                         }
                         // Phase E6 v28 — full-profile import/export.
                         // (duplicate heading removed — the SettingsCard title already shows it)
-                        Text {
-                            text: @tr("The file includes your API keys. Keep it private. Import replaces the current settings.");
-                            font-size: Metrics.font-caption;
-                            color: Theme.warning;
-                            wrap: word-wrap;
+                        WrapBlock {
+                            HorizontalLayout {
+                                spacing: Metrics.space-xs;
+                                alignment: start;
+                                if root.backup-has-secrets : Text {
+                                    text: @tr("Warning:");
+                                    font-size: Metrics.font-caption;
+                                    color: Theme.warning;
+                                }
+                                Text {
+                                    text: root.backup-has-secrets
+                                        ? @tr("Keys included. Keep private; import replaces settings.")
+                                        : @tr("Import replaces the current settings.");
+                                    font-size: Metrics.font-caption;
+                                    color: Theme.text-muted;
+                                    horizontal-stretch: 1;
+                                    wrap: word-wrap;
+                                }
+                            }
                         }
-                        // Stacked (not a row): the two RU labels side by side ran
-                        // past the ~480px card edge. One button per row never clips.
-                        VerticalLayout {
-                            spacing: 6px;
+                        HorizontalLayout {
+                            alignment: start;
                             Button {
                                 text: @tr("Export settings (incl. keys)…");
                                 clicked => { root.export-profile-clicked(); }
                             }
+                        }
+                        HorizontalLayout {
+                            alignment: start;
                             Button {
                                 text: @tr("Import settings…");
                                 clicked => { root.import-profile-clicked(); }
@@ -1612,14 +1586,15 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        // Stacked (not a row): the two long RU server labels side by
-                        // side overflowed the card. One button per row never clips.
-                        VerticalLayout {
-                            spacing: 6px;
+                        HorizontalLayout {
+                            alignment: start;
                             Button {
                                 text: @tr("Export server settings…");
                                 clicked => { root.export-server-settings-clicked(); }
                             }
+                        }
+                        HorizontalLayout {
+                            alignment: start;
                             Button {
                                 text: @tr("Import server settings…");
                                 clicked => { root.import-server-settings-clicked(); }
@@ -1696,34 +1671,6 @@ export component SettingsWindow inherits Window {
                     }
                     if root.active-tab == 6 : VerticalLayout {
                         spacing: 10px;
-                        if !Platform.is-macos : WrapBlock {
-                            spacing: 6px;
-                            Button {
-                                text: root.audio-devices-loading ? @tr("Loading audio devices...") : @tr("Refresh devices");
-                                enabled: !root.audio-devices-loading;
-                                clicked => { root.audio-devices-refresh(); }
-                            }
-                            if root.audio-devices-failed : Text {
-                                text: @tr("Could not load audio devices. Your saved choices are unchanged. Try Refresh devices.");
-                                font-size: Metrics.font-label;
-                                color: Theme.warning;
-                                wrap: word-wrap;
-                            }
-                            Text {
-                                text: @tr("Device changes apply to the next capture. Stop and start an active session to use the new choice.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                                wrap: word-wrap;
-                            }
-                            if root.audio-save-state != 0 : Text {
-                                text: root.audio-save-state == 1
-                                    ? @tr("Saved for the next capture.")
-                                    : @tr("Could not save the device. The previous choice is unchanged.");
-                                font-size: Metrics.font-label;
-                                color: root.audio-save-state == 1 ? Theme.accent : Theme.warning;
-                                wrap: word-wrap;
-                            }
-                        }
                         SettingsCard {
                             title: @tr("Microphone");
                         Text {
@@ -1736,17 +1683,49 @@ export component SettingsWindow inherits Window {
                         }
                         // Phase E6 v23 — real device list from
                         // audio::list_devices().inputs, wired by Rust.
-                        SettingsComboBox {
-                            accessible-label: @tr("Microphone device");
-                            model: root.mic-devices;
-                            current-index <=> root.mic-device-index;
-                            enabled: Platform.is-macos || (!root.audio-devices-loading && !root.audio-devices-failed);
-                            selected(val) => {
-                                if Platform.is-macos {
-                                    root.mic-device-selected(val);
-                                } else {
-                                    root.mic-device-index-selected(root.mic-device-index);
+                        HorizontalLayout {
+                            spacing: Metrics.space-sm;
+                            SettingsComboBox {
+                                accessible-label: @tr("Microphone device");
+                                horizontal-stretch: 1;
+                                model: root.mic-devices;
+                                current-index <=> root.mic-device-index;
+                                enabled: Platform.is-macos || (!root.audio-devices-loading && !root.audio-devices-failed);
+                                selected(val) => {
+                                    if Platform.is-macos {
+                                        root.mic-device-selected(val);
+                                    } else {
+                                        root.mic-device-index-selected(root.mic-device-index);
+                                    }
                                 }
+                            }
+                            if !Platform.is-macos : Button {
+                                text: root.audio-devices-loading ? @tr("Loading audio devices...") : @tr("Refresh devices");
+                                enabled: !root.audio-devices-loading;
+                                clicked => { root.audio-devices-refresh(); }
+                            }
+                        }
+                        if !Platform.is-macos : WrapBlock {
+                            spacing: 6px;
+                            if root.audio-devices-failed : Text {
+                                text: @tr("Could not load audio devices. Your saved choices are unchanged. Try Refresh devices.");
+                                font-size: Metrics.font-label;
+                                color: Theme.warning;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: @tr("Changes apply at the next capture start; restart an active session.");
+                                font-size: Metrics.font-label;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            if root.audio-save-state != 0 : Text {
+                                text: root.audio-save-state == 1
+                                    ? @tr("Saved for the next capture.")
+                                    : @tr("Could not save the device. The previous choice is unchanged.");
+                                font-size: Metrics.font-label;
+                                color: root.audio-save-state == 1 ? Theme.accent : Theme.warning;
+                                wrap: word-wrap;
                             }
                         }
                         if !Platform.is-macos && !root.audio-devices-loading && !root.audio-devices-failed && root.mic-device-missing : Text {
@@ -1802,10 +1781,10 @@ export component SettingsWindow inherits Window {
                             }
                         }
                         SettingsCard {
-                            title: @tr("Recording");
+                            title: @tr("Storage");
                         // v0.13.0 — raw session-audio recording.
                         DarkCheck {
-                            text: @tr("Record session audio (mic + system)");
+                            text: @tr("Record call audio (mic + system)");
                             checked <=> root.record-audio;
                             toggled(v) => {
                                 root.record-audio-changed(v);
@@ -1847,19 +1826,19 @@ export component SettingsWindow inherits Window {
                             color: Theme.warning;
                             wrap: word-wrap;
                         }
-                        Button {
-                            text: @tr("Open recordings folder");
-                            clicked => { root.open-recordings-clicked(); }
+                        HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: @tr("Open recordings folder");
+                                clicked => { root.open-recordings-clicked(); }
+                            }
                         }
-                        }
-                        SettingsCard {
-                            title: @tr("Storage");
                         // v0.15.0 — journal (archive) retention: the JSONL
                         // transcripts behind the archive window. Was a hidden
                         // hard-coded 100-sessions / 500 MB bound — a 10-calls-a-day
                         // user lost archive history after ~2 weeks.
                         Text {
-                            text: @tr("Session journals store transcripts and AI answers for the archive (F7). When the disk limit is exceeded, the oldest journals are deleted even if the count limit is not reached:");
+                            text: @tr("Logs store transcripts and AI answers for the archive (F7). The disk cap removes the oldest logs first.");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -1867,7 +1846,7 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             spacing: Metrics.space-sm;
                             Text {
-                                text: @tr("Journals to keep (0 = unlimited):");
+                                text: @tr("Keep logs (0 = no limit):");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
@@ -1882,7 +1861,7 @@ export component SettingsWindow inherits Window {
                         HorizontalLayout {
                             spacing: Metrics.space-sm;
                             Text {
-                                text: @tr("Journal disk cap, MB (0 = unlimited):");
+                                text: @tr("Logs disk cap, MB (0 = no limit):");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
@@ -2057,11 +2036,13 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 7 : VerticalLayout {
                         spacing: 10px;
                         SettingsCard {
-                            Text {
-                                text: @tr("Auto-tile triggers — when transcript contains these keywords, spawn an answer tile automatically.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
+                            WrapBlock {
+                                Text {
+                                    text: @tr("Trigger words in the transcript create answer tiles.");
+                                    font-size: Metrics.font-label;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                }
                             }
                             DarkCheck {
                                 text: @tr("Enable auto-tile detector");
@@ -2077,61 +2058,65 @@ export component SettingsWindow inherits Window {
                                     root.suppress-tiles-changed(v);
                                 }
                             }
-                            Text {
-                                text: @tr("Mutes auto-detected AI tiles so you can record and just listen. Manual asks (F6/F9), the knowledge base, and summaries still appear.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
+                            WrapBlock {
+                                Text {
+                                    text: @tr("Only auto-tiles are muted; manual asks still work.");
+                                    font-size: Metrics.font-label;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                }
                             }
-                            Text {
-                                text: @tr("Trigger keywords (space-separated). A sentence ending in '?' also triggers.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
+                            WrapBlock {
+                                Text {
+                                    text: @tr("Separate words with spaces; questions also trigger.");
+                                    font-size: Metrics.font-label;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                }
                             }
                             TextEdit {
-                                text <=> root.trigger-keywords-input;
                                 wrap: word-wrap;
+                                text <=> root.trigger-keywords-input;
+                                placeholder-text: @tr("how, why, what is, explain");
                                 height: 150px;
                             }
-                            Button {
-                                height: 32px;
-                                text: @tr("Save keywords");
-                                clicked => {
-                                    root.trigger-keywords-save(root.trigger-keywords-input);
+                            HorizontalLayout {
+                                alignment: start;
+                                Button {
+                                    text: @tr("Save words");
+                                    clicked => { root.trigger-keywords-save(root.trigger-keywords-input); }
                                 }
                             }
                         }
                     }
                     if root.active-tab == 9 : VerticalLayout {
-                        spacing: 10px;
+                        spacing: Metrics.space-md;
                         SettingsCard {
                             Text {
-                                text: @tr("The knowledge base ships with the app: glossary, commands and patterns.");
+                                text: @tr("{} entries: glossary, commands and patterns. They ship with the app.", root.kb-entry-count);
                                 font-size: Metrics.font-label;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
-                            // Phase E6 v29 — the in-Settings search box was a
-                            // dead stub. KB search lives in the F4 palette
-                            // (fully wired). Point the user there instead of
-                            // shipping a non-functional second search box.
-                            Text {
-                                text: @tr("Press F4 anywhere to search the knowledge base and spawn a tile from any entry.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
+                            HorizontalLayout {
+                                alignment: start;
+                                Button {
+                                    text: @tr("Open search (F4)");
+                                    clicked => { root.kb-open-clicked(); }
+                                }
                             }
                         }
                     }
                     if root.active-tab == 10 : VerticalLayout {
                         spacing: 10px;
                         SettingsCard {
-                        Text {
-                            text: @tr("Persistent context sent with every AI request — your role, focus areas, vocabulary. Saved to config; applied to new AI calls immediately.");
-                            font-size: Metrics.font-label;
-                            color: Theme.text-muted;
-                            wrap: word-wrap;
+                        WrapBlock {
+                            Text {
+                                text: @tr("Persistent context sent with every AI request — your role, focus areas, vocabulary. Saved to config; applied to new AI calls immediately.");
+                                font-size: Metrics.font-label;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
                         }
                         // Phase F — multi-profile picker. Row 1: select; row 2:
                         // add/rename/delete (split rows so the buttons never clip).
@@ -2200,7 +2185,7 @@ export component SettingsWindow inherits Window {
                             text <=> root.meeting-context-input;
                             wrap: word-wrap;
                             height: 220px;
-                            placeholder-text: @tr("e.g. I'm a Senior SRE interviewing for a platform role. Answer concisely, prefer Kubernetes/AWS examples, Russian output.");
+                            placeholder-text: @tr("e.g. SRE interview; brief answers, AWS examples.");
                         }
                         HorizontalLayout {
                             spacing: Metrics.space-sm;
@@ -3422,28 +3407,13 @@ export component SettingsWindow inherits Window {
                         }
                     }
                     if root.active-tab == 16 : VerticalLayout {
-                        spacing: 10px;
+                        spacing: Metrics.space-md;
                         SettingsCard {
-                            title: @tr("What you get after setup");
                             Text {
-                                text: @tr("1) Ask your Hermes agent about your calls in ITS chat, in plain words: \"what was my last call about?\", \"search my calls for the salary talk\", \"suggest to suflyor memory that Timur is the team lead\", \"prepare a call profile for an interview at Acme and set it active\".");
+                                text: @tr("Bridge: {}. API: {}", root.hermes-bridge-status,
+                                    root.hermes-api-test-result == "" ? @tr("not checked") : root.hermes-api-test-result);
                                 font-size: Metrics.font-label;
                                 color: Theme.text-secondary;
-                                wrap: word-wrap;
-                            }
-                            Text {
-                                text: @tr("2) Right here below: type a brief into «Prepare a call profile» — the agent researches it and activates the profile, and live answers on the call will use it.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                                wrap: word-wrap;
-                            }
-                        }
-                        SettingsCard {
-                            title: @tr("Hermes — bridge (agent reads suflyor)");
-                            Text {
-                                text: @tr("Let a LOCAL Hermes agent read your calls, memory and profiles over a loopback API. Off by default; localhost-only; needs the token below.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
                             DarkCheck {
@@ -3451,84 +3421,12 @@ export component SettingsWindow inherits Window {
                                 checked <=> root.hermes-bridge-enabled;
                                 toggled(v) => { root.hermes-bridge-toggled(v); }
                             }
-                            Text {
-                                text: @tr("Status:") + " " + root.hermes-bridge-status;
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                                wrap: word-wrap;
-                            }
-                            Text {
-                                text: @tr("Bind host — leave 127.0.0.1 for a Hermes on THIS machine; for a REMOTE Hermes over Tailscale set this machine's Tailscale IP (100.x) or 0.0.0.0:");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                                wrap: word-wrap;
-                            }
                             HorizontalLayout {
-                                spacing: 6px;
-                                SettingsLineEdit {
-                                    placeholder-text: "127.0.0.1";
-                                    text <=> root.hermes-bridge-host;
-                                    horizontal-stretch: 1;
-                                }
+                                alignment: start;
                                 Button {
-                                    text: @tr("Save");
-                                    clicked => { root.hermes-bridge-host-save(root.hermes-bridge-host); }
-                                }
-                            }
-                            if root.hermes-bridge-remote : Text {
-                                text: @tr("Bridge is reachable off this machine — use a trusted network (Tailscale) only; a token is required.");
-                                font-size: Metrics.font-label;
-                                color: Theme.warning;
-                                wrap: word-wrap;
-                            }
-                            Text {
-                                text: @tr("Port:");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                            }
-                            HorizontalLayout {
-                                spacing: 6px;
-                                SettingsLineEdit {
-                                    placeholder-text: "8654";
-                                    text <=> root.hermes-bridge-port;
-                                    horizontal-stretch: 1;
-                                }
-                                Button {
-                                    text: @tr("Save");
-                                    clicked => { root.hermes-bridge-port-save(root.hermes-bridge-port); }
-                                }
-                            }
-                            Text {
-                                text: @tr("Token (the install button below writes it into Hermes automatically):");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                                wrap: word-wrap;
-                            }
-                            HorizontalLayout {
-                                spacing: 6px;
-                                SettingsLineEdit {
-                                    text <=> root.hermes-bridge-token;
-                                    read-only: true;
-                                    horizontal-stretch: 1;
-                                }
-                                Button {
-                                    text: @tr("Generate");
-                                    clicked => { root.hermes-bridge-regen-token(); }
-                                }
-                            }
-                            Text {
-                                text: @tr("One click installs the agent plugin into the Hermes on THIS machine (files + token + enable). Then restart Hermes.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            HorizontalLayout {
-                                spacing: 6px;
-                                Button {
-                                    text: @tr("Install plugin into Hermes");
+                                    text: @tr("Install plugin in Hermes");
                                     clicked => { root.hermes-plugin-install(); }
                                 }
-                                Rectangle { horizontal-stretch: 1; }
                             }
                             if root.hermes-plugin-install-status != "" : Text {
                                 text: root.hermes-plugin-install-status;
@@ -3536,76 +3434,147 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
-                        }
-                        SettingsCard {
-                            title: @tr("Hermes — API (suflyor asks the agent)");
-                            Text {
-                                text: @tr("Point at the local Hermes API server to prepare a call profile with the agent (it can research). Slow, agentic — never used for live answers.");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            Text {
-                                text: @tr("Hermes API URL:");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                            }
                             HorizontalLayout {
-                                spacing: 6px;
-                                SettingsLineEdit {
-                                    placeholder-text: "http://127.0.0.1:8642/v1";
-                                    text <=> root.hermes-api-url;
-                                    horizontal-stretch: 1;
+                                alignment: start;
+                                Button {
+                                    text: @tr("Get key from local Hermes");
+                                    clicked => { root.hermes-api-setup(); }
                                 }
                                 Button {
-                                    text: @tr("Save");
-                                    clicked => { root.hermes-api-url-save(root.hermes-api-url); }
-                                }
-                            }
-                            Text {
-                                text: @tr("Hermes API key (API_SERVER_KEY):");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                            }
-                            HorizontalLayout {
-                                spacing: 6px;
-                                SettingsLineEdit {
-                                    placeholder-text: @tr("paste API_SERVER_KEY then Save");
-                                    text <=> root.hermes-api-key;
-                                    input-type: password;
-                                    horizontal-stretch: 1;
-                                }
-                                Button {
-                                    text: @tr("Save");
-                                    clicked => { root.hermes-api-key-save(root.hermes-api-key); }
-                                }
-                                Button {
-                                    text: @tr("Test");
+                                    text: @tr("Check");
                                     clicked => { root.hermes-api-test(); }
                                 }
                             }
-                            if root.hermes-api-test-result != "" : Text {
-                                text: root.hermes-api-test-result;
+                            if root.hermes-api-setup-status != "" : Text {
+                                text: root.hermes-api-setup-status;
                                 font-size: Metrics.font-label;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
                             }
                             Text {
-                                text: @tr("Don't know the key? For a Hermes on THIS machine the button below enables its API server, creates the key and fills it in here. Then restart Hermes.");
-                                font-size: Metrics.font-label;
+                                text: @tr("After installing the plugin or getting a key, restart Hermes.");
+                                font-size: Metrics.font-caption;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
                             HorizontalLayout {
-                                spacing: 6px;
+                                alignment: start;
                                 Button {
-                                    text: @tr("Get the key from local Hermes");
-                                    clicked => { root.hermes-api-setup(); }
+                                    text: @tr("Fine tuning");
+                                    clicked => { root.hermes-more-open = !root.hermes-more-open; }
                                 }
-                                Rectangle { horizontal-stretch: 1; }
                             }
-                            if root.hermes-api-setup-status != "" : Text {
-                                text: root.hermes-api-setup-status;
+                        }
+                        if root.hermes-more-open : WrapBlock {
+                            SettingsCard {
+                                title: @tr("Hermes — bridge (agent reads suflyor)");
+                                Text {
+                                    text: @tr("Bind host — leave 127.0.0.1 for a Hermes on THIS machine; for a REMOTE Hermes over Tailscale set this machine's Tailscale IP (100.x) or 0.0.0.0:");
+                                    font-size: Metrics.font-label;
+                                    color: Theme.text-secondary;
+                                    wrap: word-wrap;
+                                }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    SettingsLineEdit {
+                                        placeholder-text: "127.0.0.1";
+                                        text <=> root.hermes-bridge-host;
+                                        horizontal-stretch: 1;
+                                    }
+                                }
+                                if root.hermes-bridge-remote : Text {
+                                    text: @tr("Bridge is reachable off this machine — use a trusted network (Tailscale) only; a token is required.");
+                                    font-size: Metrics.font-label;
+                                    color: Theme.warning;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: @tr("Port:");
+                                    font-size: Metrics.font-label;
+                                    color: Theme.text-secondary;
+                                }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    SettingsLineEdit {
+                                        placeholder-text: "8654";
+                                        text <=> root.hermes-bridge-port;
+                                        horizontal-stretch: 1;
+                                    }
+                                }
+                                Text {
+                                    text: @tr("Token (plugin installation writes it into Hermes):");
+                                    font-size: Metrics.font-label;
+                                    color: Theme.text-secondary;
+                                    wrap: word-wrap;
+                                }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    SettingsLineEdit {
+                                        text <=> root.hermes-bridge-token;
+                                        read-only: true;
+                                        horizontal-stretch: 1;
+                                    }
+                                    Button {
+                                        text: @tr("Generate");
+                                        clicked => { root.hermes-bridge-regen-token(); }
+                                    }
+                                }
+                                HorizontalLayout {
+                                    alignment: start;
+                                    Button {
+                                        text: @tr("Save");
+                                        clicked => {
+                                            root.hermes-bridge-host-save(root.hermes-bridge-host);
+                                            root.hermes-bridge-port-save(root.hermes-bridge-port);
+                                        }
+                                    }
+                                }
+                            }
+                            SettingsCard {
+                                title: @tr("Hermes — API (suflyor asks the agent)");
+                                Text {
+                                    text: @tr("Hermes API URL:");
+                                    font-size: Metrics.font-label;
+                                    color: Theme.text-secondary;
+                                }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    SettingsLineEdit {
+                                        placeholder-text: "http://127.0.0.1:8642/v1";
+                                        text <=> root.hermes-api-url;
+                                        horizontal-stretch: 1;
+                                    }
+                                }
+                                Text {
+                                    text: @tr("Hermes API key (API_SERVER_KEY):");
+                                    font-size: Metrics.font-label;
+                                    color: Theme.text-secondary;
+                                }
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    SettingsLineEdit {
+                                        placeholder-text: @tr("paste API_SERVER_KEY then Save");
+                                        text <=> root.hermes-api-key;
+                                        input-type: password;
+                                        horizontal-stretch: 1;
+                                    }
+                                }
+                                HorizontalLayout {
+                                    alignment: start;
+                                    Button {
+                                        text: @tr("Save");
+                                        clicked => {
+                                            root.hermes-api-url-save(root.hermes-api-url);
+                                            root.hermes-api-key-save(root.hermes-api-key);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        SettingsCard {
+                            title: @tr("What you get after setup");
+                            Text {
+                                text: @tr("Ask Hermes to search calls, suggest memories and manage profiles. Prepare a call profile below to guide live AI answers.");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
