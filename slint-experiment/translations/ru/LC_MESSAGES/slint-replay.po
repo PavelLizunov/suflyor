@@ -583,7 +583,7 @@ msgid "Session journals — the transcripts + AI answers behind the archive (F7)
 msgstr "Журналы сессий — транскрипты и ответы ИИ, на которых работает архив (F7). При превышении потолка по МБ старейшие журналы удаляются, даже если лимит по количеству не достигнут:"
 
 msgid "Journals to keep (0 = unlimited):"
-msgstr "Сколько журналов хранить (0 = без лимита):"
+msgstr "Хранить журналов (0 = без лимита):"
 
 msgid "Journal disk cap, MB (0 = unlimited):"
 msgstr "Потолок журналов на диске, МБ (0 = без лимита):"
