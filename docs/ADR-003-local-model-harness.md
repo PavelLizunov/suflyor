@@ -163,6 +163,40 @@ P4 (Strata) started on 2026-10-15 at the owner's request, before P1-P3; see
   chip only hides tiles), Strata vision, Strata updates (a new pinned release
   installs into a new folder; Strata finds its existing model files).
 
+## P2-P3 as built, and an existing Strata (2026-10-15)
+
+- `overlay-backend/src/ai/agent.rs` runs the loop inside the streamed answer:
+  each step offers the tools and streams text to the tile; `tool_calls`
+  deltas are collected by index, the calls run, and the next step asks again.
+  At most 4 tool steps and 60 s of tool time; the step after that offers no
+  tools. Each tool has 20 s and its result is capped at 4000 characters. The
+  first request is the capability probe: an HTTP error there marks the server
+  and the answer goes through the plain path.
+- It runs only for the local provider (`is_local` OpenAI-compatible
+  endpoints) and only after the user turns on "Model tools" in Settings
+  (`ai_agent_tools`, default off). Cloud providers keep the plain path.
+- Tools (`overlay-backend/src/ai/tools.rs`): `kb_search`; with the second
+  switch `ai_web_search` (default off) also `web_search` and `open_url`.
+  Web search uses DuckDuckGo's lite page without a key: its full HTML page
+  returned a captcha to scripted requests on 2026-10-15, the lite page did
+  not. `open_url` opens only public http(s) hosts: names and addresses on this
+  PC, the LAN or Tailscale's 100.64/10 range are refused, after redirects and
+  after DNS too. `memory_recall` is not built yet.
+- The tile's state label shows the running tool ("AI · ищет в интернете:
+  <query>"); the answer text does not change.
+- Thinking is not switched off for tool steps yet: one streamed request serves
+  both the tool choice and the answer.
+- A Strata installed before Suflyor: Strata's own setup lists the folders it
+  ran from in `%APPDATA%\Strata\settings.json` (`installs`, `data_dir`).
+  Settings reads that file and the `Strata*` folders next to them, and shows
+  the newest usable model config (`.venv`, `serve/server.py`, a
+  `strata-<model>.json` with `exe` and `args`). "Find my Strata folder…"
+  picks one by hand. Choosing it saves `ai_strata_dir` and
+  `ai_strata_config` (machine-local, not exported) and starts that server on
+  :8090 with its own config. Nothing is downloaded. A model the user already
+  runs may be a fine-tune; its licence is the user's (decision 5 covers only
+  what Suflyor offers to download).
+
 ## Verification rules
 
 - `cargo` does not run on the workstation. Build, lint and test run on the

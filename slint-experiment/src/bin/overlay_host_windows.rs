@@ -615,6 +615,10 @@ fn main() -> Result<(), slint::PlatformError> {
     {
         let c = cfg.read();
         ai::set_local_no_think(c.ai_provider == "local" && !c.ai_local_thinking);
+        // ADR-003 — the local model's tools, and a Strata installed before
+        // Suflyor if the user chose one.
+        ai::set_agent_tools(c.ai_agent_tools, c.ai_web_search);
+        overlay_backend::local_ai::set_adopted_strata(&c.ai_strata_dir, &c.ai_strata_config);
     }
     // E10.2 — restore persisted stealth only where capture exclusion exists.
     // Keep the saved preference untouched on macOS so returning to Windows does

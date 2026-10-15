@@ -806,3 +806,163 @@ async fn deep_lock_guard_refuses_every_managed_sender() {
 
     drop(permits);
 }
+
+/// Serves `responses` in order, one per request, and hands back each request
+/// body.
+fn serve_sequence(
+    responses: Vec<(u16, &'static str)>,
+) -> (String, std::sync::mpsc::Receiver<String>) {
+    let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", server.server_addr());
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for (status, body) in responses {
+            let Ok(mut req) = server.recv() else { return };
+            let mut sent = String::new();
+            let _ = std::io::Read::read_to_string(req.as_reader(), &mut sent);
+            let _ = tx.send(sent);
+            let mut resp = tiny_http::Response::from_string(body).with_status_code(status);
+            if let Ok(h) =
+                tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"text/event-stream"[..])
+            {
+                resp = resp.with_header(h);
+            }
+            let _ = req.respond(resp);
+        }
+    });
+    (url, rx)
+}
+
+fn local_endpoint(base_url: String) -> AiEndpoint {
+    AiEndpoint {
+        protocol: AiProtocol::OpenAiCompatible,
+        base_url,
+        bearer: String::new(),
+        model: "local-model".into(),
+        reasoning_effort: None,
+        is_local: true,
+    }
+}
+
+const KB_CALL: &str = "data: {\"id\":\"c1\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"kb_search\",\"arguments\":\"\"}}]}}]}\n\n\
+data: {\"id\":\"c1\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"query\\\":\\\"tokio\\\"}\"}}]}}]}\n\n\
+data: {\"id\":\"c1\",\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n\
+data: [DONE]\n\n";
+const ANSWER: &str = "data: {\"id\":\"c2\",\"choices\":[{\"delta\":{\"content\":\"answer\"}}]}\n\n\
+data: {\"id\":\"c2\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n\
+data: [DONE]\n\n";
+
+async fn collect(mut rx: tokio::sync::mpsc::Receiver<AiEvent>) -> Vec<AiEvent> {
+    let mut events = Vec::new();
+    while let Ok(Some(ev)) =
+        tokio::time::timeout(std::time::Duration::from_secs(10), rx.recv()).await
+    {
+        let last = matches!(ev, AiEvent::Done { .. } | AiEvent::Error { .. });
+        events.push(ev);
+        if last {
+            break;
+        }
+    }
+    events
+}
+
+#[tokio::test]
+async fn agent_runs_a_tool_call_then_streams_the_answer() {
+    let _stream_guard = STREAM_TEST_LOCK.lock().await;
+    set_agent_tools(true, false);
+    let (url, bodies) = serve_sequence(vec![(200, KB_CALL), (200, ANSWER)]);
+    let rx = stream_chat_endpoint(
+        local_endpoint(url),
+        vec![ChatMessage {
+            role: "user".into(),
+            content: MessageContent::Text("what is tokio?".into()),
+        }],
+        64,
+    );
+    let events = collect(rx).await;
+    set_agent_tools(false, false);
+
+    assert!(matches!(&events[0], AiEvent::Start { id } if id == "c1"));
+    assert!(
+        matches!(&events[1], AiEvent::Tool { name, detail } if name == "kb_search" && detail == "tokio")
+    );
+    assert!(matches!(&events[2], AiEvent::Delta { text } if text == "answer"));
+    assert!(matches!(&events[3], AiEvent::Done { reason } if reason == "stop"));
+
+    let first: Value = serde_json::from_str(&bodies.recv().unwrap()).unwrap();
+    assert_eq!(first["tool_choice"], "auto");
+    let names: Vec<_> = first["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["function"]["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["kb_search"], "web tools stay off until allowed");
+    let second: Value = serde_json::from_str(&bodies.recv().unwrap()).unwrap();
+    let msgs = second["messages"].as_array().unwrap();
+    assert_eq!(msgs[1]["role"], "assistant");
+    assert_eq!(msgs[1]["tool_calls"][0]["function"]["name"], "kb_search");
+    assert_eq!(msgs[2]["role"], "tool");
+    assert_eq!(msgs[2]["tool_call_id"], "call_1");
+}
+
+#[tokio::test]
+async fn agent_falls_back_when_the_server_rejects_tools() {
+    let _stream_guard = STREAM_TEST_LOCK.lock().await;
+    set_agent_tools(true, false);
+    let (url, bodies) = serve_sequence(vec![(400, "tools are not supported"), (200, ANSWER)]);
+    let endpoint = local_endpoint(url);
+    let events = collect(stream_chat_endpoint(endpoint.clone(), Vec::new(), 16)).await;
+    let still_applies = super::agent::applies(&endpoint);
+    set_agent_tools(false, false);
+
+    assert!(events
+        .iter()
+        .any(|e| matches!(e, AiEvent::Delta { text } if text == "answer")));
+    assert!(matches!(events.last(), Some(AiEvent::Done { .. })));
+    let probe: Value = serde_json::from_str(&bodies.recv().unwrap()).unwrap();
+    assert!(probe.get("tools").is_some());
+    let plain: Value = serde_json::from_str(&bodies.recv().unwrap()).unwrap();
+    assert!(plain.get("tools").is_none());
+    assert!(!still_applies, "the server is not offered tools again");
+}
+
+#[tokio::test]
+async fn agent_stops_offering_tools_after_four_steps() {
+    let _stream_guard = STREAM_TEST_LOCK.lock().await;
+    set_agent_tools(true, false);
+    let (url, bodies) = serve_sequence(vec![
+        (200, KB_CALL),
+        (200, KB_CALL),
+        (200, KB_CALL),
+        (200, KB_CALL),
+        (200, ANSWER),
+    ]);
+    let events = collect(stream_chat_endpoint(local_endpoint(url), Vec::new(), 16)).await;
+    set_agent_tools(false, false);
+
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| matches!(e, AiEvent::Tool { .. }))
+            .count(),
+        4
+    );
+    assert!(matches!(events.last(), Some(AiEvent::Done { reason }) if reason == "stop"));
+    let sent: Vec<Value> = (0..5)
+        .map(|_| serde_json::from_str(&bodies.recv().unwrap()).unwrap())
+        .collect();
+    assert!(sent[..4].iter().all(|b| b.get("tools").is_some()));
+    assert!(sent[4].get("tools").is_none(), "the last step must answer");
+}
+
+#[tokio::test]
+async fn cloud_endpoints_never_get_tools() {
+    let _stream_guard = STREAM_TEST_LOCK.lock().await;
+    set_agent_tools(true, true);
+    let mut cloud = local_endpoint("http://127.0.0.1:9/v1".into());
+    cloud.is_local = false;
+    let applies = super::agent::applies(&cloud);
+    set_agent_tools(false, false);
+    assert!(!applies);
+}

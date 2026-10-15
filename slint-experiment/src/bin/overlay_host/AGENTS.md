@@ -33,7 +33,7 @@ The host orchestration layer lives under `slint-experiment/src/bin/overlay_host/
 | | `settings_memory.rs` | SQLite memory tab callbacks (`wire_memory`), memory review, extraction, and deletion. |
 | | `settings_hermes.rs` | Hermes agent integration tab & process-lived handle (`settings_hermes::wire`). |
 | | `settings_import_export.rs` | Server-settings import/export callbacks (`wire_import_export`), server preview application (`apply_server_preview`). |
-| | `settings_local_ai.rs` | One-click local AI server installer pipeline (`wire_local_ai`) and the engine switch between the built-in llama.cpp and Strata (`wire_strata`). |
+| | `settings_local_ai.rs` | One-click local AI server installer pipeline (`wire_local_ai`) and the engine switch between the built-in llama.cpp and Strata (`wire_strata`), including a Strata the user installed before Suflyor. |
 | | `settings_updates.rs` | GitHub release update checker and verified installer callbacks (`wire_updates`). |
 | | `settings_mlx.rs` | Apple Silicon MLX local backend settings callbacks (`include!("settings_mlx.rs")` inside `settings_controller.rs`). |
 | **Auxiliary & Specialized** | `aux_windows.rs` | Thin facade for shared auxiliary-window state and re-exports; implementations live in its child modules. |

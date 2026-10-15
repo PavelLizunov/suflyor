@@ -61,6 +61,9 @@ pub const STRATA_SETUP_STOPPED: &str = "Strata setup stopped: ";
 const STRATA_READY_BUDGET: Duration = Duration::from_secs(600);
 
 static STRATA_CHILD: Mutex<Option<Child>> = Mutex::new(None);
+/// The run config the running server was started with: choosing another
+/// Strata install restarts the server.
+static STRATA_CHILD_CONFIG: Mutex<Option<PathBuf>> = Mutex::new(None);
 /// Set by a Settings switch that is waiting for the lifecycle lock, so a
 /// boot or watchdog start of Strata (which holds that lock while the model
 /// loads) gives up instead of making the user wait up to ten minutes.
@@ -90,11 +93,189 @@ fn strata_config(dir: &Path) -> PathBuf {
     dir.join(format!("strata-{}.json", STRATA_SIZE.to_ascii_lowercase()))
 }
 
-/// Stat-only: the venv and the run config that setup writes last both exist.
+/// Stat-only: Suflyor's own install has the venv and the run config that
+/// setup writes last.
 #[must_use]
-pub fn strata_installed(root: &Path) -> bool {
+pub fn own_strata_installed(root: &Path) -> bool {
     let dir = strata_dir(root);
     strata_python(&dir).is_file() && strata_config(&dir).is_file()
+}
+
+/// The Strata that starts: a folder the user installed and chose, while it
+/// is still usable, or else Suflyor's own install.
+#[must_use]
+pub fn strata_installed(root: &Path) -> bool {
+    match adopted_strata() {
+        Some(found) => found.usable(),
+        None => own_strata_installed(root),
+    }
+}
+
+// ---- a Strata the user installed before ------------------------------------
+
+/// A Strata folder and the model run config in it (`strata-<model>.json`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FoundStrata {
+    pub dir: PathBuf,
+    pub config: PathBuf,
+    /// The config's `model_name`, else the tag in its file name.
+    pub model: String,
+}
+
+impl FoundStrata {
+    /// The venv, the server script and the model config are all in place.
+    #[must_use]
+    pub fn usable(&self) -> bool {
+        strata_python(&self.dir).is_file()
+            && self.dir.join("serve").join("server.py").is_file()
+            && model_config_name(&self.config).is_some()
+    }
+}
+
+static ADOPTED: Mutex<Option<FoundStrata>> = Mutex::new(None);
+
+/// Use the user's own Strata (`dir` + `config` from the saved config), or,
+/// with an empty `dir`, Suflyor's install. Called at boot and on a choice.
+pub fn set_adopted_strata(dir: &str, config: &str) {
+    let found = (!dir.trim().is_empty() && !config.trim().is_empty()).then(|| {
+        let config = PathBuf::from(config);
+        FoundStrata {
+            dir: PathBuf::from(dir),
+            model: model_config_name(&config).unwrap_or_default(),
+            config,
+        }
+    });
+    *ADOPTED.lock().unwrap_or_else(|p| p.into_inner()) = found;
+}
+
+#[must_use]
+pub fn adopted_strata() -> Option<FoundStrata> {
+    ADOPTED.lock().unwrap_or_else(|p| p.into_inner()).clone()
+}
+
+/// A Strata model run config is a JSON object with `exe` and `args`; the
+/// server keeps its chat settings beside it as `*.shared-settings.json`.
+/// Returns the model name to show.
+fn model_config_name(path: &Path) -> Option<String> {
+    let file = path.file_name()?.to_str()?;
+    let tag = file.strip_prefix("strata-")?.strip_suffix(".json")?;
+    if tag.ends_with(".shared-settings") {
+        return None;
+    }
+    let text = std::fs::read_to_string(path).ok()?;
+    let cfg: serde_json::Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).ok()?;
+    if cfg.get("exe").and_then(serde_json::Value::as_str).is_none()
+        || !cfg.get("args").is_some_and(serde_json::Value::is_array)
+    {
+        return None;
+    }
+    Some(
+        cfg.get("model_name")
+            .and_then(serde_json::Value::as_str)
+            .filter(|n| !n.trim().is_empty())
+            .map_or_else(|| tag.to_ascii_uppercase(), str::to_owned),
+    )
+}
+
+/// The usable model configs of one Strata folder, newest first.
+#[must_use]
+pub fn strata_in_folder(dir: &Path) -> Vec<FoundStrata> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut found: Vec<(std::time::SystemTime, FoundStrata)> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter_map(|config| {
+            let model = model_config_name(&config)?;
+            let at = std::fs::metadata(&config)
+                .and_then(|m| m.modified())
+                .unwrap_or(std::time::UNIX_EPOCH);
+            Some((
+                at,
+                FoundStrata {
+                    dir: dir.to_path_buf(),
+                    config,
+                    model,
+                },
+            ))
+        })
+        .filter(|(_, f)| f.usable())
+        .collect();
+    found.sort_by(|a, b| b.0.cmp(&a.0));
+    found.into_iter().map(|(_, f)| f).collect()
+}
+
+/// Strata's per-user file: the folders this user ran Strata from, and where
+/// the model files are.
+fn strata_settings_file() -> Option<PathBuf> {
+    if cfg!(windows) {
+        std::env::var_os("APPDATA")
+            .map(PathBuf::from)
+            .or_else(dirs::config_dir)
+            .map(|d| d.join("Strata").join("settings.json"))
+    } else {
+        std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .or_else(|| dirs::home_dir().map(|h| h.join(".config")))
+            .map(|d| d.join("strata").join("settings.json"))
+    }
+}
+
+/// Strata installs on this PC other than Suflyor's own: the folders Strata's
+/// own setup remembered, and `Strata*` folders next to them and next to its
+/// data folder. Reads a few small files; callers keep it off the UI thread.
+#[must_use]
+pub fn find_existing_strata(root: &Path) -> Vec<FoundStrata> {
+    let settings: serde_json::Value = strata_settings_file()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or(serde_json::Value::Null);
+    let mut folders: Vec<PathBuf> = settings
+        .get("installs")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .map(PathBuf::from)
+        .collect();
+    let mut parents: Vec<PathBuf> = folders.iter().filter_map(|f| f.parent().map(Path::to_path_buf)).collect();
+    if let Some(data) = settings.get("data_dir").and_then(serde_json::Value::as_str) {
+        if let Some(parent) = Path::new(data).parent() {
+            parents.push(parent.to_path_buf());
+        }
+    }
+    for parent in parents {
+        if let Ok(entries) = std::fs::read_dir(&parent) {
+            folders.extend(entries.flatten().map(|e| e.path()).filter(|p| {
+                p.is_dir()
+                    && p.file_name()
+                        .and_then(|n| n.to_str())
+                        .is_some_and(|n| n.to_ascii_lowercase().starts_with("strata") && !n.eq_ignore_ascii_case("strata-data"))
+            }));
+        }
+    }
+    let own = strata_dir(root);
+    let mut seen = Vec::new();
+    let mut found = Vec::new();
+    for folder in folders {
+        let key = folder.to_string_lossy().to_ascii_lowercase();
+        if seen.contains(&key) || same_dir(&folder, &own) {
+            continue;
+        }
+        seen.push(key);
+        if let Some(first) = strata_in_folder(&folder).into_iter().next() {
+            found.push(first);
+        }
+    }
+    found
+}
+
+fn same_dir(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    }
 }
 
 /// True only for Suflyor's loopback Strata endpoint.
@@ -190,7 +371,7 @@ pub fn install_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -
         }
     }
     run_setup(&dir, cancel, on)?;
-    if !strata_installed(root) {
+    if !own_strata_installed(root) {
         bail!("Strata setup finished without an installed model");
     }
     Ok(())
@@ -508,11 +689,22 @@ pub fn stop_strata() {
     }
 }
 
+/// The folder and run config of the Strata that starts.
+fn active_location(root: &Path) -> (PathBuf, PathBuf) {
+    match adopted_strata() {
+        Some(found) => (found.dir, found.config),
+        None => {
+            let dir = strata_dir(root);
+            let config = strata_config(&dir);
+            (dir, config)
+        }
+    }
+}
+
 fn launch_strata(root: &Path) -> Result<Child> {
     use std::process::{Command, Stdio};
 
-    let dir = strata_dir(root);
-    let config = strata_config(&dir);
+    let (dir, config) = active_location(root);
     let log = std::fs::File::create(dir.join("suflyor-server.log")).context("server log")?;
     let log_err = log.try_clone().context("server log")?;
     // The same command line as Strata's own run-<model>.bat.
@@ -537,7 +729,13 @@ pub fn start_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> 
     if !strata_installed(root) {
         return StrataStart::NotInstalled;
     }
-    if strata_running() && strata_answers() {
+    let (_, config) = active_location(root);
+    let same_install = STRATA_CHILD_CONFIG
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .as_ref()
+        == Some(&config);
+    if same_install && strata_running() && strata_answers() {
         return StrataStart::Ready;
     }
     stop_strata();
@@ -564,6 +762,9 @@ pub fn start_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> 
         }
     };
     *STRATA_CHILD.lock().unwrap_or_else(|p| p.into_inner()) = Some(child);
+    *STRATA_CHILD_CONFIG
+        .lock()
+        .unwrap_or_else(|p| p.into_inner()) = Some(config);
     let started = Instant::now();
     while started.elapsed() < STRATA_READY_BUDGET {
         if cancel.load(Ordering::Relaxed) || STRATA_START_ABORT.load(Ordering::Relaxed) {
@@ -668,13 +869,35 @@ mod tests {
         let root = std::env::temp_dir().join(format!("suflyor-strata-test-{}", std::process::id()));
         let dir = strata_dir(&root);
         let _ = std::fs::remove_dir_all(&root);
-        assert!(!strata_installed(&root));
+        assert!(!own_strata_installed(&root));
         std::fs::create_dir_all(strata_python(&dir).parent().unwrap()).unwrap();
         std::fs::write(strata_python(&dir), b"").unwrap();
-        assert!(!strata_installed(&root));
+        assert!(!own_strata_installed(&root));
         std::fs::write(strata_config(&dir), b"{}").unwrap();
-        assert!(strata_installed(&root));
+        assert!(own_strata_installed(&root));
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn finds_model_configs_in_a_strata_folder() {
+        let dir = std::env::temp_dir().join(format!("suflyor-found-strata-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("serve")).unwrap();
+        std::fs::write(dir.join("serve").join("server.py"), b"").unwrap();
+        std::fs::write(dir.join("strata-iq3_s.json"), br#"{"exe":"strata.exe","args":[],"model_name":"swift-1.5"}"#).unwrap();
+        std::fs::write(dir.join("strata-iq3_s.shared-settings.json"), br#"{"exe":"x","args":[]}"#).unwrap();
+        std::fs::write(dir.join("strata-notes.json"), b"{}").unwrap();
+        // No venv yet: not usable.
+        assert!(strata_in_folder(&dir).is_empty());
+        std::fs::create_dir_all(strata_python(&dir).parent().unwrap()).unwrap();
+        std::fs::write(strata_python(&dir), b"").unwrap();
+        let found = strata_in_folder(&dir);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].model, "swift-1.5");
+        assert_eq!(found[0].config, dir.join("strata-iq3_s.json"));
+        std::fs::write(dir.join("strata-iq2_xs.json"), "\u{feff}{\"exe\":\"strata.exe\",\"args\":[]}").unwrap();
+        assert!(strata_in_folder(&dir).iter().any(|f| f.model == "IQ2_XS"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

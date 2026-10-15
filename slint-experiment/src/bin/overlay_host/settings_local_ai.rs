@@ -1541,6 +1541,26 @@ fn strata_progress_line(p: &overlay_backend::local_ai::Progress, ru: bool) -> St
     }
 }
 
+/// A Strata the user installed before Suflyor: found on Settings open or
+/// picked by folder. "Use" on its row adopts it.
+static FOUND_STRATA: std::sync::Mutex<Option<overlay_backend::local_ai::FoundStrata>> =
+    std::sync::Mutex::new(None);
+
+/// Only the folder name: Settings may be screen-shared.
+fn found_strata_row(win: &SettingsWindow, found: Option<&overlay_backend::local_ai::FoundStrata>) {
+    let (title, detail) = found.map_or_else(Default::default, |f| {
+        (
+            f.model.clone(),
+            f.dir
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+        )
+    });
+    win.set_strata_found_title(SharedString::from(title));
+    win.set_strata_found_detail(SharedString::from(detail));
+}
+
 /// Refresh what the engine panels show about each engine from the saved
 /// config, without moving the panel the user is looking at.
 pub(crate) fn refresh_local_engine_state(
@@ -1549,10 +1569,16 @@ pub(crate) fn refresh_local_engine_state(
 ) {
     let root = overlay_backend::local_ai::default_root();
     win.set_llama_installed(overlay_backend::local_ai::llama_engine_installed(&root));
-    win.set_strata_installed(overlay_backend::local_ai::strata_installed(&root));
+    win.set_strata_installed(overlay_backend::local_ai::own_strata_installed(&root));
     win.set_strata_active(overlay_backend::local_ai::is_managed_strata_endpoint(
         &cfg.ai_local_base_url,
     ));
+    let adopted = overlay_backend::local_ai::adopted_strata();
+    win.set_strata_adopted(adopted.is_some());
+    if let Some(found) = adopted {
+        found_strata_row(win, Some(&found));
+        *FOUND_STRATA.lock().unwrap_or_else(|p| p.into_inner()) = Some(found);
+    }
 }
 
 /// On Settings open: refresh the engine state and show the panel of the
@@ -1563,6 +1589,24 @@ pub(crate) fn refresh_local_engine_controls(
     cfg: &overlay_backend::config::Config,
 ) {
     refresh_local_engine_state(win, cfg);
+    // Look for a Strata installed before Suflyor (a few small files).
+    if cfg!(windows) && overlay_backend::local_ai::adopted_strata().is_none() {
+        let weak = win.as_weak();
+        std::thread::spawn(move || {
+            let root = overlay_backend::local_ai::default_root();
+            let found = overlay_backend::local_ai::find_existing_strata(&root)
+                .into_iter()
+                .next();
+            *FOUND_STRATA.lock().unwrap_or_else(|p| p.into_inner()) = found.clone();
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(w) = weak.upgrade() {
+                    if !w.get_strata_adopted() {
+                        found_strata_row(&w, found.as_ref());
+                    }
+                }
+            });
+        });
+    }
     let strata_active = overlay_backend::local_ai::is_managed_strata_endpoint(&cfg.ai_local_base_url);
     let llama_active = overlay_backend::local_ai::is_managed_llama_endpoint(&cfg.ai_local_base_url);
     win.set_local_engine_index(if win.get_strata_busy() || strata_active {
@@ -1584,6 +1628,78 @@ pub(crate) fn wire_strata(
     state: &slint_replay::app_state::SharedState,
     overlay_weak: &slint::Weak<OverlayBarWindow>,
 ) {
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_strata_choose(move |own| {
+            let Some(w) = weak.upgrade() else { return };
+            let found = if own {
+                None
+            } else {
+                let found = FOUND_STRATA.lock().unwrap_or_else(|p| p.into_inner()).clone();
+                if found.is_none() {
+                    return;
+                }
+                found
+            };
+            let (dir, config) = found.as_ref().map_or_else(Default::default, |f| {
+                (
+                    f.dir.to_string_lossy().into_owned(),
+                    f.config.to_string_lossy().into_owned(),
+                )
+            });
+            {
+                let mut c = cfg_c.write();
+                c.ai_strata_dir.clone_from(&dir);
+                c.ai_strata_config.clone_from(&config);
+                if let Err(e) = overlay_backend::config::save(&c) {
+                    eprintln!("[overlay-host] Strata choice save failed: {e:#}");
+                }
+            }
+            overlay_backend::local_ai::set_adopted_strata(&dir, &config);
+            w.set_strata_adopted(found.is_some());
+        });
+    }
+
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_strata_find_folder_clicked(move || {
+            let Some(w) = weak.upgrade() else { return };
+            let Some(folder) = rfd::FileDialog::new().pick_folder() else {
+                return;
+            };
+            // The Strata folder itself, or the folder that holds it.
+            let mut found = overlay_backend::local_ai::strata_in_folder(&folder);
+            if found.is_empty() {
+                if let Ok(entries) = std::fs::read_dir(&folder) {
+                    for sub in entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
+                        found.extend(overlay_backend::local_ai::strata_in_folder(&sub));
+                    }
+                }
+            }
+            let ru = cfg_c.read().ui_is_ru();
+            let Some(first) = found.into_iter().next() else {
+                w.set_strata_status(SharedString::from(if ru {
+                    "В этой папке нет готовой Strata. Нужна папка, где Strata уже запускалась: в ней есть .venv и файл strata-<модель>.json."
+                } else {
+                    "No ready Strata in this folder. Pick the folder Strata already ran from: it holds .venv and a strata-<model>.json file."
+                }));
+                return;
+            };
+            found_strata_row(&w, Some(&first));
+            *FOUND_STRATA.lock().unwrap_or_else(|p| p.into_inner()) = Some(first);
+            w.set_strata_status(SharedString::default());
+            let weak_invoke = w.as_weak();
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(w) = weak_invoke.upgrade() {
+                    w.invoke_strata_choose(false);
+                    w.invoke_local_engine_activate(1);
+                }
+            });
+        });
+    }
+
     win.on_strata_license_clicked(|| {
         let _ = std::process::Command::new("explorer")
             .arg(overlay_backend::local_ai::STRATA_MODEL_LICENSE_URL)

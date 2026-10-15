@@ -1310,6 +1310,28 @@ pub(crate) fn wire_ai_settings(
     }
     {
         let cfg_c = cfg.clone();
+        win.on_ai_agent_tools_changed(move |on| {
+            let mut c = cfg_c.write();
+            c.ai_agent_tools = on;
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] ai_agent_tools save failed: {e:#}");
+            }
+            overlay_backend::ai::set_agent_tools(on, c.ai_web_search);
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_ai_web_search_changed(move |on| {
+            let mut c = cfg_c.write();
+            c.ai_web_search = on;
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] ai_web_search save failed: {e:#}");
+            }
+            overlay_backend::ai::set_agent_tools(c.ai_agent_tools, on);
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_ai_local_test_clicked(move || {
             let Some(w) = weak.upgrade() else {

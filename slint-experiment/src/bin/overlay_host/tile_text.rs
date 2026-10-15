@@ -92,6 +92,23 @@ pub(crate) fn asking_body(is_ru: bool) -> &'static str {
     }
 }
 
+/// State label while the model uses a tool: what it looks up, and where.
+pub(crate) fn tool_label(name: &str, detail: &str, is_ru: bool) -> String {
+    use overlay_backend::ai::tools::{KB_SEARCH, OPEN_URL, WEB_SEARCH};
+    let (ru, en) = match name {
+        WEB_SEARCH => ("AI · ищет в интернете", "ai · searching the web"),
+        OPEN_URL => ("AI · читает страницу", "ai · reading a page"),
+        KB_SEARCH => ("AI · ищет в базе знаний", "ai · searching the knowledge base"),
+        _ => ("AI · инструмент", "ai · tool"),
+    };
+    let head = if is_ru { ru } else { en };
+    if detail.is_empty() {
+        format!("{head}…")
+    } else {
+        format!("{head}: {detail}")
+    }
+}
+
 /// State label of a finished answer. A normal finish says nothing more; any
 /// other reason (length, content filter) is shown.
 pub(crate) fn done_label(reason: &str, is_ru: bool) -> String {
@@ -149,6 +166,16 @@ mod tests {
         assert_eq!(done_label("", true), "AI · готово");
         assert_eq!(done_label("length", false), "ai · done (length)");
         assert_eq!(done_label("length", true), "AI · готово (length)");
+    }
+
+    #[test]
+    fn a_tool_label_names_the_lookup() {
+        assert_eq!(
+            tool_label("web_search", "курс доллара", true),
+            "AI · ищет в интернете: курс доллара"
+        );
+        assert_eq!(tool_label("open_url", "docs.rs", false), "ai · reading a page: docs.rs");
+        assert_eq!(tool_label("kb_search", "", false), "ai · searching the knowledge base…");
     }
 
     #[test]

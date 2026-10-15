@@ -2503,3 +2503,18 @@ msgstr "Strata выбрана движком, но не отвечает. Наж
 
 msgid "Start"
 msgstr "Запустить"
+
+msgid "Your Strata · {}"
+msgstr "Ваша Strata · {}"
+
+msgid "Find my Strata folder…"
+msgstr "Указать папку своей Strata…"
+
+msgid "Model tools: search the knowledge base"
+msgstr "Инструменты модели: поиск по базе знаний"
+
+msgid "Also search the web (DuckDuckGo)"
+msgstr "И поиск в интернете (DuckDuckGo)"
+
+msgid "The model decides when to look something up; each lookup adds a few seconds. Web queries go to DuckDuckGo. A server without tool support answers as before."
+msgstr "Модель сама решает, когда искать; каждый поиск добавляет несколько секунд. Запросы в интернет уходят в DuckDuckGo. Сервер без поддержки инструментов отвечает как раньше."

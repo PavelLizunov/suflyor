@@ -312,6 +312,9 @@ export component SettingsWindow inherits Window {
     // E10 — local-model "thinking"/reasoning toggle. Off (default) sends
     // enable_thinking=false for faster answers; on lets the model reason.
     in-out property <bool> ai-local-thinking: false;
+    // The local model's read-only tools (ADR-003): knowledge base, and web.
+    in-out property <bool> ai-agent-tools: false;
+    in-out property <bool> ai-web-search: false;
     // Bundled local LLM profile: 0=legacy 4B, 1=12B QAT, 2=26B-A4B.
     // ai-local-quality remains the backwards-compatible 26B flag.
     in-out property <bool> ai-local-quality: false;
@@ -364,8 +367,14 @@ export component SettingsWindow inherits Window {
     in-out property <int> local-engine-index: 0;
     in-out property <bool> llama-installed: false;
     in-out property <bool> local-more-open: false;
+    // Suflyor's own Strata install.
     in-out property <bool> strata-installed: false;
     in-out property <bool> strata-active: false;
+    // A Strata the user installed before: the chosen one, or the one found
+    // on this PC. `strata-adopted`: that install is the one that starts.
+    in-out property <bool> strata-adopted: false;
+    in-out property <string> strata-found-title: "";
+    in-out property <string> strata-found-detail: "";
     // Checked off the UI thread on open and after a switch: the saved engine
     // can be Strata while its server is down.
     in-out property <bool> strata-running: false;
@@ -376,6 +385,9 @@ export component SettingsWindow inherits Window {
     callback local-engine-activate(int);
     callback strata-install-clicked();
     callback strata-license-clicked();
+    // true: Suflyor's own install starts; false: the found one.
+    callback strata-choose(bool);
+    callback strata-find-folder-clicked();
     // One status line, one progress bar and one Cancel for every built-in
     // engine job (install, download, switch, projector, engine update). The
     // line shows the newest message of whichever job wrote last.
@@ -452,6 +464,8 @@ export component SettingsWindow inherits Window {
     callback ai-local-models-refresh();
     callback ai-local-vision-changed(bool);
     callback ai-local-thinking-changed(bool);
+    callback ai-agent-tools-changed(bool);
+    callback ai-web-search-changed(bool);
     // Local profile: legacy 4B, 12B QAT, or 26B-A4B primary.
     // `model-profile-changed` transactionally restarts the managed server;
     // `download-model-clicked(index)` pulls EXACTLY that bundled model on demand
@@ -2758,7 +2772,7 @@ export component SettingsWindow inherits Window {
                                     detail: root.strata-installed
                                         ? @tr("Strata engine · installed")
                                         : @tr("Strata engine · ~72 GB download");
-                                    active: root.strata-active;
+                                    active: root.strata-active && !root.strata-adopted;
                                     action: root.strata-busy ? @tr("Working…")
                                         : self.active && root.strata-running ? @tr("Active")
                                         : self.active ? @tr("Start")
@@ -2766,10 +2780,36 @@ export component SettingsWindow inherits Window {
                                     action-enabled: !(self.active && root.strata-running) && !root.strata-busy && !root.builtin-busy;
                                     action-clicked => {
                                         if root.strata-installed {
+                                            root.strata-choose(true);
                                             root.local-engine-activate(1);
                                         } else {
                                             root.strata-install-clicked();
                                         }
+                                    }
+                                }
+                                // A Strata installed before Suflyor: its models are
+                                // already on disk, nothing is downloaded.
+                                if root.strata-found-title != "" : ModelChoiceRow {
+                                    title: root.strata-found-title;
+                                    detail: @tr("Your Strata · {}", root.strata-found-detail);
+                                    active: root.strata-active && root.strata-adopted;
+                                    action: root.strata-busy ? @tr("Working…")
+                                        : self.active && root.strata-running ? @tr("Active")
+                                        : self.active ? @tr("Start")
+                                        : @tr("Use");
+                                    action-enabled: !(self.active && root.strata-running) && !root.strata-busy && !root.builtin-busy;
+                                    action-clicked => {
+                                        root.strata-choose(false);
+                                        root.local-engine-activate(1);
+                                    }
+                                }
+                                HorizontalLayout {
+                                    alignment: start;
+                                    Button {
+                                        height: 30px;
+                                        text: @tr("Find my Strata folder…");
+                                        enabled: !root.strata-busy && !root.builtin-busy;
+                                        clicked => { root.strata-find-folder-clicked(); }
                                     }
                                 }
                                 Text {
@@ -2907,6 +2947,29 @@ export component SettingsWindow inherits Window {
                                 checked <=> root.ai-local-thinking;
                                 toggled(v) => {
                                     root.ai-local-thinking-changed(v);
+                                }
+                            }
+                            DarkCheck {
+                                text: @tr("Model tools: search the knowledge base");
+                                checked <=> root.ai-agent-tools;
+                                toggled(v) => {
+                                    root.ai-agent-tools-changed(v);
+                                }
+                            }
+                            DarkCheck {
+                                text: @tr("Also search the web (DuckDuckGo)");
+                                checked <=> root.ai-web-search;
+                                enabled: root.ai-agent-tools;
+                                toggled(v) => {
+                                    root.ai-web-search-changed(v);
+                                }
+                            }
+                            WrapBlock {
+                                Text {
+                                    text: @tr("The model decides when to look something up; each lookup adds a few seconds. Web queries go to DuckDuckGo. A server without tool support answers as before.");
+                                    font-size: Metrics.font-caption;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
                                 }
                             }
                             if Platform.is-macos || root.local-engine-index != 0 : HorizontalLayout {

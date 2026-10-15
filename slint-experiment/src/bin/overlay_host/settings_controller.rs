@@ -1902,6 +1902,8 @@ pub(crate) fn populate_token_status(
         win.set_tera_install_label(SharedString::from(""));
     }
     win.set_ai_local_thinking(c.ai_local_thinking);
+    win.set_ai_agent_tools(c.ai_agent_tools);
+    win.set_ai_web_search(c.ai_web_search);
     // Local model choice + whether the optional 26B-A4B is downloaded.
     win.set_ai_local_quality(effective_quality);
     refresh_local_context_controls(win, &c);

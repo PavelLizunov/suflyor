@@ -255,6 +255,19 @@ impl RuntimeEvents for PttStreamSink {
         };
         match evt {
             ai::AiEvent::Start { .. } => self.bridge.inc_ai_in_flight(),
+            ai::AiEvent::Tool { name, detail } => {
+                let label = crate::tile_text::tool_label(
+                    &name,
+                    &detail,
+                    self.bridge.cfg.read().ui_is_ru(),
+                );
+                let weak = self.tile.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(t) = weak.upgrade() {
+                        t.set_source_label(SharedString::from(label));
+                    }
+                });
+            }
             ai::AiEvent::Delta { text } => {
                 // Accumulate the (cheap) push FIRST, then throttle, then clone the
                 // O(n) body ONLY when we're actually going to render (audit P2).
@@ -717,6 +730,25 @@ impl OverlayBarBridge {
                         }
                     });
                 }
+            }
+            ai::AiEvent::Tool { name, detail } => {
+                let label =
+                    crate::tile_text::tool_label(&name, &detail, self.cfg.read().ui_is_ru());
+                let weak = {
+                    let slot = match self.current_streaming.lock() {
+                        Ok(g) => g,
+                        Err(p) => p.into_inner(),
+                    };
+                    let Some(stream) = slot.as_ref() else {
+                        return;
+                    };
+                    stream.weak.clone()
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(tile) = weak.upgrade() {
+                        tile.set_source_label(SharedString::from(label));
+                    }
+                });
             }
             ai::AiEvent::Start { .. } => {
                 // Phase E6 v11 — Start fires once per AI call (F9 +
