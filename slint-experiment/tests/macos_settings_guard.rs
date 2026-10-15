@@ -84,9 +84,7 @@ fn macos_provider_catalogs_and_components_keep_platform_indices_honest() {
     assert!(settings.contains("c.detail = \"Apple Vision\".into()"));
     assert!(settings.contains("\"whisper\" => !snap.stt_whisper_url.trim().is_empty()"));
     assert!(ui.contains("if !Platform.is-macos && root.ai-provider-index == 4 : WrapBlock"));
-    assert!(
-        ui.contains("if !Platform.is-macos && root.vision-provider-index == 6 : WrapBlock")
-    );
+    assert!(ui.contains("if !Platform.is-macos && root.vision-provider-index == 6 : WrapBlock"));
     assert!(ui.contains("if root.stt-provider-index == 0 : WrapBlock"));
     assert!(ui.contains("if Platform.is-macos && root.ai-provider-index < 0 : Text"));
     assert!(ui.contains("if Platform.is-macos && root.vision-provider-index < 0 : Text"));
