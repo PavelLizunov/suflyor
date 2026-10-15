@@ -45,29 +45,32 @@ const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Suflyor";
 /// Tool schemas in the OpenAI `tools` shape. The list is the same for every
 /// request of a day, so the engine's prompt cache keeps the prefix.
 pub(crate) fn definitions(web: bool, today: &str) -> Value {
-    let mut tools = vec![json!({
-        "type": "function",
-        "function": {
-            "name": KB_SEARCH,
-            "description": "Search the user's knowledge base (glossary, commands, interview answer patterns) for a term. Returns matching entries.",
-            "parameters": {
-                "type": "object",
-                "properties": { "query": { "type": "string", "description": "A term or short phrase" } },
-                "required": ["query"]
+    let mut tools = vec![
+        json!({
+            "type": "function",
+            "function": {
+                "name": KB_SEARCH,
+                "description": "Search the user's knowledge base (glossary, commands, interview answer patterns) for a term. Returns matching entries.",
+                "parameters": {
+                    "type": "object",
+                    "properties": { "query": { "type": "string", "description": "A term or short phrase" } },
+                    "required": ["query"]
+                }
             }
-        }
-    }), json!({
-        "type": "function",
-        "function": {
-            "name": MEMORY_RECALL,
-            "description": "Search the user's personal memory: facts they approved about people, projects, terms and themselves. Use it when the question names someone or something the user may have told the app before.",
-            "parameters": {
-                "type": "object",
-                "properties": { "query": { "type": "string", "description": "A name, term or short phrase" } },
-                "required": ["query"]
+        }),
+        json!({
+            "type": "function",
+            "function": {
+                "name": MEMORY_RECALL,
+                "description": "Search the user's personal memory: facts they approved about people, projects, terms and themselves. Use it when the question names someone or something the user may have told the app before.",
+                "parameters": {
+                    "type": "object",
+                    "properties": { "query": { "type": "string", "description": "A name, term or short phrase" } },
+                    "required": ["query"]
+                }
             }
-        }
-    })];
+        }),
+    ];
     if web {
         tools.push(json!({
             "type": "function",
