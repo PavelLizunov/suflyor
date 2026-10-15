@@ -44,7 +44,9 @@ fn write_in(root: &Path, map: &Map) -> std::io::Result<()> {
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     let final_path = file_path_in(root);
     let tmp = final_path.with_extension("json.tmp");
-    std::fs::write(&tmp, json)?;
+    // SECURITY: Use write_private to enforce 0o600 permissions on POSIX so session
+    // titles are restricted to the owner before atomic rename.
+    crate::paths::write_private(&tmp, json.as_bytes())?;
     std::fs::rename(&tmp, &final_path)
 }
 
@@ -115,6 +117,22 @@ pub fn get(session_id: &str) -> Option<String> {
 )]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn session_names_file_is_owner_only_on_unix() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        set_in(temp.path(), "sess-perm-1", "Private Title", 100).unwrap();
+        let path = file_path_in(temp.path());
+        assert!(path.exists());
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(
+            mode, 0o600,
+            "session_names.json must be owner-only (0600) on Unix"
+        );
+    }
 
     #[test]
     fn set_then_get_round_trips() {
