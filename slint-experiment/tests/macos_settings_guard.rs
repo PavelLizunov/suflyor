@@ -70,7 +70,7 @@ fn macos_settings_hide_windows_only_setup_and_managed_local_actions() {
     ] {
         assert!(windows.contains(&format!("@tr(\"{title}\")")));
         assert!(!macos
-            .split_once("// Text OUTER")
+            .split_once("if root.active-tab == 17 : VerticalLayout")
             .unwrap()
             .0
             .contains(&format!("@tr(\"{title}\")")));
