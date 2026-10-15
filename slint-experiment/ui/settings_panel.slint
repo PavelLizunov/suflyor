@@ -1392,11 +1392,12 @@ export component SettingsWindow inherits Window {
                             vertical-stretch: 0;
                             // `SettingsCard` derives its preferred height before this
                             // conditional block's wrapped status text has a final width.
-                            // Reserve the complete controls/status stack explicitly;
+                            // Reserve the complete controls/status stack explicitly (an
+                            // installed model has no Install row, so less height);
                             // the parent ScrollView can grow, but Speed must never enter
                             // this rectangle.
                             min-height: root.tts-available
-                                ? (root.tera-install-phase != 0 ? 164px : 145px)
+                                ? (root.tera-install-phase != 0 ? 164px : root.tera-installing ? 145px : 107px)
                                 : (root.tera-install-phase != 0 ? 128px : 108px);
                         Text {
                             text: @tr("Experimental neural voice TeraTTS v2 (RU and EN). Downloads about 370 MB on demand. Until it is installed, reading uses Piper; speaker detection always uses Piper.");
@@ -1736,10 +1737,13 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
-                        Button {
-                            text: @tr("Test microphone (3s record)");
-                            enabled: Platform.is-macos || (!root.audio-devices-loading && !root.audio-devices-failed && !root.mic-device-missing && !root.mic-devices-empty);
-                            clicked => { root.mic-test-clicked(); }
+                        HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: @tr("Test microphone (3s record)");
+                                enabled: Platform.is-macos || (!root.audio-devices-loading && !root.audio-devices-failed && !root.mic-device-missing && !root.mic-devices-empty);
+                                clicked => { root.mic-test-clicked(); }
+                            }
                         }
                         if root.mic-test-result != "" : Text {
                             text: root.mic-test-result;
@@ -3800,13 +3804,6 @@ export component SettingsWindow inherits Window {
                         spacing: 6px;
                         Rectangle { background: Theme.border; height: 1px; }
 
-                        Text {
-                            text: @tr("Groq STT (Whisper) — API key + model. Used only when the engine above is Cloud.");
-                            font-size: Metrics.font-label;
-                            color: Theme.text-muted;
-                            wrap: word-wrap;
-                        }
-
                         // ----- groq_api_key -----
                         Text {
                             text: root.groq-api-key-status;
@@ -3830,9 +3827,12 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
-                        Button {
-                            text: @tr("Get Groq API Key (console.groq.com)");
-                            clicked => { root.open-groq-keys-clicked(); }
+                        HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: @tr("Get Groq API Key (console.groq.com)");
+                                clicked => { root.open-groq-keys-clicked(); }
+                            }
                         }
                         }
 
@@ -3841,6 +3841,7 @@ export component SettingsWindow inherits Window {
                         // ----- Connection test (Phase E6 v27) -----
                         HorizontalLayout {
                             spacing: 6px;
+                            alignment: start;
                             vertical-stretch: 0;
                             height: 32px;
                             Button {
@@ -3893,6 +3894,7 @@ export component SettingsWindow inherits Window {
                         }
                         HorizontalLayout {
                             spacing: Metrics.space-sm;
+                            alignment: start;
                             Button {
                                 text: @tr("Extract from recent sessions");
                                 clicked => { root.memory-extract(); }
