@@ -387,6 +387,9 @@ export component SettingsWindow inherits Window {
     in-out property <[FoundModel]> found-models: [];
     in-out property <string> found-models-note: "";
     in-out property <bool> found-models-searching: false;
+    // Strata is in use through a server the user started (its row under
+    // "Already on this PC"), not through one of the installs below.
+    in-out property <bool> strata-external: false;
     callback found-model-use(int);
     callback found-models-search();
     // Checked off the UI thread on open and after a switch: the saved engine
@@ -2824,7 +2827,7 @@ export component SettingsWindow inherits Window {
                                     detail: root.strata-installed
                                         ? @tr("Strata engine · installed")
                                         : @tr("Strata engine · ~72 GB download");
-                                    active: root.strata-active && !root.strata-adopted;
+                                    active: root.strata-active && !root.strata-adopted && !root.strata-external && root.strata-installed;
                                     action: root.strata-busy ? @tr("Working…")
                                         : self.active && root.strata-running ? @tr("Active")
                                         : self.active ? @tr("Start")

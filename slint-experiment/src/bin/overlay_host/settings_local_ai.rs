@@ -1610,6 +1610,7 @@ fn show_found_models(win: &SettingsWindow, cfg: &overlay_backend::config::Config
             active: false,
         });
     }
+    let mut external = false;
     for server in listed_servers() {
         let name = if server.name.is_empty() {
             if ru { "Сервер" } else { "Server" }.to_string()
@@ -1635,6 +1636,7 @@ fn show_found_models(win: &SettingsWindow, cfg: &overlay_backend::config::Config
         // one is chosen.
         let current = server.is_current(&cfg.ai_local_base_url, &cfg.ai_local_model)
             && !(server.strata_ready && overlay_backend::local_ai::adopted_strata().is_some());
+        external |= current && server.strata_ready;
         rows.push(super::FoundModel {
             title: SharedString::from(server.pick_model(&cfg.ai_local_model)),
             detail: SharedString::from(detail),
@@ -1642,6 +1644,7 @@ fn show_found_models(win: &SettingsWindow, cfg: &overlay_backend::config::Config
             active: current,
         });
     }
+    win.set_strata_external(external);
     win.set_found_models(super::ModelRc::new(super::VecModel::from(rows)));
 }
 
