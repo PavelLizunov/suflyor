@@ -29,7 +29,8 @@ use super::{
 
 /// The pinned Strata source release (GitHub tag `v0.1.44.1`, 2026-10-14).
 pub const STRATA_VERSION: &str = "0.1.44.1";
-const STRATA_SOURCE_URL: &str = "https://github.com/Niko1221/Strata/archive/refs/tags/v0.1.44.1.zip";
+const STRATA_SOURCE_URL: &str =
+    "https://github.com/Niko1221/Strata/archive/refs/tags/v0.1.44.1.zip";
 const STRATA_SOURCE_SIZE: u64 = 22_629_639;
 const STRATA_SOURCE_SHA256: &str =
     "22be94124b4d37dc2ff76e742c49498a3e5f31873ed916a636b2a31707d09b31";
@@ -112,12 +113,16 @@ impl StrataHardware {
     #[must_use]
     pub fn meets_recommendation(self) -> bool {
         self.ram_gib.is_some_and(|ram| ram >= STRATA_MIN_RAM_GIB)
-            && self.vram_gib.is_some_and(|vram| vram >= STRATA_MIN_VRAM_GIB)
+            && self
+                .vram_gib
+                .is_some_and(|vram| vram >= STRATA_MIN_VRAM_GIB)
     }
 
     #[must_use]
     pub fn describe(self, ru: bool) -> String {
-        let ram = self.ram_gib.map_or_else(|| "?".to_string(), |v| v.to_string());
+        let ram = self
+            .ram_gib
+            .map_or_else(|| "?".to_string(), |v| v.to_string());
         let vram = self
             .vram_gib
             .map_or_else(|| "?".to_string(), |v| v.to_string());
@@ -146,7 +151,9 @@ pub fn install_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -
     let dir = strata_dir(root);
     if !dir.join("START-HERE.bat").is_file() {
         let zip = base.join(format!("strata-{STRATA_VERSION}.zip"));
-        on(Progress::Step(format!("Downloading Strata {STRATA_VERSION}")));
+        on(Progress::Step(format!(
+            "Downloading Strata {STRATA_VERSION}"
+        )));
         curl_resumable(
             STRATA_SOURCE_URL,
             &zip,
@@ -456,7 +463,10 @@ pub fn strata_running() -> bool {
 /// Stop the server this process started (the whole tree: setup's Python
 /// launcher, the server and the engine). A no-op when none runs.
 pub fn stop_strata() {
-    let child = STRATA_CHILD.lock().unwrap_or_else(|p| p.into_inner()).take();
+    let child = STRATA_CHILD
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .take();
     if let Some(child) = child {
         terminate_child_tree(child);
     }
@@ -533,10 +543,7 @@ pub fn start_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> 
             return StrataStart::FailedToStart;
         }
         if strata_answers() {
-            log::info!(
-                "strata ready: load_ms={}",
-                started.elapsed().as_millis()
-            );
+            log::info!("strata ready: load_ms={}", started.elapsed().as_millis());
             return StrataStart::Ready;
         }
         on(Progress::Step(format!(
