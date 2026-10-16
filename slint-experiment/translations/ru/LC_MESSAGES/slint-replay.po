@@ -2922,3 +2922,12 @@ msgstr "Прятать окна Суфлёра от захвата экрана"
 
 msgid "Press Print Screen or open a screen-share preview: Suflyor windows should disappear from the capture and stay on your screen. This cannot be checked automatically."
 msgstr "Нажмите Print Screen или откройте предпросмотр демонстрации экрана: окна Суфлёра должны пропасть из снимка и остаться на вашем экране. Автоматически это не проверить."
+
+msgid "glossary"
+msgstr "глоссарий"
+
+msgid "commands"
+msgstr "команды"
+
+msgid "patterns"
+msgstr "шаблоны"

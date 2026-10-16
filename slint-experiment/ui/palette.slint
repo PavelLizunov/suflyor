@@ -208,12 +208,20 @@ export component PaletteWindow inherits Window {
                                         font-weight: 700;
                                         color: i == root.selected-index ? Theme.accent : Theme.text-secondary;
                                         vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                        overflow: elide;
                                     }
+                                    // The kind sits in one right-hand column on every row.
                                     Text {
-                                        text: result.source;
-                                        font-size: 9px;
+                                        text: result.source == "glossary" ? @tr("glossary")
+                                            : result.source == "commands" ? @tr("commands")
+                                            : result.source == "patterns" ? @tr("patterns")
+                                            : result.source;
+                                        font-size: Metrics.font-caption;
                                         color: Theme.text-muted;
                                         vertical-alignment: center;
+                                        horizontal-alignment: right;
+                                        horizontal-stretch: 0;
                                     }
                                 }
                                 Text {

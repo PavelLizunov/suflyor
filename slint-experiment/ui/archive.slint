@@ -333,6 +333,12 @@ export component ArchiveWindow inherits Window {
                                             color: Theme.text-muted;
                                             vertical-alignment: center;
                                         }
+                                        // Open first, edit next, delete last and set apart.
+                                        if root.renaming-index != i : RowIcon {
+                                            icon: @image-url("../assets/icons/bubble.svg");
+                                            a11y: @tr("View transcript");
+                                            clicked => { root.transcript-requested(i); }
+                                        }
                                         if root.renaming-index != i : RowIcon {
                                             icon: @image-url("../assets/icons/pencil.svg");
                                             a11y: @tr("Rename session");
@@ -343,15 +349,11 @@ export component ArchiveWindow inherits Window {
                                             a11y: @tr("Regenerate name from transcript");
                                             clicked => { root.regen-name-requested(i); }
                                         }
+                                        if root.renaming-index != i : Rectangle { width: Metrics.space-sm; }
                                         if root.renaming-index != i : RowIcon {
                                             icon: @image-url("../assets/icons/trash.svg");
                                             a11y: @tr("Delete session");
                                             clicked => { root.delete-requested(i); }
-                                        }
-                                        if root.renaming-index != i : RowIcon {
-                                            icon: @image-url("../assets/icons/bubble.svg");
-                                            a11y: @tr("View transcript");
-                                            clicked => { root.transcript-requested(i); }
                                         }
                                     }
                                     Text {
