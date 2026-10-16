@@ -19,6 +19,26 @@ Operational note: Windows jobs follow
 because SSH or a terminal disconnected. macOS builds and live QA run only on
 `mm4`; Windows compilation and the repository gate run only on `winbrat`.
 
+## Fast live answers — branch `claude/auto-tile-stream` (2026-10-17)
+
+Open pull request, not on master yet. The owner reported that on a call an auto tile appeared
+about 10 s after the question with a local Strata model. Cause: the auto-tile path asked the
+model for the whole answer (`complete_with_usage_endpoint`) and opened the tile only after it.
+
+- Auto tiles open at the trigger and stream the answer in (`auto-tile:stream|fill|drop` bridge
+  channels, `SpawnAction::Fill/Drop` in the spawn timer reuse the same window).
+- `ai_fast_answers` (default on, Settings → auto tiles): short prompt, one-line answer first,
+  400-token limit; its system prompt is stable per session.
+- `ai::local_server`: detects Strata / llama.cpp / Ollama; Strata gets `strata_prefix` (pinned
+  system prompt) and one-shot calls `strata_checkpoint=false`; during a session the fast
+  prompt is primed at start and after other requests; Ollama is asked to keep the model 30 min.
+- QA builds (`--features ui-mcp`) can replay transcript lines from `SUFLYOR_QA_TRANSCRIPT`
+  instead of audio, which is how the auto-tile path was checked live on winbrat.
+- Measured on X3D Strata (Swift 1.5 Qwen3.8 Flash-Next IQ3_S): first token 0.55 s from the
+  request with the cache hit, whole answer about 2 s; before, the tile appeared after 6–10 s.
+- Not changed: F9 and typed asks (own prompt, KB, tools). Strata serves one sequence: a long
+  manual answer in progress delays an auto tile.
+
 ## Bar redesign withdrawn (2026-10-12)
 
 Pull request #253 (capsule bar, released as `v0.38.1-rc.6`) is reverted on master. The owner
