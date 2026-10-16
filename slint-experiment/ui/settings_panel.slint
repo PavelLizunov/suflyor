@@ -938,25 +938,36 @@ export component SettingsWindow inherits Window {
                 x: parent.width - self.width - 18px;
                 y: parent.height - self.height - 22px;
             }
+            // The page title stays put while the tab scrolls, so the corner
+            // Close button never floats over a card.
+            page-head := VerticalLayout {
+                y: 0;
+                width: parent.width;
+                height: self.preferred-height;
+                padding: Metrics.space-lg;
+                padding-bottom: Metrics.space-md;
+                spacing: Metrics.space-md;
+                Text {
+                    text: root.active-tab == 4 && Platform.is-macos
+                        ? @tr("Backup")
+                        : tab-name-for(root.active-tab);
+                    font-size: Metrics.font-heading;
+                    font-weight: 700;
+                    color: Theme.text-primary;
+                }
+                Rectangle { background: Theme.border; height: 1px; }
+            }
             content-scroll := ScrollView {
+                y: page-head.height;
+                height: parent.height - page-head.height;
                 VerticalLayout {
                     padding: Metrics.space-lg;
+                    padding-top: 0;
                     spacing: Metrics.space-md;
                     // A short tab keeps its natural height: the free space stays
                     // below it instead of being spread between captions and
                     // stretching buttons inside the cards.
                     alignment: start;
-
-                    // Header
-                    Text {
-                        text: root.active-tab == 4 && Platform.is-macos
-                            ? @tr("Backup")
-                            : tab-name-for(root.active-tab);
-                        font-size: Metrics.font-heading;
-                        font-weight: 700;
-                        color: Theme.text-primary;
-                    }
-                    Rectangle { background: Theme.border; height: 1px; }
 
                     // Tab content
                     if root.active-tab == 0 : VerticalLayout {
@@ -982,14 +993,13 @@ export component SettingsWindow inherits Window {
                                 toggled(v) => { root.stealth-changed(v); }
                             }
                             // Report verified capture exclusion, not just the toggle intent.
-                            if !Platform.is-macos : Text {
+                            // Only while the toggle is on: off needs no second line.
+                            if !Platform.is-macos && root.stealth-toggle : Text {
                                 text: root.stealth-effective
                                     ? @tr("On, hidden from capture")
-                                    : root.stealth-toggle
-                                        ? @tr("Capture hiding unavailable")
-                                        : @tr("Off");
+                                    : @tr("Capture hiding unavailable");
                                 font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
+                                color: root.stealth-effective ? Theme.text-secondary : Theme.warning;
                                 wrap: word-wrap;
                             }
                         }
@@ -1096,7 +1106,7 @@ export component SettingsWindow inherits Window {
                         for row in [
                             { label: @tr("AI (answers)"), level: root.diag-ai-level, detail: root.diag-ai-detail },
                             { label: @tr("Speech recognition (STT)"), level: root.diag-stt-level, detail: root.diag-stt-detail },
-                            { label: @tr("Vision (F8)"), level: root.diag-vision-level, detail: root.diag-vision-detail == "" ? @tr("off") : root.diag-vision-detail },
+                            { label: @tr("Screenshots (F8)"), level: root.diag-vision-level, detail: root.diag-vision-detail == "" ? @tr("off") : root.diag-vision-detail },
                             { label: @tr("Microphone"), level: root.diag-mic-level, detail: root.diag-mic-detail == "" ? @tr("default") : root.diag-mic-detail },
                             { label: @tr("System audio"), level: root.diag-sys-level, detail: root.diag-sys-detail == "" ? @tr("default") : root.diag-sys-detail },
                             // Detail precedence is load-bearing: registering (level 3) → conflict (failed non-empty) → ok list → unavailable. Keep `failed` checked BEFORE `detail` so a conflict is never hidden behind the registered list.
@@ -1169,16 +1179,25 @@ export component SettingsWindow inherits Window {
                                 vertical-alignment: center;
                             }
                         }
-                        // ── База данных — бэкап-first ремонт + намеренные очистки.
-                        // Each button on its OWN row: the wide RU labels overflowed a
-                        // single HorizontalLayout (which does not wrap) — the "уехал" bug.
-                        Rectangle { height: 6px; }
                         Text {
-                            text: @tr("Database");
-                            font-size: Metrics.font-label;
-                            font-weight: 700;
+                            text: @tr("“Check all” pings AI + STT, records the mic, and plays a test tone to verify system-audio capture. Speak during the check to see the mic level — you don't need to play anything yourself.");
+                            font-size: Metrics.font-caption;
                             color: Theme.text-muted;
+                            wrap: word-wrap;
                         }
+                        // "Собрать логи" result — the full saved path, wrapping, so
+                        // the tester can read/copy it (the reveal is best-effort).
+                        if root.diag-logs-path != "" : Text {
+                            text: root.diag-logs-path;
+                            font-size: Metrics.font-label;
+                            color: Theme.success;
+                            wrap: word-wrap;
+                        }
+                        }
+
+                        // Backup-first repair and deliberate clean-ups, one button per row.
+                        SettingsCard {
+                            title: @tr("Database");
                         HorizontalLayout {
                             Button {
                                 text: @tr("Check & repair database");
@@ -1224,20 +1243,6 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
-                        // "Собрать логи" result — the full saved path, wrapping, so
-                        // the tester can read/copy it (the reveal is best-effort).
-                        if root.diag-logs-path != "" : Text {
-                            text: root.diag-logs-path;
-                            font-size: Metrics.font-label;
-                            color: Theme.success;
-                            wrap: word-wrap;
-                        }
-                        Text {
-                            text: @tr("“Check all” pings AI + STT, records the mic, and plays a test tone to verify system-audio capture. Speak during the check to see the mic level — you don't need to play anything yourself.");
-                            font-size: Metrics.font-caption;
-                            color: Theme.text-muted;
-                            wrap: word-wrap;
-                        }
                         }
                     }
                     if root.active-tab == 3 : VerticalLayout {
@@ -1277,7 +1282,7 @@ export component SettingsWindow inherits Window {
                                     changed(v) => { root.tile-body-opacity-changed(v); }
                                 }
                                 Text {
-                                    text: @tr("Tile opacity ({}%)", Math.round(root.tile-body-opacity * 100));
+                                    text: Math.round(root.tile-body-opacity * 100) + "%";
                                     font-size: Metrics.font-caption;
                                     color: Theme.text-secondary;
                                 }
@@ -1328,6 +1333,7 @@ export component SettingsWindow inherits Window {
                             height: 32px;
                             Text {
                                 text: @tr("Engine:");
+                                width: 96px;
                                 font-size: Metrics.font-label;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
@@ -1346,6 +1352,7 @@ export component SettingsWindow inherits Window {
                             height: 32px;
                             Text {
                                 text: @tr("Voice:");
+                                width: 96px;
                                 font-size: Metrics.font-label;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
@@ -1424,6 +1431,7 @@ export component SettingsWindow inherits Window {
                             height: 32px;
                             Text {
                                 text: @tr("Voice:");
+                                width: 96px;
                                 font-size: Metrics.font-label;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
@@ -1468,6 +1476,7 @@ export component SettingsWindow inherits Window {
                             height: 32px;
                             Text {
                                 text: @tr("Speed:");
+                                width: 96px;
                                 font-size: Metrics.font-label;
                                 color: Theme.text-secondary;
                                 vertical-alignment: center;
@@ -1499,6 +1508,12 @@ export component SettingsWindow inherits Window {
                         spacing: 10px;
                         if !Platform.is-macos : SettingsCard {
                         title: @tr("Updates");
+                        Text {
+                            text: @tr("Version: {}", root.app-version);
+                            font-size: Metrics.font-caption;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
                         Text {
                             text: @tr("Check GitHub for a newer release. If one is found you can download + install it in one click (the app restarts).");
                             font-size: Metrics.font-label;
@@ -1536,7 +1551,8 @@ export component SettingsWindow inherits Window {
 
                         SettingsCard {
                             title: @tr("Backup and transfer");
-                        Text {
+                        // Windows shows the version in the Updates card.
+                        if Platform.is-macos : Text {
                             text: @tr("Version: {}", root.app-version);
                             font-size: Metrics.font-caption;
                             color: Theme.text-muted;
@@ -2018,7 +2034,6 @@ export component SettingsWindow inherits Window {
                             wrap: word-wrap;
                         }
                         if !root.diar-models-installed : HorizontalLayout {
-                            alignment: start;
                             Button {
                                 text: root.diar-installing ? @tr("Installing…") : @tr("Install speaker models");
                                 enabled: !root.diar-installing;
@@ -3232,79 +3247,91 @@ export component SettingsWindow inherits Window {
                         // The wrapped text is a direct child of the page layout: inside the conditional
                         // block below its second line was not counted and the next control overlapped.
                         if root.vision-provider-index == 2 : Text {
-                            text: @tr("Screenshots are sent to the cloud. Leave a field blank to reuse the text bridge's value.");
+                            text: @tr("Screenshots go to this server. Blank fields reuse the answers bridge.");
                             font-size: Metrics.font-caption;
                             color: Theme.warning;
                             wrap: word-wrap;
                         }
                         if root.vision-provider-index == 2 : VerticalLayout {
                             spacing: Metrics.space-sm;
-                            HorizontalLayout {
-                                spacing: 6px;
+                            SettingsRow {
+                                label: @tr("Server address");
                                 SettingsLineEdit {
-                                    placeholder-text: @tr("vision base URL (blank = text bridge)");
+                                    placeholder-text: @tr("blank = same as the answers bridge");
                                     text <=> root.vision-base-url-input;
-                                    horizontal-stretch: 1;
                                 }
-                                Button { text: @tr("Save"); clicked => { root.vision-base-url-save(root.vision-base-url-input); } }
                             }
-                            HorizontalLayout {
-                                spacing: 6px;
+                            SettingsRow {
+                                label: @tr("API key");
                                 SettingsLineEdit {
-                                    placeholder-text: @tr("vision bearer (blank = text bridge)");
+                                    placeholder-text: @tr("type a new key to replace it");
                                     text <=> root.vision-bearer-input;
                                     input-type: password;
-                                    horizontal-stretch: 1;
                                 }
-                                Button { text: @tr("Save"); clicked => { root.vision-bearer-save(root.vision-bearer-input); root.vision-bearer-input = ""; } }
                             }
-                            HorizontalLayout {
-                                spacing: 6px;
+                            SettingsRow {
+                                label: @tr("Model name");
                                 SettingsLineEdit {
-                                    placeholder-text: @tr("vision model (blank = claude-sonnet-4-6)");
+                                    placeholder-text: @tr("blank = claude-sonnet-4-6");
                                     text <=> root.vision-model-input;
-                                    horizontal-stretch: 1;
                                 }
-                                Button { text: @tr("Save"); clicked => { root.vision-model-save(root.vision-model-input); } }
+                            }
+                            // One Save for the group; an empty key field keeps the stored key.
+                            Button {
+                                text: @tr("Save");
+                                clicked => {
+                                    root.vision-base-url-save(root.vision-base-url-input);
+                                    root.vision-model-save(root.vision-model-input);
+                                    if (root.vision-bearer-input != "") {
+                                        root.vision-bearer-save(root.vision-bearer-input);
+                                        root.vision-bearer-input = "";
+                                    }
+                                }
                             }
                         }
                         // The wrapped text is a direct child of the page layout: inside the conditional
                         // block below its second line was not counted and the next control overlapped.
                         if root.vision-provider-index == 3 : Text {
-                            text: @tr("A 2nd local OpenAI-compatible server running a vision model (e.g. Qwen2-VL). Blank = reuse the text-local server.");
+                            text: @tr("A second server on this PC with a model that understands images (e.g. Qwen2-VL). Blank fields reuse the answers server.");
                             font-size: Metrics.font-caption;
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
                         if root.vision-provider-index == 3 : VerticalLayout {
                             spacing: Metrics.space-sm;
-                            HorizontalLayout {
-                                spacing: 6px;
+                            SettingsRow {
+                                label: @tr("Server address");
                                 SettingsLineEdit {
-                                    placeholder-text: @tr("vision local URL — http://127.0.0.1:8082/v1");
+                                    placeholder-text: "http://127.0.0.1:8082/v1";
                                     text <=> root.vision-local-base-url-input;
-                                    horizontal-stretch: 1;
                                 }
-                                Button { text: @tr("Save"); clicked => { root.vision-local-base-url-save(root.vision-local-base-url-input); } }
                             }
-                            HorizontalLayout {
-                                spacing: 6px;
+                            SettingsRow {
+                                label: @tr("Model name");
                                 SettingsLineEdit {
-                                    placeholder-text: @tr("vision local model id");
+                                    placeholder-text: @tr("e.g. qwen2-vl");
                                     text <=> root.vision-local-model-input;
-                                    horizontal-stretch: 1;
                                 }
-                                Button { text: @tr("Save"); clicked => { root.vision-local-model-save(root.vision-local-model-input); } }
                             }
-                            HorizontalLayout {
-                                spacing: 6px;
+                            SettingsRow {
+                                label: @tr("API key");
                                 SettingsLineEdit {
-                                    placeholder-text: @tr("vision local bearer (optional)");
+                                    placeholder-text: @tr("optional");
                                     text <=> root.vision-local-bearer-input;
                                     input-type: password;
-                                    horizontal-stretch: 1;
                                 }
-                                Button { text: @tr("Save"); clicked => { root.vision-local-bearer-save(root.vision-local-bearer-input); root.vision-local-bearer-input = ""; } }
+                            }
+                            // One Save for the group; an empty key field keeps the stored key.
+                            Button {
+                                text: @tr("Save");
+                                clicked => {
+                                    root.vision-local-base-url-save(root.vision-local-base-url-input);
+                                    root.vision-local-model-save(root.vision-local-model-input);
+                                    if (root.vision-local-bearer-input != "") {
+                                        root.vision-local-bearer-save(root.vision-local-bearer-input);
+                                        root.vision-local-bearer-input = "";
+                                    }
+                                }
                             }
                         }
                         if root.vision-provider-index == 4 : Text {
@@ -3392,7 +3419,7 @@ export component SettingsWindow inherits Window {
                         }
                         if root.vision-provider-index >= 1 : HorizontalLayout {
                             spacing: 6px;
-                            Button { text: @tr("Test vision connection"); clicked => { root.vision-test-clicked(); } }
+                            Button { text: @tr("Test screenshot model"); clicked => { root.vision-test-clicked(); } }
                             if root.vision-test-result != "" : Text {
                                 text: root.vision-test-result;
                                 font-size: Metrics.font-label;

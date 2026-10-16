@@ -2766,3 +2766,36 @@ msgstr "{} записей: глоссарий, команды и шаблоны.
 
 msgid "Entries: {}. Glossary, commands and patterns ship with the app."
 msgstr "Записей: {}. Глоссарий, команды и шаблоны входят в приложение."
+
+msgid "Screenshots go to this server. Blank fields reuse the answers bridge."
+msgstr "Скриншоты уходят на этот сервер. Пустые поля берутся из моста для ответов."
+
+msgid "Server address"
+msgstr "Адрес сервера"
+
+msgid "blank = same as the answers bridge"
+msgstr "пусто — как у моста для ответов"
+
+msgid "API key"
+msgstr "Ключ API"
+
+msgid "type a new key to replace it"
+msgstr "введите новый ключ, чтобы заменить"
+
+msgid "Model name"
+msgstr "Модель"
+
+msgid "blank = claude-sonnet-4-6"
+msgstr "пусто — claude-sonnet-4-6"
+
+msgid "A second server on this PC with a model that understands images (e.g. Qwen2-VL). Blank fields reuse the answers server."
+msgstr "Второй сервер на этом ПК с моделью, которая понимает картинки (например, Qwen2-VL). Пустые поля берутся у сервера ответов."
+
+msgid "e.g. qwen2-vl"
+msgstr "например, qwen2-vl"
+
+msgid "optional"
+msgstr "необязательно"
+
+msgid "Test screenshot model"
+msgstr "Проверить модель скриншотов"

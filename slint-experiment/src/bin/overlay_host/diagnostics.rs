@@ -39,7 +39,9 @@ pub(crate) fn populate_diagnostics(
     let c = cfg.read();
     let r = c.readiness();
     win.set_diag_summary(SharedString::from(settings_readiness_summary(&c)));
-    win.set_diag_ai_level(if r.ai.configured { 0 } else { 2 });
+    // A filled-in endpoint is not proof the model answers (the engine may not
+    // be installed yet): stay neutral until "Check all" pings it, like mic/sys.
+    win.set_diag_ai_level(if r.ai.configured { 3 } else { 2 });
     win.set_diag_ai_detail(SharedString::from(if r.ai.configured {
         settings_ai_detail(&c)
     } else {
