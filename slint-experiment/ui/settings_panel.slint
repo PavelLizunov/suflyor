@@ -1509,12 +1509,6 @@ export component SettingsWindow inherits Window {
                         if !Platform.is-macos : SettingsCard {
                         title: @tr("Updates");
                         Text {
-                            text: @tr("Version: {}", root.app-version);
-                            font-size: Metrics.font-caption;
-                            color: Theme.text-muted;
-                            wrap: word-wrap;
-                        }
-                        Text {
                             text: @tr("Check GitHub for a newer release. If one is found you can download + install it in one click (the app restarts).");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
@@ -1551,8 +1545,7 @@ export component SettingsWindow inherits Window {
 
                         SettingsCard {
                             title: @tr("Backup and transfer");
-                        // Windows shows the version in the Updates card.
-                        if Platform.is-macos : Text {
+                        Text {
                             text: @tr("Version: {}", root.app-version);
                             font-size: Metrics.font-caption;
                             color: Theme.text-muted;
