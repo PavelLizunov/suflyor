@@ -106,10 +106,15 @@ pub async fn detect_kind(base_url: &str) -> ServerKind {
         return kind;
     }
     let root = server_root(base_url).to_string();
+    let (health_url, props_url, version_url) = (
+        format!("{root}/health"),
+        format!("{root}/props"),
+        format!("{root}/api/version"),
+    );
     let (health, props, version) = tokio::join!(
-        get_json(&format!("{root}/health")),
-        get_json(&format!("{root}/props")),
-        get_json(&format!("{root}/api/version")),
+        get_json(&health_url),
+        get_json(&props_url),
+        get_json(&version_url),
     );
     let kind = kind_from_replies(health.as_ref(), props.as_ref(), version.as_ref());
     log::info!("local AI server kind: {kind:?}");
