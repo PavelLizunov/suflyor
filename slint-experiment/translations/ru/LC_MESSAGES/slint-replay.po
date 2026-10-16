@@ -2979,3 +2979,9 @@ msgstr "Тонкая настройка"
 
 msgid "Almost done: check the marked items"
 msgstr "Почти готово: проверьте отмеченное"
+
+msgid "Fast answers for calls and interviews"
+msgstr "Быстрые ответы для созвонов и собеседований"
+
+msgid "A one-line answer first, then two or three points."
+msgstr "Сначала ответ одной строкой, затем 2–3 пункта."
