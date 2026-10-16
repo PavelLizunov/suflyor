@@ -5,7 +5,7 @@ This release candidate is v0.38.1-rc.8 plus the local-model work, the Settings r
 ## Local AI
 
 - **Strata engine.** Settings > AI providers can install and run the Strata server with Qwen3.8, or use a Strata folder or server that is already on the PC.
-- **Already on this PC.** Running Ollama, LM Studio, Jan, KoboldCpp, GPT4All and llama.cpp servers are found on their usual ports and offered with one click.
+- **Already on this PC.** Running Ollama, LM Studio, Jan, KoboldCpp, GPT4All and text-generation-webui servers are found on their usual ports and offered with one click.
 - **One model list.** "Now answering" shows which model answers and whether it responds; "Choose a model" lists what is on this PC and what can be downloaded.
 - **Model tools.** The local model can search the knowledge base and personal memory (on by default) and the web through DuckDuckGo (off by default).
 - **Deep lock** also unloads Strata.
