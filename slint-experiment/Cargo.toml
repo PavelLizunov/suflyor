@@ -168,7 +168,6 @@ clipboard-win = "5"
 # inspect the UI tree, take screenshots, click, and type — replaces
 # visual_check.ps1 + computer-use.
 i-slint-backend-testing = "~1.17"
-tempfile = "3"
 
 [lints.clippy]
 # Tier 3 lint baseline (unwrap/expect/panic denied). `deny` (not `forbid`) so

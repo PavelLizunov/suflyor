@@ -1330,8 +1330,13 @@ mod tests {
     fn collect_redacted_log_write_private_enforces_owner_only_permissions() {
         use std::os::unix::fs::PermissionsExt;
 
-        let tmp = tempfile::tempdir().unwrap();
-        let log_file = tmp.path().join("suflyor-log.txt");
+        let log_file = std::env::temp_dir().join(format!(
+            "suflyor-log-test-{}.txt",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
         let content = "redacted log contents";
 
         overlay_backend::paths::write_private(&log_file, content.as_bytes()).unwrap();
@@ -1341,6 +1346,7 @@ mod tests {
             .permissions()
             .mode()
             & 0o777;
+        let _ = std::fs::remove_file(&log_file);
         assert_eq!(mode, 0o600, "exported log file must have 0600 permissions on POSIX");
     }
 }
