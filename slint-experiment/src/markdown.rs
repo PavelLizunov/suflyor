@@ -743,7 +743,8 @@ mod tests {
         assert!(blocks.iter().any(|block| {
             block.kind == kind::CODE
                 && block.text.trim_end_matches('\n') == "c_{ij} = \\sum_{k=1}^{n}"
-                && block.display_text == block.text
+                // Code is shown verbatim, minus the fence's trailing newline.
+                && block.display_text == block.text.trim_end_matches('\n')
         }));
     }
 
