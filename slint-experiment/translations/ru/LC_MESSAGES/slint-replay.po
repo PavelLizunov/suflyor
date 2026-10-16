@@ -2417,13 +2417,13 @@ msgid "Rename session"
 msgstr "Переименовать сессию"
 
 msgid "Regenerate name from transcript"
-msgstr "Придумать название по расшифровке"
+msgstr "Придумать название по стенограмме"
 
 msgid "Delete session"
 msgstr "Удалить сессию"
 
 msgid "View transcript"
-msgstr "Открыть расшифровку"
+msgstr "Открыть стенограмму"
 
 # Local engine choice and Strata (ADR-003, P4)
 msgid "Built-in engine (llama.cpp)"

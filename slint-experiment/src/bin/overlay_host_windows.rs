@@ -3196,7 +3196,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     if let Some(t) = weak.upgrade() {
                         t.set_voice_recording(false);
                         t.set_followup_busy(false);
-                        t.set_source_label(SharedString::from("stt · ничего не распознано"));
+                        t.set_source_label(SharedString::from("STT · ничего не распознано"));
                     }
                     continue;
                 }
