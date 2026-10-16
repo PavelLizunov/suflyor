@@ -89,7 +89,7 @@ wasapi = "0.25"
 # no longer compiles against it. These are the versions of
 # slint-experiment/Cargo.lock, which the product is built from.
 transcribe-rs = { version = "=0.3.11", default-features = false, features = ["onnx", "ort-directml"] }
-ort = { version = "=2.0.0-rc.12", default-features = false }
+ort = { version = "=2.0.0-rc.14", default-features = false }
 
 # Text-to-speech (tts.rs, read-aloud feature) — Windows SAPI 5 ISpVoice via the
 # official Win32 binding, feature-gated to just the Speech + COM namespaces it
@@ -125,7 +125,7 @@ windows-core = "0.62"
 # no longer compiles against it. These are the versions of
 # slint-experiment/Cargo.lock, which the product is built from.
 transcribe-rs = { version = "=0.3.11", default-features = false, features = ["onnx", "ort-coreml"] }
-ort = { version = "=2.0.0-rc.12", default-features = false }
+ort = { version = "=2.0.0-rc.14", default-features = false }
 
 # macOS-only BUILD dependency — compiles the tiny Objective-C AVAudioEngine
 # microphone bridge (native/macos/mic_capture.m) via build.rs. No new runtime
