@@ -20,7 +20,7 @@
 
 import { Button, ScrollView, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { CloseButton, DragGrip } from "controls.slint";
+import { CloseButton, DragGrip, WindowHeader } from "controls.slint";
 import { Metrics } from "metrics.slint";
 
 export component RecoverOfferWindow inherits Window {
@@ -65,46 +65,17 @@ export component RecoverOfferWindow inherits Window {
         }
 
         VerticalLayout {
-            padding: Metrics.space-lg;   // was 16px
+            padding: Metrics.space-md;
             spacing: Metrics.space-md;   // was 12px
 
             // Header row: title + explicit close (ASCII "X" — ✕ U+2715 is a
             // missing-glyph box on the Slint+skia fallback, same as the bar's
             // Quit + the tile close).
-            HorizontalLayout {
-                spacing: Metrics.space-sm;   // was 8px
-                Rectangle {
-                    horizontal-stretch: 1;
-                    height: 30px;
-                    TouchArea {
-                        mouse-cursor: grab;
-                        pointer-event(ev) => {
-                            if (ev.button == PointerEventButton.left
-                                && ev.kind == PointerEventKind.down) {
-                                root.drag-start-requested();
-                            }
-                        }
-                        moved => { if (self.pressed) { root.drag-moved(); } }
-                    }
-                    HorizontalLayout {
-                        spacing: Metrics.space-sm;
-                        Rectangle {
-                            width: 13px;
-                            height: 30px;
-                            DragGrip { y: 2px; }
-                        }
-                        Text {
-                            text: @tr("Restore the previous session?");
-                            color: Theme.text-primary;
-                            font-size: 15px;   // one-off heading size; no exact token (font-heading=18)
-                            font-weight: 700;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
-                CloseButton {
-                    clicked => { root.dismissed(); }
-                }
+            WindowHeader {
+                title: @tr("Restore the previous session?");
+                drag-start => { root.drag-start-requested(); }
+                drag-move => { root.drag-moved(); }
+                close => { root.dismissed(); }
             }
 
             Text {

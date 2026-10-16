@@ -1,7 +1,7 @@
 import { ScrollView, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Platform } from "platform.slint";
-import { BrandHeaderMark, CloseButton, DragGrip } from "controls.slint";
+import { BrandHeaderMark, CloseButton, DragGrip, WindowHeader } from "controls.slint";
 import { Metrics } from "metrics.slint";
 
 component IconSlot inherits Rectangle {
@@ -41,7 +41,6 @@ component TableHeader inherits Rectangle {
             border-width: 0px;
             Text {
                 text: root.left;
-                font-family: Theme.font-mono;
                 font-size: Metrics.font-caption;
                 font-weight: 700;
                 color: Theme.text-muted;
@@ -55,14 +54,16 @@ component TableHeader inherits Rectangle {
                 background: Theme.border;
             }
         }
-        Text {
-            text: root.right;
-            font-family: Theme.font-mono;
-            font-size: Metrics.font-caption;
-            font-weight: 700;
-            color: Theme.text-muted;
-            vertical-alignment: center;
+        HorizontalLayout {
             horizontal-stretch: 1;
+            padding-left: Metrics.space-md;
+            Text {
+                text: root.right;
+                font-size: Metrics.font-caption;
+                font-weight: 700;
+                color: Theme.text-muted;
+                vertical-alignment: center;
+            }
         }
     }
 }
@@ -121,13 +122,18 @@ component TableRow inherits Rectangle {
                 background: Theme.border;
             }
         }
-        Text {
-            text: root.desc;
-            font-size: Metrics.font-body;
-            color: Theme.text-secondary;
-            wrap: word-wrap;
-            vertical-alignment: center;
+        // The description keeps clear of the column line on both sides.
+        HorizontalLayout {
             horizontal-stretch: 1;
+            padding-left: Metrics.space-md;
+            padding-right: Metrics.space-sm;
+            Text {
+                text: root.desc;
+                font-size: Metrics.font-body;
+                color: Theme.text-secondary;
+                wrap: word-wrap;
+                vertical-alignment: center;
+            }
         }
     }
 }
@@ -160,51 +166,14 @@ export component HelpWindow inherits Window {
         }
 
         VerticalLayout {
-            padding: Metrics.space-lg;
-            spacing: 10px;
+            padding: Metrics.space-md;
+            spacing: Metrics.space-sm;
 
-            HorizontalLayout {
-                spacing: Metrics.space-sm;
-                Rectangle {
-                    horizontal-stretch: 1;
-                    height: 30px;
-                    TouchArea {
-                        mouse-cursor: grab;
-                        pointer-event(ev) => {
-                            if (ev.button == PointerEventButton.left
-                                && ev.kind == PointerEventKind.down) {
-                                root.drag-start-requested();
-                            }
-                        }
-                        moved => {
-                            if (self.pressed) { root.drag-moved(); }
-                        }
-                    }
-                    HorizontalLayout {
-                        spacing: 7px;
-                        alignment: start;
-                        Rectangle {
-                            width: 22px;
-                            height: 30px;
-                            BrandHeaderMark { y: 4px; mark-size: 22px; }
-                        }
-                        Rectangle {
-                            width: 13px;
-                            height: 30px;
-                            DragGrip { y: 2px; }
-                        }
-                        Text {
-                            text: @tr("Help");
-                            font-size: 15px;
-                            font-weight: 700;
-                            color: Theme.text-primary;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
-                CloseButton {
-                    clicked => { root.cancelled(); }
-                }
+            WindowHeader {
+                title: @tr("Help");
+                drag-start => { root.drag-start-requested(); }
+                drag-move => { root.drag-moved(); }
+                close => { root.cancelled(); }
             }
 
             Rectangle { background: Theme.border; height: 1px; }

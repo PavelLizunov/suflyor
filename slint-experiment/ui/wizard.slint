@@ -18,7 +18,7 @@
 import { Button, Switch, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { Metrics } from "metrics.slint";
-import { BrandHeaderMark, CloseButton, DragGrip } from "controls.slint";
+import { BrandHeaderMark, CloseButton, DragGrip, WindowHeader } from "controls.slint";
 
 // One row in the left progress rail. state: 0 future · 1 current · 2 done.
 component RailStep inherits Rectangle {
@@ -216,47 +216,16 @@ export component WizardWindow inherits Window {
             // ===================== Step content =====================
             VerticalLayout {
                 horizontal-stretch: 1;
-                padding: 20px;
-                spacing: 14px;
+                padding: Metrics.space-md;
+                spacing: Metrics.space-md;
 
-                // Header: brand · grip · step counter + corner close. Doubles
-                // as the drag handle (frameless — no native title bar); the
-                // TouchArea sits BEHIND the row so the CloseButton on top still
-                // captures its own clicks (same idiom as Settings).
-                Rectangle {
-                    height: 26px;
-                    TouchArea {
-                        mouse-cursor: grab;
-                        pointer-event(ev) => {
-                            if (ev.button == PointerEventButton.left
-                                && ev.kind == PointerEventKind.down) {
-                                root.drag-start-requested();
-                            }
-                        }
-                        moved => { if (self.pressed) { root.drag-moved(); } }
-                    }
-                    HorizontalLayout {
-                        spacing: 7px;
-                        Rectangle {
-                            width: 22px;
-                            height: 26px;
-                            BrandHeaderMark { y: 2px; mark-size: 22px; }
-                        }
-                        DragGrip { }
-                        Text {
-                            text: @tr("Step {} of 7", root.step + 1);
-                            color: Theme.text-secondary;
-                            font-size: Metrics.font-body;
-                            font-weight: 600;
-                            vertical-alignment: center;
-                        }
-                        Rectangle { horizontal-stretch: 1; }
-                        CloseButton {
-                            box: 26px;
-                            glyph: 14px;
-                            clicked => { root.cancelled(); }
-                        }
-                    }
+                // Header: the shared WindowHeader; the step counter is its note.
+                WindowHeader {
+                    title: @tr("Setup wizard");
+                    note: @tr("Step {} of 7", root.step + 1);
+                    drag-start => { root.drag-start-requested(); }
+                    drag-move => { root.drag-moved(); }
+                    close => { root.cancelled(); }
                 }
 
                 // Step card (exactly one panel visible)

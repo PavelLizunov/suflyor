@@ -9,7 +9,7 @@
 
 import { LineEdit, ScrollView, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { BrandHeaderMark, CloseButton, DragGrip } from "controls.slint";
+import { BrandHeaderMark, CloseButton, DragGrip, WindowHeader } from "controls.slint";
 import { Metrics } from "metrics.slint";
 
 export struct PaletteResult {
@@ -104,43 +104,11 @@ export component PaletteWindow inherits Window {
                 padding: Metrics.space-md;   // was 12px
                 spacing: Metrics.space-sm;   // was 8px
 
-                HorizontalLayout {
-                    spacing: Metrics.space-sm;
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        height: 30px;
-                        TouchArea {
-                            mouse-cursor: grab;
-                            pointer-event(ev) => {
-                                if (ev.button == PointerEventButton.left
-                                    && ev.kind == PointerEventKind.down) {
-                                    root.drag-start-requested();
-                                }
-                            }
-                            moved => { if (self.pressed) { root.drag-moved(); } }
-                        }
-                        HorizontalLayout {
-                            spacing: 7px;
-                            Rectangle {
-                                width: 22px;
-                                height: 30px;
-                                BrandHeaderMark { y: 4px; mark-size: 22px; }
-                            }
-                            Rectangle {
-                                width: 13px;
-                                height: 30px;
-                                DragGrip { y: 2px; }
-                            }
-                            Text {
-                                text: @tr("Knowledge palette");
-                                font-size: 15px;
-                                font-weight: 700;
-                                color: Theme.text-primary;
-                                vertical-alignment: center;
-                            }
-                        }
-                    }
-                    CloseButton { clicked => { root.close-requested(); } }
+                WindowHeader {
+                    title: @tr("Knowledge palette");
+                    drag-start => { root.drag-start-requested(); }
+                    drag-move => { root.drag-moved(); }
+                    close => { root.close-requested(); }
                 }
 
                 // Input field
