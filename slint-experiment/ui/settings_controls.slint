@@ -121,13 +121,17 @@ export component SettingsRow inherits Rectangle {
     preferred-height: row.preferred-height;
     row := HorizontalLayout {
         spacing: Metrics.space-sm;
-        Text {
-            text: root.label;
+        VerticalLayout {
             width: 132px;
             horizontal-stretch: 0;
-            font-size: Metrics.font-label;
-            color: Theme.text-secondary;
-            vertical-alignment: center;
+            alignment: start;
+            Text {
+                text: root.label;
+                height: 32px;
+                font-size: Metrics.font-label;
+                color: Theme.text-secondary;
+                vertical-alignment: center;
+            }
         }
         VerticalLayout {
             horizontal-stretch: 1;
@@ -239,7 +243,7 @@ export component LocalModelRow inherits Rectangle {
                     wrap: word-wrap;
                 }
             }
-            Text {
+            if root.chip != "" : Text {
                 width: 96px;
                 horizontal-stretch: 0;
                 text: root.chip;
@@ -279,6 +283,27 @@ export component LocalModelRow inherits Rectangle {
                 text: @tr("Cancel");
                 clicked => { root.cancel-clicked(); }
             }
+        }
+    }
+}
+
+// Keep native button activation and accessibility; only replace its visuals.
+export component SettingsDangerButton inherits Button {
+    Rectangle {
+        width: root.width;
+        height: root.height;
+        border-radius: Metrics.radius-control;
+        border-width: Metrics.border-thin;
+        border-color: Theme.danger.with-alpha(root.has-focus || root.pressed ? 1 : 0.55);
+        background: Theme.bg-elevated;
+        Text {
+            width: parent.width;
+            height: parent.height;
+            text: root.text;
+            font-size: Metrics.font-body;
+            color: Theme.danger;
+            horizontal-alignment: center;
+            vertical-alignment: center;
         }
     }
 }

@@ -199,12 +199,14 @@ export component HelpWindow inherits Window {
                         color: Theme.text-secondary;
                         wrap: word-wrap;
                     }
+                    Rectangle { height: Metrics.space-md / 2; }
                     Text {
-                        text: @tr("2) Get help — hold ask or grab for a voice question, or press F9. Answers appear in tiles.");
+                        text: @tr("2) Get help — hold ask to ask by voice, hold grab to send the other side's last words to AI, or press F9. Answers appear in tiles.");
                         font-size: Metrics.font-label;
                         color: Theme.text-secondary;
                         wrap: word-wrap;
                     }
+                    Rectangle { height: Metrics.space-md / 2; }
                     Text {
                         text: @tr("3) Stop and review — press stop to end the session; open the session archive (F7) for transcripts and summaries.");
                         font-size: Metrics.font-label;

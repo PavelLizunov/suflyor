@@ -104,14 +104,19 @@ export component TextAskWindow inherits Window {
                 close => { root.cancelled(); }
             }
             HorizontalLayout {
-                spacing: Metrics.space-sm;   // was 8px
+                height: Metrics.control-xl;
+                vertical-stretch: 0;
+                spacing: Metrics.space-sm;
                 input := LineEdit {
+                    height: Metrics.control-xl;
                     placeholder-text: @tr("Type your question…");
                     text <=> root.query;
                     accepted => { root.fire(); }
                 }
                 Button {
+                    height: Metrics.control-xl;
                     text: @tr("Send");
+                    enabled: root.query != "";
                     primary: true;
                     clicked => { root.fire(); }
                 }

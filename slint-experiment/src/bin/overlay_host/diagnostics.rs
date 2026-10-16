@@ -61,7 +61,18 @@ pub(crate) fn populate_diagnostics(
     // P1.2 — global-hotkey registration outcome (per-key conflict surfacing).
     let (hk_level, hk_registered, hk_failed) = hotkey_diag_row();
     win.set_diag_hotkeys_level(hk_level);
-    win.set_diag_hotkeys_detail(SharedString::from(hk_registered));
+    // Keep the complete key list in the copied report, not the Settings row.
+    let hk_detail = if hk_level == 0 && hk_failed.is_empty() {
+        let n = hk_registered.split_whitespace().count();
+        if c.ui_is_ru() {
+            format!("зарегистрировано: {n}")
+        } else {
+            format!("registered: {n}")
+        }
+    } else {
+        hk_registered
+    };
+    win.set_diag_hotkeys_detail(SharedString::from(hk_detail));
     win.set_diag_hotkeys_failed(SharedString::from(hk_failed));
     // I1 — the stealth row reports the EFFECTIVE state (the bar's last
     // verified WDA apply + readback), not the config intent: a failed

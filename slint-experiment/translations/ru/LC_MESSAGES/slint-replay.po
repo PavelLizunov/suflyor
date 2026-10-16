@@ -2931,3 +2931,39 @@ msgstr "команды"
 
 msgid "patterns"
 msgstr "шаблоны"
+
+msgid "Description"
+msgstr "Описание"
+
+msgid "Translation"
+msgstr "Перевод"
+
+msgid "Practice"
+msgstr "Тренировка"
+
+msgid "AI and speech on this PC, offline; download models first."
+msgstr "AI и речь на этом ПК, без интернета; сначала скачайте модели."
+
+msgid "Install the built-in AI"
+msgstr "Установить встроенный AI"
+
+msgid "When it is on: press Print Screen or open a screen-share preview. Suflyor windows should disappear from the capture and stay on your screen. This cannot be checked automatically."
+msgstr "Когда включено: нажмите Print Screen или откройте предпросмотр демонстрации экрана. Окна Суфлёра должны пропасть из снимка и остаться на вашем экране. Автоматически это не проверить."
+
+msgid "2) Get help — hold ask to ask by voice, hold grab to send the other side's last words to AI, or press F9. Answers appear in tiles."
+msgstr "2) Получите помощь: удерживайте «спросить», чтобы спросить голосом, или «захватить», чтобы отправить AI последние слова собеседника, либо нажмите F9. Ответы появляются в тайлах."
+
+msgid "Up/Down — select · Enter — open · Esc — close"
+msgstr "↑↓ — выбрать · Enter — открыть · Esc — закрыть"
+
+msgid "F8 options"
+msgstr "Параметры F8"
+
+msgid "Prepare"
+msgstr "Подготовить"
+
+msgid "Describe the call; the agent builds an active profile from it."
+msgstr "Опишите созвон, и агент соберёт из этого активный профиль."
+
+msgid "Knowledge-base search (open / close)"
+msgstr "Поиск по базе знаний (открыть / закрыть)"

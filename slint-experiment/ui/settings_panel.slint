@@ -25,7 +25,7 @@ import {
     IconSlot, BrandHeaderMark, DarkCheck, SettingsCard,
     SettingsComboBox, SettingsLineEdit, SettingsSlider,
     NavGroupHeader, NavItem,
-    WrapBlock, LocalModelRow, SettingsRow,
+    WrapBlock, LocalModelRow, SettingsRow, SettingsDangerButton,
 } from "settings_controls.slint";
 export { DarkCheck }
 
@@ -921,13 +921,8 @@ export component SettingsWindow inherits Window {
             horizontal-stretch: 1;
             background: Theme.bg-surface;
             clip: true;
-            // Watermark only on the AIRY tabs — hidden on the dense ones (AI
-            // bridge 11 / Auto-tiles 7 / Hotkeys 2 / Memory 14) where it bled
-            // through behind fields, cards and lists (design review #3). Gated
-            // with an `if`-element (not `visible:`, which rendered nothing at
-            // all here) — the same reliable per-tab pattern used below.
-            if root.active-tab != 11 && root.active-tab != 7
-                && root.active-tab != 2 && root.active-tab != 14 : Image {
+            // Only short tabs leave enough clear space for the watermark.
+            if root.active-tab == 0 || root.active-tab == 1 || root.active-tab == 9 : Image {
                 source: Theme.is-light
                     ? @image-url("../assets/brand-mark.png")
                     : @image-url("../assets/brand-mark-light.png");
@@ -974,14 +969,6 @@ export component SettingsWindow inherits Window {
                         spacing: 10px;
                         SettingsCard {
                             title: @tr("Window behaviour");
-                            Text {
-                                text: Platform.is-macos
-                                    ? @tr("macOS has no public API that can hide the overlay from other screen-sharing apps. Suflyor only excludes its own windows from its own screenshots.")
-                                    : @tr("Hides the overlay from screen capture and sharing (Print Screen, Teams, Meet, OBS).");
-                                font-size: Metrics.font-label;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
                             DarkCheck {
                                 text: @tr("Always on top");
                                 checked <=> root.always-on-top-toggle;
@@ -991,6 +978,14 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Stealth (hide from screen capture)");
                                 checked <=> root.stealth-toggle;
                                 toggled(v) => { root.stealth-changed(v); }
+                            }
+                            Text {
+                                text: Platform.is-macos
+                                    ? @tr("macOS has no public API that can hide the overlay from other screen-sharing apps. Suflyor only excludes its own windows from its own screenshots.")
+                                    : @tr("Hides the overlay from screen capture and sharing (Print Screen, Teams, Meet, OBS).");
+                                font-size: Metrics.font-label;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
                             }
                             // Report verified capture exclusion, not just the toggle intent.
                             // Only while the toggle is on: off needs no second line.
@@ -1058,7 +1053,7 @@ export component SettingsWindow inherits Window {
                                 ["Shift+Alt+1", @tr("Read the selected text aloud")],
                                 ["Shift+Alt+2", @tr("OCR a screen region and read it aloud")],
                                 ["Shift+Alt+3", @tr("Pause / resume reading aloud")],
-                                ["F4",  @tr("Knowledge-base palette (open / close)")],
+                                ["F4",  @tr("Knowledge-base search (open / close)")],
                                 ["F1",  @tr("Help (open / close)")],
                                 ["F7",  @tr("Session archive (open / close)")],
                             ] : HorizontalLayout {
@@ -1075,8 +1070,9 @@ export component SettingsWindow inherits Window {
                                     ) : entry[0];
                                     font-size: Metrics.font-label;
                                     font-weight: 700;
-                                    color: Theme.accent;
-                                    width: 92px;
+                                    color: Theme.text-primary;
+                                    // macOS chords ("Shift+Option+1") need the wider column.
+                                    width: Platform.is-macos ? 92px : 80px;
                                 }
                                 hotkey-description := Text {
                                     text: entry[1];
@@ -1090,12 +1086,7 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 13 : VerticalLayout {
                         spacing: 10px;
                         SettingsCard {
-                        Text {
-                            text: @tr("Session readiness");
-                            font-size: 13px;
-                            font-weight: 700;
-                            color: Theme.text-primary;
-                        }
+                        title: @tr("Session readiness");
                         Text {
                             text: root.diag-summary;
                             font-size: Metrics.font-label;
@@ -1206,7 +1197,7 @@ export component SettingsWindow inherits Window {
                         }
                         HorizontalLayout {
                             // Destructive → 2-click confirm; backend backs up first.
-                            Button {
+                            SettingsDangerButton {
                                 text: root.db-clear-armed == "queue"
                                     ? @tr("Tap again — clear the suggestions queue")
                                     : @tr("Clear suggestions queue");
@@ -1221,7 +1212,7 @@ export component SettingsWindow inherits Window {
                             }
                         }
                         HorizontalLayout {
-                            Button {
+                            SettingsDangerButton {
                                 text: root.db-clear-armed == "memory"
                                     ? @tr("Tap again — clear approved memory")
                                     : @tr("Clear approved memory");
@@ -1328,17 +1319,10 @@ export component SettingsWindow inherits Window {
                         // RC17 — engine choice: Piper (default) or the
                         // experimental Tera sidecar. Piper stays the automatic
                         // fallback whenever Tera is unavailable.
-                        HorizontalLayout {
-                            spacing: Metrics.space-sm;
-                            height: 32px;
-                            Text {
-                                text: @tr("Engine:");
-                                width: 96px;
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                                vertical-alignment: center;
-                            }
+                        SettingsRow {
+                            label: @tr("Engine:");
                             SettingsComboBox {
+                                horizontal-stretch: 1;
                                 model: root.tts-engine-names;
                                 current-index: root.tts-engine-index;
                                 selected => { root.tts-engine-changed(self.current-index); }
@@ -1347,17 +1331,10 @@ export component SettingsWindow inherits Window {
                         if root.tts-engine-index == 0 : VerticalLayout {
                             spacing: 6px;
                         // Voice chooser — only when at least one voice is installed.
-                        if root.tts-available : HorizontalLayout {
-                            spacing: Metrics.space-sm;
-                            height: 32px;
-                            Text {
-                                text: @tr("Voice:");
-                                width: 96px;
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                                vertical-alignment: center;
-                            }
+                        if root.tts-available : SettingsRow {
+                            label: @tr("Voice:");
                             SettingsComboBox {
+                                horizontal-stretch: 1;
                                 model: root.tts-voice-names;
                                 current-index: root.tts-voice-index;
                                 selected => { root.tts-voice-changed(self.current-index); }
@@ -1426,17 +1403,10 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-secondary;
                             wrap: word-wrap;
                         }
-                        if root.tts-available : HorizontalLayout {
-                            spacing: Metrics.space-sm;
-                            height: 32px;
-                            Text {
-                                text: @tr("Voice:");
-                                width: 96px;
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                                vertical-alignment: center;
-                            }
+                        if root.tts-available : SettingsRow {
+                            label: @tr("Voice:");
                             SettingsComboBox {
+                                horizontal-stretch: 1;
                                 model: root.tts-voice-names;
                                 current-index: root.tts-voice-index;
                                 selected => { root.tts-voice-changed(self.current-index); }
@@ -1471,17 +1441,10 @@ export component SettingsWindow inherits Window {
                         }
                         }
                         // Speed preset (multipliers are language-neutral, untranslated).
-                        HorizontalLayout {
-                            spacing: Metrics.space-sm;
-                            height: 32px;
-                            Text {
-                                text: @tr("Speed:");
-                                width: 96px;
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                                vertical-alignment: center;
-                            }
+                        SettingsRow {
+                            label: @tr("Speed:");
                             SettingsComboBox {
+                                horizontal-stretch: 1;
                                 model: ["0.75×", "1.0×", "1.3×", "1.5×", "2.0×"];
                                 current-index: root.tts-rate-index;
                                 selected => { root.tts-rate-changed(self.current-index); }
@@ -2131,7 +2094,6 @@ export component SettingsWindow inherits Window {
                         // add/rename/delete (split rows so the buttons never clip).
                         HorizontalLayout {
                             spacing: 6px;
-                            alignment: start;
                             vertical-stretch: 0;
                             Text {
                                 text: @tr("Profile:");
@@ -3420,25 +3382,24 @@ export component SettingsWindow inherits Window {
                                 vertical-alignment: center;
                             }
                         }
-                        // v0.11.0 — Test Practice mode for plain F8 (study / self-check):
-                        // answer + a short explanation from a screenshot of a PRACTICE
-                        // question. For studying, NOT graded exams. Shown when vision is on.
-                        if root.vision-provider-index >= 1 : DarkCheck {
-                            text: @tr("F8 → Test Practice: answer + short explanation (for practice & self-check)");
-                            checked <=> root.vision-test-practice;
-                            toggled(v) => {
-                                root.vision-test-practice-changed(v);
-                            }
                         }
-                        // Feature #4 — phonetics in TRANSLATE mode (F8 toggle / Shift+F8).
-                        // Shown whenever vision is enabled (any provider).
-                        if root.vision-provider-index >= 1 : DarkCheck {
-                            text: @tr("Phonetics in F8 translate mode (IPA, e.g. schedule [ˈʃedjuːl])");
-                            checked <=> root.vision-phonetics;
-                            toggled(v) => {
-                                root.vision-phonetics-changed(v);
+                        if root.vision-provider-index >= 1 : SettingsCard {
+                            title: @tr("F8 options");
+                            // Practice mode is for study and self-check.
+                            DarkCheck {
+                                text: @tr("Practice: answer and a short review");
+                                checked <=> root.vision-test-practice;
+                                toggled(v) => {
+                                    root.vision-test-practice-changed(v);
+                                }
                             }
-                        }
+                            DarkCheck {
+                                text: @tr("Phonetics in F8 translate mode (IPA, e.g. schedule [ˈʃedjuːl])");
+                                checked <=> root.vision-phonetics;
+                                toggled(v) => {
+                                    root.vision-phonetics-changed(v);
+                                }
+                            }
                         }
                     }
                     if root.active-tab == 16 : VerticalLayout {
@@ -3620,7 +3581,7 @@ export component SettingsWindow inherits Window {
                         SettingsCard {
                             title: @tr("Prepare a call profile");
                             Text {
-                                text: @tr("Prepare a call profile — describe the call, the agent researches it into an active profile:");
+                                text: @tr("Describe the call; the agent builds an active profile from it.");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
@@ -3633,7 +3594,7 @@ export component SettingsWindow inherits Window {
                                     horizontal-stretch: 1;
                                 }
                                 Button {
-                                    text: @tr("Prepare profile (Hermes)");
+                                    text: @tr("Prepare");
                                     clicked => { root.hermes-prepare-profile(root.hermes-profile-seed); }
                                 }
                             }

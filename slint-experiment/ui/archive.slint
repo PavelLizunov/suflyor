@@ -202,17 +202,20 @@ export component ArchiveWindow inherits Window {
                 }
 
                 // ── Search box (FTS over transcript + AI answers) ──
-                search-input := LineEdit {
-                    placeholder-text: @tr("Search transcripts and AI answers…");
-                    text <=> root.query;
-                    edited(t) => {
-                        root.notice = "";
-                        root.query-changed(t);
-                        root.selected-index = 0;
-                    }
-                    accepted => {
-                        if (root.results.length > 0) {
-                            root.result-activated(root.selected-index);
+                HorizontalLayout {
+                    padding-right: 14px;
+                    search-input := LineEdit {
+                        placeholder-text: @tr("Search transcripts and AI answers…");
+                        text <=> root.query;
+                        edited(t) => {
+                            root.notice = "";
+                            root.query-changed(t);
+                            root.selected-index = 0;
+                        }
+                        accepted => {
+                            if (root.results.length > 0) {
+                                root.result-activated(root.selected-index);
+                            }
                         }
                     }
                 }
@@ -242,7 +245,7 @@ export component ArchiveWindow inherits Window {
                 // ── Cloud-STT egress note (only when "Summary" would upload) ──
                 if root.stt-is-cloud && !root.retranscribe-busy : Text {
                     text: @tr("Generate sends the saved audio of a session to cloud speech recognition.");
-                    font-size: Metrics.font-caption;
+                    font-size: Metrics.font-label;
                     color: Theme.warning;
                     horizontal-alignment: center;
                     wrap: word-wrap;
@@ -317,7 +320,7 @@ export component ArchiveWindow inherits Window {
                                             a11y: @tr("Cancel rename");
                                             clicked => { root.rename-cancelled(); }
                                         }
-                                        // ── Normal: title + meta + ✎ rename ──
+                                        // Session title and metadata.
                                         if root.renaming-index != i : Text {
                                             text: row.title;
                                             font-size: Metrics.font-body;
@@ -333,34 +336,42 @@ export component ArchiveWindow inherits Window {
                                             color: Theme.text-muted;
                                             vertical-alignment: center;
                                         }
-                                        // Open first, edit next, delete last and set apart.
-                                        if root.renaming-index != i : RowIcon {
-                                            icon: @image-url("../assets/icons/bubble.svg");
-                                            a11y: @tr("View transcript");
-                                            clicked => { root.transcript-requested(i); }
-                                        }
-                                        if root.renaming-index != i : RowIcon {
-                                            icon: @image-url("../assets/icons/pencil.svg");
-                                            a11y: @tr("Rename session");
-                                            clicked => { root.rename-requested(i, row.name); }
-                                        }
-                                        if root.renaming-index != i : RowIcon {
-                                            icon: @image-url("../assets/icons/ai.svg");
-                                            a11y: @tr("Regenerate name from transcript");
-                                            clicked => { root.regen-name-requested(i); }
-                                        }
-                                        if root.renaming-index != i : Rectangle { width: Metrics.space-sm; }
-                                        if root.renaming-index != i : RowIcon {
-                                            icon: @image-url("../assets/icons/trash.svg");
-                                            a11y: @tr("Delete session");
-                                            clicked => { root.delete-requested(i); }
-                                        }
                                     }
                                     Text {
                                         text: row.subtitle;
                                         font-size: Metrics.font-caption;
                                         color: Theme.text-muted;
                                         overflow: elide;
+                                    }
+                                }
+
+                                if root.renaming-index != i : VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 0;
+                                    HorizontalLayout {
+                                        spacing: Metrics.space-sm;
+                                        // Open first, edit next, delete last and set apart.
+                                        RowIcon {
+                                            icon: @image-url("../assets/icons/bubble.svg");
+                                            a11y: @tr("View transcript");
+                                            clicked => { root.transcript-requested(i); }
+                                        }
+                                        RowIcon {
+                                            icon: @image-url("../assets/icons/pencil.svg");
+                                            a11y: @tr("Rename session");
+                                            clicked => { root.rename-requested(i, row.name); }
+                                        }
+                                        RowIcon {
+                                            icon: @image-url("../assets/icons/ai.svg");
+                                            a11y: @tr("Regenerate name from transcript");
+                                            clicked => { root.regen-name-requested(i); }
+                                        }
+                                        Rectangle { width: Metrics.space-sm; }
+                                        RowIcon {
+                                            icon: @image-url("../assets/icons/trash.svg");
+                                            a11y: @tr("Delete session");
+                                            clicked => { root.delete-requested(i); }
+                                        }
                                     }
                                 }
 
@@ -493,7 +504,7 @@ export component ArchiveWindow inherits Window {
 
                 Text {
                     text: @tr("Esc to close · Enter / click to open a session");
-                    font-size: 9px;
+                    font-size: Metrics.font-label;
                     color: Theme.text-muted;
                     horizontal-alignment: center;
                 }
