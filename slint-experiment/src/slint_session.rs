@@ -80,7 +80,7 @@ fn prime_live_prompt(cfg: &SharedConfig) {
         (endpoint, system)
     };
     let base_url = endpoint.base_url.clone();
-    ai::local_server::set_hot_prompt(endpoint, system);
+    ai::local_server::set_hot_prompt(endpoint, system, backend_runtime::FAST_USER_HEAD);
     let session_gen = PRIME_SESSION.fetch_add(1, Ordering::SeqCst) + 1;
     tokio::spawn(async move {
         ai::local_server::detect_kind(&base_url).await;
@@ -1426,7 +1426,11 @@ async fn maybe_spawn_auto_tile(
     };
     if fast {
         // Keep this prompt in the local server's cache between questions.
-        ai::local_server::set_hot_prompt(endpoint.clone(), sys_full.clone());
+        ai::local_server::set_hot_prompt(
+            endpoint.clone(),
+            sys_full.clone(),
+            backend_runtime::FAST_USER_HEAD,
+        );
     }
     let question_label = match &trigger {
         backend_runtime::Trigger::Question(q) => q.clone(),

@@ -1191,7 +1191,8 @@ fn fast_auto_tile_system_prompt_is_stable_across_questions() {
     let (sys2, usr2) = build_fast_auto_tile_prompts(&q2, &[], "SRE, Kubernetes", "ru", false);
     assert_eq!(sys1, sys2);
     assert!(usr1.contains("Вопрос: \"Чем процесс отличается от потока?\""));
-    assert!(usr2.starts_with("Фон пользователя"));
+    assert!(usr1.starts_with(FAST_USER_HEAD) && usr2.starts_with(FAST_USER_HEAD));
+    assert!(usr2.contains("Фон пользователя"));
     assert!(usr2.contains("SRE, Kubernetes") && usr2.contains("etcd"));
     assert!(!sys2.contains("SRE"));
     assert!(sys1.contains("Первая строка"));

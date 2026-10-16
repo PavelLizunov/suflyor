@@ -174,6 +174,8 @@ pub(crate) fn apply_server_hints(body: &mut Value, endpoint: &AiEndpoint) {
 struct HotPrompt {
     endpoint: AiEndpoint,
     system: String,
+    /// How the live requests' user message starts; the prime starts the same.
+    user_head: String,
 }
 
 static HOT: Mutex<Option<HotPrompt>> = Mutex::new(None);
@@ -182,12 +184,17 @@ static HOT: Mutex<Option<HotPrompt>> = Mutex::new(None);
 static PRIME_GEN: AtomicU64 = AtomicU64::new(0);
 
 /// Keep `system` (the live-answer system prompt) in the cache of the local
-/// server at `endpoint` until `clear_hot_prompt`.
-pub fn set_hot_prompt(endpoint: AiEndpoint, system: String) {
+/// server at `endpoint` until `clear_hot_prompt`. `user_head` is how the live
+/// requests' user message starts.
+pub fn set_hot_prompt(endpoint: AiEndpoint, system: String, user_head: &str) {
     if endpoint.protocol != AiProtocol::OpenAiCompatible || !endpoint.is_local {
         return;
     }
-    *HOT.lock().unwrap_or_else(|p| p.into_inner()) = Some(HotPrompt { endpoint, system });
+    *HOT.lock().unwrap_or_else(|p| p.into_inner()) = Some(HotPrompt {
+        endpoint,
+        system,
+        user_head: user_head.to_string(),
+    });
 }
 
 /// Stop priming: the session ended.
@@ -252,11 +259,11 @@ fn note_request_done(base_url: &str, system: Option<&str>) {
 /// Read the live prompt into the server's cache now, if the server is idle.
 /// Best effort: any failure only means the next answer reads it itself.
 pub async fn prime_hot_prompt() {
-    let Some((endpoint, system)) = HOT
+    let Some((endpoint, system, user_head)) = HOT
         .lock()
         .unwrap_or_else(|p| p.into_inner())
         .as_ref()
-        .map(|h| (h.endpoint.clone(), h.system.clone()))
+        .map(|h| (h.endpoint.clone(), h.system.clone(), h.user_head.clone()))
     else {
         return;
     };
@@ -273,7 +280,7 @@ pub async fn prime_hot_prompt() {
         "model": endpoint.model,
         "messages": [
             { "role": "system", "content": system },
-            { "role": "user", "content": "…" },
+            { "role": "user", "content": format!("{user_head}…") },
         ],
         "max_tokens": 1,
         "stream": false,

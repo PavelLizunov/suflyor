@@ -209,6 +209,11 @@ pub fn build_auto_tile_prompts(
     (system_prompt, user_prompt)
 }
 
+/// How every fast-answer user message starts. A local server pins the system
+/// prompt plus this start, so priming it with the same start lets the first
+/// question of a session reuse it.
+pub const FAST_USER_HEAD: &str = "Реплики (старые сверху):\n";
+
 /// Fast-answer profile of the auto-tile prompts (`ai_fast_answers`): a short
 /// system prompt that asks for a one-line answer first, then two or three
 /// points. The system prompt depends only on settings that stay put during a
@@ -257,17 +262,17 @@ pub fn build_fast_auto_tile_prompts(
         String::new()
     } else {
         format!(
-            "Фон пользователя (только для уровня детализации):\n{}\n\n",
+            "Фон пользователя (только для уровня детализации):\n{}\n",
             meeting_context.trim()
         )
     };
     let user_prompt = match trigger {
         Trigger::Question(question) => format!(
-            "{context_block}Реплики (старые сверху):\n```\n{transcript_block}\n```\n\
+            "{FAST_USER_HEAD}```\n{transcript_block}\n```\n{context_block}\
              Вопрос: \"{question}\""
         ),
         Trigger::Keyword(keyword, line) => format!(
-            "{context_block}Реплики (старые сверху):\n```\n{transcript_block}\n```\n\
+            "{FAST_USER_HEAD}```\n{transcript_block}\n```\n{context_block}\
              В реплике \"{line}\" упомянута технология {keyword}. Первая строка — что это, \
              затем 2–3 факта, которые пригодятся прямо сейчас."
         ),

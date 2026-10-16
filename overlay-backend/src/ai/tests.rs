@@ -1078,11 +1078,15 @@ async fn hot_prompt_is_primed_with_one_token() {
             let _ = req.respond(resp);
         }
     });
-    super::local_server::set_hot_prompt(local_endpoint(url), "live rules".into());
+    super::local_server::set_hot_prompt(local_endpoint(url), "live rules".into(), "Head:\n");
     super::local_server::prime_hot_prompt().await;
     super::local_server::clear_hot_prompt();
 
     let body: Value = serde_json::from_str(&rx.recv().unwrap()).unwrap();
     assert_eq!(body["messages"][0]["content"], "live rules");
     assert_eq!(body["max_tokens"], 1);
+    assert!(body["messages"][1]["content"]
+        .as_str()
+        .unwrap()
+        .starts_with("Head:\n"));
 }
