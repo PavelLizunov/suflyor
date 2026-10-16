@@ -1470,7 +1470,7 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 4 : VerticalLayout {
                         spacing: 10px;
                         if !Platform.is-macos : SettingsCard {
-                        // No card title: the page title already says Updates.
+                        title: @tr("Updates");
                         Text {
                             text: @tr("Check GitHub for a newer release. If one is found you can download + install it in one click (the app restarts).");
                             font-size: Metrics.font-label;
