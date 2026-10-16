@@ -1437,7 +1437,6 @@ async fn maybe_spawn_auto_tile(
     } else if session_live {
         ai::local_server::clear_hot_prompt();
     }
-    }
     let question_label = match &trigger {
         backend_runtime::Trigger::Question(q) => q.clone(),
         // De-emojified to match the rest of the UI (Codex icon pass): the
