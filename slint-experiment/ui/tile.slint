@@ -841,27 +841,14 @@ export component TileWindow inherits Window {
                                 // the tile (maximize button) to read them in full.
                                 HorizontalLayout {
                                     padding-right: Metrics.space-sm;
-                                    Rectangle {
-                                        // Hide only the fence's final empty line; keep copy/selection intact.
-                                        height: max(0px, code-text.height - (block.display-text.ends-with("\n") ? code-line.preferred-height : 0px));
-                                        vertical-stretch: 0;
-                                        clip: true;
-                                        code-line := Text {
-                                            visible: false;
-                                            text: "0";
-                                            font-size: Metrics.font-label;
-                                            font-family: Theme.font-mono;
-                                        }
-                                        code-text := SelectableText {
-                                            width: parent.width;
-                                            text: block.display-text;
-                                            source-text: block.text;
-                                            font-size: Metrics.font-label;
-                                            text-color: Theme.code-text;
-                                            mono-family: Theme.font-mono;
-                                            wrap: no-wrap;
-                                            capture(a, c) => { root.capture-selection(i, a, c); }
-                                        }
+                                    SelectableText {
+                                        text: block.display-text;
+                                        source-text: block.text;
+                                        font-size: Metrics.font-label;
+                                        text-color: Theme.code-text;
+                                        mono-family: Theme.font-mono;
+                                        wrap: no-wrap;
+                                        capture(a, c) => { root.capture-selection(i, a, c); }
                                     }
                                 }
                             }
