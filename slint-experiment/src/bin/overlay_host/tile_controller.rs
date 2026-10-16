@@ -728,7 +728,9 @@ impl OverlayBarBridge {
                     } else {
                         crate::tile_text::error_body(safe, ru)
                     };
-                    let body = if stream.prefix.is_empty() {
+                    // Only the error itself: no earlier answer worth a memory star.
+                    let only_error = stream.prefix.is_empty();
+                    let body = if only_error {
                         err_line
                     } else {
                         format!("{}\n\n{err_line}", stream.prefix)
@@ -739,6 +741,7 @@ impl OverlayBarBridge {
                             tile.set_source_label(SharedString::from(
                                 crate::tile_text::error_label(ru),
                             ));
+                            tile.set_plain_notice(only_error);
                             tile.set_followup_busy(false);
                         }
                     });
