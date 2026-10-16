@@ -554,63 +554,70 @@ fn start_session_inner(
         .unwrap_or_else(|| format!("session_{}", now_unix_ms()));
     lock(&rt).current_session_id = Some(session_id.clone());
 
-    // ===== 4. Spawn audio capture =====
-    let (audio_rx, capture_handle) = audio::start_capture(mic_dev, sys_dev)
-        .context("audio::start_capture failed (check mic / system audio devices in Settings)")?;
     let health = lock(&rt).health.clone();
-
-    // ===== 4b. Pause gate + optional raw-audio recorder (v0.13.0) =====
-    // Every chunk now crosses the same pause-aware forwarder before STT,
-    // regardless of whether recording is enabled. The recorder feed is
-    // non-blocking (drops on overflow), and forwarding to STT keeps the same
-    // bounded(128) back-pressure.
-    // One atomic snapshot — the enabled flag + both retention bounds are read
-    // under a SINGLE lock so a concurrent Settings save can't split the
-    // decision across two config states (review v0.15.0).
-    let (record_enabled, keep_sessions, keep_days, max_total_mb) = {
-        let c = cfg.read();
-        (
-            c.record_audio_enabled,
-            c.record_retention_sessions as usize,
-            c.record_retention_days,
-            c.record_max_total_mb,
-        )
-    };
-    let recorder = if record_enabled {
-        // Reuse the session id derived above (the conspect + the recordings dir
-        // share one key, so a re-Summary from the archive lines up with both).
-        match overlay_backend::recorder::SessionRecorder::start(
-            &session_id,
-            keep_sessions,
-            keep_days,
-            max_total_mb,
-        ) {
-            Ok(recorder) => {
-                log_info(&format!("audio recording → {}", recorder.dir().display()));
-                Some(recorder)
-            }
-            Err(e) => {
-                // Recording is best-effort: a failure must NOT abort the session.
-                log_info(&format!(
-                    "audio recording unavailable (continuing without it): {e:#}"
-                ));
-                None
-            }
-        }
+    let stt_rx = if let Some(rx) = qa_transcript_source() {
+        log_info("QA transcript replaces audio capture and STT");
+        rx
     } else {
-        None
-    };
-    let stt_audio_rx = forward_audio_chunks(audio_rx, rt.clone(), recorder);
+        // ===== 4. Spawn audio capture =====
+        let (audio_rx, capture_handle) = audio::start_capture(mic_dev, sys_dev).context(
+            "audio::start_capture failed (check mic / system audio devices in Settings)",
+        )?;
 
-    // ===== 5. Spawn STT pipeline =====
-    let stt_rx = stt::spawn(
-        stt_audio_rx,
-        stt_backend,
-        language,
-        whisper_prompt,
-        health.clone(),
-    );
-    lock(&rt).capture = Some(capture_handle);
+        // ===== 4b. Pause gate + optional raw-audio recorder (v0.13.0) =====
+        // Every chunk now crosses the same pause-aware forwarder before STT,
+        // regardless of whether recording is enabled. The recorder feed is
+        // non-blocking (drops on overflow), and forwarding to STT keeps the same
+        // bounded(128) back-pressure.
+        // One atomic snapshot — the enabled flag + both retention bounds are read
+        // under a SINGLE lock so a concurrent Settings save can't split the
+        // decision across two config states (review v0.15.0).
+        let (record_enabled, keep_sessions, keep_days, max_total_mb) = {
+            let c = cfg.read();
+            (
+                c.record_audio_enabled,
+                c.record_retention_sessions as usize,
+                c.record_retention_days,
+                c.record_max_total_mb,
+            )
+        };
+        let recorder = if record_enabled {
+            // Reuse the session id derived above (the conspect + the recordings dir
+            // share one key, so a re-Summary from the archive lines up with both).
+            match overlay_backend::recorder::SessionRecorder::start(
+                &session_id,
+                keep_sessions,
+                keep_days,
+                max_total_mb,
+            ) {
+                Ok(recorder) => {
+                    log_info(&format!("audio recording → {}", recorder.dir().display()));
+                    Some(recorder)
+                }
+                Err(e) => {
+                    // Recording is best-effort: a failure must NOT abort the session.
+                    log_info(&format!(
+                        "audio recording unavailable (continuing without it): {e:#}"
+                    ));
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        let stt_audio_rx = forward_audio_chunks(audio_rx, rt.clone(), recorder);
+
+        // ===== 5. Spawn STT pipeline =====
+        let stt_rx = stt::spawn(
+            stt_audio_rx,
+            stt_backend,
+            language,
+            whisper_prompt,
+            health.clone(),
+        );
+        lock(&rt).capture = Some(capture_handle);
+        stt_rx
+    };
     system_audio_owner.disarm();
 
     // ===== 6. Spawn health emitter (2s ticker) =====
@@ -688,6 +695,57 @@ fn start_session_inner(
     );
 
     Ok(())
+}
+
+/// QA builds only: replay transcript lines from the file named by
+/// `SUFLYOR_QA_TRANSCRIPT` instead of capturing audio, so the live-answer path
+/// can be checked on a machine without audio devices. Each line is
+/// `<delay ms>\t<mic|sys>\t<text>`.
+#[cfg(feature = "ui-mcp")]
+fn qa_transcript_source() -> Option<tokio::sync::mpsc::Receiver<stt::TranscriptEvent>> {
+    let path = std::env::var_os("SUFLYOR_QA_TRANSCRIPT")?;
+    let text = std::fs::read_to_string(path).ok()?;
+    let lines: Vec<(u64, AudioSource, String)> = text
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.splitn(3, '\t');
+            let delay = parts.next()?.trim().parse().ok()?;
+            let source = if parts.next()?.trim() == "mic" {
+                AudioSource::Mic
+            } else {
+                AudioSource::System
+            };
+            Some((delay, source, parts.next()?.to_string()))
+        })
+        .collect();
+    let (tx, rx) = tokio::sync::mpsc::channel(16);
+    tokio::spawn(async move {
+        let started = Instant::now();
+        for (delay, source, text) in lines {
+            tokio::time::sleep(Duration::from_millis(delay)).await;
+            log_info(&format!(
+                "QA transcript line sent at unix_ms={} ({} chars)",
+                now_unix_ms(),
+                text.chars().count()
+            ));
+            let event = stt::TranscriptEvent {
+                source,
+                text,
+                timestamp_ms: started.elapsed().as_millis() as u64,
+            };
+            if tx.send(event).await.is_err() {
+                return;
+            }
+        }
+        // Keep the session running after the last line.
+        tx.closed().await;
+    });
+    Some(rx)
+}
+
+#[cfg(not(feature = "ui-mcp"))]
+fn qa_transcript_source() -> Option<tokio::sync::mpsc::Receiver<stt::TranscriptEvent>> {
+    None
 }
 
 fn forward_audio_chunks(
