@@ -44,7 +44,7 @@ fn data_root_in(base: &Path) -> PathBuf {
 /// whether it is new or already exists with a wider mode. An existing file is emptied only
 /// after its mode was restricted, so a failure to restrict it leaves its content intact.
 /// Elsewhere this is `std::fs::write`.
-pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+pub fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     #[cfg(unix)]
     {
         use std::io::Write;

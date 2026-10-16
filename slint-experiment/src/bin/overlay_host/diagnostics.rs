@@ -961,7 +961,7 @@ fn collect_redacted_log() -> std::io::Result<std::path::PathBuf> {
     let redacted = redact_secrets(&redact_user_home(&redact_ipv4(&redact_urls(&raw))));
     let dir = dirs::desktop_dir().unwrap_or(root);
     let out = dir.join("suflyor-log.txt");
-    std::fs::write(&out, redacted)?;
+    overlay_backend::paths::write_private(&out, redacted.as_bytes())?;
     Ok(out)
 }
 
@@ -1323,5 +1323,24 @@ mod tests {
         assert!(!is_ipv4("1.2.3.4.5")); // 5 octets
         assert!(!is_ipv4("256.1.1.1")); // octet > 255
         assert!(!is_ipv4("")); // empty
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn collect_redacted_log_write_private_enforces_owner_only_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let log_file = tmp.path().join("suflyor-log.txt");
+        let content = "redacted log contents";
+
+        overlay_backend::paths::write_private(&log_file, content.as_bytes()).unwrap();
+
+        let mode = std::fs::metadata(&log_file)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600, "exported log file must have 0600 permissions on POSIX");
     }
 }
