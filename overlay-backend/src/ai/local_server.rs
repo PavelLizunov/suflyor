@@ -159,22 +159,14 @@ pub(crate) fn apply_kind_hints(body: &mut Value, kind: ServerKind) {
     }
 }
 
-/// `apply_kind_hints` for a local endpoint whose kind is known; an unknown
-/// local server is probed in the background for the next request.
+/// `apply_kind_hints` for a local endpoint whose kind is already known (a
+/// session start detects it); an undetected server gets no extra fields.
 pub(crate) fn apply_server_hints(body: &mut Value, endpoint: &AiEndpoint) {
     if endpoint.protocol != AiProtocol::OpenAiCompatible || !endpoint.is_local {
         return;
     }
-    match known_kind(&endpoint.base_url) {
-        Some(kind) => apply_kind_hints(body, kind),
-        None => {
-            let base_url = endpoint.base_url.clone();
-            if let Ok(handle) = tokio::runtime::Handle::try_current() {
-                handle.spawn(async move {
-                    detect_kind(&base_url).await;
-                });
-            }
-        }
+    if let Some(kind) = known_kind(&endpoint.base_url) {
+        apply_kind_hints(body, kind);
     }
 }
 

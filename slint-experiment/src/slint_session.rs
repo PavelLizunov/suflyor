@@ -76,8 +76,12 @@ fn prime_live_prompt(cfg: &SharedConfig) {
         );
         (endpoint, system)
     };
+    let base_url = endpoint.base_url.clone();
     ai::local_server::set_hot_prompt(endpoint, system);
-    tokio::spawn(ai::local_server::prime_hot_prompt());
+    tokio::spawn(async move {
+        ai::local_server::detect_kind(&base_url).await;
+        ai::local_server::prime_hot_prompt().await;
+    });
 }
 /// The answer so far for a streaming auto tile: `{label, text}`.
 pub const AUTO_TILE_STREAM_CHANNEL: &str = "auto-tile:stream";
