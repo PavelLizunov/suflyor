@@ -167,19 +167,19 @@ pub fn state_hint(ru: bool, managed: bool, suppress_tiles: bool, deep_lock: bool
     match (ru, deep_lock, suppress_tiles) {
         (_, true, _) => {
             if ru {
-                "Глубокая блокировка: локальный ИИ выгружен. Нажмите, чтобы запустить модель и снять блокировку"
+                "Глубокая блокировка: локальный AI выгружен. Нажмите, чтобы запустить модель и снять блокировку"
             } else {
                 "Deep lock: local AI is unloaded. Press to start the model and unlock"
             }
         }
         (true, false, true) => {
-            "Режим прослушивания включён. Нажмите ещё раз для глубокой блокировки (локальный ИИ будет выгружен)"
+            "Режим прослушивания включён. Нажмите ещё раз для глубокой блокировки (локальный AI будет выгружен)"
         }
         (false, false, true) => {
             "Listening mode on. Press again to deep-lock (the local AI will be unloaded)"
         }
         (true, false, false) => {
-            "Блокировка тайлов: первое нажатие — режим прослушивания, второе — глубокая блокировка с выгрузкой локального ИИ"
+            "Блокировка тайлов: первое нажатие — режим прослушивания, второе — глубокая блокировка с выгрузкой локального AI"
         }
         (false, false, false) => {
             "Lock tiles: first press enables listening mode, second press deep-locks and unloads the local AI"
@@ -206,15 +206,15 @@ pub fn status_text(ru: bool, status: LockStatus) -> &'static str {
         (false, LockStatus::ListeningOn) => "listening",
         (true, LockStatus::ListeningOff) => "разблокировано",
         (false, LockStatus::ListeningOff) => "unlocked",
-        (true, LockStatus::Unloading) => "выгрузка ИИ…",
+        (true, LockStatus::Unloading) => "выгрузка AI…",
         (false, LockStatus::Unloading) => "unloading AI…",
-        (true, LockStatus::Unloaded) => "ИИ выгружен",
+        (true, LockStatus::Unloaded) => "AI выгружен",
         (false, LockStatus::Unloaded) => "AI unloaded",
         (true, LockStatus::Unlocking) => "запуск модели…",
         (false, LockStatus::Unlocking) => "starting model…",
-        (true, LockStatus::UnlockReady) => "ИИ готов",
+        (true, LockStatus::UnlockReady) => "AI готов",
         (false, LockStatus::UnlockReady) => "AI ready",
-        (true, LockStatus::UnlockFailed) => "не удалось запустить ИИ",
+        (true, LockStatus::UnlockFailed) => "не удалось запустить AI",
         (false, LockStatus::UnlockFailed) => "AI start failed",
     }
 }
@@ -224,7 +224,7 @@ pub fn status_text(ru: bool, status: LockStatus) -> &'static str {
 #[must_use]
 pub fn blocked_notice(ru: bool) -> &'static str {
     if ru {
-        "Локальный ИИ заблокирован (значок замка на панели). Снимите блокировку, чтобы получать ответы."
+        "Локальный AI заблокирован (значок замка на панели). Снимите блокировку, чтобы получать ответы."
     } else {
         "Local AI is deep-locked (the bar's lock chip). Unlock it to get answers."
     }
@@ -241,7 +241,7 @@ pub fn blocked_test_result(ru: bool, msg: &str) -> Option<String> {
 #[must_use]
 pub fn unlock_failed_notice(ru: bool) -> &'static str {
     if ru {
-        "Не удалось запустить локальный ИИ — блокировка сохранена. Проверьте установку в Настройки → AI и попробуйте ещё раз."
+        "Не удалось запустить локальный AI — блокировка сохранена. Проверьте установку в Настройки → AI и попробуйте ещё раз."
     } else {
         "Couldn't start the local AI — the lock is kept. Check Settings → AI and try again."
     }

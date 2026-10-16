@@ -25,7 +25,7 @@ export component PaletteWindow inherits Window {
     property <bool> widgets-light: Theme.is-light;
     init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
-    title: @tr("F4 — KB palette");
+    title: @tr("Suflyor — knowledge base");
     // Phase E6 fix: was `background: transparent` + frameless which
     // combined with WS_EX_LAYERED via make_transparent_overlay on the
     // HWND causes text to render invisible (alpha-clamped). Use solid
@@ -190,7 +190,7 @@ export component PaletteWindow inherits Window {
                 }
                 Rectangle { horizontal-stretch: 1; }
                 Text {
-                    text: @tr("Esc to close · Enter to spawn tile");
+                    text: @tr("Esc closes · Enter opens a tile");
                     font-size: 9px;
                     color: Theme.text-muted;
                     vertical-alignment: center;

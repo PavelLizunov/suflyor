@@ -258,7 +258,7 @@ export component ArchiveWindow inherits Window {
 
                 // ── Search box (FTS over transcript + AI answers) ──
                 search-input := LineEdit {
-                    placeholder-text: @tr("search transcript + AI answers…");
+                    placeholder-text: @tr("Search transcripts and AI answers…");
                     text <=> root.query;
                     edited(t) => {
                         root.notice = "";
@@ -296,7 +296,7 @@ export component ArchiveWindow inherits Window {
 
                 // ── Cloud-STT egress note (only when "Summary" would upload) ──
                 if root.stt-is-cloud && !root.retranscribe-busy : Text {
-                    text: @tr("Re-Summary uploads this session's saved audio to the cloud STT.");
+                    text: @tr("Generate sends the saved audio of a session to cloud speech recognition.");
                     font-size: Metrics.font-caption;
                     color: Theme.warning;
                     horizontal-alignment: center;

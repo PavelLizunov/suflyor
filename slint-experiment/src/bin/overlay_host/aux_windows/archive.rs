@@ -1070,7 +1070,7 @@ fn session_to_row(
     } else {
         "Transcript"
     };
-    let ai_word = if ru { "ИИ" } else { "AI" };
+    let ai_word = "AI";
     // Subtitle = time (when a NAME is the title) · transcript count · AI count
     // · model (only when known) · status (only when abnormal).
     let mut parts: Vec<String> = Vec::new();
@@ -1196,7 +1196,7 @@ fn build_session_markdown(
         // like the rest of this markdown) — no code-like `lines N · ai N`
         // metadata and no "—" dash for an unknown model.
         out.push_str(&format!("Стенограмма: {}", s.transcript_lines));
-        out.push_str(&format!(" · ИИ: {}", s.ai_turns_count));
+        out.push_str(&format!(" · AI: {}", s.ai_turns_count));
         if let Some(model) = s.ai_model.as_deref().filter(|m| !m.is_empty()) {
             out.push_str(&format!(" · {model}"));
         }
@@ -1214,7 +1214,7 @@ fn build_session_markdown(
     // (derived from the session start) and the two-way channel label.
     let session_start = session.and_then(|s| s.started_at_ms).filter(|&ms| ms > 0);
     if utterances.is_empty() {
-        out.push_str("_Транскрипт не сохранён_\n\n");
+        out.push_str("_Стенограмма не сохранена_\n\n");
     } else {
         for (i, u) in utterances.iter().enumerate() {
             let label = super::tile_copy::transcript_role_label(u.source == "mic", ru);
@@ -1354,7 +1354,7 @@ mod tests {
         );
         // UX-clarity — short LOCALIZED labels instead of code-like metadata.
         assert!(row.subtitle.as_str().contains("Стенограмма: 12"));
-        assert!(row.subtitle.as_str().contains("ИИ: 3"));
+        assert!(row.subtitle.as_str().contains("AI: 3"));
         assert!(row.subtitle.as_str().contains("gemma"));
         assert_eq!(row.meta.as_str(), ""); // zero cost → blank meta
 
@@ -1539,6 +1539,6 @@ mod tests {
     #[test]
     fn session_markdown_empty_shows_not_saved_notice() {
         let md = build_session_markdown(None, &[], &[], true);
-        assert!(md.contains("Транскрипт не сохранён"), "got: {md}");
+        assert!(md.contains("Стенограмма не сохранена"), "got: {md}");
     }
 }

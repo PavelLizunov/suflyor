@@ -140,7 +140,7 @@ pub(crate) fn start_mlx_for_unlock(
 
 pub(crate) fn show_mlx_runtime_error(weak: slint::Weak<TileWindow>, is_ru: bool) {
     let message = if is_ru {
-        "Не удалось запустить локальный ИИ. Проверьте установленную модель в Настройках."
+        "Не удалось запустить локальный AI. Проверьте установленную модель в Настройках."
     } else {
         "Couldn't start local AI. Check the installed model in Settings."
     };
@@ -182,12 +182,12 @@ pub(crate) fn spawn_mlx_runtime_error(
     let _ = events.spawn_tile_full(
         TileSpec {
             question: if is_ru {
-                "Локальный ИИ".into()
+                "Локальный AI".into()
             } else {
                 "Local AI".into()
             },
             answer: if is_ru {
-                "Не удалось запустить локальный ИИ. Проверьте установленную модель в Настройках."
+                "Не удалось запустить локальный AI. Проверьте установленную модель в Настройках."
                     .into()
             } else {
                 "Couldn't start local AI. Check the installed model in Settings.".into()

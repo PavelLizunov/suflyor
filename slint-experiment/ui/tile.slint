@@ -161,6 +161,8 @@ export component TileWindow inherits Window {
     in-out property <[MarkdownBlock]> blocks: [];
     // Source label shown in chrome row (e.g. "ai", "kb", "snippet").
     in-out property <string> source-label: "—";
+    // A notice or an error has nothing worth keeping in memory: no stars.
+    in-out property <bool> plain-notice: false;
     // Phase E6 v12 — trigger badge.
     in-out property <string> trigger-label: "";
     // The host names the badge category; the hue comes from the theme.
@@ -622,8 +624,9 @@ export component TileWindow inherits Window {
             // Phase E6 v12 — colored pill below chrome row shows what
             // detector trigger spawned this tile (Keyword "docker",
             // Question "...", every-line). Hidden when trigger-label
-            // is empty (manual F9 ask or F6 spawn).
-            if root.trigger-label != "" : Rectangle {
+            // is empty (manual F9 ask or F6 spawn) or just repeats the title.
+            if root.trigger-label != ""
+                && root.trigger-label.to-lowercase() != root.tile-title.to-lowercase() : Rectangle {
                 height: 22px;
                 horizontal-stretch: 1;
                 HorizontalLayout {
@@ -719,7 +722,7 @@ export component TileWindow inherits Window {
                                 horizontal-stretch: 1;
                                 capture(a, c) => { root.capture-selection(i, a, c); }
                             }
-                            StarMark {
+                            if !root.plain-notice : StarMark {
                                 marked: block.marked;
                                 clicked(shift) => { root.toggle-block-marked(i, shift); }
                             }
@@ -743,7 +746,7 @@ export component TileWindow inherits Window {
                                 horizontal-stretch: 1;
                                 capture(a, c) => { root.capture-selection(i, a, c); }
                             }
-                            StarMark {
+                            if !root.plain-notice : StarMark {
                                 marked: block.marked;
                                 clicked(shift) => { root.toggle-block-marked(i, shift); }
                             }

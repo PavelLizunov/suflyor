@@ -18,10 +18,10 @@ fn short_model_name(full: &str) -> String {
     }
 }
 
-/// Build the bar's "active stack" label: which STT engine + which AI model are
-/// live, prefixed with 🟢 (all-local), ☁ (all-cloud), or ◐ (mixed). (#E10.2)
+/// Build the bar's "active stack" label: which STT engine and which AI model
+/// are live, e.g. `STT: Groq · AI: Gemma 12B`. (#E10.2)
 pub(super) fn active_stack_label(c: &overlay_backend::config::Config) -> String {
-    let (stt, stt_local): (String, bool) = match c.stt_provider.as_str() {
+    let (stt, _stt_local): (String, bool) = match c.stt_provider.as_str() {
         // Show the platform accelerator so the bar reflects accelerated vs CPU.
         "gigaam" => (
             format!("GigaAM {}", gigaam_accelerator_name(c.stt_gigaam_gpu)),
@@ -51,16 +51,10 @@ pub(super) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
     } else {
         short_model_name(model_full)
     };
-    // ASCII tag + Latin-1 middle dot only — fancier glyphs (✕/✓/arrows) render
-    // as missing-glyph boxes on the user's Slint+skia font fallback.
-    let tag = if stt_local && ai_local {
-        "local"
-    } else if !stt_local && !ai_local {
-        "cloud"
-    } else {
-        "mixed"
-    };
-    format!("{tag}: {stt} · {model}")
+    // Latin-1 middle dot only — fancier glyphs (✕/✓/arrows) render as
+    // missing-glyph boxes on the user's Slint+skia font fallback. Both labels
+    // are the tab names in Settings, so the line reads the same in RU and EN.
+    format!("STT: {stt} · AI: {model}")
 }
 
 pub(super) fn ai_perf_label(
@@ -158,7 +152,7 @@ pub(super) fn summary_empty_copy(is_ru: bool) -> (&'static str, &'static str) {
     if is_ru {
         (
             "Сводка встречи",
-            "Транскрипта пока нет. Нажмите Старт, поговорите — и Сводка соберёт итог встречи.",
+            "Стенограммы пока нет. Нажмите «старт» на панели, поговорите, и сводка соберёт итог встречи.",
         )
     } else {
         (
@@ -200,7 +194,7 @@ pub(super) fn manual_tile_placeholder(deep_locked: bool, has_transcript: bool, i
     match (has_transcript, is_ru) {
         (true, true) => "Спрашиваю AI…",
         (true, false) => "Asking AI…",
-        (false, true) => "Транскрипт пока пуст. Нажмите старт на баре (или удерживайте «спросить») — AI ответит по последним репликам.",
+        (false, true) => "Стенограмма пока пуста. Нажмите «старт» на панели (или удерживайте «спросить»), и AI ответит по последним репликам.",
         (false, false) => "The transcript is empty. Start a session from the bar (or hold ask) and AI will answer from the latest lines.",
     }
 }
@@ -290,7 +284,7 @@ mod tile_heading_tests {
         assert!(manual_tile_failure("Tile", "offline", false).contains("could not"));
 
         assert_eq!(manual_tile_heading(false, true), "Тайл");
-        assert!(manual_tile_placeholder(false, false, true).starts_with("Транскрипт"));
+        assert!(manual_tile_placeholder(false, false, true).starts_with("Стенограмма"));
         assert!(manual_tile_not_configured(true).contains("не настроен"));
         assert!(manual_tile_failure("Тайл", "offline", true).contains("Не удалось"));
 
@@ -309,7 +303,7 @@ mod tile_heading_tests {
         assert_eq!(summary_empty_copy(false).0, "Meeting summary");
         assert!(summary_empty_copy(false).1.starts_with("No transcript"));
         assert_eq!(summary_empty_copy(true).0, "Сводка встречи");
-        assert!(summary_empty_copy(true).1.starts_with("Транскрипта"));
+        assert!(summary_empty_copy(true).1.starts_with("Стенограммы"));
     }
 
     #[test]
@@ -365,7 +359,7 @@ pub(super) fn connection_failed(ru: bool, chain: &str) -> String {
         needles.iter().any(|n| lower.contains(n))
     };
     let (ru_text, en_text) = if has(&["no groq api key", "no api key", "missing api key"]) {
-        ("Нет ключа: добавьте его выше", "No key yet: add it above")
+        ("Нет ключа: добавьте его в Настройках", "No key yet: add it in Settings")
     } else if has(&["401", "403", "unauthorized", "forbidden", "invalid api key"]) {
         ("Ключ не подошёл", "The key was rejected")
     } else if has(&["404", "not found"]) {
@@ -390,7 +384,7 @@ mod connection_text_tests {
 
     #[test]
     fn failures_read_as_plain_words() {
-        assert_eq!(connection_failed(true, "no Groq API key set"), "Нет ключа: добавьте его выше");
+        assert_eq!(connection_failed(true, "no Groq API key set"), "Нет ключа: добавьте его в Настройках");
         assert_eq!(connection_failed(false, "HTTP 401 Unauthorized"), "The key was rejected");
         assert_eq!(connection_failed(true, "error sending request: connection refused"), "Сервер не отвечает");
         assert_eq!(connection_failed(false, "weird"), "Could not connect");

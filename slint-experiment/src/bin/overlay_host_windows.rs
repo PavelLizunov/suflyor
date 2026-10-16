@@ -2063,6 +2063,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 req.stealth,
                 cfg_for_poll.read().ui_is_ru(),
             )));
+            tile.set_plain_notice(req.kind == TileKind::Error);
             // Phase E6 v12 — first highlight (if any) becomes the
             // trigger badge. Backend's trigger_highlights() already
             // formats it as "keyword ..." or "question ...".
@@ -3453,6 +3454,7 @@ fn main() -> Result<(), slint::PlatformError> {
             tile.set_tile_id(tile_id);
             tile.set_tile_title(SharedString::from(heading));
             tile.set_source_label(SharedString::from(tile_text::asking_label(is_ru)));
+            tile.set_plain_notice(false);
             wire_tile_drag(&tile);
 
             // Initial body — shown instantly: the AI-in-flight hint, or a
@@ -3655,6 +3657,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                 .collect();
                             tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
                             tile.set_source_label(SharedString::from(tile_text::error_label(is_ru)));
+                            tile.set_plain_notice(true);
                         }
                     }
                 });
@@ -4558,7 +4561,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                     let _ = events_unlock.spawn_tile_full(
                                         overlay_backend::events::TileSpec {
                                             question: if ru {
-                                                "Локальный ИИ".into()
+                                                "Локальный AI".into()
                                             } else {
                                                 "Local AI".into()
                                             },

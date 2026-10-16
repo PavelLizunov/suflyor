@@ -152,11 +152,12 @@ pub(crate) fn superseded_label(is_ru: bool) -> &'static str {
 }
 
 /// Body of a failed answer; `safe` is already free of addresses and secrets.
+/// The state pill already says "error", so the body names the cause and where to look.
 pub(crate) fn error_body(safe: &str, is_ru: bool) -> String {
     if is_ru {
-        format!("Ошибка AI: {safe}")
+        format!("{safe}. Проверьте Настройки → AI-провайдеры.")
     } else {
-        format!("AI error: {safe}")
+        format!("{safe}. Check Settings → AI providers.")
     }
 }
 
@@ -223,7 +224,7 @@ mod tests {
             assert!(!en.chars().any(|c| ('а'..='я').contains(&c)), "{en}");
             assert!(ru.chars().any(|c| ('а'..='я').contains(&c)), "{ru}");
         }
-        assert_eq!(error_body("x", false), "AI error: x");
-        assert_eq!(error_body("x", true), "Ошибка AI: x");
+        assert_eq!(error_body("x", false), "x. Check Settings → AI providers.");
+        assert_eq!(error_body("x", true), "x. Проверьте Настройки → AI-провайдеры.");
     }
 }

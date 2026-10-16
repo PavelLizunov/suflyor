@@ -369,6 +369,7 @@ impl RuntimeEvents for PttStreamSink {
                     if let Some(t) = weak.upgrade() {
                         t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&body))));
                         t.set_source_label(SharedString::from(crate::tile_text::error_label(ru)));
+                        t.set_plain_notice(true);
                         t.set_followup_busy(false);
                     }
                 });
@@ -651,7 +652,7 @@ impl OverlayBarBridge {
                         let note = if ru {
                             "_(Модель не вернула текст — вероятно, запросила \
                             инструмент вроде веб-поиска, который в этом режиме не \
-                            поддерживается. Переформулируй вопрос без «найди/загугли».)_"
+                            поддерживается. Переформулируйте вопрос без «найди/загугли».)_"
                         } else {
                             "_(The model returned no text. It probably asked for a tool \
                             such as web search, which this mode does not support. \

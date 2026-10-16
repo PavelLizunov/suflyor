@@ -375,6 +375,7 @@ pub(crate) fn fire_ptt_ask(
                         slint_replay::app_state::tile_title_line(&q),
                     ));
                     t.set_source_label(SharedString::from(crate::tile_text::asking_label(ui_is_ru)));
+                    t.set_plain_notice(false);
                 }
             });
         }

@@ -194,7 +194,7 @@ export component HelpWindow inherits Window {
                             DragGrip { y: 2px; }
                         }
                         Text {
-                            text: @tr("Help — icons, hotkeys & gestures");
+                            text: @tr("Help");
                             font-size: 15px;
                             font-weight: 700;
                             color: Theme.text-primary;
@@ -253,24 +253,27 @@ export component HelpWindow inherits Window {
                     Rectangle { height: 8px; }
                     TableHeader { left: @tr("Icon"); right: @tr("What it does"); }
                     for row in [
-                        { ico: @image-url("../assets/icons/grip.svg"), hasicon: true, glyph: "", desc: @tr("Drag to move the bar; shows the live state") },
-                        { ico: @image-url("../assets/icons/mic.svg"), hasicon: true, glyph: "", desc: @tr("Toggle continuous mic capture (your voice)") },
-                        { ico: @image-url("../assets/icons/system-audio.svg"), hasicon: true, glyph: "", desc: @tr("Toggle continuous system-audio capture (the other side)") },
-                        { ico: @image-url("../assets/icons/mic.svg"), hasicon: true, glyph: @tr("ask"), desc: @tr("Hold to record your voice → AI answer (swipe up to lock)") },
-                        { ico: @image-url("../assets/icons/system-audio.svg"), hasicon: true, glyph: @tr("grab"), desc: @tr("Hold to capture system audio → AI answer (swipe up to lock)") },
-                        { ico: @image-url("../assets/icons/session-start.svg"), hasicon: true, glyph: "", desc: @tr("Start / stop the live session (transcript + auto-tips)") },
-                        { ico: @image-url("../assets/icons/x.svg"), hasicon: false, glyph: "$0.000", desc: @tr("Session cost (cloud only; local is free)") },
-                        { ico: @image-url("../assets/icons/stealth.svg"), hasicon: true, glyph: "", desc: @tr("Stealth: hide the overlay from screen capture / share") },
-                        { ico: @image-url("../assets/icons/flame.svg"), hasicon: true, glyph: "", desc: @tr("Aggressive auto-tiles (answer more often)") },
+                        { ico: @image-url("../assets/icons/grip.svg"), hasicon: true, glyph: "", desc: @tr("Drag to move the bar; its colour shows the state") },
+                        { ico: @image-url("../assets/icons/mic.svg"), hasicon: true, glyph: "", desc: @tr("Microphone: turn recording of your voice on or off") },
+                        { ico: @image-url("../assets/icons/system-audio.svg"), hasicon: true, glyph: "", desc: @tr("System audio: turn recording of the other side on or off") },
+                        { ico: @image-url("../assets/icons/mic.svg"), hasicon: true, glyph: @tr("ask"), desc: @tr("Hold to ask by voice; swipe up so you do not have to hold") },
+                        { ico: @image-url("../assets/icons/system-audio.svg"), hasicon: true, glyph: @tr("grab"), desc: @tr("Hold to send the other side's last words to AI; swipe up so you do not have to hold") },
+                        { ico: @image-url("../assets/icons/session-start.svg"), hasicon: true, glyph: "", desc: @tr("Start or end the session: transcript and auto-tips") },
+                        { ico: @image-url("../assets/icons/x.svg"), hasicon: false, glyph: "$0.000", desc: @tr("Session cost (cloud AI only)") },
+                        { ico: @image-url("../assets/icons/stealth.svg"), hasicon: true, glyph: "", desc: @tr("Stealth: hide Suflyor windows from screen capture") },
+                        { ico: @image-url("../assets/icons/flame.svg"), hasicon: true, glyph: "", desc: @tr("Frequent auto-tiles: answer more phrases") },
+                        { ico: @image-url("../assets/icons/unlock.svg"), hasicon: true, glyph: "", desc: @tr("Tile lock: keep listening without opening new tiles") },
+                        { ico: @image-url("../assets/icons/archive.svg"), hasicon: true, glyph: "", desc: @tr("Session archive (also F7)") },
+                        { ico: @image-url("../assets/icons/summary.svg"), hasicon: true, glyph: "", desc: @tr("Meeting summary: participants, topics, decisions, tasks") },
                         { ico: @image-url("../assets/icons/pencil.svg"), hasicon: true, glyph: "", desc: @tr("Write a question as text") },
-                        { ico: @image-url("../assets/icons/plus.svg"), hasicon: true, glyph: "", desc: @tr("New tile from the last line / a manual question") },
-                        { ico: @image-url("../assets/icons/camera.svg"), hasicon: true, glyph: "", desc: @tr("Screenshot a region → AI vision answer") },
-                        { ico: @image-url("../assets/icons/archive.svg"), hasicon: true, glyph: "", desc: @tr("Session archive: browse and search past calls (also F7)") },
-                        { ico: @image-url("../assets/icons/summary.svg"), hasicon: true, glyph: "", desc: @tr("Call summary: digest (participants, topics, decisions, tasks)") },
+                        { ico: @image-url("../assets/icons/plus.svg"), hasicon: true, glyph: "", desc: @tr("New tile from the last phrase (also F6)") },
+                        { ico: @image-url("../assets/icons/camera.svg"), hasicon: true, glyph: "", desc: @tr("Screenshot a region, AI answers (also F8)") },
                         { ico: @image-url("../assets/icons/gear.svg"), hasicon: true, glyph: "", desc: @tr("Settings") },
                         { ico: @image-url("../assets/icons/sos.svg"), hasicon: true, glyph: "", desc: @tr("This help (also F1)") },
-                        { ico: @image-url("../assets/icons/restart.svg"), hasicon: true, glyph: "", desc: @tr("Restart the overlay (two-step; settings survive)") },
-                        { ico: @image-url("../assets/icons/x.svg"), hasicon: true, glyph: "", desc: @tr("Quit (two-step)") },
+                        { ico: @image-url("../assets/icons/restart.svg"), hasicon: true, glyph: "", desc: @tr("Restart Suflyor (two clicks; settings are kept)") },
+                        { ico: @image-url("../assets/icons/minimize.svg"), hasicon: true, glyph: "", desc: @tr("Compact mode: only the main buttons") },
+                        { ico: @image-url("../assets/icons/tray.svg"), hasicon: true, glyph: "", desc: @tr("Hide to tray") },
+                        { ico: @image-url("../assets/icons/x.svg"), hasicon: true, glyph: "", desc: @tr("Quit (two clicks)") },
                     ] : TableRow {
                         icon: row.ico;
                         has-icon: row.hasicon;
@@ -288,19 +291,19 @@ export component HelpWindow inherits Window {
                     Rectangle { height: 8px; }
                     TableHeader { left: @tr("Key"); right: @tr("Action"); }
                     for row in [
-                        ["F1", @tr("This help")],
                         ["F9", @tr("Ask AI now (streams the answer into a tile)")],
-                        ["Shift+F9", @tr("Ask AI escalated to the smart cloud model (one-shot)")],
-                        ["F8", @tr("Screenshot → AI vision (drag a region; Esc cancels)")],
+                        ["Shift+F9", @tr("Ask AI escalated to the smart cloud model (one-shot; tile shows a cloud badge)")],
                         ["F3", @tr("Re-ask the last question with fresh context")],
-                        ["F4", @tr("Knowledge-base palette (open / close)")],
                         ["F6", @tr("Manual tile from the last transcript line")],
-                        ["F7", @tr("Session archive (browse and search)")],
-                        ["Shift+F8", @tr("Screenshot → translate text (AI vision)")],
+                        ["F8", @tr("Screenshot → AI explains it")],
+                        ["Shift+F8", @tr("Screenshot → translate only (no screen description)")],
                         ["Ctrl+F8", @tr("Screenshot → OCR the text, then read it aloud")],
-                        ["Shift+Alt+1", @tr("Read the selected text aloud (TTS)")],
+                        ["Shift+Alt+1", @tr("Read the selected text aloud")],
                         ["Shift+Alt+2", @tr("OCR a screen region and read it aloud")],
                         ["Shift+Alt+3", @tr("Pause / resume reading aloud")],
+                        ["F4", @tr("Knowledge-base palette (open / close)")],
+                        ["F1", @tr("Help (open / close)")],
+                        ["F7", @tr("Session archive (open / close)")],
                     ] : TableRow {
                         key-row: true;
                         glyph: Platform.is-macos ? (
@@ -335,9 +338,7 @@ export component HelpWindow inherits Window {
                     }
                     Rectangle { height: 8px; }
                     Text {
-                        text: Platform.is-macos
-                            ? @tr("Choose the text and Vision providers separately in Settings → AI providers. Gemma 4B is text-only and cannot analyse screenshots. Speech recognition is configured in Settings → STT.")
-                            : @tr("Choose the text and Vision providers separately in Settings → AI. Gemma 4B is text-only and cannot analyse screenshots. Speech recognition is configured in Settings → STT.");
+                        text: @tr("The answer model is chosen in Settings → AI providers, the screenshot model in Settings → Screenshots (F8). Speech recognition is set up in Settings → STT.");
                         font-size: Metrics.font-label;
                         color: Theme.text-secondary;
                         wrap: word-wrap;
@@ -354,7 +355,7 @@ export component HelpWindow inherits Window {
                     Text {
                         text: Platform.is-macos
                             ? @tr("Shift+Option+1 — read the selected text aloud; Shift+Option+2 — recognize a screen region with Apple Vision and read it; Shift+Option+3 — pause/resume. Voices are configured in Settings → TTS; Apple Vision is built into macOS. Compact reader mode uses the collapse chip on the bar. Listening mode in Settings → Auto-tiles mutes automatic tiles.")
-                            : @tr("Shift+Alt+1 — read the selected text aloud; Shift+Alt+2 — OCR text from a screen region and read it; Shift+Alt+3 — pause/resume. Voices (TTS) and the recognition engine (OCR) install with a button in Settings → AI (TTS and Vision). Compact \"reader\" mode: the collapse chip on the bar turns it into a tiny read-aloud-only pill. \"Listening mode\" (Settings → Auto-tiles) mutes auto-tiles so you can just record and listen.");
+                            : @tr("Shift+Alt+1 — read the selected text aloud; Shift+Alt+2 — recognize text in a screen region and read it; Shift+Alt+3 — pause or resume. Voices are set up in Settings → TTS, text recognition is installed in Settings → Components. Compact mode keeps only the main buttons on the bar. Listening mode (the lock on the bar or Settings → Auto-tiles) keeps recording without opening tiles.");
                         font-size: Metrics.font-label;
                         color: Theme.text-secondary;
                         wrap: word-wrap;

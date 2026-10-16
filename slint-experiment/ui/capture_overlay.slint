@@ -9,7 +9,7 @@
 import { Metrics } from "metrics.slint";
 
 export component CaptureOverlay inherits Window {
-    title: @tr("suflyor — capture");
+    title: @tr("Suflyor — screenshot");
     no-frame: true;
     always-on-top: true;
     forward-focus: fs;
@@ -208,8 +208,8 @@ export component CaptureOverlay inherits Window {
         border-width: 1px;
         border-color: #22d3ee;
         modehint := Text {
-            text: root.translate-mode ? @tr("Translate — tap to Describe")
-                : (root.practice-mode ? @tr("Test Practice (self-check)") : @tr("Describe — tap to Translate"));
+            text: root.translate-mode ? @tr("Translation · click to switch to description")
+                : (root.practice-mode ? @tr("Practice: answer and a short review") : @tr("Description · click to switch to translation"));
             color: #e8e8ec;
             font-size: Metrics.font-body;
             horizontal-alignment: center;

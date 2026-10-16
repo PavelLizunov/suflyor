@@ -1181,7 +1181,7 @@ export component OverlayBarWindow inherits Window {
             // The live transcript text — elide when too long.
             Text {
                 text: root.last-transcript-line == ""
-                    ? @tr("waiting for transcript... (mic/sys → STT)")
+                    ? @tr("Waiting for speech…")
                     : root.last-transcript-line;
                 font-size: Metrics.font-label;
                 color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;
@@ -1425,7 +1425,7 @@ export component OverlayBarWindow inherits Window {
                 }
                 Text {
                     text: root.last-transcript-line == ""
-                        ? @tr("waiting for transcript... (mic/sys → STT)")
+                        ? @tr("Waiting for speech…")
                         : root.last-transcript-line;
                     font-size: Metrics.font-label;
                     color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;
@@ -1537,7 +1537,7 @@ export component OverlayBarWindow inherits Window {
                 }
                 Text {
                     text: root.last-transcript-line == ""
-                        ? @tr("waiting for transcript... (mic/sys → STT)")
+                        ? @tr("Waiting for speech…")
                         : root.last-transcript-line;
                     font-size: Metrics.font-label;
                     color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;

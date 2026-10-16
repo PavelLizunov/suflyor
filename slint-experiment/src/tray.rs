@@ -402,7 +402,7 @@ unsafe fn add_notify_icon(
         hIcon: unsafe { load_tray_icon(module) },
         ..Default::default()
     };
-    fill_tip(&mut data.szTip, "suflyor");
+    fill_tip(&mut data.szTip, "Suflyor");
 
     if !unsafe { Shell_NotifyIconW(NIM_ADD, &data) }.as_bool() {
         let err = unsafe { GetLastError() };

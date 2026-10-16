@@ -207,7 +207,7 @@ export component WizardWindow inherits Window {
                     RailStep { num: "3"; label: @tr("STT"); state: root.step == 2 ? 1 : (root.step > 2 ? 2 : 0); }
                     RailStep { num: "4"; label: @tr("Microphone"); state: root.step == 3 ? 1 : (root.step > 3 ? 2 : 0); }
                     RailStep { num: "5"; label: @tr("System audio"); state: root.step == 4 ? 1 : (root.step > 4 ? 2 : 0); }
-                    RailStep { num: "6"; label: @tr("Overlay"); state: root.step == 5 ? 1 : (root.step > 5 ? 2 : 0); }
+                    RailStep { num: "6"; label: @tr("Stealth"); state: root.step == 5 ? 1 : (root.step > 5 ? 2 : 0); }
                     RailStep { num: "7"; label: @tr("Done"); state: root.step == 6 ? 1 : 0; }
                     Rectangle { vertical-stretch: 1; }
                 }
@@ -275,26 +275,26 @@ export component WizardWindow inherits Window {
                         if root.step == 0: VerticalLayout {
                             spacing: Metrics.space-sm;
                             Text {
-                                text: @tr("Choose how suflyor runs");
+                                text: @tr("Choose how Suflyor works");
                                 font-size: Metrics.font-heading;
                                 font-weight: 700;
                                 color: Theme.text-primary;
                             }
                             ModeOption {
                                 title: @tr("Cloud");
-                                desc: @tr("Groq STT + Claude bridge — fast start, needs keys + internet.");
+                                desc: @tr("Speech recognition and AI in the cloud: a quick start, needs keys and internet.");
                                 selected: root.mode == 0;
                                 chosen => { root.mode = 0; root.mode-selected(0); }
                             }
                             ModeOption {
                                 title: @tr("Fully local");
-                                desc: @tr("Local AI + local STT — nothing leaves the machine, needs models.");
+                                desc: @tr("AI and speech recognition on this PC: nothing leaves it, models need downloading.");
                                 selected: root.mode == 1;
                                 chosen => { root.mode = 1; root.mode-selected(1); }
                             }
                             ModeOption {
                                 title: @tr("Mixed");
-                                desc: @tr("e.g. local STT + cloud AI — configure manually.");
+                                desc: @tr("For example, speech on this PC and AI in the cloud; set up in Settings.");
                                 selected: root.mode == 2;
                                 chosen => { root.mode = 2; root.mode-selected(2); }
                             }
@@ -305,16 +305,15 @@ export component WizardWindow inherits Window {
                             spacing: 10px;
                             Text { text: @tr("AI"); font-size: Metrics.font-heading; font-weight: 700; color: Theme.text-primary; }
                             Text {
-                                text: @tr("Configure the AI provider in Settings; here we just confirm it answers.");
+                                text: @tr("The AI is chosen in Settings → AI providers. Here we only check that it answers.");
                                 color: Theme.text-secondary;
                                 font-size: Metrics.font-body;
                                 wrap: word-wrap;
                             }
                             HorizontalLayout {
                                 spacing: Metrics.space-sm;
-                                alignment: start;
-                                Button { text: @tr("Test AI"); clicked => { root.ai-test-clicked(); } }
-                                Button { text: @tr("Install / complete local AI"); clicked => { root.install-local-clicked(); } }
+                                Button { min-width: 0px; preferred-width: 0px; horizontal-stretch: 1; text: @tr("Test AI"); clicked => { root.ai-test-clicked(); } }
+                                Button { min-width: 0px; preferred-width: 0px; horizontal-stretch: 1; text: @tr("Install or finish the built-in AI"); clicked => { root.install-local-clicked(); } }
                             }
                             HorizontalLayout {
                                 spacing: 6px;
@@ -328,14 +327,13 @@ export component WizardWindow inherits Window {
                             spacing: 10px;
                             Text { text: @tr("Speech recognition (STT)"); font-size: Metrics.font-heading; font-weight: 700; color: Theme.text-primary; }
                             Text {
-                                text: @tr("Configure STT in Settings; here we confirm it connects.");
+                                text: @tr("Speech recognition is set up in Settings → STT. Here we only check the connection.");
                                 color: Theme.text-secondary;
                                 font-size: Metrics.font-body;
                                 wrap: word-wrap;
                             }
                             HorizontalLayout {
-                                alignment: start;
-                                Button { text: @tr("Test STT"); clicked => { root.stt-test-clicked(); } }
+                                Button { min-width: 0px; preferred-width: 0px; horizontal-stretch: 1; text: @tr("Test STT"); clicked => { root.stt-test-clicked(); } }
                             }
                             HorizontalLayout {
                                 spacing: 6px;
@@ -355,8 +353,7 @@ export component WizardWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             HorizontalLayout {
-                                alignment: start;
-                                Button { text: @tr("Record test"); clicked => { root.mic-test-clicked(); } }
+                                Button { min-width: 0px; preferred-width: 0px; horizontal-stretch: 1; text: @tr("Record test"); clicked => { root.mic-test-clicked(); } }
                             }
                             HorizontalLayout {
                                 spacing: 6px;
@@ -370,14 +367,13 @@ export component WizardWindow inherits Window {
                             spacing: 10px;
                             Text { text: @tr("System audio"); font-size: Metrics.font-heading; font-weight: 700; color: Theme.text-primary; }
                             Text {
-                                text: @tr("Needed to hear the other side. Plays a short test tone and checks loopback.");
+                                text: @tr("Needed to hear the other side. Plays a short sound and checks that it is recorded.");
                                 color: Theme.text-secondary;
                                 font-size: Metrics.font-body;
                                 wrap: word-wrap;
                             }
                             HorizontalLayout {
-                                alignment: start;
-                                Button { text: @tr("Check system audio"); clicked => { root.sys-test-clicked(); } }
+                                Button { min-width: 0px; preferred-width: 0px; horizontal-stretch: 1; text: @tr("Check system audio"); clicked => { root.sys-test-clicked(); } }
                             }
                             HorizontalLayout {
                                 spacing: 6px;
@@ -389,14 +385,14 @@ export component WizardWindow inherits Window {
                         // Step 6 — overlay + stealth
                         if root.step == 5: VerticalLayout {
                             spacing: 10px;
-                            Text { text: @tr("Overlay & stealth"); font-size: Metrics.font-heading; font-weight: 700; color: Theme.text-primary; }
+                            Text { text: @tr("Stealth"); font-size: Metrics.font-heading; font-weight: 700; color: Theme.text-primary; }
                             HorizontalLayout {
                                 spacing: Metrics.space-sm;
-                                Text { text: @tr("Hide overlay from screen capture"); color: Theme.text-primary; vertical-alignment: center; wrap: word-wrap; horizontal-stretch: 1; }
+                                Text { text: @tr("Hide Suflyor windows from screen capture"); color: Theme.text-primary; vertical-alignment: center; wrap: word-wrap; horizontal-stretch: 1; }
                                 Switch { horizontal-stretch: 0; checked <=> root.stealth-on; toggled => { root.stealth-toggled(self.checked); } }
                             }
                             Text {
-                                text: @tr("Press Print Screen or open a screen-share preview — the overlay should vanish from the capture but stay on your screen. We can't verify stealth automatically.");
+                                text: @tr("Press Print Screen or open a screen-share preview: Suflyor windows should disappear from the capture and stay on your screen. This cannot be checked automatically.");
                                 color: Theme.text-secondary;
                                 font-size: Metrics.font-body;
                                 wrap: word-wrap;
@@ -412,29 +408,32 @@ export component WizardWindow inherits Window {
                             // System audio reuse the existing step-title msgids.
                             HorizontalLayout {
                                 spacing: Metrics.space-sm;
-                                Text { text: "AI"; width: 130px; color: Theme.text-secondary; font-family: Theme.font-mono; }
-                                Text { text: root.summary-ai; horizontal-stretch: 1; color: Theme.text-secondary; font-family: Theme.font-mono; wrap: word-wrap; }
+                                Text { text: "AI"; width: 130px; color: Theme.text-secondary; }
+                                Text { text: root.level-text(root.ai-level); width: 132px; color: root.level-color(root.ai-level); font-weight: 700; }
+                                Text { text: root.summary-ai; horizontal-stretch: 1; color: Theme.text-secondary; wrap: word-wrap; }
                             }
                             HorizontalLayout {
                                 spacing: Metrics.space-sm;
-                                Text { text: "STT"; width: 130px; color: Theme.text-secondary; font-family: Theme.font-mono; }
-                                Text { text: root.summary-stt; horizontal-stretch: 1; color: Theme.text-secondary; font-family: Theme.font-mono; wrap: word-wrap; }
+                                Text { text: "STT"; width: 130px; color: Theme.text-secondary; }
+                                Text { text: root.level-text(root.stt-level); width: 132px; color: root.level-color(root.stt-level); font-weight: 700; }
+                                Text { text: root.summary-stt; horizontal-stretch: 1; color: Theme.text-secondary; wrap: word-wrap; }
                             }
                             HorizontalLayout {
                                 spacing: Metrics.space-sm;
-                                Text { text: @tr("Microphone"); width: 130px; color: Theme.text-secondary; font-family: Theme.font-mono; }
-                                Text { text: root.summary-mic; horizontal-stretch: 1; color: Theme.text-secondary; font-family: Theme.font-mono; wrap: word-wrap; }
+                                Text { text: @tr("Microphone"); width: 130px; color: Theme.text-secondary; }
+                                Text { text: root.level-text(root.mic-level); width: 132px; color: root.level-color(root.mic-level); font-weight: 700; }
+                                Text { text: root.summary-mic; horizontal-stretch: 1; color: Theme.text-secondary; wrap: word-wrap; }
                             }
                             HorizontalLayout {
                                 spacing: Metrics.space-sm;
-                                Text { text: @tr("System audio"); width: 130px; color: Theme.text-secondary; font-family: Theme.font-mono; }
-                                Text { text: root.summary-sys; horizontal-stretch: 1; color: Theme.text-secondary; font-family: Theme.font-mono; wrap: word-wrap; }
+                                Text { text: @tr("System audio"); width: 130px; color: Theme.text-secondary; }
+                                Text { text: root.level-text(root.sys-level); width: 132px; color: root.level-color(root.sys-level); font-weight: 700; }
+                                Text { text: root.summary-sys; horizontal-stretch: 1; color: Theme.text-secondary; wrap: word-wrap; }
                             }
                             HorizontalLayout {
                                 spacing: Metrics.space-sm;
-                                alignment: start;
-                                Button { text: @tr("Start working"); primary: true; clicked => { root.finished(); } }
-                                Button { text: @tr("Open diagnostics"); clicked => { root.open-diagnostics(); } }
+                                Button { min-width: 0px; preferred-width: 0px; horizontal-stretch: 1; text: @tr("Start working"); primary: true; clicked => { root.finished(); } }
+                                Button { min-width: 0px; preferred-width: 0px; horizontal-stretch: 1; text: @tr("Open diagnostics"); clicked => { root.open-diagnostics(); } }
                             }
                         }
 

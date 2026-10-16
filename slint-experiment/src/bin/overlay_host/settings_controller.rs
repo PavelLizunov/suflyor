@@ -1574,7 +1574,7 @@ pub(crate) fn populate_component_rows(
                 if ru {
                     (
                         "Распознавание речи (STT)",
-                        "Настройки → STT → Cloud, GigaAM или External Whisper",
+                        "Настройки → STT → Облако, GigaAM или External Whisper",
                     )
                 } else {
                     (
