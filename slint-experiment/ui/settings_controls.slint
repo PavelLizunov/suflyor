@@ -287,24 +287,32 @@ export component LocalModelRow inherits Rectangle {
     }
 }
 
-// Keep native button activation and accessibility; only replace its visuals.
-export component SettingsDangerButton inherits Button {
-    Rectangle {
-        width: root.width;
-        height: root.height;
-        border-radius: Metrics.radius-control;
-        border-width: Metrics.border-thin;
-        border-color: Theme.danger.with-alpha(root.has-focus || root.pressed ? 1 : 0.55);
-        background: Theme.bg-elevated;
-        Text {
-            width: parent.width;
-            height: parent.height;
-            text: root.text;
-            font-size: Metrics.font-body;
-            color: Theme.danger;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-        }
+// A destructive action: same size and role as a Settings button, drawn in the
+// danger colour so it does not read like the harmless buttons next to it.
+export component SettingsDangerButton inherits Rectangle {
+    in property <string> text;
+    callback clicked();
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
+    height: 32px;
+    border-radius: Metrics.radius-field;
+    border-width: Metrics.border-thin;
+    border-color: Theme.danger.with-alpha(ta.has-hover ? 1 : 0.55);
+    background: ta.pressed ? Theme.danger.with-alpha(0.18)
+        : (ta.has-hover ? Theme.danger.with-alpha(0.10) : Theme.bg-elevated);
+    Text {
+        width: parent.width;
+        height: parent.height;
+        text: root.text;
+        font-size: Metrics.font-body;
+        color: Theme.danger;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
     }
 }
 
