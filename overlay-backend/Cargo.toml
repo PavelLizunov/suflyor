@@ -88,7 +88,7 @@ wasapi = "0.25"
 # resolves anew. ort 2.0.0-rc.14 changed `Session::builder` and transcribe-rs
 # no longer compiles against it. These are the versions of
 # slint-experiment/Cargo.lock, which the product is built from.
-transcribe-rs = { version = "=0.3.11", default-features = false, features = ["onnx", "ort-directml"] }
+transcribe-rs = { version = "=0.3.12", default-features = false, features = ["onnx", "ort-directml"] }
 ort = { version = "=2.0.0-rc.12", default-features = false }
 
 # Text-to-speech (tts.rs, read-aloud feature) — Windows SAPI 5 ISpVoice via the
