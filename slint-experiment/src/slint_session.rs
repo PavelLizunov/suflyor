@@ -47,6 +47,8 @@ pub const AUTO_TILE_STREAM_CHANNEL: &str = "auto-tile:stream";
 pub const AUTO_TILE_FILL_CHANNEL: &str = "auto-tile:fill";
 /// Close a streaming auto tile that got no answer: `{label}`.
 pub const AUTO_TILE_DROP_CHANNEL: &str = "auto-tile:drop";
+/// `TileSpec::source` of the tile that waits for its streamed answer.
+pub const AUTO_TILE_STREAM_SOURCE: &str = "auto_tile_stream";
 /// How often a streaming auto tile is redrawn.
 const AUTO_TILE_STREAM_PUSH: Duration = Duration::from_millis(100);
 /// Attempts for an auto-tile answer, as the one-shot call it replaced made.
@@ -71,7 +73,16 @@ async fn stream_auto_tile_answer(
         let mut answer = String::new();
         let mut last_push: Option<Instant> = None;
         let outcome = loop {
-            match rx.recv().await {
+            // Wake up now and then so a stopped session closes the tile even
+            // while the request still waits for its first token.
+            let next = match tokio::time::timeout(AUTO_TILE_STREAM_PUSH * 5, rx.recv()).await {
+                Ok(next) => next,
+                Err(_) if lock(rt).session_gen != session_gen => {
+                    break Ok("cancelled".to_string());
+                }
+                Err(_) => continue,
+            };
+            match next {
                 Some(ai::AiEvent::Delta { text }) => {
                     answer.push_str(&text);
                     if lock(rt).session_gen != session_gen {
@@ -88,6 +99,11 @@ async fn stream_auto_tile_answer(
                         );
                         last_push = Some(Instant::now());
                     }
+                }
+                // A connection closed before any text is a failure to retry,
+                // as a truncated one-shot reply was.
+                Some(ai::AiEvent::Done { reason }) if reason == "eof" && answer.is_empty() => {
+                    break Err("AI stream closed without an answer".to_string());
                 }
                 Some(ai::AiEvent::Done { reason }) => break Ok(reason),
                 Some(ai::AiEvent::Error { message }) => break Err(message),
@@ -462,14 +478,18 @@ fn start_session_inner(
             stt::build_whisper_prompt(&c.trigger_keywords, &c.meeting_context),
         )
     };
+    // QA builds may replay transcript lines instead; then no STT is checked.
+    let qa_rx = qa_transcript_source();
     // Only the cloud (Groq) backend needs a key — local GigaAM/Whisper don't.
-    if !stt_is_local && groq_key.trim().is_empty() {
+    if qa_rx.is_none() && !stt_is_local && groq_key.trim().is_empty() {
         anyhow::bail!("Groq API key not set in settings (cfg.groq_api_key empty)");
     }
     // Local GigaAM: validate the model dir loads up front so we fail fast with a
     // clear message instead of silently producing no transcripts once capture
     // starts (mirrors the cloud-key bail above). One-shot blocking load (~0.5s).
-    if let overlay_backend::config::SttBackendCfg::Gigaam { model_dir } = &stt_backend {
+    if let (None, overlay_backend::config::SttBackendCfg::Gigaam { model_dir }) =
+        (&qa_rx, &stt_backend)
+    {
         if let Err(e) = stt::validate_gigaam_dir(model_dir) {
             anyhow::bail!("GigaAM model dir invalid: {e}");
         }
@@ -555,7 +575,7 @@ fn start_session_inner(
     lock(&rt).current_session_id = Some(session_id.clone());
 
     let health = lock(&rt).health.clone();
-    let stt_rx = if let Some(rx) = qa_transcript_source() {
+    let stt_rx = if let Some(rx) = qa_rx {
         log_info("QA transcript replaces audio capture and STT");
         rx
     } else {
@@ -1344,13 +1364,12 @@ async fn maybe_spawn_auto_tile(
     let highlights_for_spec = trigger_highlights(&trigger);
     // Open the tile now and stream the answer into it: on a call the first
     // words must show in a second or two, not after the whole answer is
-    // written (about 10 s for 500 tokens on a local model). An auto tile with
-    // an empty answer is the UI's cue for this streaming placeholder.
+    // written (about 10 s for 500 tokens on a local model).
     let stream_label = match events.spawn_tile_full(
         TileSpec {
             question: question_label.clone(),
             answer: String::new(),
-            source: "auto_tile".into(),
+            source: AUTO_TILE_STREAM_SOURCE.into(),
             is_translation: false,
             highlights: highlights_for_spec.clone(),
             summary_session: None,
@@ -1493,7 +1512,8 @@ async fn maybe_spawn_auto_tile(
     }
 
     // ===== Cache the answer =====
-    {
+    // An empty answer or one cut off by a closed connection is not reused.
+    if !answer.is_empty() && finish_reason != "eof" {
         let mut s = lock(&rt);
         if s.qa_cache.len() >= QA_CACHE_MAX_ENTRIES {
             let now = Instant::now();
@@ -2479,6 +2499,20 @@ data: [DONE]\n\n";
             .expect("the first words are pushed to the tile");
         assert_eq!(first.1["label"], "tile-7");
         assert_eq!(first.1["text"], "first ");
+    }
+
+    /// A stream that closes before any text counts as a failure and is retried.
+    #[tokio::test]
+    async fn auto_tile_answer_retries_a_stream_closed_before_any_text() {
+        let url = serve_sse(vec![(200, ""), (200, SSE_ANSWER)]);
+        let events: Arc<dyn RuntimeEvents> = Arc::new(RecordingEvents::default());
+        let rt: SharedSlintRuntime = Arc::default();
+        let (answer, reason) =
+            stream_auto_tile_answer(&sse_endpoint(url), Vec::new(), 64, &events, None, &rt, 0)
+                .await
+                .unwrap();
+        assert_eq!(answer, "first answer");
+        assert_eq!(reason, "stop");
     }
 
     /// A failure before any text is retried, as the one-shot call was.

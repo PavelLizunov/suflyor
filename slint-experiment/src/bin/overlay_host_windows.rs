@@ -2466,9 +2466,11 @@ fn main() -> Result<(), slint::PlatformError> {
                     });
                 }
             }
-            // An auto tile with no answer yet is the streaming placeholder:
-            // it shows the answer as it arrives and gets its dialog on Fill.
-            if req.kind == TileKind::Auto && req.spec.answer.is_empty() {
+            // The streaming auto tile shows the answer as it arrives and gets
+            // its dialog on Fill.
+            if req.action == SpawnAction::New
+                && req.spec.source == slint_replay::slint_session::AUTO_TILE_STREAM_SOURCE
+            {
                 let is_ru = cfg_for_poll.read().ui_is_ru();
                 let early = AUTO_STREAM_EARLY.with(|m| m.borrow_mut().remove(&req.label));
                 let body = early.unwrap_or_else(|| tile_text::asking_body(is_ru).to_string());
