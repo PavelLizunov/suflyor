@@ -229,10 +229,10 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
                                     "Connection works".to_string()
                                 }
                             }
-                            Err(e) => format!("[err] {e:#}").chars().take(90).collect(),
+                            Err(e) => super::status_copy::connection_failed(ru, &format!("{e:#}")),
                         }
                     }
-                    Err(e) => format!("[err] runtime: {e}"),
+                    Err(e) => super::status_copy::check_not_started(ru, &e),
                 };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_res.upgrade() {

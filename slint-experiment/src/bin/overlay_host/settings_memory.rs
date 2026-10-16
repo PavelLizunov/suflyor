@@ -208,7 +208,7 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
                             Err(e) => {
                                 eprintln!("[overlay-host] memory add-fact failed: {e}");
                                 w.set_memory_status(SharedString::from(
-                                    "[err] не удалось сохранить факт — попробуйте ещё раз",
+                                    "Не удалось сохранить факт, попробуйте ещё раз",
                                 ));
                             }
                         }

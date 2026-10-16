@@ -355,3 +355,44 @@ mod tile_heading_tests {
         }
     }
 }
+
+/// One plain line for a failed connection test. The full error chain can carry
+/// URLs, paths and library jargon, so it goes to the log, not the screen.
+pub(super) fn connection_failed(ru: bool, chain: &str) -> String {
+    log::warn!("connection test failed: {chain}");
+    let has = |needles: &[&str]| {
+        let lower = chain.to_lowercase();
+        needles.iter().any(|n| lower.contains(n))
+    };
+    let (ru_text, en_text) = if has(&["no groq api key", "no api key", "missing api key"]) {
+        ("Нет ключа: добавьте его выше", "No key yet: add it above")
+    } else if has(&["401", "403", "unauthorized", "forbidden", "invalid api key"]) {
+        ("Ключ не подошёл", "The key was rejected")
+    } else if has(&["404", "not found"]) {
+        ("По этому адресу ничего не найдено", "Nothing found at this address")
+    } else if has(&["timed out", "timeout", "refused", "error sending request", "dns", "connect"]) {
+        ("Сервер не отвечает", "The server does not answer")
+    } else {
+        ("Не удалось подключиться", "Could not connect")
+    };
+    if ru { ru_text } else { en_text }.to_string()
+}
+
+/// A connection test that could not even start (no async runtime).
+pub(super) fn check_not_started(ru: bool, err: &dyn std::fmt::Display) -> String {
+    log::warn!("connection test could not start: {err}");
+    if ru { "Проверка не запустилась" } else { "The check could not start" }.to_string()
+}
+
+#[cfg(test)]
+mod connection_text_tests {
+    use super::connection_failed;
+
+    #[test]
+    fn failures_read_as_plain_words() {
+        assert_eq!(connection_failed(true, "no Groq API key set"), "Нет ключа: добавьте его выше");
+        assert_eq!(connection_failed(false, "HTTP 401 Unauthorized"), "The key was rejected");
+        assert_eq!(connection_failed(true, "error sending request: connection refused"), "Сервер не отвечает");
+        assert_eq!(connection_failed(false, "weird"), "Could not connect");
+    }
+}

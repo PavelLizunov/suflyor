@@ -67,7 +67,7 @@ pub(crate) fn wire_import_export(
                 .save_file();
             let Some(w) = weak.upgrade() else { return };
             let msg = match picked {
-                None => "export cancelled".to_string(),
+                None => if ru { "Экспорт отменён" } else { "Export cancelled" }.to_string(),
                 Some(path) => {
                     match overlay_backend::config::export_server_settings_to(&path, &snapshot) {
                         Ok(()) => {
@@ -81,7 +81,7 @@ pub(crate) fn wire_import_export(
                             // Generic + log: the error chain can carry a path /
                             // internals into this screen-shared field (audit Q8).
                             eprintln!("[overlay-host] server export failed: {e:#}");
-                            "[err] export failed (see log)".to_string()
+                            if ru { "Экспорт не удался, подробности в журнале" } else { "Export failed, details are in the log" }.to_string()
                         }
                     }
                 }
@@ -106,8 +106,9 @@ pub(crate) fn wire_import_export(
                 .add_filter("JSON", &["json"])
                 .pick_file();
             let Some(w) = weak.upgrade() else { return };
+            let ru = snapshot.ui_is_ru();
             let Some(path) = picked else {
-                w.set_profile_io_result(SharedString::from("import cancelled"));
+                w.set_profile_io_result(SharedString::from(if ru { "Импорт отменён" } else { "Import cancelled" }));
                 return;
             };
             // Read + parse + build the redacted preview. The parse error stays
@@ -117,17 +118,21 @@ pub(crate) fn wire_import_export(
                     apply_server_preview(&w, &preview);
                     *pending.borrow_mut() = Some(imported);
                     w.set_server_preview_ready(true);
-                    w.set_profile_io_result(SharedString::from(
-                        "review the changes below, then Apply",
-                    ));
+                    w.set_profile_io_result(SharedString::from(if ru {
+                        "Проверьте изменения ниже и нажмите «Применить»"
+                    } else {
+                        "Review the changes below, then Apply"
+                    }));
                 }
                 Err(e) => {
                     *pending.borrow_mut() = None;
                     w.set_server_preview_ready(false);
                     eprintln!("[overlay-host] server import preview failed: {e:#}");
-                    w.set_profile_io_result(SharedString::from(
-                        "[err] could not read file (see log)",
-                    ));
+                    w.set_profile_io_result(SharedString::from(if ru {
+                        "Не удалось прочитать файл, подробности в журнале"
+                    } else {
+                        "Could not read the file, details are in the log"
+                    }));
                 }
             }
         });
@@ -146,7 +151,7 @@ pub(crate) fn wire_import_export(
             let Some(w) = weak.upgrade() else { return };
             let Some(imported) = pending.borrow_mut().take() else {
                 w.set_server_preview_ready(false);
-                w.set_profile_io_result(SharedString::from("nothing to apply"));
+                w.set_profile_io_result(SharedString::from(if ru { "Применять нечего" } else { "Nothing to apply" }));
                 return;
             };
             let merged = {
@@ -166,7 +171,7 @@ pub(crate) fn wire_import_export(
                 }
                 Err(e) => {
                     eprintln!("[overlay-host] server settings apply/save failed: {e:#}");
-                    "[err] apply failed (see log)".to_string()
+                    if ru { "Не удалось применить, подробности в журнале" } else { "Could not apply, details are in the log" }.to_string()
                 }
             };
             w.set_profile_io_result(SharedString::from(msg));

@@ -722,7 +722,7 @@ pub(crate) fn open_settings(
                 .save_file();
             let Some(w) = weak.upgrade() else { return };
             let msg = match picked {
-                None => "export cancelled".to_string(),
+                None => if ru { "Экспорт отменён" } else { "Export cancelled" }.to_string(),
                 Some(path) => match overlay_backend::config::export_to(&path, &snapshot) {
                     Ok(()) => {
                         if ru {
@@ -731,7 +731,11 @@ pub(crate) fn open_settings(
                             format!("Settings exported to {}", path.display())
                         }
                     }
-                    Err(e) => format!("[err] {e:#}"),
+                    Err(e) => {
+                        // Generic + log: the chain can carry a path (audit Q8).
+                        eprintln!("[overlay-host] settings export failed: {e:#}");
+                        if ru { "Экспорт не удался, подробности в журнале" } else { "Export failed, details are in the log" }.to_string()
+                    }
                 },
             };
             w.set_profile_io_result(SharedString::from(msg));
@@ -752,8 +756,9 @@ pub(crate) fn open_settings(
                 .add_filter("JSON", &["json"])
                 .pick_file();
             let Some(w) = weak.upgrade() else { return };
+            let ru = cfg_c.read().ui_is_ru();
             let msg = match picked {
-                None => "import cancelled".to_string(),
+                None => if ru { "Импорт отменён" } else { "Import cancelled" }.to_string(),
                 Some(path) => {
                     let local_deep_lock = cfg_c.read().deep_lock;
                     match overlay_backend::config::import_from(&path, local_deep_lock) {
@@ -767,7 +772,10 @@ pub(crate) fn open_settings(
                             }
                             msg_refresh_after_import(&w, &cfg_c)
                         }
-                        Err(e) => format!("[err] {e:#}"),
+                        Err(e) => {
+                            eprintln!("[overlay-host] settings import failed: {e:#}");
+                            if ru { "Импорт не удался: файл не подходит, подробности в журнале" } else { "Import failed: the file does not fit, details are in the log" }.to_string()
+                        }
                     }
                 }
             };

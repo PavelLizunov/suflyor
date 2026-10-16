@@ -712,12 +712,19 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
             let (ai_endpoint, stt_backend, mic_device, sys_device, vision_ep, ui_is_ru) = {
                 let c = cfg_c.read();
                 let ep = c.ai_endpoint(false);
+                // Keep the row "off" when the readiness snapshot says so, even if
+                // a bridge fallback would resolve an endpoint.
+                let vision_ep = if c.readiness().vision.configured {
+                    c.vision_endpoint()
+                } else {
+                    None
+                };
                 (
                     ep,
                     c.stt_backend(),
                     c.mic_device.clone(),
                     c.system_audio_device.clone(),
-                    c.vision_endpoint(),
+                    vision_ep,
                     c.ui_is_ru(),
                 )
             };
@@ -755,7 +762,16 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                             .block_on(overlay_backend::stt::test_connection_backend(&stt_backend))
                         {
                             Ok(_) => (0, if ui_is_ru { "Подключение работает" } else { "Connection works" }.to_string()),
-                            Err(e) => (4, format!("[err] {e:#}").chars().take(80).collect()),
+                            Err(e) => {
+                                let missing_key = format!("{e:#}").contains("no Groq API key");
+                                let msg = match (missing_key, ui_is_ru) {
+                                    (true, true) => "Нет ключа Groq: добавьте его на вкладке STT",
+                                    (true, false) => "No Groq key: add it on the STT tab",
+                                    (false, true) => "Не удалось проверить подключение",
+                                    (false, false) => "Could not verify the connection",
+                                };
+                                (4, msg.to_string())
+                            }
                         };
                         // P2 — Vision live-check: send a SYNTHETIC image (never the
                         // user's screen) to the resolved vision endpoint, so a
@@ -782,7 +798,8 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                         (al, am, sl, sm, vl, vm)
                     }
                     Err(e) => {
-                        let m = format!("[err] runtime: {e}");
+                        log::warn!("diagnostics: check runtime failed: {e}");
+                        let m = if ui_is_ru { "Проверка не запустилась" } else { "The check could not start" }.to_string();
                         (4, m.clone(), 4, m.clone(), 4, m)
                     }
                 };
@@ -829,7 +846,10 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                                 (0, if ui_is_ru { format!("Запись работает · тихо ({dbfs:.0} dBFS)") } else { format!("Capture works · quiet ({dbfs:.0} dBFS)") })
                             }
                         }
-                        Err(e) => (4, format!("[err] {e}").chars().take(80).collect()),
+                        Err(e) => {
+                            log::warn!("diagnostics: mic check failed: {e}");
+                            (4, if ui_is_ru { "Не удалось открыть микрофон" } else { "Could not open the microphone" }.to_string())
+                        }
                     }
                 };
                 let weak_m = weak_res.clone();
@@ -860,7 +880,10 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                                 )
                             }
                         }
-                        Err(e) => (4, format!("[err] {e}").chars().take(80).collect()),
+                        Err(e) => {
+                            log::warn!("diagnostics: system audio check failed: {e}");
+                            (4, if ui_is_ru { "Не удалось открыть устройство вывода" } else { "Could not open the output device" }.to_string())
+                        }
                     };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_res.upgrade() {

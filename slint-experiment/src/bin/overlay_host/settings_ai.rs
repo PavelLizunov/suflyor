@@ -146,8 +146,8 @@ fn codex_copy_status(result: CodexCopyResult, is_ru: bool) -> &'static str {
         (CodexCopyResult::Empty, _) => "",
         (CodexCopyResult::Copied, true) => "Код скопирован",
         (CodexCopyResult::Copied, false) => "Code copied",
-        (CodexCopyResult::Failed, true) => "[err] Не удалось скопировать",
-        (CodexCopyResult::Failed, false) => "[err] Copy failed",
+        (CodexCopyResult::Failed, true) => "Не удалось скопировать",
+        (CodexCopyResult::Failed, false) => "Copy failed",
     }
 }
 
@@ -191,8 +191,8 @@ fn codex_account_label(
             || "signed in with ChatGPT".into(),
             |plan| format!("signed in with ChatGPT ({plan})"),
         ),
-        AccountState::Error if is_ru => "[err] не удалось проверить аккаунт Codex".into(),
-        AccountState::Error => "[err] could not query the Codex account".into(),
+        AccountState::Error if is_ru => "Не удалось проверить аккаунт Codex".into(),
+        AccountState::Error => "Could not query the Codex account".into(),
     }
 }
 
@@ -572,9 +572,9 @@ pub(crate) fn wire_ai_settings(
                 if let Some(w) = weak_for_refresh.upgrade() {
                     let is_ru = cfg_c.read().ui_language != "en";
                     w.set_openai_key_status(if is_ru {
-                        "[ошибка] защищённое хранилище недоступно".into()
+                        "Не удалось сохранить: защищённое хранилище Windows недоступно".into()
                     } else {
-                        "[err] secure storage unavailable".into()
+                        "Could not save: Windows secure storage is unavailable".into()
                     });
                 }
                 return;
@@ -596,9 +596,9 @@ pub(crate) fn wire_ai_settings(
                 if let Some(w) = weak_for_refresh.upgrade() {
                     let is_ru = cfg_c.read().ui_language != "en";
                     w.set_anthropic_key_status(if is_ru {
-                        "[ошибка] защищённое хранилище недоступно".into()
+                        "Не удалось сохранить: защищённое хранилище Windows недоступно".into()
                     } else {
-                        "[err] secure storage unavailable".into()
+                        "Could not save: Windows secure storage is unavailable".into()
                     });
                 }
                 return;
@@ -948,9 +948,9 @@ pub(crate) fn wire_ai_settings(
                                 window.set_codex_user_code(SharedString::default());
                                 window.set_codex_copy_status(SharedString::default());
                                 window.set_codex_auth_status(SharedString::from(if is_ru {
-                                    "[err] вход Codex недоступен"
+                                    "Вход в Codex недоступен"
                                 } else {
-                                    "[err] Codex sign-in unavailable"
+                                    "Codex sign-in unavailable"
                                 }));
                             }
                         }
@@ -1433,10 +1433,10 @@ pub(crate) fn wire_ai_settings(
                                 "Connection works"
                             }
                             .to_string(),
-                            Err(e) => format!("[err] {e:#}").chars().take(90).collect(),
+                            Err(e) => super::status_copy::connection_failed(ru, &format!("{e:#}")),
                         }
                     }
-                    Err(e) => format!("[err] runtime: {e}"),
+                    Err(e) => super::status_copy::check_not_started(ru, &e),
                 };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_res.upgrade() {
@@ -1580,11 +1580,11 @@ mod tests {
         );
         assert_eq!(
             codex_copy_status(CodexCopyResult::Failed, false),
-            "[err] Copy failed"
+            "Copy failed"
         );
         assert_eq!(
             codex_copy_status(CodexCopyResult::Failed, true),
-            "[err] Не удалось скопировать"
+            "Не удалось скопировать"
         );
     }
 }
