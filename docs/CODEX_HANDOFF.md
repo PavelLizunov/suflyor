@@ -6,7 +6,7 @@ Updated 2026-10-12 (operational state and open-work section only; the rest dates
 
 - Branch: `master`
 - Latest published stable release: `v0.38.0`
-- Latest published prerelease: `v0.38.1-rc.8` (rc.7 plus four layout fixes, pull request #258)
+- Latest published prerelease: `v0.38.1-rc.9` (local AI, Settings redesign and a wording and layout pass; pull requests #267, #276, #277, #279)
 - Active master handoff: none
 - Post-release maintenance may be newer than the stable tag; inspect Git before acting.
 
