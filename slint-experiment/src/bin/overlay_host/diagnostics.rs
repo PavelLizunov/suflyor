@@ -38,9 +38,15 @@ pub(crate) fn populate_diagnostics(
     win.set_diag_logs_path(SharedString::from(""));
     let c = cfg.read();
     let r = c.readiness();
-    win.set_diag_summary(SharedString::from(active_stack_label(&c)));
-    win.set_diag_ai_level(if r.ai.configured { 0 } else { 2 });
-    win.set_diag_ai_detail(SharedString::from(r.ai.detail));
+    win.set_diag_summary(SharedString::from(settings_readiness_summary(&c)));
+    // A filled-in endpoint is not proof the model answers (the engine may not
+    // be installed yet): stay neutral until "Check all" pings it, like mic/sys.
+    win.set_diag_ai_level(if r.ai.configured { 3 } else { 2 });
+    win.set_diag_ai_detail(SharedString::from(if r.ai.configured {
+        settings_ai_detail(&c)
+    } else {
+        String::new()
+    }));
     win.set_diag_stt_level(if r.stt.configured { 0 } else { 2 });
     win.set_diag_stt_detail(SharedString::from(r.stt.detail));
     // mic/sys: neutral ("—") until "Check all" records a live sample (#133) —
@@ -55,7 +61,18 @@ pub(crate) fn populate_diagnostics(
     // P1.2 — global-hotkey registration outcome (per-key conflict surfacing).
     let (hk_level, hk_registered, hk_failed) = hotkey_diag_row();
     win.set_diag_hotkeys_level(hk_level);
-    win.set_diag_hotkeys_detail(SharedString::from(hk_registered));
+    // Keep the complete key list in the copied report, not the Settings row.
+    let hk_detail = if hk_level == 0 && hk_failed.is_empty() {
+        let n = hk_registered.split_whitespace().count();
+        if c.ui_is_ru() {
+            format!("зарегистрировано: {n}")
+        } else {
+            format!("registered: {n}")
+        }
+    } else {
+        hk_registered
+    };
+    win.set_diag_hotkeys_detail(SharedString::from(hk_detail));
     win.set_diag_hotkeys_failed(SharedString::from(hk_failed));
     // I1 — the stealth row reports the EFFECTIVE state (the bar's last
     // verified WDA apply + readback), not the config intent: a failed
@@ -64,6 +81,64 @@ pub(crate) fn populate_diagnostics(
     // registry) exclusion failures are logged but not aggregated into this
     // row (window_lifecycle.rs keeps the same note on STEALTH_EFFECTIVE).
     win.set_diag_stealth_on(global_stealth_effective());
+}
+
+pub(crate) fn settings_readiness_summary(c: &overlay_backend::config::Config) -> String {
+    let ru = c.ui_is_ru();
+    let answers = match c.ai_provider.as_str() {
+        "local" | "mlx" => {
+            if ru {
+                "локальная модель"
+            } else {
+                "local model"
+            }
+        }
+        "openai" => "OpenAI",
+        "anthropic" => "Anthropic",
+        "codex" => "ChatGPT",
+        _ => {
+            if ru {
+                "облачная модель"
+            } else {
+                "cloud model"
+            }
+        }
+    };
+    let speech = match c.stt_provider.as_str() {
+        "gigaam" => "GigaAM",
+        "whisper" => "Whisper",
+        _ => "Groq",
+    };
+    if ru {
+        format!("Ответы: {answers} · Речь: {speech}")
+    } else {
+        format!("Answers: {answers} · Speech: {speech}")
+    }
+}
+
+fn settings_ai_detail(c: &overlay_backend::config::Config) -> String {
+    let ep = c.ai_endpoint(false);
+    let basename = ep.model.rsplit(['/', '\\']).next().unwrap_or_default();
+    let lower = basename.to_ascii_lowercase();
+    let model = if lower.contains("gemma") {
+        overlay_backend::local_ai::local_model_label(basename)
+    } else if lower.ends_with(".gguf") {
+        // A custom file is not a model display name.
+        if c.ui_is_ru() {
+            "Своя локальная модель"
+        } else {
+            "Custom local model"
+        }
+        .to_string()
+    } else {
+        basename.to_string()
+    };
+    let authority = super::settings_local_ai::now_endpoint_authority(&ep.base_url);
+    if authority.is_empty() {
+        model
+    } else {
+        format!("{authority} · {model}")
+    }
 }
 
 /// True if `s` is exactly a dotted IPv4 literal (four 0–255 octets). Used to mask
@@ -171,8 +246,8 @@ fn next_scheme_before_query(token: &str) -> Option<usize> {
 
 /// Redact credentials from diagnostic outputs and log exports so exported files and reports
 /// never leak API keys or authorization tokens: a labelled value (`Bearer <token>` in any ASCII
-/// case and after any run of spaces, tabs, `:` or `=`, quoted or not; an `x-api-key` header)
-/// and a provider key recognised by its prefix (`gsk_`, `sk-`, `xai-`, `nvapi-`).
+/// case and after any run of spaces, tabs, `:` or `=`, quoted or not; `x-api-key`, `api_key`, `api-key`,
+/// `apikey` headers/fields) and a provider key recognised by its prefix (`gsk_`, `sk-`, `xai-`, `nvapi-`).
 pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
@@ -221,8 +296,18 @@ fn labelled_secret(rest: &str, mid_word: bool) -> Option<(&'static str, usize)> 
     if let Some(len) = labelled_secret_len(rest, "bearer") {
         return Some(("Bearer <redacted>", len));
     }
-    let len = labelled_secret_len(rest, "x-api-key")?;
-    Some(("x-api-key: <redacted>", len))
+    if let Some(len) = labelled_secret_len(rest, "x-api-key") {
+        return Some(("x-api-key: <redacted>", len));
+    }
+    // SECURITY: Redact generic API key labels (api_key, api-key, apikey) so un-prefixed secrets in logs/reports are masked
+    if let Some(len) = labelled_secret_len(rest, "api_key") {
+        return Some(("api_key: <redacted>", len));
+    }
+    if let Some(len) = labelled_secret_len(rest, "api-key") {
+        return Some(("api-key: <redacted>", len));
+    }
+    let len = labelled_secret_len(rest, "apikey")?;
+    Some(("apikey: <redacted>", len))
 }
 
 /// Byte length of `label`, what separates it from its value, and the value. Between the two
@@ -496,10 +581,12 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
     // block — keep them off the event loop). Never deletes user rows; the backup
     // path is reported so the tester can find it.
     {
+        let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_db_repair_clicked(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let Some(w) = weak.upgrade() else { return };
-            w.set_db_repair_status(SharedString::from("Проверка базы…"));
+            w.set_db_repair_status(SharedString::from(if ru { "Проверка базы…" } else { "Checking database…" }));
             let done = w.as_weak();
             std::thread::spawn(move || {
                 let msg =
@@ -507,15 +594,16 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                         Ok(h) => {
                             let backup = h.backup_path.unwrap_or_else(|| "—".to_string());
                             if h.healthy {
-                                format!("[ok] База в порядке. Резервная копия: {backup}")
+                                if ru { format!("База в порядке. Резервная копия: {backup}") } else { format!("Database healthy. Backup: {backup}") }
                             } else {
-                                format!(
-                                    "[!] Остались проблемы ({}). Данные не удалялись; резервная копия: {backup}",
+                                if ru { format!("Остались проблемы ({}). Данные не удалялись; резервная копия: {backup}",
                                     h.issues.len()
-                                )
+                                ) } else { format!("Issues remain ({}). No data deleted; backup: {backup}",
+                                    h.issues.len()
+                                ) }
                             }
                         }
-                        Err(e) => format!("[err] Не удалось проверить базу: {e}"),
+                        Err(e) => if ru { format!("Не удалось проверить базу: {e}") } else { format!("Could not check database: {e}") },
                     };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = done.upgrade() {
@@ -536,19 +624,22 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
     // result line. Only the memory tables are touched (whitelisted in the backend);
     // sessions/archive are never affected.
     {
+        let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_db_clear_queue_clicked(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let Some(w) = weak.upgrade() else { return };
-            w.set_db_repair_status(SharedString::from("Очистка очереди…"));
+            w.set_db_repair_status(SharedString::from(if ru { "Очистка очереди…" } else { "Clearing suggestions…" }));
             let done = w.as_weak();
             std::thread::spawn(move || {
                 let msg =
                     match overlay_backend::persistence::maintenance::clear_memory_candidates_default() {
-                        Ok(r) => format!(
-                            "[ok] Очередь предложений очищена: удалено {}. Резервная копия: {}",
+                        Ok(r) => if ru { format!("Очередь предложений очищена: удалено {}. Резервная копия: {}",
                             r.cleared, r.backup_path
-                        ),
-                        Err(e) => format!("[err] Очистка отменена: {e}"),
+                        ) } else { format!("Suggestions cleared: {} removed. Backup: {}",
+                            r.cleared, r.backup_path
+                        ) },
+                        Err(e) => if ru { format!("Очистка отменена: {e}") } else { format!("Clear cancelled: {e}") },
                     };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = done.upgrade() {
@@ -563,19 +654,40 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
         });
     }
     {
+        let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_db_clear_memory_clicked(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let Some(w) = weak.upgrade() else { return };
-            w.set_db_repair_status(SharedString::from("Очистка памяти…"));
+            w.set_db_repair_status(SharedString::from(if ru {
+                "Очистка памяти…"
+            } else {
+                "Clearing memory…"
+            }));
             let done = w.as_weak();
             std::thread::spawn(move || {
                 let msg =
                     match overlay_backend::persistence::maintenance::clear_memory_items_default() {
-                        Ok(r) => format!(
-                            "[ok] Одобренная память очищена: удалено {}. Резервная копия: {}",
-                            r.cleared, r.backup_path
-                        ),
-                        Err(e) => format!("[err] Очистка отменена: {e}"),
+                        Ok(r) => {
+                            if ru {
+                                format!(
+                                    "Одобренная память очищена: удалено {}. Резервная копия: {}",
+                                    r.cleared, r.backup_path
+                                )
+                            } else {
+                                format!(
+                                    "Approved memory cleared: {} removed. Backup: {}",
+                                    r.cleared, r.backup_path
+                                )
+                            }
+                        }
+                        Err(e) => {
+                            if ru {
+                                format!("Очистка отменена: {e}")
+                            } else {
+                                format!("Clear cancelled: {e}")
+                            }
+                        }
                     };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = done.upgrade() {
@@ -611,19 +723,27 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
             let (ai_endpoint, stt_backend, mic_device, sys_device, vision_ep, ui_is_ru) = {
                 let c = cfg_c.read();
                 let ep = c.ai_endpoint(false);
+                // Keep the row "off" when the readiness snapshot says so, even if
+                // a bridge fallback would resolve an endpoint.
+                let vision_ep = if c.readiness().vision.configured {
+                    c.vision_endpoint()
+                } else {
+                    None
+                };
                 (
                     ep,
                     c.stt_backend(),
                     c.mic_device.clone(),
                     c.system_audio_device.clone(),
-                    c.vision_endpoint(),
+                    vision_ep,
                     c.ui_is_ru(),
                 )
             };
+            let ai_detail = settings_ai_detail(&cfg_c.read());
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
                 // 1. AI + STT live pings (async, on a throwaway runtime).
-                let (ai_level, ai_msg, stt_level, stt_msg, vis_level, vis_msg): (
+                let (ai_level, _ai_msg, stt_level, stt_msg, vis_level, vis_msg): (
                     i32,
                     String,
                     i32,
@@ -638,23 +758,31 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                         let (al, am): (i32, String) = match rt
                             .block_on(overlay_backend::ai::test_connection_endpoint(ai_endpoint))
                         {
-                            Ok(s) => (0, format!("[ok] {s}")),
+                            Ok(_) => (0, if ui_is_ru { "Подключение работает" } else { "Connection works" }.to_string()),
                             Err(e) => {
                                 let chain = format!("{e:#}");
-                                let msg = overlay_backend::deep_lock::blocked_test_result(
-                                    ui_is_ru, &chain,
-                                )
-                                .unwrap_or_else(|| {
-                                    format!("[err] {chain}").chars().take(80).collect()
-                                });
+                                let msg = if overlay_backend::deep_lock::is_blocked_error(&chain) {
+ overlay_backend::deep_lock::blocked_notice(ui_is_ru).to_string()
+ } else {
+ if ui_is_ru { "Не удалось проверить подключение" } else { "Could not verify the connection" }.to_string()
+ };
                                 (4, msg)
                             }
                         };
                         let (sl, sm): (i32, String) = match rt
                             .block_on(overlay_backend::stt::test_connection_backend(&stt_backend))
                         {
-                            Ok(s) => (0, format!("[ok] {s}")),
-                            Err(e) => (4, format!("[err] {e:#}").chars().take(80).collect()),
+                            Ok(_) => (0, if ui_is_ru { "Подключение работает" } else { "Connection works" }.to_string()),
+                            Err(e) => {
+                                let missing_key = format!("{e:#}").contains("no Groq API key");
+                                let msg = match (missing_key, ui_is_ru) {
+                                    (true, true) => "Нет ключа Groq: добавьте его на вкладке STT",
+                                    (true, false) => "No Groq key: add it on the STT tab",
+                                    (false, true) => "Не удалось проверить подключение",
+                                    (false, false) => "Could not verify the connection",
+                                };
+                                (4, msg.to_string())
+                            }
                         };
                         // P2 — Vision live-check: send a SYNTHETIC image (never the
                         // user's screen) to the resolved vision endpoint, so a
@@ -662,19 +790,18 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                         // reachability (the old check only pinged text). Vision off
                         // → neutral "off" (3), not an error.
                         let (vl, vm): (i32, String) = match vision_ep {
-                            None => (3, "off".to_string()),
+                            None => (3, if ui_is_ru { "Выключено" } else { "Off" }.to_string()),
                             Some(ep) => match rt
                                 .block_on(overlay_backend::vision::test_connection_endpoint(ep))
                             {
-                                Ok(s) => (0, format!("[ok] {s}")),
+                                Ok(_) => (0, if ui_is_ru { "Подключение работает" } else { "Connection works" }.to_string()),
                                 Err(e) => {
                                     let chain = format!("{e:#}");
-                                    let msg = overlay_backend::deep_lock::blocked_test_result(
-                                        ui_is_ru, &chain,
-                                    )
-                                    .unwrap_or_else(|| {
-                                        format!("[err] {chain}").chars().take(80).collect()
-                                    });
+                                    let msg = if overlay_backend::deep_lock::is_blocked_error(&chain) {
+ overlay_backend::deep_lock::blocked_notice(ui_is_ru).to_string()
+ } else {
+ if ui_is_ru { "Не удалось проверить подключение" } else { "Could not verify the connection" }.to_string()
+ };
                                     (4, msg)
                                 }
                             },
@@ -682,7 +809,8 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                         (al, am, sl, sm, vl, vm)
                     }
                     Err(e) => {
-                        let m = format!("[err] runtime: {e}");
+                        log::warn!("diagnostics: check runtime failed: {e}");
+                        let m = if ui_is_ru { "Проверка не запустилась" } else { "The check could not start" }.to_string();
                         (4, m.clone(), 4, m.clone(), 4, m)
                     }
                 };
@@ -690,7 +818,14 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_a.upgrade() {
                         w.set_diag_ai_level(ai_level);
-                        w.set_diag_ai_detail(SharedString::from(ai_msg));
+                        // The ping body may contain a full URL or a model filename.
+                        w.set_diag_ai_detail(SharedString::from(if ai_level == 0 {
+                            ai_detail
+                        } else if ui_is_ru {
+                            "Не удалось проверить подключение".to_string()
+                        } else {
+                            "Could not verify the connection".to_string()
+                        }));
                         w.set_diag_stt_level(stt_level);
                         w.set_diag_stt_detail(SharedString::from(stt_msg));
                         w.set_diag_vision_level(vis_level);
@@ -707,22 +842,25 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                 let (mic_level, mic_msg): (i32, String) = if mic_guard.is_none() {
                     (
                         4,
-                        "[!] mic busy — close PTT / dictation and retry".to_string(),
+                        if ui_is_ru { "Микрофон занят — завершите голосовой ввод и повторите" } else { "Microphone busy — finish voice input and retry" }.to_string(),
                     )
                 } else {
                     let r = overlay_backend::audio::record_mic_blocking(3000, mic_device);
                     drop(mic_guard); // release before processing (RAII: also on panic)
                     match r {
-                        Ok(s) if s.is_empty() => (4, "[!] no audio captured".to_string()),
+                        Ok(s) if s.is_empty() => (4, if ui_is_ru { "Звук не записан" } else { "No audio captured" }.to_string()),
                         Ok(s) => {
                             let dbfs = overlay_backend::audio::rms_dbfs(&s);
                             if dbfs >= -45.0 {
-                                (0, format!("[ok] heard you ({dbfs:.0} dBFS)"))
+                                (0, if ui_is_ru { format!("Голос слышен ({dbfs:.0} dBFS)") } else { format!("Heard you ({dbfs:.0} dBFS)") })
                             } else {
-                                (0, format!("[ok] capture works · quiet ({dbfs:.0} dBFS)"))
+                                (0, if ui_is_ru { format!("Запись работает · тихо ({dbfs:.0} dBFS)") } else { format!("Capture works · quiet ({dbfs:.0} dBFS)") })
                             }
                         }
-                        Err(e) => (4, format!("[err] {e}").chars().take(80).collect()),
+                        Err(e) => {
+                            log::warn!("diagnostics: mic check failed: {e}");
+                            (4, if ui_is_ru { "Не удалось открыть микрофон" } else { "Could not open the microphone" }.to_string())
+                        }
                     }
                 };
                 let weak_m = weak_res.clone();
@@ -743,17 +881,20 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                             if dbfs > -60.0 {
                                 (
                                     0,
-                                    format!("[ok] loopback heard the test tone ({dbfs:.0} dBFS)"),
+                                    if ui_is_ru { format!("Проверочный звук записан ({dbfs:.0} dBFS)") } else { format!("Test tone captured ({dbfs:.0} dBFS)") },
                                 )
                             } else {
                                 (
                                     4,
-                                    "[!] test tone not captured — output device ≠ loopback source?"
+                                    if ui_is_ru { "Проверочный звук не записан — проверьте выбранное устройство вывода" } else { "Test tone not captured — check the selected output device" }
                                         .to_string(),
                                 )
                             }
                         }
-                        Err(e) => (4, format!("[err] {e}").chars().take(80).collect()),
+                        Err(e) => {
+                            log::warn!("diagnostics: system audio check failed: {e}");
+                            (4, if ui_is_ru { "Не удалось открыть устройство вывода" } else { "Could not open the output device" }.to_string())
+                        }
                     };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_res.upgrade() {
@@ -852,6 +993,40 @@ mod tests {
     //! useful and safe to paste into a support thread. Pure: no bridge, no UI,
     //! no network.
     use super::*;
+
+    #[test]
+    fn settings_summary_uses_plain_localized_roles() {
+        let mut c = overlay_backend::config::Config::defaults();
+        c.ai_provider = "local".into();
+        c.stt_provider = "cloud".into();
+        c.ui_language = "en".into();
+        assert_eq!(
+            settings_readiness_summary(&c),
+            "Answers: local model · Speech: Groq"
+        );
+        c.ui_language = "ru".into();
+        assert_eq!(
+            settings_readiness_summary(&c),
+            "Ответы: локальная модель · Речь: Groq"
+        );
+    }
+
+    #[test]
+    fn settings_ai_detail_hides_url_paths_credentials_and_model_files() {
+        let mut c = overlay_backend::config::Config::defaults();
+        c.ai_provider = "local".into();
+        c.ai_local_base_url =
+            "http://user:secret@localhost:8080/private/v1?key=secret#fragment".into();
+        c.ai_local_model = r"C:\models\gemma-4-12b-it.gguf".into();
+        assert_eq!(settings_ai_detail(&c), "localhost:8080 · Gemma 12B");
+        c.ai_local_base_url = "https://[::1]/v1".into();
+        assert_eq!(settings_ai_detail(&c), "[::1]:443 · Gemma 12B");
+        c.ai_local_model = "Qwen3-4B".into();
+        assert_eq!(settings_ai_detail(&c), "[::1]:443 · Qwen3-4B");
+        c.ui_language = "en".into();
+        c.ai_local_model = "custom-12b.gguf".into();
+        assert_eq!(settings_ai_detail(&c), "[::1]:443 · Custom local model");
+    }
 
     // P1.1 — lock the "Copy report" redaction contract (its security boundary):
     // the LAN bridge IP must be masked, while ports / paths / non-IP tokens
@@ -1089,6 +1264,23 @@ mod tests {
         ] {
             let redacted = redact_secrets(sample);
             assert!(!redacted.contains("secret_value_123"), "leaked from {sample:?}: {redacted}");
+        }
+    }
+
+    #[test]
+    fn redact_secrets_masks_api_key_variants() {
+        for sample in [
+            "api_key: secret_value_123",
+            "api_key=secret_value_123",
+            "api-key: secret_value_123",
+            "apikey: secret_value_123",
+            "\"api_key\": \"secret_value_123\"",
+        ] {
+            let redacted = redact_secrets(sample);
+            assert!(
+                !redacted.contains("secret_value_123"),
+                "leaked from {sample:?}: {redacted}"
+            );
         }
     }
 

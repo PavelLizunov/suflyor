@@ -113,6 +113,209 @@ export component SettingsCard inherits Rectangle {
     }
 }
 
+// Fixed label column with a stretching control and optional captions.
+export component SettingsRow inherits Rectangle {
+    in property <string> label;
+    horizontal-stretch: 1;
+    min-height: row.preferred-height;
+    preferred-height: row.preferred-height;
+    row := HorizontalLayout {
+        spacing: Metrics.space-sm;
+        VerticalLayout {
+            width: 132px;
+            horizontal-stretch: 0;
+            alignment: start;
+            Text {
+                text: root.label;
+                height: 32px;
+                font-size: Metrics.font-label;
+                color: Theme.text-secondary;
+                vertical-alignment: center;
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: Metrics.space-xs;
+            @children
+        }
+    }
+}
+
+// A conditional or repeated group of rows that contains wrapped text. A plain
+// VerticalLayout in that place reports the height of its text as one line, so
+// the control after the group overlaps it; the binding below reads the height
+// at the real width, as SettingsCard does.
+export component WrapBlock inherits Rectangle {
+    in property <length> spacing: Metrics.space-sm;
+    min-height: block-content.preferred-height;
+    preferred-height: block-content.preferred-height;
+    block-content := VerticalLayout {
+        spacing: root.spacing;
+        @children
+    }
+}
+
+// One model in a choice list. The action column has a fixed width, so the
+// buttons of every row line up; the active row keeps its (disabled) button.
+export component ModelChoiceRow inherits Rectangle {
+    in property <string> title;
+    in property <string> detail;
+    in property <string> action;
+    in property <bool> active: false;
+    in property <bool> action-enabled: true;
+    callback action-clicked();
+    horizontal-stretch: 1;
+    min-height: row.preferred-height;
+    preferred-height: row.preferred-height;
+    border-radius: Metrics.radius-field;
+    background: root.active ? Theme.accent.with-alpha(0.12) : transparent;
+    row := HorizontalLayout {
+        padding: Metrics.space-xs;
+        padding-left: Metrics.space-sm;
+        spacing: Metrics.space-sm;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            Text {
+                text: root.title;
+                font-size: Metrics.font-body;
+                font-weight: root.active ? 700 : 400;
+                color: Theme.text-primary;
+                wrap: word-wrap;
+            }
+            Text {
+                text: root.detail;
+                font-size: Metrics.font-caption;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
+        }
+        Button {
+            width: 132px;
+            height: 30px;
+            y: (parent.height - self.height) / 2;
+            text: root.action;
+            enabled: root.action-enabled;
+            clicked => { root.action-clicked(); }
+        }
+    }
+}
+
+// A single grid for installed models, downloads and discovered servers.
+export component LocalModelRow inherits Rectangle {
+    in property <string> title;
+    in property <string> detail;
+    in property <string> chip;
+    // 0 neutral, 1 good, 2 warning.
+    in property <int> chip-tone: 0;
+    in property <string> action;
+    in property <bool> active: false;
+    in property <bool> action-enabled: true;
+    in property <bool> busy: false;
+    in property <bool> progress-visible: false;
+    in property <float> progress: 0;
+    callback action-clicked();
+    callback cancel-clicked();
+    horizontal-stretch: 1;
+    min-height: content.preferred-height;
+    preferred-height: content.preferred-height;
+    border-radius: Metrics.radius-field;
+    background: root.active ? Theme.accent-subtle : transparent;
+    content := VerticalLayout {
+        padding: Metrics.space-xs;
+        spacing: Metrics.space-xs;
+        HorizontalLayout {
+            spacing: Metrics.space-sm;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: Metrics.space-xs;
+                Text {
+                    text: root.title;
+                    font-size: Metrics.font-body;
+                    font-weight: root.active ? 700 : 400;
+                    color: Theme.text-primary;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: root.detail;
+                    font-size: Metrics.font-caption;
+                    color: Theme.text-muted;
+                    wrap: word-wrap;
+                }
+            }
+            if root.chip != "" : Text {
+                width: 96px;
+                horizontal-stretch: 0;
+                text: root.chip;
+                font-size: Metrics.font-caption;
+                color: root.chip-tone == 1 ? Theme.success : root.chip-tone == 2 ? Theme.warning : Theme.text-muted;
+                wrap: word-wrap;
+                vertical-alignment: center;
+            }
+            Button {
+                width: 132px;
+                height: 30px;
+                y: (parent.height - self.height) / 2;
+                text: root.action;
+                enabled: root.action-enabled;
+                clicked => { root.action-clicked(); }
+            }
+        }
+        if root.busy : HorizontalLayout {
+            spacing: Metrics.space-sm;
+            if root.progress-visible : Rectangle {
+                horizontal-stretch: 1;
+                height: 6px;
+                y: (parent.height - self.height) / 2;
+                border-radius: Metrics.radius-field;
+                background: Theme.border;
+                Rectangle {
+                    height: parent.height;
+                    width: parent.width * clamp(root.progress, 0, 1);
+                    border-radius: Metrics.radius-field;
+                    background: Theme.accent;
+                }
+            }
+            if !root.progress-visible : Rectangle { horizontal-stretch: 1; }
+            Button {
+                width: 132px;
+                height: 30px;
+                text: @tr("Cancel");
+                clicked => { root.cancel-clicked(); }
+            }
+        }
+    }
+}
+
+// A destructive action: same size and role as a Settings button, drawn in the
+// danger colour so it does not read like the harmless buttons next to it.
+export component SettingsDangerButton inherits Rectangle {
+    in property <string> text;
+    callback clicked();
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
+    height: 32px;
+    border-radius: Metrics.radius-field;
+    border-width: Metrics.border-thin;
+    border-color: Theme.danger.with-alpha(ta.has-hover ? 1 : 0.55);
+    background: ta.pressed ? Theme.danger.with-alpha(0.18)
+        : (ta.has-hover ? Theme.danger.with-alpha(0.10) : Theme.bg-elevated);
+    Text {
+        width: parent.width;
+        height: parent.height;
+        text: root.text;
+        font-size: Metrics.font-body;
+        color: Theme.danger;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
 export component SettingsComboBox inherits ComboBox {
     height: 32px;
 }
@@ -122,7 +325,8 @@ export component SettingsLineEdit inherits LineEdit {
 }
 
 export component SettingsSlider inherits Slider {
-    height: 20px;
+    // A full control row, so the row label lines up with the track.
+    height: 32px;
 }
 
 export component NavGroupHeader inherits Rectangle {

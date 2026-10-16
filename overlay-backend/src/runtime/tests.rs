@@ -1004,7 +1004,7 @@ async fn manual_spawn_tile_empty_transcript_returns_none() {
 async fn manual_spawn_empty_notice_follows_ui_not_response_language() {
     for (ui, response, title, body_prefix) in [
         ("en", "ru", "Manual ask (F6)", "Transcript is empty"),
-        ("ru", "en", "Ручной запрос (F6)", "Транскрипт пустой"),
+        ("ru", "en", "Ручной запрос (F6)", "Стенограмма пустая"),
     ] {
         let cfg = hermetic_empty_config();
         {

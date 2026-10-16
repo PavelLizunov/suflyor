@@ -165,6 +165,37 @@ pub(crate) async fn stream_inner(
     {
         return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
     }
+    if super::agent::applies(&endpoint) {
+        return super::agent::stream_agent(
+            endpoint,
+            messages,
+            max_tokens,
+            tx,
+            request_id,
+            request_started_at,
+        )
+        .await;
+    }
+    stream_plain(
+        endpoint,
+        messages,
+        max_tokens,
+        tx,
+        request_id,
+        request_started_at,
+    )
+    .await
+}
+
+/// One streamed request without tools.
+pub(crate) async fn stream_plain(
+    endpoint: AiEndpoint,
+    messages: Vec<ChatMessage>,
+    max_tokens: u32,
+    tx: mpsc::Sender<AiEvent>,
+    request_id: u64,
+    request_started_at: std::time::Instant,
+) -> Result<()> {
     let client = http_client();
 
     let url = format!(

@@ -7,9 +7,10 @@
 // window scale-factor to get image pixels and crops the frozen buffer). Esc or
 // right-click or a too-small drag cancels.
 import { Metrics } from "metrics.slint";
+import { Theme } from "theme.slint";
 
 export component CaptureOverlay inherits Window {
-    title: @tr("suflyor — capture");
+    title: @tr("Suflyor — screenshot");
     no-frame: true;
     always-on-top: true;
     forward-focus: fs;
@@ -195,27 +196,57 @@ export component CaptureOverlay inherits Window {
         }
     }
 
-    // Feature #3 — Describe/Translate mode toggle. Declared AFTER the drag
-    // TouchArea so its own TouchArea sits on top and a click flips the mode
-    // instead of starting a selection. Absolutely positioned under the hint pill.
+    // Above drag tracking: clicking the mode hint keeps the existing toggle.
     Rectangle {
-        x: 12px;
+        x: Metrics.space-md;
         y: 46px;
-        width: modehint.preferred-width + 24px;
-        height: 26px;
-        background: root.translate-mode ? #0e7490ee : (root.practice-mode ? #6d28d9ee : #111827dd);
-        border-radius: 6px;
-        border-width: 1px;
-        border-color: #22d3ee;
-        modehint := Text {
-            text: root.translate-mode ? @tr("Translate — tap to Describe")
-                : (root.practice-mode ? @tr("Test Practice (self-check)") : @tr("Describe — tap to Translate"));
-            color: #e8e8ec;
-            font-size: Metrics.font-body;
-            horizontal-alignment: center;
-            vertical-alignment: center;
+        width: mode-options.preferred-width;
+        height: Metrics.space-xl + Metrics.border-focus;
+        background: Theme.bg-surface;
+        border-radius: Metrics.radius-field;
+        border-width: Metrics.border-thin;
+        border-color: Theme.border-strong;
+        mode-options := HorizontalLayout {
+            padding: Metrics.border-focus;
+            spacing: Metrics.border-thin;
+            if root.practice-mode && !root.translate-mode : Rectangle {
+                background: Theme.tint(Theme.cat-violet);
+                border-radius: Metrics.radius-field;
+                HorizontalLayout {
+                    padding-left: Metrics.space-sm;
+                    padding-right: Metrics.space-sm;
+                    Text {
+                        text: @tr("Practice");
+                        color: Theme.on-tint(Theme.cat-violet);
+                        font-size: Metrics.font-body;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+            if !root.practice-mode || root.translate-mode : HorizontalLayout {
+                spacing: Metrics.border-thin;
+                for option in [
+                    { label: @tr("Description"), active: !root.translate-mode },
+                    { label: @tr("Translation"), active: root.translate-mode },
+                ] : Rectangle {
+                    background: option.active ? Theme.accent-subtle : transparent;
+                    border-radius: Metrics.radius-field;
+                    HorizontalLayout {
+                        padding-left: Metrics.space-sm;
+                        padding-right: Metrics.space-sm;
+                        Text {
+                            text: option.label;
+                            color: option.active ? Theme.accent : Theme.text-secondary;
+                            font-size: Metrics.font-body;
+                            font-weight: option.active ? 600 : 400;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
         }
         TouchArea {
+            mouse-cursor: pointer;
             clicked => {
                 root.translate-mode = !root.translate-mode;
             }

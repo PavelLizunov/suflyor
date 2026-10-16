@@ -180,8 +180,8 @@ pub(crate) fn fire_f8_vision_capture(
             events,
             cfg,
             "vision_off",
-            "Vision выключен. Выберите маршрут в Настройки > AI мост > Vision.",
-            "Vision is off. Choose a route in Settings > AI bridge > Vision.",
+            "Скриншоты выключены. Выберите модель в Настройки > Скриншоты (F8).",
+            "Screenshots are off. Choose a model in Settings > Screenshots (F8).",
         );
         diag!("[overlay-host] F8: vision off and no local OCR — notice shown");
         return;

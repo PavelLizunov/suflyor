@@ -88,12 +88,15 @@ impl std::fmt::Debug for AiEndpoint {
     }
 }
 
-/// Frontend-visible event stream.
+/// Frontend-visible event stream. `Tool` says the model called a tool
+/// (`name`) with `detail` (its query or page host); it is status only and
+/// does not change the answer text.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AiEvent {
     Start { id: String },
     Delta { text: String },
+    Tool { name: String, detail: String },
     Done { reason: String },
     Error { message: String },
 }

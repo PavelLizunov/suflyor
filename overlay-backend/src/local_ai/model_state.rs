@@ -222,6 +222,10 @@ pub fn repair_managed_model_state_after_verification(
 /// and matching projector state instead of trusting the persisted UI flag.
 #[must_use]
 pub fn local_vision_available(cfg: &crate::config::Config, root: &Path) -> bool {
+    // Strata is installed without its image encoder.
+    if super::is_managed_strata_endpoint(&cfg.ai_local_base_url) {
+        return false;
+    }
     !is_managed_llama_endpoint(&cfg.ai_local_base_url)
         || (cfg.ai_local_custom_gguf.trim().is_empty()
             && managed_model_vision_capable(
@@ -343,7 +347,7 @@ pub fn quality_vision_supported(root: &Path) -> bool {
 #[must_use]
 pub fn local_model_resource_warning(root: &Path, base_url: &str, model_id: &str) -> String {
     if !is_managed_llama_endpoint(base_url) {
-        return "[!] Требования к памяти выбранной внешней модели неизвестны.".to_string();
+        return "Требования к памяти выбранной внешней модели неизвестны.".to_string();
     }
     let lower = model_id.to_ascii_lowercase();
     if lower.contains("26b-a4b") {
@@ -357,23 +361,23 @@ pub fn local_model_resource_warning(root: &Path, base_url: &str, model_id: &str)
             }
         };
         format!(
-            "[!] Gemma 26B-A4B: {:.1} GiB на диске; {matrix}. Память для vision: неизвестно.",
+            "Gemma 26B-A4B: {:.1} GiB на диске; {matrix}. Память для vision: неизвестно.",
             GEMMA26_SIZE as f64 / GIB as f64
         )
     } else if lower.contains("12b") {
         format!(
-            "[!] Gemma 12B QAT fallback: {:.1} GiB на диске. Матрица 8 ГБ VRAM / 16-31 ГБ RAM подтверждена владельцем. Память для vision: неизвестно.",
+            "Gemma 12B QAT fallback: {:.1} GiB на диске. Матрица 8 ГБ VRAM / 16-31 ГБ RAM подтверждена владельцем. Память для vision: неизвестно.",
             GEMMA_SIZE as f64 / GIB as f64
         )
     } else if lower.contains("e4b") || lower.contains("4b") {
         format!(
-            "[!] Legacy Gemma 4B: {:.1} GiB на диске. Память для vision: неизвестно.",
+            "Legacy Gemma 4B: {:.1} GiB на диске. Память для vision: неизвестно.",
             LEGACY_GEMMA_SIZE as f64 / GIB as f64
         )
     } else if model_id.trim().is_empty() && base_model_present(root) {
         local_model_resource_warning(root, base_url, &fallback_model_name(root))
     } else {
-        "[!] Требования к памяти выбранной локальной модели неизвестны.".to_string()
+        "Требования к памяти выбранной локальной модели неизвестны.".to_string()
     }
 }
 

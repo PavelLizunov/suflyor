@@ -45,12 +45,14 @@ pub fn is_blocked_error(msg: &str) -> bool {
 }
 
 /// Pure guard predicate used by [`crate::ai`]: block only when the deep lock
-/// is active AND the target is the app-managed loopback llama endpoint. Cloud,
-/// external Ollama, whisper :8081 and any other URL pass through untouched.
+/// is active AND the target is an app-managed engine (loopback llama.cpp,
+/// Strata on :8090, MLX). Cloud, external Ollama, whisper :8081 and any other
+/// URL pass through untouched.
 #[must_use]
 pub fn endpoint_blocked(deep_lock: bool, base_url: &str) -> bool {
     deep_lock
         && (crate::local_ai::is_managed_llama_endpoint(base_url)
+            || crate::local_ai::is_managed_strata_endpoint(base_url)
             || crate::mlx_runtime::is_owned_endpoint(base_url))
 }
 
@@ -66,7 +68,8 @@ pub const fn lifecycle_launch_allowed(deep_lock: bool, explicit_unlock: bool) ->
 #[must_use]
 pub fn cfg_is_managed_local(cfg: &crate::config::Config) -> bool {
     (cfg.ai_provider == "local"
-        && crate::local_ai::is_managed_llama_endpoint(&cfg.ai_local_base_url))
+        && (crate::local_ai::is_managed_llama_endpoint(&cfg.ai_local_base_url)
+            || crate::local_ai::is_managed_strata_endpoint(&cfg.ai_local_base_url)))
         || (cfg.ai_provider == "mlx" && cfg!(target_os = "macos"))
 }
 
@@ -164,19 +167,19 @@ pub fn state_hint(ru: bool, managed: bool, suppress_tiles: bool, deep_lock: bool
     match (ru, deep_lock, suppress_tiles) {
         (_, true, _) => {
             if ru {
-                "Глубокая блокировка: локальный ИИ выгружен. Нажмите, чтобы запустить модель и снять блокировку"
+                "Глубокая блокировка: локальный AI выгружен. Нажмите, чтобы запустить модель и снять блокировку"
             } else {
                 "Deep lock: local AI is unloaded. Press to start the model and unlock"
             }
         }
         (true, false, true) => {
-            "Режим прослушивания включён. Нажмите ещё раз для глубокой блокировки (локальный ИИ будет выгружен)"
+            "Режим прослушивания включён. Нажмите ещё раз для глубокой блокировки (локальный AI будет выгружен)"
         }
         (false, false, true) => {
             "Listening mode on. Press again to deep-lock (the local AI will be unloaded)"
         }
         (true, false, false) => {
-            "Блокировка тайлов: первое нажатие — режим прослушивания, второе — глубокая блокировка с выгрузкой локального ИИ"
+            "Блокировка тайлов: первое нажатие — режим прослушивания, второе — глубокая блокировка с выгрузкой локального AI"
         }
         (false, false, false) => {
             "Lock tiles: first press enables listening mode, second press deep-locks and unloads the local AI"
@@ -203,15 +206,15 @@ pub fn status_text(ru: bool, status: LockStatus) -> &'static str {
         (false, LockStatus::ListeningOn) => "listening",
         (true, LockStatus::ListeningOff) => "разблокировано",
         (false, LockStatus::ListeningOff) => "unlocked",
-        (true, LockStatus::Unloading) => "выгрузка ИИ…",
+        (true, LockStatus::Unloading) => "выгрузка AI…",
         (false, LockStatus::Unloading) => "unloading AI…",
-        (true, LockStatus::Unloaded) => "ИИ выгружен",
+        (true, LockStatus::Unloaded) => "AI выгружен",
         (false, LockStatus::Unloaded) => "AI unloaded",
         (true, LockStatus::Unlocking) => "запуск модели…",
         (false, LockStatus::Unlocking) => "starting model…",
-        (true, LockStatus::UnlockReady) => "ИИ готов",
+        (true, LockStatus::UnlockReady) => "AI готов",
         (false, LockStatus::UnlockReady) => "AI ready",
-        (true, LockStatus::UnlockFailed) => "не удалось запустить ИИ",
+        (true, LockStatus::UnlockFailed) => "не удалось запустить AI",
         (false, LockStatus::UnlockFailed) => "AI start failed",
     }
 }
@@ -221,7 +224,7 @@ pub fn status_text(ru: bool, status: LockStatus) -> &'static str {
 #[must_use]
 pub fn blocked_notice(ru: bool) -> &'static str {
     if ru {
-        "Локальный ИИ заблокирован (значок замка на панели). Снимите блокировку, чтобы получать ответы."
+        "Локальный AI заблокирован (значок замка на панели). Снимите блокировку, чтобы получать ответы."
     } else {
         "Local AI is deep-locked (the bar's lock chip). Unlock it to get answers."
     }
@@ -238,7 +241,7 @@ pub fn blocked_test_result(ru: bool, msg: &str) -> Option<String> {
 #[must_use]
 pub fn unlock_failed_notice(ru: bool) -> &'static str {
     if ru {
-        "Не удалось запустить локальный ИИ — блокировка сохранена. Проверьте установку в Настройки → AI и попробуйте ещё раз."
+        "Не удалось запустить локальный AI — блокировка сохранена. Проверьте установку в Настройки → AI и попробуйте ещё раз."
     } else {
         "Couldn't start the local AI — the lock is kept. Check Settings → AI and try again."
     }
@@ -275,6 +278,14 @@ mod tests {
             "local",
             "http://127.0.0.1:8080/v1"
         )));
+        // Strata on its own loopback port is an app-managed engine too.
+        assert!(cfg_is_managed_local(&cfg(
+            "local",
+            "http://127.0.0.1:8090/v1"
+        )));
+        assert!(endpoint_blocked(true, "http://127.0.0.1:8090/v1"));
+        assert!(!endpoint_blocked(false, "http://127.0.0.1:8090/v1"));
+        assert!(!endpoint_blocked(true, "http://127.0.0.1:11434/v1"));
         // External Ollama on the same provider stays two-state.
         assert!(!cfg_is_managed_local(&cfg(
             "local",

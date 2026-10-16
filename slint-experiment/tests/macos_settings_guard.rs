@@ -33,9 +33,10 @@ fn macos_reports_builtin_apple_vision_without_tesseract_install_actions() {
     assert!(settings
         .contains("cfg!(target_os = \"macos\") || overlay_backend::ocr_install::is_installed()"));
     assert!(vision.contains("#[cfg(windows)]\n    {\n        let weak = win.as_weak();\n        win.on_ocr_install_clicked"));
-    assert!(ui.contains("if Platform.is-macos : Text"));
-    assert!(ui.contains("Apple Vision is built into macOS; no download is required."));
-    assert!(ui.contains("if !Platform.is-macos : VerticalLayout"));
+    // OCR is installed only from its Components row, whose macOS detail is
+    // "Apple Vision" (checked above); no other Settings tab offers Tesseract.
+    assert!(!ui.contains("root.ocr-install-clicked()"));
+    assert!(ui.contains("root.component-install(idx)"));
 }
 
 #[test]
@@ -51,12 +52,89 @@ fn macos_settings_hide_windows_only_setup_and_managed_local_actions() {
         settings.contains("#[cfg(windows)]\n    wire_local_ai(&win, cfg, state, overlay_weak);")
     );
     assert!(ui.contains(
-        "if !Platform.is-macos : SettingsCard {\n                            title: @tr(\"Setup\")"
+        "if !Platform.is-macos : SettingsRow {\n                                label: @tr(\"Setup\")"
     ));
-    assert!(ui.contains("if !Platform.is-macos && root.ai-provider-index == 1 : SettingsCard {\n                            title: @tr(\"Engine (llama.cpp)\")"));
-    assert!(ui.contains(
-        "if !Platform.is-macos : VerticalLayout {\n                            spacing: 6px;"
-    ));
+    let local = ui
+        .split_once("// ============================ LOCAL")
+        .unwrap()
+        .1;
+    let (windows, macos) = local
+        .split_once("if Platform.is-macos : WrapBlock {")
+        .unwrap();
+    assert!(windows.contains("if !Platform.is-macos : WrapBlock {"));
+    for title in [
+        "Now answering",
+        "Choose a model",
+        "What the model can do",
+        "Show fine tuning",
+    ] {
+        assert!(windows.contains(&format!("@tr(\"{title}\")")));
+        assert!(!macos
+            .split_once("if root.active-tab == 17 : VerticalLayout")
+            .unwrap()
+            .0
+            .contains(&format!("@tr(\"{title}\")")));
+    }
+    let windows_block = windows
+        .split_once("if !Platform.is-macos : WrapBlock {")
+        .unwrap()
+        .1;
+    let mut depth = 1;
+    let mut closing = None;
+    for (index, ch) in windows_block.char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => depth -= 1,
+            _ => {}
+        }
+        if depth == 0 {
+            closing = Some(index + 1);
+            break;
+        }
+    }
+    assert!(
+        windows_block[closing.expect("Windows wrapper closes")..]
+            .trim()
+            .is_empty(),
+        "all model cards must stay within the Windows wrapper"
+    );
+    assert_eq!(
+        depth, 0,
+        "Windows-only model card wrapper must close before macOS fields"
+    );
+    assert!(windows.contains("LocalModelRow {"));
+    assert!(!windows.contains("current-index <=> root.local-engine-index"));
+    let server = macos.split_once("// ----- switches").unwrap().0;
+    assert!(server.contains("text <=> root.ai-local-base-url-input"));
+    assert!(server.contains("text <=> root.ai-local-bearer-input"));
+    assert!(server.contains("model: root.ai-local-models"));
+    assert!(server.contains("root.ai-local-models-refresh();"));
+    assert!(!server.contains("LocalModelRow {"));
+}
+
+#[test]
+fn local_model_cards_keep_jobs_actions_and_async_checks_reachable() {
+    let ui = read("ui/settings_panel.slint");
+    let controls = read("ui/settings_controls.slint");
+    let local = read("src/bin/overlay_host/settings_local_ai.rs");
+    let ai = read("src/bin/overlay_host/settings_ai.rs");
+    assert!(ui.contains("(!root.llama-installed || root.local-ai-installing)"));
+    assert!(ui.contains("root.ai-local-bearer-save(\"\")"));
+    assert!(ui.contains("root.local-connect-auto = false"));
+    for profile in 0..=2 {
+        assert!(ui.contains(&format!("root.local-download-profile == {profile}")));
+        assert!(ui.contains(&format!("root.builtin-model-use({profile})")));
+    }
+    for width in ["width: 96px", "width: 132px", "height: 30px", "height: 6px"] {
+        assert!(controls.contains(width));
+    }
+    assert!(local.contains("std::time::Duration::from_secs(3)"));
+    assert!(local.contains("overlay_backend::ai::list_models(&base, &bearer)"));
+    assert!(local.contains("if w.get_ai_local_test_result().is_empty()"));
+    assert!(local.contains("PENDING_BUILTIN_CHOICE"));
+    assert!(local.contains("w.invoke_local_engine_activate(0)"));
+    assert!(ai.contains("now_check_is_current(generation)"));
+    assert!(ai.contains("w.set_now_state(if working { 1 } else { 3 })"));
 }
 
 #[test]
@@ -81,11 +159,9 @@ fn macos_provider_catalogs_and_components_keep_platform_indices_honest() {
     assert!(settings.contains("if cfg!(target_os = \"macos\") { 1 } else { 3 }"));
     assert!(settings.contains("c.detail = \"Apple Vision\".into()"));
     assert!(settings.contains("\"whisper\" => !snap.stt_whisper_url.trim().is_empty()"));
-    assert!(ui.contains("if !Platform.is-macos && root.ai-provider-index == 4 : VerticalLayout"));
-    assert!(
-        ui.contains("if !Platform.is-macos && root.vision-provider-index == 6 : VerticalLayout")
-    );
-    assert!(ui.contains("if root.stt-provider-index == 0 : VerticalLayout"));
+    assert!(ui.contains("if !Platform.is-macos && root.ai-provider-index == 4 : WrapBlock"));
+    assert!(ui.contains("if !Platform.is-macos && root.vision-provider-index == 6 : WrapBlock"));
+    assert!(ui.contains("if root.stt-provider-index == 0 : WrapBlock"));
     assert!(ui.contains("if Platform.is-macos && root.ai-provider-index < 0 : Text"));
     assert!(ui.contains("if Platform.is-macos && root.vision-provider-index < 0 : Text"));
     assert!(ui.contains("@tr(\"Use Apple Core ML — faster on Apple Silicon\")"));
@@ -141,20 +217,19 @@ fn macos_provider_catalogs_and_components_keep_platform_indices_honest() {
     ));
 
     assert_eq!(
-        ui.matches("@tr(\"Version: {} (suflyor / Slint)\", root.app-version)")
-            .count(),
+        ui.matches("@tr(\"Version: {}\", root.app-version)").count(),
         1,
         "ui/settings_panel.slint must contain exactly one Version text line"
     );
     let backup = ui
-        .split_once("title: @tr(\"Backup / transfer settings\");")
-        .expect("Backup / transfer settings card title must exist in UI")
+        .split_once("title: @tr(\"Backup and transfer\");")
+        .expect("Backup and transfer card title must exist in UI")
         .1
         .split_once("// Phase E6 v28")
         .expect("Backup card content marker must follow its title")
         .0;
     assert!(
-        backup.contains("@tr(\"Version: {} (suflyor / Slint)\", root.app-version)"),
+        backup.contains("@tr(\"Version: {}\", root.app-version)"),
         "Version text must be inside the platform-neutral Backup card"
     );
 }
@@ -167,7 +242,7 @@ fn model_dropdowns_keep_selected_indices_across_provider_switches() {
         "root.ai-model-index = self.current-index;\n                                        root.ai-model-selected(self.current-value);"
     ));
     assert!(ui.contains(
-        "root.ai-local-model-index = self.current-index;\n                                        root.ai-local-model-selected(self.current-value);"
+        "root.ai-local-model-index = self.current-index;\n                                            root.ai-local-model-selected(self.current-value);"
     ));
 }
 

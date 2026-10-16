@@ -129,6 +129,21 @@ pub struct Config {
     /// model to think. Only affects the LOCAL provider.
     #[serde(default)]
     pub ai_local_thinking: bool,
+    /// The local model may call read-only tools while it answers: the
+    /// knowledge base and personal memory, and the web when `ai_web_search`
+    /// is on (ADR-003). On by default: these tools never leave the PC.
+    #[serde(default = "default_true")]
+    pub ai_agent_tools: bool,
+    /// With `ai_agent_tools`: web search (DuckDuckGo) and page reading. The
+    /// model's queries leave the PC, so this is a separate opt-in.
+    #[serde(default)]
+    pub ai_web_search: bool,
+    /// A Strata folder the user installed before Suflyor, and the run config
+    /// in it to start (`strata-<model>.json`). Empty: Suflyor's own install.
+    #[serde(default)]
+    pub ai_strata_dir: String,
+    #[serde(default)]
+    pub ai_strata_config: String,
     /// Backwards-compatible 26B flag for the bundled local LLM. `true` selects
     /// the owner-approved Gemma 4 26B-A4B primary; `false` uses the explicit
     /// 4B/12B filename in `ai_local_model`. A missing or invalid target falls
@@ -645,6 +660,10 @@ impl Config {
             ai_local_prep_model: String::new(),
             ai_local_vision: false,
             ai_local_thinking: false,
+            ai_agent_tools: true,
+            ai_web_search: false,
+            ai_strata_dir: String::new(),
+            ai_strata_config: String::new(),
             ai_local_quality: false,
             ai_local_context: default_ai_local_context(),
             vision_provider: default_vision_provider(),
@@ -1112,6 +1131,10 @@ impl Config {
     pub fn stt_is_local(&self) -> bool {
         matches!(self.stt_provider.as_str(), "gigaam" | "whisper")
     }
+}
+
+const fn default_true() -> bool {
+    true
 }
 
 fn default_ai_provider() -> String {
@@ -1640,6 +1663,9 @@ fn portable_config_bytes(cfg: &Config) -> Result<Vec<u8>> {
     let mut value = serde_json::to_value(cfg).context("serialize config value")?;
     if let Some(fields) = value.as_object_mut() {
         fields.remove("deep_lock");
+        // Folders on this PC: another PC has its own Strata, or none.
+        fields.remove("ai_strata_dir");
+        fields.remove("ai_strata_config");
     }
     serde_json::to_vec_pretty(&value).context("serialize portable config")
 }
@@ -1708,6 +1734,10 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     next.ai_local_prep_model = imported.ai_local_prep_model;
     next.ai_local_vision = imported.ai_local_vision;
     next.ai_local_thinking = imported.ai_local_thinking;
+    next.ai_agent_tools = imported.ai_agent_tools;
+    next.ai_web_search = imported.ai_web_search;
+    // NOTE: ai_strata_dir/ai_strata_config are deliberately NOT transferred:
+    // they are folders on THIS PC. A full profile export leaves them out too.
     // Vision channel (separate endpoint).
     next.vision_provider = imported.vision_provider;
     next.vision_base_url = imported.vision_base_url;

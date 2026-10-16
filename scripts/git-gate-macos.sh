@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Fast fmt/compile/unit/static-guard checks by default; Clippy for stable --full.
+full=false
+case "${1:-}" in
+  '') ;;
+  --full) full=true ;;
+  *) echo "usage: $0 [--full]" >&2; exit 1 ;;
+esac
+if (($# > 1)); then echo "usage: $0 [--full]" >&2; exit 1; fi
+
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 export CARGO_INCREMENTAL=0
@@ -34,18 +43,21 @@ printf 'macOS memory preflight: %s%% free; Cargo jobs=%s; Rust test threads=%s\n
 
 echo "=== macOS backend ==="
 cargo fmt --manifest-path overlay-backend/Cargo.toml --all -- --check
-cargo clippy --manifest-path overlay-backend/Cargo.toml --all-targets -- -D warnings
+if $full; then
+  cargo clippy --manifest-path overlay-backend/Cargo.toml --all-targets -- -D warnings
+fi
 cargo test --manifest-path overlay-backend/Cargo.toml
 
 echo "=== macOS portable Slint/UI ==="
 cargo fmt --manifest-path slint-experiment/Cargo.toml --all -- --check
 cargo check --locked --lib --bin slint-replay --bin markdown-spike --bin overlay-host \
   --manifest-path slint-experiment/Cargo.toml
-cargo clippy --locked --lib --bin slint-replay --bin markdown-spike --bin overlay-host --tests \
-  --manifest-path slint-experiment/Cargo.toml -- -D warnings
-cargo test --locked --lib --manifest-path slint-experiment/Cargo.toml
-cargo test --locked --bin slint-replay --manifest-path slint-experiment/Cargo.toml
-cargo test --locked --bin overlay-host --manifest-path slint-experiment/Cargo.toml
+if $full; then
+  cargo clippy --locked --lib --bin slint-replay --bin markdown-spike --bin overlay-host --tests \
+    --manifest-path slint-experiment/Cargo.toml -- -D warnings
+  cargo test --locked --bin slint-replay --manifest-path slint-experiment/Cargo.toml
+fi
+cargo test --locked --lib --bin overlay-host --manifest-path slint-experiment/Cargo.toml
 # The two omitted integration tests create/show Slint windows and belong to live GUI QA.
 for test in \
   codex_copy_guard \
@@ -87,17 +99,23 @@ test -s "$mlx_metallib"
 
 echo "=== macOS TTS sidecar ==="
 cargo fmt --manifest-path suflyor-tts/Cargo.toml --all -- --check
-cargo clippy --locked --manifest-path suflyor-tts/Cargo.toml --all-targets -- -D warnings
+if $full; then
+  cargo clippy --locked --manifest-path suflyor-tts/Cargo.toml --all-targets -- -D warnings
+fi
 cargo test --locked --manifest-path suflyor-tts/Cargo.toml
 
 echo "=== macOS WSOLA sidecar ==="
 cargo fmt --manifest-path suflyor-wsola/Cargo.toml --all -- --check
-cargo clippy --locked --manifest-path suflyor-wsola/Cargo.toml --all-targets -- -D warnings
+if $full; then
+  cargo clippy --locked --manifest-path suflyor-wsola/Cargo.toml --all-targets -- -D warnings
+fi
 cargo test --locked --manifest-path suflyor-wsola/Cargo.toml
 
 echo "=== macOS TeraTTS sidecar ==="
 cargo fmt --manifest-path suflyor-teratts/Cargo.toml --all -- --check
-cargo clippy --locked --manifest-path suflyor-teratts/Cargo.toml --all-targets -- -D warnings
+if $full; then
+  cargo clippy --locked --manifest-path suflyor-teratts/Cargo.toml --all-targets -- -D warnings
+fi
 cargo test --locked --manifest-path suflyor-teratts/Cargo.toml
 
 echo "All macOS compile-seam layers green."

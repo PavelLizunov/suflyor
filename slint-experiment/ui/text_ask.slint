@@ -14,7 +14,7 @@
 
 import { LineEdit, Button, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { CloseButton, DragGrip } from "controls.slint";
+import { CloseButton, DragGrip, WindowHeader } from "controls.slint";
 import { Metrics } from "metrics.slint";
 
 component IconSlot inherits Rectangle {
@@ -44,7 +44,7 @@ export component TextAskWindow inherits Window {
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     no-frame: true;
     always-on-top: true;
-    title: @tr("suflyor text ask (Slint)");
+    title: @tr("Suflyor — question");
     default-font-family: Theme.font-sans;
     background: Theme.bg-surface;
     preferred-width: 480px;
@@ -94,80 +94,29 @@ export component TextAskWindow inherits Window {
             return reject;
         }
         VerticalLayout {
-            padding: 14px;
-            spacing: 10px;
-            HorizontalLayout {
-                spacing: Metrics.space-sm;   // was 8px
-                // ТЗ 2026-07-06 (C) — drag handle BEHIND the header content
-                // (help.slint pattern): the TouchArea drags; the CloseButton
-                // stays a sibling on top so its clicks are its own.
-                Rectangle {
-                    horizontal-stretch: 1;
-                    height: 30px;
-                    TouchArea {
-                        mouse-cursor: grab;
-                        pointer-event(ev) => {
-                            if (ev.button == PointerEventButton.left
-                                && ev.kind == PointerEventKind.down) {
-                                root.drag-start-requested();
-                            }
-                        }
-                        moved => {
-                            if (self.pressed) { root.drag-moved(); }
-                        }
-                    }
-                    HorizontalLayout {
-                        spacing: Metrics.space-sm;
-                        Rectangle {
-                            width: 18px;
-                            height: 30px;
-                            IconSlot {
-                                y: 6px;
-                                icon: @image-url("../assets/icons/pencil.svg");
-                                tint: Theme.accent;
-                                glyph-size: 15px;
-                                slot-size: 18px;
-                            }
-                        }
-                        Rectangle {
-                            width: 13px;
-                            height: 30px;
-                            DragGrip { y: 2px; }
-                        }
-                        Text {
-                            text: @tr("Write a question for the assistant");
-                            color: Theme.text-secondary;
-                            font-size: Metrics.font-body;   // was 12px
-                            font-weight: 600;
-                            vertical-alignment: center;
-                        }
-                        // v0.10.1 — active profile/persona (applies to the typed
-                        // answer too, identically to voice). Right-aligned, muted.
-                        Text {
-                            text: root.active-profile;
-                            color: Theme.text-muted;
-                            font-size: Metrics.font-label;
-                            vertical-alignment: center;
-                            horizontal-alignment: right;
-                            horizontal-stretch: 1;
-                            overflow: elide;
-                        }
-                    }
-                }
-                // V0.8.4 — explicit close (= Esc). Shared CloseButton.
-                CloseButton {
-                    clicked => { root.cancelled(); }
-                }
+            padding: Metrics.space-md;
+            spacing: Metrics.space-sm;
+            WindowHeader {
+                title: @tr("Write a question for the assistant");
+                note: root.active-profile;
+                drag-start => { root.drag-start-requested(); }
+                drag-move => { root.drag-moved(); }
+                close => { root.cancelled(); }
             }
             HorizontalLayout {
-                spacing: Metrics.space-sm;   // was 8px
+                height: Metrics.control-xl;
+                vertical-stretch: 0;
+                spacing: Metrics.space-sm;
                 input := LineEdit {
+                    height: Metrics.control-xl;
                     placeholder-text: @tr("Type your question…");
                     text <=> root.query;
                     accepted => { root.fire(); }
                 }
                 Button {
+                    height: Metrics.control-xl;
                     text: @tr("Send");
+                    enabled: root.query != "";
                     primary: true;
                     clicked => { root.fire(); }
                 }

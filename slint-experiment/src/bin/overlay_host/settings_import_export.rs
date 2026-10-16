@@ -58,6 +58,7 @@ pub(crate) fn wire_import_export(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_export_server_settings_clicked(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let snapshot = cfg_c.read().clone();
             let picked = rfd::FileDialog::new()
                 .set_title("Export server settings (AI/STT only — contains API keys)")
@@ -66,15 +67,21 @@ pub(crate) fn wire_import_export(
                 .save_file();
             let Some(w) = weak.upgrade() else { return };
             let msg = match picked {
-                None => "export cancelled".to_string(),
+                None => if ru { "Экспорт отменён" } else { "Export cancelled" }.to_string(),
                 Some(path) => {
                     match overlay_backend::config::export_server_settings_to(&path, &snapshot) {
-                        Ok(()) => format!("[ok] server settings exported to {}", path.display()),
+                        Ok(()) => {
+                            if ru {
+                                format!("Настройки сервера экспортированы в {}", path.display())
+                            } else {
+                                format!("Server settings exported to {}", path.display())
+                            }
+                        }
                         Err(e) => {
                             // Generic + log: the error chain can carry a path /
                             // internals into this screen-shared field (audit Q8).
                             eprintln!("[overlay-host] server export failed: {e:#}");
-                            "[err] export failed (see log)".to_string()
+                            if ru { "Экспорт не удался, подробности в журнале" } else { "Export failed, details are in the log" }.to_string()
                         }
                     }
                 }
@@ -99,8 +106,9 @@ pub(crate) fn wire_import_export(
                 .add_filter("JSON", &["json"])
                 .pick_file();
             let Some(w) = weak.upgrade() else { return };
+            let ru = snapshot.ui_is_ru();
             let Some(path) = picked else {
-                w.set_profile_io_result(SharedString::from("import cancelled"));
+                w.set_profile_io_result(SharedString::from(if ru { "Импорт отменён" } else { "Import cancelled" }));
                 return;
             };
             // Read + parse + build the redacted preview. The parse error stays
@@ -110,17 +118,21 @@ pub(crate) fn wire_import_export(
                     apply_server_preview(&w, &preview);
                     *pending.borrow_mut() = Some(imported);
                     w.set_server_preview_ready(true);
-                    w.set_profile_io_result(SharedString::from(
-                        "review the changes below, then Apply",
-                    ));
+                    w.set_profile_io_result(SharedString::from(if ru {
+                        "Проверьте изменения ниже и нажмите «Применить»"
+                    } else {
+                        "Review the changes below, then Apply"
+                    }));
                 }
                 Err(e) => {
                     *pending.borrow_mut() = None;
                     w.set_server_preview_ready(false);
                     eprintln!("[overlay-host] server import preview failed: {e:#}");
-                    w.set_profile_io_result(SharedString::from(
-                        "[err] could not read file (see log)",
-                    ));
+                    w.set_profile_io_result(SharedString::from(if ru {
+                        "Не удалось прочитать файл, подробности в журнале"
+                    } else {
+                        "Could not read the file, details are in the log"
+                    }));
                 }
             }
         });
@@ -135,10 +147,11 @@ pub(crate) fn wire_import_export(
         let pending = pending.clone();
         let overlay = overlay_weak.clone();
         win.on_apply_server_settings_clicked(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let Some(w) = weak.upgrade() else { return };
             let Some(imported) = pending.borrow_mut().take() else {
                 w.set_server_preview_ready(false);
-                w.set_profile_io_result(SharedString::from("nothing to apply"));
+                w.set_profile_io_result(SharedString::from(if ru { "Применять нечего" } else { "Nothing to apply" }));
                 return;
             };
             let merged = {
@@ -154,11 +167,11 @@ pub(crate) fn wire_import_export(
                         refresh_lock_chip(&o, &cfg_c);
                     }
                     let _ = msg_refresh_after_import(&w, &cfg_c);
-                    "[ok] server settings applied (AI/STT providers, URLs, models, keys). Local profiles, devices, UI and snippets kept; the local GigaAM model path was kept from this PC. Restart for full effect.".to_string()
+                    if ru { "Настройки сервера применены. Профили, устройства, интерфейс, фрагменты и путь к GigaAM сохранены. Для полного применения перезапустите приложение." } else { "Server settings applied. Local profiles, devices, UI, snippets and the GigaAM path were kept. Restart the app for full effect." }.to_string()
                 }
                 Err(e) => {
                     eprintln!("[overlay-host] server settings apply/save failed: {e:#}");
-                    "[err] apply failed (see log)".to_string()
+                    if ru { "Не удалось применить, подробности в журнале" } else { "Could not apply, details are in the log" }.to_string()
                 }
             };
             w.set_profile_io_result(SharedString::from(msg));
@@ -247,7 +260,10 @@ mod tests {
             "local GigaAM model path kept from this PC ({home}\\suflyor-local-ai\\gigaam-v3); the imported file's path ({home}\\imported\\gigaam-v3) is NOT applied"
         );
         let redacted = redact_user_home(&sample);
-        assert!(!redacted.contains("alice"), "leaked OS username in preview: {redacted}");
+        assert!(
+            !redacted.contains("alice"),
+            "leaked OS username in preview: {redacted}"
+        );
         assert!(redacted.contains("%USERPROFILE%"));
     }
 }

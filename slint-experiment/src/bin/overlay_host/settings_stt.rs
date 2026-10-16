@@ -15,8 +15,7 @@
 //! NOT moved (different domain, left in `open_settings`): the Audio-device mic
 //! callbacks `on_mic_device_selected` / `on_mic_test_clicked`.
 //!
-//! SECURITY (unchanged by this mechanical move): the STT test-result tile keeps
-//! its GENERIC messages (`[ok] …` / `[err] …`, error chain capped at 90 chars) so
+//! SECURITY: the STT test-result tile keeps generic messages so
 //! no `base_url` / LAN IP leaks into a screen-shared Settings window. The endpoint
 //! resolves via `cfg.stt_backend()` exactly as before.
 //!
@@ -207,8 +206,13 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_stt_test_clicked(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let Some(w) = weak.upgrade() else { return };
-            w.set_stt_test_result(SharedString::from("testing…"));
+            w.set_stt_test_result(SharedString::from(if ru {
+                "Проверка…"
+            } else {
+                "Checking…"
+            }));
             let backend = cfg_c.read().stt_backend();
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
@@ -218,11 +222,17 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
                 {
                     Ok(rt) => {
                         match rt.block_on(overlay_backend::stt::test_connection_backend(&backend)) {
-                            Ok(s) => format!("[ok] {s}"),
-                            Err(e) => format!("[err] {e:#}").chars().take(90).collect(),
+                            Ok(_) => {
+                                if ru {
+                                    "Подключение работает".to_string()
+                                } else {
+                                    "Connection works".to_string()
+                                }
+                            }
+                            Err(e) => super::status_copy::connection_failed(ru, &format!("{e:#}")),
                         }
                     }
-                    Err(e) => format!("[err] runtime: {e}"),
+                    Err(e) => super::status_copy::check_not_started(ru, &e),
                 };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_res.upgrade() {
@@ -245,9 +255,7 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
                 if let Some(dir) = installed_gigaam_dir(&c.stt_gigaam_dir) {
                     c.stt_gigaam_dir = dir.to_string_lossy().into_owned();
                     if let Some(w) = weak.upgrade() {
-                        w.set_stt_gigaam_dir_input(SharedString::from(
-                            c.stt_gigaam_dir.clone(),
-                        ));
+                        w.set_stt_gigaam_dir_input(SharedString::from(c.stt_gigaam_dir.clone()));
                         w.set_stt_gigaam_installed(true);
                     }
                 }

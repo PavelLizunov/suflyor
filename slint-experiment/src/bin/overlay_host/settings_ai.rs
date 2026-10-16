@@ -32,9 +32,7 @@
 //! `on_check_updates_clicked`, `on_install_update_clicked`), and the STT /
 //! Vision blocks (already extracted to their own modules).
 //!
-//! SECURITY (unchanged by this mechanical move): the AI bridge / local
-//! test-result tiles keep their GENERIC messages (`[ok] …` / `[err] …` capped
-//! at 90 chars for the bridge, `[--] …` for the local test) so no `base_url` /
+//! SECURITY: the AI bridge / local tests keep generic messages so no `base_url` /
 //! LAN IP leaks into a screen-shared Settings window. `ai_base_url` saves log
 //! presence (char count) only, never the value.
 //!
@@ -43,8 +41,8 @@
 //! `diag!` macro / `populate_token_status` / the `overlay_backend` config + ai
 //! helpers). That is intentional for the move; imports narrow in a later pass.
 use super::{
-    active_stack_label, populate_token_status, refresh_lock_chip, ComponentHandle, ModelRc,
-    OverlayBarWindow, SettingsWindow, SharedString, VecModel,
+    active_stack_label, populate_token_status, refresh_local_engine_state, refresh_lock_chip,
+    ComponentHandle, ModelRc, OverlayBarWindow, SettingsWindow, SharedString, VecModel,
 };
 use slint::Model;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -146,10 +144,10 @@ fn copy_codex_user_code<E>(
 fn codex_copy_status(result: CodexCopyResult, is_ru: bool) -> &'static str {
     match (result, is_ru) {
         (CodexCopyResult::Empty, _) => "",
-        (CodexCopyResult::Copied, true) => "[ok] Код скопирован",
-        (CodexCopyResult::Copied, false) => "[ok] Code copied",
-        (CodexCopyResult::Failed, true) => "[err] Не удалось скопировать",
-        (CodexCopyResult::Failed, false) => "[err] Copy failed",
+        (CodexCopyResult::Copied, true) => "Код скопирован",
+        (CodexCopyResult::Copied, false) => "Code copied",
+        (CodexCopyResult::Failed, true) => "Не удалось скопировать",
+        (CodexCopyResult::Failed, false) => "Copy failed",
     }
 }
 
@@ -178,25 +176,23 @@ fn codex_account_label(
     use overlay_backend::codex_subscription::AccountState;
     match state {
         AccountState::NotInstalled if is_ru => {
-            "[--] Codex app-server не найден — установите официальный Codex".into()
+            "Codex app-server не найден — установите официальный Codex".into()
         }
-        AccountState::NotInstalled => {
-            "[--] Codex app-server not found — install official Codex".into()
-        }
-        AccountState::SignedOut if is_ru => "[--] выход выполнен".into(),
-        AccountState::SignedOut => "[--] signed out".into(),
-        AccountState::SignInRequired if is_ru => "[--] требуется вход".into(),
-        AccountState::SignInRequired => "[--] sign-in required".into(),
+        AccountState::NotInstalled => "Codex app-server not found — install official Codex".into(),
+        AccountState::SignedOut if is_ru => "выход выполнен".into(),
+        AccountState::SignedOut => "signed out".into(),
+        AccountState::SignInRequired if is_ru => "требуется вход".into(),
+        AccountState::SignInRequired => "sign-in required".into(),
         AccountState::SignedIn { plan } if is_ru => plan.as_ref().map_or_else(
-            || "[ok] вход через ChatGPT выполнен".into(),
-            |plan| format!("[ok] вход через ChatGPT выполнен ({plan})"),
+            || "вход через ChatGPT выполнен".into(),
+            |plan| format!("вход через ChatGPT выполнен ({plan})"),
         ),
         AccountState::SignedIn { plan } => plan.as_ref().map_or_else(
-            || "[ok] signed in with ChatGPT".into(),
-            |plan| format!("[ok] signed in with ChatGPT ({plan})"),
+            || "signed in with ChatGPT".into(),
+            |plan| format!("signed in with ChatGPT ({plan})"),
         ),
-        AccountState::Error if is_ru => "[err] не удалось проверить аккаунт Codex".into(),
-        AccountState::Error => "[err] could not query the Codex account".into(),
+        AccountState::Error if is_ru => "Не удалось проверить аккаунт Codex".into(),
+        AccountState::Error => "Could not query the Codex account".into(),
     }
 }
 
@@ -576,9 +572,9 @@ pub(crate) fn wire_ai_settings(
                 if let Some(w) = weak_for_refresh.upgrade() {
                     let is_ru = cfg_c.read().ui_language != "en";
                     w.set_openai_key_status(if is_ru {
-                        "[ошибка] защищённое хранилище недоступно".into()
+                        "Не удалось сохранить: защищённое хранилище Windows недоступно".into()
                     } else {
-                        "[err] secure storage unavailable".into()
+                        "Could not save: Windows secure storage is unavailable".into()
                     });
                 }
                 return;
@@ -600,9 +596,9 @@ pub(crate) fn wire_ai_settings(
                 if let Some(w) = weak_for_refresh.upgrade() {
                     let is_ru = cfg_c.read().ui_language != "en";
                     w.set_anthropic_key_status(if is_ru {
-                        "[ошибка] защищённое хранилище недоступно".into()
+                        "Не удалось сохранить: защищённое хранилище Windows недоступно".into()
                     } else {
-                        "[err] secure storage unavailable".into()
+                        "Could not save: Windows secure storage is unavailable".into()
                     });
                 }
                 return;
@@ -941,9 +937,9 @@ pub(crate) fn wire_ai_settings(
                                 window.set_codex_user_code(SharedString::default());
                                 window.set_codex_copy_status(SharedString::default());
                                 window.set_codex_auth_status(SharedString::from(if is_ru {
-                                    "[--] вход не завершён — повторите подключение"
+                                    "вход не завершён — повторите подключение"
                                 } else {
-                                    "[--] sign-in not completed — connect again"
+                                    "sign-in not completed — connect again"
                                 }));
                             }
                             LoginEvent::Error => {
@@ -952,9 +948,9 @@ pub(crate) fn wire_ai_settings(
                                 window.set_codex_user_code(SharedString::default());
                                 window.set_codex_copy_status(SharedString::default());
                                 window.set_codex_auth_status(SharedString::from(if is_ru {
-                                    "[err] вход Codex недоступен"
+                                    "Вход в Codex недоступен"
                                 } else {
-                                    "[err] Codex sign-in unavailable"
+                                    "Codex sign-in unavailable"
                                 }));
                             }
                         }
@@ -1168,6 +1164,13 @@ pub(crate) fn wire_ai_settings(
         win.on_ai_local_base_url_save(move |v| {
             let base_url = v.trim().to_string();
             let root = overlay_backend::local_ai::default_root();
+            // Strata pins tens of GB of RAM; leaving it for another server stops it.
+            if !overlay_backend::local_ai::is_managed_strata_endpoint(&base_url)
+                && overlay_backend::local_ai::strata_running()
+            {
+                overlay_backend::local_ai::abort_strata_start();
+                std::thread::spawn(overlay_backend::local_ai::stop_strata);
+            }
             let (
                 managed,
                 quality,
@@ -1217,6 +1220,7 @@ pub(crate) fn wire_ai_settings(
                     &vision_provider,
                 ));
                 refresh_local_model_resource_warning(&w, root, saved_base_url, model);
+                refresh_local_engine_state(&w, &cfg_c.read());
             }
             // #E10.1 — re-query models against the new URL.
             fetch_models(weak.clone(), cfg_c.clone(), ModelTarget::Local);
@@ -1250,6 +1254,7 @@ pub(crate) fn wire_ai_settings(
                 c.ai_local_base_url.clone()
             };
             if let Some(w) = weak.upgrade() {
+                refresh_local_engine_state(&w, &cfg_c.read());
                 refresh_local_model_resource_warning(
                     &w,
                     overlay_backend::local_ai::default_root(),
@@ -1302,12 +1307,36 @@ pub(crate) fn wire_ai_settings(
     }
     {
         let cfg_c = cfg.clone();
+        win.on_ai_agent_tools_changed(move |on| {
+            let mut c = cfg_c.write();
+            c.ai_agent_tools = on;
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] ai_agent_tools save failed: {e:#}");
+            }
+            overlay_backend::ai::set_agent_tools(on, c.ai_web_search);
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_ai_web_search_changed(move |on| {
+            let mut c = cfg_c.write();
+            c.ai_web_search = on;
+            if let Err(e) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] ai_web_search save failed: {e:#}");
+            }
+            overlay_backend::ai::set_agent_tools(c.ai_agent_tools, on);
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_ai_local_test_clicked(move || {
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            w.set_ai_local_test_result(SharedString::from("Проверка…"));
+            #[cfg(windows)]
+            let generation = super::settings_local_ai::begin_now_check(&w);
+            w.set_ai_local_test_result(SharedString::from(if cfg_c.read().ui_is_ru() { "Проверка…" } else { "Checking…" }));
             let (base_url, bearer, model, ui_is_ru) = {
                 let c = cfg_c.read();
                 (
@@ -1319,6 +1348,7 @@ pub(crate) fn wire_ai_settings(
             };
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
+                let mut working = false;
                 let msg = match tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()
@@ -1327,17 +1357,17 @@ pub(crate) fn wire_ai_settings(
                         match rt.block_on(overlay_backend::ai::test_connection(
                             base_url, bearer, model,
                         )) {
-                            Ok(s) => format!("[ok] {s}"),
+                            Ok(_) => {
+                                working = true;
+                                if ui_is_ru { "Подключение работает" } else { "Connection works" }.to_string()
+                            }
                             // A deep-locked managed server: the specific
                             // localized notice instead of a misleading "server
                             // not answering".
                             Err(e)
                                 if overlay_backend::deep_lock::is_blocked_error(&e.to_string()) =>
                             {
-                                format!(
-                                    "[--] {}",
-                                    overlay_backend::deep_lock::blocked_notice(ui_is_ru)
-                                )
+                                overlay_backend::deep_lock::blocked_notice(ui_is_ru).to_string()
                             }
                             // UI-audit 2026-06-13: do NOT echo the raw error body
                             // into the panel. A starting llama-server returns the
@@ -1350,19 +1380,22 @@ pub(crate) fn wire_ai_settings(
                             Err(e) => {
                                 let es = e.to_string().to_lowercase();
                                 if es.contains("503") || es.contains("loading") {
-                                    "Сервер запускает модель — подождите ~10 с и повторите."
-                                        .to_string()
+                                    if ui_is_ru { "Сервер запускает модель — подождите ~10 с и повторите." } else { "The server is loading the model — wait about 10 seconds and try again." }.to_string()
                                 } else {
-                                    "[--] Локальный сервер не отвечает — проверьте, что он запущен."
-                                        .to_string()
+                                    if ui_is_ru { "Локальный сервер не отвечает — проверьте, что он запущен." } else { "The local server is not answering — check that it is running." }.to_string()
                                 }
                             }
                         }
                     }
-                    Err(e) => format!("[--] runtime: {e}"),
+                    Err(_) => if ui_is_ru { "Не удалось проверить подключение." } else { "Could not check the connection." }.to_string(),
                 };
                 let _ = slint::invoke_from_event_loop(move || {
+                    #[cfg(windows)]
+                    if !super::settings_local_ai::now_check_is_current(generation) {
+                        return;
+                    }
                     if let Some(w) = weak_res.upgrade() {
+                        w.set_now_state(if working { 1 } else { 3 });
                         w.set_ai_local_test_result(SharedString::from(msg));
                     }
                 });
@@ -1373,13 +1406,18 @@ pub(crate) fn wire_ai_settings(
     // Phase E6 v27 — AI bridge connection test. Off-thread (local
     // current-thread tokio runtime) so the blocking HTTP round-trip
     // doesn't freeze the UI; result posted back via invoke_from_
-    // event_loop. ASCII status prefixes (no ✓/✗ missing-glyphs).
+    // event_loop with plain localized success copy.
     {
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_ai_bridge_test_clicked(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let Some(w) = weak.upgrade() else { return };
-            w.set_ai_bridge_test_result(SharedString::from("testing…"));
+            w.set_ai_bridge_test_result(SharedString::from(if ru {
+                "Проверка…"
+            } else {
+                "Checking…"
+            }));
             let endpoint = cfg_c.read().ai_endpoint(false);
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
@@ -1389,11 +1427,16 @@ pub(crate) fn wire_ai_settings(
                 {
                     Ok(rt) => {
                         match rt.block_on(overlay_backend::ai::test_connection_endpoint(endpoint)) {
-                            Ok(s) => format!("[ok] {s}"),
-                            Err(e) => format!("[err] {e:#}").chars().take(90).collect(),
+                            Ok(_) => if ru {
+                                "Подключение работает"
+                            } else {
+                                "Connection works"
+                            }
+                            .to_string(),
+                            Err(e) => super::status_copy::connection_failed(ru, &format!("{e:#}")),
                         }
                     }
-                    Err(e) => format!("[err] runtime: {e}"),
+                    Err(e) => super::status_copy::check_not_started(ru, &e),
                 };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_res.upgrade() {
@@ -1529,19 +1572,19 @@ mod tests {
     fn codex_copy_feedback_is_short_generic_and_localized() {
         assert_eq!(
             codex_copy_status(CodexCopyResult::Copied, false),
-            "[ok] Code copied"
+            "Code copied"
         );
         assert_eq!(
             codex_copy_status(CodexCopyResult::Copied, true),
-            "[ok] Код скопирован"
+            "Код скопирован"
         );
         assert_eq!(
             codex_copy_status(CodexCopyResult::Failed, false),
-            "[err] Copy failed"
+            "Copy failed"
         );
         assert_eq!(
             codex_copy_status(CodexCopyResult::Failed, true),
-            "[err] Не удалось скопировать"
+            "Не удалось скопировать"
         );
     }
 }

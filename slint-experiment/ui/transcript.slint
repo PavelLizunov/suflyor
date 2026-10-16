@@ -9,7 +9,7 @@
 
 import { ListView, Palette, LineEdit, TextEdit, Button, ScrollView, ComboBox, Slider } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { CloseButton, DragGrip, SelectableText } from "controls.slint";
+import { CloseButton, DragGrip, SelectableText, WindowHeader } from "controls.slint";
 import { Metrics } from "metrics.slint";
 import { DarkCheck } from "settings_panel.slint";
 
@@ -243,62 +243,13 @@ export component TranscriptWindow inherits Window {
                 padding: Metrics.space-md;
                 spacing: Metrics.space-sm;
 
-                // ── Header: icon · title · session heading (DRAG) · close ──
-                HorizontalLayout {
-                    spacing: Metrics.space-sm;
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        TouchArea {
-                            mouse-cursor: grab;
-                            pointer-event(ev) => {
-                                if (ev.button == PointerEventButton.left
-                                    && ev.kind == PointerEventKind.down) {
-                                    root.drag-start-requested();
-                                }
-                            }
-                            moved => { if (self.pressed) { root.drag-moved(); } }
-                        }
-                        HorizontalLayout {
-                            spacing: Metrics.space-sm;
-                            Rectangle {
-                                width: 18px;
-                                height: 30px;
-                                horizontal-stretch: 0;
-                                Image {
-                                    y: 6px;
-                                    source: @image-url("../assets/icons/bubble.svg");
-                                    colorize: Theme.text-primary;
-                                    width: 18px;
-                                    height: 18px;
-                                    image-fit: contain;
-                                }
-                            }
-                            Rectangle {
-                                width: 13px;
-                                height: 30px;
-                                horizontal-stretch: 0;
-                                DragGrip { y: 4px; }
-                            }
-                            Text {
-                                text: @tr("Transcript");
-                                font-size: Metrics.font-heading;
-                                font-weight: 700;
-                                color: Theme.text-primary;
-                                vertical-alignment: center;
-                            }
-                            Text {
-                                text: root.heading;
-                                font-size: Metrics.font-caption;
-                                color: Theme.text-muted;
-                                vertical-alignment: center;
-                                horizontal-stretch: 1;
-                                overflow: elide;
-                            }
-                        }
-                    }
-                    CloseButton {
-                        clicked => { root.close-requested(); }
-                    }
+                // ── Header: the shared WindowHeader, session date as the note ──
+                WindowHeader {
+                    title: @tr("Transcript");
+                    note: root.heading;
+                    drag-start => { root.drag-start-requested(); }
+                    drag-move => { root.drag-moved(); }
+                    close => { root.close-requested(); }
                 }
 
                 Rectangle {

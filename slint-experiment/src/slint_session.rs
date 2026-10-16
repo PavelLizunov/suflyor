@@ -1260,7 +1260,7 @@ async fn maybe_spawn_auto_tile(
                     let _ = events.spawn_tile_full(
                         TileSpec {
                             question: if ui_is_ru {
-                                "Локальный ИИ заблокирован".into()
+                                "Локальный AI заблокирован".into()
                             } else {
                                 "Local AI is locked".into()
                             },
@@ -1637,7 +1637,7 @@ pub fn maybe_run_debrief(
                 .count();
             let notice: Option<String> = if reason == SKIP_AI_NOT_CONFIGURED {
                 Some(if is_ru {
-                    "Коучинг включён, но ИИ не настроен — откройте Настройки → AI.".to_string()
+                    "Коучинг включён, но AI не настроен — откройте Настройки → AI.".to_string()
                 } else {
                     "Coaching is on, but no AI provider is configured — open Settings → AI."
                         .to_string()

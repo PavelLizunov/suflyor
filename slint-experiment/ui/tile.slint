@@ -24,14 +24,17 @@ export struct MarkdownBlock {
 
 // A2 (ТЗ 2026-07-02) — the quiet «⭐ В память» mark: a MUTED outline star (SVG so it
 // colorizes — the U+2B50 emoji the tester found "too bright" cannot). Accent + full
-// opacity when marked; muted + dim (0.35) at rest; full on hover. Click toggles.
+// opacity when marked; quiet at rest; full on hover. Click toggles.
 component StarMark inherits Rectangle {
     in property <bool> marked;
     // P5: carries whether SHIFT was held, for range-marking. `clicked` gives no modifiers, so latch
     // the shift state on pointer-DOWN and fire it on `clicked` — this keeps proper click semantics
     // (fires only on down+up BOTH in-area; a drag-release-outside or a cancel does NOT toggle).
     callback clicked(bool /* shift */);
-    width: 20px;
+    // 24 px wide target; one text line high so list rows keep their pitch.
+    width: Metrics.space-xl;
+    height: 18px;
+    horizontal-stretch: 0;
     ta := TouchArea {
         property <bool> shift-latched;
         pointer-event(e) => {
@@ -44,7 +47,7 @@ component StarMark inherits Rectangle {
     Image {
         source: @image-url("../assets/icons/star.svg");
         colorize: root.marked ? Theme.accent : Theme.text-muted;
-        opacity: root.marked ? 1.0 : (ta.has-hover ? 1.0 : 0.35);
+        opacity: root.marked ? 1.0 : (ta.has-hover ? 1.0 : 0.55);
         width: 13px;
         height: 13px;
         image-fit: contain;
@@ -161,6 +164,8 @@ export component TileWindow inherits Window {
     in-out property <[MarkdownBlock]> blocks: [];
     // Source label shown in chrome row (e.g. "ai", "kb", "snippet").
     in-out property <string> source-label: "—";
+    // A notice or an error has nothing worth keeping in memory: no stars.
+    in-out property <bool> plain-notice: false;
     // Phase E6 v12 — trigger badge.
     in-out property <string> trigger-label: "";
     // The host names the badge category; the hue comes from the theme.
@@ -271,6 +276,8 @@ export component TileWindow inherits Window {
     in-out property <string> speak-speed-label: "1.0x";
     // Bound to the follow-up LineEdit so do-submit() can read + clear it.
     in-out property <string> followup-text;
+    // Share one scrollbar gutter with the follow-up row.
+    property <length> content-gutter: Metrics.space-md + Metrics.border-focus;
 
     callback close-clicked();
     callback pin-clicked();
@@ -622,8 +629,9 @@ export component TileWindow inherits Window {
             // Phase E6 v12 — colored pill below chrome row shows what
             // detector trigger spawned this tile (Keyword "docker",
             // Question "...", every-line). Hidden when trigger-label
-            // is empty (manual F9 ask or F6 spawn).
-            if root.trigger-label != "" : Rectangle {
+            // is empty (manual F9 ask or F6 spawn) or just repeats the title.
+            if root.trigger-label != ""
+                && root.trigger-label.to-lowercase() != root.tile-title.to-lowercase() : Rectangle {
                 height: 22px;
                 horizontal-stretch: 1;
                 HorizontalLayout {
@@ -668,7 +676,7 @@ export component TileWindow inherits Window {
                     // A2 fix (retest r2): right inset so the per-block ⭐ gutter clears the
                     // ScrollView scrollbar on long/scrolling answers (tester: the stars
                     // "compete with the scroll" and get hard to click).
-                    padding-right: 14px;
+                    padding-right: root.content-gutter;
                     // Per-block wrapper is a LAYOUT, not a bare Rectangle.
                     // A Rectangle does NOT size its height to non-layout
                     // children, so long Text blocks collapsed to ~0px and
@@ -719,7 +727,7 @@ export component TileWindow inherits Window {
                                 horizontal-stretch: 1;
                                 capture(a, c) => { root.capture-selection(i, a, c); }
                             }
-                            StarMark {
+                            if !root.plain-notice : StarMark {
                                 marked: block.marked;
                                 clicked(shift) => { root.toggle-block-marked(i, shift); }
                             }
@@ -743,7 +751,7 @@ export component TileWindow inherits Window {
                                 horizontal-stretch: 1;
                                 capture(a, c) => { root.capture-selection(i, a, c); }
                             }
-                            StarMark {
+                            if !root.plain-notice : StarMark {
                                 marked: block.marked;
                                 clicked(shift) => { root.toggle-block-marked(i, shift); }
                             }
@@ -779,13 +787,16 @@ export component TileWindow inherits Window {
                         }
                         // Code block
                         if block.kind == 5 && block.lang != "user" : Rectangle {
+                            height: code-layout.preferred-height;
+                            vertical-stretch: 0;
                             background: Theme.code-bg;
                             border-radius: 4px;
                             border-width: 1px;
                             border-color: Theme.border;
                             clip: true;
-                            VerticalLayout {
+                            code-layout := VerticalLayout {
                                 padding: Metrics.space-sm;
+                                padding-right: 0px;
                                 spacing: Metrics.space-xs;
                                 // Header: language label (left) + per-block copy
                                 // button (right). The button copies THIS block's
@@ -829,14 +840,17 @@ export component TileWindow inherits Window {
                                 // don't reflow and lose meaning; long lines
                                 // clip at the box edge (clip:true) — maximize
                                 // the tile (maximize button) to read them in full.
-                                SelectableText {
-                                    text: block.display-text;
-                                    source-text: block.text;
-                                    font-size: Metrics.font-label;
-                                    text-color: Theme.code-text;
-                                    mono-family: Theme.font-mono;
-                                    wrap: no-wrap;
-                                    capture(a, c) => { root.capture-selection(i, a, c); }
+                                HorizontalLayout {
+                                    padding-right: Metrics.space-sm;
+                                    SelectableText {
+                                        text: block.display-text;
+                                        source-text: block.text;
+                                        font-size: Metrics.font-label;
+                                        text-color: Theme.code-text;
+                                        mono-family: Theme.font-mono;
+                                        wrap: no-wrap;
+                                        capture(a, c) => { root.capture-selection(i, a, c); }
+                                    }
                                 }
                             }
                         }
@@ -1029,6 +1043,7 @@ export component TileWindow inherits Window {
             // → button sends; both are disabled while the answer streams.
             // User: "нет возможности продолжить диалог в рамках тайла".
             if root.convo-id >= 0 : HorizontalLayout {
+                padding-right: root.content-gutter;
                 spacing: Metrics.space-sm;
                 LineEdit {
                     placeholder-text: @tr("Continue the dialog…");

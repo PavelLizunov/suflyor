@@ -1997,3 +1997,18 @@ fn config_backup_is_owner_only_on_unix() {
     assert!(size > 2, "the save must rewrite the backup");
     assert_eq!(unix_mode(&bak), 0o600, "the backup holds profiles");
 }
+
+/// A full profile export leaves out the Strata folder chosen on this PC.
+#[test]
+fn profile_export_leaves_out_strata_folders() {
+    let cfg = Config {
+        ai_strata_dir: r"D:\AI\Strata-0.1.40".into(),
+        ai_strata_config: r"D:\AI\Strata-0.1.40\strata-iq3_s.json".into(),
+        ai_agent_tools: true,
+        ..Config::defaults()
+    };
+    let text = String::from_utf8(portable_config_bytes(&cfg).unwrap()).unwrap();
+    assert!(!text.contains("ai_strata_dir"));
+    assert!(!text.contains("Strata-0.1.40"));
+    assert!(text.contains("\"ai_agent_tools\": true"));
+}

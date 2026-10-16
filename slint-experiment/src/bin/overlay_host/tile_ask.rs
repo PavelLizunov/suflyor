@@ -297,7 +297,7 @@ fn missing_cloud_auth_copy(is_ru: bool) -> (&'static str, &'static str) {
     if is_ru {
         (
             "Облачный запрос (Shift+F9)",
-            "Облачный ИИ не настроен. Добавьте токен доступа в Настройки → AI и повторите Shift+F9.",
+            "Облачный AI не настроен. Добавьте токен доступа в Настройки → AI и повторите Shift+F9.",
         )
     } else {
         (
@@ -402,6 +402,7 @@ pub(crate) fn fire_f9_ask(
     tile.set_source_label(SharedString::from(crate::tile_text::asking_label(
         tile_is_ru,
     )));
+    tile.set_plain_notice(false);
     // Phase E6 v12 — purple trigger badge for manual F9 ask so user
     // sees which tile came from a hotkey vs auto-detector. V0.8.0 (Поток D):
     // a CLOUD-escalated ask (Shift+F9) gets a distinct 🧠 cloud badge so the
@@ -847,6 +848,6 @@ mod tests {
             missing_cloud_auth_copy(true).0,
             "Облачный запрос (Shift+F9)"
         );
-        assert!(missing_cloud_auth_copy(true).1.starts_with("Облачный ИИ"));
+        assert!(missing_cloud_auth_copy(true).1.starts_with("Облачный AI"));
     }
 }

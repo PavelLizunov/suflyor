@@ -232,7 +232,7 @@ pub(crate) fn wire_voice_followup(
             if !stop.swap(true, Ordering::AcqRel) {
                 t.set_voice_recording(false);
                 t.set_followup_busy(true);
-                t.set_source_label(SharedString::from("stt · расшифровка…"));
+                t.set_source_label(SharedString::from("STT · распознаю…"));
                 return;
             }
             // The 30 s watchdog already fired (stop was already true): the prior
@@ -264,7 +264,7 @@ pub(crate) fn wire_voice_followup(
         };
         if !stt_is_local && groq_key.is_empty() {
             // No STT key — generic message (never leak endpoint/secret).
-            t.set_source_label(SharedString::from("stt · ключ не задан (Settings → STT)"));
+            t.set_source_label(SharedString::from("STT · нет ключа"));
             return;
         }
         let Some(tx) = VFU_TX.get().cloned() else {
@@ -272,7 +272,7 @@ pub(crate) fn wire_voice_followup(
         };
         // M2 — only one mic capture at a time across all recorders.
         let Some(mic_guard) = try_acquire_mic() else {
-            t.set_source_label(SharedString::from("stt · микрофон занят"));
+            t.set_source_label(SharedString::from("STT · микрофон занят"));
             return;
         };
         let stop = Arc::new(AtomicBool::new(false));
@@ -462,6 +462,7 @@ pub(crate) fn fire_followup_ask(
     if let Some(tile) = tile_weak.upgrade() {
         tile.set_followup_busy(true);
         tile.set_source_label(SharedString::from(crate::tile_text::asking_label(cfg.read().ui_is_ru())));
+        tile.set_plain_notice(false);
         // Plain ellipsis — no hourglass glyph (tofu on the skia font fallback).
         let shown = format!("{prefix}…");
         tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&shown))));

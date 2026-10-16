@@ -502,6 +502,13 @@ fn flush(
                 disp = normalize_math_display(&disp);
             }
             disp.retain(|ch| !matches!(ch, INLINE_CODE_START | INLINE_CODE_END));
+            // A fenced block ends with a newline; shown as is it adds an empty
+            // last line to the code panel. Copy still uses the raw text.
+            if k == kind::CODE {
+                while disp.ends_with('\n') {
+                    disp.pop();
+                }
+            }
             let raw_text = std::mem::take(raw);
             out.push(Block {
                 kind: k,
@@ -736,7 +743,8 @@ mod tests {
         assert!(blocks.iter().any(|block| {
             block.kind == kind::CODE
                 && block.text.trim_end_matches('\n') == "c_{ij} = \\sum_{k=1}^{n}"
-                && block.display_text == block.text
+                // Code is shown verbatim, minus the fence's trailing newline.
+                && block.display_text == block.text.trim_end_matches('\n')
         }));
     }
 

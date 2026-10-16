@@ -42,9 +42,9 @@ component IconSlot inherits Rectangle {
 
 component BrandStateMark inherits Rectangle {
     in property <bool> assistant-active: false;
-    in property <length> mark-size: 22px;
+    in property <length> mark-size: Metrics.space-lg;
     width: mark-size;
-    height: mark-size;
+    height: max(Metrics.control-md, root.mark-size);
     horizontal-stretch: 0;
 
     Image {
@@ -175,11 +175,13 @@ export component LockModeMenuRow inherits Rectangle {
             vertical-alignment: center;
         }
         Rectangle { horizontal-stretch: 1; }
-        if root.current : Text {
-            text: @tr("Current");
-            color: root.mode-color;
-            font-size: Metrics.font-label;
-            vertical-alignment: center;
+        // A check mark, not the word: the word did not fit the narrow menu.
+        if root.current : Image {
+            source: @image-url("../assets/icons/check.svg");
+            colorize: root.mode-color;
+            width: 12px;
+            height: 12px;
+            y: (parent.height - self.height) / 2;
         }
     }
     row-touch := TouchArea {
@@ -750,7 +752,9 @@ export component OverlayBarWindow inherits Window {
             spacing: Metrics.space-xs;
 
         HorizontalLayout {
-            padding: 2px;
+            height: Metrics.icon-button-size + Metrics.space-xs;
+            vertical-stretch: 0;
+            padding: Metrics.border-focus;
             spacing: 6px;
             alignment: start;
 
@@ -788,7 +792,7 @@ export component OverlayBarWindow inherits Window {
                     spacing: Metrics.space-xs;
                     BrandStateMark {
                         assistant-active: root.ai-streaming;
-                        mark-size: 22px;
+                        mark-size: Metrics.space-lg;
                     }
                     // Grip — drag affordance (accent). Design-system 6-dot
                     // grip icon (skia-safe) in place of the "::" text.
@@ -1181,7 +1185,7 @@ export component OverlayBarWindow inherits Window {
             // The live transcript text — elide when too long.
             Text {
                 text: root.last-transcript-line == ""
-                    ? @tr("waiting for transcript... (mic/sys → STT)")
+                    ? @tr("Waiting for speech…")
                     : root.last-transcript-line;
                 font-size: Metrics.font-label;
                 color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;
@@ -1238,8 +1242,9 @@ export component OverlayBarWindow inherits Window {
 
             // ── Action row: status (drag) · спросить · захватить · таймер · развернуть ──
             HorizontalLayout {
-                padding-left: 2px;
-                padding-right: 2px;
+                height: Metrics.icon-button-size + Metrics.space-xs;
+                vertical-stretch: 0;
+                padding: Metrics.border-focus;
                 spacing: 6px;
 
                 // Status pill — DOUBLES AS DRAG HANDLE (same pattern as the full
@@ -1290,7 +1295,7 @@ export component OverlayBarWindow inherits Window {
                         // pulses on ai-streaming exactly like the full bar).
                         BrandStateMark {
                             assistant-active: root.ai-streaming;
-                            mark-size: 22px;
+                            mark-size: Metrics.space-lg;
                         }
                         // Grip — AFTER the brand mark, mirroring the full bar's
                         // [brand · grip · status] order (constraint #2: keep it).
@@ -1412,7 +1417,7 @@ export component OverlayBarWindow inherits Window {
                     color: Theme.accent;
                     overflow: elide;
                     vertical-alignment: center;
-                    horizontal-stretch: 1;
+                    horizontal-stretch: 0;
                 }
                 Rectangle {
                     width: 8px;
@@ -1425,7 +1430,7 @@ export component OverlayBarWindow inherits Window {
                 }
                 Text {
                     text: root.last-transcript-line == ""
-                        ? @tr("waiting for transcript... (mic/sys → STT)")
+                        ? @tr("Waiting for speech…")
                         : root.last-transcript-line;
                     font-size: Metrics.font-label;
                     color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;
@@ -1537,7 +1542,7 @@ export component OverlayBarWindow inherits Window {
                 }
                 Text {
                     text: root.last-transcript-line == ""
-                        ? @tr("waiting for transcript... (mic/sys → STT)")
+                        ? @tr("Waiting for speech…")
                         : root.last-transcript-line;
                     font-size: Metrics.font-label;
                     color: root.last-transcript-line == "" ? Theme.text-muted : Theme.text-secondary;

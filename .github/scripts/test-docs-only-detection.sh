@@ -49,7 +49,7 @@ check true  "docs/ nested"          docs/reference-shots/icon.png
 check true  "crate README"          slint-experiment/README.md
 check true  "multiple docs"         README.md docs/a.md docs/b.png
 
-# ---- full CI ----
+# ---- Rust checks (fast by default; full is selected separately) ----
 check false "rust source"           overlay-backend/src/lib.rs
 check false "cargo manifest"        Cargo.toml
 check false "cargo lock"            slint-experiment/Cargo.lock
@@ -77,7 +77,7 @@ else
   echo "skip: newline-in-filename (filesystem restriction)"
 fi
 
-# ---- rename: --no-renames shows old+new → conservative full CI ----
+# ---- rename: --no-renames shows old+new → conservative Rust checks ----
 mkdir -p src docs
 echo x > src/old.rs
 git add -A

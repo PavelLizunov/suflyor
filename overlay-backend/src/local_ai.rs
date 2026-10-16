@@ -29,10 +29,14 @@ use serde::Deserialize;
 mod hardware_profile;
 mod model_choice;
 mod model_state;
+mod running;
+mod strata;
 
 pub use hardware_profile::*;
 pub use model_choice::*;
 pub use model_state::*;
+pub use running::*;
+pub use strata::*;
 
 // ---- pinned model coordinates (HuggingFace) + exact sizes (integrity) -------
 // RAM-safe fallback: Gemma 4 12B QAT. It is always installed so a machine that
@@ -618,6 +622,8 @@ pub fn install(
             bail!(crate::deep_lock::BLOCKED_ERROR);
         }
         on(Progress::Step("Starting llama-server :8080".to_string()));
+        // The install makes llama.cpp the local engine; Strata would hold the GPU.
+        stop_strata();
         let exe = find_exe(&llama_dir, "llama-server.exe")
             .context("llama-server.exe not found after install")?;
         // Free :8080 of OUR stale/projector-less server so the fresh --mmproj
@@ -1066,6 +1072,7 @@ where
     I: IntoIterator<Item = Child>,
 {
     terminate_servers(servers);
+    stop_strata();
     let _ = stop_listener_on_port(LLAMA_PORT, root);
     let _ = stop_listener_on_port(WHISPER_PORT, root);
 }
@@ -1596,6 +1603,12 @@ pub fn mark_engine_update_checked(root: &Path) {
 /// The installed llama.cpp build number, for display ("движок bNNNN"). `None`
 /// when unstamped (an engine installed before stamping existed).
 #[must_use]
+/// Stat-only: the managed llama.cpp server binary is on disk.
+#[must_use]
+pub fn llama_engine_installed(root: &Path) -> bool {
+    find_exe(&root.join("llama.cpp"), "llama-server.exe").is_some()
+}
+
 pub fn installed_engine_build(root: &Path) -> Option<u32> {
     installed_llama_build(&root.join("llama.cpp"))
 }
@@ -3075,6 +3088,17 @@ fn spawn_hidden(exe: &str, args: &[&str]) -> Result<Child> {
         .stderr(Stdio::null())
         .spawn()
         .with_context(|| format!("spawn {exe}"))
+}
+
+/// Spawn a prepared command without a console window and tie it to the app's
+/// lifetime job. Child modules (Strata) build their own command lines, but
+/// spawning stays here.
+fn spawn_owned(cmd: &mut Command) -> Result<Child> {
+    crate::download::no_window(cmd);
+    let child = cmd.spawn().context("spawn a local AI process")?;
+    #[cfg(windows)]
+    assign_to_lifetime_job(&child);
+    Ok(child)
 }
 
 /// Launch a hidden server process (kept alive; returned to the caller).

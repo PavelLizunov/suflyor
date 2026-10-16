@@ -144,7 +144,7 @@ pub async fn run_post_meeting_debrief(
             let body = if crate::deep_lock::is_blocked_error(&chain) {
                 crate::deep_lock::blocked_notice(ui_is_ru).to_string()
             } else if ui_is_ru {
-                "Не удалось сформировать разбор (ошибка ИИ). Подробности — в логе («Собрать логи» в Диагностике).".to_string()
+                "Не удалось сформировать разбор (ошибка AI). Подробности — в логе («Собрать логи» в Диагностике).".to_string()
             } else {
                 "Couldn't generate the debrief (AI error). Details in the log (Diagnostics → Collect logs).".to_string()
             };
@@ -1585,7 +1585,7 @@ pub async fn manual_spawn_tile(
                 }
                 .into(),
                 answer: if ui_is_ru {
-                    "Транскрипт пустой — нечего спрашивать. Запустите сессию (захват аудио), дождитесь реплик и снова нажмите F6."
+                    "Стенограмма пустая — нечего спрашивать. Запустите сессию (захват аудио), дождитесь реплик и снова нажмите F6."
                 } else {
                     "Transcript is empty — nothing to ask. Start a session (audio capture), wait for lines, then press F6 again."
                 }

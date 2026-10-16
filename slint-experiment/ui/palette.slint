@@ -9,7 +9,7 @@
 
 import { LineEdit, ScrollView, Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { BrandHeaderMark, CloseButton, DragGrip } from "controls.slint";
+import { BrandHeaderMark, CloseButton, DragGrip, WindowHeader } from "controls.slint";
 import { Metrics } from "metrics.slint";
 
 export struct PaletteResult {
@@ -25,7 +25,7 @@ export component PaletteWindow inherits Window {
     property <bool> widgets-light: Theme.is-light;
     init => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
     changed widgets-light => { Palette.color-scheme = root.widgets-light ? ColorScheme.light : ColorScheme.dark; }
-    title: @tr("F4 — KB palette");
+    title: @tr("Suflyor — knowledge base");
     // Phase E6 fix: was `background: transparent` + frameless which
     // combined with WS_EX_LAYERED via make_transparent_overlay on the
     // HWND causes text to render invisible (alpha-clamped). Use solid
@@ -104,58 +104,29 @@ export component PaletteWindow inherits Window {
                 padding: Metrics.space-md;   // was 12px
                 spacing: Metrics.space-sm;   // was 8px
 
-                HorizontalLayout {
-                    spacing: Metrics.space-sm;
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        height: 30px;
-                        TouchArea {
-                            mouse-cursor: grab;
-                            pointer-event(ev) => {
-                                if (ev.button == PointerEventButton.left
-                                    && ev.kind == PointerEventKind.down) {
-                                    root.drag-start-requested();
-                                }
-                            }
-                            moved => { if (self.pressed) { root.drag-moved(); } }
-                        }
-                        HorizontalLayout {
-                            spacing: 7px;
-                            Rectangle {
-                                width: 22px;
-                                height: 30px;
-                                BrandHeaderMark { y: 4px; mark-size: 22px; }
-                            }
-                            Rectangle {
-                                width: 13px;
-                                height: 30px;
-                                DragGrip { y: 2px; }
-                            }
-                            Text {
-                                text: @tr("Knowledge palette");
-                                font-size: 15px;
-                                font-weight: 700;
-                                color: Theme.text-primary;
-                                vertical-alignment: center;
-                            }
-                        }
-                    }
-                    CloseButton { clicked => { root.close-requested(); } }
+                WindowHeader {
+                    title: @tr("Knowledge palette");
+                    drag-start => { root.drag-start-requested(); }
+                    drag-move => { root.drag-moved(); }
+                    close => { root.close-requested(); }
                 }
 
                 // Input field
-                search-input := LineEdit {
-                    placeholder-text: @tr("Search knowledge or snippets…");
-                    text <=> root.query;
-                    // Reset the highlight to the top on every edit so the
-                    // selection never points past a shorter result set.
-                    edited(t) => { root.query-changed(t); root.selected-index = 0; }
-                    // Enter spawns the highlighted result. Up/Down move the
-                    // selection (handled by the ancestor FocusScope, since a
-                    // single-line LineEdit lets those keys bubble).
-                    accepted => {
-                        if (root.results.length > 0) {
-                            root.result-activated(root.selected-index);
+                HorizontalLayout {
+                    padding-right: 14px;
+                    search-input := LineEdit {
+                        placeholder-text: @tr("Search knowledge or snippets…");
+                        text <=> root.query;
+                        // Reset the highlight to the top on every edit so the
+                        // selection never points past a shorter result set.
+                        edited(t) => { root.query-changed(t); root.selected-index = 0; }
+                        // Enter spawns the highlighted result. Up/Down move the
+                        // selection (handled by the ancestor FocusScope, since a
+                        // single-line LineEdit lets those keys bubble).
+                        accepted => {
+                            if (root.results.length > 0) {
+                                root.result-activated(root.selected-index);
+                            }
                         }
                     }
                 }
@@ -190,8 +161,8 @@ export component PaletteWindow inherits Window {
                 }
                 Rectangle { horizontal-stretch: 1; }
                 Text {
-                    text: @tr("Esc to close · Enter to spawn tile");
-                    font-size: 9px;
+                    text: @tr("Esc closes · Enter opens a tile");
+                    font-size: Metrics.font-label;
                     color: Theme.text-muted;
                     vertical-alignment: center;
                 }
@@ -240,18 +211,26 @@ export component PaletteWindow inherits Window {
                                         font-weight: 700;
                                         color: i == root.selected-index ? Theme.accent : Theme.text-secondary;
                                         vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                        overflow: elide;
                                     }
+                                    // The kind sits in one right-hand column on every row.
                                     Text {
-                                        text: result.source;
-                                        font-size: 9px;
+                                        text: result.source == "glossary" ? @tr("glossary")
+                                            : result.source == "commands" ? @tr("commands")
+                                            : result.source == "patterns" ? @tr("patterns")
+                                            : result.source;
+                                        font-size: Metrics.font-caption;
                                         color: Theme.text-muted;
                                         vertical-alignment: center;
+                                        horizontal-alignment: right;
+                                        horizontal-stretch: 0;
                                     }
                                 }
                                 Text {
                                     text: result.preview;
-                                    font-size: Metrics.font-caption;   // was 10px
-                                    color: Theme.text-muted;
+                                    font-size: Metrics.font-label;
+                                    color: Theme.text-secondary;
                                     overflow: elide;
                                 }
                             }

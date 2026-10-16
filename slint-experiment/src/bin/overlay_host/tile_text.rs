@@ -92,6 +92,36 @@ pub(crate) fn asking_body(is_ru: bool) -> &'static str {
     }
 }
 
+/// State label while the model uses a tool. Short: the header chip is
+/// narrow; `tool_body` names the lookup in the tile body.
+pub(crate) fn tool_label(is_ru: bool) -> &'static str {
+    if is_ru {
+        "AI · ищет…"
+    } else {
+        "ai · looking up…"
+    }
+}
+
+/// Body line under the answer while the model uses a tool: what it looks
+/// up, and where. The next part of the answer replaces it.
+pub(crate) fn tool_body(name: &str, detail: &str, is_ru: bool) -> String {
+    use overlay_backend::ai::tools::{KB_SEARCH, MEMORY_RECALL, OPEN_URL, WEB_SEARCH};
+    let (ru, en) = match name {
+        WEB_SEARCH => ("Ищу в интернете", "Searching the web"),
+        OPEN_URL => ("Читаю страницу", "Reading a page"),
+        KB_SEARCH => ("Ищу в базе знаний", "Searching the knowledge base"),
+        MEMORY_RECALL => ("Вспоминаю из памяти", "Checking personal memory"),
+        _ => ("Использую инструмент", "Using a tool"),
+    };
+    let head = if is_ru { ru } else { en };
+    let detail = detail.replace(['*', '_', '`', '\n'], " ");
+    if detail.trim().is_empty() {
+        format!("*{head}…*")
+    } else {
+        format!("*{head}: {}*", detail.trim())
+    }
+}
+
 /// State label of a finished answer. A normal finish says nothing more; any
 /// other reason (length, content filter) is shown.
 pub(crate) fn done_label(reason: &str, is_ru: bool) -> String {
@@ -122,11 +152,12 @@ pub(crate) fn superseded_label(is_ru: bool) -> &'static str {
 }
 
 /// Body of a failed answer; `safe` is already free of addresses and secrets.
+/// The state pill already says "error", so the body names the cause and where to look.
 pub(crate) fn error_body(safe: &str, is_ru: bool) -> String {
     if is_ru {
-        format!("Ошибка AI: {safe}")
+        format!("{safe}. Проверьте Настройки → AI-провайдеры.")
     } else {
-        format!("AI error: {safe}")
+        format!("{safe}. Check Settings → AI providers.")
     }
 }
 
@@ -152,6 +183,17 @@ mod tests {
     }
 
     #[test]
+    fn a_tool_body_names_the_lookup() {
+        assert_eq!(
+            tool_body("web_search", "курс доллара", true),
+            "*Ищу в интернете: курс доллара*"
+        );
+        assert_eq!(tool_body("open_url", "docs.rs", false), "*Reading a page: docs.rs*");
+        assert_eq!(tool_body("kb_search", "", false), "*Searching the knowledge base…*");
+        assert_eq!(tool_body("web_search", "a*b_c", false), "*Searching the web: a b c*");
+    }
+
+    #[test]
     fn a_tile_kind_label_has_no_dangling_separator() {
         use overlay_backend::events::TileKind;
         assert_eq!(kind_label(TileKind::Ai, false, false), "ai");
@@ -173,6 +215,7 @@ mod tests {
             (escalated_badge(false), escalated_badge(true)),
             (asking_label(false), asking_label(true)),
             (asking_body(false), asking_body(true)),
+            (tool_label(false), tool_label(true)),
             (error_label(false), error_label(true)),
             (superseded_label(false), superseded_label(true)),
             (empty_answer_note(false), empty_answer_note(true)),
@@ -181,7 +224,7 @@ mod tests {
             assert!(!en.chars().any(|c| ('а'..='я').contains(&c)), "{en}");
             assert!(ru.chars().any(|c| ('а'..='я').contains(&c)), "{ru}");
         }
-        assert_eq!(error_body("x", false), "AI error: x");
-        assert_eq!(error_body("x", true), "Ошибка AI: x");
+        assert_eq!(error_body("x", false), "x. Check Settings → AI providers.");
+        assert_eq!(error_body("x", true), "x. Проверьте Настройки → AI-провайдеры.");
     }
 }

@@ -338,6 +338,16 @@ fn windows_updater_is_absent_but_backup_remains_on_the_macos_settings_surface() 
     assert!(SETTINGS_CONTROLLER.contains("#[cfg(windows)]\n    wire_updates(&win);"));
     assert!(SETTINGS_UI.contains("label: Platform.is-macos ? @tr(\"Backup\") : @tr(\"Updates\")"));
     assert!(SETTINGS_UI.contains("if root.active-tab == 4 : VerticalLayout"));
-    assert!(SETTINGS_UI.contains("if !Platform.is-macos : SettingsCard {\n                            title: @tr(\"Updates\")"));
-    assert!(SETTINGS_UI.contains("title: @tr(\"Backup / transfer settings\")"));
+    let updates = SETTINGS_UI
+        .split_once("if root.active-tab == 4 : VerticalLayout {")
+        .expect("Updates tab")
+        .1
+        .split_once("title: @tr(\"Backup and transfer\")")
+        .expect("platform-neutral Backup card follows the updater")
+        .0;
+    assert!(updates.contains("if !Platform.is-macos : SettingsCard {"));
+    assert!(updates.contains("root.check-updates-clicked()"));
+    assert!(updates.contains("root.install-update-clicked()"));
+    assert_eq!(updates.matches("title: @tr(\"Updates\")").count(), 1);
+    assert!(SETTINGS_UI.contains("title: @tr(\"Backup and transfer\")"));
 }

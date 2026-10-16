@@ -34,14 +34,14 @@ fn ptt_initial_copy(is_ru: bool) -> (&'static str, &'static str, &'static str, &
     if is_ru {
         (
             "Запись",
-            "stt · расшифровка…",
+            "STT · распознаю…",
             "Расшифровка…",
             "голосовой запрос",
         )
     } else {
         (
             "Recording",
-            "stt · transcribing…",
+            "STT · transcribing…",
             "Transcribing…",
             "push-to-talk",
         )
@@ -56,9 +56,9 @@ pub(crate) fn ptt_tile_error(weak: slint::Weak<TileWindow>, msg: &str, is_ru: bo
     let _ = slint::invoke_from_event_loop(move || {
         if let Some(t) = weak.upgrade() {
             t.set_source_label(SharedString::from(if is_ru {
-                "stt · ошибка"
+                "STT · ошибка"
             } else {
-                "stt · error"
+                "STT · error"
             }));
             t.set_blocks(ModelRc::new(VecModel::from(vec![MarkdownBlock {
                 kind: markdown::kind::PARAGRAPH,
@@ -375,6 +375,7 @@ pub(crate) fn fire_ptt_ask(
                         slint_replay::app_state::tile_title_line(&q),
                     ));
                     t.set_source_label(SharedString::from(crate::tile_text::asking_label(ui_is_ru)));
+                    t.set_plain_notice(false);
                 }
             });
         }
@@ -492,7 +493,7 @@ mod tests {
             ptt_initial_copy(false),
             (
                 "Recording",
-                "stt · transcribing…",
+                "STT · transcribing…",
                 "Transcribing…",
                 "push-to-talk"
             )
@@ -501,7 +502,7 @@ mod tests {
             ptt_initial_copy(true),
             (
                 "Запись",
-                "stt · расшифровка…",
+                "STT · распознаю…",
                 "Расшифровка…",
                 "голосовой запрос"
             )

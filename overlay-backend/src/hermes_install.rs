@@ -117,13 +117,13 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
     match outcome {
         EnableEdit::Updated(new_text) => {
             std::fs::write(&cfg_path, new_text).map_err(|e| format!("запись config.yaml: {e}"))?;
-            Ok("готово: плагин установлен и включён — перезапусти Hermes".to_string())
+            Ok("готово: плагин установлен и включён — перезапустите Hermes".to_string())
         }
         EnableEdit::AlreadyEnabled => {
-            Ok("готово: плагин обновлён (уже включён) — перезапусти Hermes".to_string())
+            Ok("готово: плагин обновлён (уже включён) — перезапустите Hermes".to_string())
         }
         EnableEdit::Unsupported => Ok(
-            "файлы установлены, но config.yaml нестандартный — выполни вручную: \
+            "файлы установлены, но config.yaml нестандартный — выполните вручную: \
              hermes plugins enable suflyor"
                 .to_string(),
         ),
@@ -156,7 +156,7 @@ pub fn ensure_api_server() -> Result<(String, bool), String> {
             Ok((key, true))
         }
         ApiEdit::Unsupported => Err(
-            "config.yaml нестандартный — пропиши platforms.api_server.extra.key вручную"
+            "config.yaml нестандартный — пропишите platforms.api_server.extra.key вручную"
                 .to_string(),
         ),
     }

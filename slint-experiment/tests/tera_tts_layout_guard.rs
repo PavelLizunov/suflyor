@@ -17,7 +17,7 @@ fn settings_source() -> String {
 #[test]
 fn tera_install_controls_keep_natural_height_before_speed_picker() {
     let source = settings_source();
-    let marker = "if root.tts-engine-index == 1 : VerticalLayout {";
+    let marker = "if root.tts-engine-index == 1 : WrapBlock {";
     let tera_start = source
         .find(marker)
         .expect("Tera settings section must exist");
@@ -36,10 +36,15 @@ fn tera_install_controls_keep_natural_height_before_speed_picker() {
         "installed-state height must follow the predicate that shows the voice row"
     );
     assert!(
-        tera.contains("? (root.tera-install-phase != 0 ? 164px : 145px)")
+        tera.contains("? (root.tera-install-phase != 0 ? 164px : root.tera-installing ? 145px : 107px)")
             && tera.contains(": (root.tera-install-phase != 0 ? 128px : 108px);"),
         "Tera status and install controls need their own reserved vertical space, including the installed voice row"
     );
+    assert!(
+        tera.contains("if !root.tts-available || root.tera-installing : HorizontalLayout"),
+        "installed models must not leave a disabled Install model button"
+    );
+    assert!(tera.contains("enabled: !root.tera-installing && !root.tts-available;"));
     let install = tera
         .find("@tr(\"Install model\")")
         .expect("install button must exist");

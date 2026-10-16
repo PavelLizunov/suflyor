@@ -102,7 +102,7 @@ mod tests {
         let russian = ui::OverlayBarWindow::new().expect("create Russian bar");
         assert_bootstrap(
             &russian,
-            "Suflyor для macOS. Нативный оверлей готов; функции продукта подключаются.",
+            "Suflyor для macOS. Окна Суфлёра готовы; функции продукта подключаются.",
             "Выйти",
         );
     }

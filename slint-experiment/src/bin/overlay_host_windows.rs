@@ -32,7 +32,7 @@ macro_rules! diag {
 }
 
 use ui::{
-    ArchiveRow, ArchiveWindow, CaptureOverlay, ComponentRow, HelpWindow, LockModeMenuWindow,
+    ArchiveRow, ArchiveWindow, CaptureOverlay, ComponentRow, FoundModel, HelpWindow, LockModeMenuWindow,
     MarkdownBlock, MemoryRow, OverlayBarWindow, PaletteResult, PaletteWindow, RecoverOfferWindow,
     SettingsWindow, SpeakerRow, TextAskWindow, TileWindow, TranscriptLine, TranscriptWindow,
     TrayMenuWindow, WizardWindow,
@@ -615,6 +615,10 @@ fn main() -> Result<(), slint::PlatformError> {
     {
         let c = cfg.read();
         ai::set_local_no_think(c.ai_provider == "local" && !c.ai_local_thinking);
+        // ADR-003 — the local model's tools, and a Strata installed before
+        // Suflyor if the user chose one.
+        ai::set_agent_tools(c.ai_agent_tools, c.ai_web_search);
+        overlay_backend::local_ai::set_adopted_strata(&c.ai_strata_dir, &c.ai_strata_config);
     }
     // E10.2 — restore persisted stealth only where capture exclusion exists.
     // Keep the saved preference untouched on macOS so returning to Windows does
@@ -1109,6 +1113,34 @@ fn main() -> Result<(), slint::PlatformError> {
                     }
                 }
             }
+            // Strata as the local engine: start it once at boot. It needs the
+            // whole GPU, so it runs only while the saved local URL is its own.
+            {
+                let want_strata = {
+                    let c = cfg_w.read();
+                    c.ai_provider == "local"
+                        && !c.deep_lock
+                        && overlay_backend::local_ai::is_managed_strata_endpoint(
+                            &c.ai_local_base_url,
+                        )
+                };
+                if want_strata {
+                    let lifecycle_lock = {
+                        let s = state_w.lock().unwrap_or_else(|p| p.into_inner());
+                        s.local_ai_lock.clone()
+                    };
+                    let Some(guard) =
+                        overlay_backend::local_ai::blocking_acquire_lifecycle(&lifecycle_lock)
+                    else {
+                        return;
+                    };
+                    let no_cancel = std::sync::atomic::AtomicBool::new(false);
+                    let outcome =
+                        overlay_backend::local_ai::start_strata(&root, &no_cancel, &|_| {});
+                    drop(guard);
+                    diag!("Strata boot start: {outcome:?}");
+                }
+            }
             // v0.18.2 — keep llama.cpp fresh: a throttled (weekly) auto-update of
             // the engine so the local model stays fast and 12B vision (gemma4uv)
             // works without the user ever touching it. Runs ONCE at boot, BEHIND
@@ -1121,7 +1153,12 @@ fn main() -> Result<(), slint::PlatformError> {
             // auto-update too (a real swap stops :8080, and the watchdog below
             // won't bring it back while locked). Not marking the check done, so
             // the first unlocked boot catches up.
+            // The update check loads the 12B on the GPU; skip it while Strata
+            // holds the GPU. The first boot on the built-in engine catches up.
             if !cfg_w.read().deep_lock
+                && !overlay_backend::local_ai::is_managed_strata_endpoint(
+                    &cfg_w.read().ai_local_base_url,
+                )
                 && overlay_backend::local_ai::should_check_engine_update(&root)
             {
                 let lifecycle_lock = {
@@ -1154,6 +1191,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 overlay_backend::local_ai::mark_engine_update_checked(&root);
             }
             let mut watchdog = WatchdogState::default();
+            let mut strata_watchdog = WatchdogState::default();
             loop {
                 let (want_llama, choice) = {
                     let c = cfg_w.read();
@@ -1201,8 +1239,17 @@ fn main() -> Result<(), slint::PlatformError> {
                             let guard = lifecycle_lock.try_acquire_owned().ok();
                             if let Some(_ai_guard) = guard {
                                 // Re-check UNDER the lock — a manual op may have
-                                // brought :8080 up between our probe and the lock.
-                                if !overlay_backend::local_ai::llama_reachable() {
+                                // brought :8080 up between our probe and the lock,
+                                // or switched the local engine to Strata.
+                                let still_wanted = {
+                                    let c = cfg_w.read();
+                                    c.ai_provider == "local"
+                                        && !c.deep_lock
+                                        && overlay_backend::local_ai::is_managed_llama_endpoint(
+                                            &c.ai_local_base_url,
+                                        )
+                                };
+                                if still_wanted && !overlay_backend::local_ai::llama_reachable() {
                                     diag!(
                                         "local AI :8080 not answering — auto-(re)starting llama-server"
                                     );
@@ -1308,6 +1355,55 @@ fn main() -> Result<(), slint::PlatformError> {
                                     }
                                 }
                                 // _ai_guard drops here → lifecycle lock released.
+                            }
+                        }
+                    }
+                }
+                let want_strata = {
+                    let c = cfg_w.read();
+                    c.ai_provider == "local"
+                        && !c.deep_lock
+                        && overlay_backend::local_ai::is_managed_strata_endpoint(
+                            &c.ai_local_base_url,
+                        )
+                };
+                if want_strata {
+                    if overlay_backend::local_ai::strata_reachable() {
+                        strata_watchdog.note_reachable();
+                    } else if strata_watchdog.should_restart(
+                        std::time::Instant::now(),
+                        std::time::Duration::from_secs(WATCHDOG_COOLDOWN_SECS),
+                        WATCHDOG_MAX_FAILS,
+                    ) {
+                        let lifecycle_lock = {
+                            let s = state_w.lock().unwrap_or_else(|p| p.into_inner());
+                            s.local_ai_lock.clone()
+                        };
+                        // A Settings switch owns the lifecycle: skip this tick.
+                        if let Ok(_ai_guard) = lifecycle_lock.try_acquire_owned() {
+                            // Re-check under the lock: a Settings switch may have
+                            // moved the local engine away from Strata meanwhile.
+                            let still_wanted = {
+                                let c = cfg_w.read();
+                                c.ai_provider == "local"
+                                    && !c.deep_lock
+                                    && overlay_backend::local_ai::is_managed_strata_endpoint(
+                                        &c.ai_local_base_url,
+                                    )
+                            };
+                            if still_wanted && !overlay_backend::local_ai::strata_reachable() {
+                                diag!("Strata :8090 not answering — restarting it");
+                                let no_cancel = std::sync::atomic::AtomicBool::new(false);
+                                let outcome = overlay_backend::local_ai::start_strata(
+                                    &root,
+                                    &no_cancel,
+                                    &|_| {},
+                                );
+                                strata_watchdog.note_attempt(
+                                    std::time::Instant::now(),
+                                    outcome == overlay_backend::local_ai::StrataStart::Ready,
+                                );
+                                diag!("Strata restart: {outcome:?}");
                             }
                         }
                     }
@@ -1967,6 +2063,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 req.stealth,
                 cfg_for_poll.read().ui_is_ru(),
             )));
+            tile.set_plain_notice(req.kind == TileKind::Error);
             // Phase E6 v12 — first highlight (if any) becomes the
             // trigger badge. Backend's trigger_highlights() already
             // formats it as "keyword ..." or "question ...".
@@ -3099,7 +3196,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     if let Some(t) = weak.upgrade() {
                         t.set_voice_recording(false);
                         t.set_followup_busy(false);
-                        t.set_source_label(SharedString::from("stt · ничего не распознано"));
+                        t.set_source_label(SharedString::from("STT · ничего не распознано"));
                     }
                     continue;
                 }
@@ -3357,6 +3454,7 @@ fn main() -> Result<(), slint::PlatformError> {
             tile.set_tile_id(tile_id);
             tile.set_tile_title(SharedString::from(heading));
             tile.set_source_label(SharedString::from(tile_text::asking_label(is_ru)));
+            tile.set_plain_notice(false);
             wire_tile_drag(&tile);
 
             // Initial body — shown instantly: the AI-in-flight hint, or a
@@ -3559,6 +3657,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                 .collect();
                             tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
                             tile.set_source_label(SharedString::from(tile_text::error_label(is_ru)));
+                            tile.set_plain_notice(true);
                         }
                     }
                 });
@@ -4193,6 +4292,11 @@ fn main() -> Result<(), slint::PlatformError> {
                                     "[overlay-host] deep lock: :8080 is held by a foreign process — left alive"
                                 );
                             }
+                            // Strata holds the GPU the same way. Only the server
+                            // this app started stops; a Strata the user started
+                            // stays (the request guard blocks our traffic to it).
+                            overlay_backend::local_ai::abort_strata_start();
+                            overlay_backend::local_ai::stop_strata();
                         }
                         // Reap exited server handles so kill-on-quit tracking
                         // stays honest.
@@ -4317,6 +4421,9 @@ fn main() -> Result<(), slint::PlatformError> {
                             return;
                         }
                         let root = overlay_backend::local_ai::default_root();
+                        let unlock_strata = overlay_backend::local_ai::is_managed_strata_endpoint(
+                            &cfg_unlock.read().ai_local_base_url,
+                        );
                         let choice = {
                             let mut c = cfg_unlock.write();
                             // Repair a stale persisted tier before selecting the
@@ -4341,6 +4448,31 @@ fn main() -> Result<(), slint::PlatformError> {
                         let (outcome, started) = match
                             overlay_backend::local_ai::blocking_acquire_lifecycle(&lifecycle_lock)
                         {
+                            // The engine in use comes back: Strata (or a Strata
+                            // the user started, still answering) or llama.cpp.
+                            Some(guard) if unlock_strata => {
+                                let no_cancel = std::sync::atomic::AtomicBool::new(false);
+                                let start = if overlay_backend::local_ai::strata_reachable()
+                                    && !overlay_backend::local_ai::strata_running()
+                                {
+                                    overlay_backend::local_ai::use_running_strata(&root)
+                                } else {
+                                    overlay_backend::local_ai::start_strata(
+                                        &root,
+                                        &no_cancel,
+                                        &|_| {},
+                                    )
+                                };
+                                drop(guard);
+                                (
+                                    if start == overlay_backend::local_ai::StrataStart::Ready {
+                                        overlay_backend::local_ai::ModelSwitch::Switched
+                                    } else {
+                                        overlay_backend::local_ai::ModelSwitch::FailedToStart
+                                    },
+                                    Vec::new(),
+                                )
+                            }
                             Some(guard) => {
                                 let result =
                                     overlay_backend::local_ai::restart_llama_server_for_unlock(
@@ -4429,7 +4561,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                     let _ = events_unlock.spawn_tile_full(
                                         overlay_backend::events::TileSpec {
                                             question: if ru {
-                                                "Локальный ИИ".into()
+                                                "Локальный AI".into()
                                             } else {
                                                 "Local AI".into()
                                             },
