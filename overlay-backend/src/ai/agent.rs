@@ -149,6 +149,7 @@ pub(crate) async fn stream_agent(
     let tools_until = Instant::now() + TOOL_BUDGET;
     let mut id_sent = false;
     let mut step = 0;
+    let _done = super::local_server::request_started(&endpoint.base_url, &messages);
     loop {
         if tx.is_closed() {
             return Ok(());
@@ -167,6 +168,7 @@ pub(crate) async fn stream_agent(
         apply_prompt_cache(&mut body);
         apply_local_no_think(&mut body, false);
         apply_managed_gemma_sampler(&mut body, &endpoint.base_url, &endpoint.model);
+        super::local_server::apply_server_hints(&mut body, &endpoint);
         log::info!(
             "AI agent step {step} (model={}, msgs={}, tools={offer_tools})",
             endpoint.model,

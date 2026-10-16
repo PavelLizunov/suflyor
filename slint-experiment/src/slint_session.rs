@@ -40,6 +40,45 @@ use std::time::{Duration, Instant};
 const SESSION_SYSTEM_COLLECTOR_MAX_SAMPLES: usize = audio::TARGET_SAMPLE_RATE as usize * 30;
 const AUTO_TILE_MAX_TOKENS: u32 = 4096;
 const AUTO_TILE_MAX_TOKENS_MLX: u32 = 384;
+/// Fast answers ask for ~70 words; this leaves room without letting a
+/// rambling answer run on.
+const AUTO_TILE_MAX_TOKENS_FAST: u32 = 400;
+
+/// Whether auto tiles use the fast-answer prompt. The managed MLX server
+/// keeps its own compact prompt.
+fn auto_tile_fast(c: &overlay_backend::config::Config) -> bool {
+    c.ai_fast_answers && c.ai_provider != "mlx"
+}
+
+/// Session start: read the fast-answer system prompt into the local server's
+/// cache before the first question, and keep it there during the session.
+fn prime_live_prompt(cfg: &SharedConfig) {
+    let (endpoint, system) = {
+        let c = cfg.read();
+        if !auto_tile_fast(&c) || c.ai_provider != "local" || c.deep_lock {
+            return;
+        }
+        let ep = c.ai_endpoint(false);
+        let endpoint = ai::AiEndpoint {
+            protocol: ep.protocol,
+            base_url: ep.base_url,
+            bearer: ep.bearer,
+            model: ep.model,
+            reasoning_effort: ep.reasoning_effort,
+            is_local: true,
+        };
+        let (system, _) = backend_runtime::build_fast_auto_tile_prompts(
+            &backend_runtime::Trigger::Question(String::new()),
+            &[],
+            "",
+            &c.response_language,
+            c.live_coaching_tiles_enabled,
+        );
+        (endpoint, system)
+    };
+    ai::local_server::set_hot_prompt(endpoint, system);
+    tokio::spawn(ai::local_server::prime_hot_prompt());
+}
 /// The answer so far for a streaming auto tile: `{label, text}`.
 pub const AUTO_TILE_STREAM_CHANNEL: &str = "auto-tile:stream";
 /// The complete answer for a streaming auto tile: `{label, question, answer,
@@ -708,6 +747,8 @@ fn start_session_inner(
     ));
     lock(&rt).transcript_task = Some(forwarder);
 
+    prime_live_prompt(&cfg);
+
     // ===== 8. Signal session start =====
     events.emit(
         "session:started",
@@ -1070,6 +1111,7 @@ async fn maybe_spawn_auto_tile(
         stealth,
         is_local,
         is_mlx,
+        fast,
     ) = {
         let c = cfg.read();
         let ep = c.ai_endpoint(false);
@@ -1091,6 +1133,7 @@ async fn maybe_spawn_auto_tile(
             c.stealth_enabled,
             is_unmetered,
             is_mlx,
+            auto_tile_fast(&c),
         )
     };
     // A bearer is required only for the CLOUD bridge; local servers
@@ -1222,7 +1265,7 @@ async fn maybe_spawn_auto_tile(
     trigger_keywords.hash(&mut keyword_hasher);
     let kw_hash = keyword_hasher.finish();
     let cache_key: String = format!(
-        "m={model};l={response_language};p={is_mlx};h={prompt_hash:x};k={kw_hash:x};q={}",
+        "m={model};l={response_language};p={is_mlx};f={fast};h={prompt_hash:x};k={kw_hash:x};q={}",
         normalized_full.chars().take(200).collect::<String>(),
     );
     let cache_hit: Option<String> = {
@@ -1305,17 +1348,27 @@ async fn maybe_spawn_auto_tile(
         backend_runtime::Trigger::Question(q) => q.clone(),
         backend_runtime::Trigger::Keyword(kw, _) => kw.clone(),
     };
-    let (system_prompt, prompt) = backend_runtime::build_auto_tile_prompts(
-        &trigger,
-        &recent_transcript,
-        // Phase 3b.4 — fold the user's APPROVED memory into the background block.
-        // Audit (prompt-context): reuse the SAME effective context hashed for the
-        // cache key above (computed once; off the audio thread).
-        &effective_context,
-        &response_language,
-        live_coaching,
-        is_mlx,
-    );
+    // Phase 3b.4 — fold the user's APPROVED memory into the background block.
+    // Audit (prompt-context): reuse the SAME effective context hashed for the
+    // cache key above (computed once; off the audio thread).
+    let (system_prompt, prompt) = if fast {
+        backend_runtime::build_fast_auto_tile_prompts(
+            &trigger,
+            &recent_transcript,
+            &effective_context,
+            &response_language,
+            live_coaching,
+        )
+    } else {
+        backend_runtime::build_auto_tile_prompts(
+            &trigger,
+            &recent_transcript,
+            &effective_context,
+            &response_language,
+            live_coaching,
+            is_mlx,
+        )
+    };
     let sys_full = system_prompt.clone();
     let usr_full = prompt.clone();
     let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
@@ -1348,7 +1401,15 @@ async fn maybe_spawn_auto_tile(
         reasoning_effort,
         is_local,
     };
-    let max_tokens = auto_tile_max_tokens(is_mlx);
+    let max_tokens = if fast {
+        AUTO_TILE_MAX_TOKENS_FAST
+    } else {
+        auto_tile_max_tokens(is_mlx)
+    };
+    if fast {
+        // Keep this prompt in the local server's cache between questions.
+        ai::local_server::set_hot_prompt(endpoint.clone(), sys_full.clone());
+    }
     let question_label = match &trigger {
         backend_runtime::Trigger::Question(q) => q.clone(),
         // De-emojified to match the rest of the UI (Codex icon pass): the
@@ -1408,7 +1469,10 @@ async fn maybe_spawn_auto_tile(
                 .health
                 .last_ai_ok_ms
                 .store(now_unix_ms() as u64, Ordering::Relaxed);
-            (t.trim().to_string(), reason)
+            let t = t.trim();
+            // The fast prompt answers "—" when the line needs no hint.
+            let t = if fast && t == "—" { "" } else { t };
+            (t.to_string(), reason)
         }
         Err(e) => {
             drop_placeholder(&events);
@@ -1631,6 +1695,7 @@ async fn maybe_spawn_auto_tile(
 /// (cfg opt-in + ≥30s session + ≥5 mic lines + AI configured local-or-cloud)
 /// and fires `overlay_backend::runtime::run_post_meeting_debrief`.
 pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<TranscriptLine> {
+    ai::local_server::clear_hot_prompt();
     let mut s = lock(&rt);
     let capture = s.capture.take();
     #[cfg(target_os = "macos")]

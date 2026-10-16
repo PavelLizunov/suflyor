@@ -238,7 +238,9 @@ pub(crate) async fn stream_plain(
         apply_prompt_cache(&mut body);
         apply_local_no_think(&mut body, false);
         apply_managed_gemma_sampler(&mut body, &endpoint.base_url, &endpoint.model);
+        super::local_server::apply_server_hints(&mut body, &endpoint);
     }
+    let _done = super::local_server::request_started(&endpoint.base_url, &messages);
 
     log::info!(
         "AI stream → provider (protocol={}, model={}, msgs={})",

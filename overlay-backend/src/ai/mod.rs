@@ -5,6 +5,7 @@ pub(crate) mod agent;
 pub mod completion;
 pub(crate) mod control;
 pub mod inspect;
+pub mod local_server;
 pub mod pricing;
 pub mod prompt;
 pub(crate) mod provider;
