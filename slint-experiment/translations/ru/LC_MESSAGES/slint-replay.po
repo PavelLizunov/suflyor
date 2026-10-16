@@ -1534,7 +1534,7 @@ msgid "Window behaviour"
 msgstr "Поведение окна"
 
 msgid "Tile opacity"
-msgstr "Прозрачность тайла"
+msgstr "Непрозрачность тайла"
 
 # === Glacier SettingsCard section titles (E6 cycle 41) ===
 
@@ -2650,7 +2650,7 @@ msgstr "Для картинок локально нужна установлен
 
 # Settings plain-language copy
 msgid "Hides the overlay from screen capture and sharing (Print Screen, Teams, Meet, OBS)."
-msgstr "Скрывает окна Суфлёра при захвате экрана и демонстрации (Print Screen, Teams, Meet, OBS)."
+msgstr "Когда включено, окна Суфлёра не видны при захвате экрана и демонстрации (Print Screen, Teams, Meet, OBS)."
 
 msgid "On, hidden from capture"
 msgstr "Включён, скрыт от захвата"
@@ -2732,7 +2732,7 @@ msgid "Only auto-tiles are muted; manual asks still work."
 msgstr "Скрыты лишь авто-тайлы; ручные запросы работают."
 
 msgid "Open search (F4)"
-msgstr "Открыть поиск (F4)"
+msgstr "Поиск по базе знаний (F4)"
 
 msgid "Record call audio (mic + system)"
 msgstr "Записывать звук звонка (микрофон + система)"
@@ -2915,7 +2915,7 @@ msgid "Speech recognition is set up in Settings → STT. Here we only check the 
 msgstr "Распознавание речи настраивается в Настройках → STT. Здесь только проверяем подключение."
 
 msgid "Needed to hear the other side. Plays a short sound and checks that it is recorded."
-msgstr "Нужен, чтобы слышать собеседника. Проигрывает короткий звук и проверяет, что он записался."
+msgstr "Нужен, чтобы записывать собеседника. Проигрывает короткий звук и проверяет, что он записался."
 
 msgid "Hide Suflyor windows from screen capture"
 msgstr "Прятать окна Суфлёра от захвата экрана"
@@ -2967,3 +2967,15 @@ msgstr "Опишите созвон, и агент соберёт из этог�
 
 msgid "Knowledge-base search (open / close)"
 msgstr "Поиск по базе знаний (открыть / закрыть)"
+
+msgid "e.g. kubernetes docker postgres"
+msgstr "например: kubernetes docker postgres"
+
+msgid "Hide fine tuning"
+msgstr "Скрыть тонкую настройку"
+
+msgid "Show fine tuning"
+msgstr "Тонкая настройка"
+
+msgid "Almost done: check the marked items"
+msgstr "Почти готово: проверьте отмеченное"

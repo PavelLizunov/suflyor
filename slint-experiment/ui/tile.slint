@@ -31,8 +31,9 @@ component StarMark inherits Rectangle {
     // the shift state on pointer-DOWN and fire it on `clicked` — this keeps proper click semantics
     // (fires only on down+up BOTH in-area; a drag-release-outside or a cancel does NOT toggle).
     callback clicked(bool /* shift */);
+    // 24 px wide target; one text line high so list rows keep their pitch.
     width: Metrics.space-xl;
-    height: Metrics.space-xl;
+    height: 18px;
     horizontal-stretch: 0;
     ta := TouchArea {
         property <bool> shift-latched;

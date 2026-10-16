@@ -1470,7 +1470,7 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 4 : VerticalLayout {
                         spacing: 10px;
                         if !Platform.is-macos : SettingsCard {
-                        title: @tr("Updates");
+                        // No card title: the page title already says Updates.
                         Text {
                             text: @tr("Check GitHub for a newer release. If one is found you can download + install it in one click (the app restarts).");
                             font-size: Metrics.font-label;
@@ -2050,7 +2050,7 @@ export component SettingsWindow inherits Window {
                             TextEdit {
                                 wrap: word-wrap;
                                 text <=> root.trigger-keywords-input;
-                                placeholder-text: @tr("how, why, what is, explain");
+                                placeholder-text: @tr("e.g. kubernetes docker postgres");
                                 min-height: 150px;
                                 vertical-stretch: 1;
                             }
@@ -2859,7 +2859,7 @@ export component SettingsWindow inherits Window {
                                 }
                                 if root.llama-installed && root.managed-local-server : SettingsCard {
                                     HorizontalLayout {
-                                        Button { text: @tr("Fine tuning"); clicked => { root.local-more-open = !root.local-more-open; } }
+                                        Button { text: root.local-more-open ? @tr("Hide fine tuning") : @tr("Show fine tuning"); clicked => { root.local-more-open = !root.local-more-open; } }
                                     }
                                     if root.local-more-open : WrapBlock {
                                         Rectangle { background: Theme.border; height: Metrics.border-thin; }
@@ -3460,7 +3460,7 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 Button {
-                                    text: @tr("Fine tuning");
+                                    text: root.hermes-more-open ? @tr("Hide fine tuning") : @tr("Show fine tuning");
                                     clicked => { root.hermes-more-open = !root.hermes-more-open; }
                                 }
                             }

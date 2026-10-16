@@ -66,7 +66,7 @@ fn macos_settings_hide_windows_only_setup_and_managed_local_actions() {
         "Now answering",
         "Choose a model",
         "What the model can do",
-        "Fine tuning",
+        "Show fine tuning",
     ] {
         assert!(windows.contains(&format!("@tr(\"{title}\")")));
         assert!(!macos

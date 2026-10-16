@@ -374,7 +374,16 @@ export component WizardWindow inherits Window {
                         // Step 7 — summary
                         if root.step == 6: VerticalLayout {
                             spacing: Metrics.space-md;
-                            Text { text: @tr("Done"); font-size: Metrics.font-heading; font-weight: 700; color: Theme.text-primary; }
+                            // "Done" only when nothing needs attention.
+                            Text {
+                                text: root.ai-level == 4 || root.stt-level == 4 || root.mic-level == 4 || root.sys-level == 4
+                                    ? @tr("Almost done: check the marked items")
+                                    : @tr("Done");
+                                font-size: Metrics.font-heading;
+                                font-weight: 700;
+                                color: Theme.text-primary;
+                                wrap: word-wrap;
+                            }
                             // Aligned label, status and detail columns.
                             // AI/STT are universal acronyms (left literal); Microphone /
                             // System audio reuse the existing step-title msgids.
