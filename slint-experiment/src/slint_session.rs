@@ -1424,13 +1424,19 @@ async fn maybe_spawn_auto_tile(
     } else {
         auto_tile_max_tokens(is_mlx)
     };
-    if fast {
-        // Keep this prompt in the local server's cache between questions.
+    // Keep the fast prompt in the local server's cache between questions;
+    // a stopped session or a switch away from fast answers stops that.
+    // A question whose session already ended leaves the hot prompt alone.
+    let session_live = lock(&rt).session_gen == session_gen;
+    if session_live && fast {
         ai::local_server::set_hot_prompt(
             endpoint.clone(),
             sys_full.clone(),
             backend_runtime::FAST_USER_HEAD,
         );
+    } else if session_live {
+        ai::local_server::clear_hot_prompt();
+    }
     }
     let question_label = match &trigger {
         backend_runtime::Trigger::Question(q) => q.clone(),

@@ -58,6 +58,12 @@ fn remember_kind(base_url: &str, kind: ServerKind) {
         .insert(key(base_url), kind);
 }
 
+fn forget_kind(base_url: &str) {
+    if let Some(m) = KINDS.lock().unwrap_or_else(|p| p.into_inner()).as_mut() {
+        m.remove(&key(base_url));
+    }
+}
+
 /// The server root: the base URL without its trailing `/v1`.
 fn server_root(base_url: &str) -> &str {
     let trimmed = base_url.trim_end_matches('/');
@@ -100,11 +106,10 @@ pub fn kind_from_replies(
     ServerKind::Other
 }
 
-/// Probe a local server once and remember what it is.
+/// Probe a local server and remember what it is. A session start calls it
+/// each time, so a server replaced on the same address is seen again; a
+/// server that does not answer is not remembered.
 pub async fn detect_kind(base_url: &str) -> ServerKind {
-    if let Some(kind) = known_kind(base_url) {
-        return kind;
-    }
     let root = server_root(base_url).to_string();
     let (health_url, props_url, version_url) = (
         format!("{root}/health"),
@@ -118,7 +123,11 @@ pub async fn detect_kind(base_url: &str) -> ServerKind {
     );
     let kind = kind_from_replies(health.as_ref(), props.as_ref(), version.as_ref());
     log::info!("local AI server kind: {kind:?}");
-    remember_kind(base_url, kind);
+    if health.is_some() || props.is_some() || version.is_some() || kind != ServerKind::Other {
+        remember_kind(base_url, kind);
+    } else {
+        forget_kind(base_url);
+    }
     kind
 }
 
@@ -179,6 +188,9 @@ struct HotPrompt {
 }
 
 static HOT: Mutex<Option<HotPrompt>> = Mutex::new(None);
+/// Bumped whenever the hot prompt is set or cleared, so a prime started for
+/// an earlier one does not send.
+static HOT_ID: AtomicU64 = AtomicU64::new(0);
 /// Bumped by every finished request; a scheduled prime runs only if no other
 /// request finished after it was scheduled.
 static PRIME_GEN: AtomicU64 = AtomicU64::new(0);
@@ -186,20 +198,46 @@ static PRIME_GEN: AtomicU64 = AtomicU64::new(0);
 /// Keep `system` (the live-answer system prompt) in the cache of the local
 /// server at `endpoint` until `clear_hot_prompt`. `user_head` is how the live
 /// requests' user message starts.
+/// A cloud or other non-local endpoint clears it: nothing to keep warm.
 pub fn set_hot_prompt(endpoint: AiEndpoint, system: String, user_head: &str) {
     if endpoint.protocol != AiProtocol::OpenAiCompatible || !endpoint.is_local {
+        clear_hot_prompt();
         return;
     }
-    *HOT.lock().unwrap_or_else(|p| p.into_inner()) = Some(HotPrompt {
+    let mut hot = HOT.lock().unwrap_or_else(|p| p.into_inner());
+    let unchanged = hot.as_ref().is_some_and(|h| {
+        h.system == system
+            && key(&h.endpoint.base_url) == key(&endpoint.base_url)
+            && h.endpoint.model == endpoint.model
+    });
+    if !unchanged {
+        HOT_ID.fetch_add(1, Ordering::SeqCst);
+    }
+    *hot = Some(HotPrompt {
         endpoint,
         system,
         user_head: user_head.to_string(),
     });
 }
 
-/// Stop priming: the session ended.
+/// Stop priming: the session ended, or the live answers no longer use the
+/// fast prompt on a local server.
 pub fn clear_hot_prompt() {
-    *HOT.lock().unwrap_or_else(|p| p.into_inner()) = None;
+    let mut hot = HOT.lock().unwrap_or_else(|p| p.into_inner());
+    HOT_ID.fetch_add(1, Ordering::SeqCst);
+    *hot = None;
+}
+
+fn hot_snapshot() -> Option<(u64, AiEndpoint, String, String)> {
+    let hot = HOT.lock().unwrap_or_else(|p| p.into_inner());
+    hot.as_ref().map(|h| {
+        (
+            HOT_ID.load(Ordering::SeqCst),
+            h.endpoint.clone(),
+            h.system.clone(),
+            h.user_head.clone(),
+        )
+    })
 }
 
 fn first_system_text(messages: &[ChatMessage]) -> Option<&str> {
@@ -235,13 +273,23 @@ impl Drop for RequestDone {
 }
 
 fn note_request_done(base_url: &str, system: Option<&str>) {
-    let generation = PRIME_GEN.fetch_add(1, Ordering::SeqCst) + 1;
-    let needed = {
+    let (same_server, needed) = {
         let hot = HOT.lock().unwrap_or_else(|p| p.into_inner());
-        hot.as_ref().is_some_and(|h| {
-            key(&h.endpoint.base_url) == key(base_url) && system != Some(h.system.as_str())
-        })
+        let same = hot
+            .as_ref()
+            .is_some_and(|h| key(&h.endpoint.base_url) == key(base_url));
+        let needed = same
+            && hot
+                .as_ref()
+                .is_some_and(|h| system != Some(h.system.as_str()));
+        (same, needed)
     };
+    // Only requests to the hot server move the schedule: a cloud request
+    // finishing meanwhile leaves that server's cache as it was.
+    if !same_server {
+        return;
+    }
+    let generation = PRIME_GEN.fetch_add(1, Ordering::SeqCst) + 1;
     if !needed {
         return;
     }
@@ -259,23 +307,27 @@ fn note_request_done(base_url: &str, system: Option<&str>) {
 /// Read the live prompt into the server's cache now, if the server is idle.
 /// Best effort: any failure only means the next answer reads it itself.
 pub async fn prime_hot_prompt() {
-    let Some((endpoint, system, user_head)) = HOT
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .as_ref()
-        .map(|h| (h.endpoint.clone(), h.system.clone(), h.user_head.clone()))
-    else {
+    let Some((id, endpoint, system, user_head)) = hot_snapshot() else {
         return;
     };
-    if crate::deep_lock::endpoint_blocked(crate::deep_lock::deep_lock_active(), &endpoint.base_url)
+    // Only when nothing else runs or waits, and with one permit, so a
+    // question that comes in meanwhile is not held back by the prime.
+    if AI_SEMAPHORE.available_permits() < 2 {
+        return;
+    }
+    let Ok(_permit) = AI_SEMAPHORE.try_acquire() else {
+        return;
+    };
+    // The session may have stopped, or deep lock come on, since the snapshot.
+    if HOT_ID.load(Ordering::SeqCst) != id
+        || crate::deep_lock::endpoint_blocked(
+            crate::deep_lock::deep_lock_active(),
+            &endpoint.base_url,
+        )
     {
         return;
     }
-    // Both permits free: nothing else is running or queued.
-    let Ok(_permit) = AI_SEMAPHORE.try_acquire_many(2) else {
-        return;
-    };
-    let kind = detect_kind(&endpoint.base_url).await;
+    let kind = known_kind(&endpoint.base_url).unwrap_or(ServerKind::Other);
     let mut body = json!({
         "model": endpoint.model,
         "messages": [
@@ -298,7 +350,7 @@ pub async fn prime_hot_prompt() {
     );
     let t0 = std::time::Instant::now();
     let sent = super::provider::authorize(
-        http_client().post(&url).timeout(Duration::from_secs(60)),
+        http_client().post(&url).timeout(Duration::from_secs(20)),
         endpoint.protocol,
         &endpoint.bearer,
     )

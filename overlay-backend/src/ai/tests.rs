@@ -1079,10 +1079,18 @@ async fn hot_prompt_is_primed_with_one_token() {
         }
     });
     super::local_server::set_hot_prompt(local_endpoint(url), "live rules".into(), "Head:\n");
-    super::local_server::prime_hot_prompt().await;
+    // Another test may hold an AI permit for a moment; the prime then skips.
+    let mut sent = None;
+    for _ in 0..50 {
+        super::local_server::prime_hot_prompt().await;
+        if let Ok(body) = rx.recv_timeout(std::time::Duration::from_millis(200)) {
+            sent = Some(body);
+            break;
+        }
+    }
     super::local_server::clear_hot_prompt();
 
-    let body: Value = serde_json::from_str(&rx.recv().unwrap()).unwrap();
+    let body: Value = serde_json::from_str(&sent.expect("the prime was sent")).unwrap();
     assert_eq!(body["messages"][0]["content"], "live rules");
     assert_eq!(body["max_tokens"], 1);
     assert!(body["messages"][1]["content"]
