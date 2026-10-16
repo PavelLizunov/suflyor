@@ -309,3 +309,42 @@ pub async fn prime_hot_prompt() {
         ),
     }
 }
+
+/// Ollama unloads a model five minutes after its last request, and the next
+/// answer then waits for the model to load again. Ask it to keep the live
+/// model loaded for 30 minutes; other servers keep their model anyway.
+pub async fn keep_model_loaded() {
+    let Some(endpoint) = HOT
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .as_ref()
+        .map(|h| h.endpoint.clone())
+    else {
+        return;
+    };
+    if known_kind(&endpoint.base_url) != Some(ServerKind::Ollama) {
+        return;
+    }
+    let url = format!("{}/api/generate", server_root(&endpoint.base_url));
+    let body = json!({ "model": endpoint.model, "keep_alive": "30m" });
+    match http_client()
+        .post(&url)
+        .timeout(Duration::from_secs(120))
+        .json(&body)
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => log::info!("Ollama keeps the live model loaded"),
+        Ok(resp) => log::info!("Ollama keep-alive refused: HTTP {}", resp.status().as_u16()),
+        Err(e) => log::info!(
+            "Ollama keep-alive failed ({})",
+            super::control::transport_failure_kind(&e)
+        ),
+    }
+}
+
+/// Whether a session still keeps a live prompt hot.
+#[must_use]
+pub fn hot_prompt_active() -> bool {
+    HOT.lock().unwrap_or_else(|p| p.into_inner()).is_some()
+}

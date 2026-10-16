@@ -50,6 +50,9 @@ fn auto_tile_fast(c: &overlay_backend::config::Config) -> bool {
     c.ai_fast_answers && c.ai_provider != "mlx"
 }
 
+/// Bumped by each session start; a keep-loaded loop ends when it changes.
+static PRIME_SESSION: AtomicU64 = AtomicU64::new(0);
+
 /// Session start: read the fast-answer system prompt into the local server's
 /// cache before the first question, and keep it there during the session.
 fn prime_live_prompt(cfg: &SharedConfig) {
@@ -78,9 +81,20 @@ fn prime_live_prompt(cfg: &SharedConfig) {
     };
     let base_url = endpoint.base_url.clone();
     ai::local_server::set_hot_prompt(endpoint, system);
+    let session_gen = PRIME_SESSION.fetch_add(1, Ordering::SeqCst) + 1;
     tokio::spawn(async move {
         ai::local_server::detect_kind(&base_url).await;
         ai::local_server::prime_hot_prompt().await;
+        // Keep an idle server from unloading the model between questions.
+        loop {
+            ai::local_server::keep_model_loaded().await;
+            tokio::time::sleep(Duration::from_secs(240)).await;
+            if PRIME_SESSION.load(Ordering::SeqCst) != session_gen
+                || !ai::local_server::hot_prompt_active()
+            {
+                break;
+            }
+        }
     });
 }
 /// The answer so far for a streaming auto tile: `{label, text}`.
