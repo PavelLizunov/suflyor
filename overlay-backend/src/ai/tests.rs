@@ -970,3 +970,28 @@ async fn cloud_endpoints_never_get_tools() {
     set_agent_tools(false, false);
     assert!(!applies);
 }
+
+/// Auto-tiles stream through the plain entry point: one request without
+/// `tools` even when the local model's tools are on, so the answer starts
+/// at once.
+#[tokio::test]
+async fn plain_stream_never_offers_tools() {
+    let _stream_guard = STREAM_TEST_LOCK.lock().await;
+    set_agent_tools(true, false);
+    let (url, bodies) = serve_sequence(vec![(200, ANSWER)]);
+    let events = collect(stream_chat_endpoint_plain(
+        local_endpoint(url),
+        Vec::new(),
+        16,
+    ))
+    .await;
+    set_agent_tools(false, false);
+
+    assert!(events
+        .iter()
+        .any(|e| matches!(e, AiEvent::Delta { text } if text == "answer")));
+    assert!(matches!(events.last(), Some(AiEvent::Done { reason }) if reason == "stop"));
+    let sent: Value = serde_json::from_str(&bodies.recv().unwrap()).unwrap();
+    assert!(sent.get("tools").is_none());
+    assert_eq!(sent["stream"], true);
+}

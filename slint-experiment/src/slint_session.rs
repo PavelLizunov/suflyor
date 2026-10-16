@@ -40,6 +40,80 @@ use std::time::{Duration, Instant};
 const SESSION_SYSTEM_COLLECTOR_MAX_SAMPLES: usize = audio::TARGET_SAMPLE_RATE as usize * 30;
 const AUTO_TILE_MAX_TOKENS: u32 = 4096;
 const AUTO_TILE_MAX_TOKENS_MLX: u32 = 384;
+/// The answer so far for a streaming auto tile: `{label, text}`.
+pub const AUTO_TILE_STREAM_CHANNEL: &str = "auto-tile:stream";
+/// The complete answer for a streaming auto tile: `{label, question, answer,
+/// highlights, stealth}`.
+pub const AUTO_TILE_FILL_CHANNEL: &str = "auto-tile:fill";
+/// Close a streaming auto tile that got no answer: `{label}`.
+pub const AUTO_TILE_DROP_CHANNEL: &str = "auto-tile:drop";
+/// How often a streaming auto tile is redrawn.
+const AUTO_TILE_STREAM_PUSH: Duration = Duration::from_millis(100);
+/// Attempts for an auto-tile answer, as the one-shot call it replaced made.
+const AUTO_TILE_AI_ATTEMPTS: u32 = 3;
+
+/// Stream an auto-tile answer, pushing the text so far into the tile `label`.
+/// Returns the answer and the provider's finish reason. A failure before any
+/// text arrived is retried after 1 s and 2 s, like the one-shot call this
+/// replaced; a stopped or restarted session ends the stream early.
+async fn stream_auto_tile_answer(
+    endpoint: &ai::AiEndpoint,
+    messages: Vec<ai::ChatMessage>,
+    max_tokens: u32,
+    events: &Arc<dyn RuntimeEvents>,
+    label: Option<&str>,
+    rt: &SharedSlintRuntime,
+    session_gen: u64,
+) -> Result<(String, String)> {
+    let mut attempt = 1;
+    loop {
+        let mut rx = ai::stream_chat_endpoint_plain(endpoint.clone(), messages.clone(), max_tokens);
+        let mut answer = String::new();
+        let mut last_push: Option<Instant> = None;
+        let outcome = loop {
+            match rx.recv().await {
+                Some(ai::AiEvent::Delta { text }) => {
+                    answer.push_str(&text);
+                    if lock(rt).session_gen != session_gen {
+                        break Ok("cancelled".to_string());
+                    }
+                    let due = match last_push {
+                        None => true,
+                        Some(at) => at.elapsed() >= AUTO_TILE_STREAM_PUSH,
+                    };
+                    if let (Some(label), true) = (label, due) {
+                        events.emit(
+                            AUTO_TILE_STREAM_CHANNEL,
+                            serde_json::json!({ "label": label, "text": answer }),
+                        );
+                        last_push = Some(Instant::now());
+                    }
+                }
+                Some(ai::AiEvent::Done { reason }) => break Ok(reason),
+                Some(ai::AiEvent::Error { message }) => break Err(message),
+                Some(_) => {}
+                None => break Err("AI stream ended without an answer".to_string()),
+            }
+        };
+        match outcome {
+            Ok(reason) => return Ok((answer, reason)),
+            Err(message) => {
+                let retry = answer.is_empty()
+                    && attempt < AUTO_TILE_AI_ATTEMPTS
+                    && !ai::is_permanent_ai_error(&message)
+                    && lock(rt).session_gen == session_gen;
+                if !retry {
+                    return Err(anyhow::anyhow!(message));
+                }
+                log_warn(&format!(
+                    "auto-tile AI attempt {attempt}/{AUTO_TILE_AI_ATTEMPTS} failed — retrying"
+                ));
+                tokio::time::sleep(Duration::from_millis(1000 << (attempt - 1))).await;
+                attempt += 1;
+            }
+        }
+    }
+}
 
 #[must_use]
 fn auto_tile_max_tokens(is_mlx: bool) -> u32 {
@@ -1197,17 +1271,70 @@ async fn maybe_spawn_auto_tile(
         is_local,
     };
     let max_tokens = auto_tile_max_tokens(is_mlx);
-    let (answer, usage) = match ai::complete_with_usage_endpoint(&endpoint, messages, max_tokens)
-        .await
-    {
-        Ok((t, u)) => {
+    let question_label = match &trigger {
+        backend_runtime::Trigger::Question(q) => q.clone(),
+        // De-emojified to match the rest of the UI (Codex icon pass): the
+        // keyword itself is the tile title / stored last_question, no glyph.
+        backend_runtime::Trigger::Keyword(kw, _) => kw.clone(),
+    };
+    let monitor_hint = match preferred_monitor.as_deref() {
+        Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
+        _ => MonitorHint::Auto,
+    };
+    // Phase E6 v12 — pass trigger info so the tile shows a badge
+    // explaining which keyword/question spawned it.
+    let highlights_for_spec = trigger_highlights(&trigger);
+    // Open the tile now and stream the answer into it: on a call the first
+    // words must show in a second or two, not after the whole answer is
+    // written (about 10 s for 500 tokens on a local model). An auto tile with
+    // an empty answer is the UI's cue for this streaming placeholder.
+    let stream_label = match events.spawn_tile_full(
+        TileSpec {
+            question: question_label.clone(),
+            answer: String::new(),
+            source: "auto_tile".into(),
+            is_translation: false,
+            highlights: highlights_for_spec.clone(),
+            summary_session: None,
+        },
+        monitor_hint.clone(),
+        stealth,
+        TileKind::Auto,
+    ) {
+        Ok(label) => Some(label),
+        Err(e) => {
+            log_warn(&format!("auto-tile placeholder spawn failed: {e}"));
+            None
+        }
+    };
+    let drop_placeholder = |events: &Arc<dyn RuntimeEvents>| {
+        if let Some(label) = &stream_label {
+            events.emit(
+                AUTO_TILE_DROP_CHANNEL,
+                serde_json::json!({ "label": label }),
+            );
+        }
+    };
+    let streamed = stream_auto_tile_answer(
+        &endpoint,
+        messages,
+        max_tokens,
+        &events,
+        stream_label.as_deref(),
+        &rt,
+        session_gen,
+    )
+    .await;
+    let (answer, finish_reason) = match streamed {
+        Ok((t, reason)) => {
             lock(&rt)
                 .health
                 .last_ai_ok_ms
                 .store(now_unix_ms() as u64, Ordering::Relaxed);
-            (t.trim().to_string(), u)
+            (t.trim().to_string(), reason)
         }
         Err(e) => {
+            drop_placeholder(&events);
             // V0.8.0 (Поток A) — the auto-tile AI call failed. Previously
             // this returned SILENTLY (log + journal only), so the user saw
             // auto-tiles simply stop with no explanation ("почему тайлы
@@ -1303,6 +1430,7 @@ async fn maybe_spawn_auto_tile(
     // bill, or spawn a tile into a session that no longer exists.
     if lock(&rt).session_gen != session_gen {
         log_info("auto-tile: session changed during AI call — discarding result");
+        drop_placeholder(&events);
         return;
     }
 
@@ -1326,11 +1454,14 @@ async fn maybe_spawn_auto_tile(
     }
 
     // ===== Cost accumulate + emit =====
+    // The stream reports no usage, so output is estimated as chars/4, the
+    // same estimate the F9 stream uses.
+    let output_tokens_est = (answer.chars().count() as u64) / 4;
     // Local inference is free — don't bill it.
     let micro = if is_local {
         0
     } else {
-        ai::cost_microcents(&model, usage.input, usage.output)
+        ai::cost_microcents(&model, input_tokens_est, output_tokens_est)
     };
     let total_usd = {
         let mut s = lock(&rt);
@@ -1347,52 +1478,59 @@ async fn maybe_spawn_auto_tile(
         purpose: "auto_tile",
         model: &model,
         latency_ms,
-        // The provider's real reason ("stop", "length" = truncated, …) —
-        // surfaced by `complete_once` (audit D4; previously hardcoded).
-        finish_reason: &usage.finish_reason,
+        // The provider's real reason ("stop", "length" = truncated, …) from
+        // the stream's Done event (audit D4; previously hardcoded).
+        finish_reason: &finish_reason,
         text: &answer,
-        output_tokens_est: usage.output,
+        output_tokens_est,
         cost_microcents: micro,
     });
 
     if answer.is_empty() {
+        drop_placeholder(&events);
         return;
     }
 
-    // ===== Spawn auto-tile =====
-    let question_label = match &trigger {
-        backend_runtime::Trigger::Question(q) => q.clone(),
-        // De-emojified to match the rest of the UI (Codex icon pass): the
-        // keyword itself is the tile title / stored last_question, no glyph.
-        backend_runtime::Trigger::Keyword(kw, _) => kw.clone(),
-    };
+    // ===== Finish the auto-tile =====
     {
         let mut s = lock(&rt);
         s.last_question = Some(question_label.clone());
         s.last_answer = Some(answer.clone());
     }
-    let monitor_hint = match preferred_monitor.as_deref() {
-        Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
-        _ => MonitorHint::Auto,
-    };
     let label_for_log = question_label.clone();
     let answer_for_journal = answer.clone();
-    // Phase E6 v12 — pass trigger info so the tile shows a badge
-    // explaining which keyword/question spawned it.
-    let highlights_for_spec = trigger_highlights(&trigger);
-    match events.spawn_tile_full(
-        TileSpec {
-            question: question_label.clone(),
-            answer,
-            source: "auto_tile".into(),
-            is_translation: false,
-            highlights: highlights_for_spec,
-            summary_session: None,
-        },
-        monitor_hint,
-        stealth,
-        TileKind::Auto,
-    ) {
+    // The streamed tile gets the complete answer in place, with the same
+    // dialog wiring a finished auto tile gets; without one (its spawn
+    // failed) the tile opens now, as before.
+    let finished = match &stream_label {
+        Some(label) => {
+            events.emit(
+                AUTO_TILE_FILL_CHANNEL,
+                serde_json::json!({
+                    "label": label,
+                    "question": question_label,
+                    "answer": answer,
+                    "highlights": highlights_for_spec,
+                    "stealth": stealth,
+                }),
+            );
+            Ok(label.clone())
+        }
+        None => events.spawn_tile_full(
+            TileSpec {
+                question: question_label.clone(),
+                answer,
+                source: "auto_tile".into(),
+                is_translation: false,
+                highlights: highlights_for_spec,
+                summary_session: None,
+            },
+            monitor_hint,
+            stealth,
+            TileKind::Auto,
+        ),
+    };
+    match finished {
         Ok(label) => {
             journal.write(&JournalEvent::TileSpawn {
                 unix_ms: now_unix_ms(),
@@ -2185,5 +2323,116 @@ mod tests {
             3,
             "summary source must survive stop"
         );
+    }
+
+    /// Serves `responses` in order on a loopback port, one per request.
+    fn serve_sse(responses: Vec<(u16, &'static str)>) -> String {
+        use std::io::{BufRead, BufReader, Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            for (status, body) in responses {
+                let Ok((stream, _)) = listener.accept() else {
+                    return;
+                };
+                let mut reader = BufReader::new(stream);
+                let mut len = 0usize;
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
+                        break;
+                    }
+                    if let Some(v) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                        len = v.trim().parse().unwrap_or(0);
+                    }
+                }
+                let mut sent = vec![0u8; len];
+                let _ = reader.read_exact(&mut sent);
+                let mut stream = reader.into_inner();
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 {status} X\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+            }
+        });
+        url
+    }
+
+    #[derive(Default)]
+    struct RecordingEvents(std::sync::Mutex<Vec<(String, serde_json::Value)>>);
+
+    impl RuntimeEvents for RecordingEvents {
+        fn emit(&self, channel: &str, payload: serde_json::Value) {
+            self.0.lock().unwrap().push((channel.to_string(), payload));
+        }
+        fn spawn_tile_full(
+            &self,
+            _spec: TileSpec,
+            _monitor: MonitorHint,
+            _stealth: bool,
+            _kind: TileKind,
+        ) -> Result<String, String> {
+            Ok("tile".into())
+        }
+    }
+
+    const SSE_ANSWER: &str =
+        "data: {\"id\":\"a\",\"choices\":[{\"delta\":{\"content\":\"first \"}}]}\n\n\
+data: {\"id\":\"a\",\"choices\":[{\"delta\":{\"content\":\"answer\"}}]}\n\n\
+data: {\"id\":\"a\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n\
+data: [DONE]\n\n";
+
+    fn sse_endpoint(base_url: String) -> ai::AiEndpoint {
+        ai::AiEndpoint {
+            protocol: ai::AiProtocol::OpenAiCompatible,
+            base_url,
+            bearer: String::new(),
+            model: "local-model".into(),
+            reasoning_effort: None,
+            is_local: true,
+        }
+    }
+
+    /// The auto tile shows the answer while it is written, not after it.
+    #[tokio::test]
+    async fn auto_tile_answer_streams_into_its_tile() {
+        let url = serve_sse(vec![(200, SSE_ANSWER)]);
+        let recorder = Arc::new(RecordingEvents::default());
+        let events: Arc<dyn RuntimeEvents> = recorder.clone();
+        let rt: SharedSlintRuntime = Arc::default();
+        let (answer, reason) = stream_auto_tile_answer(
+            &sse_endpoint(url),
+            Vec::new(),
+            64,
+            &events,
+            Some("tile-7"),
+            &rt,
+            0,
+        )
+        .await
+        .unwrap();
+        assert_eq!(answer, "first answer");
+        assert_eq!(reason, "stop");
+        let pushed = recorder.0.lock().unwrap().clone();
+        let first = pushed
+            .iter()
+            .find(|(c, _)| c == AUTO_TILE_STREAM_CHANNEL)
+            .expect("the first words are pushed to the tile");
+        assert_eq!(first.1["label"], "tile-7");
+        assert_eq!(first.1["text"], "first ");
+    }
+
+    /// A failure before any text is retried, as the one-shot call was.
+    #[tokio::test]
+    async fn auto_tile_answer_retries_a_failure_before_any_text() {
+        let url = serve_sse(vec![(503, "busy"), (200, SSE_ANSWER)]);
+        let events: Arc<dyn RuntimeEvents> = Arc::new(RecordingEvents::default());
+        let rt: SharedSlintRuntime = Arc::default();
+        let (answer, _) =
+            stream_auto_tile_answer(&sse_endpoint(url), Vec::new(), 64, &events, None, &rt, 0)
+                .await
+                .unwrap();
+        assert_eq!(answer, "first answer");
     }
 }
