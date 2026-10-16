@@ -2065,7 +2065,10 @@ fn main() -> Result<(), slint::PlatformError> {
             // Keep the bar's open-tile count honest even if the new() below
             // fails after a cap eviction (review minor).
             refresh_open_tiles(&weak_overlay_poll, &tiles_for_poll);
-            let tile = match reused.clone().map_or_else(TileWindow::new, Ok) {
+            let tile = match reused
+                .as_ref()
+                .map_or_else(TileWindow::new, |t| Ok(t.clone_strong()))
+            {
                 Ok(t) => t,
                 Err(e) => {
                     eprintln!(
