@@ -106,7 +106,7 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
     let env_new = merge_env_text(&env_old, bridge_url, token);
     sync_env(&env_path, &env_old, &env_new).map_err(|e| format!("запись .env: {e}"))?;
 
-    // 3. config.yaml enable.
+    // 3. config.yaml enable (written with 0o600 permissions to protect API keys/secrets).
     let cfg_path = home.join("config.yaml");
     let cfg_old = if cfg_path.is_file() {
         Some(std::fs::read_to_string(&cfg_path).map_err(|e| format!("чтение config.yaml: {e}"))?)
@@ -116,7 +116,8 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
     let outcome = enable_in_config_text(cfg_old.as_deref().unwrap_or(""));
     match outcome {
         EnableEdit::Updated(new_text) => {
-            std::fs::write(&cfg_path, new_text).map_err(|e| format!("запись config.yaml: {e}"))?;
+            crate::paths::write_private(&cfg_path, new_text.as_bytes())
+                .map_err(|e| format!("запись config.yaml: {e}"))?;
             Ok("готово: плагин установлен и включён — перезапустите Hermes".to_string())
         }
         EnableEdit::AlreadyEnabled => {
@@ -152,7 +153,9 @@ pub fn ensure_api_server() -> Result<(String, bool), String> {
     match ensure_api_server_text(&old, crate::bridge::generate_token) {
         ApiEdit::Ready(key) => Ok((key, false)),
         ApiEdit::Updated(text, key) => {
-            std::fs::write(&cfg_path, text).map_err(|e| format!("запись config.yaml: {e}"))?;
+            // Write config.yaml with owner-only permissions (0o600) on Unix targets to prevent local credential leaks.
+            crate::paths::write_private(&cfg_path, text.as_bytes())
+                .map_err(|e| format!("запись config.yaml: {e}"))?;
             Ok((key, true))
         }
         ApiEdit::Unsupported => Err(
@@ -654,6 +657,37 @@ mod tests {
         assert_eq!(unix_mode(&wide), 0o600, "an unchanged .env is tightened");
         // Nothing to restrict when the file does not exist and nothing is to be written.
         sync_env(&temp.path().join("absent.env"), "", "").unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn config_yaml_is_owner_only_on_unix() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        std::env::set_var("HERMES_HOME", temp.path());
+
+        // Test install_plugin creates config.yaml with 0o600 permissions
+        let status = install_plugin("http://127.0.0.1:8654", "secret_token").unwrap();
+        assert!(status.contains("готово"));
+        let cfg_path = temp.path().join("config.yaml");
+        assert_eq!(
+            unix_mode(&cfg_path),
+            0o600,
+            "config.yaml written by install_plugin must be owner-only"
+        );
+
+        // Make config.yaml wider (0o644) and verify ensure_api_server tightens mode back to 0o600
+        std::fs::set_permissions(&cfg_path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let (_key, changed) = ensure_api_server().unwrap();
+        assert!(changed);
+        assert_eq!(
+            unix_mode(&cfg_path),
+            0o600,
+            "config.yaml written by ensure_api_server must be owner-only"
+        );
+
+        std::env::remove_var("HERMES_HOME");
     }
 
     #[test]
