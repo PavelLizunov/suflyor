@@ -273,7 +273,11 @@ pub(crate) async fn complete_once(
         apply_prompt_cache(&mut body);
         apply_local_no_think(&mut body, force_no_think);
         apply_managed_gemma_sampler(&mut body, base_url, model);
+        if let Some(kind) = super::local_server::known_kind(base_url) {
+            super::local_server::apply_kind_hints(&mut body, kind);
+        }
     }
+    let _done = super::local_server::request_started(base_url, &messages);
 
     log::info!(
         "AI complete → provider (protocol={}, model={}, msgs={})",

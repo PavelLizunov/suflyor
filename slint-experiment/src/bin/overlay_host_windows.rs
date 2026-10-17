@@ -2020,9 +2020,35 @@ fn main() -> Result<(), slint::PlatformError> {
         while processed < MAX_SPAWNS_PER_TICK {
             let Ok(req) = spawn_rx.try_recv() else { break };
             processed += 1;
+            // The end of a streaming auto tile reuses its window. A tile the
+            // user already closed (or the cap evicted) stays closed.
+            let reused = if req.action == SpawnAction::New {
+                None
+            } else {
+                AUTO_STREAM_EARLY.with(|m| m.borrow_mut().remove(&req.label));
+                let Some(tile) = AUTO_STREAM_TILES
+                    .with(|m| m.borrow_mut().remove(&req.label))
+                    .and_then(|w| w.upgrade())
+                else {
+                    continue;
+                };
+                if req.action == SpawnAction::Drop {
+                    let close_hwnd = grab_hwnd(tile.window()).ok();
+                    let _ = tile.hide();
+                    slint_replay::win32::force_hide(tile.window());
+                    if let Some(target) = close_hwnd {
+                        tiles_for_poll
+                            .borrow_mut()
+                            .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
+                    }
+                    refresh_open_tiles(&weak_overlay_poll, &tiles_for_poll);
+                    continue;
+                }
+                Some(tile)
+            };
             // Drop oldest tile if we're at the cap. Slint releases
             // the native window when the Strong refcount hits 0.
-            while tiles_for_poll.borrow().len() >= MAX_LIVE_TILES {
+            while reused.is_none() && tiles_for_poll.borrow().len() >= MAX_LIVE_TILES {
                 let dropped = tiles_for_poll.borrow_mut().remove(0);
                 // Abort the evicted tile's in-flight AI request (keyed by the
                 // synchronous tile-id; -1 for non-"+ tile" tiles is a no-op).
@@ -2039,7 +2065,10 @@ fn main() -> Result<(), slint::PlatformError> {
             // Keep the bar's open-tile count honest even if the new() below
             // fails after a cap eviction (review minor).
             refresh_open_tiles(&weak_overlay_poll, &tiles_for_poll);
-            let tile = match TileWindow::new() {
+            let tile = match reused
+                .as_ref()
+                .map_or_else(TileWindow::new, |t| Ok(t.clone_strong()))
+            {
                 Ok(t) => t,
                 Err(e) => {
                     eprintln!(
@@ -2055,8 +2084,10 @@ fn main() -> Result<(), slint::PlatformError> {
             // Phase E6 fix — auto-increment sequence so tile labels
             // show #1, #2, #3 instead of all #0. Use Relaxed because
             // poll-Timer is single-threaded (UI thread).
-            let seq = TILE_DISPLAY_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-            tile.set_sequence(seq as i32);
+            if reused.is_none() {
+                let seq = TILE_DISPLAY_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                tile.set_sequence(seq as i32);
+            }
             wire_tile_drag(&tile);
             tile.set_source_label(SharedString::from(tile_text::kind_label(
                 req.kind,
@@ -2434,6 +2465,25 @@ fn main() -> Result<(), slint::PlatformError> {
                         });
                     });
                 }
+            }
+            // The streaming auto tile shows the answer as it arrives and gets
+            // its dialog on Fill.
+            if req.action == SpawnAction::New
+                && req.spec.source == slint_replay::slint_session::AUTO_TILE_STREAM_SOURCE
+            {
+                let is_ru = cfg_for_poll.read().ui_is_ru();
+                let early = AUTO_STREAM_EARLY.with(|m| m.borrow_mut().remove(&req.label));
+                let body = early.unwrap_or_else(|| tile_text::asking_body(is_ru).to_string());
+                tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks_streaming(&body))));
+                tile.set_source_label(SharedString::from(tile_text::asking_label(is_ru)));
+                tile.set_followup_busy(true);
+                AUTO_STREAM_TILES.with(|m| {
+                    m.borrow_mut().insert(req.label.clone(), tile.as_weak());
+                });
+            }
+            if reused.is_some() {
+                // Already shown and placed; keep it where the user sees it.
+                continue;
             }
             // (monitor placement applied via apply_tile_hwnd_with_monitor.)
             present_tile_window(&tile);

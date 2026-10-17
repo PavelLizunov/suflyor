@@ -970,3 +970,131 @@ async fn cloud_endpoints_never_get_tools() {
     set_agent_tools(false, false);
     assert!(!applies);
 }
+
+/// Auto-tiles stream through the plain entry point: one request without
+/// `tools` even when the local model's tools are on, so the answer starts
+/// at once.
+#[tokio::test]
+async fn plain_stream_never_offers_tools() {
+    let _stream_guard = STREAM_TEST_LOCK.lock().await;
+    set_agent_tools(true, false);
+    let (url, bodies) = serve_sequence(vec![(200, ANSWER)]);
+    let events = collect(stream_chat_endpoint_plain(
+        local_endpoint(url),
+        Vec::new(),
+        16,
+    ))
+    .await;
+    set_agent_tools(false, false);
+
+    assert!(events
+        .iter()
+        .any(|e| matches!(e, AiEvent::Delta { text } if text == "answer")));
+    assert!(matches!(events.last(), Some(AiEvent::Done { reason }) if reason == "stop"));
+    let sent: Value = serde_json::from_str(&bodies.recv().unwrap()).unwrap();
+    assert!(sent.get("tools").is_none());
+    assert_eq!(sent["stream"], true);
+}
+
+#[test]
+fn server_kind_comes_from_the_servers_own_status_paths() {
+    use super::local_server::{kind_from_replies, ServerKind};
+    let strata = json!({"status": "ok", "service": "strata", "loaded": true});
+    let props = json!({"default_generation_settings": {"n_ctx": 8192}});
+    let ollama = json!({"version": "0.12.3"});
+    assert_eq!(
+        kind_from_replies(Some(&strata), None, None),
+        ServerKind::Strata
+    );
+    assert_eq!(
+        kind_from_replies(None, Some(&props), None),
+        ServerKind::LlamaCpp
+    );
+    assert_eq!(
+        kind_from_replies(None, None, Some(&ollama)),
+        ServerKind::Ollama
+    );
+    assert_eq!(
+        kind_from_replies(Some(&json!({"status": "ok"})), None, None),
+        ServerKind::Other
+    );
+}
+
+#[test]
+fn strata_pins_the_system_prompt_and_keeps_one_shot_calls_out_of_its_cache() {
+    use super::local_server::{apply_kind_hints, ServerKind};
+    let chat = json!({
+        "max_tokens": 400,
+        "messages": [
+            {"role": "system", "content": "rules"},
+            {"role": "user", "content": "question"}
+        ]
+    });
+    let mut pinned = chat.clone();
+    apply_kind_hints(&mut pinned, ServerKind::Strata);
+    assert_eq!(pinned["strata_prefix"], json!({"message": 1, "chars": 1}));
+    assert!(pinned.get("strata_checkpoint").is_none());
+
+    let mut probe = chat.clone();
+    probe["max_tokens"] = json!(1);
+    apply_kind_hints(&mut probe, ServerKind::Strata);
+    assert_eq!(probe["strata_checkpoint"], json!(false));
+    assert!(probe.get("strata_prefix").is_none());
+
+    let mut no_system = json!({"max_tokens": 400, "messages": [{"role": "user", "content": "q"}]});
+    apply_kind_hints(&mut no_system, ServerKind::Strata);
+    assert!(no_system.get("strata_prefix").is_none());
+
+    for kind in [ServerKind::LlamaCpp, ServerKind::Ollama, ServerKind::Other] {
+        let mut other = chat.clone();
+        apply_kind_hints(&mut other, kind);
+        assert_eq!(other, chat, "{kind:?} gets no Strata fields");
+    }
+}
+
+/// During a session the live prompt goes back into the server's cache: one
+/// small request with that system prompt and a single token.
+#[tokio::test]
+async fn hot_prompt_is_primed_with_one_token() {
+    let _stream_guard = STREAM_TEST_LOCK.lock().await;
+    let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/v1", server.server_addr());
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        while let Ok(mut req) = server.recv() {
+            let mut sent = String::new();
+            let _ = std::io::Read::read_to_string(req.as_reader(), &mut sent);
+            let post = *req.method() == tiny_http::Method::Post;
+            if post {
+                let _ = tx.send(sent);
+            }
+            let resp = if post {
+                tiny_http::Response::from_string(
+                    "{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}",
+                )
+            } else {
+                tiny_http::Response::from_string("").with_status_code(404)
+            };
+            let _ = req.respond(resp);
+        }
+    });
+    super::local_server::set_hot_prompt(local_endpoint(url), "live rules".into(), "Head:\n");
+    // Another test may hold an AI permit for a moment; the prime then skips.
+    let mut sent = None;
+    for _ in 0..50 {
+        super::local_server::prime_hot_prompt().await;
+        if let Ok(body) = rx.recv_timeout(std::time::Duration::from_millis(200)) {
+            sent = Some(body);
+            break;
+        }
+    }
+    super::local_server::clear_hot_prompt();
+
+    let body: Value = serde_json::from_str(&sent.expect("the prime was sent")).unwrap();
+    assert_eq!(body["messages"][0]["content"], "live rules");
+    assert_eq!(body["max_tokens"], 1);
+    assert!(body["messages"][1]["content"]
+        .as_str()
+        .unwrap()
+        .starts_with("Head:\n"));
+}

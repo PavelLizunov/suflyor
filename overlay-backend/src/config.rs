@@ -408,6 +408,14 @@ pub struct Config {
     #[serde(default)]
     pub auto_tile_every_line: bool,
 
+    /// Fast answers for calls and interviews: auto tiles use a short prompt
+    /// (one-line answer first, then two or three points, up to ~70 words)
+    /// with a smaller token limit, and a local server keeps that prompt
+    /// cached. Off = the detailed prompt. Not used by the managed MLX
+    /// server, which has its own compact prompt.
+    #[serde(default = "default_true")]
+    pub ai_fast_answers: bool,
+
     /// "Reader mode" tile mute — suppress AUTO-detected AI tiles (the
     /// `TileKind::Ai` answers the detector spawns on each transcript line) so
     /// the user can record + just listen without tiles popping up. Manual asks
@@ -716,6 +724,7 @@ impl Config {
             max_session_cost_usd: default_max_session_cost_usd(),
             detector_skip_mic: default_detector_skip_mic(),
             auto_tile_every_line: false,
+            ai_fast_answers: true,
             suppress_tiles: false,
             deep_lock: false,
             compact_bar: false,
@@ -1734,6 +1743,7 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     next.ai_local_prep_model = imported.ai_local_prep_model;
     next.ai_local_vision = imported.ai_local_vision;
     next.ai_local_thinking = imported.ai_local_thinking;
+    next.ai_fast_answers = imported.ai_fast_answers;
     next.ai_agent_tools = imported.ai_agent_tools;
     next.ai_web_search = imported.ai_web_search;
     // NOTE: ai_strata_dir/ai_strata_config are deliberately NOT transferred:

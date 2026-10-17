@@ -487,11 +487,40 @@ pub(crate) struct ConvoState {
     pub(crate) rendered: String,
 }
 
+/// What a spawn request does with its label.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum SpawnAction {
+    /// Create a tile.
+    New,
+    /// Put the complete answer into the streaming auto tile and wire its
+    /// dialog the way a finished auto tile is wired.
+    Fill,
+    /// Close the streaming auto tile: its answer failed or was empty.
+    Drop,
+}
+
+thread_local! {
+    /// Streaming auto tiles by bridge label, until their Fill or Drop.
+    /// UI thread only.
+    pub(crate) static AUTO_STREAM_TILES: std::cell::RefCell<
+        std::collections::HashMap<String, slint::Weak<TileWindow>>,
+    > = std::cell::RefCell::new(std::collections::HashMap::new());
+    /// Answer text that arrived before its tile was created (latest wins).
+    pub(crate) static AUTO_STREAM_EARLY: std::cell::RefCell<
+        std::collections::HashMap<String, String>,
+    > = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Most early answers kept for tiles not created yet.
+const AUTO_STREAM_EARLY_MAX: usize = 8;
+
 /// Tile-spawn request sent from the bridge (any thread) to the UI
 /// poll-Timer running on the Slint main thread. Carries everything
 /// needed to construct a TileWindow + render the markdown body.
 pub(crate) struct SpawnTileRequest {
     pub(crate) label: String,
+    /// New tile, or the end of a streaming auto tile with this label.
+    pub(crate) action: SpawnAction,
     pub(crate) spec: TileSpec,
     /// Reserved for Phase E3 follow-up — pass through to a tile-
     /// placement helper that honors MonitorHint::Named (cfg.tile_
@@ -565,6 +594,85 @@ impl OverlayBarBridge {
     /// scheduling the UI mutation. Mutex is released BEFORE the
     /// invoke_from_event_loop call so the UI thread isn't blocked
     /// on the lock if the same code path re-enters.
+    /// Draw the answer so far into a streaming auto tile.
+    fn handle_auto_tile_stream(&self, payload: serde_json::Value) {
+        let label = payload
+            .get("label")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let text = payload
+            .get("text")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let _ = slint::invoke_from_event_loop(move || {
+            let tile = AUTO_STREAM_TILES.with(|m| m.borrow().get(&label).map(slint::Weak::upgrade));
+            match tile {
+                Some(Some(t)) => {
+                    t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks_streaming(&text))));
+                }
+                // Closed by the user: nothing to draw.
+                Some(None) => {}
+                // Not created yet: the spawn timer draws it on creation.
+                None => AUTO_STREAM_EARLY.with(|m| {
+                    let mut m = m.borrow_mut();
+                    if m.len() >= AUTO_STREAM_EARLY_MAX && !m.contains_key(&label) {
+                        m.clear();
+                    }
+                    m.insert(label, text);
+                }),
+            }
+        });
+    }
+
+    /// Queue the end of a streaming auto tile behind its creation: both go
+    /// through the spawn channel, so a Fill or Drop never overtakes its tile.
+    fn handle_auto_tile_end(&self, channel: &str, payload: serde_json::Value) {
+        let text = |key: &str| {
+            payload
+                .get(key)
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string()
+        };
+        let action = if channel == slint_replay::slint_session::AUTO_TILE_FILL_CHANNEL {
+            SpawnAction::Fill
+        } else {
+            SpawnAction::Drop
+        };
+        let highlights = payload
+            .get("highlights")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let req = SpawnTileRequest {
+            label: text("label"),
+            action,
+            spec: TileSpec {
+                question: text("question"),
+                answer: text("answer"),
+                source: "auto_tile".into(),
+                is_translation: false,
+                highlights,
+                summary_session: None,
+            },
+            monitor: MonitorHint::Auto,
+            stealth: payload
+                .get("stealth")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+            kind: TileKind::Auto,
+        };
+        if let Err(e) = self.spawn_tx.send(req) {
+            eprintln!("[overlay-bridge] auto tile {channel} not queued: {e}");
+        }
+    }
+
     fn handle_ai_event(&self, payload: serde_json::Value) {
         let Ok(evt) = serde_json::from_value::<ai::AiEvent>(payload) else {
             return;
@@ -861,6 +969,16 @@ impl SlintUiBridge for OverlayBarBridge {
             }
             *last = now;
         }
+        if channel == slint_replay::slint_session::AUTO_TILE_STREAM_CHANNEL {
+            self.handle_auto_tile_stream(payload);
+            return;
+        }
+        if channel == slint_replay::slint_session::AUTO_TILE_FILL_CHANNEL
+            || channel == slint_replay::slint_session::AUTO_TILE_DROP_CHANNEL
+        {
+            self.handle_auto_tile_end(&channel, payload);
+            return;
+        }
         // Route all cap emitters through one visible, debounced notice.
         if channel == "cost:cap-hit" {
             self.handle_cost_cap_hit(payload);
@@ -1036,6 +1154,7 @@ impl SlintUiBridge for OverlayBarBridge {
         let label = format!("slint-tile-{n}");
         let req = SpawnTileRequest {
             label: label.clone(),
+            action: SpawnAction::New,
             spec,
             monitor,
             stealth,

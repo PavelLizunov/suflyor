@@ -2012,3 +2012,11 @@ fn profile_export_leaves_out_strata_folders() {
     assert!(!text.contains("Strata-0.1.40"));
     assert!(text.contains("\"ai_agent_tools\": true"));
 }
+
+/// Fast answers are on by default, also for a config saved before the field.
+#[test]
+fn fast_answers_default_on() {
+    assert!(Config::defaults().ai_fast_answers);
+    let old: Config = serde_json::from_str("{}").unwrap();
+    assert!(old.ai_fast_answers);
+}

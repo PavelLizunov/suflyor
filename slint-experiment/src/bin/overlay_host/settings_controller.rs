@@ -178,6 +178,7 @@ pub(crate) fn open_settings(
         win.set_coaching_live_tiles(snap.live_coaching_tiles_enabled);
         win.set_record_audio(snap.record_audio_enabled);
         win.set_auto_tiles_enabled(snap.auto_tiles_enabled);
+        win.set_fast_answers(snap.ai_fast_answers);
         win.set_suppress_tiles(snap.suppress_tiles);
         win.set_trigger_keywords_input(SharedString::from(snap.trigger_keywords.as_str()));
         // v0.15.0 — seed the storage/retention controls. Days wins the display
@@ -1076,6 +1077,14 @@ pub(crate) fn open_settings(
         win.on_auto_tiles_enabled_changed(move |on| {
             let mut c = cfg_c.write();
             c.auto_tiles_enabled = on;
+            let _ = overlay_backend::config::save(&c);
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_fast_answers_changed(move |on| {
+            let mut c = cfg_c.write();
+            c.ai_fast_answers = on;
             let _ = overlay_backend::config::save(&c);
         });
     }

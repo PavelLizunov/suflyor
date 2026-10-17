@@ -1173,3 +1173,32 @@ fn reask_title_is_translated_and_does_not_stack() {
         "Уточнение: Что такое X?"
     );
 }
+
+/// The fast system prompt stays the same across questions, transcripts and
+/// meeting context, so a local server can keep it cached; what changes per
+/// question goes in the user message.
+#[test]
+fn fast_auto_tile_system_prompt_is_stable_across_questions() {
+    let q1 = Trigger::Question("Чем процесс отличается от потока?".into());
+    let q2 = Trigger::Keyword("etcd".into(), "у нас etcd падает".into());
+    let (sys1, usr1) = build_fast_auto_tile_prompts(
+        &q1,
+        &["[СОБЕСЕДНИК] Чем процесс отличается от потока?".into()],
+        "",
+        "ru",
+        false,
+    );
+    let (sys2, usr2) = build_fast_auto_tile_prompts(&q2, &[], "SRE, Kubernetes", "ru", false);
+    assert_eq!(sys1, sys2);
+    assert!(usr1.contains("Вопрос: \"Чем процесс отличается от потока?\""));
+    assert!(usr1.starts_with(FAST_USER_HEAD) && usr2.starts_with(FAST_USER_HEAD));
+    assert!(usr2.contains("Фон пользователя"));
+    assert!(usr2.contains("SRE, Kubernetes") && usr2.contains("etcd"));
+    assert!(!sys2.contains("SRE"));
+    assert!(sys1.contains("Первая строка"));
+
+    let (sys_en, _) = build_fast_auto_tile_prompts(&q1, &[], "", "en", false);
+    let (sys_coach, _) = build_fast_auto_tile_prompts(&q1, &[], "", "ru", true);
+    assert!(sys_en.ends_with("Respond in English."));
+    assert!(sys_coach.contains("прочитают вслух"));
+}

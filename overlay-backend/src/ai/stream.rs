@@ -35,6 +35,25 @@ pub fn stream_chat_endpoint(
     messages: Vec<ChatMessage>,
     max_tokens: u32,
 ) -> mpsc::Receiver<AiEvent> {
+    stream_chat_endpoint_with(endpoint, messages, max_tokens, true)
+}
+
+/// Same stream without the local model's tools: one request, answer only.
+/// Auto-tiles use it — they never ran tools and must start answering at once.
+pub fn stream_chat_endpoint_plain(
+    endpoint: AiEndpoint,
+    messages: Vec<ChatMessage>,
+    max_tokens: u32,
+) -> mpsc::Receiver<AiEvent> {
+    stream_chat_endpoint_with(endpoint, messages, max_tokens, false)
+}
+
+fn stream_chat_endpoint_with(
+    endpoint: AiEndpoint,
+    messages: Vec<ChatMessage>,
+    max_tokens: u32,
+    allow_tools: bool,
+) -> mpsc::Receiver<AiEvent> {
     let request_started_at = std::time::Instant::now();
     let request_id = begin_request();
     let (tx, rx) = mpsc::channel::<AiEvent>(64);
@@ -118,6 +137,7 @@ pub fn stream_chat_endpoint(
             endpoint,
             messages,
             max_tokens,
+            allow_tools,
             tx.clone(),
             request_id,
             request_started_at,
@@ -157,6 +177,7 @@ pub(crate) async fn stream_inner(
     endpoint: AiEndpoint,
     messages: Vec<ChatMessage>,
     max_tokens: u32,
+    allow_tools: bool,
     tx: mpsc::Sender<AiEvent>,
     request_id: u64,
     request_started_at: std::time::Instant,
@@ -165,7 +186,7 @@ pub(crate) async fn stream_inner(
     {
         return Err(anyhow!(crate::deep_lock::BLOCKED_ERROR));
     }
-    if super::agent::applies(&endpoint) {
+    if allow_tools && super::agent::applies(&endpoint) {
         return super::agent::stream_agent(
             endpoint,
             messages,
@@ -217,7 +238,9 @@ pub(crate) async fn stream_plain(
         apply_prompt_cache(&mut body);
         apply_local_no_think(&mut body, false);
         apply_managed_gemma_sampler(&mut body, &endpoint.base_url, &endpoint.model);
+        super::local_server::apply_server_hints(&mut body, &endpoint);
     }
+    let _done = super::local_server::request_started(&endpoint.base_url, &messages);
 
     log::info!(
         "AI stream → provider (protocol={}, model={}, msgs={})",

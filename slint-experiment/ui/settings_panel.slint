@@ -660,6 +660,8 @@ export component SettingsWindow inherits Window {
     callback open-groq-keys-clicked();
     in-out property <bool> auto-tiles-enabled: true;
     callback auto-tiles-enabled-changed(bool);
+    in-out property <bool> fast-answers: true;
+    callback fast-answers-changed(bool);
     // "Listening mode" — mute auto-detected AI tiles (TileKind::Ai) so the user
     // can record + just listen without tiles popping up.
     in-out property <bool> suppress-tiles: false;
@@ -2025,6 +2027,20 @@ export component SettingsWindow inherits Window {
                                 toggled(v) => {
                                     root.auto-tiles-enabled-changed(v);
                                 }
+                            }
+                            DarkCheck {
+                                text: @tr("Fast answers for calls and interviews");
+                                checked <=> root.fast-answers;
+                                toggled(v) => {
+                                    root.fast-answers-changed(v);
+                                }
+                            }
+                            Text {
+                                text: @tr("A one-line answer first, then two or three points.");
+                                font-size: Metrics.font-label;
+                                color: Theme.text-muted;
+                                overflow: elide;
+                                vertical-stretch: 0;
                             }
                             DarkCheck {
                                 text: @tr("Listening mode — don't show tiles");
