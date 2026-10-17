@@ -141,6 +141,58 @@ component TilePlayerButton inherits Rectangle {
 // What a tile's trigger badge marks, named by the host (see `trigger-color`).
 export enum TileTone { accent, violet, sky, green, cyan, red, orange }
 
+// One row of term buttons. Slint has no wrapping row, so the host splits the
+// terms into rows that fit the tile.
+export struct TermRow {
+    items: [string],
+}
+
+// A term the listener can open: an outlined pill, filled while it is open.
+component TermChip inherits Rectangle {
+    in property <string> text;
+    in property <bool> current: false;
+    callback clicked();
+
+    accessible-role: button;
+    accessible-label: root.text;
+    height: Metrics.control-sm;
+    width: chip-label.preferred-width + 2 * Metrics.space-sm;
+    horizontal-stretch: 0;
+    border-radius: Metrics.radius-pill;
+    border-width: Metrics.border-thin;
+    border-color: root.current || chip-touch.has-hover ? Theme.on-tint(Theme.cat-violet) : Theme.border-strong;
+    background: root.current ? Theme.tint(Theme.cat-violet) : chip-touch.has-hover ? Theme.bg-elevated : transparent;
+
+    chip-label := Text {
+        text: root.text;
+        font-size: Metrics.font-label;
+        color: root.current ? Theme.on-tint(Theme.cat-violet) : Theme.text-secondary;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    chip-touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+component TermRows inherits VerticalLayout {
+    in property <[TermRow]> rows;
+    in property <string> current;
+    callback picked(string);
+
+    spacing: Metrics.space-xs;
+    for row in root.rows: HorizontalLayout {
+        alignment: start;
+        spacing: Metrics.space-xs;
+        for term in row.items: TermChip {
+            text: term;
+            current: term == root.current;
+            clicked => { root.picked(term); }
+        }
+    }
+}
+
 export component TileWindow inherits Window {
     // Phase 4 — keep std-widgets (follow-up LineEdit, ScrollView) dark with
     // the active scheme instead of Slint's light fluent default.
@@ -160,6 +212,21 @@ export component TileWindow inherits Window {
     min-height: 200px;
 
     in-out property <string> tile-title: "Untitled tile";
+    // The full question an answer replies to, shown wrapped under the header;
+    // the header then shows only the tile number.
+    in-out property <string> question-text: "";
+    // Terms named under the answer, and the chain of definitions opened from
+    // them: term-path is Answer › term › term…, the definition is of its last.
+    in-out property <[TermRow]> answer-terms: [];
+    in-out property <[string]> term-path: [];
+    in-out property <string> term-definition: "";
+    in-out property <[TermRow]> term-subterms: [];
+    in-out property <bool> term-busy: false;
+    // A term clicked under the answer (false) or inside the open definition (true).
+    callback term-opened(string, bool);
+    // Back to the definition at this place in term-path.
+    callback term-crumb(int);
+    callback term-closed();
     in-out property <int> sequence: 0;
     in-out property <[MarkdownBlock]> blocks: [];
     // Source label shown in chrome row (e.g. "ai", "kb", "snippet").
@@ -375,7 +442,7 @@ export component TileWindow inherits Window {
                     }
                     Text {
                         x: 17px;
-                        text: @tr("#{}  {}", root.sequence, root.tile-title);
+                        text: root.question-text != "" ? @tr("#{}", root.sequence) : @tr("#{}  {}", root.sequence, root.tile-title);
                         font-size: Metrics.font-body;
                         font-weight: 700;
                         color: Theme.text-primary;
@@ -623,6 +690,30 @@ export component TileWindow inherits Window {
                 font-size: Metrics.font-label;
                 color: Theme.danger;
                 wrap: word-wrap;
+            }
+
+            // ===== Question =====
+            // The whole question, wrapped: the header has room for a few words
+            // only, and the listener has to see what the answer replies to.
+            if root.question-text != "" : Rectangle {
+                vertical-stretch: 0;
+                background: Theme.tint(Theme.cat-sky);
+                border-radius: Metrics.radius-field;
+                VerticalLayout {
+                    padding-left: Metrics.space-sm;
+                    padding-right: Metrics.space-sm;
+                    padding-top: Metrics.space-xs;
+                    padding-bottom: Metrics.space-xs;
+                    Text {
+                        text: root.question-text;
+                        font-size: Metrics.font-body;
+                        font-weight: 600;
+                        color: Theme.text-primary;
+                        wrap: word-wrap;
+                        overflow: elide;
+                        max-height: 5 * 16px;
+                    }
+                }
             }
 
             // ===== Trigger badge =====
@@ -881,6 +972,91 @@ export component TileWindow inherits Window {
                                 }
                             }
                         }
+                    }
+                    // Terms the listener may not know; a click opens the
+                    // definition below the answer.
+                    if root.answer-terms.length > 0 : VerticalLayout {
+                        padding-top: Metrics.space-sm;
+                        spacing: Metrics.space-xs;
+                        Text {
+                            text: @tr("Terms");
+                            font-size: Metrics.font-caption;
+                            color: Theme.text-muted;
+                        }
+                        TermRows {
+                            rows: root.answer-terms;
+                            current: root.term-path.length > 0 ? root.term-path[0] : "";
+                            picked(term) => { root.term-opened(term, false); }
+                        }
+                    }
+                }
+            }
+
+            // ===== Definition of the open term =====
+            // Stays in view under the answer; its own terms go one level deeper,
+            // the path above goes back.
+            if root.term-path.length > 0 && !root.select-mode : Rectangle {
+                vertical-stretch: 0;
+                max-height: root.height * 0.5;
+                background: Theme.bg-elevated;
+                border-radius: Metrics.radius-field;
+                border-width: Metrics.border-thin;
+                border-color: Theme.border;
+                clip: true;
+                VerticalLayout {
+                    padding: Metrics.space-sm;
+                    spacing: Metrics.space-xs;
+                    HorizontalLayout {
+                        spacing: Metrics.space-xs;
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            clip: true;
+                            height: 22px;
+                            HorizontalLayout {
+                                alignment: start;
+                                spacing: Metrics.space-xs;
+                                for crumb[i] in root.term-path: HorizontalLayout {
+                                    spacing: Metrics.space-xs;
+                                    if i > 0 : Text {
+                                        text: "›";
+                                        font-size: Metrics.font-label;
+                                        color: Theme.text-muted;
+                                        vertical-alignment: center;
+                                    }
+                                    Text {
+                                        text: crumb;
+                                        max-width: 140px;
+                                        overflow: elide;
+                                        font-size: Metrics.font-label;
+                                        font-weight: i == root.term-path.length - 1 ? 700 : 400;
+                                        color: i == root.term-path.length - 1 ? Theme.text-primary : Theme.accent;
+                                        vertical-alignment: center;
+                                        TouchArea {
+                                            enabled: i < root.term-path.length - 1;
+                                            mouse-cursor: self.enabled ? pointer : default;
+                                            clicked => { root.term-crumb(i); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        CloseButton {
+                            box: 22px;
+                            glyph: 12px;
+                            a11y: @tr("Close the definition");
+                            clicked => { root.term-closed(); }
+                        }
+                    }
+                    Text {
+                        text: root.term-definition != "" ? root.term-definition : root.term-busy ? "…" : "";
+                        font-size: Metrics.font-body;
+                        color: Theme.text-secondary;
+                        wrap: word-wrap;
+                        overflow: elide;
+                    }
+                    if root.term-subterms.length > 0 && !root.term-busy : TermRows {
+                        rows: root.term-subterms;
+                        picked(term) => { root.term-opened(term, true); }
                     }
                 }
             }

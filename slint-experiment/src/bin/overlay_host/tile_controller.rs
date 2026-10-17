@@ -610,7 +610,8 @@ impl OverlayBarBridge {
             let tile = AUTO_STREAM_TILES.with(|m| m.borrow().get(&label).map(slint::Weak::upgrade));
             match tile {
                 Some(Some(t)) => {
-                    t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks_streaming(&text))));
+                    let shown = overlay_backend::runtime::hide_terms_line_while_streaming(&text);
+                    t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks_streaming(&shown))));
                 }
                 // Closed by the user: nothing to draw.
                 Some(None) => {}

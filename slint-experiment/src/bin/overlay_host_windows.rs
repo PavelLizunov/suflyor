@@ -217,6 +217,12 @@ use tile_ptt::*;
 mod tile_followup;
 use tile_followup::*;
 
+// `tile_terms.rs` — the terms under a fast answer and the chain of
+// definitions opened from them.
+#[path = "overlay_host/tile_terms.rs"]
+mod tile_terms;
+use tile_terms::*;
+
 // Phase 7b of the modularization (docs/overlay-host-modularization-plan.md
 // §5.8/§5.9) — the FINAL phase: the Settings window controller. `open_settings`
 // (the Settings fn with its remaining inline handlers + the stealth/scheme/
@@ -2018,8 +2024,12 @@ fn main() -> Result<(), slint::PlatformError> {
         const MAX_LIVE_TILES: usize = 16;
         let mut processed = 0;
         while processed < MAX_SPAWNS_PER_TICK {
-            let Ok(req) = spawn_rx.try_recv() else { break };
+            let Ok(mut req) = spawn_rx.try_recv() else { break };
             processed += 1;
+            // A fast answer ends with its terms: shown as buttons, not as text.
+            let (shown_answer, answer_terms) =
+                overlay_backend::runtime::split_terms_line(&req.spec.answer);
+            req.spec.answer = shown_answer;
             // The end of a streaming auto tile reuses its window. A tile the
             // user already closed (or the cap evicted) stays closed.
             let reused = if req.action == SpawnAction::New {
@@ -2099,7 +2109,19 @@ fn main() -> Result<(), slint::PlatformError> {
             // trigger badge. Backend's trigger_highlights() already
             // formats it as "keyword ..." or "question ...".
             // Color: orange for keyword/aggressive, blue for question.
-            if let Some(first) = req.spec.highlights.first() {
+            // A question is shown whole under the header instead of as a
+            // badge cut at 60 characters.
+            let question_badge = req
+                .spec
+                .highlights
+                .first()
+                .is_some_and(|first| first.starts_with("question"));
+            tile.set_question_text(SharedString::from(if question_badge {
+                slint_replay::app_state::tile_title_line(&req.spec.question)
+            } else {
+                String::new()
+            }));
+            if let Some(first) = req.spec.highlights.first().filter(|_| !question_badge) {
                 tile.set_trigger_label(SharedString::from(first.clone()));
                 let is_keyword = first.starts_with("keyword");
                 tile.set_trigger_tone(if is_keyword {
@@ -2121,6 +2143,13 @@ fn main() -> Result<(), slint::PlatformError> {
                 })
                 .collect();
             tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
+            wire_terms(
+                &tile,
+                &answer_terms,
+                req.spec.question.clone(),
+                &cfg_for_poll,
+                &rt_handle_for_poll,
+            );
             // Phase E6 v20 — apply saved tile opacity from config so
             // new auto-tiles inherit the user's last slider setting.
             tile.set_body_opacity(cfg_for_poll.read().tile_body_opacity);
@@ -2474,6 +2503,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 let is_ru = cfg_for_poll.read().ui_is_ru();
                 let early = AUTO_STREAM_EARLY.with(|m| m.borrow_mut().remove(&req.label));
                 let body = early.unwrap_or_else(|| tile_text::asking_body(is_ru).to_string());
+                let body = overlay_backend::runtime::hide_terms_line_while_streaming(&body);
                 tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks_streaming(&body))));
                 tile.set_source_label(SharedString::from(tile_text::asking_label(is_ru)));
                 tile.set_followup_busy(true);

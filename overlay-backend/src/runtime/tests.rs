@@ -1202,3 +1202,67 @@ fn fast_auto_tile_system_prompt_is_stable_across_questions() {
     assert!(sys_en.ends_with("Respond in English."));
     assert!(sys_coach.contains("прочитают вслух"));
 }
+
+#[test]
+fn terms_line_is_split_off_the_answer() {
+    let answer = "**StatefulSet даёт подам стабильные имена.**\n- Каждый под получает **PVC**.\n\nТермины: StatefulSet, PVC, **Headless Service**, pvc, «ReplicaSet».\n";
+    let (body, terms) = split_terms_line(answer);
+    assert_eq!(
+        body,
+        "**StatefulSet даёт подам стабильные имена.**\n- Каждый под получает **PVC**."
+    );
+    assert_eq!(terms, ["StatefulSet", "PVC", "Headless Service", "ReplicaSet"]);
+
+    let (body, terms) = split_terms_line("**Terms:** etcd; Raft");
+    assert_eq!(body, "");
+    assert_eq!(terms, ["etcd", "Raft"]);
+
+    // Any other last line stays, and the answer comes back unchanged.
+    let plain = "**502 — шлюз.**\n- **Ключевое различие**: прокси жив.";
+    assert_eq!(split_terms_line(plain), (plain.to_string(), Vec::new()));
+}
+
+#[test]
+fn a_terms_line_being_written_is_not_shown() {
+    let head = "**Ответ.**\n- пункт";
+    for partial in ["\nТ", "\nТерм", "\n**Термины", "\nТермины: etcd, Ra", "\nTerms: et"] {
+        assert_eq!(
+            hide_terms_line_while_streaming(&format!("{head}{partial}")),
+            head,
+            "{partial:?}"
+        );
+    }
+    // A line that only starts like the label is shown once it is not one.
+    let tls = format!("{head}\nTLS 1.3 короче");
+    assert_eq!(hide_terms_line_while_streaming(&tls), tls);
+}
+
+#[test]
+fn term_rows_fit_the_tile_and_keep_the_order() {
+    let terms: Vec<String> = ["etcd", "Raft", "Headless Service", "PersistentVolumeClaim", "gRPC"]
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    let rows = term_rows(&terms, 200.0);
+    assert_eq!(rows.concat(), terms);
+    assert!(rows.len() > 1);
+    assert!(term_rows(&terms, 2000.0).len() == 1);
+    assert!(term_rows(&[], 200.0).is_empty());
+}
+
+#[test]
+fn a_definition_prompt_names_the_term_its_path_and_the_question() {
+    let path = vec!["StatefulSet".to_string()];
+    let (sys, usr) = build_term_prompts("PVC", &path, "Чем StatefulSet отличается от Deployment?", "ru");
+    let (sys2, _) = build_term_prompts("etcd", &[], "", "ru");
+    assert_eq!(sys, sys2, "the system prompt is the same for every term");
+    assert!(sys.contains("Термины: "));
+    assert!(usr.contains("Термин: \"PVC\""));
+    assert!(usr.contains("Уже объяснено: StatefulSet"));
+    assert!(usr.contains("Вопрос разговора"));
+    assert_eq!(
+        new_terms(vec!["statefulset".into(), "PersistentVolume".into()], &path),
+        ["PersistentVolume"]
+    );
+}
+

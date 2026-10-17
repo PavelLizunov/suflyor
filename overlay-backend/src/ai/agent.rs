@@ -209,6 +209,7 @@ pub(crate) async fn stream_agent(
                     endpoint,
                     messages,
                     max_tokens,
+                    false,
                     tx,
                     request_id,
                     request_started_at,

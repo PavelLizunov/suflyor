@@ -40,9 +40,9 @@ use std::time::{Duration, Instant};
 const SESSION_SYSTEM_COLLECTOR_MAX_SAMPLES: usize = audio::TARGET_SAMPLE_RATE as usize * 30;
 const AUTO_TILE_MAX_TOKENS: u32 = 4096;
 const AUTO_TILE_MAX_TOKENS_MLX: u32 = 384;
-/// Fast answers ask for ~70 words; this leaves room without letting a
-/// rambling answer run on.
-const AUTO_TILE_MAX_TOKENS_FAST: u32 = 400;
+/// Fast answers ask for up to 140 words and a terms line (about 270 tokens
+/// measured); this leaves room without letting a rambling answer run on.
+const AUTO_TILE_MAX_TOKENS_FAST: u32 = 640;
 
 /// Whether auto tiles use the fast-answer prompt. The managed MLX server
 /// keeps its own compact prompt.
@@ -111,14 +111,21 @@ const AUTO_TILE_STREAM_PUSH: Duration = Duration::from_millis(100);
 /// Attempts for an auto-tile answer, as the one-shot call it replaced made.
 const AUTO_TILE_AI_ATTEMPTS: u32 = 3;
 
+/// What an auto tile asks: the messages, the token limit, and whether a local
+/// model must answer without reasoning (fast answers).
+struct AutoTileAsk {
+    messages: Vec<ai::ChatMessage>,
+    max_tokens: u32,
+    no_think: bool,
+}
+
 /// Stream an auto-tile answer, pushing the text so far into the tile `label`.
 /// Returns the answer and the provider's finish reason. A failure before any
 /// text arrived is retried after 1 s and 2 s, like the one-shot call this
 /// replaced; a stopped or restarted session ends the stream early.
 async fn stream_auto_tile_answer(
     endpoint: &ai::AiEndpoint,
-    messages: Vec<ai::ChatMessage>,
-    max_tokens: u32,
+    ask: &AutoTileAsk,
     events: &Arc<dyn RuntimeEvents>,
     label: Option<&str>,
     rt: &SharedSlintRuntime,
@@ -126,7 +133,12 @@ async fn stream_auto_tile_answer(
 ) -> Result<(String, String)> {
     let mut attempt = 1;
     loop {
-        let mut rx = ai::stream_chat_endpoint_plain(endpoint.clone(), messages.clone(), max_tokens);
+        let mut rx = ai::stream_chat_endpoint_plain(
+            endpoint.clone(),
+            ask.messages.clone(),
+            ask.max_tokens,
+            ask.no_think,
+        );
         let mut answer = String::new();
         let mut last_push: Option<Instant> = None;
         let outcome = loop {
@@ -1035,6 +1047,32 @@ pub fn trigger_highlights(trigger: &backend_runtime::Trigger) -> Vec<String> {
     }
 }
 
+/// Longest question an auto tile shows; a longer line keeps its end, where
+/// the question usually is.
+const SHOWN_QUESTION_MAX_CHARS: usize = 240;
+
+/// What an auto tile shows as its question: the whole recognised line for a
+/// question (the detected clause alone can lose what "it" refers to), the
+/// keyword for a keyword.
+fn shown_question(trigger: &backend_runtime::Trigger, line: &str) -> String {
+    match trigger {
+        backend_runtime::Trigger::Question(_) => {
+            let line = overlay_backend::text::collapse_ws(line);
+            let chars = line.chars().count();
+            if chars <= SHOWN_QUESTION_MAX_CHARS {
+                line
+            } else {
+                let tail: String = line
+                    .chars()
+                    .skip(chars - SHOWN_QUESTION_MAX_CHARS)
+                    .collect();
+                format!("…{tail}")
+            }
+        }
+        backend_runtime::Trigger::Keyword(kw, _) => kw.clone(),
+    }
+}
+
 /// Auto-tile rate limit — drop spawn if more than this many tiles
 /// fired in the rolling 60s window. Matches src-tauri's MAX_TILES_
 /// PER_MIN value to keep cost behavior identical across binaries.
@@ -1298,10 +1336,7 @@ async fn maybe_spawn_auto_tile(
     if let Some(cached_answer) = cache_hit {
         // No transcript text in the log (shareable via "Collect logs").
         log_info("qa_cache HIT (avoided AI call)");
-        let trigger_text_for_q = match &trigger {
-            backend_runtime::Trigger::Question(q) => q.clone(),
-            backend_runtime::Trigger::Keyword(kw, _) => kw.clone(),
-        };
+        let trigger_text_for_q = shown_question(&trigger, &text);
         // Phase E6 v12 — populate highlights with the trigger keyword
         // (or "❓" + question prefix) so the tile UI can show a badge
         // explaining why this tile spawned. User: "ключевые слова не
@@ -1437,12 +1472,7 @@ async fn maybe_spawn_auto_tile(
     } else if session_live {
         ai::local_server::clear_hot_prompt();
     }
-    let question_label = match &trigger {
-        backend_runtime::Trigger::Question(q) => q.clone(),
-        // De-emojified to match the rest of the UI (Codex icon pass): the
-        // keyword itself is the tile title / stored last_question, no glyph.
-        backend_runtime::Trigger::Keyword(kw, _) => kw.clone(),
-    };
+    let question_label = shown_question(&trigger, &text);
     let monitor_hint = match preferred_monitor.as_deref() {
         Some(name) if !name.is_empty() => MonitorHint::Named(name.to_string()),
         _ => MonitorHint::Auto,
@@ -1480,10 +1510,14 @@ async fn maybe_spawn_auto_tile(
             );
         }
     };
-    let streamed = stream_auto_tile_answer(
-        &endpoint,
+    let ask = AutoTileAsk {
         messages,
         max_tokens,
+        no_think: fast,
+    };
+    let streamed = stream_auto_tile_answer(
+        &endpoint,
+        &ask,
         &events,
         stream_label.as_deref(),
         &rt,
@@ -2564,6 +2598,31 @@ data: [DONE]\n\n";
         }
     }
 
+    #[test]
+    fn an_auto_tile_shows_the_whole_line_and_keeps_the_end_of_a_long_one() {
+        let line = "Так, хорошо.   Давай про сеть.\nЧем отличается 502 от 503?";
+        let q = backend_runtime::Trigger::Question("Чем отличается 502 от 503?".into());
+        assert_eq!(
+            shown_question(&q, line),
+            "Так, хорошо. Давай про сеть. Чем отличается 502 от 503?"
+        );
+        let long = format!("{} А чем StatefulSet отличается от Deployment?", "слово ".repeat(80));
+        let shown = shown_question(&q, &long);
+        assert!(shown.starts_with('…'));
+        assert!(shown.ends_with("отличается от Deployment?"));
+        assert_eq!(shown.chars().count(), SHOWN_QUESTION_MAX_CHARS + 1);
+        let kw = backend_runtime::Trigger::Keyword("etcd".into(), "у нас etcd".into());
+        assert_eq!(shown_question(&kw, "у нас etcd"), "etcd");
+    }
+
+    fn test_ask() -> AutoTileAsk {
+        AutoTileAsk {
+            messages: Vec::new(),
+            max_tokens: 64,
+            no_think: false,
+        }
+    }
+
     /// The auto tile shows the answer while it is written, not after it.
     #[tokio::test]
     async fn auto_tile_answer_streams_into_its_tile() {
@@ -2573,8 +2632,7 @@ data: [DONE]\n\n";
         let rt: SharedSlintRuntime = Arc::default();
         let (answer, reason) = stream_auto_tile_answer(
             &sse_endpoint(url),
-            Vec::new(),
-            64,
+            &test_ask(),
             &events,
             Some("tile-7"),
             &rt,
@@ -2600,7 +2658,7 @@ data: [DONE]\n\n";
         let events: Arc<dyn RuntimeEvents> = Arc::new(RecordingEvents::default());
         let rt: SharedSlintRuntime = Arc::default();
         let (answer, reason) =
-            stream_auto_tile_answer(&sse_endpoint(url), Vec::new(), 64, &events, None, &rt, 0)
+            stream_auto_tile_answer(&sse_endpoint(url), &test_ask(), &events, None, &rt, 0)
                 .await
                 .unwrap();
         assert_eq!(answer, "first answer");
@@ -2614,7 +2672,7 @@ data: [DONE]\n\n";
         let events: Arc<dyn RuntimeEvents> = Arc::new(RecordingEvents::default());
         let rt: SharedSlintRuntime = Arc::default();
         let (answer, _) =
-            stream_auto_tile_answer(&sse_endpoint(url), Vec::new(), 64, &events, None, &rt, 0)
+            stream_auto_tile_answer(&sse_endpoint(url), &test_ask(), &events, None, &rt, 0)
                 .await
                 .unwrap();
         assert_eq!(answer, "first answer");
