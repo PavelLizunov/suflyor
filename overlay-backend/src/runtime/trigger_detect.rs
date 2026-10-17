@@ -228,10 +228,13 @@ pub fn build_fast_auto_tile_prompts(
     response_language: &str,
     live_coaching: bool,
 ) -> (String, String) {
+    // With the language on auto, a plain "answer in the question's language"
+    // lost to the Russian prompt: an English question got a Russian answer.
     let lang_line = match response_language {
         "ru" => "Отвечай по-русски; по-английски только названия и команды.",
         "en" => "Respond in English.",
-        _ => "Отвечай на языке вопроса.",
+        _ => "Язык ответа — язык последней реплики собеседника: вопрос по-английски — весь ответ \
+              по-английски, последняя строка «Terms: …»; по-русски — по-русски.",
     };
     let coaching_line = if live_coaching {
         "\nОтвет прочитают вслух: короткие уверенные законченные фразы, без слов-паразитов и «наверное»."

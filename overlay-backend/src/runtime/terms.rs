@@ -145,7 +145,7 @@ pub fn build_term_prompts(
     let lang_line = match response_language {
         "ru" => "Отвечай по-русски; по-английски только названия и команды.",
         "en" => "Respond in English; the last line starts with «Terms: ».",
-        _ => "Отвечай на языке вопроса.",
+        _ => "Язык ответа — язык вопроса разговора; последняя строка по-английски — «Terms: ».",
     };
     let system = format!(
         "Ты объясняешь термин человеку на созвоне, который слышит его впервые. \
