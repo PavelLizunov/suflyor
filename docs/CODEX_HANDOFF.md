@@ -6,7 +6,7 @@ Updated 2026-10-12 (operational state and open-work section only; the rest dates
 
 - Branch: `master`
 - Latest published stable release: `v0.38.0`
-- Latest published prerelease: `v0.38.1-rc.9` (local AI, Settings redesign and a wording and layout pass; pull requests #267, #276, #277, #279)
+- Latest published prerelease: `v0.38.1-rc.10` (fast live answers from local models; pull request #283)
 - Active master handoff: none
 - Post-release maintenance may be newer than the stable tag; inspect Git before acting.
 
@@ -19,9 +19,9 @@ Operational note: Windows jobs follow
 because SSH or a terminal disconnected. macOS builds and live QA run only on
 `mm4`; Windows compilation and the repository gate run only on `winbrat`.
 
-## Fast live answers — branch `claude/auto-tile-stream` (2026-10-17)
+## Fast live answers — `v0.38.1-rc.10` (2026-10-17)
 
-Open pull request, not on master yet. The owner reported that on a call an auto tile appeared
+Pull request #283, released as `v0.38.1-rc.10`. The owner reported that on a call an auto tile appeared
 about 10 s after the question with a local Strata model. Cause: the auto-tile path asked the
 model for the whole answer (`complete_with_usage_endpoint`) and opened the tile only after it.
 
