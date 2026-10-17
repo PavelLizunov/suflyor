@@ -997,7 +997,9 @@ export component TileWindow inherits Window {
             // the path above goes back.
             if root.term-path.length > 0 && !root.select-mode : Rectangle {
                 vertical-stretch: 0;
-                max-height: root.height * 0.5;
+                // Half of a default tile; a fixed size (not the window's
+                // height) so the window layout does not depend on itself.
+                max-height: 180px;
                 background: Theme.bg-elevated;
                 border-radius: Metrics.radius-field;
                 border-width: Metrics.border-thin;
