@@ -18,7 +18,11 @@ pub const TERM_DEFINITION_MAX_TOKENS: u32 = 220;
 fn terms_line_rest(line: &str) -> Option<&str> {
     let line = line.trim().trim_start_matches(['*', '_', '-', ' ']);
     let colon = line.find(':')?;
-    let label = line[..colon].trim().trim_end_matches(['*', '_']).trim().to_lowercase();
+    let label = line[..colon]
+        .trim()
+        .trim_end_matches(['*', '_'])
+        .trim()
+        .to_lowercase();
     if !TERMS_LABELS.contains(&label.as_str()) {
         return None;
     }
@@ -49,7 +53,9 @@ pub fn split_terms_line(answer: &str) -> (String, Vec<String>) {
         let term = clean_term(raw);
         if term.is_empty()
             || term.chars().count() > MAX_TERM_CHARS
-            || terms.iter().any(|t| t.to_lowercase() == term.to_lowercase())
+            || terms
+                .iter()
+                .any(|t| t.to_lowercase() == term.to_lowercase())
         {
             continue;
         }
@@ -69,10 +75,15 @@ pub fn hide_terms_line_while_streaming(partial: &str) -> String {
         Some(i) => (&partial[..i], &partial[i + 1..]),
         None => ("", partial),
     };
-    let start = last.trim_start().trim_start_matches(['*', '_']).to_lowercase();
+    let start = last
+        .trim_start()
+        .trim_start_matches(['*', '_'])
+        .to_lowercase();
     let becoming = !start.is_empty()
         && !start.contains(':')
-        && TERMS_LABELS.iter().any(|label| label.starts_with(start.as_str()));
+        && TERMS_LABELS
+            .iter()
+            .any(|label| label.starts_with(start.as_str()));
     if becoming {
         return head.trim_end().to_string();
     }

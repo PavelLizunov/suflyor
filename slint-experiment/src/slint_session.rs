@@ -2606,7 +2606,10 @@ data: [DONE]\n\n";
             shown_question(&q, line),
             "Так, хорошо. Давай про сеть. Чем отличается 502 от 503?"
         );
-        let long = format!("{} А чем StatefulSet отличается от Deployment?", "слово ".repeat(80));
+        let long = format!(
+            "{} А чем StatefulSet отличается от Deployment?",
+            "слово ".repeat(80)
+        );
         let shown = shown_question(&q, &long);
         assert!(shown.starts_with('…'));
         assert!(shown.ends_with("отличается от Deployment?"));

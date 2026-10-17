@@ -1211,7 +1211,10 @@ fn terms_line_is_split_off_the_answer() {
         body,
         "**StatefulSet даёт подам стабильные имена.**\n- Каждый под получает **PVC**."
     );
-    assert_eq!(terms, ["StatefulSet", "PVC", "Headless Service", "ReplicaSet"]);
+    assert_eq!(
+        terms,
+        ["StatefulSet", "PVC", "Headless Service", "ReplicaSet"]
+    );
 
     let (body, terms) = split_terms_line("**Terms:** etcd; Raft");
     assert_eq!(body, "");
@@ -1225,7 +1228,13 @@ fn terms_line_is_split_off_the_answer() {
 #[test]
 fn a_terms_line_being_written_is_not_shown() {
     let head = "**Ответ.**\n- пункт";
-    for partial in ["\nТ", "\nТерм", "\n**Термины", "\nТермины: etcd, Ra", "\nTerms: et"] {
+    for partial in [
+        "\nТ",
+        "\nТерм",
+        "\n**Термины",
+        "\nТермины: etcd, Ra",
+        "\nTerms: et",
+    ] {
         assert_eq!(
             hide_terms_line_while_streaming(&format!("{head}{partial}")),
             head,
@@ -1239,10 +1248,16 @@ fn a_terms_line_being_written_is_not_shown() {
 
 #[test]
 fn term_rows_fit_the_tile_and_keep_the_order() {
-    let terms: Vec<String> = ["etcd", "Raft", "Headless Service", "PersistentVolumeClaim", "gRPC"]
-        .iter()
-        .map(ToString::to_string)
-        .collect();
+    let terms: Vec<String> = [
+        "etcd",
+        "Raft",
+        "Headless Service",
+        "PersistentVolumeClaim",
+        "gRPC",
+    ]
+    .iter()
+    .map(ToString::to_string)
+    .collect();
     let rows = term_rows(&terms, 200.0);
     assert_eq!(rows.concat(), terms);
     assert!(rows.len() > 1);
@@ -1253,7 +1268,12 @@ fn term_rows_fit_the_tile_and_keep_the_order() {
 #[test]
 fn a_definition_prompt_names_the_term_its_path_and_the_question() {
     let path = vec!["StatefulSet".to_string()];
-    let (sys, usr) = build_term_prompts("PVC", &path, "Чем StatefulSet отличается от Deployment?", "ru");
+    let (sys, usr) = build_term_prompts(
+        "PVC",
+        &path,
+        "Чем StatefulSet отличается от Deployment?",
+        "ru",
+    );
     let (sys2, _) = build_term_prompts("etcd", &[], "", "ru");
     assert_eq!(sys, sys2, "the system prompt is the same for every term");
     assert!(sys.contains("Термины: "));
@@ -1265,4 +1285,3 @@ fn a_definition_prompt_names_the_term_its_path_and_the_question() {
         ["PersistentVolume"]
     );
 }
-

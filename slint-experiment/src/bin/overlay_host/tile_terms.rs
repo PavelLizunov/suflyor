@@ -31,7 +31,9 @@ static DEFINITIONS: Mutex<Vec<(String, String, Vec<String>)>> = Mutex::new(Vec::
 
 fn cached(term: &str) -> Option<(String, Vec<String>)> {
     let key = term.to_lowercase();
-    let cache = DEFINITIONS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let cache = DEFINITIONS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     cache
         .iter()
         .find(|(k, _, _)| *k == key)
@@ -39,7 +41,9 @@ fn cached(term: &str) -> Option<(String, Vec<String>)> {
 }
 
 fn remember(term: &str, text: &str, terms: &[String]) {
-    let mut cache = DEFINITIONS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut cache = DEFINITIONS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if cache.len() >= TERM_CACHE_MAX {
         cache.drain(..TERM_CACHE_MAX / 2);
     }
@@ -121,7 +125,11 @@ pub(crate) fn wire_terms(
             tile.set_term_subterms(rows_model(&[]));
             let (endpoint, language, is_ru) = {
                 let c = cfg.read();
-                (c.ai_endpoint(false), c.response_language.clone(), c.ui_is_ru())
+                (
+                    c.ai_endpoint(false),
+                    c.response_language.clone(),
+                    c.ui_is_ru(),
+                )
             };
             let (system, user) = build_term_prompts(&term, earlier, &question, &language);
             let messages = vec![
