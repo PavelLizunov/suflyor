@@ -126,7 +126,10 @@ mod tests {
         set_in(temp.path(), "sess-perm-1", "Private Title", 100).unwrap();
         let path = file_path_in(temp.path());
         let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode, 0o600, "session_names.json must be owner-only (0600) on Unix");
+        assert_eq!(
+            mode, 0o600,
+            "session_names.json must be owner-only (0600) on Unix"
+        );
     }
 
     #[test]
