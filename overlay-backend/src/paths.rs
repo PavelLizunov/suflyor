@@ -44,7 +44,7 @@ fn data_root_in(base: &Path) -> PathBuf {
 /// whether it is new or already exists with a wider mode. An existing file is emptied only
 /// after its mode was restricted, so a failure to restrict it leaves its content intact.
 /// Elsewhere this is `std::fs::write`.
-pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+pub fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     #[cfg(unix)]
     {
         use std::io::Write;
@@ -63,7 +63,7 @@ pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 }
 
 /// Restrict an existing file to its owner on Unix (mode 0600). Does nothing elsewhere.
-pub(crate) fn restrict_to_owner(path: &Path) -> std::io::Result<()> {
+pub fn restrict_to_owner(path: &Path) -> std::io::Result<()> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -75,7 +75,7 @@ pub(crate) fn restrict_to_owner(path: &Path) -> std::io::Result<()> {
 }
 
 /// Open `path` for appending; a file created here is owner-only on Unix (mode 0600).
-pub(crate) fn open_private_append(path: &Path) -> std::io::Result<std::fs::File> {
+pub fn open_private_append(path: &Path) -> std::io::Result<std::fs::File> {
     let mut options = std::fs::OpenOptions::new();
     options.create(true).append(true);
     #[cfg(unix)]
@@ -170,6 +170,21 @@ mod tests {
         write_private(&path, b"new").unwrap();
 
         assert_eq!(std::fs::read(&path).unwrap(), b"new");
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn open_private_append_and_restrict_to_owner_enforces_mode_0600() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("overlay-host.log");
+
+        let _file = open_private_append(&path).unwrap();
+        restrict_to_owner(&path).unwrap();
+
         let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600);
     }

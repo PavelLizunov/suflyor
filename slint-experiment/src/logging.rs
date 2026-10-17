@@ -15,7 +15,6 @@
 //! NEVER log secrets (API keys / bearer tokens). Call sites log presence
 //! booleans, not values.
 
-use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
@@ -79,7 +78,8 @@ pub fn init() {
             let _ = std::fs::rename(&path, path.with_extension("log.old"));
         }
     }
-    if let Ok(file) = OpenOptions::new().create(true).append(true).open(&path) {
+    if let Ok(file) = overlay_backend::paths::open_private_append(&path) {
+        let _ = overlay_backend::paths::restrict_to_owner(&path);
         // RELEASE is built `windows_subsystem="windows"` → NO console, so the
         // process stderr is invalid and EVERY `eprintln!` (~170 of them across
         // the binary) is silently discarded — testers ended up with an almost
