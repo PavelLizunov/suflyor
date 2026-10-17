@@ -1220,6 +1220,14 @@ fn terms_line_is_split_off_the_answer() {
     assert_eq!(body, "");
     assert_eq!(terms, ["etcd", "Raft"]);
 
+    // A label followed by a sentence is part of the answer, not terms.
+    let prose = "**Условия.**\nTerms: payment is due within thirty calendar days after delivery of the invoice.";
+    assert_eq!(split_terms_line(prose), (prose.to_string(), Vec::new()));
+    assert_eq!(
+        split_terms_line("Ответ.\nТермины:"),
+        ("Ответ.\nТермины:".to_string(), Vec::new())
+    );
+
     // Any other last line stays, and the answer comes back unchanged.
     let plain = "**502 — шлюз.**\n- **Ключевое различие**: прокси жив.";
     assert_eq!(split_terms_line(plain), (plain.to_string(), Vec::new()));
@@ -1232,6 +1240,7 @@ fn a_terms_line_being_written_is_not_shown() {
         "\nТ",
         "\nТерм",
         "\n**Термины",
+        "\nТермины: ",
         "\nТермины: etcd, Ra",
         "\nTerms: et",
     ] {

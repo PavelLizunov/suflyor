@@ -26,11 +26,21 @@ const TERM_STREAM_PUSH: Duration = Duration::from_millis(100);
 /// Definitions kept for the session; the oldest half goes when it is full.
 const TERM_CACHE_MAX: usize = 200;
 
-/// A definition and the terms it names, by lowercase term.
+/// A definition and the terms it names, by `cache_key`.
 static DEFINITIONS: Mutex<Vec<(String, String, Vec<String>)>> = Mutex::new(Vec::new());
 
-fn cached(term: &str) -> Option<(String, Vec<String>)> {
-    let key = term.to_lowercase();
+/// A definition depends on the answer language and on the question it was
+/// asked for ("Service" in Kubernetes is not a Windows service), so both are
+/// part of the key with the term in any case.
+fn cache_key(term: &str, language: &str, question: &str) -> String {
+    format!(
+        "{language}\u{1}{}\u{1}{}",
+        overlay_backend::text::collapse_ws(question).to_lowercase(),
+        term.to_lowercase()
+    )
+}
+
+fn cached(key: &str) -> Option<(String, Vec<String>)> {
     let cache = DEFINITIONS
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -40,16 +50,23 @@ fn cached(term: &str) -> Option<(String, Vec<String>)> {
         .map(|(_, text, terms)| (text.clone(), terms.clone()))
 }
 
-fn remember(term: &str, text: &str, terms: &[String]) {
+fn remember(key: String, text: &str, terms: &[String]) {
     let mut cache = DEFINITIONS
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     if cache.len() >= TERM_CACHE_MAX {
         cache.drain(..TERM_CACHE_MAX / 2);
     }
-    let key = term.to_lowercase();
     cache.retain(|(k, _, _)| *k != key);
     cache.push((key, text.to_string(), terms.to_vec()));
+}
+
+/// Remove the terms and any open definition: the answer they belong to is
+/// being replaced (regenerate, smart model, follow-up). A definition still
+/// being written stops landing in the tile.
+pub(crate) fn clear_terms(tile: &TileWindow) {
+    tile.invoke_term_closed();
+    tile.set_answer_terms(rows_model(&[]));
 }
 
 pub(crate) fn rows_model(terms: &[String]) -> ModelRc<TermRow> {
@@ -114,15 +131,6 @@ pub(crate) fn wire_terms(
             tile.set_term_path(ModelRc::new(VecModel::from(
                 path.iter().map(SharedString::from).collect::<Vec<_>>(),
             )));
-            if let Some((text, terms)) = cached(&term) {
-                tile.set_term_busy(false);
-                tile.set_term_definition(SharedString::from(text));
-                tile.set_term_subterms(rows_model(&new_terms(terms, &path)));
-                return;
-            }
-            tile.set_term_busy(true);
-            tile.set_term_definition(SharedString::new());
-            tile.set_term_subterms(rows_model(&[]));
             let (endpoint, language, is_ru) = {
                 let c = cfg.read();
                 (
@@ -131,6 +139,16 @@ pub(crate) fn wire_terms(
                     c.ui_is_ru(),
                 )
             };
+            let key = cache_key(&term, &language, &question);
+            if let Some((text, terms)) = cached(&key) {
+                tile.set_term_busy(false);
+                tile.set_term_definition(SharedString::from(text));
+                tile.set_term_subterms(rows_model(&new_terms(terms, &path)));
+                return;
+            }
+            tile.set_term_busy(true);
+            tile.set_term_definition(SharedString::new());
+            tile.set_term_subterms(rows_model(&[]));
             let (system, user) = build_term_prompts(&term, earlier, &question, &language);
             let messages = vec![
                 ai::ChatMessage {
@@ -186,7 +204,7 @@ pub(crate) fn wire_terms(
                 };
                 let (body, terms) = split_terms_line(&text);
                 if outcome {
-                    remember(&term, &body, &terms);
+                    remember(key, &body, &terms);
                 }
                 let _ = slint::invoke_from_event_loop(move || {
                     if generation.load(Ordering::SeqCst) != gen {
@@ -252,12 +270,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_definition_is_remembered_by_its_term_in_any_case() {
-        remember("Raft-test", "Алгоритм консенсуса.", &["кворум".to_string()]);
-        let (text, terms) = cached("raft-TEST").unwrap();
-        assert_eq!(text, "Алгоритм консенсуса.");
-        assert_eq!(terms, ["кворум"]);
-        remember("raft-test", "Новый текст.", &[]);
-        assert_eq!(cached("Raft-test").unwrap().0, "Новый текст.");
+    fn a_definition_is_remembered_per_language_and_question() {
+        let k8s = cache_key("Service-test", "ru", "Что такое  Service в Kubernetes?");
+        remember(k8s.clone(), "Объект Kubernetes.", &["Pod".to_string()]);
+        let same = cache_key("service-TEST", "ru", "что такое service в kubernetes?");
+        let (text, terms) = cached(&same).unwrap();
+        assert_eq!(text, "Объект Kubernetes.");
+        assert_eq!(terms, ["Pod"]);
+        assert!(cached(&cache_key(
+            "Service-test",
+            "en",
+            "Что такое Service в Kubernetes?"
+        ))
+        .is_none());
+        assert!(cached(&cache_key(
+            "Service-test",
+            "ru",
+            "Как остановить службу Windows?"
+        ))
+        .is_none());
+        remember(same.clone(), "Новый текст.", &[]);
+        assert_eq!(cached(&k8s).unwrap().0, "Новый текст.");
     }
 }

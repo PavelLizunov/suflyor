@@ -9,8 +9,9 @@
 const TERMS_LABELS: [&str; 2] = ["термины", "terms"];
 /// At most this many terms are shown for one answer or definition.
 const MAX_TERMS: usize = 6;
-/// A longer "term" is a sentence the model wrote by mistake.
+/// A longer "term" is a sentence: the line is prose, not a list of terms.
 const MAX_TERM_CHARS: usize = 48;
+const MAX_TERM_WORDS: usize = 5;
 /// Token limit of a definition: two or three sentences and a terms line.
 pub const TERM_DEFINITION_MAX_TOKENS: u32 = 220;
 
@@ -37,7 +38,9 @@ fn clean_term(raw: &str) -> String {
 }
 
 /// Split an answer into the text to show and the terms of its last line.
-/// An answer without a terms line comes back unchanged with no terms.
+/// An answer without a terms line comes back unchanged with no terms; so does
+/// one whose last line starts with the label but reads as a sentence
+/// ("Terms: payment is due within thirty days after delivery").
 #[must_use]
 pub fn split_terms_line(answer: &str) -> (String, Vec<String>) {
     let trimmed = answer.trim_end();
@@ -51,18 +54,23 @@ pub fn split_terms_line(answer: &str) -> (String, Vec<String>) {
     let mut terms: Vec<String> = Vec::new();
     for raw in rest.split([',', ';']) {
         let term = clean_term(raw);
+        if term.chars().count() > MAX_TERM_CHARS || term.split_whitespace().count() > MAX_TERM_WORDS
+        {
+            return (answer.to_string(), Vec::new());
+        }
         if term.is_empty()
-            || term.chars().count() > MAX_TERM_CHARS
             || terms
                 .iter()
                 .any(|t| t.to_lowercase() == term.to_lowercase())
         {
             continue;
         }
-        terms.push(term);
-        if terms.len() == MAX_TERMS {
-            break;
+        if terms.len() < MAX_TERMS {
+            terms.push(term);
         }
+    }
+    if terms.is_empty() {
+        return (answer.to_string(), Vec::new());
     }
     (head.trim_end().to_string(), terms)
 }
@@ -84,10 +92,12 @@ pub fn hide_terms_line_while_streaming(partial: &str) -> String {
         && TERMS_LABELS
             .iter()
             .any(|label| label.starts_with(start.as_str()));
-    if becoming {
+    // A finished label hides the line until the answer ends: its terms may
+    // still be on the way, and the complete answer decides what it was.
+    if becoming || terms_line_rest(last).is_some() {
         return head.trim_end().to_string();
     }
-    split_terms_line(partial).0
+    partial.to_string()
 }
 
 /// Terms that are not already on the path the listener came by.

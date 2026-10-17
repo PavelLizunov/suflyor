@@ -460,6 +460,7 @@ pub(crate) fn fire_followup_ask(
     // Show the question immediately + mark busy; register the slot so the
     // ai:event deltas land in this tile.
     if let Some(tile) = tile_weak.upgrade() {
+        clear_terms(&tile);
         tile.set_followup_busy(true);
         tile.set_source_label(SharedString::from(crate::tile_text::asking_label(cfg.read().ui_is_ru())));
         tile.set_plain_notice(false);
@@ -693,6 +694,7 @@ pub(crate) fn fire_regenerate(
         "regenerate",
     );
     if let Some(t) = tile_weak.upgrade() {
+        clear_terms(&t);
         t.set_followup_busy(true);
         t.set_source_label(SharedString::from("ai · перегенерация…"));
         t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks("…"))));
