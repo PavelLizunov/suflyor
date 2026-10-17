@@ -2027,9 +2027,14 @@ fn main() -> Result<(), slint::PlatformError> {
             let Ok(mut req) = spawn_rx.try_recv() else { break };
             processed += 1;
             // A fast answer ends with its terms: shown as buttons, not as text.
-            let (shown_answer, answer_terms) =
-                overlay_backend::runtime::split_terms_line(&req.spec.answer);
-            req.spec.answer = shown_answer;
+            // Only auto tiles ask for them; a note or a summary keeps its text.
+            let answer_terms = if req.kind == TileKind::Auto {
+                let (shown, terms) = overlay_backend::runtime::split_terms_line(&req.spec.answer);
+                req.spec.answer = shown;
+                terms
+            } else {
+                Vec::new()
+            };
             // The end of a streaming auto tile reuses its window. A tile the
             // user already closed (or the cap evicted) stays closed.
             let reused = if req.action == SpawnAction::New {
