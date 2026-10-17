@@ -6,7 +6,7 @@ Updated 2026-10-12 (operational state and open-work section only; the rest dates
 
 - Branch: `master`
 - Latest published stable release: `v0.38.0`
-- Latest published prerelease: `v0.38.1-rc.10` (fast live answers from local models; pull request #283)
+- Latest published prerelease: `v0.38.1-rc.11` (answers with context and term definitions, dependency batch; pull requests #287, #285)
 - Active master handoff: none
 - Post-release maintenance may be newer than the stable tag; inspect Git before acting.
 
@@ -19,9 +19,9 @@ Operational note: Windows jobs follow
 because SSH or a terminal disconnected. macOS builds and live QA run only on
 `mm4`; Windows compilation and the repository gate run only on `winbrat`.
 
-## Answers with context and terms — branch `claude/answer-context` (2026-10-17)
+## Answers with context and terms — `v0.38.1-rc.11` (2026-10-17)
 
-Open pull request #287. The owner tested rc.10 on calls: answers came too short and without
+Pull request #287, released as `v0.38.1-rc.11`. The owner tested rc.10 on calls: answers came too short and without
 context (HTTP 502/503, StatefulSet vs Deployment), the question was cut to a few words in the
 tile, and reasoning was on although fast answers want it off. They asked for a graph of term
 definitions under an answer.
