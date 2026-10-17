@@ -35,17 +35,20 @@ pub fn stream_chat_endpoint(
     messages: Vec<ChatMessage>,
     max_tokens: u32,
 ) -> mpsc::Receiver<AiEvent> {
-    stream_chat_endpoint_with(endpoint, messages, max_tokens, true)
+    stream_chat_endpoint_with(endpoint, messages, max_tokens, true, false)
 }
 
 /// Same stream without the local model's tools: one request, answer only.
 /// Auto-tiles use it — they never ran tools and must start answering at once.
+/// `no_think` turns a local model's reasoning off for this request whatever
+/// the reasoning setting says (fast answers on a call).
 pub fn stream_chat_endpoint_plain(
     endpoint: AiEndpoint,
     messages: Vec<ChatMessage>,
     max_tokens: u32,
+    no_think: bool,
 ) -> mpsc::Receiver<AiEvent> {
-    stream_chat_endpoint_with(endpoint, messages, max_tokens, false)
+    stream_chat_endpoint_with(endpoint, messages, max_tokens, false, no_think)
 }
 
 fn stream_chat_endpoint_with(
@@ -53,6 +56,7 @@ fn stream_chat_endpoint_with(
     messages: Vec<ChatMessage>,
     max_tokens: u32,
     allow_tools: bool,
+    no_think: bool,
 ) -> mpsc::Receiver<AiEvent> {
     let request_started_at = std::time::Instant::now();
     let request_id = begin_request();
@@ -138,6 +142,7 @@ fn stream_chat_endpoint_with(
             messages,
             max_tokens,
             allow_tools,
+            no_think,
             tx.clone(),
             request_id,
             request_started_at,
@@ -178,6 +183,7 @@ pub(crate) async fn stream_inner(
     messages: Vec<ChatMessage>,
     max_tokens: u32,
     allow_tools: bool,
+    no_think: bool,
     tx: mpsc::Sender<AiEvent>,
     request_id: u64,
     request_started_at: std::time::Instant,
@@ -201,6 +207,7 @@ pub(crate) async fn stream_inner(
         endpoint,
         messages,
         max_tokens,
+        no_think,
         tx,
         request_id,
         request_started_at,
@@ -213,6 +220,7 @@ pub(crate) async fn stream_plain(
     endpoint: AiEndpoint,
     messages: Vec<ChatMessage>,
     max_tokens: u32,
+    no_think: bool,
     tx: mpsc::Sender<AiEvent>,
     request_id: u64,
     request_started_at: std::time::Instant,
@@ -236,7 +244,7 @@ pub(crate) async fn stream_plain(
     )?;
     if endpoint.protocol == AiProtocol::OpenAiCompatible {
         apply_prompt_cache(&mut body);
-        apply_local_no_think(&mut body, false);
+        apply_local_no_think(&mut body, no_think && endpoint.is_local);
         apply_managed_gemma_sampler(&mut body, &endpoint.base_url, &endpoint.model);
         super::local_server::apply_server_hints(&mut body, &endpoint);
     }

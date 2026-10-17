@@ -6,7 +6,7 @@ Updated 2026-10-12 (operational state and open-work section only; the rest dates
 
 - Branch: `master`
 - Latest published stable release: `v0.38.0`
-- Latest published prerelease: `v0.38.1-rc.10` (fast live answers from local models; pull request #283)
+- Latest published prerelease: `v0.38.1-rc.11` (answers with context and term definitions, dependency batch; pull requests #287, #285)
 - Active master handoff: none
 - Post-release maintenance may be newer than the stable tag; inspect Git before acting.
 
@@ -18,6 +18,27 @@ Operational note: Windows jobs follow
 [`docs/winbrat-recovery.md`](winbrat-recovery.md). Never start a duplicate job
 because SSH or a terminal disconnected. macOS builds and live QA run only on
 `mm4`; Windows compilation and the repository gate run only on `winbrat`.
+
+## Answers with context and terms — `v0.38.1-rc.11` (2026-10-17)
+
+Pull request #287, released as `v0.38.1-rc.11`. The owner tested rc.10 on calls: answers came too short and without
+context (HTTP 502/503, StatefulSet vs Deployment), the question was cut to a few words in the
+tile, and reasoning was on although fast answers want it off. They asked for a graph of term
+definitions under an answer.
+
+- Fast prompt: answer line, 3–5 points with context, last line `Термины: a, b, c`; 640 tokens.
+  On X3D Strata first words 0.7–0.9 s, the whole answer 4–5.6 s (77–133 words).
+- Fast answers send `enable_thinking=false` to a local model whatever the reasoning setting is
+  (`stream_chat_endpoint_plain(…, no_think)`).
+- Auto tiles show the whole recognised line as the question under the header (its end when
+  longer than 240 characters).
+- `overlay-backend/src/runtime/terms.rs` parses the terms line; the spawn timer strips it from
+  auto tiles; `tile_terms.rs` shows the terms as buttons and streams a 1–3 sentence definition
+  with its own terms into a card under the answer, with a path back. Definitions are cached per
+  language, question and term.
+- Strata's `prefill N tok/s` in its request line is low (about 20) on a cache hit because only
+  the question's few new tokens are read and the fixed per-request time dominates; the time
+  that matters is `prompt_read` in the same line.
 
 ## Fast live answers — `v0.38.1-rc.10` (2026-10-17)
 

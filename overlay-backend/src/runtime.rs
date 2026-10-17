@@ -43,6 +43,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 mod summary_plan;
+mod terms;
 mod trigger_detect;
 
 #[cfg(test)]
@@ -56,6 +57,10 @@ use summary_plan::{
     managed_summary_context, partial_summary_prompt, summary_request_fits,
     SUMMARY_INPUT_BUDGET_CLOUD_CHARS, SUMMARY_INPUT_BUDGET_LOCAL_CHARS, SUMMARY_MAX_TOKENS,
     SUMMARY_PARTIAL_MAX_TOKENS,
+};
+pub use terms::{
+    build_term_prompts, hide_terms_line_while_streaming, new_terms, split_terms_line, term_rows,
+    TERM_DEFINITION_MAX_TOKENS,
 };
 pub use trigger_detect::{
     build_auto_tile_prompts, build_fast_auto_tile_prompts, detect_trigger,

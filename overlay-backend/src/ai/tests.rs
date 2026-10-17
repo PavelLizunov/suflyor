@@ -983,6 +983,7 @@ async fn plain_stream_never_offers_tools() {
         local_endpoint(url),
         Vec::new(),
         16,
+        false,
     ))
     .await;
     set_agent_tools(false, false);
@@ -994,6 +995,33 @@ async fn plain_stream_never_offers_tools() {
     let sent: Value = serde_json::from_str(&bodies.recv().unwrap()).unwrap();
     assert!(sent.get("tools").is_none());
     assert_eq!(sent["stream"], true);
+}
+
+/// Fast answers turn a local model's reasoning off even when the reasoning
+/// setting is on; without the flag the setting decides.
+#[tokio::test]
+async fn plain_stream_no_think_overrides_the_reasoning_setting() {
+    let _stream_guard = STREAM_TEST_LOCK.lock().await;
+    set_local_no_think(false);
+    let (url, bodies) = serve_sequence(vec![(200, ANSWER), (200, ANSWER)]);
+    collect(stream_chat_endpoint_plain(
+        local_endpoint(url.clone()),
+        Vec::new(),
+        16,
+        true,
+    ))
+    .await;
+    collect(stream_chat_endpoint_plain(
+        local_endpoint(url),
+        Vec::new(),
+        16,
+        false,
+    ))
+    .await;
+    let fast: Value = serde_json::from_str(&bodies.recv().unwrap()).unwrap();
+    let plain: Value = serde_json::from_str(&bodies.recv().unwrap()).unwrap();
+    assert_eq!(fast["chat_template_kwargs"]["enable_thinking"], false);
+    assert!(plain.get("chat_template_kwargs").is_none());
 }
 
 #[test]

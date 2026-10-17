@@ -2983,5 +2983,14 @@ msgstr "Почти готово: проверьте отмеченное"
 msgid "Fast answers for calls and interviews"
 msgstr "Быстрые ответы для созвонов и собеседований"
 
-msgid "A one-line answer first, then two or three points."
-msgstr "Сначала ответ одной строкой, затем 2–3 пункта."
+msgid "A one-line answer, then three to five points with context; terms under the answer open their definitions."
+msgstr "Сначала ответ одной строкой, затем 3–5 пунктов с контекстом; термины под ответом открывают определения."
+
+msgid "#{}"
+msgstr "№{}"
+
+msgid "Terms"
+msgstr "Термины"
+
+msgid "Close the definition"
+msgstr "Закрыть определение"
