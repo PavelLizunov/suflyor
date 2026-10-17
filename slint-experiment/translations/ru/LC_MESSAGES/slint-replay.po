@@ -2987,7 +2987,7 @@ msgid "A one-line answer, then three to five points with context; terms under th
 msgstr "Сначала ответ одной строкой, затем 3–5 пунктов с контекстом; термины под ответом открывают определения."
 
 msgid "#{}"
-msgstr "#{}"
+msgstr "№{}"
 
 msgid "Terms"
 msgstr "Термины"

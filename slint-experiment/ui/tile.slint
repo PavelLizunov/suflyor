@@ -695,11 +695,14 @@ export component TileWindow inherits Window {
             // ===== Question =====
             // The whole question, wrapped: the header has room for a few words
             // only, and the listener has to see what the answer replies to.
+            // A Rectangle does not size to its children: the height comes from
+            // the layout inside, as for the user bubble below.
             if root.question-text != "" : Rectangle {
+                height: question-layout.preferred-height;
                 vertical-stretch: 0;
                 background: Theme.tint(Theme.cat-sky);
                 border-radius: Metrics.radius-field;
-                VerticalLayout {
+                question-layout := VerticalLayout {
                     padding-left: Metrics.space-sm;
                     padding-right: Metrics.space-sm;
                     padding-top: Metrics.space-xs;
@@ -996,16 +999,16 @@ export component TileWindow inherits Window {
             // Stays in view under the answer; its own terms go one level deeper,
             // the path above goes back.
             if root.term-path.length > 0 && !root.select-mode : Rectangle {
+                // Half of a default tile at most; a fixed size (not the
+                // window's height) so the window layout does not depend on itself.
+                height: min(card-layout.preferred-height, 180px);
                 vertical-stretch: 0;
-                // Half of a default tile; a fixed size (not the window's
-                // height) so the window layout does not depend on itself.
-                max-height: 180px;
                 background: Theme.bg-elevated;
                 border-radius: Metrics.radius-field;
                 border-width: Metrics.border-thin;
                 border-color: Theme.border;
                 clip: true;
-                VerticalLayout {
+                card-layout := VerticalLayout {
                     padding: Metrics.space-sm;
                     spacing: Metrics.space-xs;
                     HorizontalLayout {
