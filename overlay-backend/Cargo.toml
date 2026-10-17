@@ -69,7 +69,7 @@ getrandom = "0.2"
 # unsupported audio seam (`audio_unavailable.rs`) — no silent fallback.
 [target.'cfg(windows)'.dependencies]
 # Audio capture (audio.rs)
-wasapi = "0.25"
+wasapi = "0.26"
 
 # Local STT — GigaAM-v3 in-process via ONNX (Russian-specialised). The `ort`
 # crate statically links the onnxruntime binary at build time. We enable
@@ -88,7 +88,7 @@ wasapi = "0.25"
 # resolves anew. ort 2.0.0-rc.14 changed `Session::builder` and transcribe-rs
 # no longer compiles against it. These are the versions of
 # slint-experiment/Cargo.lock, which the product is built from.
-transcribe-rs = { version = "=0.3.11", default-features = false, features = ["onnx", "ort-directml"] }
+transcribe-rs = { version = "=0.3.12", default-features = false, features = ["onnx", "ort-directml"] }
 ort = { version = "=2.0.0-rc.12", default-features = false }
 
 # Text-to-speech (tts.rs, read-aloud feature) — Windows SAPI 5 ISpVoice via the
@@ -124,7 +124,7 @@ windows-core = "0.62"
 # resolves anew. ort 2.0.0-rc.14 changed `Session::builder` and transcribe-rs
 # no longer compiles against it. These are the versions of
 # slint-experiment/Cargo.lock, which the product is built from.
-transcribe-rs = { version = "=0.3.11", default-features = false, features = ["onnx", "ort-coreml"] }
+transcribe-rs = { version = "=0.3.12", default-features = false, features = ["onnx", "ort-coreml"] }
 ort = { version = "=2.0.0-rc.12", default-features = false }
 
 # macOS-only BUILD dependency — compiles the tiny Objective-C AVAudioEngine

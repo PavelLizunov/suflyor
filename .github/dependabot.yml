@@ -14,6 +14,11 @@ updates:
       backend-deps:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    # ort stays on 2.0.0-rc.12: rc.14 changed `Session::builder` and
+    # transcribe-rs does not compile against it (overlay-backend/Cargo.toml).
+    ignore:
+      - dependency-name: "ort"
+        versions: [">=2.0.0-rc.13"]
 
   - package-ecosystem: cargo
     directory: "/slint-experiment"

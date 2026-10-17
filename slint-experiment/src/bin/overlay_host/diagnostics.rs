@@ -247,7 +247,8 @@ fn next_scheme_before_query(token: &str) -> Option<usize> {
 /// Redact credentials from diagnostic outputs and log exports so exported files and reports
 /// never leak API keys or authorization tokens: a labelled value (`Bearer <token>` in any ASCII
 /// case and after any run of spaces, tabs, `:` or `=`, quoted or not; `x-api-key`, `api_key`, `api-key`,
-/// `apikey` headers/fields) and a provider key recognised by its prefix (`gsk_`, `sk-`, `xai-`, `nvapi-`).
+/// `apikey`, `groq_api_key`, `password` headers/fields) and a provider key recognised by its prefix
+/// (`gsk_`, `sk-`, `xai-`, `nvapi-`, `hf_`).
 pub(crate) fn redact_secrets(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
@@ -306,8 +307,15 @@ fn labelled_secret(rest: &str, mid_word: bool) -> Option<(&'static str, usize)> 
     if let Some(len) = labelled_secret_len(rest, "api-key") {
         return Some(("api-key: <redacted>", len));
     }
-    let len = labelled_secret_len(rest, "apikey")?;
-    Some(("apikey: <redacted>", len))
+    if let Some(len) = labelled_secret_len(rest, "apikey") {
+        return Some(("apikey: <redacted>", len));
+    }
+    // Config field names start mid-word for the labels above (`groq_api_key`).
+    if let Some(len) = labelled_secret_len(rest, "groq_api_key") {
+        return Some(("groq_api_key: <redacted>", len));
+    }
+    let len = labelled_secret_len(rest, "password")?;
+    Some(("password: <redacted>", len))
 }
 
 /// Byte length of `label`, what separates it from its value, and the value. Between the two
@@ -343,7 +351,7 @@ fn key_prefix(rest: &str, mid_word: bool) -> Option<&'static str> {
     if mid_word {
         return None;
     }
-    let mut dashed = ["sk-", "xai-", "nvapi-"].into_iter();
+    let mut dashed = ["sk-", "xai-", "nvapi-", "hf_"].into_iter();
     dashed.find(|p| rest.starts_with(*p))
 }
 
@@ -961,7 +969,7 @@ fn collect_redacted_log() -> std::io::Result<std::path::PathBuf> {
     let redacted = redact_secrets(&redact_user_home(&redact_ipv4(&redact_urls(&raw))));
     let dir = dirs::desktop_dir().unwrap_or(root);
     let out = dir.join("suflyor-log.txt");
-    std::fs::write(&out, redacted)?;
+    overlay_backend::paths::write_private(&out, redacted.as_bytes())?;
     Ok(out)
 }
 
@@ -1282,6 +1290,22 @@ mod tests {
                 "leaked from {sample:?}: {redacted}"
             );
         }
+    }
+
+    #[test]
+    fn redact_secrets_masks_config_labels_and_hugging_face_tokens() {
+        for (sample, mask) in [
+            ("groq_api_key: secret_value_123", "groq_api_key: <redacted>"),
+            ("\"groq_api_key\": \"secret_value_123\"", "groq_api_key: <redacted>"),
+            ("password: secret_value_123", "password: <redacted>"),
+            ("token hf_secret_value_123 end", "hf_<redacted>"),
+        ] {
+            let redacted = redact_secrets(sample);
+            assert!(!redacted.contains("secret_value_123"), "leaked from {sample:?}: {redacted}");
+            assert!(redacted.contains(mask), "missing mask in {sample:?}: {redacted}");
+        }
+        // The prefix needs a word boundary, so identifiers stay readable.
+        assert_eq!(redact_secrets("graph_hf_cache"), "graph_hf_cache");
     }
 
     #[test]

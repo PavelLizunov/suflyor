@@ -3,7 +3,7 @@
 //! The empty lock file stays on disk: deleting a locked inode would let a
 //! second process create and lock a replacement while the first still runs.
 
-use std::fs::{File, OpenOptions, TryLockError};
+use std::fs::{File, TryLockError};
 use std::io;
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -16,11 +16,8 @@ pub struct SingletonGuard {
 }
 
 fn try_acquire(path: &Path) -> io::Result<Option<SingletonGuard>> {
-    let file = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .write(true)
-        .open(path)?;
+    let file = overlay_backend::paths::open_private_append(path)?;
+    let _ = overlay_backend::paths::restrict_to_owner(path);
     match file.try_lock() {
         Ok(()) => Ok(Some(SingletonGuard { _file: file })),
         Err(TryLockError::WouldBlock) => Ok(None),
