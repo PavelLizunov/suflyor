@@ -122,18 +122,10 @@ mod posix_credentials {
     use std::path::{Path, PathBuf};
 
     pub(super) fn ensure_dir_permissions(dir: &Path) -> Result<()> {
-        fs::create_dir_all(dir)?;
-        // SECURITY: Enforce restricted 0o700 permissions on the credentials directory
-        // on POSIX/Unix so other local users on a multi-user system cannot list or
-        // access secret files stored within.
-        #[cfg(unix)]
-        {
-            let mut perms = fs::metadata(dir)?.permissions();
-            if perms.mode() & 0o777 != 0o700 {
-                perms.set_mode(0o700);
-                fs::set_permissions(dir, perms)?;
-            }
-        }
+        // SECURITY: Delegate directory creation and owner-only 0o700 permission enforcement to
+        // crate::paths::ensure_private_dir so directory creation and mode restriction on POSIX/Unix
+        // are consistent across the crate.
+        crate::paths::ensure_private_dir(dir)?;
         Ok(())
     }
 
@@ -276,6 +268,13 @@ mod tests {
         posix_credentials::ensure_dir_permissions(&dir).expect("ensure dir permissions");
         assert_eq!(
             std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+
+        let new_dir = temp.path().join("new_suflyor");
+        posix_credentials::ensure_dir_permissions(&new_dir).expect("ensure new dir permissions");
+        assert_eq!(
+            std::fs::metadata(&new_dir).unwrap().permissions().mode() & 0o777,
             0o700
         );
     }
