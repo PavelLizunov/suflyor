@@ -8,6 +8,12 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-062 Buffered Responses answers are discarded as empty and close auto tiles   Severity: **P1**   Status: Open
+Evidence: native Windows c39142d QA binary, loopback Responses SSE sends response.created and response.completed containing output text, without delta events. Log records reason=stop deltas=0; the placeholder appears then disappears. The completed response contains a synthetic non-empty answer.
+Scenario: a bridge buffers successful Responses output; delta-streamed refusal text remains visible while successful buffered answers disappear. This reproduces the owner symptom with a fixture, not a trace of the owner endpoint.
+Fix proposed: extract the final Responses output when no text deltas arrived; never append the final snapshot after already-streamed text. Add terminal-only and non-duplication regressions.
+Closed by:
+
 ### D-061 OpenAI provider block overlaps the download card after text wrapping   Severity: **P1**   Status: Open
 Evidence: native Windows MCP at the rc.13 source tree, RU 720x600: OpenAI conditional VerticalLayout y144/h296, test button y431/h32, next card y448. The next card overlaps the button by15px.
 Scenario: AI providers with OpenAI selected; its reasoning help wraps to three lines but the conditional group reports a shorter preferred height.
