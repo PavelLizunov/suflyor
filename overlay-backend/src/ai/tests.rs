@@ -683,6 +683,60 @@ async fn native_streams_emit_delta_and_terminal_event() {
         }
 }
 
+#[tokio::test]
+async fn responses_terminal_snapshot_keeps_buffered_answers_without_duplicating_deltas() {
+    let _stream_guard = STREAM_TEST_LOCK.lock().await;
+    for (delta, kind, output, expected_reason) in [
+        ("", "completed", "answer", "stop"),
+        (
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"answer\"}\n\n",
+            "completed",
+            "answer",
+            "stop",
+        ),
+        ("", "completed", "", "stop"),
+        ("", "incomplete", "answer", "length"),
+    ] {
+        let body = format!(
+            "data: {{\"type\":\"response.created\",\"response\":{{\"id\":\"r1\"}}}}\n\n{delta}\
+             data: {{\"type\":\"response.{kind}\",\"response\":{{\"status\":\"{kind}\",\"output\":[{{\"type\":\"message\",\"content\":[{{\"type\":\"output_text\",\"text\":\"{output}\"}}]}}]}}}}\n\n"
+        );
+        let (url, _captured) =
+            serve_one_capture(Box::leak(body.into_boxed_str()), "text/event-stream");
+        let mut rx = stream_chat_endpoint_plain(
+            AiEndpoint {
+                protocol: AiProtocol::OpenAiResponses,
+                base_url: url,
+                bearer: "fixture".into(),
+                model: "model".into(),
+                reasoning_effort: None,
+                is_local: false,
+            },
+            Vec::new(),
+            32,
+            false,
+        );
+        let mut text = String::new();
+        let mut terminal = 0;
+        while let Some(event) = rx.recv().await {
+            match event {
+                AiEvent::Delta { text: delta } => text.push_str(&delta),
+                AiEvent::Done { reason } => {
+                    assert_eq!(reason, expected_reason);
+                    terminal += 1;
+                }
+                AiEvent::Error { message } => panic!("unexpected stream error: {message}"),
+                _ => {}
+            }
+        }
+        assert_eq!(
+            text, output,
+            "buffered or streamed answer must arrive exactly once"
+        );
+        assert_eq!(terminal, 1);
+    }
+}
+
 /// A provider reporting `finish_reason: "length"` (answer truncated by
 /// max_tokens) must surface the REAL reason to callers — the non-streaming
 /// journaling sites (reask_last, manual_spawn_tile, auto_tile) write

@@ -8,6 +8,39 @@ mod ui {
 }
 
 #[test]
+fn retained_windows_cannot_be_revealed_after_close_by_native_setup() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let controller =
+        std::fs::read_to_string(root.join("src/bin/overlay_host/settings_controller.rs")).unwrap();
+    let close = controller
+        .split_once("win.on_close_clicked(move || {")
+        .unwrap()
+        .1
+        .split_once("// Keep the instance alive")
+        .unwrap()
+        .0;
+    assert!(close.contains("force_hide(w.window())"));
+    assert!(controller.contains("position.x <= -30000 || position.y <= -30000"));
+    assert!(controller.contains("present_window_stealth_aware(existing,"));
+    for (path, guard) in [
+        (
+            "src/bin/overlay_host/window_lifecycle.rs",
+            "if !w.window().is_visible()",
+        ),
+        (
+            "src/bin/overlay_host/tile_window.rs",
+            "if !t.window().is_visible()",
+        ),
+    ] {
+        let source = std::fs::read_to_string(root.join(path)).unwrap();
+        assert!(
+            source.contains(guard),
+            "deferred native setup needs a close guard: {path}"
+        );
+    }
+}
+
+#[test]
 fn hidden_settings_keep_download_and_shared_status_until_completion() {
     i_slint_backend_testing::init_no_event_loop();
     let win = ui::SettingsWindow::new().unwrap();
