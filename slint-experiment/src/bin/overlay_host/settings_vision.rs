@@ -270,12 +270,7 @@ pub(crate) fn wire_vision_settings(
                                 if overlay_backend::deep_lock::is_blocked_error(&chain) {
                                     overlay_backend::deep_lock::blocked_notice(ui_is_ru).to_string()
                                 } else {
-                                    if ui_is_ru {
-                                        "Не удалось проверить подключение"
-                                    } else {
-                                        "Could not verify the connection"
-                                    }
-                                    .to_string()
+                                    super::status_copy::connection_failed(ui_is_ru, &chain)
                                 }
                             }
                         }
