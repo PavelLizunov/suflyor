@@ -202,6 +202,18 @@ pub(crate) fn open_settings(
         // (see populate_component_rows; also called on the reused-window path).
         populate_component_rows(&win, &snap);
     }
+    // Choices made in other tabs change what the hub reports; rebuild its rows
+    // whenever it is shown, unless an inline install is updating them.
+    {
+        let weak = win.as_weak();
+        let cfg_tab = cfg.clone();
+        win.on_tab_selected(move |idx| {
+            let Some(w) = weak.upgrade() else { return };
+            if idx == 15 && w.get_component_busy_index() == -1 {
+                populate_component_rows(&w, &cfg_tab.read());
+            }
+        });
+    }
 
     // Onboarding «Компоненты» — inline install for the LIGHT, single-call
     // installers (voices / OCR). The heavy ones (engine / model / STT) keep their
@@ -1594,6 +1606,20 @@ pub(crate) fn populate_component_rows(
             } else {
                 component_row_copy(c.kind, ru)
             };
+            // The local engine and model serve answers only when answers or
+            // screenshots use this PC; GigaAM only when STT selects it.
+            let needed = match c.kind {
+                ComponentKind::Engine | ComponentKind::LocalModel => {
+                    is_macos || snap.ai_provider == "local" || snap.vision_provider == "local"
+                }
+                ComponentKind::Stt => is_macos || snap.stt_provider == "gigaam",
+                ComponentKind::Voices | ComponentKind::Ocr => true,
+            };
+            let hint = if needed {
+                hint.to_string()
+            } else {
+                not_needed_hint(c.kind, snap, ru)
+            };
             ComponentRow {
                 name: SharedString::from(name),
                 detail: SharedString::from(c.detail.as_str()),
@@ -1601,10 +1627,158 @@ pub(crate) fn populate_component_rows(
                 hint: SharedString::from(hint),
                 installable,
                 jump_tab,
+                needed,
             }
         })
         .collect();
     win.set_component_rows(ModelRc::new(VecModel::from(rows)));
+    win.set_active_rows(ModelRc::new(VecModel::from(active_rows(snap))));
+}
+
+/// Display name of a text or screenshot provider id from the Settings lists.
+fn provider_name(provider: &str, ru: bool) -> &'static str {
+    match (provider, ru) {
+        ("local", true) => "Модель на этом ПК",
+        ("local", false) => "Model on this PC",
+        ("openai", _) => "OpenAI API",
+        ("anthropic", _) => "Anthropic API",
+        ("codex", true) => "ChatGPT через Codex",
+        ("codex", false) => "ChatGPT via Codex",
+        ("mlx", _) => "MLX",
+        (_, true) => "Ваш сервер или мост",
+        (_, false) => "Your server or bridge",
+    }
+}
+
+fn not_needed_hint(
+    kind: overlay_backend::components::ComponentKind,
+    snap: &overlay_backend::config::Config,
+    ru: bool,
+) -> String {
+    use overlay_backend::components::ComponentKind;
+    if kind == ComponentKind::Stt {
+        let engine = match snap.stt_provider.as_str() {
+            "whisper" => "Whisper",
+            _ => "Groq",
+        };
+        return if ru {
+            format!("Не нужно: речь распознаёт {engine}")
+        } else {
+            format!("Not needed: {engine} recognises speech")
+        };
+    }
+    let provider = provider_name(&snap.ai_provider, ru);
+    if ru {
+        format!("Не нужно: ответы идут через «{provider}»")
+    } else {
+        format!("Not needed: answers go through {provider}")
+    }
+}
+
+/// Pure: whether a resolved endpoint has what a request needs. A bridge with
+/// no key counts only when its address was entered for screenshots.
+fn endpoint_ready(ep: &overlay_backend::ai::AiEndpoint, address_entered: bool) -> bool {
+    if ep.protocol == overlay_backend::ai::AiProtocol::CodexSubscription {
+        return !ep.model.trim().is_empty();
+    }
+    !ep.base_url.trim().is_empty()
+        && !ep.model.trim().is_empty()
+        && (ep.is_local || !ep.bearer.trim().is_empty() || address_entered)
+}
+
+fn endpoint_detail(provider: &str, ep: &overlay_backend::ai::AiEndpoint, ru: bool) -> String {
+    let model = ep.model.rsplit(['/', '\\']).next().unwrap_or_default();
+    let model = if model.to_ascii_lowercase().ends_with(".gguf") {
+        overlay_backend::local_ai::local_model_label(model)
+    } else {
+        model.to_string()
+    };
+    format!("{} · {model}", provider_name(provider, ru))
+}
+
+/// The «In use now» rows: what answers, screenshots and speech use and whether
+/// each is set up. Shows provider and model names only, never an address or key.
+pub(crate) fn active_rows(snap: &overlay_backend::config::Config) -> Vec<ComponentRow> {
+    let ru = snap.ui_is_ru();
+    let row = |name: &str, ready: bool, detail: String, hint: &str, jump_tab: i32| ComponentRow {
+        name: SharedString::from(name),
+        detail: SharedString::from(detail),
+        installed: ready,
+        hint: SharedString::from(hint),
+        installable: false,
+        jump_tab,
+        needed: true,
+    };
+
+    let answers = snap.ai_endpoint(false);
+    let answers_row = row(
+        if ru { "Ответы AI" } else { "AI answers" },
+        endpoint_ready(&answers, false),
+        endpoint_detail(&snap.ai_provider, &answers, ru),
+        if ru {
+            "Не настроено: укажите ключ и модель в AI-провайдерах"
+        } else {
+            "Not set up: enter the key and model in AI providers"
+        },
+        11,
+    );
+
+    let vision = snap.vision_endpoint();
+    let vision_provider = if snap.vision_provider == "same" {
+        snap.ai_provider.as_str()
+    } else {
+        snap.vision_provider.as_str()
+    };
+    let vision_row = row(
+        if ru { "Скриншоты (F8)" } else { "Screenshots (F8)" },
+        vision.as_ref().is_some_and(|ep| {
+            endpoint_ready(
+                ep,
+                snap.vision_provider == "cloud" && !snap.vision_base_url.trim().is_empty(),
+            )
+        }),
+        vision
+            .as_ref()
+            .map(|ep| endpoint_detail(vision_provider, ep, ru))
+            .unwrap_or_default(),
+        match (snap.vision_provider.as_str(), ru) {
+            ("off", true) => "Выключено: выберите модель для скриншотов",
+            ("off", false) => "Off: choose a model for screenshots",
+            (_, true) => "Не настроено: выберите «Как у модели ответов» или другую модель",
+            (_, false) => "Not set up: choose Same as the answer model or another model",
+        },
+        17,
+    );
+
+    let (speech_ready, speech_detail) = match snap.stt_provider.as_str() {
+        // The folder the STT check and the session load (not a fallback),
+        // judged like the STT row below so the two never disagree.
+        "gigaam" => (
+            !snap.stt_gigaam_dir.trim().is_empty()
+                && overlay_backend::local_ai::gigaam_model_present(std::path::Path::new(
+                    snap.stt_gigaam_dir.trim(),
+                )),
+            if ru { "GigaAM, на этом ПК" } else { "GigaAM, on this PC" },
+        ),
+        "whisper" => (!snap.stt_whisper_url.trim().is_empty(), "Whisper"),
+        _ => (!snap.groq_api_key.trim().is_empty(), "Groq Whisper"),
+    };
+    let speech_row = row(
+        if ru { "Распознавание речи" } else { "Speech recognition" },
+        speech_ready,
+        speech_detail.to_string(),
+        match (snap.stt_provider.as_str(), ru) {
+            ("gigaam", true) => "Модель GigaAM не скачана: загрузите её во вкладке STT",
+            ("gigaam", false) => "The GigaAM model is not downloaded: get it in the STT tab",
+            ("whisper", true) => "Не указан адрес сервера Whisper",
+            ("whisper", false) => "No Whisper server address",
+            (_, true) => "Нет ключа Groq: добавьте его во вкладке STT",
+            (_, false) => "No Groq key: add it in the STT tab",
+        },
+        12,
+    );
+
+    vec![answers_row, vision_row, speech_row]
 }
 
 fn reset_component_install_state(win: &SettingsWindow) {
@@ -1903,7 +2077,7 @@ pub(crate) fn populate_token_status(
     win.set_vision_provider_index(super::settings_vision::vision_provider_index_from_id(
         &c.vision_provider,
     ));
-    win.set_vision_same_available(c.same_text_model_accepts_images_declared());
+    win.set_vision_same_available(super::settings_vision::same_choice_available(&c));
     win.set_vision_base_url_input(SharedString::from(c.vision_base_url.clone()));
     win.set_vision_model_input(SharedString::from(c.vision_model.clone()));
     win.set_vision_local_base_url_input(SharedString::from(c.vision_local_base_url.clone()));
@@ -2125,6 +2299,11 @@ pub(crate) fn populate_token_status(
     if !win.get_stt_gigaam_installing() {
         let installed = super::settings_stt::installed_gigaam_dir(&c.stt_gigaam_dir);
         win.set_stt_gigaam_installed(installed.is_some());
+        win.set_stt_gigaam_custom(
+            installed
+                .as_deref()
+                .is_some_and(super::settings_stt::is_custom_gigaam_dir),
+        );
         win.set_stt_gigaam_install_failed(false);
         win.set_stt_gigaam_install_cancelled(false);
         win.set_stt_gigaam_install_progress(0.0);
@@ -2163,8 +2342,42 @@ pub(crate) fn populate_token_status(
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-    use super::{ai_provider_index, component_row_copy};
+    use super::{active_rows, ai_provider_index, component_row_copy};
     use overlay_backend::components::ComponentKind;
+
+    #[test]
+    fn active_rows_name_the_providers_and_hide_addresses() {
+        let mut c = overlay_backend::config::Config::defaults();
+        c.ui_language = "ru".into();
+        c.ai_provider = "cloud".into();
+        c.ai_bearer = "secret-key".into();
+        c.ai_model = "answer-model".into();
+        c.vision_provider = "cloud".into();
+        c.stt_provider = "cloud".into();
+        c.groq_api_key = String::new();
+        let rows = active_rows(&c);
+        assert_eq!(rows.len(), 3);
+        assert!(rows[0].installed, "answers with key + model are set up");
+        assert!(rows[0].detail.contains("answer-model"), "{}", rows[0].detail);
+        assert!(rows[1].installed, "screenshot bridge reuses the answers key");
+        assert!(!rows[2].installed, "Groq without a key is not set up");
+        assert!(!rows[2].hint.is_empty());
+        for row in &rows {
+            assert!(!row.detail.contains("secret-key"));
+            assert!(!row.detail.contains(c.ai_base_url.as_str()) || c.ai_base_url.is_empty());
+        }
+
+        c.ai_bearer = String::new();
+        c.vision_bearer = String::new();
+        c.vision_base_url = String::new();
+        let rows = active_rows(&c);
+        assert!(!rows[0].installed, "a bridge without a key is not set up");
+        assert!(!rows[1].installed, "screenshots without a key or address are not set up");
+        assert_eq!(rows[1].jump_tab, 17);
+
+        c.vision_provider = "off".into();
+        assert!(active_rows(&c)[1].hint.starts_with("Выключено"));
+    }
 
     /// The Components hub rows follow the interface language in BOTH
     /// directions — the old rows were unconditionally Cyrillic, so an English

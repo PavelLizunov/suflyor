@@ -108,6 +108,30 @@ mod gigaam_shim {
     }
 }
 
+/// Public error when the GigaAM folder holds no model file at all.
+pub const GIGAAM_NOT_DOWNLOADED: &str = "GigaAM: model not downloaded";
+/// Public error when the model file is there but the runtime could not load it.
+pub const GIGAAM_LOAD_FAILED: &str = "GigaAM: model failed to load (see log)";
+
+/// Load GigaAM from `dir`. A folder without `model.int8.onnx` fails with
+/// [`GIGAAM_NOT_DOWNLOADED`] before the runtime starts, and a complete managed
+/// model gets its bundled `vocab.txt` back when that file was lost.
+fn load_gigaam(dir: &str) -> Result<gigaam_shim::Model> {
+    if cfg!(any(windows, target_os = "macos")) {
+        let path = std::path::Path::new(dir);
+        let model_file = std::fs::metadata(path.join("model.int8.onnx"));
+        if dir.trim().is_empty() || !model_file.is_ok_and(|m| m.len() > 0) {
+            anyhow::bail!(GIGAAM_NOT_DOWNLOADED);
+        }
+        match crate::local_ai::repair_gigaam_vocab(path) {
+            Ok(true) => log::info!("GigaAM vocab.txt was missing; restored the bundled copy"),
+            Ok(false) => {}
+            Err(e) => log::warn!("GigaAM vocab.txt restore failed: {e}"),
+        }
+    }
+    gigaam_shim::load(dir)
+}
+
 fn public_gigaam_load_error(error: anyhow::Error, public_message: &'static str) -> anyhow::Error {
     log::warn!("GigaAM load failed: {error}");
     anyhow::anyhow!(public_message)
@@ -206,10 +230,14 @@ pub async fn test_connection_backend(backend: &SttBackendCfg) -> Result<String> 
         SttBackendCfg::Gigaam { model_dir } => {
             let dir = model_dir.clone();
             tokio::task::spawn_blocking(move || {
-                gigaam_shim::load(&dir)
+                load_gigaam(&dir)
                     .map(|_model| "GigaAM model loaded OK".to_string())
                     .map_err(|e| {
-                        public_gigaam_load_error(e, "GigaAM: model failed to load (see log)")
+                        if e.to_string() == GIGAAM_NOT_DOWNLOADED {
+                            e
+                        } else {
+                            public_gigaam_load_error(e, GIGAAM_LOAD_FAILED)
+                        }
                     })
             })
             .await
@@ -762,7 +790,7 @@ fn shared_gigaam_model(model_dir: &str) -> Result<SharedGigaamModel> {
         .lock()
         .unwrap_or_else(|p| p.into_inner());
     if !matches!(&*guard, Some((cached_dir, _)) if cached_dir == model_dir) {
-        let model = gigaam_shim::load(model_dir)?;
+        let model = load_gigaam(model_dir)?;
         *guard = Some((model_dir.to_string(), Arc::new(Mutex::new(model))));
     }
     guard

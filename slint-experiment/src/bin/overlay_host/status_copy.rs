@@ -367,9 +367,49 @@ pub(super) fn connection_failed(ru: bool, chain: &str) -> String {
     } else if has(&["timed out", "timeout", "refused", "error sending request", "dns", "connect"]) {
         ("Сервер не отвечает", "The server does not answer")
     } else {
-        ("Не удалось подключиться", "Could not connect")
+        (
+            "Не удалось подключиться: проверьте адрес, ключ и модель",
+            "Could not connect: check the address, key and model",
+        )
     };
     if ru { ru_text } else { en_text }.to_string()
+}
+
+/// The GigaAM action the STT tab offers under the folder field.
+#[derive(Clone, Copy)]
+pub(super) enum GigaamAction {
+    /// «Download / Resume»: the managed model is missing or incomplete.
+    Download,
+    /// «Check files»: the managed model is installed.
+    CheckFiles,
+    /// No button applies: the model lives in the person's own folder.
+    OwnFolder,
+}
+
+/// Result of the STT check for the local GigaAM model: what happened and the
+/// next step the STT tab offers. Other failures read as connection failures.
+pub(super) fn gigaam_check_failed(ru: bool, chain: &str, action: GigaamAction) -> String {
+    let accelerator = if cfg!(target_os = "macos") { "Apple Core ML" } else { "GPU (DirectML)" };
+    let (button_ru, button_en) = match action {
+        GigaamAction::CheckFiles => ("«Проверить файлы»", "Check files"),
+        _ => ("«Загрузить / Продолжить»", "Download / Resume"),
+    };
+    if chain.contains(overlay_backend::stt::GIGAAM_NOT_DOWNLOADED) {
+        if ru {
+            format!("В этой папке нет модели GigaAM. Нажмите {button_ru} выше или укажите папку, где лежит model.int8.onnx.")
+        } else {
+            format!("This folder has no GigaAM model. Press {button_en} above or point to the folder with model.int8.onnx.")
+        }
+    } else if chain.contains(overlay_backend::stt::GIGAAM_LOAD_FAILED) {
+        match (action, ru) {
+            (GigaamAction::OwnFolder, true) => format!("Модель есть, но не запустилась. Выключите {accelerator} и проверьте снова; не помогло — укажите папку с рабочей моделью."),
+            (GigaamAction::OwnFolder, false) => format!("The model is there but did not start. Turn off {accelerator} and check again; if that fails, point to a folder with a working model."),
+            (_, true) => format!("Модель есть, но не запустилась. Выключите {accelerator} и проверьте снова; не помогло — нажмите {button_ru} выше."),
+            (_, false) => format!("The model is there but did not start. Turn off {accelerator} and check again; if that fails, press {button_en} above."),
+        }
+    } else {
+        connection_failed(ru, chain)
+    }
 }
 
 /// A connection test that could not even start (no async runtime).
@@ -387,6 +427,24 @@ mod connection_text_tests {
         assert_eq!(connection_failed(true, "no Groq API key set"), "Нет ключа: добавьте его в Настройках");
         assert_eq!(connection_failed(false, "HTTP 401 Unauthorized"), "The key was rejected");
         assert_eq!(connection_failed(true, "error sending request: connection refused"), "Сервер не отвечает");
-        assert_eq!(connection_failed(false, "weird"), "Could not connect");
+        assert_eq!(connection_failed(false, "weird"), "Could not connect: check the address, key and model");
+    }
+
+    #[test]
+    fn gigaam_failures_name_the_next_step() {
+        use super::{gigaam_check_failed, GigaamAction};
+        use overlay_backend::stt::{GIGAAM_LOAD_FAILED, GIGAAM_NOT_DOWNLOADED};
+        let missing = gigaam_check_failed(true, GIGAAM_NOT_DOWNLOADED, GigaamAction::Download);
+        assert!(missing.contains("«Загрузить / Продолжить»"), "{missing}");
+        let broken = gigaam_check_failed(false, GIGAAM_LOAD_FAILED, GigaamAction::CheckFiles);
+        assert!(broken.contains("Check files"), "{broken}");
+        let partial = gigaam_check_failed(true, GIGAAM_LOAD_FAILED, GigaamAction::Download);
+        assert!(partial.contains("«Загрузить / Продолжить»"), "{partial}");
+        let own = gigaam_check_failed(true, GIGAAM_LOAD_FAILED, GigaamAction::OwnFolder);
+        assert!(own.contains("укажите папку"), "{own}");
+        assert_eq!(
+            gigaam_check_failed(true, "weird", GigaamAction::Download),
+            connection_failed(true, "weird")
+        );
     }
 }

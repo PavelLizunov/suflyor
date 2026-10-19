@@ -68,6 +68,10 @@ export struct ComponentRow {
     // Settings tab-index this card jumps to via «Открыть ›» (engine/model → AI
     // мост 11, STT → STT 12). -1 = no jump (voices/OCR install inline instead).
     jump-tab: int,
+    // False when the current choice in its tab does not use this part (e.g.
+    // the local engine while answers go through a cloud API): the row then
+    // reads «не нужно» instead of offering an install.
+    needed: bool,
 }
 
 export component SettingsWindow inherits Window {
@@ -117,6 +121,9 @@ export component SettingsWindow inherits Window {
     in-out property <[MemoryRow]> memory-items: [];
     // Onboarding «Компоненты» readiness rows (set by the controller on open).
     in-out property <[ComponentRow]> component-rows: [];
+    // What answers, screenshots and speech use right now (Components tab top).
+    // `installed` = set up; `jump-tab` opens the tab that sets it up.
+    in-out property <[ComponentRow]> active-rows: [];
     // Index of the row whose inline install is running (-1 = none) + its status
     // line. The controller sets these while a hub install worker runs.
     in-out property <int> component-busy-index: -1;
@@ -537,6 +544,9 @@ export component SettingsWindow inherits Window {
     in-out property <int> stt-cloud-model-index: 0;
     in-out property <string> stt-gigaam-dir-input: "";
     in-out property <bool> stt-gigaam-installed: false;
+    // The model in use lives outside the managed install; «Check files» covers
+    // only the managed copy, so it is off then.
+    in-out property <bool> stt-gigaam-custom: false;
     in-out property <bool> stt-gigaam-installing: false;
     in-out property <bool> stt-gigaam-install-failed: false;
     in-out property <bool> stt-gigaam-install-cancelled: false;
@@ -1864,8 +1874,60 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 15 : VerticalLayout {
                         spacing: 10px;
                         SettingsCard {
+                            title: @tr("In use now");
+                            for row in root.active-rows : HorizontalLayout {
+                                spacing: 10px;
+                                VerticalLayout {
+                                    alignment: center;
+                                    Rectangle {
+                                        width: 10px;
+                                        height: 10px;
+                                        border-radius: 5px;
+                                        background: row.installed ? Theme.success : Theme.warning;
+                                    }
+                                }
+                                VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 1;
+                                    Text {
+                                        text: row.name;
+                                        font-size: Metrics.font-body;
+                                        font-weight: 600;
+                                        color: Theme.text-primary;
+                                        wrap: word-wrap;
+                                    }
+                                    Text {
+                                        text: row.installed ? row.detail : row.hint;
+                                        font-size: Metrics.font-caption;
+                                        color: Theme.text-muted;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                                if !row.installed && row.jump-tab >= 0 : VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 0;
+                                    Button {
+                                        width: 132px;
+                                        text: @tr("Set up");
+                                        clicked => {
+                                            root.active-tab = row.jump-tab;
+                                            root.tab-selected(row.jump-tab);
+                                        }
+                                    }
+                                }
+                                if row.installed : Text {
+                                    text: @tr("set up");
+                                    font-size: Metrics.font-label;
+                                    font-weight: 600;
+                                    color: Theme.success;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 0;
+                                }
+                            }
+                        }
+                        SettingsCard {
                         Text {
-                            text: @tr("What is installed for AI without the internet. Each part downloads on demand: here or in the tab named under it.");
+                            text: @tr("Parts for working without the internet. Each is needed only when its tab selects it, and downloads on demand: here or in the tab named under it.");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -1956,6 +2018,7 @@ export component SettingsWindow inherits Window {
                                 // lives. Once installed they show «установлено» below.
                                 if idx != root.component-busy-index
                                     && !row.installed
+                                    && row.needed
                                     && row.jump-tab >= 0 : VerticalLayout {
                                     alignment: center;
                                     horizontal-stretch: 0;
@@ -1972,8 +2035,8 @@ export component SettingsWindow inherits Window {
                                 // (installed = green «установлено»; otherwise grey).
                                 if idx != root.component-busy-index
                                     && !(row.installable && !row.installed)
-                                    && !(row.jump-tab >= 0 && !row.installed) : Text {
-                                    text: row.installed ? @tr("installed") : @tr("not installed");
+                                    && !(row.needed && row.jump-tab >= 0 && !row.installed) : Text {
+                                    text: row.installed ? @tr("installed") : row.needed ? @tr("not installed") : @tr("not needed");
                                     font-size: Metrics.font-label;
                                     font-weight: 600;
                                     color: row.installed ? Theme.success : Theme.text-muted;
@@ -3115,7 +3178,10 @@ export component SettingsWindow inherits Window {
                                 @tr("Anthropic API (Messages)"),
                                 @tr("ChatGPT via Codex (experimental)"),
                             ];
-                            current-index: root.vision-provider-index;
+                            // Two-way: the controller may replace the choice (the
+                            // direct API behind "same", a refused switch) and the
+                            // list must show what was saved.
+                            current-index <=> root.vision-provider-index;
                             selected => {
                                 root.vision-provider-index = self.current-index;
                                 root.vision-provider-changed(self.current-index);
@@ -3714,12 +3780,12 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
-                        if Platform.is-macos && root.stt-provider-index == 1 : VerticalLayout {
+                        if root.stt-provider-index == 1 : VerticalLayout {
                             spacing: 6px;
                             Text {
                                 text: root.stt-gigaam-installing ? @tr("Downloading and verifying…")
-                                    : root.stt-gigaam-installed ? @tr("Installed")
                                     : root.stt-gigaam-install-failed ? @tr("Download or activation failed. Retry when ready.")
+                                    : root.stt-gigaam-installed ? @tr("Installed")
                                     : root.stt-gigaam-install-cancelled ? @tr("Download cancelled. Resume keeps verified files.")
                                     : @tr("Not installed");
                                 font-size: Metrics.font-label;
@@ -3747,9 +3813,12 @@ export component SettingsWindow inherits Window {
                             }
                             HorizontalLayout {
                                 spacing: 6px;
+                                // Installed: the same call verifies the files against the
+                                // pinned checksum and restores what is missing or damaged.
                                 Button {
-                                    text: @tr("Download / Resume");
-                                    enabled: !root.stt-gigaam-installing && !root.stt-gigaam-installed;
+                                    text: root.stt-gigaam-installed ? @tr("Check files") : @tr("Download / Resume");
+                                    enabled: !root.stt-gigaam-installing
+                                        && !(root.stt-gigaam-installed && root.stt-gigaam-custom);
                                     clicked => { root.stt-gigaam-install(); }
                                 }
                                 if root.stt-gigaam-installing : Button {

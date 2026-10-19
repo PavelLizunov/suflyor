@@ -1509,6 +1509,13 @@ pub fn load() -> Config {
             &crate::local_ai::default_root(),
         ));
     dirty |= migrate_macos_gigaam_default(&mut cfg, managed_gigaam_ready);
+    if cfg.stt_provider == "gigaam" {
+        let managed = crate::local_ai::gigaam_default_dir(&crate::local_ai::default_root());
+        dirty |= repair_gigaam_dir(
+            &mut cfg,
+            crate::local_ai::gigaam_model_present(&managed).then_some(managed.as_path()),
+        );
+    }
     // v2: CoreML was slower and retained substantially more RSS than CPU on
     // Apple Silicon. Migrate the former implicit-on default once; users can
     // still opt back in through Settings after this version is stamped.
@@ -1567,6 +1574,22 @@ fn migrate_macos_gigaam_cpu_default(cfg: &mut Config) -> bool {
     }
     cfg.stt_gigaam_gpu = false;
     true
+}
+
+/// Point GigaAM STT at the complete managed install when the saved folder has
+/// no model file. Settings already shows the managed folder in that case, so
+/// the check and the session load the folder the person sees.
+fn repair_gigaam_dir(cfg: &mut Config, managed_complete: Option<&std::path::Path>) -> bool {
+    let saved = std::path::Path::new(cfg.stt_gigaam_dir.trim());
+    let saved_has_model = !cfg.stt_gigaam_dir.trim().is_empty()
+        && std::fs::metadata(saved.join("model.int8.onnx")).is_ok_and(|m| m.len() > 0);
+    match managed_complete {
+        Some(managed) if cfg.stt_provider == "gigaam" && !saved_has_model => {
+            cfg.stt_gigaam_dir = managed.to_string_lossy().into_owned();
+            true
+        }
+        _ => false,
+    }
 }
 
 fn migrate_macos_gigaam_default(cfg: &mut Config, managed_ready: bool) -> bool {

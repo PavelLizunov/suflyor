@@ -2020,3 +2020,31 @@ fn fast_answers_default_on() {
     let old: Config = serde_json::from_str("{}").unwrap();
     assert!(old.ai_fast_answers);
 }
+
+#[test]
+fn gigaam_dir_without_a_model_follows_the_complete_managed_install() {
+    let tmp = tempfile::tempdir().unwrap();
+    let managed = tmp.path().join("managed");
+    let custom = tmp.path().join("custom");
+    std::fs::create_dir_all(&custom).unwrap();
+    let mut c = Config::defaults();
+    c.stt_provider = "gigaam".into();
+    c.stt_gigaam_dir = String::new();
+    assert!(repair_gigaam_dir(&mut c, Some(&managed)));
+    assert_eq!(c.stt_gigaam_dir, managed.to_string_lossy());
+
+    c.stt_gigaam_dir = custom.to_string_lossy().into_owned();
+    std::fs::write(custom.join("model.int8.onnx"), b"model").unwrap();
+    assert!(
+        !repair_gigaam_dir(&mut c, Some(&managed)),
+        "a folder with a model is kept"
+    );
+    assert!(!repair_gigaam_dir(&mut c, None));
+
+    c.stt_provider = "cloud".into();
+    c.stt_gigaam_dir = String::new();
+    assert!(
+        !repair_gigaam_dir(&mut c, Some(&managed)),
+        "other STT engines are left alone"
+    );
+}

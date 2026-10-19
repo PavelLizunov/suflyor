@@ -21,6 +21,25 @@
 //! imports narrow in a later pass.
 use super::{ComponentHandle, SettingsWindow, SharedString};
 
+/// The direct API profile that "Same as the answer model" stands for when the
+/// answers go through OpenAI or Anthropic. The Vision entries for those APIs
+/// already reuse the key, address and model from AI providers, so choosing
+/// "same" saves that entry instead of asking for the connection again.
+pub(crate) fn same_choice_direct_provider(
+    c: &overlay_backend::config::Config,
+) -> Option<&'static str> {
+    match c.ai_provider.as_str() {
+        "openai" => Some("openai"),
+        "anthropic" => Some("anthropic"),
+        _ => None,
+    }
+}
+
+/// Whether "Same as the answer model" can be chosen for screenshots.
+pub(crate) fn same_choice_available(c: &overlay_backend::config::Config) -> bool {
+    c.same_text_model_accepts_images_declared() || same_choice_direct_provider(c).is_some()
+}
+
 pub(crate) fn vision_provider_index_from_id(provider: &str) -> i32 {
     match provider {
         "off" => 0,
@@ -65,7 +84,10 @@ pub(crate) fn wire_vision_settings(
                     return;
                 }
             }
-            let provider = match idx {
+            let direct_same = (idx == 1)
+                .then(|| same_choice_direct_provider(&cfg_c.read()))
+                .flatten();
+            let provider = direct_same.unwrap_or(match idx {
                 0 => "off",
                 1 => "same",
                 2 => "cloud",
@@ -74,7 +96,7 @@ pub(crate) fn wire_vision_settings(
                 5 => "anthropic",
                 6 => "codex",
                 _ => "off",
-            };
+            });
             let (leaving_mlx, text_uses_mlx) = {
                 let current = cfg_c.read();
                 (
@@ -106,7 +128,7 @@ pub(crate) fn wire_vision_settings(
                 }
                 c.vision_provider.clone()
             };
-            if saved_provider != provider {
+            if saved_provider != provider || direct_same.is_some() {
                 if let Some(w) = weak.upgrade() {
                     w.set_vision_provider_index(vision_provider_index_from_id(&saved_provider));
                 }
@@ -248,12 +270,7 @@ pub(crate) fn wire_vision_settings(
                                 if overlay_backend::deep_lock::is_blocked_error(&chain) {
                                     overlay_backend::deep_lock::blocked_notice(ui_is_ru).to_string()
                                 } else {
-                                    if ui_is_ru {
-                                        "Не удалось проверить подключение"
-                                    } else {
-                                        "Could not verify the connection"
-                                    }
-                                    .to_string()
+                                    super::status_copy::connection_failed(ui_is_ru, &chain)
                                 }
                             }
                         }
@@ -397,7 +414,24 @@ pub(crate) fn wire_vision_settings(
 
 #[cfg(test)]
 mod tests {
-    use super::vision_provider_index_from_id;
+    use super::{same_choice_available, same_choice_direct_provider, vision_provider_index_from_id};
+
+    #[test]
+    fn same_choice_reuses_the_direct_api_profile() {
+        let mut c = overlay_backend::config::Config::defaults();
+        c.ai_provider = "openai".into();
+        assert_eq!(same_choice_direct_provider(&c), Some("openai"));
+        assert!(same_choice_available(&c));
+        c.ai_provider = "anthropic".into();
+        assert_eq!(same_choice_direct_provider(&c), Some("anthropic"));
+        c.ai_provider = "cloud".into();
+        assert_eq!(same_choice_direct_provider(&c), None);
+        assert!(!same_choice_available(&c));
+        c.ai_provider = "local".into();
+        c.ai_local_vision = true;
+        assert_eq!(same_choice_direct_provider(&c), None);
+        assert!(same_choice_available(&c));
+    }
 
     #[test]
     fn vision_provider_ids_match_the_shared_settings_catalog() {
