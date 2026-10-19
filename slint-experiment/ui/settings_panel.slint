@@ -3178,7 +3178,10 @@ export component SettingsWindow inherits Window {
                                 @tr("Anthropic API (Messages)"),
                                 @tr("ChatGPT via Codex (experimental)"),
                             ];
-                            current-index: root.vision-provider-index;
+                            // Two-way: the controller may replace the choice (the
+                            // direct API behind "same", a refused switch) and the
+                            // list must show what was saved.
+                            current-index <=> root.vision-provider-index;
                             selected => {
                                 root.vision-provider-index = self.current-index;
                                 root.vision-provider-changed(self.current-index);

@@ -1751,13 +1751,13 @@ pub(crate) fn active_rows(snap: &overlay_backend::config::Config) -> Vec<Compone
     );
 
     let (speech_ready, speech_detail) = match snap.stt_provider.as_str() {
-        // The folder the STT check and the session load, not a fallback.
+        // The folder the STT check and the session load (not a fallback),
+        // judged like the STT row below so the two never disagree.
         "gigaam" => (
             !snap.stt_gigaam_dir.trim().is_empty()
-                && std::fs::metadata(
-                    std::path::Path::new(snap.stt_gigaam_dir.trim()).join("model.int8.onnx"),
-                )
-                .is_ok_and(|m| m.len() > 0),
+                && overlay_backend::local_ai::gigaam_model_present(std::path::Path::new(
+                    snap.stt_gigaam_dir.trim(),
+                )),
             if ru { "GigaAM, на этом ПК" } else { "GigaAM, on this PC" },
         ),
         "whisper" => (!snap.stt_whisper_url.trim().is_empty(), "Whisper"),

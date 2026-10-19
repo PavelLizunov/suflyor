@@ -236,6 +236,14 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
                 backend,
                 overlay_backend::config::SttBackendCfg::Gigaam { .. }
             );
+            // Name the button the tab shows for this folder in the failure text.
+            let action = match installed_gigaam_dir(&cfg_c.read().stt_gigaam_dir) {
+                Some(dir) if is_custom_gigaam_dir(&dir) => {
+                    super::status_copy::GigaamAction::OwnFolder
+                }
+                Some(_) => super::status_copy::GigaamAction::CheckFiles,
+                None => super::status_copy::GigaamAction::Download,
+            };
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
                 let msg = match tokio::runtime::Builder::new_current_thread()
@@ -258,7 +266,7 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
                                 }
                             }
                             Err(e) if local_model => {
-                                super::status_copy::gigaam_check_failed(ru, &format!("{e:#}"))
+                                super::status_copy::gigaam_check_failed(ru, &format!("{e:#}"), action)
                             }
                             Err(e) => super::status_copy::connection_failed(ru, &format!("{e:#}")),
                         }

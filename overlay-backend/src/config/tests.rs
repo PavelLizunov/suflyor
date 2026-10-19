@@ -2035,10 +2035,16 @@ fn gigaam_dir_without_a_model_follows_the_complete_managed_install() {
 
     c.stt_gigaam_dir = custom.to_string_lossy().into_owned();
     std::fs::write(custom.join("model.int8.onnx"), b"model").unwrap();
-    assert!(!repair_gigaam_dir(&mut c, Some(&managed)), "a folder with a model is kept");
+    assert!(
+        !repair_gigaam_dir(&mut c, Some(&managed)),
+        "a folder with a model is kept"
+    );
     assert!(!repair_gigaam_dir(&mut c, None));
 
     c.stt_provider = "cloud".into();
     c.stt_gigaam_dir = String::new();
-    assert!(!repair_gigaam_dir(&mut c, Some(&managed)), "other STT engines are left alone");
+    assert!(
+        !repair_gigaam_dir(&mut c, Some(&managed)),
+        "other STT engines are left alone"
+    );
 }
