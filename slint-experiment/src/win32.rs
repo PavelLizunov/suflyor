@@ -36,14 +36,48 @@ mod windows_impl {
     use windows::Win32::UI::WindowsAndMessaging::{
         GetWindowDisplayAffinity, GetWindowLongPtrW, KillTimer, LoadCursorW, SetCursor, SetTimer,
         SetWindowDisplayAffinity, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWLP_HWNDPARENT,
-        GWL_EXSTYLE, GWL_STYLE, HWND_NOTOPMOST, HWND_TOPMOST, IDC_ARROW, SWP_FRAMECHANGED,
-        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOWNOACTIVATE,
-        WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WM_MOUSEMOVE, WM_SETCURSOR, WM_TIMER, WS_EX_APPWINDOW,
-        WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SYSMENU,
+        GWL_EXSTYLE, GWL_STYLE, HWND_NOTOPMOST, HWND_TOPMOST, IDC_ARROW, STYLESTRUCT,
+        SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE,
+        SW_SHOWNOACTIVATE, WDA_EXCLUDEFROMCAPTURE, WDA_NONE, WM_MOUSEMOVE, WM_SETCURSOR,
+        WM_STYLECHANGING, WM_TIMER, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT,
+        WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_SYSMENU,
     };
 
     const STEALTH_CURSOR_SUBCLASS_ID: usize = 0x55F1_0001;
     const STEALTH_CURSOR_TIMER_ID: usize = 0x55F1_0002;
+    const CAPTION_GUARD_SUBCLASS_ID: usize = 0x55F1_0003;
+
+    fn strip_caption_buttons(style: u32) -> u32 {
+        style & !(WS_SYSMENU.0 | WS_MAXIMIZEBOX.0 | WS_MINIMIZEBOX.0)
+    }
+
+    unsafe extern "system" fn caption_guard_subclass_proc(
+        hwnd: HWND,
+        message: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+        _id: usize,
+        _ref: usize,
+    ) -> LRESULT {
+        if message == WM_STYLECHANGING && wparam.0 as i32 == GWL_STYLE.0 && lparam.0 != 0 {
+            // SAFETY: WM_STYLECHANGING supplies a writable STYLESTRUCT for this call.
+            let style = unsafe { &mut *(lparam.0 as *mut STYLESTRUCT) };
+            style.styleNew = strip_caption_buttons(style.styleNew);
+        }
+        unsafe { DefSubclassProc(hwnd, message, wparam, lparam) }
+    }
+
+    fn install_caption_guard(hwnd: HWND) {
+        // Reinstalling the same proc/id only updates its reference data.
+        let _ = unsafe {
+            SetWindowSubclass(
+                hwnd,
+                Some(caption_guard_subclass_proc),
+                CAPTION_GUARD_SUBCLASS_ID,
+                0,
+            )
+        };
+    }
 
     fn restore_arrow_after_message(message: u32) -> bool {
         message == WM_MOUSEMOVE
@@ -233,17 +267,17 @@ mod windows_impl {
         // we extend the DWM frame into the client area (below), DWM paints the
         // caption's close/min/max glyphs faintly in the top-right corner — the
         // "еле заметный крестик" the user kept reporting on the bar (and it was on
-        // tiles too). Clearing the sys-menu + min/max bits drops those non-client
-        // buttons while leaving WS_CAPTION/WS_THICKFRAME, so the DWM frame extension
-        // is unchanged. Verified live: the × disappears, transparency + rounded
-        // corners stay intact. Alt+F4 also goes away — fine, every overlay window
-        // has its own close affordance (the bar's X chip, the tile's X button).
+        // tiles too). Clear the sys-menu + min/max bits once, then keep them off
+        // with the WM_STYLECHANGING guard: winit rewrites GWL_STYLE on later state
+        // changes (show/hide, restore, flag diffs), bringing the buttons back.
+        // WS_CAPTION/WS_THICKFRAME stay intact, so DWM frame extension is unchanged.
+        // Alt+F4 also goes away — fine, every overlay window has its own close
+        // affordance (the bar's X chip, the tile's X button).
         unsafe {
-            let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
-            let no_buttons = style
-                & !(WS_SYSMENU.0 as isize | WS_MAXIMIZEBOX.0 as isize | WS_MINIMIZEBOX.0 as isize);
+            let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
+            let no_buttons = strip_caption_buttons(style);
             if no_buttons != style {
-                SetWindowLongPtrW(hwnd, GWL_STYLE, no_buttons);
+                SetWindowLongPtrW(hwnd, GWL_STYLE, no_buttons as isize);
                 // SWP_FRAMECHANGED forces a non-client recompute so the removed
                 // buttons stop being drawn immediately (not on the next frame).
                 let _ = SetWindowPos(
@@ -257,6 +291,8 @@ mod windows_impl {
                 );
             }
         }
+
+        install_caption_guard(hwnd);
 
         let margins = MARGINS {
             cxLeftWidth: -1,
@@ -944,6 +980,22 @@ mod windows_impl {
         #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
         use super::*;
+
+        #[test]
+        fn caption_guard_strips_buttons_and_preserves_other_styles() {
+            use windows::Win32::UI::WindowsAndMessaging::{
+                WS_CAPTION, WS_DISABLED, WS_POPUP, WS_THICKFRAME, WS_VISIBLE,
+            };
+            let buttons = WS_SYSMENU.0 | WS_MAXIMIZEBOX.0 | WS_MINIMIZEBOX.0;
+            let preserved =
+                WS_CAPTION.0 | WS_THICKFRAME.0 | WS_VISIBLE.0 | WS_DISABLED.0 | WS_POPUP.0;
+            let stripped = strip_caption_buttons(preserved | buttons);
+
+            assert_eq!(strip_caption_buttons(buttons), 0);
+            assert_eq!(stripped, preserved);
+            assert_eq!(strip_caption_buttons(stripped), stripped);
+            assert_eq!(strip_caption_buttons(0), 0);
+        }
 
         #[test]
         fn stealth_cursor_guard_defers_mouse_move_restore() {
