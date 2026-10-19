@@ -177,6 +177,10 @@ export component SettingsWindow inherits Window {
     in-out property <string> openai-key-input: "";
     in-out property <string> openai-base-url-input: "";
     in-out property <string> openai-model-input: "";
+    // Reasoning level of the bridge / OpenAI profile: index into
+    // settings_ai::REASONING_LEVELS (0 = the model's default, nothing sent).
+    in-out property <int> ai-reasoning-index: 0;
+    in-out property <int> openai-reasoning-index: 0;
     in-out property <string> anthropic-key-status: "(loading...)";
     in-out property <string> anthropic-key-input: "";
     in-out property <string> anthropic-base-url-input: "";
@@ -497,6 +501,8 @@ export component SettingsWindow inherits Window {
     callback openai-key-save(string);
     callback openai-base-url-save(string);
     callback openai-model-save(string);
+    callback ai-reasoning-changed(int);
+    callback openai-reasoning-changed(int);
     callback anthropic-key-save(string);
     callback anthropic-base-url-save(string);
     callback anthropic-model-save(string);
@@ -2489,6 +2495,32 @@ export component SettingsWindow inherits Window {
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
                             }
+                            Text {
+                                text: @tr("Reasoning effort:");
+                                font-size: Metrics.font-label;
+                                color: Theme.text-secondary;
+                            }
+                            SettingsComboBox {
+                                // Same order as settings_ai::REASONING_LEVELS.
+                                model: [
+                                    @tr("Model default"),
+                                    @tr("Off — answer at once"),
+                                    @tr("Minimal"),
+                                    @tr("Low"),
+                                    @tr("Medium"),
+                                    @tr("High"),
+                                ];
+                                current-index <=> root.ai-reasoning-index;
+                                selected => {
+                                    root.ai-reasoning-changed(self.current-index);
+                                }
+                            }
+                            Text {
+                                text: @tr("Sent with every request. «Off» makes thinking models such as Gemini answer without reasoning first; a server that does not know the setting may reject requests — choose «Model default» then.");
+                                font-size: Metrics.font-caption;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
                             HorizontalLayout {
                                 spacing: 6px;
                                 Button {
@@ -2538,6 +2570,32 @@ export component SettingsWindow inherits Window {
                                 spacing: 6px;
                                 SettingsLineEdit { placeholder-text: @tr("OpenAI model ID"); text <=> root.openai-model-input; horizontal-stretch: 1; }
                                 Button { text: @tr("Save model"); clicked => { root.openai-model-save(root.openai-model-input); } }
+                            }
+                            Text {
+                                text: @tr("Reasoning effort:");
+                                font-size: Metrics.font-label;
+                                color: Theme.text-secondary;
+                            }
+                            SettingsComboBox {
+                                // Same order as settings_ai::REASONING_LEVELS.
+                                model: [
+                                    @tr("Model default"),
+                                    @tr("Off — answer at once"),
+                                    @tr("Minimal"),
+                                    @tr("Low"),
+                                    @tr("Medium"),
+                                    @tr("High"),
+                                ];
+                                current-index <=> root.openai-reasoning-index;
+                                selected => {
+                                    root.openai-reasoning-changed(self.current-index);
+                                }
+                            }
+                            Text {
+                                text: @tr("Sent with every request. «Off» makes thinking models such as Gemini answer without reasoning first; a server that does not know the setting may reject requests — choose «Model default» then.");
+                                font-size: Metrics.font-caption;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
                             }
                             HorizontalLayout {
                                 spacing: 6px;

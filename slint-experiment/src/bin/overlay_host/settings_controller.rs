@@ -2070,6 +2070,10 @@ pub(crate) fn populate_token_status(
     win.set_ai_base_url_input(SharedString::from(c.ai_base_url.clone()));
     win.set_openai_base_url_input(SharedString::from(c.openai_base_url.clone()));
     win.set_openai_model_input(SharedString::from(c.openai_model.clone()));
+    win.set_ai_reasoning_index(super::settings_ai::reasoning_level_index(&c.ai_reasoning_effort));
+    win.set_openai_reasoning_index(super::settings_ai::reasoning_level_index(
+        &c.openai_reasoning_effort,
+    ));
     win.set_anthropic_base_url_input(SharedString::from(c.anthropic_base_url.clone()));
     win.set_anthropic_model_input(SharedString::from(c.anthropic_model.clone()));
     // V4 — vision section: provider index + non-secret fields (bearers stay blank

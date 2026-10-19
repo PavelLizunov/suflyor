@@ -1,5 +1,6 @@
 use super::control::{
-    apply_local_no_think, apply_managed_gemma_sampler, apply_prompt_cache, http_client,
+    apply_local_no_think, apply_managed_gemma_sampler, apply_prompt_cache, apply_reasoning_effort,
+    http_client,
     resolve_managed_mlx_endpoint, transport_failure_kind, AI_SEMAPHORE, PROMPT_CACHE,
 };
 use super::pricing::TokenUsage;
@@ -269,6 +270,7 @@ pub(crate) async fn complete_once(
         && protocol.supports_prompt_cache_control();
     let mut body =
         provider::request_body(protocol, model, &messages, max_tokens, false, prompt_cache)?;
+    apply_reasoning_effort(&mut body, protocol, base_url);
     if protocol == AiProtocol::OpenAiCompatible {
         apply_prompt_cache(&mut body);
         apply_local_no_think(&mut body, force_no_think);

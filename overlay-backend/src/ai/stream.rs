@@ -1,5 +1,6 @@
 use super::control::{
-    apply_local_no_think, apply_managed_gemma_sampler, apply_prompt_cache, http_client,
+    apply_local_no_think, apply_managed_gemma_sampler, apply_prompt_cache, apply_reasoning_effort,
+    http_client,
     resolve_managed_mlx_endpoint, transport_failure_kind, AI_SEMAPHORE, PROMPT_CACHE,
 };
 use super::provider;
@@ -242,6 +243,7 @@ pub(crate) async fn stream_plain(
         true,
         prompt_cache,
     )?;
+    apply_reasoning_effort(&mut body, endpoint.protocol, &endpoint.base_url);
     if endpoint.protocol == AiProtocol::OpenAiCompatible {
         apply_prompt_cache(&mut body);
         apply_local_no_think(&mut body, no_think && endpoint.is_local);

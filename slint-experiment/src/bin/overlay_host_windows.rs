@@ -621,6 +621,8 @@ fn main() -> Result<(), slint::PlatformError> {
     {
         let c = cfg.read();
         ai::set_local_no_think(c.ai_provider == "local" && !c.ai_local_thinking);
+        // The reasoning level chosen for the bridge and the OpenAI profile.
+        ai::set_reasoning_efforts(c.reasoning_efforts());
         // ADR-003 — the local model's tools, and a Strata installed before
         // Suflyor if the user chose one.
         ai::set_agent_tools(c.ai_agent_tools, c.ai_web_search);
@@ -4272,6 +4274,50 @@ fn main() -> Result<(), slint::PlatformError> {
                         c.suppress_tiles
                     };
                     eprintln!("[overlay-host] suppress-tiles (listening mode) -> {new_state}");
+                    if let Some(o) = weak_for_lock.upgrade() {
+                        refresh_lock_chip(&o, &cfg_for_lock);
+                        let ru = cfg_for_lock.read().ui_is_ru();
+                        o.set_status_text(SharedString::from(
+                            overlay_backend::deep_lock::status_text(
+                                ru,
+                                if new_state {
+                                    LockStatus::ListeningOn
+                                } else {
+                                    LockStatus::ListeningOff
+                                },
+                            ),
+                        ));
+                    }
+                }
+                LockAction::ReleaseStaleLock => {
+                    let new_state = requested != LockMode::Normal;
+                    let saved = {
+                        let mut c = cfg_for_lock.write();
+                        let previous_suppress_tiles = c.suppress_tiles;
+                        c.deep_lock = false;
+                        c.suppress_tiles = new_state;
+                        match overlay_backend::config::save(&c) {
+                            Ok(()) => true,
+                            Err(e) => {
+                                c.deep_lock = true;
+                                c.suppress_tiles = previous_suppress_tiles;
+                                eprintln!(
+                                    "[overlay-host] stale deep lock release save failed; lock kept: {e:#}"
+                                );
+                                false
+                            }
+                        }
+                    };
+                    if !saved {
+                        if let Some(o) = weak_for_lock.upgrade() {
+                            refresh_lock_chip(&o, &cfg_for_lock);
+                        }
+                        return;
+                    }
+                    overlay_backend::deep_lock::set_deep_lock_active(false);
+                    eprintln!(
+                        "[overlay-host] stale deep lock released (endpoint is not app-managed)"
+                    );
                     if let Some(o) = weak_for_lock.upgrade() {
                         refresh_lock_chip(&o, &cfg_for_lock);
                         let ru = cfg_for_lock.read().ui_is_ru();
