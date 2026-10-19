@@ -1967,3 +1967,17 @@ fn old_size_4b_upgrade_compatibility_and_new_spec_integrity() {
     );
     assert_eq!(cfg.ai_local_model, LEGACY_GEMMA_FILE);
 }
+
+#[test]
+fn gigaam_vocab_is_restored_only_beside_a_complete_model() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    assert!(!repair_gigaam_vocab(dir).unwrap(), "no model → nothing written");
+    assert!(!dir.join("vocab.txt").exists());
+    make_complete(&dir.join("model.int8.onnx"), GIGAAM_MODEL_SIZE);
+    assert!(repair_gigaam_vocab(dir).unwrap(), "missing vocab is restored");
+    assert_eq!(std::fs::read(dir.join("vocab.txt")).unwrap(), GIGAAM_VOCAB);
+    std::fs::write(dir.join("vocab.txt"), b"custom").unwrap();
+    assert!(!repair_gigaam_vocab(dir).unwrap(), "an existing vocab is kept");
+    assert_eq!(std::fs::read(dir.join("vocab.txt")).unwrap(), b"custom");
+}

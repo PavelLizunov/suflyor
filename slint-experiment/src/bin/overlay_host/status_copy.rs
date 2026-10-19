@@ -367,9 +367,33 @@ pub(super) fn connection_failed(ru: bool, chain: &str) -> String {
     } else if has(&["timed out", "timeout", "refused", "error sending request", "dns", "connect"]) {
         ("Сервер не отвечает", "The server does not answer")
     } else {
-        ("Не удалось подключиться", "Could not connect")
+        (
+            "Не удалось подключиться: проверьте адрес, ключ и модель",
+            "Could not connect: check the address, key and model",
+        )
     };
     if ru { ru_text } else { en_text }.to_string()
+}
+
+/// Result of the STT check for the local GigaAM model: what happened and the
+/// next step the STT tab offers. Other failures read as connection failures.
+pub(super) fn gigaam_check_failed(ru: bool, chain: &str) -> String {
+    let accelerator = if cfg!(target_os = "macos") { "Apple Core ML" } else { "GPU (DirectML)" };
+    if chain.contains(overlay_backend::stt::GIGAAM_NOT_DOWNLOADED) {
+        if ru {
+            "В этой папке нет модели GigaAM. Нажмите «Загрузить / Продолжить» выше или укажите папку, где лежит model.int8.onnx.".to_string()
+        } else {
+            "This folder has no GigaAM model. Press Download / Resume above or point to the folder with model.int8.onnx.".to_string()
+        }
+    } else if chain.contains(overlay_backend::stt::GIGAAM_LOAD_FAILED) {
+        if ru {
+            format!("Модель есть, но не запустилась. Выключите {accelerator} и проверьте снова; не помогло — нажмите «Проверить файлы» выше.")
+        } else {
+            format!("The model is there but did not start. Turn off {accelerator} and check again; if that fails, press Check files above.")
+        }
+    } else {
+        connection_failed(ru, chain)
+    }
 }
 
 /// A connection test that could not even start (no async runtime).
@@ -387,6 +411,16 @@ mod connection_text_tests {
         assert_eq!(connection_failed(true, "no Groq API key set"), "Нет ключа: добавьте его в Настройках");
         assert_eq!(connection_failed(false, "HTTP 401 Unauthorized"), "The key was rejected");
         assert_eq!(connection_failed(true, "error sending request: connection refused"), "Сервер не отвечает");
-        assert_eq!(connection_failed(false, "weird"), "Could not connect");
+        assert_eq!(connection_failed(false, "weird"), "Could not connect: check the address, key and model");
+    }
+
+    #[test]
+    fn gigaam_failures_name_the_next_step() {
+        use super::gigaam_check_failed;
+        let missing = gigaam_check_failed(true, overlay_backend::stt::GIGAAM_NOT_DOWNLOADED);
+        assert!(missing.contains("Загрузить / Продолжить"), "{missing}");
+        let broken = gigaam_check_failed(false, overlay_backend::stt::GIGAAM_LOAD_FAILED);
+        assert!(broken.contains("Check files"), "{broken}");
+        assert_eq!(gigaam_check_failed(true, "weird"), connection_failed(true, "weird"));
     }
 }

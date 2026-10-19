@@ -222,7 +222,7 @@ pub(crate) fn refresh_codex_account_status(
                 c.codex_vision_model.clone(),
                 c.ai_provider.clone(),
                 c.vision_provider.clone(),
-                c.same_text_model_accepts_images_declared(),
+                super::settings_vision::same_choice_available(&c),
             )
         };
         let snapshot = overlay_backend::codex_subscription::provider_snapshot();
@@ -782,9 +782,20 @@ pub(crate) fn wire_ai_settings(
             if c.vision_provider == "same" && !c.same_text_model_accepts_images_declared() {
                 c.vision_provider = "off".into();
             }
+            // Screenshots never set up (the default bridge with no key) follow
+            // the direct API just chosen for answers instead of failing on F8.
+            if c.vision_provider == "cloud"
+                && c.vision_base_url.trim().is_empty()
+                && c.vision_bearer.trim().is_empty()
+                && c.ai_bearer.trim().is_empty()
+            {
+                if let Some(direct) = super::settings_vision::same_choice_direct_provider(&c) {
+                    c.vision_provider = direct.to_string();
+                }
+            }
             let vision_state = (
                 c.vision_provider.clone(),
-                c.same_text_model_accepts_images_declared(),
+                super::settings_vision::same_choice_available(&c),
             );
             let local_state = (provider == "local").then(|| {
                 let root = overlay_backend::local_ai::default_root();

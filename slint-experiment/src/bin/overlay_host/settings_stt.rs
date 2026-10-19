@@ -214,6 +214,10 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
                 "Checking…"
             }));
             let backend = cfg_c.read().stt_backend();
+            let local_model = matches!(
+                backend,
+                overlay_backend::config::SttBackendCfg::Gigaam { .. }
+            );
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
                 let msg = match tokio::runtime::Builder::new_current_thread()
@@ -222,12 +226,21 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
                 {
                     Ok(rt) => {
                         match rt.block_on(overlay_backend::stt::test_connection_backend(&backend)) {
+                            Ok(_) if local_model => if ru {
+                                "Модель загружена, распознавание готово"
+                            } else {
+                                "The model loaded; recognition is ready"
+                            }
+                            .to_string(),
                             Ok(_) => {
                                 if ru {
                                     "Подключение работает".to_string()
                                 } else {
                                     "Connection works".to_string()
                                 }
+                            }
+                            Err(e) if local_model => {
+                                super::status_copy::gigaam_check_failed(ru, &format!("{e:#}"))
                             }
                             Err(e) => super::status_copy::connection_failed(ru, &format!("{e:#}")),
                         }

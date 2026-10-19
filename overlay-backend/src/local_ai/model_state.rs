@@ -331,6 +331,18 @@ pub fn gigaam_model_present(dir: &Path) -> bool {
     file_len(&dir.join("model.int8.onnx")) >= GIGAAM_MODEL_SIZE
 }
 
+/// Write the bundled `vocab.txt` beside a complete GigaAM-v3 model when it is
+/// missing or empty. The model does not load without it, while the presence
+/// check above reads only the model file. Returns `true` when it wrote one.
+pub fn repair_gigaam_vocab(dir: &Path) -> std::io::Result<bool> {
+    let vocab = dir.join("vocab.txt");
+    if !gigaam_model_present(dir) || file_len(&vocab) > 0 {
+        return Ok(false);
+    }
+    std::fs::write(vocab, super::GIGAAM_VOCAB)?;
+    Ok(true)
+}
+
 #[must_use]
 pub fn quality_vision_present(root: &Path) -> bool {
     file_has_expected_size(&root.join("llama.cpp").join(MMPROJ26_FILE), MMPROJ26_SIZE)

@@ -2296,6 +2296,9 @@ msgstr "{} / {} МБ загружено"
 msgid "Download / Resume"
 msgstr "Загрузить / Продолжить"
 
+msgid "Check files"
+msgstr "Проверить файлы"
+
 msgid "Enable for text"
 msgstr "Использовать для текста"
 
@@ -2563,9 +2566,6 @@ msgstr "Скриншоты идут через подключение и мод�
 
 msgid "Speaker detection"
 msgstr "Определение говорящих"
-
-msgid "What is installed for AI without the internet. Each part downloads on demand: here or in the tab named under it."
-msgstr "Что установлено для AI без интернета. Каждая часть скачивается по запросу: здесь или во вкладке, указанной под ней."
 
 # Local model cards
 
@@ -2994,3 +2994,18 @@ msgstr "Термины"
 
 msgid "Close the definition"
 msgstr "Закрыть определение"
+
+msgid "In use now"
+msgstr "Сейчас используется"
+
+msgid "Set up"
+msgstr "Настроить"
+
+msgid "set up"
+msgstr "настроено"
+
+msgid "not needed"
+msgstr "не нужно"
+
+msgid "Parts for working without the internet. Each is needed only when its tab selects it, and downloads on demand: here or in the tab named under it."
+msgstr "Части для работы без интернета. Каждая нужна, только если выбрана в своей вкладке, и скачивается по запросу: здесь или во вкладке, указанной под ней."

@@ -267,7 +267,9 @@ fn macos_gigaam_is_coreml_backed_and_primary_on_fresh_config() {
     assert!(settings.contains("win.on_stt_gigaam_install_cancel("));
     assert!(settings.contains("installed_gigaam_dir(&c.stt_gigaam_dir)"));
     assert!(controller.contains("set_stt_gigaam_installed(installed.is_some())"));
-    assert!(ui.contains("if Platform.is-macos && root.stt-provider-index == 1 : VerticalLayout"));
+    // The managed GigaAM download/check block serves Windows and macOS alike.
+    assert!(ui.contains("if root.stt-provider-index == 1 : VerticalLayout"));
+    assert!(ui.contains("root.stt-gigaam-installed ? @tr(\"Check files\") : @tr(\"Download / Resume\")"));
     assert!(ui.contains("root.stt-gigaam-install-progress"));
 }
 
