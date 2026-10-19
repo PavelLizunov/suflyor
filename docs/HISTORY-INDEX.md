@@ -131,6 +131,15 @@ Every row below names the master commit 8a38baccc38ec317693be4dde376e958e8f3c242
 | docs/retest-v0.37.0-rc.1.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
 | docs/retest-v0.38.0-rc.2-macos-settings.html | 8a38baccc38ec317693be4dde376e958e8f3c242 | wave 2 |
 
+## RC.14 task audits
+
+| Path before removal | Revision that holds it | Removed in |
+|---|---|---|
+| docs/audit-2026-10-19-settings-geometry/ | 92438f4eb9bc7e0957dc5128706a0df729009de0 | rc.14 evidence closeout |
+| docs/audit-2026-10-19-auto-tiles/ | 92438f4eb9bc7e0957dc5128706a0df729009de0 | rc.14 evidence closeout |
+
+The exact release consumer evidence is retained in docs/release-evidence-v0.38.1-rc.14/README.md.
+
 ## Reduced in place
 
 These files stay in the tree but lost their historical part. The full earlier text is read the same way.
