@@ -544,6 +544,9 @@ export component SettingsWindow inherits Window {
     in-out property <int> stt-cloud-model-index: 0;
     in-out property <string> stt-gigaam-dir-input: "";
     in-out property <bool> stt-gigaam-installed: false;
+    // The model in use lives outside the managed install; «Check files» covers
+    // only the managed copy, so it is off then.
+    in-out property <bool> stt-gigaam-custom: false;
     in-out property <bool> stt-gigaam-installing: false;
     in-out property <bool> stt-gigaam-install-failed: false;
     in-out property <bool> stt-gigaam-install-cancelled: false;
@@ -3778,8 +3781,8 @@ export component SettingsWindow inherits Window {
                             spacing: 6px;
                             Text {
                                 text: root.stt-gigaam-installing ? @tr("Downloading and verifying…")
-                                    : root.stt-gigaam-installed ? @tr("Installed")
                                     : root.stt-gigaam-install-failed ? @tr("Download or activation failed. Retry when ready.")
+                                    : root.stt-gigaam-installed ? @tr("Installed")
                                     : root.stt-gigaam-install-cancelled ? @tr("Download cancelled. Resume keeps verified files.")
                                     : @tr("Not installed");
                                 font-size: Metrics.font-label;
@@ -3811,7 +3814,8 @@ export component SettingsWindow inherits Window {
                                 // pinned checksum and restores what is missing or damaged.
                                 Button {
                                     text: root.stt-gigaam-installed ? @tr("Check files") : @tr("Download / Resume");
-                                    enabled: !root.stt-gigaam-installing;
+                                    enabled: !root.stt-gigaam-installing
+                                        && !(root.stt-gigaam-installed && root.stt-gigaam-custom);
                                     clicked => { root.stt-gigaam-install(); }
                                 }
                                 if root.stt-gigaam-installing : Button {

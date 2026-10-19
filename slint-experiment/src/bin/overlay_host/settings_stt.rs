@@ -84,6 +84,19 @@ pub(crate) fn installed_gigaam_dir(saved: &str) -> Option<PathBuf> {
     overlay_backend::local_ai::gigaam_model_present(&managed).then_some(managed)
 }
 
+/// A model folder other than the managed install. "Check files" verifies the
+/// managed copy only, so it stays off for such a folder.
+pub(crate) fn is_custom_gigaam_dir(dir: &Path) -> bool {
+    dir != managed_gigaam_dir()
+}
+
+/// Show the GigaAM state of the saved folder on the STT tab.
+fn show_gigaam_state(w: &SettingsWindow, saved: &str) {
+    let installed = installed_gigaam_dir(saved);
+    w.set_stt_gigaam_installed(installed.is_some());
+    w.set_stt_gigaam_custom(installed.as_deref().is_some_and(is_custom_gigaam_dir));
+}
+
 fn format_mebibytes(bytes: u64) -> String {
     format!("{:.0}", bytes as f64 / 1_048_576.0)
 }
@@ -124,6 +137,7 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
             w.set_stt_gigaam_install_progress(0.0);
             let weak_done = w.as_weak();
             let cfg_t = cfg_c.clone();
+            let cfg_state = cfg_c.clone();
             let cancel_t = cancel.clone();
             std::thread::spawn(move || {
                 let options = overlay_backend::local_ai::InstallOptions {
@@ -176,8 +190,12 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
                     w.set_stt_gigaam_install_failed(result.is_err() && !cancelled);
                     if let Ok(dir) = result {
                         w.set_stt_gigaam_installed(true);
+                        w.set_stt_gigaam_custom(false);
                         w.set_stt_gigaam_dir_input(SharedString::from(dir));
                         w.set_stt_provider_index(1);
+                    } else {
+                        // A failed check may have removed a damaged file.
+                        show_gigaam_state(&w, &cfg_state.read().stt_gigaam_dir);
                     }
                 });
             });
@@ -269,7 +287,7 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
                     c.stt_gigaam_dir = dir.to_string_lossy().into_owned();
                     if let Some(w) = weak.upgrade() {
                         w.set_stt_gigaam_dir_input(SharedString::from(c.stt_gigaam_dir.clone()));
-                        w.set_stt_gigaam_installed(true);
+                        show_gigaam_state(&w, &c.stt_gigaam_dir);
                     }
                 }
             }
@@ -322,6 +340,7 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
     }
     {
         let cfg_c = cfg.clone();
+        let weak = win.as_weak();
         win.on_stt_gigaam_dir_save(move |v| {
             let trimmed = v.trim().to_string();
             let mut c = cfg_c.write();
@@ -330,6 +349,9 @@ pub(crate) fn wire_stt_settings(win: &SettingsWindow, cfg: &overlay_backend::con
             if let Err(e) = overlay_backend::config::save(&c) {
                 eprintln!("[overlay-host] stt_gigaam_dir save failed: {e:#}");
                 return;
+            }
+            if let Some(w) = weak.upgrade() {
+                show_gigaam_state(&w, &trimmed);
             }
             diag!("stt_gigaam_dir saved ({} chars)", trimmed.len());
         });

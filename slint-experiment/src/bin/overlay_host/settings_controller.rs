@@ -1732,7 +1732,10 @@ pub(crate) fn active_rows(snap: &overlay_backend::config::Config) -> Vec<Compone
     let vision_row = row(
         if ru { "Скриншоты (F8)" } else { "Screenshots (F8)" },
         vision.as_ref().is_some_and(|ep| {
-            endpoint_ready(ep, !snap.vision_base_url.trim().is_empty())
+            endpoint_ready(
+                ep,
+                snap.vision_provider == "cloud" && !snap.vision_base_url.trim().is_empty(),
+            )
         }),
         vision
             .as_ref()
@@ -1748,8 +1751,13 @@ pub(crate) fn active_rows(snap: &overlay_backend::config::Config) -> Vec<Compone
     );
 
     let (speech_ready, speech_detail) = match snap.stt_provider.as_str() {
+        // The folder the STT check and the session load, not a fallback.
         "gigaam" => (
-            super::settings_stt::installed_gigaam_dir(&snap.stt_gigaam_dir).is_some(),
+            !snap.stt_gigaam_dir.trim().is_empty()
+                && std::fs::metadata(
+                    std::path::Path::new(snap.stt_gigaam_dir.trim()).join("model.int8.onnx"),
+                )
+                .is_ok_and(|m| m.len() > 0),
             if ru { "GigaAM, на этом ПК" } else { "GigaAM, on this PC" },
         ),
         "whisper" => (!snap.stt_whisper_url.trim().is_empty(), "Whisper"),
@@ -2291,6 +2299,11 @@ pub(crate) fn populate_token_status(
     if !win.get_stt_gigaam_installing() {
         let installed = super::settings_stt::installed_gigaam_dir(&c.stt_gigaam_dir);
         win.set_stt_gigaam_installed(installed.is_some());
+        win.set_stt_gigaam_custom(
+            installed
+                .as_deref()
+                .is_some_and(super::settings_stt::is_custom_gigaam_dir),
+        );
         win.set_stt_gigaam_install_failed(false);
         win.set_stt_gigaam_install_cancelled(false);
         win.set_stt_gigaam_install_progress(0.0);
