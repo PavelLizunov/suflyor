@@ -1849,6 +1849,7 @@ pub(crate) fn search_found_models(
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod now_answering_tests {
     #[test]
     fn caption_keeps_only_the_endpoint_authority() {
