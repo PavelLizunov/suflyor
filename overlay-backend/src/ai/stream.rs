@@ -333,9 +333,22 @@ pub(crate) async fn stream_plain(
                     Err(_) => continue,
                 };
 
-                let parsed = provider::parse_stream(endpoint.protocol, &v);
+                let mut parsed = provider::parse_stream(endpoint.protocol, &v);
                 if parsed.failed {
                     return Err(anyhow!("AI provider stream error"));
+                }
+                // Some Responses bridges buffer text until the terminal snapshot.
+                // Reuse completion decoding only when no text was streamed; a
+                // normal stream repeats its entire answer in that snapshot.
+                if endpoint.protocol == AiProtocol::OpenAiResponses
+                    && parsed.done.is_some()
+                    && delta_count == 0
+                {
+                    let response = v.get("response").unwrap_or(&v);
+                    let (text, _) = provider::parse_completion(endpoint.protocol, response, 0.0);
+                    if !text.is_empty() {
+                        parsed.delta = Some(text);
+                    }
                 }
                 if parsed.server_tps.is_some() {
                     server_tps = parsed.server_tps;
