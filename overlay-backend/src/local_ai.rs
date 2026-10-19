@@ -456,7 +456,7 @@ pub fn install(
         on(Progress::Step("Installing llama.cpp".to_string()));
         std::fs::create_dir_all(&llama_dir)?;
         if find_exe(&llama_dir, "llama-server.exe").is_none() {
-            let rel = github_release(LLAMA_REPO)?;
+            let rel = github_build_release(LLAMA_REPO, "llama-")?;
             let pick = pick_llama(&rel.assets, gpu)?;
             cuda_version = pick.version.clone();
             let blabel = format!("llama.cpp {}", pick.version.as_deref().unwrap_or("CPU"));
@@ -1664,7 +1664,7 @@ pub fn update_llama_engine(
     let installed = installed_llama_build(&llama_dir);
 
     on(Progress::Step("Checking for a newer llama.cpp".into()));
-    let rel = github_release(LLAMA_REPO)?;
+    let rel = github_build_release(LLAMA_REPO, "llama-")?;
     let latest =
         parse_build_tag(&rel.tag_name).context("latest llama.cpp release has no build tag")?;
     if installed.is_some_and(|cur| cur >= latest) {
@@ -2200,8 +2200,13 @@ struct LlamaPick {
     version: Option<String>,
 }
 
-fn github_release(repo: &str) -> Result<GhRelease> {
-    let url = format!("https://api.github.com/repos/{repo}/releases/latest");
+
+/// Newest release of `repo` that carries binaries named `asset_prefix…`.
+/// Since October 2026 llama.cpp and whisper.cpp publish their binary builds
+/// (`bNNNN`) as prereleases, and their "latest" release is a version tag
+/// with no binaries, so `releases/latest` alone finds nothing to install.
+fn github_build_release(repo: &str, asset_prefix: &str) -> Result<GhRelease> {
+    let url = format!("https://api.github.com/repos/{repo}/releases?per_page=30");
     let out = run_capture(
         "curl.exe",
         &[
@@ -2214,18 +2219,29 @@ fn github_release(repo: &str) -> Result<GhRelease> {
             &url,
         ],
     )
-    .with_context(|| format!("fetch latest release for {repo}"))?;
+    .with_context(|| format!("fetch releases for {repo}"))?;
     if !out.status.success() {
         bail!("GitHub API request for {repo} failed");
     }
-    serde_json::from_slice(&out.stdout).with_context(|| format!("parse release JSON for {repo}"))
+    let releases: Vec<GhRelease> = serde_json::from_slice(&out.stdout)
+        .with_context(|| format!("parse releases JSON for {repo}"))?;
+    newest_with_assets(releases, asset_prefix)
+        .ok_or_else(|| anyhow!("no {repo} release with {asset_prefix} builds"))
 }
 
-/// Just the downloadable assets of the latest release (whisper path + tests
-/// don't need the tag). The llama path uses [`github_release`] to also stamp
-/// the build tag.
+/// Pure: the first (newest) release that has an asset starting with `prefix`.
+fn newest_with_assets(releases: Vec<GhRelease>, prefix: &str) -> Option<GhRelease> {
+    releases
+        .into_iter()
+        .find(|r| r.assets.iter().any(|a| a.name.starts_with(prefix)))
+}
+
+/// The downloadable assets of the newest release with builds (whisper path +
+/// tests don't need the tag). The llama path uses [`github_build_release`]
+/// directly to also stamp the build tag.
 fn github_assets(repo: &str) -> Result<Vec<GhAsset>> {
-    Ok(github_release(repo)?.assets)
+    let prefix = if repo == WHISPER_REPO { "whisper-" } else { "llama-" };
+    Ok(github_build_release(repo, prefix)?.assets)
 }
 
 /// Parse the CUDA version out of a llama.cpp build asset name, e.g.
@@ -2321,12 +2337,23 @@ fn pick_llama(assets: &[GhAsset], _gpu: GpuKind) -> Result<LlamaPick> {
 /// Parse the CUDA version from a whisper cuBLAS asset name, e.g.
 /// `whisper-cublas-12.4.0-bin-x64.zip` -> `(12, 4, 0)`.
 fn whisper_cublas_version_of(name: &str) -> Option<(u32, u32, u32)> {
-    let after = name.strip_prefix("whisper-cublas-")?; // "12.4.0-bin-x64.zip"
-    let ver = after.strip_suffix("-bin-x64.zip")?; // "12.4.0"
+    // Old name "whisper-cublas-12.4.0-bin-x64.zip"; since October 2026
+    // "whisper-bin-win-cuda-12.4.0-x64.zip". Both are x64 builds with the CUDA
+    // runtime inside.
+    let ver = name
+        .strip_prefix("whisper-cublas-")
+        .and_then(|after| after.strip_suffix("-bin-x64.zip"))
+        .or_else(|| {
+            name.strip_prefix("whisper-bin-win-cuda-")
+                .and_then(|after| after.strip_suffix("-x64.zip"))
+        })?;
     let mut it = ver.split('.');
     let maj: u32 = it.next()?.parse().ok()?;
     let min: u32 = it.next()?.parse().ok()?;
-    let patch: u32 = it.next()?.parse().ok()?;
+    let patch: u32 = it.next().map_or(Some(0), |p| p.parse().ok())?;
+    if it.next().is_some() {
+        return None;
+    }
     Some((maj, min, patch))
 }
 

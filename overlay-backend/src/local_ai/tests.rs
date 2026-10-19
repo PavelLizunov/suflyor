@@ -1477,7 +1477,7 @@ fn live_pick_llama_is_blackwell_capable() {
     assert!(pick_whisper(&wassets, false)
         .unwrap()
         .0
-        .contains("whisper-cublas-"));
+        .contains("cuda"));
     assert!(pick_whisper(&wassets, true)
         .unwrap()
         .0
@@ -2081,4 +2081,49 @@ fn gigaam_vocab_is_restored_only_beside_a_complete_model() {
         "an existing vocab is kept"
     );
     assert_eq!(std::fs::read(dir.join("vocab.txt")).unwrap(), b"custom");
+}
+
+#[test]
+fn newest_release_with_builds_skips_version_tags_without_binaries() {
+    let release = |tag: &str, names: &[&str]| GhRelease {
+        tag_name: tag.to_string(),
+        assets: names.iter().copied().map(asset).collect(),
+    };
+    // The API lists newest first: a binary-less "latest" version tag, then builds.
+    let releases = vec![
+        release("v0.7.0", &["nightly-tag.txt"]),
+        release("b11729", &["llama-b11729-bin-win-cpu-x64.zip"]),
+        release("b11727", &["llama-b11727-bin-win-cpu-x64.zip"]),
+    ];
+    let picked = newest_with_assets(releases, "llama-").unwrap();
+    assert_eq!(picked.tag_name, "b11729");
+    assert!(newest_with_assets(vec![release("v1.9.5", &[])], "whisper-").is_none());
+}
+
+#[test]
+fn whisper_cuda_build_names_old_and_new_parse() {
+    assert_eq!(
+        whisper_cublas_version_of("whisper-cublas-12.4.0-bin-x64.zip"),
+        Some((12, 4, 0))
+    );
+    assert_eq!(
+        whisper_cublas_version_of("whisper-bin-win-cuda-12.4.0-x64.zip"),
+        Some((12, 4, 0))
+    );
+    assert_eq!(
+        whisper_cublas_version_of("whisper-bin-win-cuda-13.4-x64.zip"),
+        Some((13, 4, 0))
+    );
+    assert_eq!(whisper_cublas_version_of("whisper-bin-win-cuda-13.4-arm64.zip"), None);
+    assert_eq!(whisper_cublas_version_of("whisper-bin-x64.zip"), None);
+    let assets = vec![
+        asset("whisper-bin-x64.zip"),
+        asset("whisper-bin-win-cuda-11.8.0-x64.zip"),
+        asset("whisper-bin-win-cuda-12.4.0-x64.zip"),
+        asset("whisper-bin-win-cuda-13.4-arm64.zip"),
+    ];
+    if !cfg!(target_os = "macos") {
+        assert!(pick_whisper(&assets, false).unwrap().0.contains("cuda-12.4.0-x64"));
+        assert!(pick_whisper(&assets, true).unwrap().0.ends_with("whisper-bin-x64.zip"));
+    }
 }
