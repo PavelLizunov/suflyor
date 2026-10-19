@@ -16,6 +16,7 @@ fn hidden_settings_keep_download_and_shared_status_until_completion() {
     win.set_local_ai_installing(true);
     win.set_local_ai_progress(0.42);
     win.set_local_ai_status("Gemma: 2688 / 6405 MB".into());
+    slint::platform::update_timers_and_animations();
     let cancel_called = std::rc::Rc::new(std::cell::Cell::new(false));
     let cancelled = cancel_called.clone();
     win.on_cancel_local_ai_clicked(move || cancelled.set(true));
@@ -30,6 +31,8 @@ fn hidden_settings_keep_download_and_shared_status_until_completion() {
     assert!(cancel_called.get());
     win.set_local_ai_installing(false);
     win.set_local_ai_status("Cancelled".into());
+    // Slint's changed handlers are dispatched on the next event-loop turn.
+    slint::platform::update_timers_and_animations();
     assert!(!win.get_local_ai_installing());
     assert_eq!(win.get_local_choice_status(), "Cancelled");
 }
