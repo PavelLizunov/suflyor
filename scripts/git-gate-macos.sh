@@ -80,6 +80,7 @@ for test in \
   native_macos_window_guard \
   native_screen_guard \
   rc3_regression_guard \
+  settings_provider_geometry \
   settings_reset_guard \
   tera_tts_layout_guard \
   tile_player_layout_guard \

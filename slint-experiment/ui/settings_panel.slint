@@ -2548,7 +2548,7 @@ export component SettingsWindow inherits Window {
                         }
 
                         // ============================ OPENAI ============================
-                        if root.ai-provider-index == 2 : VerticalLayout {
+                        if root.ai-provider-index == 2 : WrapBlock {
                             spacing: Metrics.space-sm;
                             vertical-stretch: 0;
                             Text { text: @tr("OpenAI Responses API"); font-size: Metrics.font-body; font-weight: 700; color: Theme.text-primary; }

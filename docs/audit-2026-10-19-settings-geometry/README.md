@@ -11,4 +11,6 @@ Local-capabilities baseline: caption is contained with 12px bottom padding at 72
 
 Private PNGs and MCP trees are retained outside Git under ~/.hygiene/sufloyr/ui-geometry/. Before/after pairs must use the same language, size, scale, theme, synthetic provider fields and scroll endpoint. No model activation/download or external connection test is necessary for layout reproduction.
 
-Checks: settings_provider_geometry on the Windows worker; selected native gate; exact-SHA MCP audit in EN/RU; independent read-only UI review. Shared primitives remain unchanged unless native evidence demonstrates an owning defect.
+Regression baseline: 0eafb54a0070a94d1addef9cb2b5124ef6e7c8c3, Windows settings_provider_geometry failed with button bottom451/card top448 in English at720px (exit101). The first probe at3a32041 failed during translation setup, not geometry; the corrected probe skips translation selection until the English component has registered its catalog.
+
+Checks: selected native gate now includes settings_provider_geometry; exact-SHA MCP audit in EN/RU; independent read-only UI review. Shared primitives remain unchanged because the native captures demonstrate correct capability-caption containment, including wrapped labels.
