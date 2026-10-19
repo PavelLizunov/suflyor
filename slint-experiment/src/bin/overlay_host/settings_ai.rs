@@ -151,6 +151,26 @@ fn codex_copy_status(result: CodexCopyResult, is_ru: bool) -> &'static str {
     }
 }
 
+/// Reasoning levels offered for the bridge and the OpenAI profile, in the
+/// order of the Settings list. The empty first entry sends nothing.
+pub(crate) const REASONING_LEVELS: [&str; 6] = ["", "none", "minimal", "low", "medium", "high"];
+
+pub(crate) fn reasoning_level_from_index(index: i32) -> &'static str {
+    usize::try_from(index)
+        .ok()
+        .and_then(|i| REASONING_LEVELS.get(i))
+        .copied()
+        .unwrap_or("")
+}
+
+/// Index of a saved level in `REASONING_LEVELS`; unknown text reads as default.
+pub(crate) fn reasoning_level_index(level: &str) -> i32 {
+    REASONING_LEVELS
+        .iter()
+        .position(|l| *l == level.trim())
+        .map_or(0, |i| i as i32)
+}
+
 pub(crate) fn invalidate_codex_login_ui() -> u64 {
     overlay_backend::codex_subscription::cancel_pending_login();
     CODEX_SNAPSHOT_UI_GENERATION.fetch_add(1, Ordering::SeqCst);
@@ -639,6 +659,9 @@ pub(crate) fn wire_ai_settings(
             {
                 let mut c = cfg_c.write();
                 c.ai_base_url = trimmed.clone();
+                // Requests use the new address even when the save fails, so
+                // the reasoning table follows it either way.
+                overlay_backend::ai::set_reasoning_efforts(c.reasoning_efforts());
                 if let Err(e) = overlay_backend::config::save(&c) {
                     eprintln!("[overlay-host] ai_base_url save failed: {e:#}");
                     return;
@@ -659,6 +682,33 @@ pub(crate) fn wire_ai_settings(
             if let Err(error) = overlay_backend::config::save(&c) {
                 eprintln!("[overlay-host] OpenAI URL save failed: {error:#}");
             }
+            overlay_backend::ai::set_reasoning_efforts(c.reasoning_efforts());
+        });
+    }
+    // Reasoning level of the bridge and the OpenAI profile; index into
+    // `REASONING_LEVELS` (0 = the model's own default, nothing sent).
+    {
+        let cfg_c = cfg.clone();
+        win.on_ai_reasoning_changed(move |index| {
+            let mut c = cfg_c.write();
+            c.ai_reasoning_effort = reasoning_level_from_index(index).to_string();
+            if let Err(error) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] bridge reasoning save failed: {error:#}");
+            }
+            overlay_backend::ai::set_reasoning_efforts(c.reasoning_efforts());
+            diag!("ai_reasoning_effort -> {:?}", c.ai_reasoning_effort);
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        win.on_openai_reasoning_changed(move |index| {
+            let mut c = cfg_c.write();
+            c.openai_reasoning_effort = reasoning_level_from_index(index).to_string();
+            if let Err(error) = overlay_backend::config::save(&c) {
+                eprintln!("[overlay-host] OpenAI reasoning save failed: {error:#}");
+            }
+            overlay_backend::ai::set_reasoning_efforts(c.reasoning_efforts());
+            diag!("openai_reasoning_effort -> {:?}", c.openai_reasoning_effort);
         });
     }
     {
@@ -1464,6 +1514,17 @@ mod tests {
     #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
     use super::*;
+
+    #[test]
+    fn reasoning_levels_round_trip_and_unknown_reads_default() {
+        for (index, level) in REASONING_LEVELS.iter().enumerate() {
+            assert_eq!(reasoning_level_from_index(index as i32), *level);
+            assert_eq!(reasoning_level_index(level), index as i32);
+        }
+        assert_eq!(reasoning_level_from_index(-1), "");
+        assert_eq!(reasoning_level_from_index(99), "");
+        assert_eq!(reasoning_level_index("extreme"), 0);
+    }
     use std::cell::RefCell;
 
     fn model(

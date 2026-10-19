@@ -1,4 +1,6 @@
-use super::control::{http_client, resolve_managed_mlx_endpoint, transport_failure_kind};
+use super::control::{
+    apply_reasoning_effort, http_client, resolve_managed_mlx_endpoint, transport_failure_kind,
+};
 use super::provider;
 use super::stream::codex_failure_message;
 use super::types::{AiEndpoint, AiProtocol, ChatMessage, ContentPart, MessageContent};
@@ -91,7 +93,7 @@ pub async fn test_connection_messages(
         endpoint.base_url.trim_end_matches('/'),
         provider::endpoint_path(endpoint.protocol)
     );
-    let body = provider::request_body(
+    let mut body = provider::request_body(
         endpoint.protocol,
         &endpoint.model,
         &messages,
@@ -99,6 +101,9 @@ pub async fn test_connection_messages(
         false,
         false,
     )?;
+    // The check sends what answers send, so a server that rejects the
+    // reasoning level fails here and not on the first real question.
+    apply_reasoning_effort(&mut body, endpoint.protocol, &endpoint.base_url);
     let request = client
         .post(&url)
         .timeout(std::time::Duration::from_secs(10));

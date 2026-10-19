@@ -11,8 +11,8 @@
 //! and is not offered tools again until the app restarts.
 
 use super::control::{
-    apply_local_no_think, apply_managed_gemma_sampler, apply_prompt_cache, http_client,
-    transport_failure_kind,
+    apply_local_no_think, apply_managed_gemma_sampler, apply_prompt_cache, apply_reasoning_effort,
+    http_client, transport_failure_kind,
 };
 use super::tools;
 use super::tps::record_stream_tps;
@@ -167,6 +167,7 @@ pub(crate) async fn stream_agent(
         }
         apply_prompt_cache(&mut body);
         apply_local_no_think(&mut body, false);
+        apply_reasoning_effort(&mut body, endpoint.protocol, &endpoint.base_url);
         apply_managed_gemma_sampler(&mut body, &endpoint.base_url, &endpoint.model);
         super::local_server::apply_server_hints(&mut body, &endpoint);
         log::info!(

@@ -1418,14 +1418,14 @@ pub(crate) fn open_settings(
     wire_updates(&win);
 
     let weak_close = win.as_weak();
-    let settings_close = settings_ref.clone();
     let overlay_for_close = overlay_weak.clone();
     let cfg_for_close = cfg.clone();
     win.on_close_clicked(move || {
         if let Some(w) = weak_close.upgrade() {
             let _ = w.hide();
         }
-        *settings_close.borrow_mut() = None;
+        // Keep the instance alive: async jobs report progress and cancellation
+        // through its weak handle, including while Settings is hidden.
         // Un-light the bar's ⚙ chip + refresh the active-stack readout (the
         // user may have switched STT/AI provider while Settings was open).
         if let Some(o) = overlay_for_close.upgrade() {
@@ -1457,6 +1457,8 @@ pub(crate) fn msg_refresh_after_import(
     cfg: &overlay_backend::config::SharedConfig,
 ) -> String {
     populate_token_status(win, cfg);
+    // Imported profiles may carry other addresses or reasoning levels.
+    overlay_backend::ai::set_reasoning_efforts(cfg.read().reasoning_efforts());
     if cfg.read().ui_is_ru() {
         "Настройки импортированы — перезапустите приложение для полного применения"
     } else {
@@ -1606,16 +1608,21 @@ pub(crate) fn populate_component_rows(
             } else {
                 component_row_copy(c.kind, ru)
             };
-            // The local engine and model serve answers only when answers or
-            // screenshots use this PC; GigaAM only when STT selects it.
+            // Local assets can be downloaded ahead of time from AI providers;
+            // keep their Open action available even while answers use the cloud.
+            let optional_local = matches!(c.kind, ComponentKind::Engine | ComponentKind::LocalModel)
+                && snap.ai_provider != "local" && snap.vision_provider != "local";
             let needed = match c.kind {
-                ComponentKind::Engine | ComponentKind::LocalModel => {
-                    is_macos || snap.ai_provider == "local" || snap.vision_provider == "local"
-                }
                 ComponentKind::Stt => is_macos || snap.stt_provider == "gigaam",
-                ComponentKind::Voices | ComponentKind::Ocr => true,
+                _ => true,
             };
-            let hint = if needed {
+            let hint = if optional_local {
+                if ru {
+                    "Необязательно: можно скачать заранее в AI-провайдерах".to_string()
+                } else {
+                    "Optional: download ahead of time in AI providers".to_string()
+                }
+            } else if needed {
                 hint.to_string()
             } else {
                 not_needed_hint(c.kind, snap, ru)
@@ -2070,6 +2077,10 @@ pub(crate) fn populate_token_status(
     win.set_ai_base_url_input(SharedString::from(c.ai_base_url.clone()));
     win.set_openai_base_url_input(SharedString::from(c.openai_base_url.clone()));
     win.set_openai_model_input(SharedString::from(c.openai_model.clone()));
+    win.set_ai_reasoning_index(super::settings_ai::reasoning_level_index(&c.ai_reasoning_effort));
+    win.set_openai_reasoning_index(super::settings_ai::reasoning_level_index(
+        &c.openai_reasoning_effort,
+    ));
     win.set_anthropic_base_url_input(SharedString::from(c.anthropic_base_url.clone()));
     win.set_anthropic_model_input(SharedString::from(c.anthropic_model.clone()));
     // V4 — vision section: provider index + non-secret fields (bearers stay blank
@@ -2112,12 +2123,22 @@ pub(crate) fn populate_token_status(
     // `vision_test_result` was reset before. Persistent state (key presence,
     // dropdowns, toggles, ai_local_quality) is reseeded below and is NOT touched.
     let blank = || SharedString::from("");
-    win.set_quality_status(blank());
-    win.set_local_ai_status(blank());
-    win.set_local_ai_gpu(blank());
-    win.set_local_ai_on_gpu(false);
+    let local_job_active = win.get_local_ai_installing()
+        || win.get_quality_downloading()
+        || win.get_model_switching()
+        || win.get_vision12b_downloading()
+        || win.get_engine_updating()
+        || win.get_strata_busy();
+    if !local_job_active {
+        win.set_quality_status(blank());
+        win.set_local_ai_status(blank());
+        win.set_local_ai_gpu(blank());
+        win.set_local_ai_on_gpu(false);
+    }
     win.set_ai_local_test_result(blank());
-    win.set_strata_status(blank());
+    if !local_job_active {
+        win.set_strata_status(blank());
+    }
     win.set_local_more_open(false);
     win.set_now_title(blank());
     win.set_now_detail(blank());
@@ -2132,7 +2153,9 @@ pub(crate) fn populate_token_status(
     if !win.get_strata_busy() {
         win.set_local_strata_job(-1);
     }
-    win.set_local_choice_status(blank());
+    if !local_job_active && !win.get_strata_busy() {
+        win.set_local_choice_status(blank());
+    }
     win.set_ai_bridge_test_result(blank());
     win.set_stt_test_result(blank());
     win.set_mic_test_result(blank());
@@ -2283,8 +2306,10 @@ pub(crate) fn populate_token_status(
                 .map(|b| format!("b{b}"))
                 .unwrap_or_default(),
         ));
-        win.set_vision12b_status(blank());
-        win.set_engine_update_status(blank());
+        if !local_job_active {
+            win.set_vision12b_status(blank());
+            win.set_engine_update_status(blank());
+        }
     }
     // Phase E10 — STT provider selector + local-engine fields.
     win.set_stt_provider_index(stt_provider_index(&c.stt_provider));

@@ -3009,3 +3009,36 @@ msgstr "не нужно"
 
 msgid "Parts for working without the internet. Each is needed only when its tab selects it, and downloads on demand: here or in the tab named under it."
 msgstr "Части для работы без интернета. Каждая нужна, только если выбрана в своей вкладке, и скачивается по запросу: здесь или во вкладке, указанной под ней."
+
+msgid "Model default"
+msgstr "По умолчанию модели"
+
+msgid "Off — answer at once"
+msgstr "Выключено — отвечать сразу"
+
+msgid "Minimal"
+msgstr "Минимальный"
+
+msgid "Low"
+msgstr "Низкий"
+
+msgid "Medium"
+msgstr "Средний"
+
+msgid "High"
+msgstr "Высокий"
+
+msgid "Sent with every request. «Off» makes thinking models such as Gemini answer without reasoning first; a server that does not know the setting may reject requests — choose «Model default» then."
+msgstr "Передаётся с каждым запросом. «Выключено» заставляет думающие модели вроде Gemini отвечать без предварительных рассуждений; сервер, который не знает этой настройки, может отклонять запросы — тогда выберите «По умолчанию модели»."
+
+msgid "Models on this PC"
+msgstr "Модели на этом ПК"
+
+msgid "Download models ahead of time. Your current answer provider stays selected until you choose to use a local model."
+msgstr "Скачайте модели заранее. Ответы останутся у текущего провайдера, пока вы не выберете локальную модель."
+
+msgid "Use for answers"
+msgstr "Использовать для ответов"
+
+msgid "Downloaded. Choose «Model on this PC» → «Use for answers» to answer with it."
+msgstr "Загружено. Выберите «Модель на этом ПК» → «Использовать для ответов», чтобы отвечать с её помощью."

@@ -76,6 +76,14 @@ pub struct Config {
     pub openai_base_url: String,
     #[serde(default = "default_openai_model")]
     pub openai_model: String,
+    /// Reasoning level sent with each request to the cloud bridge
+    /// (`reasoning_effort`) and to the OpenAI Responses profile
+    /// (`reasoning.effort`): `none`, `minimal`, `low`, `medium`, `high`.
+    /// Empty sends nothing and keeps the model's own default.
+    #[serde(default)]
+    pub ai_reasoning_effort: String,
+    #[serde(default)]
+    pub openai_reasoning_effort: String,
     /// Direct Anthropic Messages API profile. The API key is intentionally not
     /// serialized; it lives in Windows Credential Manager.
     #[serde(default = "default_anthropic_base_url")]
@@ -654,6 +662,8 @@ impl Config {
             ai_provider: default_ai_provider(),
             openai_base_url: default_openai_base_url(),
             openai_model: default_openai_model(),
+            ai_reasoning_effort: String::new(),
+            openai_reasoning_effort: String::new(),
             anthropic_base_url: default_anthropic_base_url(),
             anthropic_model: default_anthropic_model(),
             codex_model: String::new(),
@@ -901,6 +911,31 @@ impl Config {
             }
             _ => false,
         }
+    }
+
+    /// The reasoning level per remote profile, for
+    /// [`crate::ai::set_reasoning_efforts`]: the bridge speaks Chat
+    /// Completions, the OpenAI profile the Responses API.
+    #[must_use]
+    pub fn reasoning_efforts(&self) -> Vec<(AiProtocol, String, String)> {
+        [
+            (
+                AiProtocol::OpenAiCompatible,
+                &self.ai_base_url,
+                &self.ai_reasoning_effort,
+            ),
+            (
+                AiProtocol::OpenAiResponses,
+                &self.openai_base_url,
+                &self.openai_reasoning_effort,
+            ),
+        ]
+        .into_iter()
+        .filter(|(_, url, effort)| !url.trim().is_empty() && !effort.trim().is_empty())
+        .map(|(protocol, url, effort)| {
+            (protocol, url.trim().to_string(), effort.trim().to_string())
+        })
+        .collect()
     }
 
     #[must_use]
@@ -1746,6 +1781,8 @@ pub fn merge_server_settings(current: &Config, imported: Config) -> Config {
     next.ai_prompt_cache = imported.ai_prompt_cache;
     next.openai_base_url = imported.openai_base_url;
     next.openai_model = imported.openai_model;
+    next.ai_reasoning_effort = imported.ai_reasoning_effort;
+    next.openai_reasoning_effort = imported.openai_reasoning_effort;
     next.anthropic_base_url = imported.anthropic_base_url;
     next.anthropic_model = imported.anthropic_model;
     // Empty remains the legacy/fresh "unset" marker. Importing an older

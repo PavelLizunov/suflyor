@@ -138,6 +138,141 @@ fn local_model_cards_keep_jobs_actions_and_async_checks_reachable() {
 }
 
 #[test]
+fn windows_can_download_local_assets_without_selecting_local_answers() {
+    let ui = read("ui/settings_panel.slint");
+    let local = read("src/bin/overlay_host/settings_local_ai.rs");
+    let backend = read("../overlay-backend/src/local_ai.rs");
+    let controller = read("src/bin/overlay_host/settings_controller.rs");
+    let card = ui
+        .split_once("if !Platform.is-macos && root.ai-provider-index != 1 : SettingsCard {")
+        .expect("download card is visible with any non-local Windows provider")
+        .1
+        .split_once("// ============================ LOCAL")
+        .unwrap()
+        .0;
+    assert!(card.contains("title: @tr(\"Models on this PC\")"));
+    for callback in [
+        "root.install-local-ai-clicked()",
+        "root.cancel-local-ai-clicked()",
+        "root.download-model-clicked(0)",
+        "root.download-model-clicked(1)",
+        "root.download-model-clicked(2)",
+        "root.download-vision12b-clicked()",
+        "root.builtin-model-use(0)",
+        "root.builtin-model-use(1)",
+        "root.builtin-model-use(2)",
+    ] {
+        assert!(
+            card.contains(callback),
+            "missing shared callback: {callback}"
+        );
+    }
+    assert!(card.contains("text: @tr(\"Use for answers\")"));
+    assert!(!card.contains("root.ai-provider-changed(1)"));
+    assert!(card.contains("root.builtin-model-use(root.fallback-model-present ? 1 : root.legacy-model-present ? 0 : 2)"));
+    let activation = local
+        .split_once("let activate_answers = requested_choice.is_some()")
+        .unwrap()
+        .1;
+    assert!(activation.contains("if activate_answers {"));
+    assert!(activation.contains("c.ai_provider = \"local\".to_string()"));
+    assert!(activation.contains("switch_commits_choice(outcome)"));
+    assert!(activation.contains("ModelSwitch::FallbackStarted"));
+    assert!(activation.contains("ManagedModel::Fallback12B"));
+    assert!(card.contains(
+        "root.legacy-model-present || root.fallback-model-present || root.quality-model-present"
+    ));
+    let download = local
+        .split_once("Ok(res) if download_only => {")
+        .unwrap()
+        .1
+        .split_once("Ok(res) => {")
+        .unwrap()
+        .0;
+    assert!(local.contains("c.ai_provider != \"local\""));
+    assert!(download.contains("apply_download_result(&mut c, &res)"));
+    assert!(download.contains("w.set_managed_local_server("));
+    let now = local
+        .split_once("pub(crate) fn refresh_now_answering(")
+        .unwrap()
+        .1;
+    let guard = now.find("if cfg.ai_provider != \"local\"").unwrap();
+    assert!(guard < now.find("overlay_backend::ai::list_models").unwrap());
+    assert!(now[guard..]
+        .split_once("let ru =")
+        .unwrap()
+        .0
+        .contains("return;"));
+    for forbidden in [
+        "local_ai_servers",
+        "set_ai_provider_index",
+        "set_stt_provider_index",
+        "res.servers",
+    ] {
+        assert!(
+            !download.contains(forbidden),
+            "download-only completion touches {forbidden}"
+        );
+    }
+    assert!(local.contains("c.ai_provider == \"local\" && c.ai_local_quality && !c.deep_lock"));
+    assert!(backend.contains("download_only: false"));
+    let launch = backend
+        .split_once("// ---- launch servers")
+        .unwrap()
+        .1
+        .split_once("let selected_model =")
+        .unwrap()
+        .0;
+    assert_eq!(
+        launch
+            .matches("if !opts.download_only && !opts.skip_llama")
+            .count(),
+        2
+    );
+    assert_eq!(
+        launch
+            .matches("if !opts.download_only && !opts.skip_whisper")
+            .count(),
+        2
+    );
+    let apply = backend
+        .split_once("pub fn apply_download_result")
+        .unwrap()
+        .1
+        .split_once("/// Write the installer's")
+        .unwrap()
+        .0;
+    for provider in ["cfg.ai_provider", "cfg.stt_provider", "cfg.vision_provider"] {
+        assert!(!apply.contains(provider));
+    }
+    assert!(controller.contains("Optional: download ahead of time in AI providers"));
+    let needed = controller
+        .split_once("let needed = match c.kind")
+        .unwrap()
+        .1
+        .split_once("let hint =")
+        .unwrap()
+        .0;
+    assert!(needed.contains("_ => true"));
+    assert!(!needed.contains("snap.ai_provider"));
+}
+
+#[test]
+fn downloaded_models_do_not_trigger_cloud_boot_engine_updates() {
+    let host = read("src/bin/overlay_host_windows.rs");
+    let guard = host
+        .split_once("let update_active_engine = {")
+        .unwrap()
+        .1
+        .split_once("if update_active_engine")
+        .unwrap()
+        .0;
+    assert!(guard.contains("c.ai_provider == \"local\""));
+    assert!(guard.contains("!c.deep_lock"));
+    assert!(guard.contains("is_managed_llama_endpoint(&c.ai_local_base_url)"));
+}
+
+#[test]
 fn macos_provider_catalogs_and_components_keep_platform_indices_honest() {
     let ai = read("src/bin/overlay_host/settings_ai.rs");
     let settings = read("src/bin/overlay_host/settings_controller.rs");

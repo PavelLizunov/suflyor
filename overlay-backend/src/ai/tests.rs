@@ -1126,3 +1126,52 @@ async fn hot_prompt_is_primed_with_one_token() {
         .unwrap()
         .starts_with("Head:\n"));
 }
+
+#[test]
+fn reasoning_effort_goes_only_to_the_configured_profile() {
+    set_reasoning_efforts(vec![
+        (
+            AiProtocol::OpenAiCompatible,
+            "https://effort-bridge.test/v1".into(),
+            "none".into(),
+        ),
+        (
+            AiProtocol::OpenAiResponses,
+            "https://effort-bridge.test/v1/".into(),
+            "low".into(),
+        ),
+    ]);
+    let mut chat = json!({ "model": "m" });
+    apply_reasoning_effort(
+        &mut chat,
+        AiProtocol::OpenAiCompatible,
+        "https://effort-bridge.test/v1/",
+    );
+    assert_eq!(chat["reasoning_effort"], "none");
+
+    let mut responses = json!({ "model": "m" });
+    apply_reasoning_effort(
+        &mut responses,
+        AiProtocol::OpenAiResponses,
+        "https://effort-bridge.test/v1",
+    );
+    assert_eq!(responses["reasoning"], json!({ "effort": "low" }));
+
+    let mut other = json!({ "model": "m" });
+    apply_reasoning_effort(
+        &mut other,
+        AiProtocol::OpenAiCompatible,
+        "http://127.0.0.1:8080/v1",
+    );
+    apply_reasoning_effort(
+        &mut other,
+        AiProtocol::AnthropicMessages,
+        "https://effort-bridge.test/v1",
+    );
+    assert_eq!(
+        other,
+        json!({ "model": "m" }),
+        "other endpoints and protocols are untouched"
+    );
+    set_reasoning_efforts(Vec::new());
+}

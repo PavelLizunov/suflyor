@@ -82,6 +82,9 @@ pub enum LockAction {
     /// Cloud / external (e.g. Ollama) endpoint: the legacy two-state toggle of
     /// `suppress_tiles` only. External processes are never stopped.
     ToggleSuppress,
+    /// Deep lock persisted from a managed local server while the active endpoint
+    /// is no longer one; nothing to start or stop, just clear the flag.
+    ReleaseStaleLock,
     /// Managed local, unlocked → enable listening mode (`suppress_tiles` on).
     EnableListening,
     /// Managed local, listening → enter deep lock: keep `suppress_tiles` on
@@ -114,6 +117,9 @@ pub fn lock_mode_action(
     deep_lock: bool,
     requested: LockMode,
 ) -> LockAction {
+    if !is_managed_local && deep_lock {
+        return LockAction::ReleaseStaleLock;
+    }
     match requested {
         LockMode::Normal if deep_lock => LockAction::Unlock,
         LockMode::Normal if suppress_tiles => LockAction::ToggleSuppress,
@@ -140,7 +146,11 @@ pub fn next_lock_action(
     deep_lock: bool,
 ) -> LockAction {
     if !is_managed_local {
-        return LockAction::ToggleSuppress;
+        return if deep_lock {
+            LockAction::ReleaseStaleLock
+        } else {
+            LockAction::ToggleSuppress
+        };
     }
     if deep_lock {
         LockAction::Unlock
@@ -332,12 +342,40 @@ mod tests {
             next_lock_action(false, true, false),
             LockAction::ToggleSuppress
         );
-        // Even if a stale deep_lock flag is present, a cloud/external chip
-        // never runs the managed machine.
-        assert_eq!(
-            next_lock_action(false, true, true),
-            LockAction::ToggleSuppress
-        );
+    }
+
+    #[test]
+    fn non_managed_menu_releases_stale_deep_lock_for_every_mode() {
+        for suppress_tiles in [false, true] {
+            for requested in [LockMode::Normal, LockMode::Listening, LockMode::Deep] {
+                assert_eq!(
+                    lock_mode_action(false, suppress_tiles, true, requested),
+                    LockAction::ReleaseStaleLock
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn non_managed_click_releases_stale_deep_lock() {
+        for suppress_tiles in [false, true] {
+            assert_eq!(
+                next_lock_action(false, suppress_tiles, true),
+                LockAction::ReleaseStaleLock
+            );
+        }
+    }
+
+    #[test]
+    fn non_managed_hint_ignores_stale_deep_lock() {
+        for ru in [false, true] {
+            for suppress_tiles in [false, true] {
+                assert_eq!(
+                    state_hint(ru, false, suppress_tiles, true),
+                    state_hint(ru, false, suppress_tiles, false)
+                );
+            }
+        }
     }
 
     #[test]

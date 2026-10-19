@@ -163,6 +163,8 @@ pub struct InstallOptions {
     pub root: PathBuf,
     /// Force the CPU llama.cpp build even if an NVIDIA GPU is present.
     pub force_cpu: bool,
+    /// Download and verify assets without stopping or starting any servers.
+    pub download_only: bool,
     pub skip_llama: bool,
     pub skip_whisper: bool,
     pub skip_gigaam: bool,
@@ -174,6 +176,7 @@ impl Default for InstallOptions {
         Self {
             root: default_root(),
             force_cpu: false,
+            download_only: false,
             skip_llama: false,
             skip_whisper: false,
             skip_gigaam: false,
@@ -204,11 +207,10 @@ pub enum Progress {
 #[derive(Debug)]
 pub struct LocalAiResult {
     pub ai_local_model: String,
-    /// `true` when the owner-approved 26B primary actually started; `false`
-    /// when the installed/serving model is the 12B fallback.
+    /// `true` when the owner-approved 26B primary was selected (downloaded in
+    /// download-only mode, started otherwise); `false` for the 12B fallback.
     pub ai_local_quality: bool,
-    /// Whether the model that actually started also has its matching projector
-    /// attached. The 26B primary is text-only in this candidate.
+    /// Whether the selected model has its matching projector available.
     pub ai_local_vision: bool,
     pub hardware_profile: HardwareModelProfile,
     pub stt_gigaam_dir: String,
@@ -335,6 +337,19 @@ fn vram_is_at_baseline(baseline_mib: u64, after_mib: Option<u64>) -> bool {
     after_mib.is_some_and(|after| after <= baseline_mib.saturating_add(64))
 }
 
+/// Keep saved routes intact: local vision can inherit the text-local endpoint,
+/// even while answers use the cloud. Model availability is read from disk; an
+/// explicit Use action records the chosen model only after it starts. Whisper
+/// is untouched, and GigaAM moves only when the saved folder has no model.
+pub fn apply_download_result(cfg: &mut crate::config::Config, res: &LocalAiResult) {
+    let saved_gigaam = Path::new(cfg.stt_gigaam_dir.trim());
+    let saved_has_model = !cfg.stt_gigaam_dir.trim().is_empty()
+        && file_len(&saved_gigaam.join("model.int8.onnx")) > 0;
+    if !res.stt_gigaam_dir.is_empty() && !saved_has_model {
+        cfg.stt_gigaam_dir = res.stt_gigaam_dir.clone();
+    }
+}
+
 /// Write the installer's resulting endpoints/models into a `Config`, switching
 /// it to the local stack. Secrets are untouched. The actual installed selection
 /// wins over stale preferences, and the bundled single-model server never
@@ -369,7 +384,7 @@ pub fn install(
     cancel: &AtomicBool,
     on: &dyn Fn(Progress),
 ) -> Result<LocalAiResult> {
-    if !opts.skip_llama && crate::deep_lock::deep_lock_active() {
+    if !opts.download_only && !opts.skip_llama && crate::deep_lock::deep_lock_active() {
         bail!(crate::deep_lock::BLOCKED_ERROR);
     }
     preflight().context("environment preflight failed")?;
@@ -436,7 +451,7 @@ pub fn install(
         on(Progress::Step("Installing llama.cpp".to_string()));
         std::fs::create_dir_all(&llama_dir)?;
         if find_exe(&llama_dir, "llama-server.exe").is_none() {
-            let rel = github_release(LLAMA_REPO)?;
+            let rel = github_llama_release(gpu)?;
             let pick = pick_llama(&rel.assets, gpu)?;
             cuda_version = pick.version.clone();
             let blabel = format!("llama.cpp {}", pick.version.as_deref().unwrap_or("CPU"));
@@ -538,7 +553,11 @@ pub fn install(
         if find_exe(&whisper_dir, "whisper-server.exe").is_none()
             && find_exe(&whisper_dir, "server.exe").is_none()
         {
-            let assets = github_assets(WHISPER_REPO)?;
+            let force_cpu_whisper = gpu != GpuKind::Nvidia;
+            let assets = github_build_release(WHISPER_REPO, |assets| {
+                pick_whisper(assets, force_cpu_whisper).is_ok()
+            })?
+            .assets;
             // whisper.cpp ships CPU + cuBLAS(NVIDIA) builds only — no Vulkan; so GPU
             // whisper stays NVIDIA-only, AMD/Intel use the CPU whisper build (Баг2).
             let (url, size) = pick_whisper(&assets, gpu != GpuKind::Nvidia)?;
@@ -615,7 +634,7 @@ pub fn install(
 
     // ---- launch servers ----------------------------------------------------
     let mut servers = InstallServerCleanup::default();
-    if !opts.skip_llama {
+    if !opts.download_only && !opts.skip_llama {
         // The lock may have been recorded while a long model download was in
         // progress. Recheck at the actual launch boundary.
         if crate::deep_lock::deep_lock_active() {
@@ -673,7 +692,7 @@ pub fn install(
         let child = launch_hidden(&exe, &arg_refs)?;
         servers.children.push(child);
     }
-    if !opts.skip_whisper {
+    if !opts.download_only && !opts.skip_whisper {
         on(Progress::Step("Starting whisper-server :8081".to_string()));
         let exe = find_exe(&whisper_dir, "whisper-server.exe")
             .or_else(|| find_exe(&whisper_dir, "server.exe"))
@@ -704,7 +723,7 @@ pub fn install(
     // ---- wait for llama readiness + verify GPU offload --------------------
     let mut on_gpu = false;
     let mut effective_gpu = gpu;
-    if !opts.skip_llama {
+    if !opts.download_only && !opts.skip_llama {
         on(Progress::Step("Waiting for the model to load".to_string()));
         // The user-facing message (shown as the tile's {e}) must be actionable RU;
         // the inner detail only reaches the log via {e:#}.
@@ -860,7 +879,7 @@ pub fn install(
             GpuKind::None => on(Progress::Gpu("CPU".to_string())),
         }
     }
-    if !opts.skip_whisper {
+    if !opts.download_only && !opts.skip_whisper {
         // P0.2: whisper had no strict readiness check after launch.
         on(Progress::Step("Waiting for whisper-server".to_string()));
         wait_ready(&format!("{WHISPER_BASE_URL}/models"), 60)
@@ -1600,15 +1619,14 @@ pub fn mark_engine_update_checked(root: &Path) {
     let _ = std::fs::write(stamp, now_unix().to_string());
 }
 
-/// The installed llama.cpp build number, for display ("движок bNNNN"). `None`
-/// when unstamped (an engine installed before stamping existed).
-#[must_use]
 /// Stat-only: the managed llama.cpp server binary is on disk.
 #[must_use]
 pub fn llama_engine_installed(root: &Path) -> bool {
     find_exe(&root.join("llama.cpp"), "llama-server.exe").is_some()
 }
 
+/// Installed llama.cpp build number, or None for an unstamped engine.
+#[must_use]
 pub fn installed_engine_build(root: &Path) -> Option<u32> {
     installed_llama_build(&root.join("llama.cpp"))
 }
@@ -1644,7 +1662,8 @@ pub fn update_llama_engine(
     let installed = installed_llama_build(&llama_dir);
 
     on(Progress::Step("Checking for a newer llama.cpp".into()));
-    let rel = github_release(LLAMA_REPO)?;
+    let gpu = detect_gpu();
+    let rel = github_llama_release(gpu)?;
     let latest =
         parse_build_tag(&rel.tag_name).context("latest llama.cpp release has no build tag")?;
     if installed.is_some_and(|cur| cur >= latest) {
@@ -1656,7 +1675,6 @@ pub fn update_llama_engine(
     // binaries until the new ones are proven good). The staging dir is a SIBLING
     // of `llama.cpp` (NOT inside it) so `find_exe(&llama_dir, …)` — which recurses
     // — can never pick up the half-downloaded staged binary and launch it on :8080.
-    let gpu = detect_gpu();
     let pick = pick_llama(&rel.assets, gpu)?;
     let staging = root.join(".llama-staging-update");
     let _ = std::fs::remove_dir_all(&staging);
@@ -2180,8 +2198,41 @@ struct LlamaPick {
     version: Option<String>,
 }
 
-fn github_release(repo: &str) -> Result<GhRelease> {
-    let url = format!("https://api.github.com/repos/{repo}/releases/latest");
+/// Newest release of `repo` whose assets hold a build this PC can use.
+/// Since October 2026 llama.cpp and whisper.cpp publish their binary builds
+/// (`bNNNN`) as prereleases, and their "latest" release is a version tag
+/// with no binaries, so `releases/latest` alone finds nothing to install.
+/// A build is uploaded platform by platform over several minutes, so the
+/// check is for the asset the picker needs, not for any binary.
+fn github_build_release(repo: &str, usable: impl Fn(&[GhAsset]) -> bool) -> Result<GhRelease> {
+    newest_with_assets(github_releases(repo)?, usable)
+        .ok_or_else(|| anyhow!("no {repo} release with a build for this PC"))
+}
+
+fn github_llama_release(gpu: GpuKind) -> Result<GhRelease> {
+    newest_llama_release(github_releases(LLAMA_REPO)?, gpu)
+        .ok_or_else(|| anyhow!("no llama.cpp release with a build for this PC"))
+}
+
+/// Prefer a complete GPU release over a newer CPU-first partial upload. Keep
+/// CPU fallback only when none of the recent releases has a matching GPU build.
+fn newest_llama_release(mut releases: Vec<GhRelease>, gpu: GpuKind) -> Option<GhRelease> {
+    let index = releases
+        .iter()
+        .position(|r| {
+            pick_llama(&r.assets, gpu)
+                .is_ok_and(|pick| gpu == GpuKind::None || pick.version.is_some())
+        })
+        .or_else(|| {
+            releases
+                .iter()
+                .position(|r| pick_llama(&r.assets, gpu).is_ok())
+        })?;
+    Some(releases.swap_remove(index))
+}
+
+fn github_releases(repo: &str) -> Result<Vec<GhRelease>> {
+    let url = format!("https://api.github.com/repos/{repo}/releases?per_page=30");
     let out = run_capture(
         "curl.exe",
         &[
@@ -2194,18 +2245,35 @@ fn github_release(repo: &str) -> Result<GhRelease> {
             &url,
         ],
     )
-    .with_context(|| format!("fetch latest release for {repo}"))?;
+    .with_context(|| format!("fetch releases for {repo}"))?;
     if !out.status.success() {
         bail!("GitHub API request for {repo} failed");
     }
-    serde_json::from_slice(&out.stdout).with_context(|| format!("parse release JSON for {repo}"))
+    serde_json::from_slice(&out.stdout).with_context(|| format!("parse releases JSON for {repo}"))
 }
 
-/// Just the downloadable assets of the latest release (whisper path + tests
-/// don't need the tag). The llama path uses [`github_release`] to also stamp
-/// the build tag.
+/// Pure: the first (newest) release whose assets pass `usable`.
+fn newest_with_assets(
+    releases: Vec<GhRelease>,
+    usable: impl Fn(&[GhAsset]) -> bool,
+) -> Option<GhRelease> {
+    releases.into_iter().find(|r| usable(&r.assets))
+}
+
+/// The downloadable assets of the newest release with builds (whisper path +
+/// tests don't need the tag). The llama path uses [`github_build_release`]
+/// directly to also stamp the build tag.
+#[cfg(test)]
 fn github_assets(repo: &str) -> Result<Vec<GhAsset>> {
-    Ok(github_release(repo)?.assets)
+    let prefix = if repo == WHISPER_REPO {
+        "whisper-"
+    } else {
+        "llama-"
+    };
+    Ok(github_build_release(repo, |assets| {
+        assets.iter().any(|a| a.name.starts_with(prefix))
+    })?
+    .assets)
 }
 
 /// Parse the CUDA version out of a llama.cpp build asset name, e.g.
@@ -2301,12 +2369,23 @@ fn pick_llama(assets: &[GhAsset], _gpu: GpuKind) -> Result<LlamaPick> {
 /// Parse the CUDA version from a whisper cuBLAS asset name, e.g.
 /// `whisper-cublas-12.4.0-bin-x64.zip` -> `(12, 4, 0)`.
 fn whisper_cublas_version_of(name: &str) -> Option<(u32, u32, u32)> {
-    let after = name.strip_prefix("whisper-cublas-")?; // "12.4.0-bin-x64.zip"
-    let ver = after.strip_suffix("-bin-x64.zip")?; // "12.4.0"
+    // Old name "whisper-cublas-12.4.0-bin-x64.zip"; since October 2026
+    // "whisper-bin-win-cuda-12.4.0-x64.zip". Both are x64 builds with the CUDA
+    // runtime inside.
+    let ver = name
+        .strip_prefix("whisper-cublas-")
+        .and_then(|after| after.strip_suffix("-bin-x64.zip"))
+        .or_else(|| {
+            name.strip_prefix("whisper-bin-win-cuda-")
+                .and_then(|after| after.strip_suffix("-x64.zip"))
+        })?;
     let mut it = ver.split('.');
     let maj: u32 = it.next()?.parse().ok()?;
     let min: u32 = it.next()?.parse().ok()?;
-    let patch: u32 = it.next()?.parse().ok()?;
+    let patch: u32 = it.next().map_or(Some(0), |p| p.parse().ok())?;
+    if it.next().is_some() {
+        return None;
+    }
     Some((maj, min, patch))
 }
 

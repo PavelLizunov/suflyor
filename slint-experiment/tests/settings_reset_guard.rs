@@ -129,6 +129,53 @@ fn local_model_cards_reset_their_non_status_state_on_reopen() {
 }
 
 #[test]
+fn settings_close_preserves_the_window_and_active_download_state() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let rs = fs::read_to_string(root.join("src/bin/overlay_host/settings_controller.rs")).unwrap();
+    let close = rs
+        .split_once("win.on_close_clicked(move || {")
+        .unwrap()
+        .1
+        .split_once("// Phase E6 v26")
+        .unwrap()
+        .0;
+    assert!(close.contains("w.hide()"));
+    assert!(
+        !close.contains("borrow_mut() = None"),
+        "close must retain the worker callback target"
+    );
+    let body = populate_body(&rs);
+    let active = body
+        .split_once("let local_job_active =")
+        .unwrap()
+        .1
+        .split_once("if !local_job_active {")
+        .unwrap()
+        .0;
+    for flag in [
+        "get_local_ai_installing()",
+        "get_quality_downloading()",
+        "get_model_switching()",
+        "get_vision12b_downloading()",
+        "get_engine_updating()",
+        "get_strata_busy()",
+    ] {
+        assert!(active.contains(flag), "missing active job: {flag}");
+    }
+    let idle_reset = body
+        .split_once("if !local_job_active {")
+        .unwrap()
+        .1
+        .split_once("    }")
+        .unwrap()
+        .0;
+    assert!(idle_reset.contains("set_local_ai_status(blank())"));
+    assert!(idle_reset.contains("set_quality_status(blank())"));
+    assert!(!body.contains("set_local_ai_installing(false)"));
+    assert!(!body.contains("set_local_ai_progress(0.0)"));
+}
+
+#[test]
 fn tab_changes_reset_the_shared_content_scroll() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let ui = fs::read_to_string(root.join("ui/settings_panel.slint")).unwrap();

@@ -2048,3 +2048,24 @@ fn gigaam_dir_without_a_model_follows_the_complete_managed_install() {
         "other STT engines are left alone"
     );
 }
+
+#[test]
+fn reasoning_efforts_list_only_profiles_with_a_level() {
+    let mut c = Config::defaults();
+    assert!(
+        c.reasoning_efforts().is_empty(),
+        "empty level sends nothing"
+    );
+    c.ai_base_url = "https://bridge.test/v1".into();
+    c.ai_reasoning_effort = "none".into();
+    c.openai_base_url = "https://bridge.test/v1".into();
+    c.openai_reasoning_effort = " ".into();
+    assert_eq!(
+        c.reasoning_efforts(),
+        vec![(
+            crate::ai::AiProtocol::OpenAiCompatible,
+            "https://bridge.test/v1".to_string(),
+            "none".to_string()
+        )]
+    );
+}

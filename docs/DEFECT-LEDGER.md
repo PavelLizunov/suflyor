@@ -8,6 +8,37 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-056 Closing Settings disconnects an active local-model download from its UI   Severity: **P1**   Status: Open
+Evidence: at 3b00939d3927e9baa58d58e42b5453e63f7dec21, `settings_controller.rs` removes the Settings instance in `on_close_clicked`; local-AI progress/completion callbacks hold only that instance's weak handle.
+Scenario: start the built-in download, close Settings, then reopen it. The transfer continues but progress and Cancel disappear; the new window presents idle download actions.
+Demonstrated on the Windows worker: the first Settings handle showed Gemma 298 / 6405 MB and Cancel; after close/reopen the handle changed and Download model returned while the original curl process remained active. Private captures are retained outside Git.
+Fix proposed: retain the hidden Settings instance and preserve all job-source/shared status text during active work; idle reopen still clears completed transient results. Candidate branch: codex/rc13-checkpoint. Required acceptance: exact-candidate close/reopen/cancel and resumed full download, plus idle reset.
+Closed by:
+
+### D-057 Download-only completion rewrites an inherited local Vision route   Severity: P1   Status: Open
+Evidence: `apply_download_result` at a5abc4a replaces local answer URL/model; `Config::vision_endpoint` inherits those fields for local Vision when specific fields are blank.
+Scenario: cloud answers plus an external local Vision route silently switch screenshots to the managed server after an asset-only download, although that server was not started.
+Fix proposed: discover downloaded models from disk; preserve saved endpoints/model choices until explicit successful activation. Regression compares the resolved Vision endpoint before and after application.
+Closed by:
+
+### D-058 Cloud boot may load downloaded weights through automatic engine maintenance   Severity: P1   Status: Open
+Evidence: the boot engine-update condition at a5abc4a checks deep lock, Strata and throttle, but not the active answer provider; an update verifies its engine by launching installed weights.
+Scenario: downloading ahead of time while using cloud answers can cause a later boot update to load a local model without Use.
+Fix proposed: run model-loading boot maintenance only for the active managed llama.cpp answer route.
+Closed by:
+
+### D-059 CPU-first partial releases can displace complete accelerated builds   Severity: P2   Status: Open
+Evidence: release discovery accepts the first release for which the GPU picker can fall back to CPU; equal build tags suppress a later update after accelerated assets finish uploading.
+Scenario: the newest release has only Windows CPU assets while the preceding release has the complete matching CUDA or Vulkan bundle.
+Fix proposed: prefer a complete hardware-matching release before CPU fallback; keep fallback when none of the recent releases supports that GPU. Offline fixtures cover NVIDIA, Vulkan and CPU.
+Closed by:
+
+### D-060 Cloud download-card Use selects a saved endpoint instead of activating its model   Severity: P1   Status: Open
+Evidence: the new footer at a5abc4a invokes only provider selection, unlike the existing built-in activation callback. Switching the provider before async activation can also replace cloud answers when activation fails.
+Scenario: a saved external local endpoint wins over the downloaded model; Now answering stays stale. A ready fallback may otherwise be mistaken for success of the requested model.
+Fix proposed: every card Use action invokes built-in activation; switch cloud answers only after the requested choice succeeds. Existing local fallback must persist the model actually serving.
+Closed by:
+
 ### D-001 Secret redaction of diagnostics and log exports is bypassed by case and delimiters   Severity: **P1**   Status: Closed
 Evidence: slint-experiment/src/bin/overlay_host/diagnostics.rs:150 - `if rest.starts_with("Bearer ") {`
 Scenario: a log line holding `authorization: bearer <token>`, `Bearer<tab><token>`, `Bearer  <token>` (two spaces), `Bearer: <token>`, an `x-api-key: <value>` header, or an `xai-` or `nvapi-` key is copied into the "Copy report" clipboard text and the "Collect logs" export with the credential intact.

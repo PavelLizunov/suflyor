@@ -1474,10 +1474,7 @@ fn live_pick_llama_is_blackwell_capable() {
     // whisper picker against the live release too: GPU path must land on a
     // cuBLAS build (Blackwell-capable via PTX JIT), CPU path on the plain build.
     let wassets = github_assets(WHISPER_REPO).unwrap();
-    assert!(pick_whisper(&wassets, false)
-        .unwrap()
-        .0
-        .contains("whisper-cublas-"));
+    assert!(pick_whisper(&wassets, false).unwrap().0.contains("cuda"));
     assert!(pick_whisper(&wassets, true)
         .unwrap()
         .0
@@ -1520,6 +1517,91 @@ fn path_is_under_root_rejects_sibling_prefix() {
         root
     ));
     assert!(!path_is_under_root("", root));
+}
+
+#[test]
+fn install_defaults_to_launching() {
+    assert!(!InstallOptions::default().download_only);
+}
+
+#[test]
+fn apply_download_result_only_records_local_assets_and_keeps_providers() {
+    for provider in ["cloud", "openai", "anthropic", "codex", "local"] {
+        for (stt, vision) in [
+            ("cloud", "cloud"),
+            ("gigaam", "openai"),
+            ("whisper", "same"),
+            ("cloud", "local"),
+        ] {
+            let mut cfg = crate::config::Config {
+                ai_provider: provider.to_string(),
+                stt_provider: stt.to_string(),
+                vision_provider: vision.to_string(),
+                ai_local_base_url: "http://localhost:9999/v1".to_string(),
+                ai_local_custom_gguf: "custom.gguf".to_string(),
+                ai_local_prep_model: "old-prep".to_string(),
+                groq_api_key: "gsk_secret".to_string(),
+                ai_bearer: "bridge_secret".to_string(),
+                ..Default::default()
+            };
+            let before = serde_json::to_value(&cfg).unwrap();
+            let vision_before = cfg.vision_endpoint();
+            let mut res = local_result(true, true);
+            res.on_gpu = false;
+            apply_download_result(&mut cfg, &res);
+            assert_eq!(cfg.ai_provider, provider);
+            assert_eq!(cfg.stt_provider, stt);
+            assert_eq!(cfg.vision_provider, vision);
+            let vision_after = cfg.vision_endpoint();
+            assert_eq!(
+                vision_after
+                    .as_ref()
+                    .map(|e| (&e.base_url, &e.bearer, &e.model)),
+                vision_before
+                    .as_ref()
+                    .map(|e| (&e.base_url, &e.bearer, &e.model)),
+                "download-only must preserve the resolved screenshot route"
+            );
+            assert_eq!(cfg.stt_gigaam_dir, res.stt_gigaam_dir);
+            let mut after = serde_json::to_value(&cfg).unwrap();
+            after["stt_gigaam_dir"] = before["stt_gigaam_dir"].clone();
+            assert_eq!(
+                after, before,
+                "download application must leave all other settings alone"
+            );
+        }
+    }
+}
+
+#[test]
+fn apply_download_result_keeps_a_working_gigaam_folder() {
+    let tmp = tempfile::tempdir().unwrap();
+    let own = tmp.path().join("own-gigaam");
+    std::fs::create_dir_all(&own).unwrap();
+    std::fs::write(own.join("model.int8.onnx"), b"model").unwrap();
+    let mut cfg = crate::config::Config {
+        stt_provider: "gigaam".to_string(),
+        stt_gigaam_dir: own.to_string_lossy().into_owned(),
+        stt_whisper_url: "http://whisper.lan:9000/v1".to_string(),
+        ..Default::default()
+    };
+    let res = local_result(false, false);
+    assert!(!res.stt_gigaam_dir.is_empty());
+    apply_download_result(&mut cfg, &res);
+    assert_eq!(cfg.stt_gigaam_dir, own.to_string_lossy());
+    assert_eq!(cfg.stt_whisper_url, "http://whisper.lan:9000/v1");
+}
+
+#[test]
+fn apply_download_result_preserves_existing_gigaam_when_not_downloaded() {
+    let mut cfg = crate::config::Config {
+        stt_gigaam_dir: "existing-gigaam".to_string(),
+        ..Default::default()
+    };
+    let mut res = local_result(false, false);
+    res.stt_gigaam_dir.clear();
+    apply_download_result(&mut cfg, &res);
+    assert_eq!(cfg.stt_gigaam_dir, "existing-gigaam");
 }
 
 #[test]
@@ -1989,4 +2071,114 @@ fn gigaam_vocab_is_restored_only_beside_a_complete_model() {
         "an existing vocab is kept"
     );
     assert_eq!(std::fs::read(dir.join("vocab.txt")).unwrap(), b"custom");
+}
+
+#[test]
+fn newest_release_with_builds_skips_version_tags_without_binaries() {
+    let release = |tag: &str, names: &[&str]| GhRelease {
+        tag_name: tag.to_string(),
+        assets: names.iter().copied().map(asset).collect(),
+    };
+    // The API lists newest first: a binary-less "latest" version tag, then builds.
+    let releases = vec![
+        release("v0.7.0", &["nightly-tag.txt"]),
+        release("b11729", &["llama-b11729-bin-win-cpu-x64.zip"]),
+        release("b11727", &["llama-b11727-bin-win-cpu-x64.zip"]),
+    ];
+    let any_llama = |assets: &[GhAsset]| assets.iter().any(|a| a.name.starts_with("llama-"));
+    let picked = newest_with_assets(releases, any_llama).unwrap();
+    assert_eq!(picked.tag_name, "b11729");
+    assert!(newest_with_assets(vec![release("v1.9.5", &[])], any_llama).is_none());
+
+    // A build still uploading has other platforms but not the Windows one.
+    let uploading = vec![
+        release("b11731", &["llama-b11731-bin-ubuntu-x64.tar.gz"]),
+        release("b11729", &["llama-b11729-bin-win-cpu-x64.zip"]),
+    ];
+    let win_cpu = |assets: &[GhAsset]| {
+        assets
+            .iter()
+            .any(|a| a.name.starts_with("llama-") && a.name.ends_with("-bin-win-cpu-x64.zip"))
+    };
+    assert_eq!(
+        newest_with_assets(uploading, win_cpu).unwrap().tag_name,
+        "b11729"
+    );
+}
+
+#[test]
+#[cfg(windows)]
+fn llama_release_prefers_complete_gpu_uploads_before_cpu_fallback() {
+    let release = |tag: &str, names: &[&str]| GhRelease {
+        tag_name: tag.to_string(),
+        assets: names.iter().copied().map(asset).collect(),
+    };
+    let releases = || {
+        vec![
+            release("b11731", &["llama-b11731-bin-win-cpu-x64.zip"]),
+            release(
+                "b11729",
+                &[
+                    "llama-b11729-bin-win-cpu-x64.zip",
+                    "llama-b11729-bin-win-cuda-13.3-x64.zip",
+                    "cudart-llama-bin-win-cuda-13.3-x64.zip",
+                    "llama-b11729-bin-win-vulkan-x64.zip",
+                ],
+            ),
+        ]
+    };
+    for gpu in [GpuKind::Nvidia, GpuKind::Other] {
+        assert_eq!(
+            newest_llama_release(releases(), gpu).unwrap().tag_name,
+            "b11729"
+        );
+        let cpu_only = vec![release("b11731", &["llama-b11731-bin-win-cpu-x64.zip"])];
+        assert_eq!(
+            newest_llama_release(cpu_only, gpu).unwrap().tag_name,
+            "b11731"
+        );
+    }
+    assert_eq!(
+        newest_llama_release(releases(), GpuKind::None)
+            .unwrap()
+            .tag_name,
+        "b11731"
+    );
+}
+
+#[test]
+fn whisper_cuda_build_names_old_and_new_parse() {
+    assert_eq!(
+        whisper_cublas_version_of("whisper-cublas-12.4.0-bin-x64.zip"),
+        Some((12, 4, 0))
+    );
+    assert_eq!(
+        whisper_cublas_version_of("whisper-bin-win-cuda-12.4.0-x64.zip"),
+        Some((12, 4, 0))
+    );
+    assert_eq!(
+        whisper_cublas_version_of("whisper-bin-win-cuda-13.4-x64.zip"),
+        Some((13, 4, 0))
+    );
+    assert_eq!(
+        whisper_cublas_version_of("whisper-bin-win-cuda-13.4-arm64.zip"),
+        None
+    );
+    assert_eq!(whisper_cublas_version_of("whisper-bin-x64.zip"), None);
+    let assets = vec![
+        asset("whisper-bin-x64.zip"),
+        asset("whisper-bin-win-cuda-11.8.0-x64.zip"),
+        asset("whisper-bin-win-cuda-12.4.0-x64.zip"),
+        asset("whisper-bin-win-cuda-13.4-arm64.zip"),
+    ];
+    if !cfg!(target_os = "macos") {
+        assert!(pick_whisper(&assets, false)
+            .unwrap()
+            .0
+            .contains("cuda-12.4.0-x64"));
+        assert!(pick_whisper(&assets, true)
+            .unwrap()
+            .0
+            .ends_with("whisper-bin-x64.zip"));
+    }
 }
