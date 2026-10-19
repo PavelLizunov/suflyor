@@ -20,6 +20,8 @@ fn retained_windows_cannot_be_revealed_after_close_by_native_setup() {
         .unwrap()
         .0;
     assert!(close.contains("force_hide(w.window())"));
+    assert!(controller.contains("position.x <= -30000 || position.y <= -30000"));
+    assert!(controller.contains("present_window_stealth_aware(existing,"));
     for (path, guard) in [
         (
             "src/bin/overlay_host/window_lifecycle.rs",

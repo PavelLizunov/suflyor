@@ -686,13 +686,20 @@ async fn native_streams_emit_delta_and_terminal_event() {
 #[tokio::test]
 async fn responses_terminal_snapshot_keeps_buffered_answers_without_duplicating_deltas() {
     let _stream_guard = STREAM_TEST_LOCK.lock().await;
-    for delta in [
-        "",
-        "data: {\"type\":\"response.output_text.delta\",\"delta\":\"answer\"}\n\n",
+    for (delta, kind, output, expected_reason) in [
+        ("", "completed", "answer", "stop"),
+        (
+            "data: {\"type\":\"response.output_text.delta\",\"delta\":\"answer\"}\n\n",
+            "completed",
+            "answer",
+            "stop",
+        ),
+        ("", "completed", "", "stop"),
+        ("", "incomplete", "answer", "length"),
     ] {
         let body = format!(
             "data: {{\"type\":\"response.created\",\"response\":{{\"id\":\"r1\"}}}}\n\n{delta}\
-             data: {{\"type\":\"response.completed\",\"response\":{{\"status\":\"completed\",\"output\":[{{\"type\":\"message\",\"content\":[{{\"type\":\"output_text\",\"text\":\"answer\"}}]}}]}}}}\n\n"
+             data: {{\"type\":\"response.{kind}\",\"response\":{{\"status\":\"{kind}\",\"output\":[{{\"type\":\"message\",\"content\":[{{\"type\":\"output_text\",\"text\":\"{output}\"}}]}}]}}}}\n\n"
         );
         let (url, _captured) =
             serve_one_capture(Box::leak(body.into_boxed_str()), "text/event-stream");
@@ -715,7 +722,7 @@ async fn responses_terminal_snapshot_keeps_buffered_answers_without_duplicating_
             match event {
                 AiEvent::Delta { text: delta } => text.push_str(&delta),
                 AiEvent::Done { reason } => {
-                    assert_eq!(reason, "stop");
+                    assert_eq!(reason, expected_reason);
                     terminal += 1;
                 }
                 AiEvent::Error { message } => panic!("unexpected stream error: {message}"),
@@ -723,7 +730,7 @@ async fn responses_terminal_snapshot_keeps_buffered_answers_without_duplicating_
             }
         }
         assert_eq!(
-            text, "answer",
+            text, output,
             "buffered or streamed answer must arrive exactly once"
         );
         assert_eq!(terminal, 1);

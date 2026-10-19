@@ -127,6 +127,16 @@ pub(crate) fn open_settings(
             refresh_profiles(existing, &snap);
             populate_component_rows(existing, &snap);
         }
+        // An early close may cancel the first reveal while still parked.
+        // Re-enter presentation instead of re-showing it off the desktop.
+        let position = existing.window().position();
+        if position.x <= -30000 || position.y <= -30000 {
+            present_window_stealth_aware(existing, |hwnd| {
+                let _ = make_transparent_tile(hwnd);
+                let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
+            });
+            return;
+        }
         let _ = existing.show();
         // The F8 / capture-chip flow hides EVERY app window via Win32 SW_HIDE
         // (hide_own_windows) so the overlay isn't in the screenshot. That bypasses
