@@ -659,11 +659,13 @@ pub(crate) fn wire_ai_settings(
             {
                 let mut c = cfg_c.write();
                 c.ai_base_url = trimmed.clone();
+                // Requests use the new address even when the save fails, so
+                // the reasoning table follows it either way.
+                overlay_backend::ai::set_reasoning_efforts(c.reasoning_efforts());
                 if let Err(e) = overlay_backend::config::save(&c) {
                     eprintln!("[overlay-host] ai_base_url save failed: {e:#}");
                     return;
                 }
-                overlay_backend::ai::set_reasoning_efforts(c.reasoning_efforts());
             }
             // Log presence only — ai_base_url often embeds the user's LAN
             // IP / proxy port (network-topology leak). See ai.rs no-log note.

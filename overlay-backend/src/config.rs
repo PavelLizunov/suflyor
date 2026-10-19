@@ -919,12 +919,22 @@ impl Config {
     #[must_use]
     pub fn reasoning_efforts(&self) -> Vec<(AiProtocol, String, String)> {
         [
-            (AiProtocol::OpenAiCompatible, &self.ai_base_url, &self.ai_reasoning_effort),
-            (AiProtocol::OpenAiResponses, &self.openai_base_url, &self.openai_reasoning_effort),
+            (
+                AiProtocol::OpenAiCompatible,
+                &self.ai_base_url,
+                &self.ai_reasoning_effort,
+            ),
+            (
+                AiProtocol::OpenAiResponses,
+                &self.openai_base_url,
+                &self.openai_reasoning_effort,
+            ),
         ]
         .into_iter()
         .filter(|(_, url, effort)| !url.trim().is_empty() && !effort.trim().is_empty())
-        .map(|(protocol, url, effort)| (protocol, url.trim().to_string(), effort.trim().to_string()))
+        .map(|(protocol, url, effort)| {
+            (protocol, url.trim().to_string(), effort.trim().to_string())
+        })
         .collect()
     }
 

@@ -1457,6 +1457,8 @@ pub(crate) fn msg_refresh_after_import(
     cfg: &overlay_backend::config::SharedConfig,
 ) -> String {
     populate_token_status(win, cfg);
+    // Imported profiles may carry other addresses or reasoning levels.
+    overlay_backend::ai::set_reasoning_efforts(cfg.read().reasoning_efforts());
     if cfg.read().ui_is_ru() {
         "Настройки импортированы — перезапустите приложение для полного применения"
     } else {

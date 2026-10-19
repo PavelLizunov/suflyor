@@ -12,8 +12,7 @@
 
 use super::control::{
     apply_local_no_think, apply_managed_gemma_sampler, apply_prompt_cache, apply_reasoning_effort,
-    http_client,
-    transport_failure_kind,
+    http_client, transport_failure_kind,
 };
 use super::tools;
 use super::tps::record_stream_tps;

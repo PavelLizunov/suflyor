@@ -1,7 +1,6 @@
 use super::control::{
     apply_local_no_think, apply_managed_gemma_sampler, apply_prompt_cache, apply_reasoning_effort,
-    http_client,
-    resolve_managed_mlx_endpoint, transport_failure_kind, AI_SEMAPHORE, PROMPT_CACHE,
+    http_client, resolve_managed_mlx_endpoint, transport_failure_kind, AI_SEMAPHORE, PROMPT_CACHE,
 };
 use super::pricing::TokenUsage;
 use super::provider;
