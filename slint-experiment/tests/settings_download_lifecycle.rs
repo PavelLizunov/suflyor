@@ -21,11 +21,20 @@ fn retained_windows_cannot_be_revealed_after_close_by_native_setup() {
         .0;
     assert!(close.contains("force_hide(w.window())"));
     for (path, guard) in [
-        ("src/bin/overlay_host/window_lifecycle.rs", "if !w.window().is_visible()"),
-        ("src/bin/overlay_host/tile_window.rs", "if !t.window().is_visible()"),
+        (
+            "src/bin/overlay_host/window_lifecycle.rs",
+            "if !w.window().is_visible()",
+        ),
+        (
+            "src/bin/overlay_host/tile_window.rs",
+            "if !t.window().is_visible()",
+        ),
     ] {
         let source = std::fs::read_to_string(root.join(path)).unwrap();
-        assert!(source.contains(guard), "deferred native setup needs a close guard: {path}");
+        assert!(
+            source.contains(guard),
+            "deferred native setup needs a close guard: {path}"
+        );
     }
 }
 
