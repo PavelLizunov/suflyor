@@ -2107,7 +2107,10 @@ fn newest_release_with_builds_skips_version_tags_without_binaries() {
             .iter()
             .any(|a| a.name.starts_with("llama-") && a.name.ends_with("-bin-win-cpu-x64.zip"))
     };
-    assert_eq!(newest_with_assets(uploading, win_cpu).unwrap().tag_name, "b11729");
+    assert_eq!(
+        newest_with_assets(uploading, win_cpu).unwrap().tag_name,
+        "b11729"
+    );
 }
 
 #[test]
