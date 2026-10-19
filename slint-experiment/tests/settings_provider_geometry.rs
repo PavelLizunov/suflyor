@@ -48,7 +48,9 @@ fn provider_cards_contain_wrapped_content_in_both_languages() {
             "Модель ищет информацию, когда это нужно. Веб-запросы отправляются в DuckDuckGo.",
         ),
     ] {
-        slint::select_bundled_translation(language).expect("select interface language");
+        if !language.is_empty() {
+            slint::select_bundled_translation(language).expect("select interface language");
+        }
         let win = ui::SettingsWindow::new().expect("create Settings");
         win.set_active_tab(11);
         win.show().expect("show Settings");
