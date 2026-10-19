@@ -8,6 +8,12 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-061 OpenAI provider block overlaps the download card after text wrapping   Severity: **P1**   Status: Open
+Evidence: native Windows MCP at the rc.13 source tree, RU 720x600: OpenAI conditional VerticalLayout y144/h296, test button y431/h32, next card y448. The next card overlaps the button by15px.
+Scenario: AI providers with OpenAI selected; its reasoning help wraps to three lines but the conditional group reports a shorter preferred height.
+Fix proposed: use the existing WrapBlock, as the cloud, Anthropic and Codex provider groups already do. Add a headless EN/RU geometry regression at720/600/480px.
+Closed by:
+
 ### D-056 Closing Settings disconnects an active local-model download from its UI   Severity: **P1**   Status: Open
 Evidence: at 3b00939d3927e9baa58d58e42b5453e63f7dec21, `settings_controller.rs` removes the Settings instance in `on_close_clicked`; local-AI progress/completion callbacks hold only that instance's weak handle.
 Scenario: start the built-in download, close Settings, then reopen it. The transfer continues but progress and Cancel disappear; the new window presents idle download actions.
