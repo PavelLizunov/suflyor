@@ -528,6 +528,8 @@ pub(crate) fn open_settings(
     // ===== V4 — vision (screenshot) channel: provider switch + field saves + test =====
     // Extracted to settings_vision.rs (P1 domain split) — wired verbatim there.
     wire_vision_settings(&win, cfg);
+    #[cfg(windows)]
+    super::settings_strata_vision::wire(&win, cfg, state);
 
     // ===== Read-aloud (Озвучка): voice chooser + speed preset + test =====
     wire_voice_settings(&win, cfg);
@@ -2134,6 +2136,9 @@ pub(crate) fn populate_token_status(
     // `vision_test_result` was reset before. Persistent state (key presence,
     // dropdowns, toggles, ai_local_quality) is reseeded below and is NOT touched.
     let blank = || SharedString::from("");
+    if win.get_strata_vision_job() == 0 {
+        win.set_strata_vision_status(blank());
+    }
     let local_job_active = win.get_local_ai_installing()
         || win.get_quality_downloading()
         || win.get_model_switching()
@@ -2279,6 +2284,8 @@ pub(crate) fn populate_token_status(
         effective_local_model.clone(),
     );
     win.set_ai_local_vision(c.ai_local_vision);
+    #[cfg(windows)]
+    super::settings_strata_vision::refresh(win, &c);
     win.set_vision_phonetics(c.vision_phonetics);
     win.set_vision_test_practice(c.vision_test_practice);
     // Read-aloud (Озвучка): build the installed-voice dropdown + reflect the

@@ -442,6 +442,14 @@ export component SettingsWindow inherits Window {
     // Start Strata from Suflyor's own install (true) or the found one (false).
     callback strata-choose(bool);
     callback strata-find-folder-clicked();
+    in-out property <bool> strata-vision-installable: false;
+    in-out property <bool> strata-vision-downloaded: false;
+    in-out property <bool> strata-vision-enabled: false;
+    in-out property <int> strata-vision-job: 0; // 0 idle, 1 download, 2 activation
+    in-out property <float> strata-vision-progress: 0;
+    in-out property <string> strata-vision-status: "";
+    callback strata-vision-download();
+    callback strata-vision-enable();
     // One status line, one progress bar and one Cancel for every built-in
     // engine job (install, download, switch, projector, engine update). The
     // line shows the newest message of whichever job wrote last.
@@ -3317,6 +3325,57 @@ export component SettingsWindow inherits Window {
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                             wrap: word-wrap;
+                        }
+                        if !Platform.is-macos : SettingsCard {
+                            title: @tr("Add Vision to Strata");
+                            Text {
+                                text: @tr("Optional 907 MB encoder for Qwen3.8-Flash-Next. Uses the CPU, not extra GPU memory. No second language model. Downloading does not change F8.");
+                                font-size: Metrics.font-caption;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: !root.strata-vision-installable
+                                    ? @tr("First install or select a compatible Strata folder in AI providers. The image helper must be present.")
+                                    : root.strata-vision-enabled ? @tr("Enabled for F8")
+                                    : root.strata-vision-downloaded ? @tr("Downloaded. Enable separately for F8.")
+                                    : @tr("Not downloaded");
+                                font-size: Metrics.font-caption;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            if root.strata-vision-status != "" : Text {
+                                text: root.strata-vision-status;
+                                font-size: Metrics.font-caption;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            if root.strata-vision-job == 1 : Rectangle {
+                                height: 6px;
+                                background: Theme.border;
+                                Rectangle {
+                                    height: parent.height;
+                                    width: parent.width * root.strata-vision-progress;
+                                    background: Theme.accent;
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: Metrics.space-sm;
+                                Button {
+                                    text: @tr("Download / Resume");
+                                    enabled: root.strata-vision-installable && !root.strata-vision-downloaded && root.strata-vision-job == 0 && !root.strata-busy && !root.builtin-busy;
+                                    clicked => { root.strata-vision-download(); }
+                                }
+                                if root.strata-vision-job != 0 : Button {
+                                    text: @tr("Cancel");
+                                    clicked => { root.cancel-local-ai-clicked(); }
+                                }
+                                Button {
+                                    text: @tr("Enable for F8");
+                                    enabled: root.strata-vision-installable && root.strata-vision-downloaded && !root.strata-vision-enabled && root.strata-active && root.ai-provider-index == 1 && root.strata-vision-job == 0 && !root.strata-busy && !root.builtin-busy;
+                                    clicked => { root.strata-vision-enable(); }
+                                }
+                            }
                         }
                         SettingsComboBox {
                             model: Platform.is-macos ? [

@@ -2077,6 +2077,8 @@ pub(crate) fn refresh_local_engine_state(
     let root = overlay_backend::local_ai::default_root();
     win.set_llama_installed(overlay_backend::local_ai::llama_engine_installed(&root));
     win.set_strata_installed(overlay_backend::local_ai::own_strata_installed(&root));
+    #[cfg(windows)]
+    super::settings_strata_vision::refresh(win, cfg);
     win.set_strata_active(overlay_backend::local_ai::is_managed_strata_endpoint(
         &cfg.ai_local_base_url,
     ));
