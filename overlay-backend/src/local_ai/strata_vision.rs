@@ -149,7 +149,9 @@ fn replace_config(path: &Path, bytes: &[u8]) -> Result<()> {
 }
 
 fn verify_image(cancel: &AtomicBool) -> Result<()> {
-    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
     rt.block_on(async {
         let request = crate::ai::complete(
             STRATA_BASE_URL, "", "strata",
@@ -216,7 +218,10 @@ pub fn enable_strata_vision(
         if std::fs::read(&t.config)? != original {
             bail!("the Strata configuration changed during verification");
         }
-        replace_config(&t.config, &serde_json::to_vec_pretty(&with_cpu_encoder(&t))?)?;
+        replace_config(
+            &t.config,
+            &serde_json::to_vec_pretty(&with_cpu_encoder(&t))?,
+        )?;
     }
     stop_strata();
     let result = (|| {
