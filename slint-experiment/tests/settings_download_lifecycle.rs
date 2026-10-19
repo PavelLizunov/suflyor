@@ -46,6 +46,9 @@ fn hidden_settings_keep_download_and_shared_status_until_completion() {
     let win = ui::SettingsWindow::new().unwrap();
     win.show().unwrap();
     win.set_strata_status("Previous Strata result".into());
+    win.set_strata_vision_job(1);
+    win.set_strata_vision_status("Strata Vision: 300 / 907 MB".into());
+    win.set_strata_vision_progress(0.33);
     win.set_local_ai_installing(true);
     win.set_local_ai_progress(0.42);
     win.set_local_ai_status("Gemma: 2688 / 6405 MB".into());
@@ -57,6 +60,9 @@ fn hidden_settings_keep_download_and_shared_status_until_completion() {
     // A retained window and its live job fields survive without another event.
     win.show().unwrap();
     assert!(win.get_local_ai_installing());
+    assert_eq!(win.get_strata_vision_job(), 1);
+    assert_eq!(win.get_strata_vision_status(), "Strata Vision: 300 / 907 MB");
+    assert_eq!(win.get_strata_vision_progress(), 0.33);
     assert_eq!(win.get_local_ai_progress(), 0.42);
     assert_eq!(win.get_local_ai_status(), "Gemma: 2688 / 6405 MB");
     assert_eq!(win.get_local_choice_status(), "Gemma: 2688 / 6405 MB");

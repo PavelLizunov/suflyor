@@ -148,16 +148,28 @@ fn replace_config(path: &Path, bytes: &[u8]) -> Result<()> {
     std::fs::rename(&tmp, path).context("replace Strata Vision configuration")
 }
 
-fn verify_image() -> Result<()> {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-    rt.block_on(crate::vision::test_connection(
-        STRATA_BASE_URL.to_string(),
-        String::new(),
-        "strata".to_string(),
-    ))?;
-    Ok(())
+fn verify_image(cancel: &AtomicBool) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+    rt.block_on(async {
+        let request = crate::ai::complete(
+            STRATA_BASE_URL, "", "strata",
+            crate::vision::build_vision_request(crate::vision::SYNTHETIC_TEST_IMAGE_DATA_URL, "Reply with: ok"),
+            16,
+        );
+        tokio::pin!(request);
+        let deadline = tokio::time::sleep(Duration::from_secs(120));
+        tokio::pin!(deadline);
+        loop {
+            tokio::select! {
+                result = &mut request => {
+                    if result?.trim().is_empty() { bail!("Strata returned an empty image answer"); }
+                    return Ok(());
+                }
+                _ = &mut deadline => bail!("Strata image verification timed out"),
+                _ = tokio::time::sleep(Duration::from_millis(100)) => super::super::bail_if_cancelled(cancel)?,
+            }
+        }
+    })
 }
 
 /// Call under the local-AI lifecycle lock. Never stops an external server.
@@ -185,7 +197,8 @@ pub fn enable_strata_vision(
     }
     // An already configured, running encoder needs only the image check.
     if configured_at(&dir, &t) && owned {
-        verify_image()?;
+        verify_image(cancel)?;
+        super::super::bail_if_cancelled(cancel)?;
         return commit();
     }
     let original = std::fs::read(&t.config)?;
@@ -196,13 +209,14 @@ pub fn enable_strata_vision(
         if !t.json["vision"].is_null() {
             bail!("the existing Strata Vision configuration needs repair");
         }
-        if !pinned_file_matches(&t.projector, STRATA_VISION_SIZE, SHA256) {
+        if super::super::file_len(&t.projector) != STRATA_VISION_SIZE {
             bail!("download and verify the Strata Vision encoder first");
         }
-        replace_config(
-            &t.config,
-            &serde_json::to_vec_pretty(&with_cpu_encoder(&t))?,
-        )?;
+        super::super::verify_sha256(&t.projector, SHA256, "Strata Vision")?;
+        if std::fs::read(&t.config)? != original {
+            bail!("the Strata configuration changed during verification");
+        }
+        replace_config(&t.config, &serde_json::to_vec_pretty(&with_cpu_encoder(&t))?)?;
     }
     stop_strata();
     let result = (|| {
@@ -212,7 +226,7 @@ pub fn enable_strata_vision(
         }
         super::super::bail_if_cancelled(cancel)?;
         on(Progress::Step("Checking Strata image input".to_string()));
-        verify_image()?;
+        verify_image(cancel)?;
         super::super::bail_if_cancelled(cancel)?;
         commit()
     })();
