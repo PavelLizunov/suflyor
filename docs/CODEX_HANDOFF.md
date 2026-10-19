@@ -6,7 +6,7 @@ Updated 2026-10-12 (operational state and open-work section only; the rest dates
 
 - Branch: `master`
 - Latest published stable release: `v0.38.0`
-- Latest published prerelease: `v0.38.1-rc.11` (answers with context and term definitions, dependency batch; pull requests #287, #285)
+- Latest published prerelease: `v0.38.1-rc.12` (Settings say what to do next for STT, Components and screenshots; pull request #290)
 - Active master handoff: none
 - Post-release maintenance may be newer than the stable tag; inspect Git before acting.
 
@@ -18,6 +18,24 @@ Operational note: Windows jobs follow
 [`docs/winbrat-recovery.md`](winbrat-recovery.md). Never start a duplicate job
 because SSH or a terminal disconnected. macOS builds and live QA run only on
 `mm4`; Windows compilation and the repository gate run only on `winbrat`.
+
+## Settings guidance — `v0.38.1-rc.12` (2026-10-19)
+
+Pull request #290, released as `v0.38.1-rc.12`. The owner reported three dead ends in
+Settings: the STT check said only «Не удалось подключиться», Components showed every part
+«не установлено» while OpenAI answers worked, and screenshots needed the connection entered
+again.
+
+- The managed GigaAM download block was macOS-only; it now shows on Windows too, as
+  «Check files» once installed. GigaAM failures say "no model" or "did not start" and name the
+  button the tab shows. A lost `vocab.txt` is restored; a saved folder without a model follows
+  the complete managed install at config load (`repair_gigaam_dir`).
+- Components: an "In use now" card (answers, screenshots, speech) and «не нужно» for local
+  parts the current choice does not use.
+- Screenshots: "Same as the answer model" works for OpenAI and Anthropic and saves that API's
+  profile; the provider list binds two-way; the test names the failure.
+- `deny.toml` ignores RUSTSEC-2026-0370..0372 (unmaintained zbus family, Linux-only via Slint).
+- Not checked on the worker: a real 214 MB GigaAM download and the owner's own key.
 
 ## Answers with context and terms — `v0.38.1-rc.11` (2026-10-17)
 
