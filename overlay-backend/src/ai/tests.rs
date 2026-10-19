@@ -686,7 +686,10 @@ async fn native_streams_emit_delta_and_terminal_event() {
 #[tokio::test]
 async fn responses_terminal_snapshot_keeps_buffered_answers_without_duplicating_deltas() {
     let _stream_guard = STREAM_TEST_LOCK.lock().await;
-    for delta in ["", "data: {\"type\":\"response.output_text.delta\",\"delta\":\"answer\"}\n\n"] {
+    for delta in [
+        "",
+        "data: {\"type\":\"response.output_text.delta\",\"delta\":\"answer\"}\n\n",
+    ] {
         let body = format!(
             "data: {{\"type\":\"response.created\",\"response\":{{\"id\":\"r1\"}}}}\n\n{delta}\
              data: {{\"type\":\"response.completed\",\"response\":{{\"status\":\"completed\",\"output\":[{{\"type\":\"message\",\"content\":[{{\"type\":\"output_text\",\"text\":\"answer\"}}]}}]}}}}\n\n"
@@ -719,7 +722,10 @@ async fn responses_terminal_snapshot_keeps_buffered_answers_without_duplicating_
                 _ => {}
             }
         }
-        assert_eq!(text, "answer", "buffered or streamed answer must arrive exactly once");
+        assert_eq!(
+            text, "answer",
+            "buffered or streamed answer must arrive exactly once"
+        );
         assert_eq!(terminal, 1);
     }
 }
