@@ -20,7 +20,7 @@
 //! NOTE (§7): the parent crate-root symbols this module references are imported
 //! explicitly below.
 use super::{
-    active_stack_label, global_stealth_effective, hotkey_diag_row, try_acquire_mic,
+    global_stealth_effective, hotkey_diag_row, try_acquire_mic,
     ComponentHandle, Duration, SettingsWindow, SharedString, Timer,
 };
 

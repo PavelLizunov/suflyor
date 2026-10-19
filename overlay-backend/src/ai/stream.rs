@@ -178,6 +178,7 @@ pub(crate) fn codex_failure_message(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn stream_inner(
     endpoint: AiEndpoint,
     messages: Vec<ChatMessage>,

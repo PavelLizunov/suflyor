@@ -1619,15 +1619,14 @@ pub fn mark_engine_update_checked(root: &Path) {
     let _ = std::fs::write(stamp, now_unix().to_string());
 }
 
-/// The installed llama.cpp build number, for display ("движок bNNNN"). `None`
-/// when unstamped (an engine installed before stamping existed).
-#[must_use]
 /// Stat-only: the managed llama.cpp server binary is on disk.
 #[must_use]
 pub fn llama_engine_installed(root: &Path) -> bool {
     find_exe(&root.join("llama.cpp"), "llama-server.exe").is_some()
 }
 
+/// Installed llama.cpp build number, or None for an unstamped engine.
+#[must_use]
 pub fn installed_engine_build(root: &Path) -> Option<u32> {
     installed_llama_build(&root.join("llama.cpp"))
 }
@@ -2264,6 +2263,7 @@ fn newest_with_assets(
 /// The downloadable assets of the newest release with builds (whisper path +
 /// tests don't need the tag). The llama path uses [`github_build_release`]
 /// directly to also stamp the build tag.
+#[cfg(test)]
 fn github_assets(repo: &str) -> Result<Vec<GhAsset>> {
     let prefix = if repo == WHISPER_REPO {
         "whisper-"
