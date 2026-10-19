@@ -158,6 +158,7 @@ fn settings_close_preserves_the_window_and_active_download_state() {
         "get_model_switching()",
         "get_vision12b_downloading()",
         "get_engine_updating()",
+        "get_strata_busy()",
     ] {
         assert!(active.contains(flag), "missing active job: {flag}");
     }

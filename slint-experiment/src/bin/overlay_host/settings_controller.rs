@@ -2127,7 +2127,8 @@ pub(crate) fn populate_token_status(
         || win.get_quality_downloading()
         || win.get_model_switching()
         || win.get_vision12b_downloading()
-        || win.get_engine_updating();
+        || win.get_engine_updating()
+        || win.get_strata_busy();
     if !local_job_active {
         win.set_quality_status(blank());
         win.set_local_ai_status(blank());
@@ -2135,7 +2136,7 @@ pub(crate) fn populate_token_status(
         win.set_local_ai_on_gpu(false);
     }
     win.set_ai_local_test_result(blank());
-    if !win.get_strata_busy() {
+    if !local_job_active {
         win.set_strata_status(blank());
     }
     win.set_local_more_open(false);

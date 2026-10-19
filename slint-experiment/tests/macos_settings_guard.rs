@@ -176,6 +176,9 @@ fn windows_can_download_local_assets_without_selecting_local_answers() {
         .1;
     assert!(activation.contains("if activate_answers {"));
     assert!(activation.contains("c.ai_provider = \"local\".to_string()"));
+    assert!(activation.contains("switch_commits_choice(outcome)"));
+    assert!(activation.contains("ModelSwitch::FallbackStarted"));
+    assert!(activation.contains("ManagedModel::Fallback12B"));
     assert!(card.contains(
         "root.legacy-model-present || root.fallback-model-present || root.quality-model-present"
     ));

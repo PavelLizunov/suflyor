@@ -2650,8 +2650,19 @@ pub(crate) fn wire_strata(
                     });
                     let (outcome, children) =
                         overlay_backend::local_ai::restart_llama_server(&root, choice.clone());
-                    let ready = overlay_backend::local_ai::switch_has_ready_server(outcome);
+                    // A cloud user chose this model, not an unrelated fallback.
+                    // Keep their cloud route if only the fallback became ready.
+                    let ready = overlay_backend::local_ai::switch_has_ready_server(outcome)
+                        && (cfg_t.read().ai_provider == "local"
+                            || overlay_backend::local_ai::switch_commits_choice(outcome));
                     if ready {
+                        let choice = if outcome == overlay_backend::local_ai::ModelSwitch::FallbackStarted {
+                            overlay_backend::local_ai::ManagedLlamaChoice::for_model(
+                                overlay_backend::local_ai::effective_managed_model(
+                                    &root, overlay_backend::local_ai::ManagedModel::Fallback12B,
+                                ), choice.context,
+                            )
+                        } else { choice };
                         let mut c = cfg_t.write();
                         overlay_backend::local_ai::apply_llama_choice(&mut c, &root, &choice);
                         overlay_backend::local_ai::repair_managed_model_state_after_verification(&mut c, &root);
@@ -2666,14 +2677,16 @@ pub(crate) fn wire_strata(
                     } else {
                         overlay_backend::local_ai::terminate_servers(children);
                     }
-                    msg = match (ready, ru) {
-                        (true, true) => "Готово: работает встроенный движок.".to_string(),
-                        (true, false) => "Done: the built-in engine is running.".to_string(),
-                        (false, true) => {
+                    msg = match (ready, outcome, ru) {
+                        (true, overlay_backend::local_ai::ModelSwitch::FallbackStarted, true) => "Выбранная модель не запустилась; работает резервная модель.".to_string(),
+                        (true, overlay_backend::local_ai::ModelSwitch::FallbackStarted, false) => "The selected model did not start; the fallback model is running.".to_string(),
+                        (true, _, true) => "Готово: работает встроенный движок.".to_string(),
+                        (true, _, false) => "Done: the built-in engine is running.".to_string(),
+                        (false, _, true) => {
                             "Встроенный движок не запустился — проверьте установку локального AI."
                                 .to_string()
                         }
-                        (false, false) => {
+                        (false, _, false) => {
                             "The built-in engine did not start — check the local AI install."
                                 .to_string()
                         }
