@@ -2224,7 +2224,11 @@ fn newest_llama_release(mut releases: Vec<GhRelease>, gpu: GpuKind) -> Option<Gh
             pick_llama(&r.assets, gpu)
                 .is_ok_and(|pick| gpu == GpuKind::None || pick.version.is_some())
         })
-        .or_else(|| releases.iter().position(|r| pick_llama(&r.assets, gpu).is_ok()))?;
+        .or_else(|| {
+            releases
+                .iter()
+                .position(|r| pick_llama(&r.assets, gpu).is_ok())
+        })?;
     Some(releases.swap_remove(index))
 }
 
@@ -2246,8 +2250,7 @@ fn github_releases(repo: &str) -> Result<Vec<GhRelease>> {
     if !out.status.success() {
         bail!("GitHub API request for {repo} failed");
     }
-    serde_json::from_slice(&out.stdout)
-        .with_context(|| format!("parse releases JSON for {repo}"))
+    serde_json::from_slice(&out.stdout).with_context(|| format!("parse releases JSON for {repo}"))
 }
 
 /// Pure: the first (newest) release whose assets pass `usable`.

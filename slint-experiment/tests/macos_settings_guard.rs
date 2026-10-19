@@ -170,7 +170,10 @@ fn windows_can_download_local_assets_without_selecting_local_answers() {
     assert!(card.contains("text: @tr(\"Use for answers\")"));
     assert!(!card.contains("root.ai-provider-changed(1)"));
     assert!(card.contains("root.builtin-model-use(root.fallback-model-present ? 1 : root.legacy-model-present ? 0 : 2)"));
-    let activation = local.split_once("let activate_answers = requested_choice.is_some()").unwrap().1;
+    let activation = local
+        .split_once("let activate_answers = requested_choice.is_some()")
+        .unwrap()
+        .1;
     assert!(activation.contains("if activate_answers {"));
     assert!(activation.contains("c.ai_provider = \"local\".to_string()"));
     assert!(card.contains(
@@ -254,8 +257,13 @@ fn windows_can_download_local_assets_without_selecting_local_answers() {
 #[test]
 fn downloaded_models_do_not_trigger_cloud_boot_engine_updates() {
     let host = read("src/bin/overlay_host_windows.rs");
-    let guard = host.split_once("let update_active_engine = {").unwrap().1
-        .split_once("if update_active_engine").unwrap().0;
+    let guard = host
+        .split_once("let update_active_engine = {")
+        .unwrap()
+        .1
+        .split_once("if update_active_engine")
+        .unwrap()
+        .0;
     assert!(guard.contains("c.ai_provider == \"local\""));
     assert!(guard.contains("!c.deep_lock"));
     assert!(guard.contains("is_managed_llama_endpoint(&c.ai_local_base_url)"));

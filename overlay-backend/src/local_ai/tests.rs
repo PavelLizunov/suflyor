@@ -1554,8 +1554,12 @@ fn apply_download_result_only_records_local_assets_and_keeps_providers() {
             assert_eq!(cfg.vision_provider, vision);
             let vision_after = cfg.vision_endpoint();
             assert_eq!(
-                vision_after.as_ref().map(|e| (&e.base_url, &e.bearer, &e.model)),
-                vision_before.as_ref().map(|e| (&e.base_url, &e.bearer, &e.model)),
+                vision_after
+                    .as_ref()
+                    .map(|e| (&e.base_url, &e.bearer, &e.model)),
+                vision_before
+                    .as_ref()
+                    .map(|e| (&e.base_url, &e.bearer, &e.model)),
                 "download-only must preserve the resolved screenshot route"
             );
             assert_eq!(cfg.stt_gigaam_dir, res.stt_gigaam_dir);
@@ -2109,21 +2113,37 @@ fn llama_release_prefers_complete_gpu_uploads_before_cpu_fallback() {
         tag_name: tag.to_string(),
         assets: names.iter().copied().map(asset).collect(),
     };
-    let releases = || vec![
-        release("b11731", &["llama-b11731-bin-win-cpu-x64.zip"]),
-        release("b11729", &[
-            "llama-b11729-bin-win-cpu-x64.zip",
-            "llama-b11729-bin-win-cuda-13.3-x64.zip",
-            "cudart-llama-bin-win-cuda-13.3-x64.zip",
-            "llama-b11729-bin-win-vulkan-x64.zip",
-        ]),
-    ];
+    let releases = || {
+        vec![
+            release("b11731", &["llama-b11731-bin-win-cpu-x64.zip"]),
+            release(
+                "b11729",
+                &[
+                    "llama-b11729-bin-win-cpu-x64.zip",
+                    "llama-b11729-bin-win-cuda-13.3-x64.zip",
+                    "cudart-llama-bin-win-cuda-13.3-x64.zip",
+                    "llama-b11729-bin-win-vulkan-x64.zip",
+                ],
+            ),
+        ]
+    };
     for gpu in [GpuKind::Nvidia, GpuKind::Other] {
-        assert_eq!(newest_llama_release(releases(), gpu).unwrap().tag_name, "b11729");
+        assert_eq!(
+            newest_llama_release(releases(), gpu).unwrap().tag_name,
+            "b11729"
+        );
         let cpu_only = vec![release("b11731", &["llama-b11731-bin-win-cpu-x64.zip"])];
-        assert_eq!(newest_llama_release(cpu_only, gpu).unwrap().tag_name, "b11731");
+        assert_eq!(
+            newest_llama_release(cpu_only, gpu).unwrap().tag_name,
+            "b11731"
+        );
     }
-    assert_eq!(newest_llama_release(releases(), GpuKind::None).unwrap().tag_name, "b11731");
+    assert_eq!(
+        newest_llama_release(releases(), GpuKind::None)
+            .unwrap()
+            .tag_name,
+        "b11731"
+    );
 }
 
 #[test]
