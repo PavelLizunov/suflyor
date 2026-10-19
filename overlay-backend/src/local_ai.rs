@@ -337,16 +337,11 @@ fn vram_is_at_baseline(baseline_mib: u64, after_mib: Option<u64>) -> bool {
     after_mib.is_some_and(|after| after <= baseline_mib.saturating_add(64))
 }
 
-/// Record downloaded local assets without changing the answer, STT or vision
-/// provider. Whisper settings are left alone (download-only skips Whisper),
-/// and the GigaAM path moves only when the saved folder has no model.
+/// Keep saved routes intact: local vision can inherit the text-local endpoint,
+/// even while answers use the cloud. Model availability is read from disk; an
+/// explicit Use action records the chosen model only after it starts. Whisper
+/// is untouched, and GigaAM moves only when the saved folder has no model.
 pub fn apply_download_result(cfg: &mut crate::config::Config, res: &LocalAiResult) {
-    cfg.ai_local_base_url = LLAMA_BASE_URL.to_string();
-    cfg.ai_local_model = res.ai_local_model.clone();
-    cfg.ai_local_custom_gguf.clear();
-    cfg.ai_local_prep_model.clear();
-    cfg.ai_local_quality = res.ai_local_quality;
-    cfg.ai_local_vision = res.ai_local_vision;
     let saved_gigaam = Path::new(cfg.stt_gigaam_dir.trim());
     let saved_has_model = !cfg.stt_gigaam_dir.trim().is_empty()
         && file_len(&saved_gigaam.join("model.int8.onnx")) > 0;
@@ -456,7 +451,7 @@ pub fn install(
         on(Progress::Step("Installing llama.cpp".to_string()));
         std::fs::create_dir_all(&llama_dir)?;
         if find_exe(&llama_dir, "llama-server.exe").is_none() {
-            let rel = github_build_release(LLAMA_REPO, |assets| pick_llama(assets, gpu).is_ok())?;
+            let rel = github_llama_release(gpu)?;
             let pick = pick_llama(&rel.assets, gpu)?;
             cuda_version = pick.version.clone();
             let blabel = format!("llama.cpp {}", pick.version.as_deref().unwrap_or("CPU"));
@@ -1669,7 +1664,7 @@ pub fn update_llama_engine(
 
     on(Progress::Step("Checking for a newer llama.cpp".into()));
     let gpu = detect_gpu();
-    let rel = github_build_release(LLAMA_REPO, |assets| pick_llama(assets, gpu).is_ok())?;
+    let rel = github_llama_release(gpu)?;
     let latest =
         parse_build_tag(&rel.tag_name).context("latest llama.cpp release has no build tag")?;
     if installed.is_some_and(|cur| cur >= latest) {
@@ -2211,6 +2206,29 @@ struct LlamaPick {
 /// A build is uploaded platform by platform over several minutes, so the
 /// check is for the asset the picker needs, not for any binary.
 fn github_build_release(repo: &str, usable: impl Fn(&[GhAsset]) -> bool) -> Result<GhRelease> {
+    newest_with_assets(github_releases(repo)?, usable)
+        .ok_or_else(|| anyhow!("no {repo} release with a build for this PC"))
+}
+
+fn github_llama_release(gpu: GpuKind) -> Result<GhRelease> {
+    newest_llama_release(github_releases(LLAMA_REPO)?, gpu)
+        .ok_or_else(|| anyhow!("no llama.cpp release with a build for this PC"))
+}
+
+/// Prefer a complete GPU release over a newer CPU-first partial upload. Keep
+/// CPU fallback only when none of the recent releases has a matching GPU build.
+fn newest_llama_release(mut releases: Vec<GhRelease>, gpu: GpuKind) -> Option<GhRelease> {
+    let index = releases
+        .iter()
+        .position(|r| {
+            pick_llama(&r.assets, gpu)
+                .is_ok_and(|pick| gpu == GpuKind::None || pick.version.is_some())
+        })
+        .or_else(|| releases.iter().position(|r| pick_llama(&r.assets, gpu).is_ok()))?;
+    Some(releases.swap_remove(index))
+}
+
+fn github_releases(repo: &str) -> Result<Vec<GhRelease>> {
     let url = format!("https://api.github.com/repos/{repo}/releases?per_page=30");
     let out = run_capture(
         "curl.exe",
@@ -2228,10 +2246,8 @@ fn github_build_release(repo: &str, usable: impl Fn(&[GhAsset]) -> bool) -> Resu
     if !out.status.success() {
         bail!("GitHub API request for {repo} failed");
     }
-    let releases: Vec<GhRelease> = serde_json::from_slice(&out.stdout)
-        .with_context(|| format!("parse releases JSON for {repo}"))?;
-    newest_with_assets(releases, usable)
-        .ok_or_else(|| anyhow!("no {repo} release with a build for this PC"))
+    serde_json::from_slice(&out.stdout)
+        .with_context(|| format!("parse releases JSON for {repo}"))
 }
 
 /// Pure: the first (newest) release whose assets pass `usable`.

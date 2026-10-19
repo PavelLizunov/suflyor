@@ -2795,11 +2795,7 @@ export component SettingsWindow inherits Window {
                                 progress: root.quality-progress;
                                 action-clicked => {
                                     if !root.legacy-model-present { root.download-model-clicked(0); }
-                                    else {
-                                        root.ai-provider-index = 1;
-                                        root.ai-provider-changed(1);
-                                        root.builtin-model-use(0);
-                                    }
+                                    else { root.builtin-model-use(0); }
                                 }
                                 cancel-clicked => { root.cancel-local-ai-clicked(); }
                             }
@@ -2816,11 +2812,7 @@ export component SettingsWindow inherits Window {
                                 progress: root.quality-progress;
                                 action-clicked => {
                                     if !root.fallback-model-present { root.download-model-clicked(1); }
-                                    else {
-                                        root.ai-provider-index = 1;
-                                        root.ai-provider-changed(1);
-                                        root.builtin-model-use(1);
-                                    }
+                                    else { root.builtin-model-use(1); }
                                 }
                                 cancel-clicked => { root.cancel-local-ai-clicked(); }
                             }
@@ -2837,11 +2829,7 @@ export component SettingsWindow inherits Window {
                                 progress: root.quality-progress;
                                 action-clicked => {
                                     if !root.quality-model-present { root.download-model-clicked(2); }
-                                    else {
-                                        root.ai-provider-index = 1;
-                                        root.ai-provider-changed(1);
-                                        root.builtin-model-use(2);
-                                    }
+                                    else { root.builtin-model-use(2); }
                                 }
                                 cancel-clicked => { root.cancel-local-ai-clicked(); }
                             }
@@ -2873,8 +2861,7 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Use for answers");
                                 enabled: root.llama-installed && (root.legacy-model-present || root.fallback-model-present || root.quality-model-present) && !root.builtin-busy && !root.strata-busy;
                                 clicked => {
-                                    root.ai-provider-index = 1;
-                                    root.ai-provider-changed(1);
+                                    root.builtin-model-use(root.fallback-model-present ? 1 : root.legacy-model-present ? 0 : 2);
                                 }
                             }
                         }

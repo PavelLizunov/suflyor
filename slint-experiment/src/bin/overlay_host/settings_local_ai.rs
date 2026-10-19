@@ -2636,6 +2636,7 @@ pub(crate) fn wire_strata(
                     };
                 } else {
                     overlay_backend::local_ai::stop_strata();
+                    let activate_answers = requested_choice.is_some();
                     let choice = requested_choice.unwrap_or_else(|| {
                         let mut target = cfg_t.read().clone();
                         target.ai_local_base_url = overlay_backend::local_ai::LLAMA_BASE_URL.to_string();
@@ -2654,6 +2655,10 @@ pub(crate) fn wire_strata(
                         let mut c = cfg_t.write();
                         overlay_backend::local_ai::apply_llama_choice(&mut c, &root, &choice);
                         overlay_backend::local_ai::repair_managed_model_state_after_verification(&mut c, &root);
+                        if activate_answers {
+                            c.ai_provider = "local".to_string();
+                            overlay_backend::ai::set_local_no_think(!c.ai_local_thinking);
+                        }
                         if let Err(e) = overlay_backend::config::save(&c) {
                             eprintln!("[overlay-host] built-in engine save failed: {e:#}");
                         }
@@ -2698,6 +2703,9 @@ pub(crate) fn wire_strata(
                         // list, vision and the lock chip from the saved config.
                         w.invoke_ai_local_base_url_save(SharedString::from(saved_url));
                         let c = cfg_done.read();
+                        if c.ai_provider == "local" {
+                            w.set_ai_provider_index(1);
+                        }
                         refresh_local_engine_state(&w, &c);
                         refresh_local_context_controls(&w, &c);
                         // Stay on the panel of the engine the user asked for:

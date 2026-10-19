@@ -1163,10 +1163,13 @@ fn main() -> Result<(), slint::PlatformError> {
             // the first unlocked boot catches up.
             // The update check loads the 12B on the GPU; skip it while Strata
             // holds the GPU. The first boot on the built-in engine catches up.
-            if !cfg_w.read().deep_lock
-                && !overlay_backend::local_ai::is_managed_strata_endpoint(
-                    &cfg_w.read().ai_local_base_url,
-                )
+            let update_active_engine = {
+                let c = cfg_w.read();
+                c.ai_provider == "local"
+                    && !c.deep_lock
+                    && overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url)
+            };
+            if update_active_engine
                 && overlay_backend::local_ai::should_check_engine_update(&root)
             {
                 let lifecycle_lock = {

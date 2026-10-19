@@ -1418,14 +1418,14 @@ pub(crate) fn open_settings(
     wire_updates(&win);
 
     let weak_close = win.as_weak();
-    let settings_close = settings_ref.clone();
     let overlay_for_close = overlay_weak.clone();
     let cfg_for_close = cfg.clone();
     win.on_close_clicked(move || {
         if let Some(w) = weak_close.upgrade() {
             let _ = w.hide();
         }
-        *settings_close.borrow_mut() = None;
+        // Keep the instance alive: async jobs report progress and cancellation
+        // through its weak handle, including while Settings is hidden.
         // Un-light the bar's ⚙ chip + refresh the active-stack readout (the
         // user may have switched STT/AI provider while Settings was open).
         if let Some(o) = overlay_for_close.upgrade() {
@@ -2123,12 +2123,21 @@ pub(crate) fn populate_token_status(
     // `vision_test_result` was reset before. Persistent state (key presence,
     // dropdowns, toggles, ai_local_quality) is reseeded below and is NOT touched.
     let blank = || SharedString::from("");
-    win.set_quality_status(blank());
-    win.set_local_ai_status(blank());
-    win.set_local_ai_gpu(blank());
-    win.set_local_ai_on_gpu(false);
+    let local_job_active = win.get_local_ai_installing()
+        || win.get_quality_downloading()
+        || win.get_model_switching()
+        || win.get_vision12b_downloading()
+        || win.get_engine_updating();
+    if !local_job_active {
+        win.set_quality_status(blank());
+        win.set_local_ai_status(blank());
+        win.set_local_ai_gpu(blank());
+        win.set_local_ai_on_gpu(false);
+    }
     win.set_ai_local_test_result(blank());
-    win.set_strata_status(blank());
+    if !win.get_strata_busy() {
+        win.set_strata_status(blank());
+    }
     win.set_local_more_open(false);
     win.set_now_title(blank());
     win.set_now_detail(blank());
@@ -2143,7 +2152,9 @@ pub(crate) fn populate_token_status(
     if !win.get_strata_busy() {
         win.set_local_strata_job(-1);
     }
-    win.set_local_choice_status(blank());
+    if !local_job_active && !win.get_strata_busy() {
+        win.set_local_choice_status(blank());
+    }
     win.set_ai_bridge_test_result(blank());
     win.set_stt_test_result(blank());
     win.set_mic_test_result(blank());
@@ -2294,8 +2305,10 @@ pub(crate) fn populate_token_status(
                 .map(|b| format!("b{b}"))
                 .unwrap_or_default(),
         ));
-        win.set_vision12b_status(blank());
-        win.set_engine_update_status(blank());
+        if !local_job_active {
+            win.set_vision12b_status(blank());
+            win.set_engine_update_status(blank());
+        }
     }
     // Phase E10 — STT provider selector + local-engine fields.
     win.set_stt_provider_index(stt_provider_index(&c.stt_provider));

@@ -1531,6 +1531,7 @@ fn apply_download_result_only_records_local_assets_and_keeps_providers() {
             ("cloud", "cloud"),
             ("gigaam", "openai"),
             ("whisper", "same"),
+            ("cloud", "local"),
         ] {
             let mut cfg = crate::config::Config {
                 ai_provider: provider.to_string(),
@@ -1544,31 +1545,22 @@ fn apply_download_result_only_records_local_assets_and_keeps_providers() {
                 ..Default::default()
             };
             let before = serde_json::to_value(&cfg).unwrap();
+            let vision_before = cfg.vision_endpoint();
             let mut res = local_result(true, true);
             res.on_gpu = false;
             apply_download_result(&mut cfg, &res);
             assert_eq!(cfg.ai_provider, provider);
             assert_eq!(cfg.stt_provider, stt);
             assert_eq!(cfg.vision_provider, vision);
-            assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);
-            assert_eq!(cfg.ai_local_model, GEMMA26_FILE);
-            assert!(cfg.ai_local_quality);
-            assert!(cfg.ai_local_vision);
-            assert!(cfg.ai_local_custom_gguf.is_empty());
-            assert!(cfg.ai_local_prep_model.is_empty());
+            let vision_after = cfg.vision_endpoint();
+            assert_eq!(
+                vision_after.as_ref().map(|e| (&e.base_url, &e.bearer, &e.model)),
+                vision_before.as_ref().map(|e| (&e.base_url, &e.bearer, &e.model)),
+                "download-only must preserve the resolved screenshot route"
+            );
             assert_eq!(cfg.stt_gigaam_dir, res.stt_gigaam_dir);
             let mut after = serde_json::to_value(&cfg).unwrap();
-            for field in [
-                "ai_local_base_url",
-                "ai_local_model",
-                "ai_local_custom_gguf",
-                "ai_local_prep_model",
-                "ai_local_quality",
-                "ai_local_vision",
-                "stt_gigaam_dir",
-            ] {
-                after[field] = before[field].clone();
-            }
+            after["stt_gigaam_dir"] = before["stt_gigaam_dir"].clone();
             assert_eq!(
                 after, before,
                 "download application must leave all other settings alone"
@@ -1606,9 +1598,6 @@ fn apply_download_result_preserves_existing_gigaam_when_not_downloaded() {
     res.stt_gigaam_dir.clear();
     apply_download_result(&mut cfg, &res);
     assert_eq!(cfg.stt_gigaam_dir, "existing-gigaam");
-    assert_eq!(cfg.ai_local_model, GEMMA_FILE);
-    assert!(!cfg.ai_local_quality);
-    assert!(!cfg.ai_local_vision);
 }
 
 #[test]
@@ -2111,6 +2100,30 @@ fn newest_release_with_builds_skips_version_tags_without_binaries() {
         newest_with_assets(uploading, win_cpu).unwrap().tag_name,
         "b11729"
     );
+}
+
+#[test]
+#[cfg(windows)]
+fn llama_release_prefers_complete_gpu_uploads_before_cpu_fallback() {
+    let release = |tag: &str, names: &[&str]| GhRelease {
+        tag_name: tag.to_string(),
+        assets: names.iter().copied().map(asset).collect(),
+    };
+    let releases = || vec![
+        release("b11731", &["llama-b11731-bin-win-cpu-x64.zip"]),
+        release("b11729", &[
+            "llama-b11729-bin-win-cpu-x64.zip",
+            "llama-b11729-bin-win-cuda-13.3-x64.zip",
+            "cudart-llama-bin-win-cuda-13.3-x64.zip",
+            "llama-b11729-bin-win-vulkan-x64.zip",
+        ]),
+    ];
+    for gpu in [GpuKind::Nvidia, GpuKind::Other] {
+        assert_eq!(newest_llama_release(releases(), gpu).unwrap().tag_name, "b11729");
+        let cpu_only = vec![release("b11731", &["llama-b11731-bin-win-cpu-x64.zip"])];
+        assert_eq!(newest_llama_release(cpu_only, gpu).unwrap().tag_name, "b11731");
+    }
+    assert_eq!(newest_llama_release(releases(), GpuKind::None).unwrap().tag_name, "b11731");
 }
 
 #[test]
