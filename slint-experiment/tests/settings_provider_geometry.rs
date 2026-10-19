@@ -2,7 +2,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
 use i_slint_backend_testing::ElementHandle;
-use slint::{ComponentHandle, LogicalSize};
+use slint::{ComponentHandle, LogicalPosition, LogicalSize};
 
 mod ui {
     slint::include_modules!();
@@ -12,6 +12,16 @@ fn labelled(win: &ui::SettingsWindow, label: &str) -> ElementHandle {
     ElementHandle::find_by_accessible_label(win, label)
         .next()
         .unwrap_or_else(|| panic!("missing Settings element: {label}"))
+}
+
+fn scroll_to_end(win: &ui::SettingsWindow, width: f32) {
+    win.window()
+        .dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+            position: LogicalPosition::new(width - 40.0, 500.0),
+            delta_x: 0.0,
+            delta_y: -100_000.0,
+        });
+    slint::platform::update_timers_and_animations();
 }
 
 fn card_for(win: &ui::SettingsWindow, title: &str) -> ElementHandle {
@@ -57,6 +67,7 @@ fn provider_cards_contain_wrapped_content_in_both_languages() {
         for width in [720.0, 600.0, 480.0] {
             win.window().set_size(LogicalSize::new(width, 600.0));
             win.set_ai_provider_index(2);
+            scroll_to_end(&win, width);
             let button = labelled(&win, test);
             let card = card_for(&win, models);
             let button_bottom = button.absolute_position().y + button.size().height;
@@ -67,6 +78,7 @@ fn provider_cards_contain_wrapped_content_in_both_languages() {
             );
 
             win.set_ai_provider_index(1);
+            scroll_to_end(&win, width);
             let card = card_for(&win, capabilities);
             let caption = labelled(&win, caption);
             let caption_bottom = caption.absolute_position().y + caption.size().height;
