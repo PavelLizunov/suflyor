@@ -61,7 +61,10 @@ fn hidden_settings_keep_download_and_shared_status_until_completion() {
     win.show().unwrap();
     assert!(win.get_local_ai_installing());
     assert_eq!(win.get_strata_vision_job(), 1);
-    assert_eq!(win.get_strata_vision_status(), "Strata Vision: 300 / 907 MB");
+    assert_eq!(
+        win.get_strata_vision_status(),
+        "Strata Vision: 300 / 907 MB"
+    );
     assert_eq!(win.get_strata_vision_progress(), 0.33);
     assert_eq!(win.get_local_ai_progress(), 0.42);
     assert_eq!(win.get_local_ai_status(), "Gemma: 2688 / 6405 MB");
