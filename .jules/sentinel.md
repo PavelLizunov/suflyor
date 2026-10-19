@@ -42,3 +42,8 @@
 **Vulnerability:** `SessionRecorder::start_in`, `Store::open`, `logging::init`, and `settings_controller.rs` created raw session audio recording folders (`recordings/<session_id>/`), catalog database directories, and the application data root via standard `std::fs::create_dir_all`. On Unix/POSIX targets, this left directory permissions subject to default umask (`0755`/`0775`), exposing raw audio recordings (`mic.wav`, `system.wav`) and data files to other local system users.
 **Learning:** Directory creation across recorder, logging, and storage modules must explicitly enforce owner-only permissions (`0o700`) rather than relying on default `std::fs::create_dir_all`.
 **Prevention:** Always use `overlay_backend::paths::ensure_private_dir` when creating application data root and audio recording directories on POSIX targets.
+
+## 2026-10-20 - World-Readable SQLite Catalog Database Permissions on POSIX
+**Vulnerability:** `Store::open()` in `sqlite_store.rs` created `catalog.sqlite` via `rusqlite::Connection::open` and `std::fs::create_dir_all`, leaving SQLite database files containing sensitive session histories, transcripts, AI turns, and curated personal memory subject to default umask permissions (`0644`/`0755`) on Unix/POSIX targets.
+**Learning:** While `sessions/` journals and `config.json` enforced restricted permissions, `Store::open()` created SQLite catalog files without explicit permission restriction, exposing sensitive session transcripts and personal memory to other local system users.
+**Prevention:** Always use `crate::paths::ensure_private_dir` for database directories and call `crate::paths::restrict_to_owner(path)` immediately after opening/creating SQLite database files on POSIX targets.
