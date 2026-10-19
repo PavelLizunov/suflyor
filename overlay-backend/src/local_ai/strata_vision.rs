@@ -18,9 +18,17 @@ struct Target {
 
 fn config_path(dir: &Path, cfg: &serde_json::Value, value: &str) -> PathBuf {
     let cwd = PathBuf::from(cfg["cwd"].as_str().unwrap_or("."));
-    let cwd = if cwd.is_absolute() { cwd } else { dir.join(cwd) };
+    let cwd = if cwd.is_absolute() {
+        cwd
+    } else {
+        dir.join(cwd)
+    };
     let path = PathBuf::from(value);
-    if path.is_absolute() { path } else { cwd.join(path) }
+    if path.is_absolute() {
+        path
+    } else {
+        cwd.join(path)
+    }
 }
 
 fn target_at(dir: &Path, config: &Path) -> Option<Target> {
@@ -45,7 +53,13 @@ fn target_at(dir: &Path, config: &Path) -> Option<Target> {
         return None;
     }
     let projector = model.parent()?.join(FILE);
-    Some(Target { config: config.to_owned(), json, helper, model, projector })
+    Some(Target {
+        config: config.to_owned(),
+        json,
+        helper,
+        model,
+        projector,
+    })
 }
 
 fn target(root: &Path) -> Option<Target> {
@@ -66,9 +80,9 @@ pub fn strata_vision_downloaded(root: &Path) -> bool {
 fn configured_at(dir: &Path, target: &Target) -> bool {
     let vision = &target.json["vision"];
     ["exe", "model", "mmproj"].into_iter().all(|key| {
-        vision[key].as_str().is_some_and(|value| {
-            config_path(dir, &target.json, value).is_file()
-        })
+        vision[key]
+            .as_str()
+            .is_some_and(|value| config_path(dir, &target.json, value).is_file())
     })
 }
 
@@ -81,14 +95,30 @@ pub fn strata_vision_available(root: &Path) -> bool {
 }
 
 /// Download only: no run-config edits, restarts or route changes.
-pub fn download_strata_vision(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> Result<()> {
-    let t = target(root).context("a compatible installed Strata model and image helper are required")?;
+pub fn download_strata_vision(
+    root: &Path,
+    cancel: &AtomicBool,
+    on: &dyn Fn(Progress),
+) -> Result<()> {
+    let t = target(root)
+        .context("a compatible installed Strata model and image helper are required")?;
     super::super::bail_if_cancelled(cancel)?;
     if pinned_file_matches(&t.projector, STRATA_VISION_SIZE, SHA256) {
         return Ok(());
     }
-    ensure_disk_space(t.projector.parent().context("model folder")?, STRATA_VISION_SIZE, on)?;
-    curl_resumable(URL, &t.projector, STRATA_VISION_SIZE, "Strata Vision", cancel, on)?;
+    ensure_disk_space(
+        t.projector.parent().context("model folder")?,
+        STRATA_VISION_SIZE,
+        on,
+    )?;
+    curl_resumable(
+        URL,
+        &t.projector,
+        STRATA_VISION_SIZE,
+        "Strata Vision",
+        cancel,
+        on,
+    )?;
     super::super::verify_sha256(&t.projector, SHA256, "Strata Vision")
 }
 
@@ -119,16 +149,25 @@ fn replace_config(path: &Path, bytes: &[u8]) -> Result<()> {
 }
 
 fn verify_image() -> Result<()> {
-    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
     rt.block_on(crate::vision::test_connection(
-        STRATA_BASE_URL.to_string(), String::new(), "strata".to_string(),
+        STRATA_BASE_URL.to_string(),
+        String::new(),
+        "strata".to_string(),
     ))?;
     Ok(())
 }
 
 /// Call under the local-AI lifecycle lock. Never stops an external server.
 /// Existing user Vision blocks are kept byte-for-byte, not replaced by defaults.
-pub fn enable_strata_vision(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress), commit: &dyn Fn() -> Result<()>) -> Result<()> {
+pub fn enable_strata_vision(
+    root: &Path,
+    cancel: &AtomicBool,
+    on: &dyn Fn(Progress),
+    commit: &dyn Fn() -> Result<()>,
+) -> Result<()> {
     if crate::deep_lock::deep_lock_active() {
         bail!(crate::deep_lock::BLOCKED_ERROR);
     }
@@ -136,7 +175,11 @@ pub fn enable_strata_vision(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progre
     let t = target_at(&dir, &config).context("compatible Strata installation missing")?;
     super::super::bail_if_cancelled(cancel)?;
     let owned = strata_running();
-    let same = STRATA_CHILD_CONFIG.lock().unwrap_or_else(|p| p.into_inner()).as_ref() == Some(&config);
+    let same = STRATA_CHILD_CONFIG
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .as_ref()
+        == Some(&config);
     if (owned && !same) || (!owned && strata_reachable()) {
         bail!("Strata is managed by another process or installation");
     }
@@ -156,7 +199,10 @@ pub fn enable_strata_vision(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progre
         if !pinned_file_matches(&t.projector, STRATA_VISION_SIZE, SHA256) {
             bail!("download and verify the Strata Vision encoder first");
         }
-        replace_config(&t.config, &serde_json::to_vec_pretty(&with_cpu_encoder(&t))?)?;
+        replace_config(
+            &t.config,
+            &serde_json::to_vec_pretty(&with_cpu_encoder(&t))?,
+        )?;
     }
     stop_strata();
     let result = (|| {
@@ -173,10 +219,13 @@ pub fn enable_strata_vision(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progre
     if let Err(error) = result {
         stop_strata();
         if changed {
-            replace_config(&t.config, &original).context("restore previous Strata configuration")?;
+            replace_config(&t.config, &original)
+                .context("restore previous Strata configuration")?;
         }
         if owned {
-            on(Progress::Step("Restoring the previous Strata server".to_string()));
+            on(Progress::Step(
+                "Restoring the previous Strata server".to_string(),
+            ));
             let restored = start_strata(root, &AtomicBool::new(false), on);
             if restored != StrataStart::Ready {
                 bail!("{error:#}; previous Strata server could not restart: {restored:?}");
@@ -197,7 +246,15 @@ mod tests {
         std::fs::create_dir_all(strata_python(dir).parent().unwrap()).unwrap();
         std::fs::write(strata_python(dir), []).unwrap();
         std::fs::write(dir.join("model.gguf"), b"synthetic").unwrap();
-        std::fs::write(dir.join("engine").join(if cfg!(windows) { "strata-vision.exe" } else { "strata-vision" }), []).unwrap();
+        std::fs::write(
+            dir.join("engine").join(if cfg!(windows) {
+                "strata-vision.exe"
+            } else {
+                "strata-vision"
+            }),
+            [],
+        )
+        .unwrap();
         let path = dir.join("strata-iq2_xs.json");
         std::fs::write(&path, serde_json::to_vec(&serde_json::json!({
             "exe":"engine/strata.exe", "cwd":".", "model_name":"qwen3.8-flash-next-iq2_xs",
@@ -216,9 +273,19 @@ mod tests {
         assert_eq!(updated["sampling"], t.json["sampling"]);
         assert_eq!(updated["vision"]["gpu"], false);
         assert_eq!(updated["vision"]["max_tokens"], 1024);
-        assert_eq!(updated["vision"]["model"], t.model.to_string_lossy().as_ref());
-        assert!(!updated["args"].as_array().unwrap().iter().any(|a| a == "--vram-reserve-mib"));
-        assert_eq!(updated["args"].as_array().unwrap().len(), t.json["args"].as_array().unwrap().len() + 1);
+        assert_eq!(
+            updated["vision"]["model"],
+            t.model.to_string_lossy().as_ref()
+        );
+        assert!(!updated["args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a == "--vram-reserve-mib"));
+        assert_eq!(
+            updated["args"].as_array().unwrap().len(),
+            t.json["args"].as_array().unwrap().len() + 1
+        );
         assert_eq!(std::fs::read(&path).unwrap(), before);
         replace_config(&path, &serde_json::to_vec(&updated).unwrap()).unwrap();
         replace_config(&path, &before).unwrap();
@@ -230,8 +297,15 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = fixture(dir.path());
         let original = parse_json_file(&std::fs::read_to_string(&path).unwrap());
-        for name in ["qwen3.6-35b-a3b", "qwen3.8-flash-next-coder-iq2_xs", "qwen3.5-0.8b", "swift-1.5-iq2_xs", "qwen3.8-flash-next-unsloth-ud-iq4_xs"] {
-            let mut json = original.clone(); json["model_name"] = name.into();
+        for name in [
+            "qwen3.6-35b-a3b",
+            "qwen3.8-flash-next-coder-iq2_xs",
+            "qwen3.5-0.8b",
+            "swift-1.5-iq2_xs",
+            "qwen3.8-flash-next-unsloth-ud-iq4_xs",
+        ] {
+            let mut json = original.clone();
+            json["model_name"] = name.into();
             std::fs::write(&path, serde_json::to_vec(&json).unwrap()).unwrap();
             assert!(target_at(dir.path(), &path).is_none(), "{name}");
         }
