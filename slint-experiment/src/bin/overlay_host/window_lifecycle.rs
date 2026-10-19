@@ -313,6 +313,10 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
     // first-realize safe (no window stranded off-screen). Stealth-safe: in EVERY
     // native path WDA is applied BEFORE a parked window is moved on-screen.
     let do_reveal: Rc<dyn Fn(&W) -> bool> = Rc::new(move |w: &W| -> bool {
+        // A retained Settings instance can be closed before its reveal tick.
+        if !w.window().is_visible() {
+            return true;
+        }
         let Ok(hwnd) = grab_hwnd(w.window()) else {
             return false;
         };
@@ -359,6 +363,9 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
     // reopen to retry. Native decoration (rounded corners) is skipped in this
     // degraded path — a plain but VISIBLE window beats an invisible one.
     let fallback_reveal: Rc<dyn Fn(&W)> = Rc::new(move |w: &W| {
+        if !w.window().is_visible() {
+            return;
+        }
         if global_stealth() {
             diag!(
                 "[overlay-host] present: HWND never realized after retries; window kept \

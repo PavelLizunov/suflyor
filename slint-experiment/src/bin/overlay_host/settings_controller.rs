@@ -1423,6 +1423,7 @@ pub(crate) fn open_settings(
     win.on_close_clicked(move || {
         if let Some(w) = weak_close.upgrade() {
             let _ = w.hide();
+            slint_replay::win32::force_hide(w.window());
         }
         // Keep the instance alive: async jobs report progress and cancellation
         // through its weak handle, including while Settings is hidden.

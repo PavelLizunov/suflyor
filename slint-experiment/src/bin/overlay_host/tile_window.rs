@@ -285,6 +285,10 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
     let weak = tile.as_weak();
     Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
         let Some(t) = weak.upgrade() else { return };
+        // A close/drop before this delayed native setup must stay hidden.
+        if !t.window().is_visible() {
+            return;
+        }
         let Ok(hwnd) = grab_hwnd(t.window()) else {
             return;
         };
