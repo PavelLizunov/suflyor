@@ -3337,7 +3337,7 @@ export component SettingsWindow inherits Window {
                             Text {
                                 text: !root.strata-vision-installable
                                     ? @tr("First install or select a compatible Strata folder in AI providers. The image helper must be present.")
-                                    : root.strata-vision-enabled ? @tr("Enabled for F8")
+                                    : root.strata-vision-enabled && root.vision-provider-index == 1 && root.ai-provider-index == 1 && root.strata-active ? @tr("Enabled for F8")
                                     : root.strata-vision-downloaded ? @tr("Downloaded. Enable separately for F8.")
                                     : @tr("Not downloaded");
                                 font-size: Metrics.font-caption;
@@ -3372,7 +3372,7 @@ export component SettingsWindow inherits Window {
                                 }
                                 Button {
                                     text: @tr("Enable for F8");
-                                    enabled: root.strata-vision-installable && root.strata-vision-downloaded && !root.strata-vision-enabled && root.strata-active && root.ai-provider-index == 1 && root.strata-vision-job == 0 && !root.strata-busy && !root.builtin-busy;
+                                    enabled: root.strata-vision-installable && root.strata-vision-downloaded && (!root.strata-vision-enabled || root.vision-provider-index != 1) && root.strata-active && root.ai-provider-index == 1 && root.strata-vision-job == 0 && !root.strata-busy && !root.builtin-busy;
                                     clicked => { root.strata-vision-enable(); }
                                 }
                             }
