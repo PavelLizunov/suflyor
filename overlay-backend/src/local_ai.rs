@@ -163,6 +163,8 @@ pub struct InstallOptions {
     pub root: PathBuf,
     /// Force the CPU llama.cpp build even if an NVIDIA GPU is present.
     pub force_cpu: bool,
+    /// Download and verify assets without stopping or starting any servers.
+    pub download_only: bool,
     pub skip_llama: bool,
     pub skip_whisper: bool,
     pub skip_gigaam: bool,
@@ -174,6 +176,7 @@ impl Default for InstallOptions {
         Self {
             root: default_root(),
             force_cpu: false,
+            download_only: false,
             skip_llama: false,
             skip_whisper: false,
             skip_gigaam: false,
@@ -204,11 +207,10 @@ pub enum Progress {
 #[derive(Debug)]
 pub struct LocalAiResult {
     pub ai_local_model: String,
-    /// `true` when the owner-approved 26B primary actually started; `false`
-    /// when the installed/serving model is the 12B fallback.
+    /// `true` when the owner-approved 26B primary was selected (downloaded in
+    /// download-only mode, started otherwise); `false` for the 12B fallback.
     pub ai_local_quality: bool,
-    /// Whether the model that actually started also has its matching projector
-    /// attached. The 26B primary is text-only in this candidate.
+    /// Whether the selected model has its matching projector available.
     pub ai_local_vision: bool,
     pub hardware_profile: HardwareModelProfile,
     pub stt_gigaam_dir: String,
@@ -335,6 +337,24 @@ fn vram_is_at_baseline(baseline_mib: u64, after_mib: Option<u64>) -> bool {
     after_mib.is_some_and(|after| after <= baseline_mib.saturating_add(64))
 }
 
+/// Record downloaded local assets without changing the answer, STT or vision
+/// provider. Whisper settings are left alone (download-only skips Whisper),
+/// and the GigaAM path moves only when the saved folder has no model.
+pub fn apply_download_result(cfg: &mut crate::config::Config, res: &LocalAiResult) {
+    cfg.ai_local_base_url = LLAMA_BASE_URL.to_string();
+    cfg.ai_local_model = res.ai_local_model.clone();
+    cfg.ai_local_custom_gguf.clear();
+    cfg.ai_local_prep_model.clear();
+    cfg.ai_local_quality = res.ai_local_quality;
+    cfg.ai_local_vision = res.ai_local_vision;
+    let saved_gigaam = Path::new(cfg.stt_gigaam_dir.trim());
+    let saved_has_model = !cfg.stt_gigaam_dir.trim().is_empty()
+        && file_len(&saved_gigaam.join("model.int8.onnx")) > 0;
+    if !res.stt_gigaam_dir.is_empty() && !saved_has_model {
+        cfg.stt_gigaam_dir = res.stt_gigaam_dir.clone();
+    }
+}
+
 /// Write the installer's resulting endpoints/models into a `Config`, switching
 /// it to the local stack. Secrets are untouched. The actual installed selection
 /// wins over stale preferences, and the bundled single-model server never
@@ -369,7 +389,7 @@ pub fn install(
     cancel: &AtomicBool,
     on: &dyn Fn(Progress),
 ) -> Result<LocalAiResult> {
-    if !opts.skip_llama && crate::deep_lock::deep_lock_active() {
+    if !opts.download_only && !opts.skip_llama && crate::deep_lock::deep_lock_active() {
         bail!(crate::deep_lock::BLOCKED_ERROR);
     }
     preflight().context("environment preflight failed")?;
@@ -615,7 +635,7 @@ pub fn install(
 
     // ---- launch servers ----------------------------------------------------
     let mut servers = InstallServerCleanup::default();
-    if !opts.skip_llama {
+    if !opts.download_only && !opts.skip_llama {
         // The lock may have been recorded while a long model download was in
         // progress. Recheck at the actual launch boundary.
         if crate::deep_lock::deep_lock_active() {
@@ -673,7 +693,7 @@ pub fn install(
         let child = launch_hidden(&exe, &arg_refs)?;
         servers.children.push(child);
     }
-    if !opts.skip_whisper {
+    if !opts.download_only && !opts.skip_whisper {
         on(Progress::Step("Starting whisper-server :8081".to_string()));
         let exe = find_exe(&whisper_dir, "whisper-server.exe")
             .or_else(|| find_exe(&whisper_dir, "server.exe"))
@@ -704,7 +724,7 @@ pub fn install(
     // ---- wait for llama readiness + verify GPU offload --------------------
     let mut on_gpu = false;
     let mut effective_gpu = gpu;
-    if !opts.skip_llama {
+    if !opts.download_only && !opts.skip_llama {
         on(Progress::Step("Waiting for the model to load".to_string()));
         // The user-facing message (shown as the tile's {e}) must be actionable RU;
         // the inner detail only reaches the log via {e:#}.
@@ -860,7 +880,7 @@ pub fn install(
             GpuKind::None => on(Progress::Gpu("CPU".to_string())),
         }
     }
-    if !opts.skip_whisper {
+    if !opts.download_only && !opts.skip_whisper {
         // P0.2: whisper had no strict readiness check after launch.
         on(Progress::Step("Waiting for whisper-server".to_string()));
         wait_ready(&format!("{WHISPER_BASE_URL}/models"), 60)

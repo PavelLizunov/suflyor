@@ -2762,6 +2762,123 @@ export component SettingsWindow inherits Window {
                             }
                         }
 
+                        // Downloading assets is independent of the current answer provider.
+                        if !Platform.is-macos && root.ai-provider-index != 1 : SettingsCard {
+                            title: @tr("Models on this PC");
+                            Text {
+                                text: @tr("Download models ahead of time. Your current answer provider stays selected until you choose to use a local model.");
+                                font-size: Metrics.font-caption;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            if !root.llama-installed || root.local-ai-installing : LocalModelRow {
+                                title: @tr("Built-in engine + Gemma 4 12B");
+                                detail: root.local-ai-installing ? root.local-ai-status : @tr("llama.cpp · about 7 GB with speech components");
+                                action: root.local-ai-installing ? @tr("Installing…") : @tr("Install");
+                                action-enabled: !root.builtin-busy && !root.strata-busy;
+                                busy: root.local-ai-installing;
+                                progress-visible: true;
+                                progress: root.local-ai-progress;
+                                action-clicked => { root.install-local-ai-clicked(); }
+                                cancel-clicked => { root.cancel-local-ai-clicked(); }
+                            }
+                            if root.llama-installed : LocalModelRow {
+                                title: @tr("Fast (4B)");
+                                detail: root.quality-downloading && root.local-download-profile == 0 ? root.quality-status : @tr("Gemma 4 E4B · 4.6 GB");
+                                chip: "";
+                                chip-tone: 0;
+                                active: root.ai-provider-index == 1 && root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 0 && root.legacy-model-present;
+                                action: self.active ? @tr("In use") : root.legacy-model-present ? @tr("Use") : @tr("Download model");
+                                action-enabled: !self.active && !root.builtin-busy && !root.strata-busy;
+                                busy: root.quality-downloading && root.local-download-profile == 0;
+                                progress-visible: true;
+                                progress: root.quality-progress;
+                                action-clicked => {
+                                    if !root.legacy-model-present { root.download-model-clicked(0); }
+                                    else {
+                                        root.ai-provider-index = 1;
+                                        root.ai-provider-changed(1);
+                                        root.builtin-model-use(0);
+                                    }
+                                }
+                                cancel-clicked => { root.cancel-local-ai-clicked(); }
+                            }
+                            if root.llama-installed : LocalModelRow {
+                                title: @tr("Balanced (12B QAT)");
+                                detail: root.quality-downloading && root.local-download-profile == 1 ? root.quality-status : @tr("Gemma 4 12B · 6.3 GB");
+                                chip: @tr("recommended");
+                                chip-tone: 1;
+                                active: root.ai-provider-index == 1 && root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 1 && root.fallback-model-present;
+                                action: self.active ? @tr("In use") : root.fallback-model-present ? @tr("Use") : @tr("Download model");
+                                action-enabled: !self.active && !root.builtin-busy && !root.strata-busy;
+                                busy: root.quality-downloading && root.local-download-profile == 1;
+                                progress-visible: true;
+                                progress: root.quality-progress;
+                                action-clicked => {
+                                    if !root.fallback-model-present { root.download-model-clicked(1); }
+                                    else {
+                                        root.ai-provider-index = 1;
+                                        root.ai-provider-changed(1);
+                                        root.builtin-model-use(1);
+                                    }
+                                }
+                                cancel-clicked => { root.cancel-local-ai-clicked(); }
+                            }
+                            if root.llama-installed : LocalModelRow {
+                                title: @tr("Maximum (26B-A4B)");
+                                detail: root.quality-downloading && root.local-download-profile == 2 ? root.quality-status : @tr("Gemma 4 26B-A4B · 9.8 GB");
+                                chip: !root.quality-selection-allowed ? @tr("heavy for this PC") : "";
+                                chip-tone: 2;
+                                active: root.ai-provider-index == 1 && root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 2 && root.quality-model-present;
+                                action: self.active ? @tr("In use") : root.quality-model-present ? @tr("Use") : @tr("Download model");
+                                action-enabled: !self.active && !root.builtin-busy && !root.strata-busy;
+                                busy: root.quality-downloading && root.local-download-profile == 2;
+                                progress-visible: true;
+                                progress: root.quality-progress;
+                                action-clicked => {
+                                    if !root.quality-model-present { root.download-model-clicked(2); }
+                                    else {
+                                        root.ai-provider-index = 1;
+                                        root.ai-provider-changed(1);
+                                        root.builtin-model-use(2);
+                                    }
+                                }
+                                cancel-clicked => { root.cancel-local-ai-clicked(); }
+                            }
+                            if root.local-ai-status != "" && !root.local-ai-installing : Text {
+                                text: root.local-ai-status;
+                                font-size: Metrics.font-label;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            if root.quality-status != "" : Text {
+                                text: root.quality-status;
+                                font-size: Metrics.font-label;
+                                color: Theme.text-secondary;
+                                wrap: word-wrap;
+                            }
+                            if root.llama-installed && root.quality-model-present : LocalModelRow {
+                                title: @tr("Install Vision for 26B (~1.1 GiB)");
+                                detail: root.vision12b-status;
+                                action: root.vision12b-downloading ? @tr("Installing Vision…") : root.quality-vision-present ? @tr("Installed") : @tr("Download model");
+                                action-enabled: !root.quality-vision-present && !root.builtin-busy && !root.strata-busy;
+                                busy: root.vision12b-downloading;
+                                progress-visible: true;
+                                progress: root.quality-progress;
+                                action-clicked => { root.download-vision12b-clicked(); }
+                                cancel-clicked => { root.cancel-local-ai-clicked(); }
+                            }
+                            // Full card width, like the other Settings buttons.
+                            Button {
+                                text: @tr("Use for answers");
+                                enabled: root.llama-installed && (root.legacy-model-present || root.fallback-model-present || root.quality-model-present) && !root.builtin-busy && !root.strata-busy;
+                                clicked => {
+                                    root.ai-provider-index = 1;
+                                    root.ai-provider-changed(1);
+                                }
+                            }
+                        }
+
                         // ============================ LOCAL ============================
                         if root.ai-provider-index == 1 : VerticalLayout {
                             spacing: Metrics.space-sm;

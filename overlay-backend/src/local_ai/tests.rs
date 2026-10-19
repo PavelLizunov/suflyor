@@ -1523,6 +1523,98 @@ fn path_is_under_root_rejects_sibling_prefix() {
 }
 
 #[test]
+fn install_defaults_to_launching() {
+    assert!(!InstallOptions::default().download_only);
+}
+
+#[test]
+fn apply_download_result_only_records_local_assets_and_keeps_providers() {
+    for provider in ["cloud", "openai", "anthropic", "codex", "local"] {
+        for (stt, vision) in [
+            ("cloud", "cloud"),
+            ("gigaam", "openai"),
+            ("whisper", "same"),
+        ] {
+            let mut cfg = crate::config::Config {
+                ai_provider: provider.to_string(),
+                stt_provider: stt.to_string(),
+                vision_provider: vision.to_string(),
+                ai_local_base_url: "http://localhost:9999/v1".to_string(),
+                ai_local_custom_gguf: "custom.gguf".to_string(),
+                ai_local_prep_model: "old-prep".to_string(),
+                groq_api_key: "gsk_secret".to_string(),
+                ai_bearer: "bridge_secret".to_string(),
+                ..Default::default()
+            };
+            let before = serde_json::to_value(&cfg).unwrap();
+            let mut res = local_result(true, true);
+            res.on_gpu = false;
+            apply_download_result(&mut cfg, &res);
+            assert_eq!(cfg.ai_provider, provider);
+            assert_eq!(cfg.stt_provider, stt);
+            assert_eq!(cfg.vision_provider, vision);
+            assert_eq!(cfg.ai_local_base_url, LLAMA_BASE_URL);
+            assert_eq!(cfg.ai_local_model, GEMMA26_FILE);
+            assert!(cfg.ai_local_quality);
+            assert!(cfg.ai_local_vision);
+            assert!(cfg.ai_local_custom_gguf.is_empty());
+            assert!(cfg.ai_local_prep_model.is_empty());
+            assert_eq!(cfg.stt_gigaam_dir, res.stt_gigaam_dir);
+            let mut after = serde_json::to_value(&cfg).unwrap();
+            for field in [
+                "ai_local_base_url",
+                "ai_local_model",
+                "ai_local_custom_gguf",
+                "ai_local_prep_model",
+                "ai_local_quality",
+                "ai_local_vision",
+                "stt_gigaam_dir",
+            ] {
+                after[field] = before[field].clone();
+            }
+            assert_eq!(
+                after, before,
+                "download application must leave all other settings alone"
+            );
+        }
+    }
+}
+
+#[test]
+fn apply_download_result_keeps_a_working_gigaam_folder() {
+    let tmp = tempfile::tempdir().unwrap();
+    let own = tmp.path().join("own-gigaam");
+    std::fs::create_dir_all(&own).unwrap();
+    std::fs::write(own.join("model.int8.onnx"), b"model").unwrap();
+    let mut cfg = crate::config::Config {
+        stt_provider: "gigaam".to_string(),
+        stt_gigaam_dir: own.to_string_lossy().into_owned(),
+        stt_whisper_url: "http://whisper.lan:9000/v1".to_string(),
+        ..Default::default()
+    };
+    let res = local_result(false, false);
+    assert!(!res.stt_gigaam_dir.is_empty());
+    apply_download_result(&mut cfg, &res);
+    assert_eq!(cfg.stt_gigaam_dir, own.to_string_lossy());
+    assert_eq!(cfg.stt_whisper_url, "http://whisper.lan:9000/v1");
+}
+
+#[test]
+fn apply_download_result_preserves_existing_gigaam_when_not_downloaded() {
+    let mut cfg = crate::config::Config {
+        stt_gigaam_dir: "existing-gigaam".to_string(),
+        ..Default::default()
+    };
+    let mut res = local_result(false, false);
+    res.stt_gigaam_dir.clear();
+    apply_download_result(&mut cfg, &res);
+    assert_eq!(cfg.stt_gigaam_dir, "existing-gigaam");
+    assert_eq!(cfg.ai_local_model, GEMMA_FILE);
+    assert!(!cfg.ai_local_quality);
+    assert!(!cfg.ai_local_vision);
+}
+
+#[test]
 fn apply_result_sets_local_and_keeps_secrets() {
     let mut cfg = crate::config::Config {
         groq_api_key: "gsk_secret".to_string(),

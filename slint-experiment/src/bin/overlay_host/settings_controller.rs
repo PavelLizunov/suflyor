@@ -1608,16 +1608,21 @@ pub(crate) fn populate_component_rows(
             } else {
                 component_row_copy(c.kind, ru)
             };
-            // The local engine and model serve answers only when answers or
-            // screenshots use this PC; GigaAM only when STT selects it.
+            // Local assets can be downloaded ahead of time from AI providers;
+            // keep their Open action available even while answers use the cloud.
+            let optional_local = matches!(c.kind, ComponentKind::Engine | ComponentKind::LocalModel)
+                && snap.ai_provider != "local" && snap.vision_provider != "local";
             let needed = match c.kind {
-                ComponentKind::Engine | ComponentKind::LocalModel => {
-                    is_macos || snap.ai_provider == "local" || snap.vision_provider == "local"
-                }
                 ComponentKind::Stt => is_macos || snap.stt_provider == "gigaam",
-                ComponentKind::Voices | ComponentKind::Ocr => true,
+                _ => true,
             };
-            let hint = if needed {
+            let hint = if optional_local {
+                if ru {
+                    "Необязательно: можно скачать заранее в AI-провайдерах".to_string()
+                } else {
+                    "Optional: download ahead of time in AI providers".to_string()
+                }
+            } else if needed {
                 hint.to_string()
             } else {
                 not_needed_hint(c.kind, snap, ru)

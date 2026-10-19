@@ -147,18 +147,19 @@ pub(crate) fn wire_local_ai(
             if w.get_local_ai_installing() {
                 return; // re-entry guard (same window)
             }
-            // Deep lock (v0.37): the managed server is deliberately unloaded —
-            // an install would silently resurrect it. Unlock from the bar first.
-            {
+            // Downloads do not resurrect the managed server under deep lock.
+            // Keep the launch guard for the existing local-provider path.
+            let download_only = {
                 let c = cfg_c.read();
-                if c.deep_lock {
+                if c.ai_provider == "local" && c.deep_lock {
                     let ru = c.ui_is_ru();
                     w.set_local_ai_status(SharedString::from(
                         overlay_backend::deep_lock::lifecycle_guard_notice(ru),
                     ));
                     return;
                 }
-            }
+                c.ai_provider != "local"
+            };
             // B3 — process-global dedup: the per-window bool above resets when
             // Settings is closed+reopened, so a 2nd click on a fresh window could
             // spawn a 2nd worker. This flag survives window reuse; the guard frees
@@ -241,7 +242,13 @@ pub(crate) fn wire_local_ai(
                 // a stale vision-less server keeps the port and the new one
                 // silently fails to start (wait_ready still sees the old one and
                 // reports success). Fresh installs have nothing to drain.
-                let mut opts = overlay_backend::local_ai::InstallOptions::default();
+                // While answers stay on another provider, speech keeps its own
+                // engine too: no local Whisper server is downloaded or wired.
+                let mut opts = overlay_backend::local_ai::InstallOptions {
+                    download_only,
+                    skip_whisper: download_only,
+                    ..Default::default()
+                };
                 let (restore_previous, restore_whisper, previous_choice) = {
                     let c = cfg_t.read();
                     opts.context =
@@ -249,9 +256,14 @@ pub(crate) fn wire_local_ai(
                             &c.ai_local_context,
                         );
                     (
-                        overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url)
+                        !download_only
+                            && overlay_backend::local_ai::is_managed_llama_endpoint(
+                                &c.ai_local_base_url,
+                            )
                             && overlay_backend::local_ai::base_model_present(&opts.root),
-                        c.stt_provider == "whisper" && c.stt_whisper_url.contains(":8081"),
+                        !download_only
+                            && c.stt_provider == "whisper"
+                            && c.stt_whisper_url.contains(":8081"),
                         overlay_backend::local_ai::ManagedLlamaChoice::from_config(
                             &c.ai_local_model,
                             c.ai_local_quality,
@@ -260,12 +272,58 @@ pub(crate) fn wire_local_ai(
                         ),
                     )
                 };
-                let old_servers = {
-                    let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
-                    std::mem::take(&mut s.local_ai_servers)
-                };
-                overlay_backend::local_ai::stop_managed_servers(&opts.root, old_servers);
+                if !download_only {
+                    let old_servers = {
+                        let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
+                        std::mem::take(&mut s.local_ai_servers)
+                    };
+                    overlay_backend::local_ai::stop_managed_servers(&opts.root, old_servers);
+                }
                 match overlay_backend::local_ai::install(&opts, &cancel, &on) {
+                    Ok(res) if download_only => {
+                        {
+                            let mut c = cfg_t.write();
+                            overlay_backend::local_ai::apply_download_result(&mut c, &res);
+                            if let Err(e) = overlay_backend::config::save(&c) {
+                                eprintln!("[overlay-host] local-ai download config save failed: {e:#}");
+                            }
+                        }
+                        let cfg_done = cfg_t.clone();
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(w) = weak_t.upgrade() {
+                                let c = cfg_done.read();
+                                w.set_local_ai_installing(false);
+                                w.set_local_ai_progress(1.0);
+                                w.set_local_ai_status(SharedString::from(if c.ui_is_ru() {
+                                    "Загружено. Выберите «Модель на этом ПК» → «Использовать для ответов», чтобы отвечать с её помощью."
+                                } else {
+                                    "Downloaded. Choose «Model on this PC» → «Use for answers» to answer with it."
+                                }));
+                                w.set_quality_selection_allowed(
+                                    overlay_backend::local_ai::primary_26b_allowed(res.hardware_profile),
+                                );
+                                w.set_quality_model_present(
+                                    overlay_backend::local_ai::quality_model_present(&opts.root),
+                                );
+                                w.set_quality_vision_supported(
+                                    overlay_backend::local_ai::quality_vision_supported(&opts.root),
+                                );
+                                w.set_quality_vision_present(
+                                    overlay_backend::local_ai::quality_vision_present(&opts.root),
+                                );
+                                w.set_managed_local_server(
+                                    overlay_backend::local_ai::is_managed_llama_endpoint(
+                                        &c.ai_local_base_url,
+                                    ),
+                                );
+                                w.set_ai_local_base_url_input(SharedString::from(
+                                    c.ai_local_base_url.as_str(),
+                                ));
+                                refresh_local_context_controls(&w, &c);
+                                refresh_local_engine_controls(&w, &c);
+                            }
+                        });
+                    }
                     Ok(res) => {
                         let model = res.ai_local_model.clone();
                         let gigaam_dir = res.stt_gigaam_dir.clone();
@@ -401,11 +459,13 @@ pub(crate) fn wire_local_ai(
                                 previous_choice,
                             ));
                         }
-                        state_t
-                            .lock()
-                            .unwrap_or_else(|p| p.into_inner())
-                            .local_ai_servers
-                            .extend(restored_servers);
+                        if !download_only {
+                            state_t
+                                .lock()
+                                .unwrap_or_else(|p| p.into_inner())
+                                .local_ai_servers
+                                .extend(restored_servers);
+                        }
                         let cancelled = e
                             .to_string()
                             .contains(overlay_backend::local_ai::CANCEL_SENTINEL);
@@ -1269,7 +1329,7 @@ pub(crate) fn wire_local_ai(
                 // the restart is skipped (status offers the app-restart path).
                 let restart_allowed = {
                     let c = cfg_t.read();
-                    c.ai_local_quality && !c.deep_lock
+                    c.ai_provider == "local" && c.ai_local_quality && !c.deep_lock
                 };
                 let restarted = if res.is_ok() && restart_allowed {
                     let lifecycle_lock = {
@@ -1328,9 +1388,11 @@ pub(crate) fn wire_local_ai(
                     match res {
                         Ok(()) => {
                             w.set_quality_vision_present(true);
-                            w.set_ai_local_vision_available(restarted);
-                            w.set_ai_local_vision(restarted);
-                            w.set_vision_same_available(restarted);
+                            if cfg_t.read().ai_provider == "local" {
+                                w.set_ai_local_vision_available(restarted);
+                                w.set_ai_local_vision(restarted);
+                                w.set_vision_same_available(restarted);
+                            }
                             if restarted {
                                 w.set_vision_provider_index(
                                     super::settings_vision::vision_provider_index_from_id("same"),
@@ -1338,6 +1400,8 @@ pub(crate) fn wire_local_ai(
                             }
                             w.set_vision12b_status(SharedString::from(if restarted {
                                 "Зрение 26B включено — F8 теперь работает на 26B."
+                            } else if cfg_t.read().ai_provider != "local" {
+                                "Проектор 26B загружен. Выберите локальную модель, чтобы использовать зрение."
                             } else {
                                 "Проектор 26B загружен. Перезапустите приложение, чтобы включить зрение."
                             }));
@@ -1847,6 +1911,12 @@ pub(crate) fn now_endpoint_authority(base: &str) -> String {
 /// Seed the saved choice immediately, then check its models endpoint off-thread.
 #[cfg(windows)]
 pub(crate) fn refresh_now_answering(win: &SettingsWindow, cfg: &overlay_backend::config::Config) {
+    // Asset-only refreshes (including builtin-busy changes) must not probe or
+    // imply readiness of a server that downloading deliberately did not start.
+    if cfg.ai_provider != "local" {
+        NOW_GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        return;
+    }
     let ru = cfg.ui_is_ru();
     let base = cfg.ai_local_base_url.clone();
     let llama = overlay_backend::local_ai::is_managed_llama_endpoint(&base);
