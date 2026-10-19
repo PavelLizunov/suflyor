@@ -456,7 +456,7 @@ pub fn install(
         on(Progress::Step("Installing llama.cpp".to_string()));
         std::fs::create_dir_all(&llama_dir)?;
         if find_exe(&llama_dir, "llama-server.exe").is_none() {
-            let rel = github_build_release(LLAMA_REPO, "llama-")?;
+            let rel = github_build_release(LLAMA_REPO, |assets| pick_llama(assets, gpu).is_ok())?;
             let pick = pick_llama(&rel.assets, gpu)?;
             cuda_version = pick.version.clone();
             let blabel = format!("llama.cpp {}", pick.version.as_deref().unwrap_or("CPU"));
@@ -558,7 +558,11 @@ pub fn install(
         if find_exe(&whisper_dir, "whisper-server.exe").is_none()
             && find_exe(&whisper_dir, "server.exe").is_none()
         {
-            let assets = github_assets(WHISPER_REPO)?;
+            let force_cpu_whisper = gpu != GpuKind::Nvidia;
+            let assets = github_build_release(WHISPER_REPO, |assets| {
+                pick_whisper(assets, force_cpu_whisper).is_ok()
+            })?
+            .assets;
             // whisper.cpp ships CPU + cuBLAS(NVIDIA) builds only — no Vulkan; so GPU
             // whisper stays NVIDIA-only, AMD/Intel use the CPU whisper build (Баг2).
             let (url, size) = pick_whisper(&assets, gpu != GpuKind::Nvidia)?;
@@ -1664,7 +1668,8 @@ pub fn update_llama_engine(
     let installed = installed_llama_build(&llama_dir);
 
     on(Progress::Step("Checking for a newer llama.cpp".into()));
-    let rel = github_build_release(LLAMA_REPO, "llama-")?;
+    let gpu = detect_gpu();
+    let rel = github_build_release(LLAMA_REPO, |assets| pick_llama(assets, gpu).is_ok())?;
     let latest =
         parse_build_tag(&rel.tag_name).context("latest llama.cpp release has no build tag")?;
     if installed.is_some_and(|cur| cur >= latest) {
@@ -1676,7 +1681,6 @@ pub fn update_llama_engine(
     // binaries until the new ones are proven good). The staging dir is a SIBLING
     // of `llama.cpp` (NOT inside it) so `find_exe(&llama_dir, …)` — which recurses
     // — can never pick up the half-downloaded staged binary and launch it on :8080.
-    let gpu = detect_gpu();
     let pick = pick_llama(&rel.assets, gpu)?;
     let staging = root.join(".llama-staging-update");
     let _ = std::fs::remove_dir_all(&staging);
@@ -2200,12 +2204,13 @@ struct LlamaPick {
     version: Option<String>,
 }
 
-
-/// Newest release of `repo` that carries binaries named `asset_prefix…`.
+/// Newest release of `repo` whose assets hold a build this PC can use.
 /// Since October 2026 llama.cpp and whisper.cpp publish their binary builds
 /// (`bNNNN`) as prereleases, and their "latest" release is a version tag
 /// with no binaries, so `releases/latest` alone finds nothing to install.
-fn github_build_release(repo: &str, asset_prefix: &str) -> Result<GhRelease> {
+/// A build is uploaded platform by platform over several minutes, so the
+/// check is for the asset the picker needs, not for any binary.
+fn github_build_release(repo: &str, usable: impl Fn(&[GhAsset]) -> bool) -> Result<GhRelease> {
     let url = format!("https://api.github.com/repos/{repo}/releases?per_page=30");
     let out = run_capture(
         "curl.exe",
@@ -2225,23 +2230,31 @@ fn github_build_release(repo: &str, asset_prefix: &str) -> Result<GhRelease> {
     }
     let releases: Vec<GhRelease> = serde_json::from_slice(&out.stdout)
         .with_context(|| format!("parse releases JSON for {repo}"))?;
-    newest_with_assets(releases, asset_prefix)
-        .ok_or_else(|| anyhow!("no {repo} release with {asset_prefix} builds"))
+    newest_with_assets(releases, usable)
+        .ok_or_else(|| anyhow!("no {repo} release with a build for this PC"))
 }
 
-/// Pure: the first (newest) release that has an asset starting with `prefix`.
-fn newest_with_assets(releases: Vec<GhRelease>, prefix: &str) -> Option<GhRelease> {
-    releases
-        .into_iter()
-        .find(|r| r.assets.iter().any(|a| a.name.starts_with(prefix)))
+/// Pure: the first (newest) release whose assets pass `usable`.
+fn newest_with_assets(
+    releases: Vec<GhRelease>,
+    usable: impl Fn(&[GhAsset]) -> bool,
+) -> Option<GhRelease> {
+    releases.into_iter().find(|r| usable(&r.assets))
 }
 
 /// The downloadable assets of the newest release with builds (whisper path +
 /// tests don't need the tag). The llama path uses [`github_build_release`]
 /// directly to also stamp the build tag.
 fn github_assets(repo: &str) -> Result<Vec<GhAsset>> {
-    let prefix = if repo == WHISPER_REPO { "whisper-" } else { "llama-" };
-    Ok(github_build_release(repo, prefix)?.assets)
+    let prefix = if repo == WHISPER_REPO {
+        "whisper-"
+    } else {
+        "llama-"
+    };
+    Ok(github_build_release(repo, |assets| {
+        assets.iter().any(|a| a.name.starts_with(prefix))
+    })?
+    .assets)
 }
 
 /// Parse the CUDA version out of a llama.cpp build asset name, e.g.

@@ -1474,10 +1474,7 @@ fn live_pick_llama_is_blackwell_capable() {
     // whisper picker against the live release too: GPU path must land on a
     // cuBLAS build (Blackwell-capable via PTX JIT), CPU path on the plain build.
     let wassets = github_assets(WHISPER_REPO).unwrap();
-    assert!(pick_whisper(&wassets, false)
-        .unwrap()
-        .0
-        .contains("cuda"));
+    assert!(pick_whisper(&wassets, false).unwrap().0.contains("cuda"));
     assert!(pick_whisper(&wassets, true)
         .unwrap()
         .0
@@ -2095,9 +2092,22 @@ fn newest_release_with_builds_skips_version_tags_without_binaries() {
         release("b11729", &["llama-b11729-bin-win-cpu-x64.zip"]),
         release("b11727", &["llama-b11727-bin-win-cpu-x64.zip"]),
     ];
-    let picked = newest_with_assets(releases, "llama-").unwrap();
+    let any_llama = |assets: &[GhAsset]| assets.iter().any(|a| a.name.starts_with("llama-"));
+    let picked = newest_with_assets(releases, any_llama).unwrap();
     assert_eq!(picked.tag_name, "b11729");
-    assert!(newest_with_assets(vec![release("v1.9.5", &[])], "whisper-").is_none());
+    assert!(newest_with_assets(vec![release("v1.9.5", &[])], any_llama).is_none());
+
+    // A build still uploading has other platforms but not the Windows one.
+    let uploading = vec![
+        release("b11731", &["llama-b11731-bin-ubuntu-x64.tar.gz"]),
+        release("b11729", &["llama-b11729-bin-win-cpu-x64.zip"]),
+    ];
+    let win_cpu = |assets: &[GhAsset]| {
+        assets
+            .iter()
+            .any(|a| a.name.starts_with("llama-") && a.name.ends_with("-bin-win-cpu-x64.zip"))
+    };
+    assert_eq!(newest_with_assets(uploading, win_cpu).unwrap().tag_name, "b11729");
 }
 
 #[test]
@@ -2114,7 +2124,10 @@ fn whisper_cuda_build_names_old_and_new_parse() {
         whisper_cublas_version_of("whisper-bin-win-cuda-13.4-x64.zip"),
         Some((13, 4, 0))
     );
-    assert_eq!(whisper_cublas_version_of("whisper-bin-win-cuda-13.4-arm64.zip"), None);
+    assert_eq!(
+        whisper_cublas_version_of("whisper-bin-win-cuda-13.4-arm64.zip"),
+        None
+    );
     assert_eq!(whisper_cublas_version_of("whisper-bin-x64.zip"), None);
     let assets = vec![
         asset("whisper-bin-x64.zip"),
@@ -2123,7 +2136,13 @@ fn whisper_cuda_build_names_old_and_new_parse() {
         asset("whisper-bin-win-cuda-13.4-arm64.zip"),
     ];
     if !cfg!(target_os = "macos") {
-        assert!(pick_whisper(&assets, false).unwrap().0.contains("cuda-12.4.0-x64"));
-        assert!(pick_whisper(&assets, true).unwrap().0.ends_with("whisper-bin-x64.zip"));
+        assert!(pick_whisper(&assets, false)
+            .unwrap()
+            .0
+            .contains("cuda-12.4.0-x64"));
+        assert!(pick_whisper(&assets, true)
+            .unwrap()
+            .0
+            .ends_with("whisper-bin-x64.zip"));
     }
 }
