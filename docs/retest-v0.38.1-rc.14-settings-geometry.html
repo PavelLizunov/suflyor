@@ -60,6 +60,16 @@
 <div class="meta"><b>ВАЖНО:</b> тестируй УСТАНОВЛЕННЫЙ билд (<code>setup.exe /S</code> → ярлык), версия = <b>0.38.1-rc.14</b>.</div>
 
 <div id="items">
+  <div class="item" data-id="Buffered Responses auto tile">
+    <span class="id">Buffered Responses auto tile</span><span class="sev f">fix</span>
+    <div class="steps"><span class="lang">RU</span><span class="lang">EN</span>Use a Responses endpoint that returns the complete answer in its terminal event. Trigger an automatic tile and wait for completion. Repeat with a normal text-delta stream and an empty response.</div>
+    <div class="exp">A non-empty answer remains open and is not duplicated. An empty placeholder may close. No new tile is needed to reveal the preceding answer.</div>
+  </div>
+  <div class="item" data-id="Retained Settings close">
+    <span class="id">Retained Settings close</span><span class="sev f">fix</span>
+    <div class="steps"><span class="lang">RU</span><span class="lang">EN</span>Open Settings, close it promptly, then reopen. Repeat during an active model download. Move Settings to the other monitor before closing when available.</div>
+    <div class="exp">Settings is hidden natively and reopens on screen. In-flight progress and Cancel stay available. The owner's large transparent outline requires multi-monitor acceptance; it is not claimed reproduced on the single-monitor worker.</div>
+  </div>
   <div class="item" data-id="OpenAI provider spacing">
     <span class="id">OpenAI provider spacing</span><span class="sev f">visual</span>
     <div class="steps"><span class="lang">RU</span><span class="lang">EN</span>Open Settings, AI providers, OpenAI API (Responses). Keep the window at720x600, then scroll to the bottom.</div>
