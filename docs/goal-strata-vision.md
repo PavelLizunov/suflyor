@@ -31,12 +31,18 @@ pub fn enable_strata_vision(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progre
 - Existing downloads survive hiding/reopening the retained Settings window.
 
 ## 3. Verification Checklist (Definition of Done)
-- [ ] Compatible/incompatible configurations and path resolution covered by tests.
-- [ ] Download preserves run configuration and saved text/Vision/STT routes.
-- [ ] Integrity failure, cancellation and resumed download checked.
-- [ ] Failed activation restores prior configuration and owned text server.
-- [ ] Native selected gate passes on an immutable candidate SHA.
-- [ ] Matching EN/RU Vision baseline/after captures inspected through Slint MCP.
-- [ ] F8 route persistence and functional hotkey dispatch checked.
-- [ ] Real Strata image consumer verified, or exact hardware/access blocker stated.
-- [ ] Checkpoint branch pushed and exact remote SHA verified.
+- [x] Compatible/incompatible configurations and path resolution covered by tests.
+- [x] Download preserves run configuration and saved text/Vision/STT routes.
+- [x] Pinned integrity verification, cancellation and resumed download checked.
+- [x] Failed start restores prior run configuration and keeps saved routes.
+- [x] Native selected gate passes on immutable candidate 460ced5.
+- [x] Matching EN/RU Vision baseline/after captures inspected through Slint MCP.
+- [x] All 13 hotkey dispatches observed; F8 off-route behaves as saved.
+- [x] Checkpoint branch pushed and exact remote SHA verified.
+- [ ] Real successful Strata image input and saved enabled F8 route.
+- [ ] Restart of a previously running real text server on activation failure.
+
+Native evidence: `docs/audit-2026-10-20-strata-vision/README.md`. The Windows
+worker has 16 GiB RAM and no NVIDIA GPU. The approved GPU peer is offline in
+Tailscale and SSH timed out. The task is not complete and no RC is published.
+Physical macOS is not tested; its existing managed MLX Vision path is unchanged.
