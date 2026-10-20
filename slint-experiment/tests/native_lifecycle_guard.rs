@@ -37,7 +37,9 @@ fn process_singleton_is_owned_by_the_windows_lifecycle_adapter() {
     let manifest = fs::read_to_string(root.join("Cargo.toml")).expect("read manifest");
     assert!(wrapper.contains("#[cfg(any(windows, target_os = \"macos\", target_os = \"linux\"))]"));
     assert!(wrapper.contains("include!(\"overlay_host_windows.rs\")"));
-    assert!(wrapper.contains("#[cfg(not(any(windows, target_os = \"macos\", target_os = \"linux\")))]"));
+    assert!(
+        wrapper.contains("#[cfg(not(any(windows, target_os = \"macos\", target_os = \"linux\")))]")
+    );
     assert!(
         windows_host.contains("native::lifecycle::acquire_singleton")
             || bootstrap.contains("native::lifecycle::acquire_singleton")

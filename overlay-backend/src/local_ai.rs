@@ -2293,7 +2293,9 @@ fn pick_llama(assets: &[GhAsset], _gpu: GpuKind) -> Result<LlamaPick> {
     #[cfg(not(any(windows, target_os = "macos")))]
     {
         let _ = assets;
-        Err(anyhow!("managed llama.cpp installation is unsupported on this platform"))
+        Err(anyhow!(
+            "managed llama.cpp installation is unsupported on this platform"
+        ))
     }
     #[cfg(target_os = "macos")]
     {
@@ -2843,7 +2845,9 @@ fn llama_reply_has_text_content(body: &str) -> bool {
 
 fn preflight() -> Result<()> {
     if cfg!(target_os = "linux") {
-        bail!("managed local AI installation is not connected on Linux; configure an existing server");
+        bail!(
+            "managed local AI installation is not connected on Linux; configure an existing server"
+        );
     }
     if run_capture(curl_exe(), &["--version"]).is_err() {
         bail!("curl not found");
