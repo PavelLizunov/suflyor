@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-065 Memory telemetry overflows the fixed-height full bar footer   Severity: P2   Status: Open
+Evidence: prior Windows full-suite failure in overlay_bar_geometry::open_tile_controls_stay_inside_1280_in_english_and_russian: app memory y=56,height=12 exceeds the64px window. Current overlay_bar.slint places model and memory readouts in a two-line VerticalLayout; action row,padding and spacing leave only14px of footer height. Source review confirms the owning mismatch; stable candidate21f06cb full-suite replay is in progress.
+Fix: keep model and memory on one horizontal footer line without changing native1280x64/680x64 window sizes or weakening geometry expectations. Verify the existing EN/RU memory permutations and native bar presentation.
+Closed by:
+
 ### D-064 Strata Vision download/activation copy omits prerequisites and conflates cancellation   Severity: P3   Status: Closed
 Evidence: candidate d91dae4, the downloaded status asks to enable F8 while its button is disabled when Strata is not the active local text model. The activation-cancel result shares the download-cancel wording and asks to download again. Confirmed by source review; successful real activation remains unverified.
 Verified: candidate 91a2fbf shows the text-route prerequisite in EN/RU downloaded captions; native cancellation during activation reports activation cancellation and preserves F8. Selected native gate passed. Real image inference remains an explicit experimental limitation, not implied by this copy repair.
