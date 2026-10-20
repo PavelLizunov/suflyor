@@ -21,6 +21,10 @@ jobs:
         with:
           ref: master
 
+      - name: Validate release documentation guard
+        shell: pwsh
+        run: ./.github/scripts/test-release-docs.ps1
+
       - name: Resolve latest published release
         id: release
         shell: pwsh
@@ -45,10 +49,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag }}
         run: |
-          if (git diff --quiet -- README.md) {
+          git diff --quiet -- README.md
+          if ($LASTEXITCODE -eq 0) {
             Write-Output 'Documentation already matches the latest release.'
             exit 0
           }
+          if ($LASTEXITCODE -ne 1) { throw 'Failed to compare README release facts.' }
 
           $branch = "automation/docs-$($env:TAG)"
           $open = gh pr list --state open --head $branch --json number --jq '.[0].number'
