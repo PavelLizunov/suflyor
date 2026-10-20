@@ -4102,142 +4102,156 @@ fn main() -> Result<(), slint::PlatformError> {
                     "[overlay-host] lock-menu event=prepared mode={mode} managed={managed}"
                 );
 
-                let bar_hwnd = match grab_hwnd(bar.window()) {
-                    Ok(hwnd) => hwnd,
-                    Err(e) => {
-                        diag!("[overlay-host] lock-menu event=error stage=bar-hwnd error={e}");
-                        return;
-                    }
-                };
-                #[cfg(windows)]
-                let (bar_left, bar_top) = {
-                    let pos = bar.window().position();
-                    if pos.x != -32000 && pos.x != 0 {
-                        (pos.x, pos.y)
+                #[cfg(target_os = "linux")]
+                {
+                    let _ = (anchor_x, anchor_y);
+                    let generation = focus_for_open.borrow_mut().begin_open();
+                    if menu.show().is_ok() {
+                        focus_for_open.borrow_mut().mark_revealed(generation);
+                        focus_for_open.borrow_mut().arm(generation);
                     } else {
-                        get_window_rect(bar_hwnd)
-                            .map(|(l, t, _, _)| (l, t))
-                        .unwrap_or((pos.x, pos.y))
+                        focus_for_open.borrow_mut().close();
                     }
-                };
-                #[cfg(target_os = "macos")]
-                let (bar_left, bar_top) = match get_window_rect(bar_hwnd) {
-                    Ok((left, top, _, _)) => (left, top),
-                    Err(e) => {
-                        diag!(
-                            "[overlay-host] lock-menu event=error stage=bar-rect error={e}"
-                        );
-                        return;
-                    }
-                };
-                #[cfg(windows)]
-                let scale = bar.window().scale_factor().max(0.1);
-                #[cfg(not(windows))]
-                let scale = 1.0_f32;
-                let menu_width = (210.0 * scale).round() as i32;
-                let menu_height = ((if managed { 106.0 } else { 74.0 }) * scale).round() as i32;
-                let anchor_x = bar_left + (anchor_x * scale) as i32;
-                let anchor_y = bar_top + (anchor_y * scale) as i32;
-                let monitor = enum_monitors()
-                    .into_iter()
-                    .find(|m| {
-                        anchor_x >= m.left
-                            && anchor_x < m.right
-                            && anchor_y >= m.top
-                            && anchor_y < m.bottom
-                    })
-                    .or_else(|| enum_monitors().into_iter().find(|m| m.is_primary));
-                let Some(monitor) = monitor else {
-                    diag!("[overlay-host] lock-menu event=error stage=monitor reason=none");
-                    return;
-                };
-                let x = (anchor_x - menu_width).clamp(monitor.left, monitor.right - menu_width);
-                let below = anchor_y + (4.0 * scale) as i32;
-                let y = if below + menu_height <= monitor.bottom {
-                    below
-                } else {
-                    (bar_top - menu_height - (4.0 * scale) as i32).max(monitor.top)
-                };
-                // Realize off-screen, then add owner/taskbar/stealth styles
-                // before the first visible frame. A fresh Slint HWND is not
-                // always available immediately after show(), hence the shared
-                // retry helper rather than a best-effort one-shot grab.
-                set_platform_window_position(menu.window(), -32000, -32000);
-                let generation = focus_for_open.borrow_mut().begin_open();
-                if let Err(e) = menu.show() {
-                    focus_for_open.borrow_mut().close();
-                    diag!("[overlay-host] lock-menu event=error stage=show error={e}");
-                    return;
                 }
-                diag!("[overlay-host] lock-menu event=show-request generation={generation}");
-                let last_reveal_error = Rc::new(RefCell::new(None::<String>));
-                let focus_for_reveal = focus_for_open.clone();
-                let error_for_reveal = last_reveal_error.clone();
-                let reveal = Rc::new(move |window: &LockModeMenuWindow| {
-                    if !focus_for_reveal.borrow().is_current_open(generation) {
-                        return true;
-                    }
-                    let hwnd = match grab_hwnd(window.window()) {
+                #[cfg(not(target_os = "linux"))]
+                {
+                    let bar_hwnd = match grab_hwnd(bar.window()) {
                         Ok(hwnd) => hwnd,
                         Err(e) => {
-                            *error_for_reveal.borrow_mut() = Some(format!("hwnd: {e}"));
-                            return false;
+                            diag!("[overlay-host] lock-menu event=error stage=bar-hwnd error={e}");
+                            return;
                         }
                     };
-                    set_window_owner(hwnd, bar_hwnd);
-                    if let Err(e) = set_skip_taskbar(hwnd, true) {
-                        *error_for_reveal.borrow_mut() = Some(format!("skip-taskbar: {e}"));
-                        return false;
-                    }
-                    if let Err(e) = set_always_on_top(hwnd, true) {
-                        *error_for_reveal.borrow_mut() = Some(format!("always-on-top: {e}"));
-                        return false;
-                    }
-                    if global_stealth() {
-                        if let Err(e) = set_stealth(hwnd, true) {
-                            *error_for_reveal.borrow_mut() = Some(format!("stealth: {e}"));
-                            return false;
+                    #[cfg(windows)]
+                    let (bar_left, bar_top) = {
+                        let pos = bar.window().position();
+                        if pos.x != -32000 && pos.x != 0 {
+                            (pos.x, pos.y)
+                        } else {
+                            get_window_rect(bar_hwnd)
+                                .map(|(l, t, _, _)| (l, t))
+                            .unwrap_or((pos.x, pos.y))
                         }
-                    }
-                    if let Err(e) = move_window_pos_only(hwnd, x, y) {
-                        *error_for_reveal.borrow_mut() = Some(format!("move: {e}"));
-                        return false;
-                    }
-                    set_platform_window_position(window.window(), x, y);
-                    if !focus_for_reveal.borrow_mut().mark_revealed(generation) {
-                        return true;
-                    }
-                    *error_for_reveal.borrow_mut() = None;
-                    focus_window(hwnd);
-                    diag!(
-                        "[overlay-host] lock-menu event=revealed generation={generation} x={x} y={y} mode={mode} managed={managed} focus=requested"
-                    );
-                    let focus_for_arm = focus_for_reveal.clone();
-                    Timer::single_shot(Duration::ZERO, move || {
-                        if focus_for_arm.borrow_mut().arm(generation) {
+                    };
+                    #[cfg(target_os = "macos")]
+                    let (bar_left, bar_top) = match get_window_rect(bar_hwnd) {
+                        Ok((left, top, _, _)) => (left, top),
+                        Err(e) => {
                             diag!(
-                                "[overlay-host] lock-menu event=armed generation={generation}"
+                                "[overlay-host] lock-menu event=error stage=bar-rect error={e}"
                             );
+                            return;
                         }
-                    });
-                    true
-                });
-                let focus_for_fallback = focus_for_open.clone();
-                let fallback = Rc::new(move |window: &LockModeMenuWindow| {
-                    if !focus_for_fallback.borrow().is_current_open(generation) {
+                    };
+                    #[cfg(windows)]
+                    let scale = bar.window().scale_factor().max(0.1);
+                    #[cfg(not(windows))]
+                    let scale = 1.0_f32;
+                    let menu_width = (210.0 * scale).round() as i32;
+                    let menu_height = ((if managed { 106.0 } else { 74.0 }) * scale).round() as i32;
+                    let anchor_x = bar_left + (anchor_x * scale) as i32;
+                    let anchor_y = bar_top + (anchor_y * scale) as i32;
+                    let monitor = enum_monitors()
+                        .into_iter()
+                        .find(|m| {
+                            anchor_x >= m.left
+                                && anchor_x < m.right
+                                && anchor_y >= m.top
+                                && anchor_y < m.bottom
+                        })
+                        .or_else(|| enum_monitors().into_iter().find(|m| m.is_primary));
+                    let Some(monitor) = monitor else {
+                        diag!("[overlay-host] lock-menu event=error stage=monitor reason=none");
+                        return;
+                    };
+                    let x = (anchor_x - menu_width).clamp(monitor.left, monitor.right - menu_width);
+                    let below = anchor_y + (4.0 * scale) as i32;
+                    let y = if below + menu_height <= monitor.bottom {
+                        below
+                    } else {
+                        (bar_top - menu_height - (4.0 * scale) as i32).max(monitor.top)
+                    };
+                    // Realize off-screen, then add owner/taskbar/stealth styles
+                    // before the first visible frame. A fresh Slint HWND is not
+                    // always available immediately after show(), hence the shared
+                    // retry helper rather than a best-effort one-shot grab.
+                    set_platform_window_position(menu.window(), -32000, -32000);
+                    let generation = focus_for_open.borrow_mut().begin_open();
+                    if let Err(e) = menu.show() {
+                        focus_for_open.borrow_mut().close();
+                        diag!("[overlay-host] lock-menu event=error stage=show error={e}");
                         return;
                     }
-                    focus_for_fallback.borrow_mut().close();
-                    if let Err(e) = window.hide() {
-                        diag!("[overlay-host] lock-menu event=error stage=hide-reveal-fallback error={e}");
-                    }
-                    let detail = last_reveal_error
-                        .borrow()
-                        .clone()
-                        .unwrap_or_else(|| "native-window-not-realized".to_string());
-                    diag!("[overlay-host] lock-menu event=error stage=reveal error={detail}");
-                });
-                realize_with_retries(menu.as_ref(), reveal, fallback);
+                    diag!("[overlay-host] lock-menu event=show-request generation={generation}");
+                    let last_reveal_error = Rc::new(RefCell::new(None::<String>));
+                    let focus_for_reveal = focus_for_open.clone();
+                    let error_for_reveal = last_reveal_error.clone();
+                    let reveal = Rc::new(move |window: &LockModeMenuWindow| {
+                        if !focus_for_reveal.borrow().is_current_open(generation) {
+                            return true;
+                        }
+                        let hwnd = match grab_hwnd(window.window()) {
+                            Ok(hwnd) => hwnd,
+                            Err(e) => {
+                                *error_for_reveal.borrow_mut() = Some(format!("hwnd: {e}"));
+                                return false;
+                            }
+                        };
+                        set_window_owner(hwnd, bar_hwnd);
+                        if let Err(e) = set_skip_taskbar(hwnd, true) {
+                            *error_for_reveal.borrow_mut() = Some(format!("skip-taskbar: {e}"));
+                            return false;
+                        }
+                        if let Err(e) = set_always_on_top(hwnd, true) {
+                            *error_for_reveal.borrow_mut() = Some(format!("always-on-top: {e}"));
+                            return false;
+                        }
+                        if global_stealth() {
+                            if let Err(e) = set_stealth(hwnd, true) {
+                                *error_for_reveal.borrow_mut() = Some(format!("stealth: {e}"));
+                                return false;
+                            }
+                        }
+                        if let Err(e) = move_window_pos_only(hwnd, x, y) {
+                            *error_for_reveal.borrow_mut() = Some(format!("move: {e}"));
+                            return false;
+                        }
+                        set_platform_window_position(window.window(), x, y);
+                        if !focus_for_reveal.borrow_mut().mark_revealed(generation) {
+                            return true;
+                        }
+                        *error_for_reveal.borrow_mut() = None;
+                        focus_window(hwnd);
+                        diag!(
+                            "[overlay-host] lock-menu event=revealed generation={generation} x={x} y={y} mode={mode} managed={managed} focus=requested"
+                        );
+                        let focus_for_arm = focus_for_reveal.clone();
+                        Timer::single_shot(Duration::ZERO, move || {
+                            if focus_for_arm.borrow_mut().arm(generation) {
+                                diag!(
+                                    "[overlay-host] lock-menu event=armed generation={generation}"
+                                );
+                            }
+                        });
+                        true
+                    });
+                    let focus_for_fallback = focus_for_open.clone();
+                    let fallback = Rc::new(move |window: &LockModeMenuWindow| {
+                        if !focus_for_fallback.borrow().is_current_open(generation) {
+                            return;
+                        }
+                        focus_for_fallback.borrow_mut().close();
+                        if let Err(e) = window.hide() {
+                            diag!("[overlay-host] lock-menu event=error stage=hide-reveal-fallback error={e}");
+                        }
+                        let detail = last_reveal_error
+                            .borrow()
+                            .clone()
+                            .unwrap_or_else(|| "native-window-not-realized".to_string());
+                        diag!("[overlay-host] lock-menu event=error stage=reveal error={detail}");
+                    });
+                    realize_with_retries(menu.as_ref(), reveal, fallback);
+                }
             });
         }
 

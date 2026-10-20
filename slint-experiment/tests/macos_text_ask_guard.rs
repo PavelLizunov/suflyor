@@ -16,7 +16,7 @@ fn canonical_runtime_is_shared_and_reaches_text_ask() {
     let windows = read("src/bin/overlay_host/aux_windows.rs");
     let text_ask = read("src/bin/overlay_host/aux_windows/text_ask.rs");
 
-    assert!(wrapper.contains("#[cfg(any(windows, target_os = \"macos\"))]"));
+    assert!(wrapper.contains("#[cfg(any(windows, target_os = \"macos\", target_os = \"linux\"))]"));
     assert!(wrapper.contains("include!(\"overlay_host_windows.rs\");"));
     assert!(host.contains("#[path = \"overlay_host/aux_windows.rs\"]"));
     assert!(host.contains("open_text_ask("));

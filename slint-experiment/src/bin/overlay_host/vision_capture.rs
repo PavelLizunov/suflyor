@@ -279,7 +279,7 @@ pub(crate) fn fire_f8_vision_capture(
     let window_scale = win.window().scale_factor().max(0.1);
     #[cfg(windows)]
     let capture_scale = window_scale;
-    #[cfg(target_os = "macos")]
+    #[cfg(not(windows))]
     let capture_scale = 1.0_f32;
     diag!(
         "[overlay-host] F8 overlay {fw}x{fh} at ({vx},{vy}) \
