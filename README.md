@@ -6,7 +6,7 @@ and answers technical questions through an LLM, cloud or fully local, in small
 floating windows ("tiles") beside the meeting window.
 
 <!-- latest-release:start -->
-Latest published build: [v0.38.0](https://github.com/PavelLizunov/suflyor/releases/tag/v0.38.0).
+Latest published build: [v0.38.1](https://github.com/PavelLizunov/suflyor/releases/tag/v0.38.1).
 <!-- latest-release:end -->
 Download it from
 [GitHub Releases](https://github.com/PavelLizunov/suflyor/releases).

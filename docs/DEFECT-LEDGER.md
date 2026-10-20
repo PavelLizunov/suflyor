@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-066 Windows-only Strata setup constant fails macOS full Clippy   Severity: P2   Status: Open
+Evidence: exact candidate 21f06cb8f2954f1c131df95f9aef6c456935e866, physical macOS full gate exits 101: `STRATA_FAMILY` is never used. Its only consumer is the Windows-only `run_setup`.
+Fix: compile the constant only on Windows, matching its consumer. Verify full macOS and Windows gates on the final candidate.
+Closed by:
+
 ### D-065 Memory telemetry overflows the fixed-height full bar footer   Severity: P2   Status: Open
 Evidence: prior Windows full-suite failure in overlay_bar_geometry::open_tile_controls_stay_inside_1280_in_english_and_russian: app memory y=56,height=12 exceeds the64px window. Current overlay_bar.slint places model and memory readouts in a two-line VerticalLayout; action row,padding and spacing leave only14px of footer height. Source review confirms the owning mismatch; stable candidate21f06cb full-suite replay is in progress.
 Fix: keep model and memory on one horizontal footer line without changing native1280x64/680x64 window sizes or weakening geometry expectations. Verify the existing EN/RU memory permutations and native bar presentation.
