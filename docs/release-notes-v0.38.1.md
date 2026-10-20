@@ -25,7 +25,8 @@ stable publication does not broaden its model compatibility.
 - Memory telemetry shares one footer line with the active model inside the
   fixed-height overlay bar. The existing strict EN/RU geometry test is retained.
 - The Windows-only Strata setup constant is gated with its Windows-only caller
-  so the macOS full Clippy gate does not report it as unused.
+  so the macOS full Clippy gate does not report it as unused. Already-cancelled
+  macOS push-to-talk returns before starting native capture.
 
 ## Optional Strata Vision, Windows
 

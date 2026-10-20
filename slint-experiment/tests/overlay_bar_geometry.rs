@@ -36,7 +36,7 @@ const ENGLISH_CHIPS: ChipLabels = ChipLabels {
 const RUSSIAN_CHIPS: ChipLabels = ChipLabels {
     archive: "Архив сессий",
     write: "Написать вопрос",
-    camera: "Скриншот в vision",
+    camera: "Скриншот области → ответ AI",
     quit: "Выйти",
     expand: "Развернуть бар",
 };
