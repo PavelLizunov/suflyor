@@ -48,3 +48,9 @@ Tailscale and SSH timed out. Successful inference acceptance remains open.
 The owner explicitly requested an experimental prerelease with this limitation
 disclosed; v0.38.1-rc.15 is published without claiming those unchecked items passed.
 Physical macOS is not tested; its existing managed MLX Vision path is unchanged.
+
+Stable v0.38.1: the owner reports rc.15 works and authorized publication. This
+is owner-reported acceptance, not an independent inference trace. Full physical
+macOS compile-seam and isolated package start now pass; physical macOS UI and
+real Strata inference items above remain unverified. See
+`docs/release-evidence-v0.38.1/README.md`.

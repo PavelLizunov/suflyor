@@ -154,3 +154,10 @@ The active goal charter retains the unverified real-inference acceptance items.
 These files stay in the tree but lost their historical part. The full earlier text is read the same way.
 
 - `UPGRADING.md`: per-version migration notes for v0.0.1 to v0.1.1 (the retired Tauri/React build), 2233 lines. Revision 8a38baccc38ec317693be4dde376e958e8f3c242.
+
+## Stable v0.38.1 closeout
+
+| Path before removal | Revision that holds it | Removed in |
+|---|---|---|
+| docs/audit-2026-10-20-stable-0381/ | c38eafacd9357d09c849574ce8f7e251bcbddf5d | Stable v0.38.1 documentation closeout |
+| docs/goal-stable-0381.md | c38eafacd9357d09c849574ce8f7e251bcbddf5d | Stable v0.38.1 documentation closeout |
