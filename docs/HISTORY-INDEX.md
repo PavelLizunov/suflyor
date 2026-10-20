@@ -140,6 +140,15 @@ Every row below names the master commit 8a38baccc38ec317693be4dde376e958e8f3c242
 
 The exact release consumer evidence is retained in docs/release-evidence-v0.38.1-rc.14/README.md.
 
+## RC.15 task audit
+
+| Path before removal | Revision that holds it | Removed in |
+|---|---|---|
+| docs/audit-2026-10-20-strata-vision/ | b041f6462ba99f3785e9a2b4c4a0818fa49232ec | rc.15 evidence closeout |
+
+Published consumer evidence is retained in docs/release-evidence-v0.38.1-rc.15/README.md.
+The active goal charter retains the unverified real-inference acceptance items.
+
 ## Reduced in place
 
 These files stay in the tree but lost their historical part. The full earlier text is read the same way.

@@ -8,10 +8,10 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
-### D-064 Strata Vision download/activation copy omits prerequisites and conflates cancellation   Severity: P3   Status: Open
+### D-064 Strata Vision download/activation copy omits prerequisites and conflates cancellation   Severity: P3   Status: Closed
 Evidence: candidate d91dae4, the downloaded status asks to enable F8 while its button is disabled when Strata is not the active local text model. The activation-cancel result shares the download-cancel wording and asks to download again. Confirmed by source review; successful real activation remains unverified.
-Fix: show the text-route prerequisite in the downloaded caption and distinguish activation cancellation from download cancellation. Verify EN/RU copy through the selected native gate and live Vision page.
-Closed by:
+Verified: candidate 91a2fbf shows the text-route prerequisite in EN/RU downloaded captions; native cancellation during activation reports activation cancellation and preserves F8. Selected native gate passed. Real image inference remains an explicit experimental limitation, not implied by this copy repair.
+Closed by: #298, published v0.38.1-rc.15, merge b041f6462ba99f3785e9a2b4c4a0818fa49232ec.
 
 ### D-063 Deferred native presentation can re-show a retained window closed before reveal
 UNVERIFIED IMPORTED HYPOTHESIS. Status: Open
