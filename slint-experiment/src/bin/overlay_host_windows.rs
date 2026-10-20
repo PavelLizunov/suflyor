@@ -252,6 +252,9 @@ use settings_controller::*;
 // macro / the `overlay_backend` helpers through the crate-root globs.
 #[path = "overlay_host/settings_vision.rs"]
 mod settings_vision;
+#[cfg(windows)]
+#[path = "overlay_host/settings_strata_vision.rs"]
+mod settings_strata_vision;
 use settings_vision::*;
 // Read-aloud (Озвучка) Settings-tab callbacks — voice chooser + speed + test.
 #[path = "overlay_host/settings_voice.rs"]

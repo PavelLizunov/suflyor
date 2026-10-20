@@ -20,6 +20,10 @@ use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 
+#[path = "strata_vision.rs"]
+mod vision;
+pub use vision::*;
+
 use super::{
     curl_resumable, curl_success_body, detect_nvidia_memory_mib, ensure_disk_space, extract_zip,
     free_llama_port, is_loopback_v1_on_port, is_reachable, llama_reachable,
@@ -961,9 +965,10 @@ pub fn apply_strata_choice(cfg: &mut crate::config::Config, model_id: &str) {
     cfg.ai_local_model = model_id.to_string();
     cfg.ai_local_prep_model.clear();
     cfg.ai_local_quality = false;
-    // Setup ran without the image encoder.
-    cfg.ai_local_vision = false;
-    if cfg.vision_provider == "same" {
+    // Preserve an explicitly enabled encoder; merely downloading it never
+    // declares image capability or changes the screenshot route.
+    cfg.ai_local_vision &= strata_vision_available(&super::default_root());
+    if !cfg.ai_local_vision && cfg.vision_provider == "same" {
         cfg.vision_provider = "off".to_string();
     }
 }

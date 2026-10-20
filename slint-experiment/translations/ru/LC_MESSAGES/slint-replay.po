@@ -3042,3 +3042,24 @@ msgstr "Использовать для ответов"
 
 msgid "Downloaded. Choose «Model on this PC» → «Use for answers» to answer with it."
 msgstr "Загружено. Выберите «Модель на этом ПК» → «Использовать для ответов», чтобы отвечать с её помощью."
+
+msgid "Add Vision to Strata"
+msgstr "Добавить Vision в Strata"
+
+msgid "Optional 907 MB encoder for Qwen3.8-Flash-Next. Uses the CPU, not extra GPU memory. No second language model. Downloading does not change F8."
+msgstr "Необязательный энкодер на 907 МБ для Qwen3.8-Flash-Next. Работает на CPU, не занимает дополнительную видеопамять. Вторая языковая модель не нужна. Загрузка не меняет F8."
+
+msgid "First install or select a compatible Strata folder in AI providers. The image helper must be present."
+msgstr "Сначала установите или выберите совместимую папку Strata в AI-провайдерах. Нужна утилита обработки изображений."
+
+msgid "Enabled for F8"
+msgstr "Включено для F8"
+
+msgid "Downloaded. First use Strata for text, then enable F8."
+msgstr "Скачано. Сначала включите Strata для текста, затем для F8."
+
+msgid "Not downloaded"
+msgstr "Не скачано"
+
+msgid "Enable for F8"
+msgstr "Включить для F8"
