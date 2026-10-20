@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-071 New TLS trust-anchor advisories block the post-release checks   Severity: P2   Status: Open
+Evidence: security run 39500531432 rejects slint-experiment webpki-root-certs 1.0.7 (RUSTSEC-2026-0383) and suflyor-tts rustls-webpki 0.103.15 / webpki-roots 1.0.8 (RUSTSEC-2026-0382/0381). These advisories appeared after the stable release gate. No attack or runtime compromise was observed.
+Fix: update only those locked packages to webpki-root-certs 1.0.10, rustls-webpki 0.103.16 and webpki-roots 1.0.10; retain the advisory checks, verify the native targeted gate and exact-candidate security jobs. Published v0.38.1 assets are not silently replaced by a source fix.
+Closed by:
+
 ### D-070 Release documentation workflow opens reviews for an unchanged README   Severity: P3   Status: Open
 Evidence: run 39441520345 on v0.38.1 reports `nothing to commit, working tree clean` but pushes an identical automation branch and opens #301 after PR creation is denied. `if (git diff --quiet ...)` tests empty stdout rather than the native exit code in PowerShell. Earlier #197, #257 and #292 are the same fallback review family. The current README already names v0.38.1.
 Fix: interpret exit 0 as no change, 1 as a diff and any other exit as failure; test the actual workflow block. Keep workflow permissions explicit and repair the repository PR-creation setting without broadening default token permissions. Re-run the live no-change consumer before closing superseded review issues.
