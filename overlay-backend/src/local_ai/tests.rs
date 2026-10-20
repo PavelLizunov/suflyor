@@ -1383,6 +1383,18 @@ fn pick_cpu_when_non_nvidia_but_no_vulkan_asset() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn linux_installers_reject_windows_assets() {
+    let assets = vec![
+        asset("llama-b9410-bin-win-cpu-x64.zip"),
+        asset("whisper-bin-x64.zip"),
+    ];
+    assert!(pick_llama(&assets, GpuKind::None).is_err());
+    assert!(pick_whisper(&assets, true).is_err());
+    assert!(preflight().is_err());
+}
+
+#[test]
 #[cfg(target_os = "macos")]
 fn pick_llama_macos_metal() {
     let assets = vec![
