@@ -519,6 +519,9 @@ pub fn record_source_until_stop(
     _sys_device: Option<String>,
     stop: Arc<AtomicBool>,
 ) -> Result<Vec<i16>> {
+    if stop.load(Ordering::Acquire) {
+        return Ok(Vec::new());
+    }
     let mut native_rate: f64 = 0.0;
     let mut error_code: i32 = 0;
     let (mic_ctrl, sys_ctrl) = match source {
@@ -1028,8 +1031,12 @@ mod tests {
 
     #[test]
     fn record_source_until_stop_supported_shape() {
-        let stop = Arc::new(AtomicBool::new(true));
-        let _ = record_source_until_stop(AudioSource::Mic, None, None, stop);
+        for source in [AudioSource::Mic, AudioSource::System] {
+            let stop = Arc::new(AtomicBool::new(true));
+            let samples = record_source_until_stop(source, None, None, stop)
+                .expect("already stopped capture returns without native startup");
+            assert!(samples.is_empty());
+        }
     }
 
     #[test]

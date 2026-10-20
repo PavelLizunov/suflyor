@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-067 Cancelled macOS push-to-talk still starts native capture   Severity: P2   Status: Open
+Evidence: physical macOS full gate at dfca6f2 hangs in `record_source_until_stop_supported_shape` with stop already true. Native process sample traces `record_source_until_stop` into `mic_capture_start` and the permission/start path before cancellation is inspected. The source unconditionally opens microphone/system capture before its stop loop.
+Fix: return an empty recording before native startup when stop is already set. Strengthen the existing supported-shape test to assert this for both sources. No permission reset or grant is needed.
+Closed by:
+
 ### D-066 Windows-only Strata setup constant fails macOS full Clippy   Severity: P2   Status: Open
 Evidence: exact candidate 21f06cb8f2954f1c131df95f9aef6c456935e866, physical macOS full gate exits 101: `STRATA_FAMILY` is never used. Its only consumer is the Windows-only `run_setup`.
 Fix: compile the constant only on Windows, matching its consumer. Verify full macOS and Windows gates on the final candidate.
