@@ -84,6 +84,9 @@ pub fn version_gt(a: &str, b: &str) -> bool {
 /// Returns an empty string when the named asset is absent (the UI then offers
 /// the "open release page" path instead of auto-running anything).
 fn pick_installer_url(assets: &[GhAsset]) -> String {
+    if cfg!(target_os = "linux") {
+        return String::new();
+    }
     assets
         .iter()
         .find(|a| a.name == INSTALLER_ASSET)
@@ -192,6 +195,9 @@ async fn expected_sha256_for(client: &reqwest::Client, url: &str) -> Result<Opti
 /// Download the installer to `%TEMP%\suflyor-update\` and return its path.
 /// Refuses any non-GitHub URL.
 pub async fn download_installer(url: &str) -> Result<PathBuf> {
+    if cfg!(target_os = "linux") {
+        bail!("the Windows installer is not supported on Linux");
+    }
     if !is_trusted_download(url) {
         bail!("refusing to download installer from untrusted URL");
     }
@@ -263,6 +269,9 @@ pub async fn download_installer(url: &str) -> Result<PathBuf> {
 /// right after so the installer can overwrite the running binary; the NSIS
 /// installer's first page is interactive, giving the app time to quit.
 pub fn run_installer(path: &Path) -> Result<()> {
+    if cfg!(target_os = "linux") {
+        bail!("the Windows installer is not supported on Linux");
+    }
     std::process::Command::new(path)
         .spawn()
         .context("launch installer")?;
@@ -357,7 +366,12 @@ mod tests {
                 digest: None,
             },
         ];
-        assert_eq!(pick_installer_url(&assets), canonical);
+        if cfg!(target_os = "linux") {
+            assert_eq!(pick_installer_url(&assets), "");
+            assert!(run_installer(Path::new("must-not-start.exe")).is_err());
+        } else {
+            assert_eq!(pick_installer_url(&assets), canonical);
+        }
 
         // A stray/renamed .exe must NOT be picked when the canonical asset is
         // absent — pre-fix, the `.or_else(... ends_with(".exe"))` fallback would

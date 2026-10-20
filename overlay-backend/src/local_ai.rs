@@ -2401,6 +2401,9 @@ fn whisper_cublas_version_of(name: &str) -> Option<(u32, u32, u32)> {
 /// GPU-accelerates via PTX JIT (whisper_init: use gpu = 1, model loads into VRAM).
 /// Returns (url, size).
 fn pick_whisper(assets: &[GhAsset], force_cpu: bool) -> Result<(String, u64)> {
+    if cfg!(target_os = "linux") {
+        bail!("managed Whisper installation is not connected on Linux");
+    }
     if cfg!(target_os = "macos") {
         let is_arm = cfg!(target_arch = "aarch64");
         let needle = if is_arm { "macos-arm64" } else { "macos" };
@@ -2839,6 +2842,9 @@ fn llama_reply_has_text_content(body: &str) -> bool {
 // ---- process + fs helpers --------------------------------------------------
 
 fn preflight() -> Result<()> {
+    if cfg!(target_os = "linux") {
+        bail!("managed local AI installation is not connected on Linux; configure an existing server");
+    }
     if run_capture(curl_exe(), &["--version"]).is_err() {
         bail!("curl not found");
     }
