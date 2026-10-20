@@ -8,10 +8,10 @@
 yanked = "deny"
 # RUSTSEC vulnerabilities are denied by default (the advisory DB is fetched at
 # check time). Exceptions below document their reachability or maintenance status.
-# The webpki-roots 0.26.11 compatibility crate only re-exports v1's trust anchors;
-# constrain that false positive to ureq, so an affected v1 store still fails.
+# The webpki-roots 0.26.11 compatibility crate only re-exports v1's trust anchors.
+# The bans below allow only that shim or >=1.0.10, including after a downgrade.
 ignore = [
-    { id = "RUSTSEC-2026-0381", allow = ["ureq@2.12.1"], reason = "webpki-roots 0.26.11 only re-exports parent::TLS_SERVER_ROOTS from patched 1.0.10; ureq is its only direct consumer. The v1 store is not excepted." },
+    { id = "RUSTSEC-2026-0381", reason = "0.26.11 is a re-export-only v1 shim; bans below reject every other affected version, including v1 <1.0.10." },
     "RUSTSEC-2024-0436", # paste — no longer maintained (via slint/winit)
     "RUSTSEC-2026-0192", # ttf-parser — unmaintained (via slint font rendering)
     "RUSTSEC-2026-0194", # quick-xml — quadratic duplicate-attr-name check (DoS). Transitive via slint (bundled-SVG parsing) / atspi (Linux-only a11y, not built on Windows). We parse only our OWN compiled-in SVG/.slint, never untrusted XML → not reachable.
@@ -26,8 +26,11 @@ ignore = [
 multiple-versions = "warn"
 wildcards = "warn"
 # Surface a second TLS stack or a duplicate native runtime sneaking in:
-# Older 0.26 releases contain their own stale roots instead of the v1 shim.
-deny = [{ name = "webpki-roots", version = "<0.26.11" }]
+# Exempt only the re-export shim from RUSTSEC-2026-0381, never a stale root store.
+deny = [
+    { name = "webpki-roots", version = "<0.26.11" },
+    { name = "webpki-roots", version = ">0.26.11, <1.0.10" },
+]
 
 [licenses]
 # Permissive allow-list — anything outside it fails `check licenses`, which is
