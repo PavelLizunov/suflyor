@@ -3055,8 +3055,8 @@ msgstr "Сначала установите или выберите совмес
 msgid "Enabled for F8"
 msgstr "Включено для F8"
 
-msgid "Downloaded. Enable separately for F8."
-msgstr "Скачано. Включите отдельно для F8."
+msgid "Downloaded. First use Strata for text, then enable F8."
+msgstr "Скачано. Сначала включите Strata для текста, затем для F8."
 
 msgid "Not downloaded"
 msgstr "Не скачано"

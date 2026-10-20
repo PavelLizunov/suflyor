@@ -3338,7 +3338,7 @@ export component SettingsWindow inherits Window {
                                 text: !root.strata-vision-installable
                                     ? @tr("First install or select a compatible Strata folder in AI providers. The image helper must be present.")
                                     : root.strata-vision-enabled && root.vision-provider-index == 1 && root.ai-provider-index == 1 && root.strata-active ? @tr("Enabled for F8")
-                                    : root.strata-vision-downloaded ? @tr("Downloaded. Enable separately for F8.")
+                                    : root.strata-vision-downloaded ? @tr("Downloaded. First use Strata for text, then enable F8.")
                                     : @tr("Not downloaded");
                                 font-size: Metrics.font-caption;
                                 color: Theme.text-muted;

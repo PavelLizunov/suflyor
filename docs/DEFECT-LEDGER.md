@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-064 Strata Vision download/activation copy omits prerequisites and conflates cancellation   Severity: P3   Status: Open
+Evidence: candidate d91dae4, the downloaded status asks to enable F8 while its button is disabled when Strata is not the active local text model. The activation-cancel result shares the download-cancel wording and asks to download again. Confirmed by source review; successful real activation remains unverified.
+Fix: show the text-route prerequisite in the downloaded caption and distinguish activation cancellation from download cancellation. Verify EN/RU copy through the selected native gate and live Vision page.
+Closed by:
+
 ### D-063 Deferred native presentation can re-show a retained window closed before reveal
 UNVERIFIED IMPORTED HYPOTHESIS. Status: Open
 Evidence: Settings now retains its instance after close; present_window_stealth_aware_at defers native decoration/reveal without testing Slint visibility. set_skip_taskbar can call SW_SHOWNOACTIVATE. Tile native setup has the same delayed visibility gap. Settings close omits the existing force_hide fallback used by tile close.
