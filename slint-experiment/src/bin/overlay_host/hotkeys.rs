@@ -102,6 +102,12 @@ pub(crate) struct RegisteredHotkeys {
 /// dispatch loop. Registration order, the per-key log lines, and the
 /// `HOTKEY_DIAG` write are identical to the former inline block in `main`.
 pub(crate) fn register_hotkeys() -> RegisteredHotkeys {
+    #[cfg(target_os = "linux")]
+    let hotkey_manager: Option<global_hotkey::GlobalHotKeyManager> = {
+        eprintln!("[overlay-host] Wayland global shortcuts are not connected yet; use the bar controls.");
+        None
+    };
+    #[cfg(not(target_os = "linux"))]
     let hotkey_manager = match global_hotkey::GlobalHotKeyManager::new() {
         Ok(m) => Some(m),
         Err(e) => {
