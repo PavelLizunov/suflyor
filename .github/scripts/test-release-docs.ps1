@@ -45,3 +45,5 @@ try {
     Pop-Location
     Remove-Item -LiteralPath $temp -Recurse -Force
 }
+# The expected failing child must not become the Actions step exit status.
+exit 0
