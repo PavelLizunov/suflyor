@@ -20,6 +20,9 @@ ignore = [
     "RUSTSEC-2026-0371", # zbus_names — unmaintained; same Linux-only zbus path as 0370.
     "RUSTSEC-2026-0372", # zvariant_derive — unmaintained; same Linux-only zbus path as 0370.
     "RUSTSEC-2026-0206", # rustybuzz — unmaintained (via Slint/resvg); no safe upgrade exists. Not a vulnerability; replace when Slint moves to harfrust.
+    "RUSTSEC-2026-0370", # zvariant — unmaintained standalone crate (via Slint/winit/atspi/accesskit); merged into zbus.
+    "RUSTSEC-2026-0371", # zbus_names — unmaintained standalone crate (via Slint/winit/atspi/accesskit); merged into zbus.
+    "RUSTSEC-2026-0372", # zvariant_derive — unmaintained standalone crate (via Slint/winit/atspi/accesskit); merged into zbus.
 ]
 
 [bans]
