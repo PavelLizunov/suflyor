@@ -1,7 +1,9 @@
 #[cfg(windows)]
 use std::path::PathBuf;
 
-use super::{run_capture, GIB};
+use super::run_capture;
+#[cfg(any(windows, target_os = "macos"))]
+use super::GIB;
 
 /// Confirmed hardware matrix supplied by the owner. Values outside the matrix
 /// remain unknown; they are never rounded into a stronger profile.
@@ -162,6 +164,10 @@ pub(super) enum GpuKind {
 /// cheap `nvidia-smi`; only a non-NVIDIA machine pays the WMI query for an AMD /
 /// Intel adapter (Vulkan). No detectable GPU → CPU.
 pub(super) fn detect_gpu() -> GpuKind {
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        GpuKind::None
+    }
     #[cfg(target_os = "macos")]
     {
         GpuKind::Other // Metal GPU acceleration on macOS / Apple Silicon
@@ -295,6 +301,8 @@ pub(super) fn detected_hardware_model_profile(force_cpu: bool) -> HardwareModelP
         );
         hardware_profile_from_discovery(force_cpu, raw_vram, raw_ram)
     }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    HardwareModelProfile::Unknown
 }
 
 /// Detect whether this machine is currently in the confirmed 26B-A4B matrix.

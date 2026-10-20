@@ -2290,6 +2290,11 @@ fn cuda_version_of(name: &str) -> Option<(u32, u32)> {
 
 /// Pick the llama.cpp build for the detected GPU.
 fn pick_llama(assets: &[GhAsset], _gpu: GpuKind) -> Result<LlamaPick> {
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let _ = assets;
+        Err(anyhow!("managed llama.cpp installation is unsupported on this platform"))
+    }
     #[cfg(target_os = "macos")]
     {
         let mac_asset = assets

@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-072 Linux backend has missing platform return branches   Severity: P3   Status: Open
+Evidence: fresh `cargo check --manifest-path overlay-backend/Cargo.toml` on omarchy-test at 8c70b6d193b3a4c84e8e20a8cc56b0681f60618c exits 101 with four errors: platform_capability, detect_gpu, detected_hardware_model_profile and pick_llama lack non-Windows/non-macOS return paths. This reproduces Claude's earlier scoped probe; Linux is not yet a supported product target.
+Fix: add explicit unsupported capability/installer results and conservative unknown hardware fallbacks, retaining existing Windows/macOS behavior. Verify the backend on Linux and Windows against the exact candidate.
+Closed by:
+
 ### D-069 Stable CI rejects late initialization in local-engine switch   Severity: P3   Status: Closed
 Evidence: full GitHub Windows run 39428900019 at d5968aa fails Clippy 1.99 `needless_late_init` at settings_local_ai.rs:2561. Both branches assign the final status message.
 Fix: bind the message to the existing if-expression without changing branch effects or copy. Verify full CI and the native worker on the final candidate.
