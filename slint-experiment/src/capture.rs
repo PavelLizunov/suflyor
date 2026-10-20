@@ -58,6 +58,16 @@ pub fn capture_monitor_under_cursor() -> Result<CapturedBgra, Box<dyn std::error
     })
 }
 
+#[cfg(target_os = "linux")]
+pub fn capture_monitor_under_cursor() -> Result<CapturedBgra, Box<dyn std::error::Error>> {
+    Err("Wayland screen capture is not connected yet".into())
+}
+
+#[cfg(target_os = "linux")]
+pub fn capture_virtual_desktop() -> Result<(CapturedBgra, i32, i32), Box<dyn std::error::Error>> {
+    Err("Wayland screen capture is not connected yet".into())
+}
+
 /// Convert a TOP-DOWN BGRA buffer to a downscaled JPEG `data:` URI. CPU-bound
 /// (per-pixel swizzle + resize + encode) — run it off the UI thread.
 pub fn bgra_to_jpeg_data_url(

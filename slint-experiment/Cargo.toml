@@ -132,6 +132,9 @@ path = "../overlay-backend"
 # Windows-only deps — the Win32 overlay calls (`windows`) and the clipboard copy
 # button (`clipboard-win`) only apply on Windows; target-gating keeps them out of
 # the macOS dependency graph.
+[target.'cfg(target_os = "linux")'.dependencies]
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal", "wayland"] }
+
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
     "Win32_Foundation",

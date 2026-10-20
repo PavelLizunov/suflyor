@@ -150,7 +150,7 @@ fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f3
         };
         #[cfg(windows)]
         let target_width = (target_w_logical * o.window().scale_factor()).round() as i32;
-        #[cfg(target_os = "macos")]
+        #[cfg(not(windows))]
         let target_width = target_w_logical.round() as i32;
         let cur_w = get_window_rect(hwnd).map(|(_, _, bw, _)| bw).unwrap_or(0);
         if (cur_w - target_width).abs() > 24 && attempt < 12 {

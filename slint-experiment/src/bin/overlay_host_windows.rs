@@ -4132,7 +4132,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 };
                 #[cfg(windows)]
                 let scale = bar.window().scale_factor().max(0.1);
-                #[cfg(target_os = "macos")]
+                #[cfg(not(windows))]
                 let scale = 1.0_f32;
                 let menu_width = (210.0 * scale).round() as i32;
                 let menu_height = ((if managed { 106.0 } else { 74.0 }) * scale).round() as i32;

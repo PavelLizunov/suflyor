@@ -168,7 +168,7 @@ pub(crate) fn toggle_tile_maximize(hwnd: slint_replay::win32::HWND, tile: &TileW
     // rects use physical pixels; AppKit/CoreGraphics geometry uses points.
     #[cfg(windows)]
     let scale = tile.window().scale_factor();
-    #[cfg(target_os = "macos")]
+    #[cfg(not(windows))]
     let scale = 1.0_f32;
     let pw = (w * scale) as i32;
     let ph = (h * scale) as i32;

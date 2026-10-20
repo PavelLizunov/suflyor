@@ -39,6 +39,11 @@ pub(crate) fn set_platform_window_position(window: &slint::Window, x: i32, y: i3
     window.set_position(slint::PhysicalPosition::new(x, y));
     #[cfg(target_os = "macos")]
     window.set_position(slint::LogicalPosition::new(x as f32, y as f32));
+    #[cfg(target_os = "linux")]
+    {
+        // Wayland owns placement. In particular, never park at Windows' sentinel.
+        let _ = (window, x, y);
+    }
 }
 
 /// Store the current global tile body opacity (clamped 0.5..=1.0).

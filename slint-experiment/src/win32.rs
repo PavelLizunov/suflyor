@@ -1117,7 +1117,7 @@ mod posix_stubs {
         #[cfg(not(target_os = "macos"))]
         {
             let _ = window;
-            Ok(HWND(1))
+            Err("native window handles are unavailable on this platform".into())
         }
     }
 
@@ -1200,13 +1200,7 @@ mod posix_stubs {
         }
         #[cfg(not(target_os = "macos"))]
         {
-            vec![MonitorRect {
-                left: 0,
-                top: 0,
-                right: 1920,
-                bottom: 1080,
-                is_primary: true,
-            }]
+            Vec::new()
         }
     }
 
@@ -1227,7 +1221,7 @@ mod posix_stubs {
         }
         #[cfg(not(target_os = "macos"))]
         {
-            (0, 0, 1920, 1080)
+            (0, 0, 0, 0)
         }
     }
 
@@ -1238,7 +1232,7 @@ mod posix_stubs {
         }
         #[cfg(not(target_os = "macos"))]
         {
-            (500, 500)
+            (0, 0)
         }
     }
 
@@ -1318,7 +1312,7 @@ mod posix_stubs {
         #[cfg(target_os = "macos")]
         return Err("AppKit window geometry is unavailable".into());
         #[cfg(not(target_os = "macos"))]
-        Ok((100, 100, 1280, 800))
+        Err("native window geometry is unavailable on this platform".into())
     }
 
     fn monitor_for_point(monitors: &[MonitorRect], x: i32, y: i32) -> Option<MonitorRect> {
@@ -1346,13 +1340,7 @@ mod posix_stubs {
         #[cfg(not(target_os = "macos"))]
         {
             let _ = hwnd;
-            Some(MonitorRect {
-                left: 0,
-                top: 0,
-                right: 1920,
-                bottom: 1080,
-                is_primary: true,
-            })
+            None
         }
     }
 
@@ -1364,13 +1352,7 @@ mod posix_stubs {
         #[cfg(not(target_os = "macos"))]
         {
             let _ = (x, y);
-            Some(MonitorRect {
-                left: 0,
-                top: 0,
-                right: 1920,
-                bottom: 1080,
-                is_primary: true,
-            })
+            None
         }
     }
 
@@ -1421,25 +1403,29 @@ mod posix_stubs {
         {
             crate::native::clipboard::read_text()
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
+        {
+            crate::native::clipboard::read_text()
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         {
             None
         }
     }
 
     pub fn clipboard_write_text(text: &str) {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
             let _ = crate::native::clipboard::set_text(text);
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         {
             let _ = text;
         }
     }
 
     pub fn clipboard_clear() {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         crate::native::clipboard::clear();
     }
 
