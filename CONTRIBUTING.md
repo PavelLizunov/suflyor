@@ -45,8 +45,8 @@ The identity must already exist as a code-signing identity in the login Keychain
 
 The gate depends on the change; `AGENTS.md`, "Verification routing", owns the
 rule. `scripts/git-gate-native.ps1 manual` classifies the diff as docs (a
-whitespace check, no build) or targeted (fmt, clippy and tests of the affected
-crate). The full gate is for a stable release:
+whitespace check, no build) or targeted (fmt, compile and tests of the affected
+crate, without Clippy). The full gate is for a stable release:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci.ps1
@@ -64,8 +64,15 @@ followed by the complete 13-shortcut smoke test.
 
 The MCP server is compiled in **only** by the `ui-mcp` Cargo feature;
 `SLINT_MCP_PORT` / `SLINT_EMIT_DEBUG_INFO` alone do not enable it. Build the
-audited binary with `cargo build --locked --bin overlay-host --features ui-mcp
---manifest-path slint-experiment/Cargo.toml` and audit that exact binary.
+audited binary with Slint debug metadata enabled at compile time:
+
+```powershell
+$env:SLINT_EMIT_DEBUG_INFO="1"
+cargo build --locked --bin overlay-host --features ui-mcp --manifest-path slint-experiment/Cargo.toml
+```
+
+Audit that exact binary. See `.agents/skills/slint-mcp-ui-audit/SKILL.md` for
+the launch and evidence procedure.
 
 ## Project layout
 
@@ -105,13 +112,22 @@ README.md                # user-facing
 
 Releases and tags are owner-triggered only. When explicitly requested, keep
 `slint-experiment/Cargo.toml` and `scripts/slint-installer.nsi`
-(`PRODUCT_VERSION`) in sync, run the full gate, then build with
-`scripts\build-slint-release.ps1 -Installer`. Do not publish or push a tag
-without the owner's explicit command.
+(`PRODUCT_VERSION`) in sync, together with the product lockfile and both macOS
+Info.plist version fields. RCs use the selected native gate; owner-authorized
+stable publication uses the full gate. Build Windows packages with
+`scripts\build-slint-release.ps1 -Installer`. The release procedure is
+`.agents/skills/source-command-release/SKILL.md`.
 
 After a GitHub release is published, `.github/workflows/docs-after-release.yml`
-updates the README's latest-release marker on an automation branch and opens a
-reviewable PR. It never writes directly to `master`.
+updates the README's latest-release marker only when it differs, using an
+automation branch and a reviewable PR. If repository policy blocks PR creation,
+it opens a fallback issue instead. It never writes directly to `master`.
+
+Validate this workflow without a product build:
+
+```powershell
+pwsh -NoProfile -File .github/scripts/test-release-docs.ps1
+```
 
 ## Security
 

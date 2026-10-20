@@ -92,6 +92,9 @@ jobs:
         if: success() && needs.changes.outputs.docs_only == 'false'
         with:
           tool: cargo-deny
+      - name: Validate TLS root exception boundaries
+        if: success() && needs.changes.outputs.docs_only == 'false' && matrix.crate == 'suflyor-tts'
+        run: bash .github/scripts/test-tls-root-policy.sh
       # A per-crate manifest does not auto-find the repo-root deny.toml.
       - run: cargo deny --manifest-path ${{ matrix.crate }}/Cargo.toml --config deny.toml check advisories bans sources licenses
         if: success() && needs.changes.outputs.docs_only == 'false'

@@ -7,11 +7,11 @@
 [advisories]
 yanked = "deny"
 # RUSTSEC vulnerabilities are denied by default (the advisory DB is fetched at
-# check time). The ignores below are UNMAINTAINED notices — not vulnerabilities —
-# on transitive crates pulled by slint/winit that we don't control and can't
-# replace. CI still fails on a real advisory. Slint 1.17 removed the old
-# generational-arena exception; the four entries below remain in its tree.
+# check time). Exceptions below document their reachability or maintenance status.
+# The webpki-roots 0.26.11 compatibility crate only re-exports v1's trust anchors.
+# The bans below allow only that shim or >=1.0.10, including after a downgrade.
 ignore = [
+    { id = "RUSTSEC-2026-0381", reason = "0.26.11 is a re-export-only v1 shim; bans below reject every other affected version, including v1 <1.0.10." },
     "RUSTSEC-2024-0436", # paste — no longer maintained (via slint/winit)
     "RUSTSEC-2026-0192", # ttf-parser — unmaintained (via slint font rendering)
     "RUSTSEC-2026-0194", # quick-xml — quadratic duplicate-attr-name check (DoS). Transitive via slint (bundled-SVG parsing) / atspi (Linux-only a11y, not built on Windows). We parse only our OWN compiled-in SVG/.slint, never untrusted XML → not reachable.
@@ -26,7 +26,11 @@ ignore = [
 multiple-versions = "warn"
 wildcards = "warn"
 # Surface a second TLS stack or a duplicate native runtime sneaking in:
-deny = []
+# Exempt only the re-export shim from RUSTSEC-2026-0381, never a stale root store.
+deny = [
+    { name = "webpki-roots", version = "<0.26.11" },
+    { name = "webpki-roots", version = ">0.26.11, <1.0.10" },
+]
 
 [licenses]
 # Permissive allow-list — anything outside it fails `check licenses`, which is
