@@ -8,6 +8,32 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-069 Stable CI rejects late initialization in local-engine switch   Severity: P3   Status: Open
+Evidence: full GitHub Windows run 39428900019 at d5968aa fails Clippy 1.99 `needless_late_init` at settings_local_ai.rs:2561. Both branches assign the final status message.
+Fix: bind the message to the existing if-expression without changing branch effects or copy. Verify full CI and the native worker on the final candidate.
+Closed by:
+
+### D-068 Full bar geometry test uses obsolete Russian control labels   Severity: P3   Status: Open
+Evidence: Windows geometry replay at dfca6f2 no longer reaches the old memory overflow; it fails finding `Скриншот в vision`. Current bundled PO translates `Screenshot to vision` as `Скриншот области → ответ AI`.
+The next replay at e0240d4 also exposed the obsolete expand label `Развернуть бар`; the bundled label is `Развернуть панель`. All English/Russian fixture labels were compared with the current PO.
+Fix: match the current bundled accessibility labels in the regression fixture; retain every geometry assertion unchanged.
+Closed by:
+
+### D-067 Cancelled macOS push-to-talk still starts native capture   Severity: P2   Status: Open
+Evidence: physical macOS full gate at dfca6f2 hangs in `record_source_until_stop_supported_shape` with stop already true. Native process sample traces `record_source_until_stop` into `mic_capture_start` and the permission/start path before cancellation is inspected. The source unconditionally opens microphone/system capture before its stop loop.
+Fix: return an empty recording before native startup when stop is already set. Strengthen the existing supported-shape test to assert this for both sources. No permission reset or grant is needed.
+Closed by:
+
+### D-066 Windows-only Strata setup constant fails macOS full Clippy   Severity: P2   Status: Open
+Evidence: exact candidate 21f06cb8f2954f1c131df95f9aef6c456935e866, physical macOS full gate exits 101: `STRATA_FAMILY` is never used. Its only consumer is the Windows-only `run_setup`.
+Fix: compile the constant only on Windows, matching its consumer. Verify full macOS and Windows gates on the final candidate.
+Closed by:
+
+### D-065 Memory telemetry overflows the fixed-height full bar footer   Severity: P2   Status: Open
+Evidence: prior Windows full-suite failure in overlay_bar_geometry::open_tile_controls_stay_inside_1280_in_english_and_russian: app memory y=56,height=12 exceeds the64px window. Current overlay_bar.slint places model and memory readouts in a two-line VerticalLayout; action row,padding and spacing leave only14px of footer height. Source review confirms the owning mismatch; stable candidate21f06cb full-suite replay is in progress.
+Fix: keep model and memory on one horizontal footer line without changing native1280x64/680x64 window sizes or weakening geometry expectations. Verify the existing EN/RU memory permutations and native bar presentation.
+Closed by:
+
 ### D-064 Strata Vision download/activation copy omits prerequisites and conflates cancellation   Severity: P3   Status: Closed
 Evidence: candidate d91dae4, the downloaded status asks to enable F8 while its button is disabled when Strata is not the active local text model. The activation-cancel result shares the download-cancel wording and asks to download again. Confirmed by source review; successful real activation remains unverified.
 Verified: candidate 91a2fbf shows the text-route prerequisite in EN/RU downloaded captions; native cancellation during activation reports activation cancellation and preserves F8. Selected native gate passed. Real image inference remains an explicit experimental limitation, not implied by this copy repair.

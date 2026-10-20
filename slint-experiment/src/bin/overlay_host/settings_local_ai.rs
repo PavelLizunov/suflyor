@@ -2558,10 +2558,9 @@ pub(crate) fn wire_strata(
                             )
                         })
                 };
-                let msg: String;
                 let mut started = Vec::new();
                 let mut strata_ready = false;
-                if to_strata {
+                let msg = if to_strata {
                     let on = {
                         let weak_p = weak_t.clone();
                         move |p: overlay_backend::local_ai::Progress| {
@@ -2602,7 +2601,7 @@ pub(crate) fn wire_strata(
                             overlay_backend::local_ai::terminate_servers(children);
                         }
                     }
-                    msg = match (outcome, ru) {
+                    match (outcome, ru) {
                         (overlay_backend::local_ai::StrataStart::Ready, true) => {
                             "Готово: работает Strata.".to_string()
                         }
@@ -2636,7 +2635,7 @@ pub(crate) fn wire_strata(
                             "Strata did not start. Details are in suflyor-server.log in the Strata folder."
                                 .to_string()
                         }
-                    };
+                    }
                 } else {
                     overlay_backend::local_ai::stop_strata();
                     let activate_answers = requested_choice.is_some();
@@ -2680,7 +2679,7 @@ pub(crate) fn wire_strata(
                     } else {
                         overlay_backend::local_ai::terminate_servers(children);
                     }
-                    msg = match (ready, outcome, ru) {
+                    match (ready, outcome, ru) {
                         (true, overlay_backend::local_ai::ModelSwitch::FallbackStarted, true) => "Выбранная модель не запустилась; работает резервная модель.".to_string(),
                         (true, overlay_backend::local_ai::ModelSwitch::FallbackStarted, false) => "The selected model did not start; the fallback model is running.".to_string(),
                         (true, _, true) => "Готово: работает встроенный движок.".to_string(),
@@ -2693,8 +2692,8 @@ pub(crate) fn wire_strata(
                             "The built-in engine did not start — check the local AI install."
                                 .to_string()
                         }
-                    };
-                }
+                    }
+                };
                 if !started.is_empty() {
                     let mut s = state_t.lock().unwrap_or_else(|p| p.into_inner());
                     s.local_ai_servers

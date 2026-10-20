@@ -47,6 +47,7 @@ const STRATA_HEALTH_URL: &str = "http://127.0.0.1:8090/health";
 /// The original model in the size Strata recommends for 48-64 GB of RAM.
 /// Fine-tunes (Swift and others) carry their own licences and stay out until
 /// those are checked (ADR-003, decision 5).
+#[cfg(windows)]
 const STRATA_FAMILY: &str = "qwen";
 const STRATA_SIZE: &str = "IQ2_XS";
 pub const STRATA_MODEL_LABEL: &str = "Qwen3.8-Flash-Next IQ2_XS";
