@@ -220,3 +220,6 @@ jobs:
         run: bash .github/scripts/test-docs-only-detection.sh
       - name: gate logic regression test
         run: bash .github/scripts/test-gate-logic.sh
+      - name: release documentation guard regression test
+        shell: pwsh
+        run: ./.github/scripts/test-release-docs.ps1

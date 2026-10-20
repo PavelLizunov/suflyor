@@ -73,11 +73,14 @@ asks for confirmation.
 
 ### Local AI (optional)
 
-**Settings, AI bridge, Install / complete local AI** downloads llama.cpp,
-whisper.cpp and the models, detects a CUDA GPU, starts the servers and writes
-the settings, with a choice of model size. On Apple Silicon choose **Managed
-MLX**. A standalone Windows script installs the lightest profile; see
-[scripts/README.md](scripts/README.md).
+**Settings, AI providers** separates downloading models from using them.
+Download ahead of time without switching text, screenshot or speech-recognition
+routes. Choose **Use** to start and verify a downloaded local model before it
+becomes the answer provider. On Windows, the built-in engine uses llama.cpp;
+an existing compatible Strata installation is another option. Its optional
+experimental CPU Vision encoder is downloaded and enabled separately under
+**Screenshots (F8)**. On Apple Silicon choose **Managed MLX**. For the standalone
+Windows setup script, see [scripts/README.md](scripts/README.md).
 
 ## First five minutes
 

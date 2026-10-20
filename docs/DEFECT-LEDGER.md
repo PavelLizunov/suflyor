@@ -8,6 +8,16 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-071 New TLS trust-anchor advisories block the post-release checks   Severity: P2   Status: Open
+Evidence: security run 39500531432 rejects slint-experiment webpki-root-certs 1.0.7 (RUSTSEC-2026-0383) and suflyor-tts rustls-webpki 0.103.15 / webpki-roots 1.0.8 (RUSTSEC-2026-0382/0381). These advisories appeared after the stable release gate. No attack or runtime compromise was observed.
+Fix: update only those locked packages to webpki-root-certs 1.0.10, rustls-webpki 0.103.16 and webpki-roots 1.0.10. The remaining webpki-roots 0.26.11 is a compatibility shim whose entire implementation re-exports `parent::TLS_SERVER_ROOTS` from patched v1, not an old certificate store. Except only that shim: the installed cargo-deny does not support consumer-scoped advisory exceptions, so pair the documented advisory exception with explicit bans on all webpki-roots versions except 0.26.11 and >=1.0.10. An affected v1 store or pre-shim 0.26 release must still fail. Exercise both allowed versions and both rejected intervals with real cargo-deny fixtures. Verify the native targeted gate and exact-candidate security jobs. Published v0.38.1 assets are not silently replaced by a source fix.
+Closed by:
+
+### D-070 Release documentation workflow opens reviews for an unchanged README   Severity: P3   Status: Open
+Evidence: run 39441520345 on v0.38.1 reports `nothing to commit, working tree clean` but pushes an identical automation branch and opens #301 after PR creation is denied. `if (git diff --quiet ...)` tests empty stdout rather than the native exit code in PowerShell. Earlier #197, #257 and #292 are the same fallback review family. The current README already names v0.38.1.
+Fix: interpret exit 0 as no change, 1 as a diff and any other exit as failure; test the actual workflow block. Keep workflow permissions explicit and repair the repository PR-creation setting without broadening default token permissions. Re-run the live no-change consumer before closing superseded review issues.
+Closed by:
+
 ### D-069 Stable CI rejects late initialization in local-engine switch   Severity: P3   Status: Closed
 Evidence: full GitHub Windows run 39428900019 at d5968aa fails Clippy 1.99 `needless_late_init` at settings_local_ai.rs:2561. Both branches assign the final status message.
 Fix: bind the message to the existing if-expression without changing branch effects or copy. Verify full CI and the native worker on the final candidate.
