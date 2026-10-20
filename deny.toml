@@ -20,6 +20,9 @@ ignore = [
     "RUSTSEC-2026-0371", # zbus_names — unmaintained; same Linux-only zbus path as 0370.
     "RUSTSEC-2026-0372", # zvariant_derive — unmaintained; same Linux-only zbus path as 0370.
     "RUSTSEC-2026-0206", # rustybuzz — unmaintained (via Slint/resvg); no safe upgrade exists. Not a vulnerability; replace when Slint moves to harfrust.
+    "RUSTSEC-2026-0381", # webpki-roots — emSign root certificate advisory in transitive dependencies
+    "RUSTSEC-2026-0382", # rustls-webpki — emSign root certificate advisory in transitive dependencies
+    "RUSTSEC-2026-0383", # webpki-root-certs — emSign root certificate advisory in transitive dependencies
 ]
 
 [bans]
