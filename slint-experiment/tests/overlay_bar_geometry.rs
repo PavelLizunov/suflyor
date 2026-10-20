@@ -38,7 +38,7 @@ const RUSSIAN_CHIPS: ChipLabels = ChipLabels {
     write: "Написать вопрос",
     camera: "Скриншот области → ответ AI",
     quit: "Выйти",
-    expand: "Развернуть бар",
+    expand: "Развернуть панель",
 };
 
 fn assert_open_tile_geometry(

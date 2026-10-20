@@ -8,9 +8,10 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
-### D-068 Full bar geometry test uses obsolete Russian camera label   Severity: P3   Status: Open
+### D-068 Full bar geometry test uses obsolete Russian control labels   Severity: P3   Status: Open
 Evidence: Windows geometry replay at dfca6f2 no longer reaches the old memory overflow; it fails finding `Скриншот в vision`. Current bundled PO translates `Screenshot to vision` as `Скриншот области → ответ AI`.
-Fix: match the current bundled accessibility label in the regression fixture; retain every geometry assertion unchanged.
+The next replay at e0240d4 also exposed the obsolete expand label `Развернуть бар`; the bundled label is `Развернуть панель`. All English/Russian fixture labels were compared with the current PO.
+Fix: match the current bundled accessibility labels in the regression fixture; retain every geometry assertion unchanged.
 Closed by:
 
 ### D-067 Cancelled macOS push-to-talk still starts native capture   Severity: P2   Status: Open
