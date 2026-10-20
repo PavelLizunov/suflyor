@@ -42,9 +42,9 @@ pub fn enable_strata_vision(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progre
 - [ ] Real successful Strata image input and saved enabled F8 route.
 - [ ] Restart of a previously running real text server on activation failure.
 
-Native evidence: `docs/audit-2026-10-20-strata-vision/README.md`. The Windows
-worker has 16 GiB RAM and no NVIDIA GPU. The approved GPU peer is offline in
+Published evidence: `docs/release-evidence-v0.38.1-rc.15/README.md`. The Windows
+worker has 16 GiB RAM and no NVIDIA GPU. The approved GPU peer was offline in
 Tailscale and SSH timed out. Successful inference acceptance remains open.
 The owner explicitly requested an experimental prerelease with this limitation
-disclosed; prepare v0.38.1-rc.15 without claiming those unchecked items passed.
+disclosed; v0.38.1-rc.15 is published without claiming those unchecked items passed.
 Physical macOS is not tested; its existing managed MLX Vision path is unchanged.
