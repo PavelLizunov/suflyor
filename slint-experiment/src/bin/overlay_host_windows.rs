@@ -791,8 +791,21 @@ fn main() -> Result<(), slint::PlatformError> {
         Err(e) => eprintln!("[overlay-host] translation {lang} not available: {e}"),
     }
 
-    overlay.set_status_text(SharedString::from("idle"));
-    overlay.set_status_tone(crate::ui::StatusTone::Neutral);
+    #[cfg(target_os = "linux")]
+    {
+        overlay.set_status_text(SharedString::from(if cfg.read().ui_is_ru() {
+            "Linux: экспериментальный порт"
+        } else {
+            "Linux: experimental port"
+        }));
+        overlay.set_status_tone(crate::ui::StatusTone::Warning);
+        diag!("experimental Linux: audio, capture, global shortcuts and capture exclusion are not connected");
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        overlay.set_status_text(SharedString::from("idle"));
+        overlay.set_status_tone(crate::ui::StatusTone::Neutral);
+    }
     overlay.set_active_stack(SharedString::from(active_stack_label(&cfg.read())));
 
     // Poll request latency + process footprints into the footer (~1.5s). The
