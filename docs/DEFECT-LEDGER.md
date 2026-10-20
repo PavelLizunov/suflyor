@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-069 Stable CI rejects late initialization in local-engine switch   Severity: P3   Status: Open
+Evidence: full GitHub Windows run 39428900019 at d5968aa fails Clippy 1.99 `needless_late_init` at settings_local_ai.rs:2561. Both branches assign the final status message.
+Fix: bind the message to the existing if-expression without changing branch effects or copy. Verify full CI and the native worker on the final candidate.
+Closed by:
+
 ### D-068 Full bar geometry test uses obsolete Russian control labels   Severity: P3   Status: Open
 Evidence: Windows geometry replay at dfca6f2 no longer reaches the old memory overflow; it fails finding `Скриншот в vision`. Current bundled PO translates `Screenshot to vision` as `Скриншот области → ответ AI`.
 The next replay at e0240d4 also exposed the obsolete expand label `Развернуть бар`; the bundled label is `Развернуть панель`. All English/Russian fixture labels were compared with the current PO.
