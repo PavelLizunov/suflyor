@@ -12,10 +12,13 @@ on the approved worker when available; report its actual state separately.
 Do not infer individual provider/audio or multi-monitor acceptance from the
 owner's general confirmation. Preserve known limits and exact evidence.
 
-- [ ] Full Windows fmt/Clippy/all-tests gate on immutable candidate.
-- [ ] Prior overlay-bar footer geometry failure reproduced and resolved.
-- [ ] macOS full compile-seam gate or exact access/resource limit recorded.
-- [ ] Exact-candidate native UI and 13 global-hotkey dispatch checks.
-- [ ] Stable installer build/install/start/uninstall and version checks.
-- [ ] PR merge/tag tree equality and downloaded public asset hash verified.
-- [ ] Release marked stable/Latest, cleanup preview/apply complete.
+- [x] Full Windows fmt/Clippy/all-tests gate on immutable candidate.
+- [x] Prior overlay-bar footer geometry failure reproduced and resolved.
+- [x] macOS full compile-seam gate or exact access/resource limit recorded.
+- [x] Exact-candidate native UI and 13 global-hotkey dispatch checks.
+- [x] Stable installer build/install/start/uninstall and version checks.
+- [x] PR merge/tag tree equality and downloaded public asset hash verified.
+- [x] Release marked stable/Latest, cleanup preview/apply complete.
+
+Published stable v0.38.1 from PR #300/tag84249fdcb967ec6415a0d62863b71dff880d2763.
+Exact final evidence is in docs/release-evidence-v0.38.1/README.md.
