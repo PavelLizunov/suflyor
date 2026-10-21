@@ -37,7 +37,7 @@ pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
 
 pub fn rect(id: isize) -> Result<(i32,i32,i32,i32),Error> {
     let c=client(id)?;
-    let n=|key: &str,i| c[key][i].as_i64().and_then(|n| i32::try_from(n).ok()).ok_or_else(|| "invalid native window geometry".into());
+    let n=|key: &str,i: usize| -> Result<i32, Error> { c[key][i].as_i64().and_then(|n| i32::try_from(n).ok()).ok_or_else(|| "invalid native window geometry".into()) };
     Ok((n("at",0)?,n("at",1)?,n("size",0)?,n("size",1)?))
 }
 pub fn move_to(id:isize,x:i32,y:i32)->Result<(),Error>{

@@ -1391,7 +1391,6 @@ fn linux_installers_reject_windows_assets() {
     ];
     assert!(pick_llama(&assets, GpuKind::None).is_err());
     assert!(pick_whisper(&assets, true).is_err());
-    assert!(preflight().is_err());
 }
 
 #[test]

@@ -1322,6 +1322,7 @@ mod posix_stubs {
                 .unwrap_or((460, 360));
             map.insert(hwnd.0, (x, y, old_size.0, old_size.1));
         }
+        #[cfg(not(target_os = "linux"))]
         Ok(())
     }
 
