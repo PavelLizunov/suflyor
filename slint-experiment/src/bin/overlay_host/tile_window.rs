@@ -282,15 +282,13 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
     // effect on the first painted frame.
     tile.set_body_opacity(global_tile_opacity());
 
-    let weak = tile.as_weak();
-    Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
-        let Some(t) = weak.upgrade() else { return };
-        // A close/drop before this delayed native setup must stay hidden.
+    let attempt = std::rc::Rc::new(move |t: &TileWindow| {
+        // A close/drop before delayed native setup must stay hidden.
         if !t.window().is_visible() {
-            return;
+            return true;
         }
         let Ok(hwnd) = grab_hwnd(t.window()) else {
-            return;
+            return false;
         };
 
         // Phase E6 fix v4 — use make_transparent_tile (no WS_EX_
@@ -425,7 +423,14 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             set_platform_window_position(t.window(), 100, 100);
             eprintln!("[overlay-host] tile placement: no monitor from pick_monitor — fallback to (100, 100)");
         }
+        true
     });
+    let fallback = std::rc::Rc::new(|t: &TileWindow| {
+        if t.window().is_visible() {
+            diag!("[overlay-host] tile native setup failed after realization retries");
+        }
+    });
+    super::realize_with_retries(tile, attempt, fallback);
 }
 
 // Tests live at the END of the module (clippy::items_after_test_module, denied
