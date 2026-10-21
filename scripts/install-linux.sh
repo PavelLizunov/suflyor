@@ -26,7 +26,10 @@ PY
     rm -f "$prefix/suflyor-hyprland.lua" "$prefix/launch"
     command -v hyprctl >/dev/null && hyprctl reload >/dev/null || true
     command -v update-desktop-database >/dev/null && update-desktop-database "$data/applications" || true
-    [[ ! -L "$bin_dir/suflyor" || "$(readlink "$bin_dir/suflyor")" != "$prefix/overlay-host" ]] || rm "$bin_dir/suflyor"
+    if [[ -L "$bin_dir/suflyor" ]]; then
+        target=$(readlink "$bin_dir/suflyor")
+        [[ "$target" != "$prefix/overlay-host" && "$target" != "$prefix/launch" ]] || rm "$bin_dir/suflyor"
+    fi
     for name in overlay-host suflyor-tts suflyor-teratts; do rm -f "$prefix/$name"; done
     systemctl --user daemon-reload
     printf 'Removed Suflyor executables and launcher; configuration and models retained.\n'
@@ -55,12 +58,18 @@ for name in overlay-host suflyor-tts suflyor-teratts; do
     install -m755 "$source_dir/$name" "$prefix/.$name.next"
     mv "$prefix/.$name.next" "$prefix/$name"
 done
-ln -sfn "$prefix/overlay-host" "$bin_dir/suflyor"
+ln -sfn "$prefix/launch" "$bin_dir/suflyor"
 python3 - "$prefix" "$config" "$data" "$hypr_config" <<'PY'
 import pathlib,sys,shlex,json
 prefix,config,data,hypr=map(pathlib.Path,sys.argv[1:])
 launch=prefix/"launch"
-launch.write_text("#!/bin/sh\nexport XDG_CONFIG_HOME="+shlex.quote(str(config))+"\n"+shlex.quote(str(prefix/"overlay-host"))+" --command show 2>/dev/null && exit 0\nexec systemctl --user start suflyor.service\n")
+host=shlex.quote(str(prefix/"overlay-host"))
+launch.write_text(f'''#!/bin/sh
+export XDG_CONFIG_HOME={shlex.quote(str(config))}
+if [ "$#" -gt 0 ]; then exec {host} "$@"; fi
+{host} --command show 2>/dev/null && exit 0
+exec systemctl --user start suflyor.service
+''')
 launch.chmod(0o755)
 if not hypr.is_file():raise SystemExit("Hyprland Lua configuration is unavailable")
 s=hypr.read_text()
@@ -101,6 +110,7 @@ systemctl --user link "$config/systemd/user/suflyor.service" >/dev/null
 hyprctl reload >/dev/null
 errors=$(hyprctl configerrors)
 [[ -z "$errors" ]] || { printf '%s\n' "$errors" >&2; exit 1; }
+systemctl --user try-restart suflyor.service
 command -v update-desktop-database >/dev/null && update-desktop-database "$data/applications" || true
 printf 'Installed native binaries and launcher. Start: systemctl --user start suflyor.service\n'
 printf 'Optional autostart: bash scripts/install-linux.sh autostart\n'
