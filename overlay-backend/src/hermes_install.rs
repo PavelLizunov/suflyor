@@ -116,7 +116,8 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
     let outcome = enable_in_config_text(cfg_old.as_deref().unwrap_or(""));
     match outcome {
         EnableEdit::Updated(new_text) => {
-            std::fs::write(&cfg_path, new_text).map_err(|e| format!("запись config.yaml: {e}"))?;
+            crate::paths::write_private(&cfg_path, new_text.as_bytes())
+                .map_err(|e| format!("запись config.yaml: {e}"))?;
             Ok("готово: плагин установлен и включён — перезапустите Hermes".to_string())
         }
         EnableEdit::AlreadyEnabled => {
@@ -152,7 +153,8 @@ pub fn ensure_api_server() -> Result<(String, bool), String> {
     match ensure_api_server_text(&old, crate::bridge::generate_token) {
         ApiEdit::Ready(key) => Ok((key, false)),
         ApiEdit::Updated(text, key) => {
-            std::fs::write(&cfg_path, text).map_err(|e| format!("запись config.yaml: {e}"))?;
+            crate::paths::write_private(&cfg_path, text.as_bytes())
+                .map_err(|e| format!("запись config.yaml: {e}"))?;
             Ok((key, true))
         }
         ApiEdit::Unsupported => Err(
@@ -654,6 +656,36 @@ mod tests {
         assert_eq!(unix_mode(&wide), 0o600, "an unchanged .env is tightened");
         // Nothing to restrict when the file does not exist and nothing is to be written.
         sync_env(&temp.path().join("absent.env"), "", "").unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn config_yaml_is_owner_only_on_unix() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let cfg_path = temp.path().join("config.yaml");
+
+        crate::paths::write_private(&cfg_path, b"platforms:\n  api_server:\n    enabled: true\n")
+            .unwrap();
+        assert_eq!(
+            unix_mode(&cfg_path),
+            0o600,
+            "a written config.yaml must be owner-only"
+        );
+
+        // A config.yaml with wider permissions is tightened on rewrite.
+        std::fs::set_permissions(&cfg_path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        crate::paths::write_private(
+            &cfg_path,
+            b"platforms:\n  api_server:\n    enabled: true\n    extra:\n      key: k\n",
+        )
+        .unwrap();
+        assert_eq!(
+            unix_mode(&cfg_path),
+            0o600,
+            "an updated config.yaml must be owner-only"
+        );
     }
 
     #[test]
