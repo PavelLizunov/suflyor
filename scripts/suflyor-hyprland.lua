@@ -16,7 +16,7 @@ hl.window_rule({
 })
 hl.window_rule({
     name = "suflyor-native-bar",
-    match = { title = "^suflyor \\(Slint\\)$" },
+    match = { title = "^suflyor \\(Slint\\).*$" },
     size = "1280 64",
     move = "20 40",
 })
@@ -27,6 +27,6 @@ hl.window_rule({
 })
 hl.window_rule({
     name = "suflyor-native-tile",
-    match = { class = "^suflyor$", title = "^tile$" },
+    match = { class = "^suflyor$", title = "^tile.*$" },
     size = "460 360",
 })

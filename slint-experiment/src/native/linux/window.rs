@@ -13,7 +13,7 @@ static WINDOWS: std::sync::LazyLock<Mutex<HashMap<WindowId,Identity>>> = std::sy
 type Error = Box<dyn std::error::Error>;
 static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 static DRAG: Mutex<Option<(isize, i32, i32, i32, i32)>> = Mutex::new(None);
-static HIDDEN_ALPHA: std::sync::LazyLock<Mutex<HashMap<isize,serde_json::Value>>> = std::sync::LazyLock::new(||Mutex::new(HashMap::new()));
+static HIDDEN_ALPHA: std::sync::LazyLock<Mutex<HashMap<isize,Vec<(String,serde_json::Value)>>>> = std::sync::LazyLock::new(||Mutex::new(HashMap::new()));
 
 fn clients() -> Result<Vec<serde_json::Value>, Error> {
     let value = query("clients")?;
@@ -36,6 +36,14 @@ pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
         // Remove resolved windows no longer owned by this process.
         ids.retain(|_,v| v.address.is_none_or(|id| all.iter().any(|c|address(c)==Some(id))));
         if ids.len()>128 { ids.retain(|_,v|v.address.is_some()); }
+        let title=w.title();
+        let claimed:Vec<isize>=ids.values().filter_map(|v|v.address).collect();
+        let candidates:Vec<isize>=all.iter().filter(|c|c["title"].as_str()==Some(&title)).filter_map(address).filter(|id|!claimed.contains(id)).collect();
+        if !ids.contains_key(&w.id()) && candidates.len()==1 {
+            let address=candidates[0];
+            ids.insert(w.id(),Identity{title,address:Some(address)});
+            return Ok(address);
+        }
         let id=ids.entry(w.id()).or_insert_with(||Identity{
             title:format!("{} [suflyor-{}-{}]",w.title(),std::process::id(),SEQUENCE.fetch_add(1,Ordering::Relaxed)),address:None,
         });
@@ -70,6 +78,13 @@ pub fn pin(id:isize,on:bool)->Result<(),Error>{
     if c["pinned"].as_bool().unwrap_or(false)!=on {dispatch("pin",&selector(id)?)?;}
     Ok(())
 }
+pub fn set_exclusion(id:isize,on:bool)->Result<(),Error>{
+    let selector=selector(id)?;
+    super::desktop::set_property(&selector,"no_screen_share",if on{"1"}else{"0"})?;
+    if super::desktop::property(&selector,"no_screen_share")?.as_bool()!=Some(on){return Err("capture exclusion readback failed".into());}
+    Ok(())
+}
+pub fn exclusion(id:isize)->Result<bool,Error>{super::desktop::property(&selector(id)?,"no_screen_share")?.as_bool().ok_or_else(||"capture exclusion unavailable".into())}
 pub fn cursor()->Result<(i32,i32),Error>{
     let v=query("cursorpos")?;
     Ok((v["x"].as_f64().ok_or("cursor x unavailable")? as i32,v["y"].as_f64().ok_or("cursor y unavailable")? as i32))
@@ -91,12 +106,11 @@ pub fn hide_own()->Vec<(isize,bool)>{
         if let Some(id)=address(&c){
             if c["hidden"].as_bool()==Some(true){continue;}
             let selector=format!("address:0x{id:x}");
-            let saved=super::desktop::hypr(&["-j","getprop",&selector,"alpha"]).ok().and_then(|v|serde_json::from_str(&v).ok());
-            if let Some(saved)=saved {
-                if super::desktop::hypr(&["setprop", &selector, "alpha", "0", "override"]).is_ok(){
-                    HIDDEN_ALPHA.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(id,saved);
-                    hidden.push((id,true));
-                }
+            let saved:Vec<_>=["opacity","opacity_inactive","opacity_fullscreen"].iter().filter_map(|name|super::desktop::property(&selector,name).ok().map(|v|(name.to_string(),v))).collect();
+            if saved.len()==3 {
+                HIDDEN_ALPHA.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(id,saved);
+                for name in ["opacity","opacity_inactive","opacity_fullscreen"]{let _=super::desktop::set_property(&selector,name,"0");}
+                hidden.push((id,true));
             }
         }
     }
@@ -106,9 +120,9 @@ pub fn show_own(hidden:&[(isize,bool)]){
     for (id,_) in hidden {
         let saved=HIDDEN_ALPHA.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(id);
         if let (Some(saved),Ok(s))=(saved,selector(*id)){
-            let value=saved.get("value").unwrap_or(&saved);
-            if let Some(alpha)=value.as_f64(){let _=super::desktop::hypr(&["setprop", &s,"alpha",&alpha.to_string(),"override"]);}
-            else {let _=super::desktop::hypr(&["setprop", &s,"alpha","unset"]);}
+            for (name,value) in saved {
+                if let Some(alpha)=value.as_f64(){let _=super::desktop::set_property(&s,&name,&alpha.to_string());}
+            }
         }
     }
 }

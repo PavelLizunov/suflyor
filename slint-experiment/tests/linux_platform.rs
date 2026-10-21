@@ -4,7 +4,7 @@
 
 #[test]
 fn unavailable_native_features_do_not_fabricate_success() {
-    assert!(!slint_replay::win32::stealth_supported());
+    assert!(slint_replay::win32::stealth_supported());
     assert!(slint_replay::win32::set_stealth(slint_replay::win32::HWND(0), true).is_err());
     // Real monitor/capture adapters are exercised only in the live Wayland checks.
     // This headless guard keeps the unimplemented exclusion boundary explicit.

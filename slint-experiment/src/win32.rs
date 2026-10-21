@@ -1160,21 +1160,27 @@ mod posix_stubs {
     /// Whether this platform can apply and verify capture exclusion.
     #[must_use]
     pub const fn stealth_supported() -> bool {
-        false
+        cfg!(target_os = "linux")
     }
 
     pub fn set_stealth(_hwnd: HWND, on: bool) -> Result<(), Box<dyn std::error::Error>> {
+        #[cfg(target_os = "linux")]
+        { return crate::native::window::set_exclusion(_hwnd.0,on); }
+        #[cfg(not(target_os = "linux"))]
         if on {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Unsupported,
                 "screen-capture exclusion is not available on this platform",
-            )
-            .into());
+            ).into());
         }
+        #[cfg(not(target_os = "linux"))]
         Ok(())
     }
 
     pub fn read_display_affinity(_hwnd: HWND) -> Result<u32, Box<dyn std::error::Error>> {
+        #[cfg(target_os = "linux")]
+        { return crate::native::window::exclusion(_hwnd.0).map(|on|if on { 0x11 } else { 0 }); }
+        #[cfg(not(target_os = "linux"))]
         Ok(0)
     }
 

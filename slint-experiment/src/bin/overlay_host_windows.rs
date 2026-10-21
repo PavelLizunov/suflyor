@@ -5192,7 +5192,7 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     #[cfg(target_os = "linux")]
-    let command_timer = {
+    let _command_timer = {
         let weak=overlay.as_weak();
         let timer=Timer::default();
         timer.start(TimerMode::Repeated,Duration::from_millis(30),move || {
@@ -5225,6 +5225,8 @@ fn main() -> Result<(), slint::PlatformError> {
         drop(installed_status_item);
     }
     TRAY_AVAILABLE.store(false, Ordering::Relaxed);
+    #[cfg(target_os = "linux")]
+    slint_replay::native::desktop::close();
     // All event-loop exits share the normal session stop path.
     let _ = slint_session::stop_session(slint_rt.clone(), &cfg);
     // MLX owns exactly one child and stdin pipe process-wide. Clear its

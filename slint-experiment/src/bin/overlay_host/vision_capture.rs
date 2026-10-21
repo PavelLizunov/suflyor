@@ -244,6 +244,8 @@ pub(crate) fn fire_f8_vision_capture(
         return;
     }
 
+    #[cfg(not(target_os = "linux"))]
+    {
     // Freeze the virtual desktop for region selection. Windows composes all
     // monitors; macOS currently captures the display under the cursor. In both
     // cases the returned global origin can be negative and must position the
@@ -435,6 +437,7 @@ pub(crate) fn fire_f8_vision_capture(
                 surface_stealth_unavailable(&o);
             }
         }
+    }
     }
 }
 

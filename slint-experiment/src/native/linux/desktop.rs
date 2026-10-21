@@ -16,11 +16,34 @@ pub fn hypr(args: &[&str]) -> Result<String, Error> {
     if !output.status.success() { return Err("Hyprland request failed".into()); }
     Ok(String::from_utf8(output.stdout)?)
 }
+pub fn property(window:&str,name:&str)->Result<serde_json::Value,Error>{
+    let value:serde_json::Value=serde_json::from_str(&hypr(&["-j","getprop",window,name])?)?;
+    value.get(name).cloned().ok_or_else(||"compositor property unavailable".into())
+}
+pub fn set_property(window:&str,name:&str,value:&str)->Result<(),Error>{
+    let lua=format!("hl.dsp.window.set_prop({{window={},prop={},value={}}})",serde_json::to_string(window)?,serde_json::to_string(name)?,serde_json::to_string(value)?);
+    if hypr(&["dispatch",&lua])?.trim()!="ok"{return Err("compositor property rejected".into());}
+    Ok(())
+}
 pub fn query(name: &str) -> Result<serde_json::Value, Error> {
     Ok(serde_json::from_str(&hypr(&["-j", name])?)?)
 }
 pub fn dispatch(action: &str, value: &str) -> Result<(), Error> {
-    let answer = hypr(&["dispatch", action, value])?;
+    let lua = match action {
+        "movewindowpixel" | "resizewindowpixel" => {
+            let (coords,window)=value.rsplit_once(',').ok_or("missing window selector")?;
+            let mut nums=coords.trim_start_matches("exact ").split_whitespace();
+            let x=nums.next().ok_or("missing x")?.parse::<i32>()?;
+            let y=nums.next().ok_or("missing y")?.parse::<i32>()?;
+            let method=if action=="movewindowpixel"{"move"}else{"resize"};
+            format!("hl.dsp.window.{method}({{window={},x={x},y={y}}})",serde_json::to_string(window)?)
+        }
+        "setfloating"=>format!("hl.dsp.window.float({{window={},action=\"on\"}})",serde_json::to_string(value)?),
+        "focuswindow"=>format!("hl.dsp.focus({{window={}}})",serde_json::to_string(value)?),
+        "pin"=>format!("hl.dsp.window.pin({{window={}}})",serde_json::to_string(value)?),
+        _=>return Err("unsupported native compositor operation".into()),
+    };
+    let answer = hypr(&["dispatch", &lua])?;
     if answer.trim() != "ok" { return Err("Hyprland action was rejected".into()); }
     Ok(())
 }
@@ -63,6 +86,10 @@ pub fn listen() -> Result<(), Error> {
     Ok(())
 }
 
+pub fn close() {
+    if let Some(slot)=SOCKET.get(){let _=slot.lock().map(|mut slot|slot.take());}
+}
+
 pub fn receive() -> Option<String> {
     let slot = SOCKET.get()?.lock().ok()?;
     let mut buffer = [0u8; 81];
@@ -84,11 +111,12 @@ pub fn install_bindings(bindings: &[(&str, &str)]) -> Result<Vec<String>, Error>
         let conflict = existing.iter().any(|bind| {
             bind["key"].as_str().is_some_and(|k| k.eq_ignore_ascii_case(key))
                 && bind["modmask"].as_u64() == Some(mods)
-                && !bind["arg"].as_str().is_some_and(|s| s == format!("{command}{action}"))
+                && !bind["arg"].as_str().is_some_and(|s| s.contains(" --command ") && s.contains("suflyor"))
         });
         if conflict { continue; }
         let release = action.ends_with("-up");
         let keys = keys.strip_suffix("@release").unwrap_or(keys);
+        if !release { let _=hypr(&["eval",&format!("hl.unbind({})",serde_json::to_string(keys)?)]); }
         let lua = format!("hl.bind({}, hl.dsp.exec_cmd({}), {{ release = {} }})", serde_json::to_string(keys)?, serde_json::to_string(&format!("{command}{action}"))?,release);
         let result = hypr(&["eval", &lua])?;
         if result.to_ascii_lowercase().contains("error") { continue; }

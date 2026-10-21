@@ -60,7 +60,7 @@ pub fn platform_capability(feature: PlatformFeature) -> CapabilityState {
 
     #[cfg(target_os = "linux")]
     match feature {
-        PlatformFeature::Microphone | PlatformFeature::SystemAudio => CapabilityState::Available,
+        PlatformFeature::Microphone | PlatformFeature::SystemAudio | PlatformFeature::ScreenCapture | PlatformFeature::ExternalStealth => CapabilityState::Available,
         _ => CapabilityState::Unsupported(CapabilityReason::NotSupportedOnPlatform),
     }
 
