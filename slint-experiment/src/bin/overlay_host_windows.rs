@@ -2092,14 +2092,12 @@ fn main() -> Result<(), slint::PlatformError> {
                     continue;
                 };
                 if req.action == SpawnAction::Drop {
-                    let close_hwnd = grab_hwnd(tile.window()).ok();
+                    let sequence = tile.get_sequence();
                     let _ = tile.hide();
                     slint_replay::win32::force_hide(tile.window());
-                    if let Some(target) = close_hwnd {
-                        tiles_for_poll
-                            .borrow_mut()
-                            .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
-                    }
+                    tiles_for_poll
+                        .borrow_mut()
+                        .retain(|item| item.get_sequence() != sequence);
                     refresh_open_tiles(&weak_overlay_poll, &tiles_for_poll);
                     continue;
                 }
@@ -2217,20 +2215,16 @@ fn main() -> Result<(), slint::PlatformError> {
                 if let Some(t) = weak_tile.upgrade() {
                     // FIX #8 — prune this tile's conversation (no-op if none).
                     bridge_for_close.drop_conversation(t.get_convo_id());
-                    let close_hwnd = grab_hwnd(t.window()).ok();
+                    let sequence = t.get_sequence();
                     let _ = t.hide();
                     slint_replay::win32::force_hide(t.window());
-                    if let Some(target) = close_hwnd {
-                        let before = vec_for_close.borrow().len();
-                        vec_for_close
-                            .borrow_mut()
-                            .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
-                        let after = vec_for_close.borrow().len();
-                        eprintln!(
-                            "[overlay-host]   dropped from vec: before={before} after={after}"
-                        );
-                        refresh_open_tiles(&weak_overlay_close, &vec_for_close);
-                    }
+                    let before = vec_for_close.borrow().len();
+                    vec_for_close
+                        .borrow_mut()
+                        .retain(|item| item.get_sequence() != sequence);
+                    let after = vec_for_close.borrow().len();
+                    eprintln!("[overlay-host]   dropped from vec: before={before} after={after}");
+                    refresh_open_tiles(&weak_overlay_close, &vec_for_close);
                 }
             });
             // Phase E6 v17 — pin toggles visual state. Pinned tiles
@@ -2517,15 +2511,13 @@ fn main() -> Result<(), slint::PlatformError> {
                         // Dismiss the error tile (drop it from the live Vec like
                         // the close handler) — the resume spawns a fresh tile.
                         if let Some(t) = weak_retry.upgrade() {
-                            let close_hwnd = grab_hwnd(t.window()).ok();
+                            let sequence = t.get_sequence();
                             let _ = t.hide();
                             slint_replay::win32::force_hide(t.window());
-                            if let Some(target) = close_hwnd {
-                                vec_for_retry
-                                    .borrow_mut()
-                                    .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
-                                refresh_open_tiles(&weak_overlay_retry, &vec_for_retry);
-                            }
+                            vec_for_retry
+                                .borrow_mut()
+                                .retain(|item| item.get_sequence() != sequence);
+                            refresh_open_tiles(&weak_overlay_retry, &vec_for_retry);
                         }
                         let events_c = events_retry.clone();
                         let cfg_c = cfg_retry.clone();
@@ -3616,18 +3608,13 @@ fn main() -> Result<(), slint::PlatformError> {
             tile.on_close_clicked(move || {
                 eprintln!("[overlay-host] tile (spawn-poll) close_clicked fired");
                 if let Some(tw) = weak_tile.upgrade() {
-                    let close_hwnd = grab_hwnd(tw.window()).ok();
+                    let sequence = tw.get_sequence();
                     let _ = tw.hide();
                     slint_replay::win32::force_hide(tw.window());
-                    if let Some(target) = close_hwnd {
-                        // Abort this tile's in-flight AI request so the GPU isn't
-                        // left generating for a closed tile (keyed by tile-id).
-                        abort_tile_stream(tile_id);
-                        vec_for_close.borrow_mut().retain(|item| {
-                            grab_hwnd(item.window()).ok() != Some(target)
-                        });
-                        refresh_open_tiles(&weak_overlay_close, &vec_for_close);
-                    }
+                    // Request ownership is independent of native surface lifetime.
+                    abort_tile_stream(tile_id);
+                    vec_for_close.borrow_mut().retain(|item| item.get_sequence() != sequence);
+                    refresh_open_tiles(&weak_overlay_close, &vec_for_close);
                 }
             });
             let weak_pin = tile.as_weak();

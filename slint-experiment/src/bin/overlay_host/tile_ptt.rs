@@ -11,11 +11,11 @@ use super::{
     ai, apply_tile_hwnd_with_monitor, audio, classify_ai_error, fire_followup_ask, fire_regenerate,
     grab_hwnd, journal, live_route, markdown, present_tile_window, refresh_open_tiles,
     resolve_route_endpoint, route_needs_mlx, show_mlx_runtime_error, stt, toggle_tile_maximize,
-    user_turn_markdown, warn_if_over_cost_cap, wire_copy, wire_escalate, wire_speak, wire_tile_drag,
-    wire_voice_followup, Arc, AskRoute, AtomicBool, ComponentHandle, Duration, MarkdownBlock,
-    ModelRc, Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink, RuntimeEvents,
-    SharedSlintRuntime, SharedString, TileWindow, TileWindows, VecModel, AI_STREAM_MAX_TOKENS,
-    CONVO_SEQ, TILE_DISPLAY_SEQ,
+    user_turn_markdown, warn_if_over_cost_cap, wire_copy, wire_escalate, wire_speak,
+    wire_tile_drag, wire_voice_followup, Arc, AskRoute, AtomicBool, ComponentHandle, Duration,
+    MarkdownBlock, ModelRc, Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink,
+    RuntimeEvents, SharedSlintRuntime, SharedString, TileWindow, TileWindows, VecModel,
+    AI_STREAM_MAX_TOKENS, CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
 /// Phase E6 v42 — hard cap on a push-to-record hold (30 s). Backstop for a
 /// lost pointer-up (alt-tab / focus loss mid-hold): without it the record
@@ -161,15 +161,13 @@ pub(crate) fn fire_ptt_ask(
             super::stop_if_speaking(t.get_convo_id());
             // FIX #8 — prune this tile's conversation (no-op if none).
             bridge_for_close.drop_conversation(t.get_convo_id());
-            let close_hwnd = grab_hwnd(t.window()).ok();
+            let sequence = t.get_sequence();
             let _ = t.hide();
             slint_replay::win32::force_hide(t.window());
-            if let Some(target) = close_hwnd {
-                vec_for_close
-                    .borrow_mut()
-                    .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
-                refresh_open_tiles(&weak_overlay_close, &vec_for_close);
-            }
+            vec_for_close
+                .borrow_mut()
+                .retain(|item| item.get_sequence() != sequence);
+            refresh_open_tiles(&weak_overlay_close, &vec_for_close);
         }
     });
     let weak_pin = tile.as_weak();
@@ -374,7 +372,9 @@ pub(crate) fn fire_ptt_ask(
                     t.set_tile_title(SharedString::from(
                         slint_replay::app_state::tile_title_line(&q),
                     ));
-                    t.set_source_label(SharedString::from(crate::tile_text::asking_label(ui_is_ru)));
+                    t.set_source_label(SharedString::from(crate::tile_text::asking_label(
+                        ui_is_ru,
+                    )));
                     t.set_plain_notice(false);
                 }
             });

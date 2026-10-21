@@ -41,6 +41,29 @@ fn retained_windows_cannot_be_revealed_after_close_by_native_setup() {
 }
 
 #[test]
+fn tile_close_does_not_depend_on_a_destroyed_native_surface() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    for relative in [
+        "src/bin/overlay_host_windows.rs",
+        "src/bin/overlay_host/tile_ask.rs",
+        "src/bin/overlay_host/tile_ptt.rs",
+        "src/bin/overlay_host/read_aloud.rs",
+        "src/bin/overlay_host/vision_capture.rs",
+        "src/bin/overlay_host/aux_windows/archive.rs",
+    ] {
+        let source = std::fs::read_to_string(root.join(relative)).unwrap();
+        assert!(
+            !source.contains("let close_hwnd ="),
+            "surface-dependent close: {relative}"
+        );
+        assert!(
+            source.contains("item.get_sequence() != sequence"),
+            "stable close identity: {relative}"
+        );
+    }
+}
+
+#[test]
 fn hidden_settings_keep_download_and_shared_status_until_completion() {
     i_slint_backend_testing::init_no_event_loop();
     let win = ui::SettingsWindow::new().unwrap();

@@ -41,12 +41,11 @@
 //! glob).
 use super::{
     ai, apply_tile_hwnd_with_monitor, cost_cap_reason, fire_followup_ask, fire_regenerate,
-    gated_events, grab_hwnd, install_streaming_tile, journal, live_route,
-    present_tile_window, refresh_open_tiles, resolve_route_endpoint, route_needs_mlx,
-    select_recent_labeled, show_mlx_runtime_error, spawn_mlx_runtime_error, toggle_tile_maximize,
-    to_md_blocks, user_turn_markdown, wire_copy, wire_escalate, wire_speak, wire_tile_drag,
-    wire_voice_followup, Arc, AskRoute,
-    ComponentHandle, ModelRc, MonitorHint, Ordering, OverlayBarBridge,
+    gated_events, grab_hwnd, install_streaming_tile, journal, live_route, present_tile_window,
+    refresh_open_tiles, resolve_route_endpoint, route_needs_mlx, select_recent_labeled,
+    show_mlx_runtime_error, spawn_mlx_runtime_error, to_md_blocks, toggle_tile_maximize,
+    user_turn_markdown, wire_copy, wire_escalate, wire_speak, wire_tile_drag, wire_voice_followup,
+    Arc, AskRoute, ComponentHandle, ModelRc, MonitorHint, Ordering, OverlayBarBridge,
     OverlayBarWindow, RuntimeEvents, SharedSlintRuntime, SharedString, StreamingTile, TileKind,
     TileSpec, TileWindow, TileWindows, VecModel, AI_STREAM_MAX_TOKENS, CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
@@ -409,13 +408,19 @@ pub(crate) fn fire_f9_ask(
     // user sees THIS answer came from the cloud model (egress is visible).
     // V0.8.3 — a typed "✏ Написать" ask gets its own green badge.
     if is_text {
-        tile.set_trigger_label(SharedString::from(crate::tile_text::text_ask_badge(tile_is_ru)));
+        tile.set_trigger_label(SharedString::from(crate::tile_text::text_ask_badge(
+            tile_is_ru,
+        )));
         tile.set_trigger_tone(crate::ui::TileTone::Green);
     } else if route == AskRoute::Cloud {
-        tile.set_trigger_label(SharedString::from(crate::tile_text::cloud_ask_badge(tile_is_ru)));
+        tile.set_trigger_label(SharedString::from(crate::tile_text::cloud_ask_badge(
+            tile_is_ru,
+        )));
         tile.set_trigger_tone(crate::ui::TileTone::Sky);
     } else {
-        tile.set_trigger_label(SharedString::from(crate::tile_text::f9_ask_badge(tile_is_ru)));
+        tile.set_trigger_label(SharedString::from(crate::tile_text::f9_ask_badge(
+            tile_is_ru,
+        )));
         tile.set_trigger_tone(crate::ui::TileTone::Violet);
     }
     // Phase E6 v45 — this tile carries a conversation, so it shows the
@@ -444,15 +449,13 @@ pub(crate) fn fire_f9_ask(
             super::stop_if_speaking(t.get_convo_id());
             // FIX #8 — prune this tile's conversation (no-op if none).
             bridge_for_close.drop_conversation(t.get_convo_id());
-            let close_hwnd = grab_hwnd(t.window()).ok();
+            let sequence = t.get_sequence();
             let _ = t.hide();
             slint_replay::win32::force_hide(t.window());
-            if let Some(target) = close_hwnd {
-                vec_for_close
-                    .borrow_mut()
-                    .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
-                refresh_open_tiles(&weak_overlay_close, &vec_for_close);
-            }
+            vec_for_close
+                .borrow_mut()
+                .retain(|item| item.get_sequence() != sequence);
+            refresh_open_tiles(&weak_overlay_close, &vec_for_close);
         }
     });
     let weak_pin = tile.as_weak();
@@ -799,7 +802,12 @@ mod tests {
     use super::{missing_cloud_auth_copy, nothing_to_reask_copy, RememberAnswer, RuntimeEvents};
     use std::sync::Arc;
 
-    fn remember(question: &str) -> (RememberAnswer, slint_replay::runtime_state::SharedSlintRuntime) {
+    fn remember(
+        question: &str,
+    ) -> (
+        RememberAnswer,
+        slint_replay::runtime_state::SharedSlintRuntime,
+    ) {
         let rt = slint_replay::runtime_state::shared_runtime();
         let sink = RememberAnswer {
             inner: Arc::new(overlay_backend::events::Noop),
@@ -819,11 +827,23 @@ mod tests {
     #[test]
     fn a_finished_ask_becomes_the_last_question_and_answer() {
         let (sink, rt) = remember("What is an index?");
-        sink.emit("ai:event", serde_json::json!({ "type": "start", "id": "1" }));
-        sink.emit("ai:event", serde_json::json!({ "type": "delta", "text": " An index " }));
-        sink.emit("ai:event", serde_json::json!({ "type": "delta", "text": "speeds up reads.\n" }));
+        sink.emit(
+            "ai:event",
+            serde_json::json!({ "type": "start", "id": "1" }),
+        );
+        sink.emit(
+            "ai:event",
+            serde_json::json!({ "type": "delta", "text": " An index " }),
+        );
+        sink.emit(
+            "ai:event",
+            serde_json::json!({ "type": "delta", "text": "speeds up reads.\n" }),
+        );
         assert!(slint_replay::runtime_state::lock(&rt).last_answer.is_none());
-        sink.emit("ai:event", serde_json::json!({ "type": "done", "reason": "stop" }));
+        sink.emit(
+            "ai:event",
+            serde_json::json!({ "type": "done", "reason": "stop" }),
+        );
         let s = slint_replay::runtime_state::lock(&rt);
         assert_eq!(s.last_question.as_deref(), Some("What is an index?"));
         assert_eq!(s.last_answer.as_deref(), Some("An index speeds up reads."));
@@ -832,11 +852,22 @@ mod tests {
     #[test]
     fn a_failed_or_empty_ask_is_not_remembered() {
         let (sink, rt) = remember("q");
-        sink.emit("ai:event", serde_json::json!({ "type": "delta", "text": "partial" }));
-        sink.emit("ai:event", serde_json::json!({ "type": "error", "message": "x" }));
-        assert!(slint_replay::runtime_state::lock(&rt).last_question.is_none());
+        sink.emit(
+            "ai:event",
+            serde_json::json!({ "type": "delta", "text": "partial" }),
+        );
+        sink.emit(
+            "ai:event",
+            serde_json::json!({ "type": "error", "message": "x" }),
+        );
+        assert!(slint_replay::runtime_state::lock(&rt)
+            .last_question
+            .is_none());
         let (sink, rt) = remember("q");
-        sink.emit("ai:event", serde_json::json!({ "type": "done", "reason": "stop" }));
+        sink.emit(
+            "ai:event",
+            serde_json::json!({ "type": "done", "reason": "stop" }),
+        );
         assert!(slint_replay::runtime_state::lock(&rt).last_answer.is_none());
     }
 
