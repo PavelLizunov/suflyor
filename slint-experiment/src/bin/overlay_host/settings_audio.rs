@@ -1,4 +1,4 @@
-//! Windows audio settings. Device names remain the backend's existing contract.
+//! Native audio settings. Device names remain the backend's existing contract.
 
 use super::SettingsWindow;
 use overlay_backend::{audio, config};

@@ -1165,13 +1165,16 @@ mod posix_stubs {
 
     pub fn set_stealth(_hwnd: HWND, on: bool) -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(target_os = "linux")]
-        { return crate::native::window::set_exclusion(_hwnd.0,on); }
+        {
+            return crate::native::window::set_exclusion(_hwnd.0, on);
+        }
         #[cfg(not(target_os = "linux"))]
         if on {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Unsupported,
                 "screen-capture exclusion is not available on this platform",
-            ).into());
+            )
+            .into());
         }
         #[cfg(not(target_os = "linux"))]
         Ok(())
@@ -1179,7 +1182,9 @@ mod posix_stubs {
 
     pub fn read_display_affinity(_hwnd: HWND) -> Result<u32, Box<dyn std::error::Error>> {
         #[cfg(target_os = "linux")]
-        { return crate::native::window::exclusion(_hwnd.0).map(|on|if on { 0x11 } else { 0 }); }
+        {
+            return crate::native::window::exclusion(_hwnd.0).map(|on| if on { 0x11 } else { 0 });
+        }
         #[cfg(not(target_os = "linux"))]
         Ok(0)
     }
@@ -1399,7 +1404,7 @@ mod posix_stubs {
     }
 
     pub fn work_area_for_window(hwnd: HWND) -> Option<MonitorRect> {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
             let monitors = enum_monitors();
             get_window_rect(hwnd)
@@ -1409,7 +1414,7 @@ mod posix_stubs {
                 })
                 .or_else(|| pick_monitor(&monitors))
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         {
             let _ = hwnd;
             None
@@ -1417,11 +1422,11 @@ mod posix_stubs {
     }
 
     pub fn work_area_for_point(x: i32, y: i32) -> Option<MonitorRect> {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
             monitor_for_point(&enum_monitors(), x, y)
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         {
             let _ = (x, y);
             None
@@ -1446,12 +1451,12 @@ mod posix_stubs {
     pub fn set_round_corners(_hwnd: HWND) {}
 
     pub fn pick_monitor(monitors: &[MonitorRect]) -> Option<MonitorRect> {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
             let (x, y) = cursor_pos();
             monitor_for_point(monitors, x, y)
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         {
             monitors.first().copied()
         }

@@ -21,10 +21,24 @@ pub fn read_text() -> Option<String> {
 /// Read the actual selected text without synthesizing input into another app.
 pub fn read_primary() -> Option<String> {
     let output = Command::new("timeout")
-        .args(["--signal=KILL", "2s", "wl-paste", "--primary", "--no-newline", "--type", "text"])
-        .stderr(Stdio::null()).output().ok()?;
-    if !output.status.success() { return None; }
-    String::from_utf8(output.stdout).ok().filter(|text| !text.is_empty())
+        .args([
+            "--signal=KILL",
+            "2s",
+            "wl-paste",
+            "--primary",
+            "--no-newline",
+            "--type",
+            "text",
+        ])
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8(output.stdout)
+        .ok()
+        .filter(|text| !text.is_empty())
 }
 
 /// Replace the Wayland selection without passing its contents in process args.

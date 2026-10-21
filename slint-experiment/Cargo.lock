@@ -5667,6 +5667,7 @@ dependencies = [
  "global-hotkey",
  "i-slint-backend-testing",
  "image",
+ "ksni",
  "log",
  "overlay-backend",
  "pulldown-cmark",

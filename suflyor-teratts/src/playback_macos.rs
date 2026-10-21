@@ -198,7 +198,9 @@ impl Playback {
             Err(err) => {
                 stop.store(true, Ordering::Release);
                 if let Some(h) = handle.take() {
-                    if h.is_finished() { let _ = h.join(); }
+                    if h.is_finished() {
+                        let _ = h.join();
+                    }
                     // Native initialization cannot be interrupted. It observes stop
                     // when it returns; this isolated sidecar remains responsive.
                 }

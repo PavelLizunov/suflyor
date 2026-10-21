@@ -47,7 +47,7 @@ const STRATA_HEALTH_URL: &str = "http://127.0.0.1:8090/health";
 /// The original model in the size Strata recommends for 48-64 GB of RAM.
 /// Fine-tunes (Swift and others) carry their own licences and stay out until
 /// those are checked (ADR-003, decision 5).
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 const STRATA_FAMILY: &str = "qwen";
 const STRATA_SIZE: &str = "IQ2_XS";
 pub const STRATA_MODEL_LABEL: &str = "Qwen3.8-Flash-Next IQ2_XS";
@@ -528,7 +528,7 @@ pub fn install_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -
     Ok(())
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 fn run_setup(dir: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> Result<()> {
     use std::io::Write;
     use std::process::{Command, Stdio};
@@ -536,11 +536,19 @@ fn run_setup(dir: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> Result<(
 
     use super::CANCEL_SENTINEL;
 
-    let mut cmd = Command::new("cmd.exe");
+    #[cfg(windows)]
+    let mut cmd = {
+        let mut command = Command::new("cmd.exe");
+        command.args(["/d", "/c", "START-HERE.bat"]);
+        command
+    };
+    #[cfg(target_os = "linux")]
+    let mut cmd = {
+        let mut command = Command::new("/bin/sh");
+        command.arg("setup.sh");
+        command
+    };
     cmd.args([
-        "/d",
-        "/c",
-        "START-HERE.bat",
         "--yes",
         "--family",
         STRATA_FAMILY,
@@ -632,7 +640,7 @@ fn run_setup(dir: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> Result<(
     Ok(())
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux")))]
 fn run_setup(_dir: &Path, _cancel: &AtomicBool, _on: &dyn Fn(Progress)) -> Result<()> {
     bail!("the Strata engine is installed from the Windows app only")
 }

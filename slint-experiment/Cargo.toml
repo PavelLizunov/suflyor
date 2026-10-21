@@ -140,6 +140,7 @@ path = "../overlay-backend"
 # the macOS dependency graph.
 [target.'cfg(target_os = "linux")'.dependencies]
 sha2 = "0.11"
+ksni = { version = "0.3.5", default-features = false, features = ["blocking", "async-io"] }
 rfd = { version = "0.17", default-features = false, features = ["xdg-portal", "wayland"] }
 
 [target.'cfg(windows)'.dependencies]

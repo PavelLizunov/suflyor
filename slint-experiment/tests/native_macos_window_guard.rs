@@ -79,7 +79,7 @@ fn production_macos_window_uses_the_proven_minimal_appkit_bridge() {
     assert!(lock_menu.contains("set_platform_window_position(window.window(), x, y)"));
     assert!(lock_menu.contains("set_platform_window_position(menu.window(), -32000, -32000)"));
     assert!(!lock_menu.contains("set_position(slint::PhysicalPosition"));
-    assert!(maximize.contains("#[cfg(target_os = \"macos\")]\n    let scale = 1.0_f32;"));
+    assert!(maximize.contains("#[cfg(not(windows))]\n    let scale = 1.0_f32;"));
     assert!(maximize.contains("set_platform_window_position(tile.window(), nx, ny)"));
     assert!(tiles.contains("set_platform_window_position(t.window(), x_clamped, y_clamped)"));
     assert!(tiles.contains("set_platform_window_position(t.window(), 100, 100)"));

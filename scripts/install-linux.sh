@@ -22,7 +22,11 @@ if [[ "$action" != install ]]; then
     if [[ "$action" = autostart ]]; then systemctl --user enable suflyor.service; else systemctl --user disable suflyor.service; fi
     exit
 fi
-for tool in pactl parec paplay grim slurp wl-copy wl-paste hyprctl xdg-open tesseract; do
+if [[ "$(uname -m)" = x86_64 ]] && ! grep -qw avx2 /proc/cpuinfo; then
+    printf 'Suflyor Linux ONNX speech runtime requires an AVX2-capable CPU.\n' >&2
+    exit 1
+fi
+for tool in pactl parec paplay grim slurp wl-copy wl-paste hyprctl xdg-open tesseract python3; do
     command -v "$tool" >/dev/null || { printf 'Missing required native tool: %s\n' "$tool" >&2; exit 1; }
 done
 for name in overlay-host suflyor-tts suflyor-teratts; do

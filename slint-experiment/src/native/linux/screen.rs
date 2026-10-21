@@ -42,13 +42,22 @@ pub fn capture_display() -> Result<(CapturedBgra, i32, i32), Box<dyn Error>> {
         });
 
     let mon = select_monitor(&monitors, cursor)?;
-    let grim_out = run_cmd("10s", "grim", &["-s", "1", "-o", &mon.name, "-t", "ppm", "-"])?;
+    let grim_out = run_cmd(
+        "10s",
+        "grim",
+        &["-s", "1", "-o", &mon.name, "-t", "ppm", "-"],
+    )?;
     if !grim_out.status.success() {
         if grim_out.status.code() == Some(124) {
             return Err("grim timed out after 10s".into());
         }
         let err = String::from_utf8_lossy(&grim_out.stderr);
-        return Err(format!("grim failed to capture monitor {}: {}", mon.name, err.trim()).into());
+        return Err(format!(
+            "grim failed to capture monitor {}: {}",
+            mon.name,
+            err.trim()
+        )
+        .into());
     }
 
     let bgra = parse_ppm(&grim_out.stdout)?;
@@ -67,8 +76,8 @@ pub fn capture_region() -> Result<(CapturedBgra, i32, i32), Box<dyn Error>> {
         return Err("selection cancelled".into());
     }
 
-    let slurp_str = std::str::from_utf8(&slurp_out.stdout)
-        .map_err(|_| "invalid UTF-8 in slurp output")?;
+    let slurp_str =
+        std::str::from_utf8(&slurp_out.stdout).map_err(|_| "invalid UTF-8 in slurp output")?;
     let (x, y, w, h) = parse_slurp_output(slurp_str)?;
     let geom = format!("{x},{y} {w}x{h}");
 
@@ -87,17 +96,28 @@ pub fn capture_region() -> Result<(CapturedBgra, i32, i32), Box<dyn Error>> {
 
 fn run_cmd(timeout_sec: &str, program: &str, args: &[&str]) -> Result<Output, Box<dyn Error>> {
     let mut child = Command::new("timeout")
-        .args(["--signal=KILL", timeout_sec, program]).args(args)
-        .stdout(Stdio::piped()).stderr(Stdio::null()).spawn()?;
+        .args(["--signal=KILL", timeout_sec, program])
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
     let mut bytes = Vec::new();
-    let result = child.stdout.take().ok_or("capture pipe unavailable")?
-        .take(MAX_OUTPUT_BYTES as u64 + 1).read_to_end(&mut bytes);
+    let result = child
+        .stdout
+        .take()
+        .ok_or("capture pipe unavailable")?
+        .take(MAX_OUTPUT_BYTES as u64 + 1)
+        .read_to_end(&mut bytes);
     if result.is_err() || bytes.len() > MAX_OUTPUT_BYTES {
         let _ = child.kill();
         let _ = child.wait();
         return Err("capture output exceeded its limit or could not be read".into());
     }
-    Ok(Output { status: child.wait()?, stdout: bytes, stderr: Vec::new() })
+    Ok(Output {
+        status: child.wait()?,
+        stdout: bytes,
+        stderr: Vec::new(),
+    })
 }
 
 struct MonitorInfo {
@@ -111,20 +131,57 @@ struct MonitorInfo {
 
 fn parse_monitors_json(json_bytes: &[u8]) -> Result<Vec<MonitorInfo>, Box<dyn Error>> {
     let val: serde_json::Value = serde_json::from_slice(json_bytes)?;
-    let arr = val.as_array().ok_or("expected json array from hyprctl monitors")?;
+    let arr = val
+        .as_array()
+        .ok_or("expected json array from hyprctl monitors")?;
     let mut monitors = Vec::with_capacity(arr.len());
     for item in arr {
-        let name = item.get("name").and_then(|v| v.as_str()).ok_or("missing monitor name")?.to_string();
-        let x = item.get("x").and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))).ok_or("missing monitor x")? as i32;
-        let y = item.get("y").and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))).ok_or("missing monitor y")? as i32;
-        let width = item.get("width").and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))).ok_or("missing monitor width")? as i32;
-        let height = item.get("height").and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))).ok_or("missing monitor height")? as i32;
-        let scale = item.get("scale").and_then(|v| v.as_f64()).filter(|s| *s > 0.0).ok_or("invalid display scale")?;
-        let (width, height) = if item.get("transform").and_then(|v| v.as_u64()).unwrap_or(0) % 2 == 1 { (height, width) } else { (width, height) };
+        let name = item
+            .get("name")
+            .and_then(|v| v.as_str())
+            .ok_or("missing monitor name")?
+            .to_string();
+        let x = item
+            .get("x")
+            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
+            .ok_or("missing monitor x")? as i32;
+        let y = item
+            .get("y")
+            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
+            .ok_or("missing monitor y")? as i32;
+        let width = item
+            .get("width")
+            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
+            .ok_or("missing monitor width")? as i32;
+        let height = item
+            .get("height")
+            .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64)))
+            .ok_or("missing monitor height")? as i32;
+        let scale = item
+            .get("scale")
+            .and_then(|v| v.as_f64())
+            .filter(|s| *s > 0.0)
+            .ok_or("invalid display scale")?;
+        let (width, height) =
+            if item.get("transform").and_then(|v| v.as_u64()).unwrap_or(0) % 2 == 1 {
+                (height, width)
+            } else {
+                (width, height)
+            };
         let width = (f64::from(width) / scale).round() as i32;
         let height = (f64::from(height) / scale).round() as i32;
-        let focused = item.get("focused").and_then(|v| v.as_bool()).unwrap_or(false);
-        monitors.push(MonitorInfo { name, x, y, width, height, focused });
+        let focused = item
+            .get("focused")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        monitors.push(MonitorInfo {
+            name,
+            x,
+            y,
+            width,
+            height,
+            focused,
+        });
     }
     Ok(monitors)
 }
@@ -132,8 +189,10 @@ fn parse_monitors_json(json_bytes: &[u8]) -> Result<Vec<MonitorInfo>, Box<dyn Er
 fn parse_cursorpos_output(output: &[u8]) -> Option<(i32, i32)> {
     if let Ok(val) = serde_json::from_slice::<serde_json::Value>(output) {
         if let (Some(x), Some(y)) = (
-            val.get("x").and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))),
-            val.get("y").and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))),
+            val.get("x")
+                .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))),
+            val.get("y")
+                .and_then(|v| v.as_i64().or_else(|| v.as_f64().map(|f| f as i64))),
         ) {
             return Some((x as i32, y as i32));
         }
@@ -141,7 +200,10 @@ fn parse_cursorpos_output(output: &[u8]) -> Option<(i32, i32)> {
     let text = std::str::from_utf8(output).ok()?;
     let parts: Vec<&str> = text.trim().split(',').collect();
     if parts.len() == 2 {
-        if let (Ok(x), Ok(y)) = (parts[0].trim().parse::<i32>(), parts[1].trim().parse::<i32>()) {
+        if let (Ok(x), Ok(y)) = (
+            parts[0].trim().parse::<i32>(),
+            parts[1].trim().parse::<i32>(),
+        ) {
             return Some((x, y));
         }
     }
@@ -153,16 +215,19 @@ fn select_monitor<'a>(
     cursor: Option<(i32, i32)>,
 ) -> Result<&'a MonitorInfo, Box<dyn Error>> {
     if let Some((cx, cy)) = cursor {
-        if let Some(m) = monitors.iter().find(|m| {
-            cx >= m.x && cx < m.x + m.width && cy >= m.y && cy < m.y + m.height
-        }) {
+        if let Some(m) = monitors
+            .iter()
+            .find(|m| cx >= m.x && cx < m.x + m.width && cy >= m.y && cy < m.y + m.height)
+        {
             return Ok(m);
         }
     }
     if let Some(m) = monitors.iter().find(|m| m.focused) {
         return Ok(m);
     }
-    monitors.first().ok_or_else(|| "no monitor available".into())
+    monitors
+        .first()
+        .ok_or_else(|| "no monitor available".into())
 }
 
 fn parse_slurp_output(s: &str) -> Result<(i32, i32, u32, u32), Box<dyn Error>> {
@@ -176,15 +241,23 @@ fn parse_slurp_output(s: &str) -> Result<(i32, i32, u32, u32), Box<dyn Error>> {
     if coords.len() != 2 {
         return Err(format!("invalid coordinates in slurp output: {:?}", parts[0]).into());
     }
-    let x: i32 = coords[0].parse().map_err(|_| format!("invalid x coordinate: {:?}", coords[0]))?;
-    let y: i32 = coords[1].parse().map_err(|_| format!("invalid y coordinate: {:?}", coords[1]))?;
+    let x: i32 = coords[0]
+        .parse()
+        .map_err(|_| format!("invalid x coordinate: {:?}", coords[0]))?;
+    let y: i32 = coords[1]
+        .parse()
+        .map_err(|_| format!("invalid y coordinate: {:?}", coords[1]))?;
 
     let dims: Vec<&str> = parts[1].split('x').collect();
     if dims.len() != 2 {
         return Err(format!("invalid dimensions in slurp output: {:?}", parts[1]).into());
     }
-    let w: u32 = dims[0].parse().map_err(|_| format!("invalid width: {:?}", dims[0]))?;
-    let h: u32 = dims[1].parse().map_err(|_| format!("invalid height: {:?}", dims[1]))?;
+    let w: u32 = dims[0]
+        .parse()
+        .map_err(|_| format!("invalid width: {:?}", dims[0]))?;
+    let h: u32 = dims[1]
+        .parse()
+        .map_err(|_| format!("invalid height: {:?}", dims[1]))?;
 
     if w == 0 || h == 0 {
         return Err("selection dimensions must be positive non-zero".into());
@@ -192,7 +265,9 @@ fn parse_slurp_output(s: &str) -> Result<(i32, i32, u32, u32), Box<dyn Error>> {
     if w > MAX_DIMENSION || h > MAX_DIMENSION {
         return Err(format!("selection dimension exceeds maximum of {MAX_DIMENSION}").into());
     }
-    let pixels = (w as u64).checked_mul(h as u64).ok_or("pixel count overflow")?;
+    let pixels = (w as u64)
+        .checked_mul(h as u64)
+        .ok_or("pixel count overflow")?;
     if pixels > MAX_PIXELS {
         return Err(format!("selection exceeds maximum of {MAX_PIXELS} pixels").into());
     }
@@ -276,7 +351,9 @@ fn parse_ppm(data: &[u8]) -> Result<CapturedBgra, Box<dyn Error>> {
     if w > MAX_DIMENSION || h > MAX_DIMENSION {
         return Err(format!("PPM dimension exceeds maximum of {MAX_DIMENSION}").into());
     }
-    let num_pixels = (w as u64).checked_mul(h as u64).ok_or("pixel count overflow")?;
+    let num_pixels = (w as u64)
+        .checked_mul(h as u64)
+        .ok_or("pixel count overflow")?;
     if num_pixels > MAX_PIXELS {
         return Err(format!("PPM pixel count {num_pixels} exceeds limit of {MAX_PIXELS}").into());
     }
@@ -289,7 +366,8 @@ fn parse_ppm(data: &[u8]) -> Result<CapturedBgra, Box<dyn Error>> {
         return Err(format!(
             "PPM raster size mismatch: expected {expected_bytes} bytes, got {}",
             raster.len()
-        ).into());
+        )
+        .into());
     }
 
     let mut bgra = Vec::with_capacity((num_pixels as usize) * 4);
@@ -297,7 +375,7 @@ fn parse_ppm(data: &[u8]) -> Result<CapturedBgra, Box<dyn Error>> {
         bgra.push(px[2]); // B
         bgra.push(px[1]); // G
         bgra.push(px[0]); // R
-        bgra.push(255);   // A
+        bgra.push(255); // A
     }
 
     Ok(CapturedBgra {

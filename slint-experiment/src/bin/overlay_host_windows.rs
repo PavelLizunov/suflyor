@@ -32,10 +32,10 @@ macro_rules! diag {
 }
 
 use ui::{
-    ArchiveRow, ArchiveWindow, CaptureOverlay, ComponentRow, FoundModel, HelpWindow, LockModeMenuWindow,
-    MarkdownBlock, MemoryRow, OverlayBarWindow, PaletteResult, PaletteWindow, RecoverOfferWindow,
-    SettingsWindow, SpeakerRow, TextAskWindow, TileWindow, TranscriptLine, TranscriptWindow,
-    TrayMenuWindow, WizardWindow,
+    ArchiveRow, ArchiveWindow, CaptureOverlay, ComponentRow, FoundModel, HelpWindow,
+    LockModeMenuWindow, MarkdownBlock, MemoryRow, OverlayBarWindow, PaletteResult, PaletteWindow,
+    RecoverOfferWindow, SettingsWindow, SpeakerRow, TextAskWindow, TileWindow, TranscriptLine,
+    TranscriptWindow, TrayMenuWindow, WizardWindow,
 };
 
 // Phase 1 of the modularization (docs/overlay-host-modularization-plan.md §5.1):
@@ -100,10 +100,10 @@ use recovery::*;
 // and `open_settings`' "Run setup wizard" button resolve unchanged. The shared
 // mic guard (`try_acquire_mic`/`release_mic`) the step-4 check uses stays here
 // (a dozen non-wizard sites need it) and is reached from wizard.rs via its glob.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 #[path = "overlay_host/wizard.rs"]
 mod wizard;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 use wizard::*;
 
 // Phase 5 of the modularization (docs/overlay-host-modularization-plan.md §5.6):
@@ -250,11 +250,11 @@ use settings_controller::*;
 // re-exports `wire_vision_settings`, which `open_settings` calls in place of the
 // old inline V4 block; the moved code reaches `SettingsWindow` / the `diag!`
 // macro / the `overlay_backend` helpers through the crate-root globs.
-#[path = "overlay_host/settings_vision.rs"]
-mod settings_vision;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 #[path = "overlay_host/settings_strata_vision.rs"]
 mod settings_strata_vision;
+#[path = "overlay_host/settings_vision.rs"]
+mod settings_vision;
 use settings_vision::*;
 // Read-aloud (Озвучка) Settings-tab callbacks — voice chooser + speed + test.
 #[path = "overlay_host/settings_voice.rs"]
@@ -320,10 +320,10 @@ use settings_import_export::*;
 // macro / `overlay_backend::update` through the crate-root scope. SECURITY: the
 // download -> verify -> spawn sequence is unchanged (verification lives in
 // `overlay_backend::update`).
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 #[path = "overlay_host/settings_updates.rs"]
 mod settings_updates;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 use settings_updates::*;
 
 // The one-click local-AI installer Settings-tab callbacks (install pipeline +
@@ -487,9 +487,14 @@ fn main() -> Result<(), slint::PlatformError> {
     {
         let args: Vec<String> = std::env::args().collect();
         if args.get(1).map(String::as_str) == Some("--command") {
-            let result = args.get(2).ok_or("missing command")
-                .and_then(|value| slint_replay::native::desktop::send_command(value).map_err(|_| "Suflyor is not running"));
-            if let Err(error) = result { eprintln!("{error}"); std::process::exit(1); }
+            let result = args.get(2).ok_or("missing command").and_then(|value| {
+                slint_replay::native::desktop::send_command(value)
+                    .map_err(|_| "Suflyor is not running")
+            });
+            if let Err(error) = result {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
             return Ok(());
         }
     }
@@ -758,7 +763,9 @@ fn main() -> Result<(), slint::PlatformError> {
         slint::BackendSelector::new()
             .backend_name("winit".into())
             .with_winit_window_attributes_hook(|attributes| {
-                attributes.with_name("suflyor", "suflyor").with_resizable(false)
+                attributes
+                    .with_name("suflyor", "suflyor")
+                    .with_resizable(false)
             })
             .select()?;
     }
@@ -865,7 +872,10 @@ fn main() -> Result<(), slint::PlatformError> {
                         use overlay_backend::audio::SystemCaptureState;
                         let system_state = {
                             let runtime = slint_replay::runtime_state::lock(&session_rt_tps);
-                            runtime.capture.as_ref().map(|capture| capture.system_capture_state())
+                            runtime
+                                .capture
+                                .as_ref()
+                                .map(|capture| capture.system_capture_state())
                         };
                         let code = match system_state {
                             None => 0,
@@ -897,11 +907,7 @@ fn main() -> Result<(), slint::PlatformError> {
                                     }));
                                     o.set_status_tone(crate::ui::StatusTone::Danger);
                                 }
-                                0 | 2 => refresh_status(
-                                    &o,
-                                    get_mic_active(&app_state_tps),
-                                    active,
-                                ),
+                                0 | 2 => refresh_status(&o, get_mic_active(&app_state_tps), active),
                                 _ => {}
                             }
                         }
@@ -1205,8 +1211,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     && !c.deep_lock
                     && overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url)
             };
-            if update_active_engine
-                && overlay_backend::local_ai::should_check_engine_update(&root)
+            if update_active_engine && overlay_backend::local_ai::should_check_engine_update(&root)
             {
                 let lifecycle_lock = {
                     let s = state_w.lock().unwrap_or_else(|p| p.into_inner());
@@ -1563,18 +1568,17 @@ fn main() -> Result<(), slint::PlatformError> {
             // process tap. Reuse its System chunks instead of opening a second
             // aggregate device with the same UID. Outside a session the bounded
             // standalone probe remains unchanged.
-            let session_active =
-                slint_replay::runtime_state::lock(&slint_rt_sys).capture.is_some();
-            let use_session_stream = session_active
-                && slint_session::begin_system_audio_collector(&slint_rt_sys);
+            let session_active = slint_replay::runtime_state::lock(&slint_rt_sys)
+                .capture
+                .is_some();
+            let use_session_stream =
+                session_active && slint_session::begin_system_audio_collector(&slint_rt_sys);
             let aux_guard = if session_active {
                 None
             } else {
                 slint_session::try_acquire_system_audio_aux()
             };
-            if (session_active && !use_session_stream)
-                || (!session_active && aux_guard.is_none())
-            {
+            if (session_active && !use_session_stream) || (!session_active && aux_guard.is_none()) {
                 match s.lock() {
                     Ok(mut st) => st.sys_probe_in_flight = false,
                     Err(poisoned) => poisoned.into_inner().sys_probe_in_flight = false,
@@ -1645,14 +1649,9 @@ fn main() -> Result<(), slint::PlatformError> {
                         Some(db) if db.is_finite() && db >= -40.0 => {
                             ("sys ok", crate::ui::StatusTone::Info)
                         }
-                        Some(db) if db.is_finite() => {
-                            ("sys quiet", crate::ui::StatusTone::Warning)
-                        }
+                        Some(db) if db.is_finite() => ("sys quiet", crate::ui::StatusTone::Warning),
                         Some(_) => ("sys silent", crate::ui::StatusTone::Warning),
-                        None => (
-                            "sys test failed",
-                            crate::ui::StatusTone::Danger,
-                        ),
+                        None => ("sys test failed", crate::ui::StatusTone::Danger),
                     };
                     o.set_status_text(SharedString::from(label));
                     o.set_status_tone(tone);
@@ -2065,7 +2064,9 @@ fn main() -> Result<(), slint::PlatformError> {
         const MAX_LIVE_TILES: usize = 16;
         let mut processed = 0;
         while processed < MAX_SPAWNS_PER_TICK {
-            let Ok(mut req) = spawn_rx.try_recv() else { break };
+            let Ok(mut req) = spawn_rx.try_recv() else {
+                break;
+            };
             processed += 1;
             // A fast answer ends with its terms: shown as buttons, not as text.
             // Only auto tiles ask for them; a note or a summary keeps its text.
@@ -3185,18 +3186,17 @@ fn main() -> Result<(), slint::PlatformError> {
             if ptt_state.borrow().is_some() {
                 return;
             }
-            let session_active =
-                slint_replay::runtime_state::lock(&slint_rt_p).capture.is_some();
-            let use_session_stream = session_active
-                && slint_session::begin_system_audio_collector(&slint_rt_p);
+            let session_active = slint_replay::runtime_state::lock(&slint_rt_p)
+                .capture
+                .is_some();
+            let use_session_stream =
+                session_active && slint_session::begin_system_audio_collector(&slint_rt_p);
             let aux_guard = if session_active {
                 None
             } else {
                 slint_session::try_acquire_system_audio_aux()
             };
-            if (session_active && !use_session_stream)
-                || (!session_active && aux_guard.is_none())
-            {
+            if (session_active && !use_session_stream) || (!session_active && aux_guard.is_none()) {
                 eprintln!("[overlay-host] PTT sys unavailable — system capture is busy");
                 return;
             }
@@ -3433,9 +3433,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 v.clear();
                 count
             };
-            if let Some(hidden) =
-                LAST_CLOSED_READ_TILE.with(|slot| slot.borrow_mut().take())
-            {
+            if let Some(hidden) = LAST_CLOSED_READ_TILE.with(|slot| slot.borrow_mut().take()) {
                 bridge_for_close_all.drop_conversation(hidden.get_convo_id());
             }
             eprintln!("[overlay-host] close-all-tiles: closed {n} tile(s)");
@@ -4994,7 +4992,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // a beat after the bar is up, so the bar has pinned + realized first. The
     // wizard is created stealth-aware (centred on the picked monitor). Step 1's
     // mode pick writes config.json, so this branch will not fire again next run.
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     if first_run {
         eprintln!("[overlay-host] first run detected — auto-opening setup wizard");
         let wz = wizard.clone();
@@ -5192,19 +5190,44 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     #[cfg(target_os = "linux")]
+    let _native_status = match slint_replay::native::status::install(cfg.read().ui_is_ru()) {
+        Ok(guard) => {
+            TRAY_AVAILABLE.store(true, Ordering::Relaxed);
+            overlay.set_tray_available(true);
+            Some(guard)
+        }
+        Err(error) => {
+            diag!("{error}");
+            None
+        }
+    };
+
+    #[cfg(target_os = "linux")]
     let _command_timer = {
-        let weak=overlay.as_weak();
-        let timer=Timer::default();
-        timer.start(TimerMode::Repeated,Duration::from_millis(30),move || {
-            if let Some(bar)=weak.upgrade(){for action in hotkeys::take_actions(){match action.as_str(){
-                "ptt-mic-down"=>bar.invoke_ptt_mic_pressed(), "ptt-mic-up"=>bar.invoke_ptt_mic_released(),
-                "ptt-sys-down"=>bar.invoke_ptt_sys_pressed(), "ptt-sys-up"=>bar.invoke_ptt_sys_released(),
-                "show"=>restore_bar_from_tray(&weak), "hide"=>hide_bar_to_tray(&weak),
-                "settings"=>bar.invoke_open_settings_clicked(), "mic"=>bar.invoke_mic_toggle_clicked(),
-                "system"=>bar.invoke_sys_toggle_clicked(), "session"=>bar.invoke_timer_toggle_clicked(),
-                "pause"=>bar.invoke_pause_toggle_clicked(), "quit"=>{let _=slint::quit_event_loop();},
-                _=>{},
-            }}}
+        let weak = overlay.as_weak();
+        let timer = Timer::default();
+        timer.start(TimerMode::Repeated, Duration::from_millis(30), move || {
+            if let Some(bar) = weak.upgrade() {
+                for action in hotkeys::take_actions() {
+                    match action.as_str() {
+                        "ptt-mic-down" => bar.invoke_ptt_mic_pressed(),
+                        "ptt-mic-up" => bar.invoke_ptt_mic_released(),
+                        "ptt-sys-down" => bar.invoke_ptt_sys_pressed(),
+                        "ptt-sys-up" => bar.invoke_ptt_sys_released(),
+                        "show" => restore_bar_from_tray(&weak),
+                        "hide" => hide_bar_to_tray(&weak),
+                        "settings" => bar.invoke_open_settings_clicked(),
+                        "mic" => bar.invoke_mic_toggle_clicked(),
+                        "system" => bar.invoke_sys_toggle_clicked(),
+                        "session" => bar.invoke_timer_toggle_clicked(),
+                        "pause" => bar.invoke_pause_toggle_clicked(),
+                        "quit" => {
+                            let _ = slint::quit_event_loop();
+                        }
+                        _ => {}
+                    }
+                }
+            }
         });
         timer
     };

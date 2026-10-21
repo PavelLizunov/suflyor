@@ -27,7 +27,7 @@
 //! NOTE: `diag!` is reached by textual macro scope (the parent defines it before
 //! the `mod settings_local_ai;` declaration); only the crate-root items are
 //! imported explicitly below (`active_stack_label` stays in `overlay_host.rs`).
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 use super::{
     active_stack_label, refresh_local_model_resource_warning, ComponentHandle, ModelRc,
     OverlayBarWindow, VecModel,
@@ -64,7 +64,7 @@ pub(crate) fn refresh_local_context_controls(
     win.set_fallback_model_present(overlay_backend::local_ai::fallback_model_present(&root));
     win.set_ai_local_context_index(preset.index());
     refresh_local_context_preview(win, cfg, model, profile, preset, custom_active);
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     refresh_now_answering(win, cfg);
 }
 
@@ -110,7 +110,7 @@ fn refresh_local_context_preview(
 /// active-stack readout on success); the Cancel closure captures `state` (to
 /// flip the cancel flag). Those are threaded through as extra params, matching
 /// the names `open_settings` used.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(crate) fn wire_local_ai(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
@@ -1638,7 +1638,7 @@ pub(crate) fn wire_local_ai(
 
 /// Suflyor's own Strata steps in the UI language; Strata's setup output
 /// (its own English lines) passes through unchanged.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 fn strata_step_text(step: &str, ru: bool) -> String {
     if !ru {
         return step.to_string();
@@ -1659,7 +1659,7 @@ fn strata_step_text(step: &str, ru: bool) -> String {
 }
 
 /// Status text for one Strata install/start progress event.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 fn strata_progress_line(p: &overlay_backend::local_ai::Progress, ru: bool) -> String {
     match p {
         overlay_backend::local_ai::Progress::Step(s) => {
@@ -1678,7 +1678,7 @@ fn strata_progress_line(p: &overlay_backend::local_ai::Progress, ru: bool) -> St
 }
 
 // The engine switch commits a requested built-in choice only once it answers.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 static PENDING_BUILTIN_CHOICE: std::sync::Mutex<
     Option<overlay_backend::local_ai::ManagedLlamaChoice>,
 > = std::sync::Mutex::new(None);
@@ -1692,7 +1692,7 @@ static FOUND_SERVERS: std::sync::Mutex<Vec<overlay_backend::local_ai::RunningSer
     std::sync::Mutex::new(Vec::new());
 /// Bumped by a folder pick: a discovery that started earlier does not
 /// replace the picked Strata when it finishes.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 static FOUND_STRATA_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 fn listed_servers() -> Vec<overlay_backend::local_ai::RunningServer> {
@@ -1767,13 +1767,13 @@ fn show_found_models(win: &SettingsWindow, cfg: &overlay_backend::config::Config
 }
 
 /// A folder scan in flight: "Search again" does not start a second one.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 static STRATA_SCANNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Look for running model servers and, unless one is chosen, a Strata
 /// folder, off the UI thread. Each result lands on the UI thread on its own:
 /// a slow disk does not hold back the servers.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(crate) fn search_found_models(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
@@ -1868,16 +1868,16 @@ mod now_answering_tests {
     }
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 static NOW_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(crate) fn begin_now_check(win: &SettingsWindow) -> u64 {
     win.set_now_state(0);
     NOW_GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(crate) fn now_check_is_current(generation: u64) -> bool {
     NOW_GENERATION.load(std::sync::atomic::Ordering::SeqCst) == generation
 }
@@ -1910,7 +1910,7 @@ pub(crate) fn now_endpoint_authority(base: &str) -> String {
 }
 
 /// Seed the saved choice immediately, then check its models endpoint off-thread.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(crate) fn refresh_now_answering(win: &SettingsWindow, cfg: &overlay_backend::config::Config) {
     // Asset-only refreshes (including builtin-busy changes) must not probe or
     // imply readiness of a server that downloading deliberately did not start.
@@ -2077,7 +2077,7 @@ pub(crate) fn refresh_local_engine_state(
     let root = overlay_backend::local_ai::default_root();
     win.set_llama_installed(overlay_backend::local_ai::llama_engine_installed(&root));
     win.set_strata_installed(overlay_backend::local_ai::own_strata_installed(&root));
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     super::settings_strata_vision::refresh(win, cfg);
     win.set_strata_active(overlay_backend::local_ai::is_managed_strata_endpoint(
         &cfg.ai_local_base_url,
@@ -2088,7 +2088,7 @@ pub(crate) fn refresh_local_engine_state(
         *FOUND_STRATA.lock().unwrap_or_else(|p| p.into_inner()) = Some(found);
     }
     show_found_models(win, cfg);
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     {
         win.set_ai_local_test_result(SharedString::default());
         refresh_now_answering(win, cfg);
@@ -2123,7 +2123,7 @@ pub(crate) fn refresh_local_engine_controls(
 /// Wire the Strata engine and the engine switch (built-in llama.cpp or Strata).
 /// Both engines need the whole GPU, so a switch stops one before it starts
 /// the other, under the same busy flag and lifecycle lock as a model switch.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(crate) fn wire_strata(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
@@ -2361,7 +2361,9 @@ pub(crate) fn wire_strata(
 
     win.on_strata_license_clicked(|| {
         #[cfg(target_os = "linux")]
-        let _ = slint_replay::native::desktop::open(std::ffi::OsStr::new(overlay_backend::local_ai::STRATA_MODEL_LICENSE_URL));
+        let _ = slint_replay::native::desktop::open(std::ffi::OsStr::new(
+            overlay_backend::local_ai::STRATA_MODEL_LICENSE_URL,
+        ));
         #[cfg(not(target_os = "linux"))]
         let _ = std::process::Command::new("explorer")
             .arg(overlay_backend::local_ai::STRATA_MODEL_LICENSE_URL)

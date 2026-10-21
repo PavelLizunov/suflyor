@@ -508,6 +508,21 @@ msgstr "Статистика сессий, агрегированная по в�
 msgid "Windows default"
 msgstr "По умолчанию Windows"
 
+msgid "System default"
+msgstr "Системное по умолчанию"
+
+msgid "Pick the microphone. The list comes from PipeWire."
+msgstr "Выберите микрофон из списка устройств PipeWire."
+
+msgid "Saved device is unavailable. Choose another device or system default."
+msgstr "Сохранённое устройство недоступно. Выберите другое или системное по умолчанию."
+
+msgid "Capture the selected PipeWire output monitor or input. This does not change system or read-aloud playback."
+msgstr "Захват выбранного выхода или входа PipeWire. Системный вывод звука и озвучка не меняются."
+
+msgid "Uses Hyprland capture exclusion. Availability depends on the compositor and the sharing application."
+msgstr "Используется исключение из захвата Hyprland. Доступность зависит от композитора и приложения для демонстрации экрана."
+
 msgid "Loading audio devices..."
 msgstr "Загрузка аудиоустройств..."
 

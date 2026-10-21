@@ -2147,9 +2147,9 @@ fn swap_engine_binaries(staging: &Path, live: &Path, backup: &Path) -> Result<()
         }
         #[cfg(target_os = "linux")]
         {
-            let next = dst.with_file_name(format!(".{}.next",name.to_string_lossy()));
+            let next = dst.with_file_name(format!(".{}.next", name.to_string_lossy()));
             std::fs::copy(&src, &next).context("stage native engine replacement")?;
-            std::fs::rename(&next,&dst).context("replace native engine image")?;
+            std::fs::rename(&next, &dst).context("replace native engine image")?;
         }
         #[cfg(not(target_os = "linux"))]
         std::fs::copy(&src, &dst)
@@ -2160,8 +2160,8 @@ fn swap_engine_binaries(staging: &Path, live: &Path, backup: &Path) -> Result<()
             if let Ok(meta) = std::fs::metadata(&src) {
                 let mut perms = meta.permissions();
                 let mode = perms.mode();
-                let is_exec = is_known_executable_basename(&name.to_string_lossy())
-                    || (mode & 0o111 != 0);
+                let is_exec =
+                    is_known_executable_basename(&name.to_string_lossy()) || (mode & 0o111 != 0);
                 if is_exec {
                     perms.set_mode(mode | 0o755);
                 }
@@ -2742,8 +2742,7 @@ fn pick_llama_linux(assets: &[GhAsset], gpu: GpuKind, arch: &str) -> Result<Llam
                 }
             }
         }
-        if let Some(((maj, min), build, cudart)) =
-            cuda_picks.into_iter().max_by_key(|(v, _, _)| *v)
+        if let Some(((maj, min), build, cudart)) = cuda_picks.into_iter().max_by_key(|(v, _, _)| *v)
         {
             return Ok(LlamaPick {
                 build_url: build.browser_download_url.clone(),
@@ -3009,18 +3008,31 @@ fn download_and_extract(
 
 #[cfg(target_os = "linux")]
 fn github_asset_digest(url: &str) -> Result<String> {
-    let path = url.strip_prefix("https://github.com/").ok_or_else(||anyhow!("release asset host is not supported"))?;
-    let (repository, release) = path.split_once("/releases/download/").ok_or_else(||anyhow!("invalid release asset URL"))?;
-    if !matches!(repository, LLAMA_REPO | WHISPER_REPO) { bail!("unrecognized engine repository"); }
-    let (tag, name) = release.split_once('/').ok_or_else(||anyhow!("invalid release asset path"))?;
+    let path = url
+        .strip_prefix("https://github.com/")
+        .ok_or_else(|| anyhow!("release asset host is not supported"))?;
+    let (repository, release) = path
+        .split_once("/releases/download/")
+        .ok_or_else(|| anyhow!("invalid release asset URL"))?;
+    if !matches!(repository, LLAMA_REPO | WHISPER_REPO) {
+        bail!("unrecognized engine repository");
+    }
+    let (tag, name) = release
+        .split_once('/')
+        .ok_or_else(|| anyhow!("invalid release asset path"))?;
     let api = format!("https://api.github.com/repos/{repository}/releases/tags/{tag}");
     let out = run_capture(curl_exe(), &["--fail", "-sL", "--max-time", "30", &api])?;
-    if !out.status.success() { bail!("cannot verify engine release manifest"); }
-    let value:serde_json::Value=serde_json::from_slice(&out.stdout)?;
-    let digest=value["assets"].as_array().and_then(|assets|assets.iter().find(|a|a["name"].as_str()==Some(name)))
-        .and_then(|a|a["digest"].as_str()).and_then(|d|d.strip_prefix("sha256:"))
-        .filter(|d|d.len()==64 && d.bytes().all(|b|b.is_ascii_hexdigit()))
-        .ok_or_else(||anyhow!("engine release has no SHA-256 digest"))?;
+    if !out.status.success() {
+        bail!("cannot verify engine release manifest");
+    }
+    let value: serde_json::Value = serde_json::from_slice(&out.stdout)?;
+    let digest = value["assets"]
+        .as_array()
+        .and_then(|assets| assets.iter().find(|a| a["name"].as_str() == Some(name)))
+        .and_then(|a| a["digest"].as_str())
+        .and_then(|d| d.strip_prefix("sha256:"))
+        .filter(|d| d.len() == 64 && d.bytes().all(|b| b.is_ascii_hexdigit()))
+        .ok_or_else(|| anyhow!("engine release has no SHA-256 digest"))?;
     Ok(digest.to_owned())
 }
 
@@ -3176,7 +3188,11 @@ fn validate_tar_links(listing: &str) -> Result<()> {
             if !archive_entry_is_safe(link_path) {
                 bail!("unsafe link path: {link_path}");
             }
-            let target_base = if trimmed.contains(" link to ") { "root-link" } else { link_path };
+            let target_base = if trimmed.contains(" link to ") {
+                "root-link"
+            } else {
+                link_path
+            };
             if !archive_link_target_is_safe(target_base, target) {
                 bail!("refusing unsafe archive link target: {link_path} -> {target}");
             }
@@ -3791,7 +3807,14 @@ fn spawn_owned(cmd: &mut Command) -> Result<Child> {
         let parent_pid = std::process::id() as libc::pid_t;
         unsafe {
             cmd.pre_exec(move || {
-                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM as libc::c_ulong, 0, 0, 0) != 0 {
+                if libc::prctl(
+                    libc::PR_SET_PDEATHSIG,
+                    libc::SIGTERM as libc::c_ulong,
+                    0,
+                    0,
+                    0,
+                ) != 0
+                {
                     libc::_exit(1);
                 }
                 if libc::getppid() != parent_pid {
@@ -3823,7 +3846,14 @@ fn launch_hidden(exe: &Path, args: &[&str]) -> Result<Child> {
         let parent_pid = std::process::id() as libc::pid_t;
         unsafe {
             cmd.pre_exec(move || {
-                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM as libc::c_ulong, 0, 0, 0) != 0 {
+                if libc::prctl(
+                    libc::PR_SET_PDEATHSIG,
+                    libc::SIGTERM as libc::c_ulong,
+                    0,
+                    0,
+                    0,
+                ) != 0
+                {
                     libc::_exit(1);
                 }
                 if libc::getppid() != parent_pid {
@@ -3851,14 +3881,22 @@ fn spawn_linux_owned(command: Command) -> Result<Child> {
     static OWNER: OnceLock<std::sync::mpsc::Sender<Request>> = OnceLock::new();
     let owner = OWNER.get_or_init(|| {
         let (tx, rx) = std::sync::mpsc::channel::<Request>();
-        let _ = std::thread::Builder::new().name("local-ai-process-owner".into()).spawn(move || {
-            while let Ok((mut command, result)) = rx.recv() { let _ = result.send(command.spawn()); }
-        });
+        let _ = std::thread::Builder::new()
+            .name("local-ai-process-owner".into())
+            .spawn(move || {
+                while let Ok((mut command, result)) = rx.recv() {
+                    let _ = result.send(command.spawn());
+                }
+            });
         tx
     });
     let (tx, rx) = std::sync::mpsc::sync_channel(1);
-    owner.send((command, tx)).map_err(|_| anyhow!("local AI process owner unavailable"))?;
-    rx.recv().map_err(|_| anyhow!("local AI process owner stopped"))?.context("spawn a local AI process")
+    owner
+        .send((command, tx))
+        .map_err(|_| anyhow!("local AI process owner unavailable"))?;
+    rx.recv()
+        .map_err(|_| anyhow!("local AI process owner stopped"))?
+        .context("spawn a local AI process")
 }
 
 /// Assign a spawned child to a process-wide Windows Job Object configured with
@@ -3964,12 +4002,16 @@ mod linux_asset_picker_tests {
 
         let pick_x64 = pick_llama_linux(&assets, GpuKind::None, "x64").unwrap();
         assert_eq!(pick_x64.version, None);
-        assert!(pick_x64.build_url.ends_with("llama-b11793-bin-ubuntu-x64.tar.gz"));
+        assert!(pick_x64
+            .build_url
+            .ends_with("llama-b11793-bin-ubuntu-x64.tar.gz"));
         assert!(pick_x64.cudart_url.is_none());
 
         let pick_arm64 = pick_llama_linux(&assets, GpuKind::None, "arm64").unwrap();
         assert_eq!(pick_arm64.version, None);
-        assert!(pick_arm64.build_url.ends_with("llama-b11793-bin-ubuntu-arm64.tar.gz"));
+        assert!(pick_arm64
+            .build_url
+            .ends_with("llama-b11793-bin-ubuntu-arm64.tar.gz"));
         assert!(pick_arm64.cudart_url.is_none());
     }
 
@@ -3985,8 +4027,13 @@ mod linux_asset_picker_tests {
 
         let pick = pick_llama_linux(&assets, GpuKind::Nvidia, "x64").unwrap();
         assert_eq!(pick.version.as_deref(), Some("13.4"));
-        assert!(pick.build_url.ends_with("llama-b11793-bin-ubuntu-cuda-13.4-x64.tar.gz"));
-        assert!(pick.cudart_url.unwrap().ends_with("cudart-llama-b11793-bin-ubuntu-cuda-13.4-x64.tar.gz"));
+        assert!(pick
+            .build_url
+            .ends_with("llama-b11793-bin-ubuntu-cuda-13.4-x64.tar.gz"));
+        assert!(pick
+            .cudart_url
+            .unwrap()
+            .ends_with("cudart-llama-b11793-bin-ubuntu-cuda-13.4-x64.tar.gz"));
     }
 
     #[test]
@@ -4001,7 +4048,9 @@ mod linux_asset_picker_tests {
 
         let pick = pick_llama_linux(&assets, GpuKind::Nvidia, "x64").unwrap();
         assert_eq!(pick.version.as_deref(), Some("12.8"));
-        assert!(pick.build_url.ends_with("llama-b11793-bin-ubuntu-cuda-12.8-x64.tar.gz"));
+        assert!(pick
+            .build_url
+            .ends_with("llama-b11793-bin-ubuntu-cuda-12.8-x64.tar.gz"));
     }
 
     #[test]
@@ -4013,7 +4062,9 @@ mod linux_asset_picker_tests {
 
         let pick = pick_llama_linux(&assets, GpuKind::Nvidia, "x64").unwrap();
         assert_eq!(pick.version, None);
-        assert!(pick.build_url.ends_with("llama-b11793-bin-ubuntu-x64.tar.gz"));
+        assert!(pick
+            .build_url
+            .ends_with("llama-b11793-bin-ubuntu-x64.tar.gz"));
     }
 
     #[test]
@@ -4025,19 +4076,21 @@ mod linux_asset_picker_tests {
 
         let pick = pick_llama_linux(&assets, GpuKind::Other, "x64").unwrap();
         assert_eq!(pick.version.as_deref(), Some("Vulkan"));
-        assert!(pick.build_url.ends_with("llama-b11793-bin-ubuntu-vulkan-x64.tar.gz"));
+        assert!(pick
+            .build_url
+            .ends_with("llama-b11793-bin-ubuntu-vulkan-x64.tar.gz"));
         assert!(pick.cudart_url.is_none());
     }
 
     #[test]
     fn test_linux_pick_llama_vulkan_falls_to_cpu_when_missing() {
-        let assets = vec![
-            mock_asset("llama-b11793-bin-ubuntu-arm64.tar.gz"),
-        ];
+        let assets = vec![mock_asset("llama-b11793-bin-ubuntu-arm64.tar.gz")];
 
         let pick = pick_llama_linux(&assets, GpuKind::Other, "arm64").unwrap();
         assert_eq!(pick.version, None);
-        assert!(pick.build_url.ends_with("llama-b11793-bin-ubuntu-arm64.tar.gz"));
+        assert!(pick
+            .build_url
+            .ends_with("llama-b11793-bin-ubuntu-arm64.tar.gz"));
     }
 
     #[test]
@@ -4057,11 +4110,20 @@ mod linux_asset_picker_tests {
     #[test]
     fn test_linux_archive_link_target_safety() {
         assert!(archive_link_target_is_safe("libllama.so", "libllama.so.0"));
-        assert!(archive_link_target_is_safe("lib/libllama.so", "libllama.so.0"));
-        assert!(archive_link_target_is_safe("lib/libllama.so", "../lib/libllama.so.0"));
+        assert!(archive_link_target_is_safe(
+            "lib/libllama.so",
+            "libllama.so.0"
+        ));
+        assert!(archive_link_target_is_safe(
+            "lib/libllama.so",
+            "../lib/libllama.so.0"
+        ));
 
         assert!(!archive_link_target_is_safe("libllama.so", "../escape"));
-        assert!(!archive_link_target_is_safe("lib/libllama.so", "../../escape"));
+        assert!(!archive_link_target_is_safe(
+            "lib/libllama.so",
+            "../../escape"
+        ));
         assert!(!archive_link_target_is_safe("libllama.so", "/etc/passwd"));
         assert!(!archive_link_target_is_safe("libllama.so", "C:\\escape"));
 

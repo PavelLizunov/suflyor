@@ -39,10 +39,11 @@ use super::{
     live_route, markdown, present_tile_window, ptt_tile_error, refresh_open_tiles,
     resolve_route_endpoint, route_needs_mlx, set_always_on_top, set_stealth,
     show_mlx_runtime_error, surface_stealth_unavailable, toggle_tile_maximize, user_turn_markdown,
-    vision, wire_copy, wire_speak, wire_tile_drag, wire_voice_followup, Arc, AskRoute, CaptureOverlay,
-    ComponentHandle, MarkdownBlock, ModelRc, MonitorHint, Ordering, OverlayBarBridge,
-    OverlayBarWindow, PttStreamSink, Rc, RefCell, RuntimeEvents, SharedSlintRuntime, SharedString,
-    TileKind, TileSpec, TileWindow, TileWindows, VecModel, CONVO_SEQ, TILE_DISPLAY_SEQ,
+    vision, wire_copy, wire_speak, wire_tile_drag, wire_voice_followup, Arc, AskRoute,
+    CaptureOverlay, ComponentHandle, MarkdownBlock, ModelRc, MonitorHint, Ordering,
+    OverlayBarBridge, OverlayBarWindow, PttStreamSink, Rc, RefCell, RuntimeEvents,
+    SharedSlintRuntime, SharedString, TileKind, TileSpec, TileWindow, TileWindows, VecModel,
+    CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
 
 /// Build a Slint RGBA image from a top-down BGRA capture. Alpha is forced
@@ -216,7 +217,9 @@ pub(crate) fn fire_f8_vision_capture(
     {
         // Native slurp selection works across scaled outputs without an X11 overlay.
         thread_local! { static BUSY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
-        if BUSY.with(|busy| busy.replace(true)) { return; }
+        if BUSY.with(|busy| busy.replace(true)) {
+            return;
+        }
         let hidden = slint_replay::win32::hide_own_windows();
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
         let worker = std::thread::spawn(move || {
@@ -224,220 +227,263 @@ pub(crate) fn fire_f8_vision_capture(
             slint_replay::win32::show_windows(&hidden);
             let _ = tx.send(result);
         });
-        type CaptureResult = Result<(slint_replay::capture::CapturedBgra,i32,i32),String>;
-        fn poll(rx: std::sync::mpsc::Receiver<CaptureResult>, worker: std::thread::JoinHandle<()>, done: Box<dyn FnOnce(CaptureResult)>) {
+        type CaptureResult = Result<(slint_replay::capture::CapturedBgra, i32, i32), String>;
+        fn poll(
+            rx: std::sync::mpsc::Receiver<CaptureResult>,
+            worker: std::thread::JoinHandle<()>,
+            done: Box<dyn FnOnce(CaptureResult)>,
+        ) {
             match rx.try_recv() {
-                Ok(result) => { let _=worker.join(); done(result); },
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => { let _=worker.join(); done(Err("capture worker stopped".into())); },
-                Err(std::sync::mpsc::TryRecvError::Empty) => slint::Timer::single_shot(std::time::Duration::from_millis(30),move ||poll(rx,worker,done)),
+                Ok(result) => {
+                    let _ = worker.join();
+                    done(result);
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    let _ = worker.join();
+                    done(Err("capture worker stopped".into()));
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    slint::Timer::single_shot(std::time::Duration::from_millis(30), move || {
+                        poll(rx, worker, done)
+                    })
+                }
             }
         }
-        let (bridge,events,cfg,slint_rt,rt_handle,tiles,weak_overlay) = (bridge.clone(),events.clone(),cfg.clone(),slint_rt.clone(),rt_handle.clone(),tiles.clone(),weak_overlay.clone());
-        poll(rx,worker,Box::new(move |result|{
-            BUSY.with(|busy| busy.set(false));
-            match result {
-                Ok((frame, _, _)) => launch_vision_for_bgra(frame, ep, mode, &bridge, &events, &cfg, &slint_rt, &rt_handle, &tiles, &weak_overlay),
-                Err(error) if error == "selection cancelled" => {},
-                Err(_) => spawn_vision_notice(&events, &cfg, "screen_capture_failed", "Не удалось получить кадр экрана.", "Could not capture the screen."),
-            }
-        }));
+        let (bridge, events, cfg, slint_rt, rt_handle, tiles, weak_overlay) = (
+            bridge.clone(),
+            events.clone(),
+            cfg.clone(),
+            slint_rt.clone(),
+            rt_handle.clone(),
+            tiles.clone(),
+            weak_overlay.clone(),
+        );
+        poll(
+            rx,
+            worker,
+            Box::new(move |result| {
+                BUSY.with(|busy| busy.set(false));
+                match result {
+                    Ok((frame, _, _)) => launch_vision_for_bgra(
+                        frame,
+                        ep,
+                        mode,
+                        &bridge,
+                        &events,
+                        &cfg,
+                        &slint_rt,
+                        &rt_handle,
+                        &tiles,
+                        &weak_overlay,
+                    ),
+                    Err(error) if error == "selection cancelled" => {}
+                    Err(_) => spawn_vision_notice(
+                        &events,
+                        &cfg,
+                        "screen_capture_failed",
+                        "Не удалось получить кадр экрана.",
+                        "Could not capture the screen.",
+                    ),
+                }
+            }),
+        );
         return;
     }
 
     #[cfg(not(target_os = "linux"))]
     {
-    // Freeze the virtual desktop for region selection. Windows composes all
-    // monitors; macOS currently captures the display under the cursor. In both
-    // cases the returned global origin can be negative and must position the
-    // overlay rather than assuming (0, 0).
-    let hidden = slint_replay::win32::hide_own_windows();
-    let frozen = slint_replay::capture::capture_virtual_desktop();
-    slint_replay::win32::show_windows(&hidden);
-    let (frozen, vx, vy) = match frozen {
-        Ok(x) => x,
-        Err(e) => {
-            diag!("[overlay-host] F8: virtual capture failed: {e}");
-            spawn_vision_notice(
+        // Freeze the virtual desktop for region selection. Windows composes all
+        // monitors; macOS currently captures the display under the cursor. In both
+        // cases the returned global origin can be negative and must position the
+        // overlay rather than assuming (0, 0).
+        let hidden = slint_replay::win32::hide_own_windows();
+        let frozen = slint_replay::capture::capture_virtual_desktop();
+        slint_replay::win32::show_windows(&hidden);
+        let (frozen, vx, vy) = match frozen {
+            Ok(x) => x,
+            Err(e) => {
+                diag!("[overlay-host] F8: virtual capture failed: {e}");
+                spawn_vision_notice(
                 events,
                 cfg,
                 "screen_capture_failed",
                 "Не удалось получить кадр экрана. Полностью закройте и снова откройте Suflyor, затем повторите F8.",
                 "Couldn't capture the screen. Fully quit and reopen Suflyor, then try F8 again.",
             );
-            return;
-        }
-    };
-    let (fw, fh) = (frozen.width, frozen.height);
-    diag!(
-        "[overlay-host] F8 capture origin=({vx},{vy}) {fw}x{fh} monitors={:?}",
-        slint_replay::win32::enum_monitors()
-            .iter()
-            .map(|m| (m.left, m.top, m.right, m.bottom))
-            .collect::<Vec<_>>()
-    );
-    let img = bgra_to_slint_image(&frozen.bgra, fw, fh);
-
-    // Reuse the PERSISTENT, pre-stealthed overlay (created at startup). Its
-    // WDA_EXCLUDEFROMCAPTURE + WS_EX_TOOLWINDOW persist across hide/show, so it
-    // shows flash-free: never visible on a screen-share, never in the taskbar.
-    let b = capture_overlay.borrow();
-    let Some(win) = b.as_ref() else {
-        eprintln!("[overlay-host] F8: capture overlay not initialised");
-        return;
-    };
-    win.set_frozen(img);
-    win.set_dragging(false); // clear any stale selection rect from a prior capture
-                             // Seed the capture overlay's mode: Shift+F8 → translate; plain F8 →
-                             // describe OR test-practice (per the Settings toggle, resolved by the
-                             // caller). The on-overlay tap can still flip to translate before drag.
-    win.set_translate_mode(mode == vision::VisionMode::Translate);
-    win.set_practice_mode(mode == vision::VisionMode::TestPractice);
-    // Geometry is set on the still-hidden window, then show() lands it there.
-    // GDI frames use physical pixels; ScreenCaptureKit is configured in macOS
-    // screen points, matching Slint's logical coordinates on Retina displays.
-    #[cfg(windows)]
-    {
-        win.window()
-            .set_size(slint::PhysicalSize::new(fw.max(1), fh.max(1)));
-        win.window()
-            .set_position(slint::PhysicalPosition::new(vx, vy));
-    }
-    #[cfg(target_os = "macos")]
-    {
-        win.window()
-            .set_size(slint::LogicalSize::new(fw.max(1) as f32, fh.max(1) as f32));
-        win.window()
-            .set_position(slint::LogicalPosition::new(vx as f32, vy as f32));
-    }
-    let _ = win.show();
-    let window_scale = win.window().scale_factor().max(0.1);
-    #[cfg(windows)]
-    let capture_scale = window_scale;
-    #[cfg(not(windows))]
-    let capture_scale = 1.0_f32;
-    diag!(
-        "[overlay-host] F8 overlay {fw}x{fh} at ({vx},{vy}) \
-         window-scale={window_scale} capture-scale={capture_scale}"
-    );
-
-    // Share the frozen frame into the region callback (UI thread only → Rc ok).
-    let frozen_rc = Rc::new(frozen);
-    {
-        let weak_self = win.as_weak();
-        let frozen_c = frozen_rc.clone();
-        let bridge_c = bridge.clone();
-        let events_c = events.clone();
-        let rt_c = slint_rt.clone();
-        let h_c = rt_handle.clone();
-        let tiles_c = tiles.clone();
-        let wo_c = weak_overlay.clone();
-        let ep_c = ep.clone();
-        let cfg_c = cfg.clone();
-        win.on_region_selected(move |x1, y1, x2, y2| {
-            // Read the overlay's mode BEFORE hiding it (Shift+F8 seeds it; the
-            // on-overlay Describe/Translate toggle can override before drag).
-            let mode = if let Some(w) = weak_self.upgrade() {
-                // OCR (Ctrl+F8 read-aloud) is NOT an on-overlay toggle — the
-                // requested mode wins so a tap can't collapse it to Describe.
-                // Otherwise translate-mode takes precedence (a tap toggles it).
-                let m = if matches!(mode, vision::VisionMode::Ocr) {
-                    vision::VisionMode::Ocr
-                } else if w.get_translate_mode() {
-                    vision::VisionMode::Translate
-                } else if w.get_practice_mode() {
-                    vision::VisionMode::TestPractice
-                } else {
-                    vision::VisionMode::Describe
-                };
-                w.set_shown(false);
-                let _ = w.hide();
-                m
-            } else {
-                mode
-            };
-            // Windows GDI frames use physical pixels; the macOS frame is
-            // deliberately one image pixel per logical ScreenCaptureKit point.
-            let to_px = |v: f32| (v * capture_scale).round().max(0.0) as u32;
-            let (px1, py1) = (to_px(x1), to_px(y1));
-            let (px2, py2) = (to_px(x2), to_px(y2));
-            let (cw, ch) = (px2.saturating_sub(px1), py2.saturating_sub(py1));
-            // Audit (F8 #4): reject a tiny/degenerate region BEFORE crop_bgra — its
-            // `.max(1)` would otherwise coerce it into a 1×1 buffer and launch a
-            // spurious vision request on noise. The .slint already guards with a
-            // 16px-logical minimum + a fresh-drag check; this is the image-pixel
-            // backstop (covers DPI rounding + any future caller of this path).
-            const MIN_CAPTURE_PX: u32 = 8;
-            if cw < MIN_CAPTURE_PX || ch < MIN_CAPTURE_PX {
-                diag!(
-                    "[overlay-host] F8 region rejected: {cw}x{ch} image px \
-                     (logical {x1:.0},{y1:.0}-{x2:.0},{y2:.0} \
-                     capture-scale={capture_scale:.2}) — too small, no request"
-                );
                 return;
             }
-            let cropped = slint_replay::capture::crop_bgra(&frozen_c, px1, py1, cw, ch);
-            launch_vision_for_bgra(
-                cropped,
-                ep_c.clone(),
-                mode,
-                &bridge_c,
-                &events_c,
-                &cfg_c,
-                &rt_c,
-                &h_c,
-                &tiles_c,
-                &wo_c,
-            );
-        });
-    }
-    {
-        let weak_self = win.as_weak();
-        win.on_cancelled(move || {
-            if let Some(w) = weak_self.upgrade() {
-                w.set_shown(false);
-                let _ = w.hide();
-            }
-        });
-    }
+        };
+        let (fw, fh) = (frozen.width, frozen.height);
+        diag!(
+            "[overlay-host] F8 capture origin=({vx},{vy}) {fw}x{fh} monitors={:?}",
+            slint_replay::win32::enum_monitors()
+                .iter()
+                .map(|m| (m.left, m.top, m.right, m.bottom))
+                .collect::<Vec<_>>()
+        );
+        let img = bgra_to_slint_image(&frozen.bgra, fw, fh);
 
-    win.set_shown(true);
-    // The persistent HWND exists, so grab_hwnd works synchronously here. winit
-    // re-applies the window's ex-style on show() (it drops WS_EX_TOOLWINDOW, so
-    // the taskbar button would reappear) — and the pre-create WDA affinity must
-    // NEVER be assumed to have survived: I4 re-applies + READS BACK stealth on
-    // EVERY show. `set_stealth` verifies via GetWindowDisplayAffinity; on a
-    // failed exclusion we surface "stealth unavailable" instead of claiming it.
-    // Synchronous, so both land before the shell creates a taskbar button / the
-    // first composited frame = flash-free.
-    match grab_hwnd(win.window()) {
-        Ok(hwnd) => {
-            let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
-            let _ = set_always_on_top(hwnd, true);
-            match set_stealth(hwnd, true) {
-                Ok(()) => diag!("[overlay-host] F8 overlay stealth re-applied + verified"),
-                Err(e) => {
+        // Reuse the PERSISTENT, pre-stealthed overlay (created at startup). Its
+        // WDA_EXCLUDEFROMCAPTURE + WS_EX_TOOLWINDOW persist across hide/show, so it
+        // shows flash-free: never visible on a screen-share, never in the taskbar.
+        let b = capture_overlay.borrow();
+        let Some(win) = b.as_ref() else {
+            eprintln!("[overlay-host] F8: capture overlay not initialised");
+            return;
+        };
+        win.set_frozen(img);
+        win.set_dragging(false); // clear any stale selection rect from a prior capture
+                                 // Seed the capture overlay's mode: Shift+F8 → translate; plain F8 →
+                                 // describe OR test-practice (per the Settings toggle, resolved by the
+                                 // caller). The on-overlay tap can still flip to translate before drag.
+        win.set_translate_mode(mode == vision::VisionMode::Translate);
+        win.set_practice_mode(mode == vision::VisionMode::TestPractice);
+        // Geometry is set on the still-hidden window, then show() lands it there.
+        // GDI frames use physical pixels; ScreenCaptureKit is configured in macOS
+        // screen points, matching Slint's logical coordinates on Retina displays.
+        #[cfg(windows)]
+        {
+            win.window()
+                .set_size(slint::PhysicalSize::new(fw.max(1), fh.max(1)));
+            win.window()
+                .set_position(slint::PhysicalPosition::new(vx, vy));
+        }
+        #[cfg(target_os = "macos")]
+        {
+            win.window()
+                .set_size(slint::LogicalSize::new(fw.max(1) as f32, fh.max(1) as f32));
+            win.window()
+                .set_position(slint::LogicalPosition::new(vx as f32, vy as f32));
+        }
+        let _ = win.show();
+        let window_scale = win.window().scale_factor().max(0.1);
+        #[cfg(windows)]
+        let capture_scale = window_scale;
+        #[cfg(not(windows))]
+        let capture_scale = 1.0_f32;
+        diag!(
+            "[overlay-host] F8 overlay {fw}x{fh} at ({vx},{vy}) \
+         window-scale={window_scale} capture-scale={capture_scale}"
+        );
+
+        // Share the frozen frame into the region callback (UI thread only → Rc ok).
+        let frozen_rc = Rc::new(frozen);
+        {
+            let weak_self = win.as_weak();
+            let frozen_c = frozen_rc.clone();
+            let bridge_c = bridge.clone();
+            let events_c = events.clone();
+            let rt_c = slint_rt.clone();
+            let h_c = rt_handle.clone();
+            let tiles_c = tiles.clone();
+            let wo_c = weak_overlay.clone();
+            let ep_c = ep.clone();
+            let cfg_c = cfg.clone();
+            win.on_region_selected(move |x1, y1, x2, y2| {
+                // Read the overlay's mode BEFORE hiding it (Shift+F8 seeds it; the
+                // on-overlay Describe/Translate toggle can override before drag).
+                let mode = if let Some(w) = weak_self.upgrade() {
+                    // OCR (Ctrl+F8 read-aloud) is NOT an on-overlay toggle — the
+                    // requested mode wins so a tap can't collapse it to Describe.
+                    // Otherwise translate-mode takes precedence (a tap toggles it).
+                    let m = if matches!(mode, vision::VisionMode::Ocr) {
+                        vision::VisionMode::Ocr
+                    } else if w.get_translate_mode() {
+                        vision::VisionMode::Translate
+                    } else if w.get_practice_mode() {
+                        vision::VisionMode::TestPractice
+                    } else {
+                        vision::VisionMode::Describe
+                    };
+                    w.set_shown(false);
+                    let _ = w.hide();
+                    m
+                } else {
+                    mode
+                };
+                // Windows GDI frames use physical pixels; the macOS frame is
+                // deliberately one image pixel per logical ScreenCaptureKit point.
+                let to_px = |v: f32| (v * capture_scale).round().max(0.0) as u32;
+                let (px1, py1) = (to_px(x1), to_px(y1));
+                let (px2, py2) = (to_px(x2), to_px(y2));
+                let (cw, ch) = (px2.saturating_sub(px1), py2.saturating_sub(py1));
+                // Audit (F8 #4): reject a tiny/degenerate region BEFORE crop_bgra — its
+                // `.max(1)` would otherwise coerce it into a 1×1 buffer and launch a
+                // spurious vision request on noise. The .slint already guards with a
+                // 16px-logical minimum + a fresh-drag check; this is the image-pixel
+                // backstop (covers DPI rounding + any future caller of this path).
+                const MIN_CAPTURE_PX: u32 = 8;
+                if cw < MIN_CAPTURE_PX || ch < MIN_CAPTURE_PX {
                     diag!(
-                        "[overlay-host] F8 overlay stealth FAILED — capture overlay is \
-                         capturable: {e}"
+                        "[overlay-host] F8 region rejected: {cw}x{ch} image px \
+                     (logical {x1:.0},{y1:.0}-{x2:.0},{y2:.0} \
+                     capture-scale={capture_scale:.2}) — too small, no request"
                     );
-                    if let Some(o) = weak_overlay.upgrade() {
-                        surface_stealth_unavailable(&o);
+                    return;
+                }
+                let cropped = slint_replay::capture::crop_bgra(&frozen_c, px1, py1, cw, ch);
+                launch_vision_for_bgra(
+                    cropped,
+                    ep_c.clone(),
+                    mode,
+                    &bridge_c,
+                    &events_c,
+                    &cfg_c,
+                    &rt_c,
+                    &h_c,
+                    &tiles_c,
+                    &wo_c,
+                );
+            });
+        }
+        {
+            let weak_self = win.as_weak();
+            win.on_cancelled(move || {
+                if let Some(w) = weak_self.upgrade() {
+                    w.set_shown(false);
+                    let _ = w.hide();
+                }
+            });
+        }
+
+        win.set_shown(true);
+        // The persistent HWND exists, so grab_hwnd works synchronously here. winit
+        // re-applies the window's ex-style on show() (it drops WS_EX_TOOLWINDOW, so
+        // the taskbar button would reappear) — and the pre-create WDA affinity must
+        // NEVER be assumed to have survived: I4 re-applies + READS BACK stealth on
+        // EVERY show. `set_stealth` verifies via GetWindowDisplayAffinity; on a
+        // failed exclusion we surface "stealth unavailable" instead of claiming it.
+        // Synchronous, so both land before the shell creates a taskbar button / the
+        // first composited frame = flash-free.
+        match grab_hwnd(win.window()) {
+            Ok(hwnd) => {
+                let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
+                let _ = set_always_on_top(hwnd, true);
+                match set_stealth(hwnd, true) {
+                    Ok(()) => diag!("[overlay-host] F8 overlay stealth re-applied + verified"),
+                    Err(e) => {
+                        diag!(
+                            "[overlay-host] F8 overlay stealth FAILED — capture overlay is \
+                         capturable: {e}"
+                        );
+                        if let Some(o) = weak_overlay.upgrade() {
+                            surface_stealth_unavailable(&o);
+                        }
                     }
                 }
+                slint_replay::win32::focus_window(hwnd);
             }
-            slint_replay::win32::focus_window(hwnd);
-        }
-        Err(e) => {
-            diag!("[overlay-host] F8 overlay HWND grab failed — stealth NOT verified: {e}");
-            // I4 — without an HWND the exclusion could be neither applied nor
-            // verified; surface the SAME generic failure as a failed WDA apply
-            // above (a log-only miss would leave the user believing the capture
-            // overlay is hidden).
-            if let Some(o) = weak_overlay.upgrade() {
-                surface_stealth_unavailable(&o);
+            Err(e) => {
+                diag!("[overlay-host] F8 overlay HWND grab failed — stealth NOT verified: {e}");
+                // I4 — without an HWND the exclusion could be neither applied nor
+                // verified; surface the SAME generic failure as a failed WDA apply
+                // above (a log-only miss would leave the user believing the capture
+                // overlay is hidden).
+                if let Some(o) = weak_overlay.upgrade() {
+                    surface_stealth_unavailable(&o);
+                }
             }
         }
-    }
     }
 }
 
@@ -669,7 +715,9 @@ pub(crate) fn launch_vision_for_bgra(
         tile.on_escalate_clicked(move || {
             // Cloud badge — parity with the text tile's 🧠 (egress stays legible).
             if let Some(t) = weak_es.upgrade() {
-                t.set_trigger_label(SharedString::from(crate::tile_text::escalated_badge(cfg_es.read().ui_is_ru())));
+                t.set_trigger_label(SharedString::from(crate::tile_text::escalated_badge(
+                    cfg_es.read().ui_is_ru(),
+                )));
                 t.set_trigger_tone(crate::ui::TileTone::Sky);
             }
             fire_regenerate(

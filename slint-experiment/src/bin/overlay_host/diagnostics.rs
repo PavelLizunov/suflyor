@@ -20,8 +20,8 @@
 //! NOTE (§7): the parent crate-root symbols this module references are imported
 //! explicitly below.
 use super::{
-    global_stealth_effective, hotkey_diag_row, try_acquire_mic,
-    ComponentHandle, Duration, SettingsWindow, SharedString, Timer,
+    global_stealth_effective, hotkey_diag_row, try_acquire_mic, ComponentHandle, Duration,
+    SettingsWindow, SharedString, Timer,
 };
 
 /// #131 — push the config-only readiness snapshot + the active-stack summary
@@ -978,7 +978,9 @@ fn collect_redacted_log() -> std::io::Result<std::path::PathBuf> {
 /// when the profile path contains a space (e.g. a username with a space).
 fn reveal_in_explorer(path: &std::path::Path) {
     #[cfg(target_os = "linux")]
-    if let Some(parent) = path.parent() { let _ = slint_replay::native::desktop::open(parent.as_os_str()); }
+    if let Some(parent) = path.parent() {
+        let _ = slint_replay::native::desktop::open(parent.as_os_str());
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -1120,7 +1122,10 @@ mod tests {
         let home = "/Users/alice";
         let sample = "STT: ready — gigaam · /Users/alice/suflyor-local-ai/gigaam-v3";
         let redacted = redact_home_all_forms(sample, home);
-        assert!(!redacted.contains("alice"), "leaked OS username: {redacted}");
+        assert!(
+            !redacted.contains("alice"),
+            "leaked OS username: {redacted}"
+        );
         assert!(redacted.contains("%USERPROFILE%"));
     }
 
@@ -1227,9 +1232,18 @@ mod tests {
                       OpenAI: sk-proj-secret_key_789\n\
                       Normal word: desk-1 task-2\n";
         let redacted = redact_secrets(sample);
-        assert!(!redacted.contains("secret_token_123"), "leaked bearer token: {redacted}");
-        assert!(!redacted.contains("secret_key_456"), "leaked gsk key: {redacted}");
-        assert!(!redacted.contains("secret_key_789"), "leaked sk key: {redacted}");
+        assert!(
+            !redacted.contains("secret_token_123"),
+            "leaked bearer token: {redacted}"
+        );
+        assert!(
+            !redacted.contains("secret_key_456"),
+            "leaked gsk key: {redacted}"
+        );
+        assert!(
+            !redacted.contains("secret_key_789"),
+            "leaked sk key: {redacted}"
+        );
         assert!(redacted.contains("Bearer <redacted>"));
         assert!(redacted.contains("gsk_<redacted>"));
         assert!(redacted.contains("sk-<redacted>"));
@@ -1241,7 +1255,10 @@ mod tests {
     fn redact_secrets_masks_bearer_in_any_ascii_case() {
         for scheme in ["bearer", "BEARER", "bEaReR"] {
             let redacted = redact_secrets(&format!("Authorization: {scheme} secret_token_123\n"));
-            assert!(!redacted.contains("secret_token_123"), "leaked for {scheme}: {redacted}");
+            assert!(
+                !redacted.contains("secret_token_123"),
+                "leaked for {scheme}: {redacted}"
+            );
         }
     }
 
@@ -1256,24 +1273,30 @@ mod tests {
             "\"bearer\": \"secret_token_123\"",
         ] {
             let redacted = redact_secrets(sample);
-            assert!(!redacted.contains("secret_token_123"), "leaked from {sample:?}: {redacted}");
+            assert!(
+                !redacted.contains("secret_token_123"),
+                "leaked from {sample:?}: {redacted}"
+            );
         }
     }
 
     #[test]
     fn redact_secrets_stops_bearer_token_at_a_quote() {
         let json = "{\"authorization\":\"bearer secret_token_123\",\"n\":1}";
-        assert_eq!(redact_secrets(json), "{\"authorization\":\"Bearer <redacted>\",\"n\":1}");
+        assert_eq!(
+            redact_secrets(json),
+            "{\"authorization\":\"Bearer <redacted>\",\"n\":1}"
+        );
     }
 
     #[test]
     fn redact_secrets_masks_x_api_key_header_value() {
-        for sample in [
-            "x-api-key: secret_value_123",
-            "X-API-Key:secret_value_123",
-        ] {
+        for sample in ["x-api-key: secret_value_123", "X-API-Key:secret_value_123"] {
             let redacted = redact_secrets(sample);
-            assert!(!redacted.contains("secret_value_123"), "leaked from {sample:?}: {redacted}");
+            assert!(
+                !redacted.contains("secret_value_123"),
+                "leaked from {sample:?}: {redacted}"
+            );
         }
     }
 
@@ -1298,13 +1321,22 @@ mod tests {
     fn redact_secrets_masks_config_labels_and_hugging_face_tokens() {
         for (sample, mask) in [
             ("groq_api_key: secret_value_123", "groq_api_key: <redacted>"),
-            ("\"groq_api_key\": \"secret_value_123\"", "groq_api_key: <redacted>"),
+            (
+                "\"groq_api_key\": \"secret_value_123\"",
+                "groq_api_key: <redacted>",
+            ),
             ("password: secret_value_123", "password: <redacted>"),
             ("token hf_secret_value_123 end", "hf_<redacted>"),
         ] {
             let redacted = redact_secrets(sample);
-            assert!(!redacted.contains("secret_value_123"), "leaked from {sample:?}: {redacted}");
-            assert!(redacted.contains(mask), "missing mask in {sample:?}: {redacted}");
+            assert!(
+                !redacted.contains("secret_value_123"),
+                "leaked from {sample:?}: {redacted}"
+            );
+            assert!(
+                redacted.contains(mask),
+                "missing mask in {sample:?}: {redacted}"
+            );
         }
         // The prefix needs a word boundary, so identifiers stay readable.
         assert_eq!(redact_secrets("graph_hf_cache"), "graph_hf_cache");
@@ -1313,9 +1345,18 @@ mod tests {
     #[test]
     fn redact_secrets_masks_xai_and_nvapi_keys() {
         let redacted = redact_secrets("xai-secret_key_123 nvapi-secret_key_456 maxai-1");
-        assert!(!redacted.contains("secret_key_123"), "leaked xai key: {redacted}");
-        assert!(!redacted.contains("secret_key_456"), "leaked nvapi key: {redacted}");
-        assert!(redacted.contains("maxai-1"), "over-redacted a plain word: {redacted}");
+        assert!(
+            !redacted.contains("secret_key_123"),
+            "leaked xai key: {redacted}"
+        );
+        assert!(
+            !redacted.contains("secret_key_456"),
+            "leaked nvapi key: {redacted}"
+        );
+        assert!(
+            redacted.contains("maxai-1"),
+            "over-redacted a plain word: {redacted}"
+        );
     }
 
     #[test]

@@ -19,9 +19,8 @@ use super::{
     enum_monitors, get_mic_active, get_sys_active, get_window_rect, grab_hwnd,
     move_window_pos_only, pick_monitor, refresh_status, set_stealth, stealth_supported, ui,
     ArchiveWindow, ComponentHandle, Duration, HelpWindow, LockModeMenuWindow, OverlayBarWindow,
-    PaletteWindow, Rc,
-    RecoverOfferWindow, RefCell, SettingsWindow, TextAskWindow, TileWindow, TileWindows, Timer,
-    TranscriptWindow, WizardWindow, HWND_GRAB_DELAY_MS, HWND_REVEAL_FAST_MS,
+    PaletteWindow, Rc, RecoverOfferWindow, RefCell, SettingsWindow, TextAskWindow, TileWindow,
+    TileWindows, Timer, TranscriptWindow, WizardWindow, HWND_GRAB_DELAY_MS, HWND_REVEAL_FAST_MS,
 };
 
 /// Phase E6 v36 — process-global tile body opacity (raw f32 bits in an

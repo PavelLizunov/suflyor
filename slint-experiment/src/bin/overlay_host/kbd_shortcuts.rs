@@ -96,15 +96,32 @@ pub(crate) fn install(win: &slint::Window) {
     use winit::keyboard::{Key, KeyCode, ModifiersState, PhysicalKey};
     let modifiers = std::cell::Cell::new(ModifiersState::empty());
     win.on_winit_window_event(move |window, event| {
-        if let WindowEvent::ModifiersChanged(value) = event { modifiers.set(value.state()); }
-        let WindowEvent::KeyboardInput { event, is_synthetic: false, .. } = event else { return EventResult::Propagate; };
-        if modifiers.get() != ModifiersState::CONTROL || matches!(&event.logical_key, Key::Character(c) if c.is_ascii()) { return EventResult::Propagate; }
+        if let WindowEvent::ModifiersChanged(value) = event {
+            modifiers.set(value.state());
+        }
+        let WindowEvent::KeyboardInput {
+            event,
+            is_synthetic: false,
+            ..
+        } = event
+        else {
+            return EventResult::Propagate;
+        };
+        if modifiers.get() != ModifiersState::CONTROL
+            || matches!(&event.logical_key, Key::Character(c) if c.is_ascii())
+        {
+            return EventResult::Propagate;
+        }
         let text = match event.physical_key {
-            PhysicalKey::Code(KeyCode::KeyA) => "a", PhysicalKey::Code(KeyCode::KeyC) => "c",
-            PhysicalKey::Code(KeyCode::KeyV) => "v", PhysicalKey::Code(KeyCode::KeyX) => "x",
-            PhysicalKey::Code(KeyCode::KeyZ) => "z", PhysicalKey::Code(KeyCode::KeyY) => "y",
+            PhysicalKey::Code(KeyCode::KeyA) => "a",
+            PhysicalKey::Code(KeyCode::KeyC) => "c",
+            PhysicalKey::Code(KeyCode::KeyV) => "v",
+            PhysicalKey::Code(KeyCode::KeyX) => "x",
+            PhysicalKey::Code(KeyCode::KeyZ) => "z",
+            PhysicalKey::Code(KeyCode::KeyY) => "y",
             _ => return EventResult::Propagate,
-        }.into();
+        }
+        .into();
         let event = match event.state {
             ElementState::Pressed => slint::platform::WindowEvent::KeyPressed { text },
             ElementState::Released => slint::platform::WindowEvent::KeyReleased { text },

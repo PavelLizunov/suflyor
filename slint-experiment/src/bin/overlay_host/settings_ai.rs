@@ -808,10 +808,7 @@ pub(crate) fn wire_ai_settings(
                     current.vision_provider == "mlx",
                 )
             };
-            if leaving_mlx
-                && !vision_uses_mlx
-                && !overlay_backend::mlx_runtime::stop_if_idle()
-            {
+            if leaving_mlx && !vision_uses_mlx && !overlay_backend::mlx_runtime::stop_if_idle() {
                 if let Some(window) = weak.upgrade() {
                     window.set_ai_provider_index(4);
                 }
