@@ -93,6 +93,11 @@ fn closing_a_vision_tile_aborts_its_registered_request() {
     assert!(close
         .trim_start()
         .starts_with("super::abort_tile_stream(tile_id);"));
+    let controller =
+        std::fs::read_to_string(root.join("src/bin/overlay_host/tile_controller.rs")).unwrap();
+    assert!(controller.contains("impl Drop for PttStreamSink"));
+    assert!(controller.contains("if self.in_flight.swap(false, Ordering::SeqCst)"));
+    assert!(controller.contains("self.finish_in_flight();"));
 }
 
 #[test]

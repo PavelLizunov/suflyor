@@ -208,6 +208,7 @@ pub(crate) struct PttStreamSink {
     convo_id: i32,
     state: std::sync::Mutex<PttSinkState>,
     last_render: std::sync::Mutex<std::time::Instant>,
+    in_flight: std::sync::atomic::AtomicBool,
 }
 
 struct PttSinkState {
@@ -240,7 +241,20 @@ impl PttStreamSink {
                 request_messages,
             }),
             last_render: std::sync::Mutex::new(seeded),
+            in_flight: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+
+    fn finish_in_flight(&self) {
+        if self.in_flight.swap(false, Ordering::SeqCst) {
+            self.bridge.dec_ai_in_flight();
+        }
+    }
+}
+
+impl Drop for PttStreamSink {
+    fn drop(&mut self) {
+        self.finish_in_flight();
     }
 }
 
@@ -254,7 +268,11 @@ impl RuntimeEvents for PttStreamSink {
             return;
         };
         match evt {
-            ai::AiEvent::Start { .. } => self.bridge.inc_ai_in_flight(),
+            ai::AiEvent::Start { .. } => {
+                if !self.in_flight.swap(true, Ordering::SeqCst) {
+                    self.bridge.inc_ai_in_flight();
+                }
+            }
             ai::AiEvent::Tool { name, detail } => {
                 let ru = self.bridge.cfg.read().ui_is_ru();
                 let body = {
@@ -298,7 +316,7 @@ impl RuntimeEvents for PttStreamSink {
                 });
             }
             ai::AiEvent::Done { reason } => {
-                self.bridge.dec_ai_in_flight();
+                self.finish_in_flight();
                 let (answer, prefix, messages) = {
                     let st = self.state.lock().unwrap_or_else(|p| p.into_inner());
                     (
@@ -344,7 +362,7 @@ impl RuntimeEvents for PttStreamSink {
                 });
             }
             ai::AiEvent::Error { message } => {
-                self.bridge.dec_ai_in_flight();
+                self.finish_in_flight();
                 // SECURITY (review C1) — the raw error chain embeds the AI
                 // base_url (the LOCAL server's LAN IP:port), which would leak
                 // into the screen-shared tile. classify_ai_error maps it to a
@@ -874,7 +892,9 @@ impl OverlayBarBridge {
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(tile) = weak.upgrade() {
                         tile.set_source_label(SharedString::from(crate::tile_text::tool_label(ru)));
-                        tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks_streaming(&body))));
+                        tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks_streaming(
+                            &body,
+                        ))));
                     }
                 });
             }
