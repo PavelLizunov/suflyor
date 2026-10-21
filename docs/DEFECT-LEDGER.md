@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-073 First Wayland runtime tiles the bar and probes unsupported startup capture   Severity: P3   Status: Open
+Evidence: exact 143a21ce5fd9f9b736833c19041a3074f04c5a79 builds and starts as a native Wayland client (`xwayland=false`). Hyprland reports the bar tiled at 1896x1030 instead of its preferred 1280x64; opening Settings splits it to 941x1030. The Windows off-screen capture-overlay precreation maps an unnecessary 1920x1080 surface, and automatic system-audio startup logs an unsupported capture error.
+Fix: give Linux windows a stable application identity and disable compositor tiling through winit's fixed-size window contract; skip Windows/macOS capture precreation and startup audio probing on Linux. Rebuild and inspect actual native windows before claiming acceptance.
+Closed by:
+
 ### D-072 Linux backend has missing platform return branches   Severity: P3   Status: Open
 Evidence: fresh `cargo check --manifest-path overlay-backend/Cargo.toml` on omarchy-test at 8c70b6d193b3a4c84e8e20a8cc56b0681f60618c exits 101 with four errors: platform_capability, detect_gpu, detected_hardware_model_profile and pick_llama lack non-Windows/non-macOS return paths. This reproduces Claude's earlier scoped probe; Linux is not yet a supported product target.
 Fix: add explicit unsupported capability/installer results and conservative unknown hardware fallbacks, retaining existing Windows/macOS behavior. Verify the backend on Linux and Windows against the exact candidate.

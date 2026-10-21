@@ -742,6 +742,16 @@ fn main() -> Result<(), slint::PlatformError> {
             .select();
         diag!("[overlay-host] Slint windows excluded from taskbar at creation");
     }
+    #[cfg(target_os = "linux")]
+    {
+        use slint::winit_030::winit::platform::wayland::WindowAttributesExtWayland;
+        slint::BackendSelector::new()
+            .backend_name("winit".into())
+            .with_winit_window_attributes_hook(|attributes| {
+                attributes.with_name("suflyor", "suflyor").with_resizable(false)
+            })
+            .select()?;
+    }
     let overlay = OverlayBarWindow::new()?;
     // Seed the process-global colour scheme from config, then apply to the bar's
     // Theme global so the very first paint uses the user's choice (default
@@ -2644,6 +2654,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // applied via grab_hwnd RIGHT AFTER show(), which fails (HWND not realized) —
     // so the capture overlay used to be visible on screen-share + in the taskbar.
     let capture_overlay: Rc<RefCell<Option<CaptureOverlay>>> = Rc::new(RefCell::new(None));
+    #[cfg(not(target_os = "linux"))]
     match CaptureOverlay::new() {
         Ok(co) => {
             co.window().set_size(slint::PhysicalSize::new(1, 1));
@@ -4938,6 +4949,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // session remains the sole Core Audio owner instead of racing a startup
     // probe for the same process tap.
     //
+    #[cfg(not(target_os = "linux"))]
     if std::env::var("SLINT_OVERLAY_NO_AUTO_SYS").is_err() {
         let weak = overlay.as_weak();
         #[cfg(target_os = "macos")]
