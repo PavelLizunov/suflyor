@@ -51,9 +51,12 @@ pub fn set_text(text: &str) -> Result<(), String> {
         .spawn()
         .map_err(|_| "Wayland clipboard tools are unavailable".to_string())?;
     if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(text.as_bytes())
-            .map_err(|_| "Wayland clipboard write failed")?;
+        if stdin.write_all(text.as_bytes()).is_err() {
+            drop(stdin);
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("Wayland clipboard write failed".into());
+        }
     }
     if child
         .wait()

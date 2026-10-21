@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
 struct Identity {
+    original: String,
     title: String,
     address: Option<isize>,
 }
@@ -70,6 +71,7 @@ pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
                 ids.insert(
                     w.id(),
                     Identity {
+                        original: title.clone(),
                         title,
                         address: Some(address),
                     },
@@ -77,6 +79,7 @@ pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
                 return Ok(address);
             }
             let id = ids.entry(w.id()).or_insert_with(|| Identity {
+                original: w.title(),
                 title: format!(
                     "{} [suflyor-{}-{}]",
                     w.title(),
@@ -94,6 +97,7 @@ pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
                 .and_then(address)
             {
                 id.address = Some(found);
+                w.set_title(&id.original);
                 return Ok(found);
             }
             w.set_title(&id.title);

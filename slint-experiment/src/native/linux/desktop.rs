@@ -134,6 +134,30 @@ pub fn listen() -> Result<(), Error> {
 }
 
 pub fn close() {
+    if let Ok(owner) = binding_owner() {
+        if let Ok(existing) = query("binds") {
+            if let Some(bindings) = existing.as_array() {
+                for bind in bindings
+                    .iter()
+                    .filter(|b| b["description"].as_str() == Some(&owner))
+                {
+                    if let Some(key) = bind["key"].as_str() {
+                        let mask = bind["modmask"].as_u64().unwrap_or(0);
+                        let mut parts = Vec::new();
+                        for (bit, name) in [(1, "SHIFT"), (4, "CTRL"), (8, "ALT"), (64, "SUPER")] {
+                            if mask & bit != 0 {
+                                parts.push(name);
+                            }
+                        }
+                        parts.push(key);
+                        if let Ok(key) = serde_json::to_string(&parts.join(" + ")) {
+                            let _ = hypr(&["eval", &format!("hl.unbind({key})")]);
+                        }
+                    }
+                }
+            }
+        }
+    }
     if let Some(slot) = SOCKET.get() {
         let _ = slot.lock().map(|mut slot| slot.take());
     }
@@ -149,7 +173,17 @@ pub fn receive() -> Option<String> {
     std::str::from_utf8(&buffer[..n]).ok().map(str::to_owned)
 }
 
+fn binding_owner() -> Result<String, Error> {
+    let path = socket_path()?;
+    Ok(path
+        .file_stem()
+        .ok_or("command identity unavailable")?
+        .to_string_lossy()
+        .into_owned())
+}
+
 pub fn install_bindings(bindings: &[(&str, &str)]) -> Result<Vec<String>, Error> {
+    let owner = binding_owner()?;
     let binary = std::env::current_exe()?;
     let quoted = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
     let config = std::env::var("XDG_CONFIG_HOME").unwrap_or_else(|_| {
@@ -174,9 +208,7 @@ pub fn install_bindings(bindings: &[(&str, &str)]) -> Result<Vec<String>, Error>
                 .as_str()
                 .is_some_and(|k| k.eq_ignore_ascii_case(key))
                 && bind["modmask"].as_u64() == Some(mods)
-                && !bind["arg"]
-                    .as_str()
-                    .is_some_and(|s| s.contains(" --command ") && s.contains("suflyor"))
+                && bind["description"].as_str() != Some(&owner)
         });
         if conflict {
             continue;
@@ -190,9 +222,10 @@ pub fn install_bindings(bindings: &[(&str, &str)]) -> Result<Vec<String>, Error>
             ]);
         }
         let lua = format!(
-            "hl.bind({}, hl.dsp.exec_cmd({}), {{ release = {} }})",
+            "hl.bind({}, hl.dsp.exec_cmd({}), {{ description = {}, release = {} }})",
             serde_json::to_string(keys)?,
             serde_json::to_string(&format!("{command}{action}"))?,
+            serde_json::to_string(&owner)?,
             release
         );
         let result = hypr(&["eval", &lua])?;

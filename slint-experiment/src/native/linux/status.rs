@@ -43,7 +43,12 @@ impl ksni::Tray for Status {
 pub struct Guard(ksni::blocking::Handle<Status>);
 impl Drop for Guard {
     fn drop(&mut self) {
-        self.0.shutdown().wait();
+        let _shutdown = self.0.shutdown();
+        // A stalled session bus must not strand application exit/relaunch.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(300);
+        while !self.0.is_closed() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
     }
 }
 pub fn install(ru: bool) -> Result<Guard, String> {

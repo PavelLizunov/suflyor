@@ -95,7 +95,10 @@ pub(crate) fn take_actions() -> Vec<String> {
 
 pub(crate) fn next_event() -> Option<global_hotkey::GlobalHotKeyEvent> {
     #[cfg(target_os = "linux")]
-    if let Some(command) = slint_replay::native::desktop::receive() {
+    for _ in 0..64 {
+        let Some(command) = slint_replay::native::desktop::receive() else {
+            break;
+        };
         use global_hotkey::hotkey::{Code, HotKey, Modifiers};
         let (key, mods) = match command.as_str() {
             "f1" => (Code::F1, None),
@@ -113,7 +116,7 @@ pub(crate) fn next_event() -> Option<global_hotkey::GlobalHotKeyEvent> {
             "sa3" => (Code::Digit3, Some(Modifiers::SHIFT | Modifiers::ALT)),
             _ => {
                 ACTIONS.with(|slot| slot.borrow_mut().push(command));
-                return None;
+                continue;
             }
         };
         return Some(global_hotkey::GlobalHotKeyEvent {

@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-079 Hyprland Lua shortcut ownership is lost on application restart   Severity: P2   Status: Open
+Evidence: native Hyprland 0.56.2 probe registers a described Lua bind and reads `dispatcher=__lua`, `arg=13`, with the description preserved. The adapter instead recognizes ownership by searching `arg` for the command, so after a restart it treats its own keys as foreign conflicts. Action commands also stop the drain after one datagram, delaying rapid PTT release. Source review found temporary identity titles left visible after compositor resolution.
+Fix: mark bindings with a stable per-config description, compare that description and remove only owned bindings on teardown. Continue the bounded input drain for action commands, and restore original titles after identity resolves. Verify real relaunch and PTT press/release. Reviewer's claim that opacity_inactive and opacity_fullscreen do not exist was refuted by actual getprop values; preserve all three opacity values.
+Closed by:
+
 ### D-078 Linux system capture cannot resolve an input offered by Settings   Severity: P2   Status: Open
 Evidence: Linux Settings intentionally offers output sinks plus capture inputs, matching the shared backend contract. `audio_linux::resolve(System, selected)` enumerates only sinks, so selecting an input or headset mix fails as unavailable despite appearing selectable. Source-confirmed during full-port review; live pinned-input regression remains required.
 Fix: resolve a pinned system choice against sink names first and then input sources without silently falling back to a default. Preserve ambiguity rejection and route identity. Exercise a real PipeWire input choice and cancellation.

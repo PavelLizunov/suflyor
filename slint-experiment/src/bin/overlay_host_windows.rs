@@ -5251,7 +5251,10 @@ fn main() -> Result<(), slint::PlatformError> {
     }
     TRAY_AVAILABLE.store(false, Ordering::Relaxed);
     #[cfg(target_os = "linux")]
-    slint_replay::native::desktop::close();
+    {
+        drop(_native_status);
+        slint_replay::native::desktop::close();
+    }
     // All event-loop exits share the normal session stop path.
     let _ = slint_session::stop_session(slint_rt.clone(), &cfg);
     // MLX owns exactly one child and stdin pipe process-wide. Clear its
