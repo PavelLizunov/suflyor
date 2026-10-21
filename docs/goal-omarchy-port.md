@@ -33,10 +33,29 @@ Do not rewrite the UI in QML merely to obtain a shell entry point.
 - [ ] Windows targeted gate remains green for the exact candidate.
 - [ ] Record unsupported shortcuts/audio/capture, deployment and inference gaps.
 
+## Developer launch
+
+On the test worker, run `bash scripts/check-linux-port.sh` and build the QA host
+with `SLINT_EMIT_DEBUG_INFO=1 cargo build --locked --bin overlay-host --features
+ui-mcp --manifest-path slint-experiment/Cargo.toml`. For Omarchy 4.0.4's Lua
+Hyprland configuration, source the absolute checkout path to
+`scripts/suflyor-hyprland.lua` from the user's `hyprland.lua`, then validate with
+`hyprctl reload` and `hyprctl configerrors`. The snippet matches only Suflyor
+windows; it supplies the floating geometry that Wayland clients cannot enforce.
+The fixed-size winit hint alone did not make Hyprland float these windows.
+
+Start `overlay-host` with `SLINT_BACKEND=winit-software` and
+`WINIT_UNIX_BACKEND=wayland`. Use an isolated `XDG_CONFIG_HOME` for fixtures.
+No autostart, system package, Quattro plugin or release artifact is installed
+by these commands. Remove the explicit snippet source line to remove its rules.
+
 ## Verification environment
 
-Use `omarchy-test`, an approved dedicated worker with roughly 4 GiB RAM. Keep
-one owned managed build at a time, one Cargo job, disabled incremental builds,
+Use `omarchy-test`, an approved dedicated worker. Its initial 4 GiB allocation
+proved insufficient for a practical full debug host build (heavy swap use).
+After checking physical-host headroom, only VM 107 was shut down cleanly and
+raised to 8 GiB; networking and the existing Hyprland session recovered. Use
+one owned managed build at a time, two Cargo jobs, disabled incremental builds,
 no debug symbols and a bounded service memory limit. Source and editing stay in
 an isolated task worktree. Do not build or alter the owner's desktop shell.
 
