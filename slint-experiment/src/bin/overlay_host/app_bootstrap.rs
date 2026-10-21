@@ -34,6 +34,8 @@ pub fn run_preflight() -> Result<Option<AppBootstrap>, slint::PlatformError> {
         }
         Err(e) => {
             log::warn!("[overlay-host] another instance is already running ({e}); exiting.");
+            #[cfg(target_os = "linux")]
+            let _ = slint_replay::native::desktop::send_command("show");
             return Ok(None);
         }
     };

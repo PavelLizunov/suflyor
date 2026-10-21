@@ -27,6 +27,6 @@ hl.window_rule({
 })
 hl.window_rule({
     name = "suflyor-native-tile",
-    match = { class = "^suflyor$", title = "^tile.*$" },
+    match = { class = "^suflyor$", title = "^(tile|Тайл).*$" },
     size = "460 360",
 })
