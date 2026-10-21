@@ -1114,7 +1114,9 @@ mod posix_stubs {
         {
             crate::native::window::view_id(window).map(HWND)
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
+        { crate::native::window::view_id(window).map(HWND) }
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         {
             let _ = window;
             Err("native window handles are unavailable on this platform".into())
@@ -1142,8 +1144,10 @@ mod posix_stubs {
                 return crate::native::window::configure_floating_by_id(hwnd.0);
             }
         }
-        let _ = (hwnd, on);
-        Ok(())
+        #[cfg(target_os = "linux")]
+        { return crate::native::window::pin(hwnd.0, on); }
+        #[cfg(not(target_os = "linux"))]
+        { let _ = (hwnd, on); Ok(()) }
     }
 
     /// Whether this platform can apply and verify capture exclusion.
@@ -1198,10 +1202,10 @@ mod posix_stubs {
                 })
                 .collect()
         }
-        #[cfg(not(target_os = "macos"))]
-        {
-            Vec::new()
-        }
+        #[cfg(target_os = "linux")]
+        { crate::native::window::monitors().unwrap_or_default() }
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        { Vec::new() }
     }
 
     pub fn virtual_screen_bounds() -> (i32, i32, i32, i32) {
@@ -1219,10 +1223,17 @@ mod posix_stubs {
                 })
                 .unwrap_or((0, 0, 0, 0))
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
         {
-            (0, 0, 0, 0)
+            let monitors = enum_monitors();
+            let left = monitors.iter().map(|m| m.left).min().unwrap_or(0);
+            let top = monitors.iter().map(|m| m.top).min().unwrap_or(0);
+            let right = monitors.iter().map(|m| m.right).max().unwrap_or(0);
+            let bottom = monitors.iter().map(|m| m.bottom).max().unwrap_or(0);
+            (left, top, right-left, bottom-top)
         }
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        { (0, 0, 0, 0) }
     }
 
     pub fn cursor_pos() -> (i32, i32) {
@@ -1230,27 +1241,40 @@ mod posix_stubs {
         {
             crate::native::screen::cursor_position().unwrap_or((0, 0))
         }
-        #[cfg(not(target_os = "macos"))]
-        {
-            (0, 0)
-        }
+        #[cfg(target_os = "linux")]
+        { crate::native::window::cursor().unwrap_or((0,0)) }
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        { (0, 0) }
     }
 
     pub fn hide_own_windows() -> Vec<(isize, bool)> {
+        #[cfg(target_os = "linux")]
+        { return crate::native::window::hide_own(); }
+        #[cfg(not(target_os = "linux"))]
         Vec::new()
     }
 
-    pub fn show_windows(_hwnds: &[(isize, bool)]) {}
+    pub fn show_windows(hwnds: &[(isize, bool)]) {
+        #[cfg(target_os = "linux")]
+        crate::native::window::show_own(hwnds);
+        #[cfg(not(target_os = "linux"))]
+        let _ = hwnds;
+    }
 
     pub fn focus_window(hwnd: HWND) {
         #[cfg(target_os = "macos")]
         let _ = crate::native::window::raise_key_front_by_id(hwnd.0);
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
+        let _ = crate::native::window::focus(hwnd.0);
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let _ = hwnd;
     }
 
-    pub fn is_foreground_window(_hwnd: HWND) -> bool {
-        true
+    pub fn is_foreground_window(hwnd: HWND) -> bool {
+        #[cfg(target_os = "linux")]
+        { return crate::native::window::foreground(hwnd.0); }
+        #[cfg(not(target_os = "linux"))]
+        { let _ = hwnd; true }
     }
 
     pub fn reveal_window(hwnd: HWND) {
@@ -1276,8 +1300,10 @@ mod posix_stubs {
         w: i32,
         h: i32,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        set_window_rect(hwnd, x, y, w, h);
-        Ok(())
+        #[cfg(target_os = "linux")]
+        { return crate::native::window::resize_move(hwnd.0,x,y,w,h); }
+        #[cfg(not(target_os = "linux"))]
+        { set_window_rect(hwnd, x, y, w, h); Ok(()) }
     }
 
     pub fn move_window_pos_only(
@@ -1285,6 +1311,9 @@ mod posix_stubs {
         x: i32,
         y: i32,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        #[cfg(target_os = "linux")]
+        { return crate::native::window::move_to(hwnd.0,x,y); }
+        #[cfg(not(target_os = "linux"))]
         if let Ok(mut guard) = POSIX_WINDOW_RECTS.lock() {
             let map = guard.get_or_insert_with(std::collections::HashMap::new);
             let old_size = map
@@ -1302,6 +1331,9 @@ mod posix_stubs {
             return Ok(rect);
         }
 
+        #[cfg(target_os = "linux")]
+        { return crate::native::window::rect(hwnd.0); }
+        #[cfg(not(target_os = "linux"))]
         if let Ok(guard) = POSIX_WINDOW_RECTS.lock() {
             if let Some(map) = guard.as_ref() {
                 if let Some(&rect) = map.get(&hwnd.0) {
@@ -1311,7 +1343,7 @@ mod posix_stubs {
         }
         #[cfg(target_os = "macos")]
         return Err("AppKit window geometry is unavailable".into());
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         Err("native window geometry is unavailable on this platform".into())
     }
 
@@ -1356,11 +1388,20 @@ mod posix_stubs {
         }
     }
 
-    pub fn drag_begin(_hwnd: HWND) {}
-
-    pub fn drag_update(_hwnd: HWND) {}
-
-    pub fn drag_end() {}
+    pub fn drag_begin(hwnd: HWND) {
+        #[cfg(target_os = "linux")]
+        crate::native::window::drag_begin(hwnd.0);
+        let _ = hwnd;
+    }
+    pub fn drag_update(hwnd: HWND) {
+        #[cfg(target_os = "linux")]
+        crate::native::window::drag_update(hwnd.0);
+        let _ = hwnd;
+    }
+    pub fn drag_end() {
+        #[cfg(target_os = "linux")]
+        crate::native::window::drag_end();
+    }
 
     pub fn set_round_corners(_hwnd: HWND) {}
 

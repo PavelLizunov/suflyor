@@ -41,8 +41,12 @@ pub(crate) fn set_platform_window_position(window: &slint::Window, x: i32, y: i3
     window.set_position(slint::LogicalPosition::new(x as f32, y as f32));
     #[cfg(target_os = "linux")]
     {
-        // Wayland owns placement. In particular, never park at Windows' sentinel.
-        let _ = (window, x, y);
+        // Windows sentinel parking is not a Wayland operation.
+        if x > -30000 && y > -30000 {
+            if let Ok(id) = slint_replay::native::window::view_id(window) {
+                let _ = slint_replay::native::window::move_to(id, x, y);
+            }
+        }
     }
 }
 

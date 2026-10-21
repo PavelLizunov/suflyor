@@ -1066,6 +1066,8 @@ pub(crate) fn open_settings(
                     let _ = std::process::Command::new("open").arg(&dir).spawn();
                     #[cfg(windows)]
                     let _ = std::process::Command::new("explorer").arg(&dir).spawn();
+                    #[cfg(target_os = "linux")]
+                    let _ = slint_replay::native::desktop::open(dir.as_os_str());
                 }
                 Err(e) => eprintln!("[overlay-host] cannot resolve recordings dir: {e:#}"),
             }
@@ -1083,6 +1085,8 @@ pub(crate) fn open_settings(
                 let _ = std::process::Command::new("open").arg(&dir).spawn();
                 #[cfg(windows)]
                 let _ = std::process::Command::new("explorer").arg(&dir).spawn();
+                #[cfg(target_os = "linux")]
+                let _ = slint_replay::native::desktop::open(dir.as_os_str());
             }
             None => eprintln!("[overlay-host] cannot resolve data folder"),
         });
@@ -1094,6 +1098,8 @@ pub(crate) fn open_settings(
             let _ = std::process::Command::new("open").arg(url).spawn();
             #[cfg(windows)]
             let _ = std::process::Command::new("explorer").arg(url).spawn();
+            #[cfg(target_os = "linux")]
+            let _ = slint_replay::native::desktop::open(std::ffi::OsStr::new(url));
         });
     }
     {

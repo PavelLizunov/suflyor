@@ -66,6 +66,8 @@ pub fn tesseract_root() -> Option<PathBuf> {
             return Some(cand);
         }
     }
+    #[cfg(target_os = "linux")]
+    if Path::new("/usr/bin/tesseract").is_file() { return Some(PathBuf::from("/usr/bin")); }
     None
 }
 
@@ -96,6 +98,9 @@ pub fn is_available() -> bool {
 pub fn run_ocr(bgra: &[u8], width: u32, height: u32, lang: &str) -> Result<String> {
     let root = tesseract_root().ok_or_else(|| anyhow!("OCR engine not installed"))?;
     let exe = root.join(EXE_NAME);
+    #[cfg(target_os = "linux")]
+    let tessdata = if root == Path::new("/usr/bin") { PathBuf::from("/usr/share/tessdata") } else { root.join("tessdata") };
+    #[cfg(not(target_os = "linux"))]
     let tessdata = root.join("tessdata");
 
     // Guard the buffer so the BMP encoder can never read out of bounds on a

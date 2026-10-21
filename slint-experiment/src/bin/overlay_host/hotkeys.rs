@@ -86,6 +86,27 @@ pub(crate) struct RegisteredHotkeys {
     pub sa3_id: u32,
 }
 
+pub(crate) fn next_event() -> Option<global_hotkey::GlobalHotKeyEvent> {
+    #[cfg(target_os = "linux")]
+    if let Some(command) = slint_replay::native::desktop::receive() {
+        use global_hotkey::hotkey::{Code, HotKey, Modifiers};
+        let (key, mods) = match command.as_str() {
+            "f1" => (Code::F1, None), "f3" => (Code::F3, None),
+            "f4" => (Code::F4, None), "f6" => (Code::F6, None),
+            "f7" => (Code::F7, None), "f8" => (Code::F8, None),
+            "sf8" => (Code::F8, Some(Modifiers::SHIFT)),
+            "cf8" => (Code::F8, Some(Modifiers::CONTROL)),
+            "f9" => (Code::F9, None), "sf9" => (Code::F9, Some(Modifiers::SHIFT)),
+            "sa1" => (Code::Digit1, Some(Modifiers::SHIFT | Modifiers::ALT)),
+            "sa2" => (Code::Digit2, Some(Modifiers::SHIFT | Modifiers::ALT)),
+            "sa3" => (Code::Digit3, Some(Modifiers::SHIFT | Modifiers::ALT)),
+            _ => return None,
+        };
+        return Some(global_hotkey::GlobalHotKeyEvent { id: HotKey::new(mods,key).id(), state: global_hotkey::HotKeyState::Pressed });
+    }
+    global_hotkey::GlobalHotKeyEvent::receiver().try_recv().ok()
+}
+
 /// ===== Global hotkeys (Phase D2 + B3 extra) =====
 ///
 /// global-hotkey 0.6 owns a single process-wide event receiver +
@@ -103,10 +124,7 @@ pub(crate) struct RegisteredHotkeys {
 /// `HOTKEY_DIAG` write are identical to the former inline block in `main`.
 pub(crate) fn register_hotkeys() -> RegisteredHotkeys {
     #[cfg(target_os = "linux")]
-    let hotkey_manager: Option<global_hotkey::GlobalHotKeyManager> = {
-        eprintln!("[overlay-host] Wayland global shortcuts are not connected yet; use the bar controls.");
-        None
-    };
+    let hotkey_manager: Option<global_hotkey::GlobalHotKeyManager> = None;
     #[cfg(not(target_os = "linux"))]
     let hotkey_manager = match global_hotkey::GlobalHotKeyManager::new() {
         Ok(m) => Some(m),
@@ -211,10 +229,27 @@ pub(crate) fn register_hotkeys() -> RegisteredHotkeys {
                 }
             }
         }
+        #[cfg(target_os = "linux")]
+        {
+            let bindings = [
+                ("F1", "f1"), ("F3", "f3"), ("F4", "f4"), ("F6", "f6"),
+                ("F7", "f7"), ("F8", "f8"), ("SHIFT + F8", "sf8"),
+                ("CTRL + F8", "cf8"), ("F9", "f9"), ("SHIFT + F9", "sf9"),
+                ("SHIFT + ALT + 1", "sa1"), ("SHIFT + ALT + 2", "sa2"),
+                ("SHIFT + ALT + 3", "sa3"),
+            ];
+            let installed = slint_replay::native::desktop::listen()
+                .and_then(|()| slint_replay::native::desktop::install_bindings(&bindings))
+                .unwrap_or_default();
+            for (label, action) in bindings {
+                if installed.iter().any(|key| key == action) { registered.push(label); }
+                else { failed.push(label); }
+            }
+        }
         let _ = HOTKEY_DIAG.set(HotkeyDiag {
             registered: registered.join(" "),
             failed: failed.join(", "),
-            manager_missing: hotkey_manager.is_none(),
+            manager_missing: cfg!(not(target_os = "linux")) && hotkey_manager.is_none(),
         });
     }
 

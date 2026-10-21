@@ -1188,6 +1188,9 @@ pub(crate) fn wire_ai_settings(
         if !overlay_backend::codex_subscription::allowed_signin_url(url.as_str()) {
             return;
         }
+        #[cfg(target_os = "linux")]
+        let _ = slint_replay::native::desktop::open(std::ffi::OsStr::new(url.as_str()));
+        #[cfg(not(target_os = "linux"))]
         if let Err(error) = std::process::Command::new("explorer.exe")
             .arg(url.as_str())
             .spawn()

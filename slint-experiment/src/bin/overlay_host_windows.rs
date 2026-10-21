@@ -483,6 +483,16 @@ const AI_MAX_TOKENS: u32 = 600;
 pub(crate) const AI_STREAM_MAX_TOKENS: u32 = 4096;
 
 fn main() -> Result<(), slint::PlatformError> {
+    #[cfg(target_os = "linux")]
+    {
+        let args: Vec<String> = std::env::args().collect();
+        if args.get(1).map(String::as_str) == Some("--command") {
+            let result = args.get(2).ok_or("missing command")
+                .and_then(|value| slint_replay::native::desktop::send_command(value).map_err(|_| "Suflyor is not running"));
+            if let Err(error) = result { eprintln!("{error}"); std::process::exit(1); }
+            return Ok(());
+        }
+    }
     let Some(bootstrap) = app_bootstrap::run_preflight()? else {
         return Ok(());
     };
@@ -2748,7 +2758,7 @@ fn main() -> Result<(), slint::PlatformError> {
         TimerMode::Repeated,
         Duration::from_millis(HOTKEY_POLL_MS),
         move || {
-            while let Ok(event) = global_hotkey::GlobalHotKeyEvent::receiver().try_recv() {
+            while let Some(event) = hotkeys::next_event() {
                 if event.state != global_hotkey::HotKeyState::Pressed {
                     continue;
                 }
@@ -2934,7 +2944,9 @@ fn main() -> Result<(), slint::PlatformError> {
                     .to_string();
                     let saved = Rc::new(saved);
                     let copy_selection = Rc::new(move || {
+                        #[cfg(not(target_os = "linux"))]
                         slint_replay::win32::clipboard_clear();
+                        #[cfg(not(target_os = "linux"))]
                         if !slint_replay::win32::send_ctrl_c() {
                             restore_text_clipboard(saved.as_ref());
                             #[cfg(target_os = "macos")]
@@ -2976,12 +2988,18 @@ fn main() -> Result<(), slint::PlatformError> {
                         // Ctrl+C is async — the foreground app writes the clipboard
                         // on its own message loop; read after a short second delay.
                         Timer::single_shot(std::time::Duration::from_millis(140), move || {
+                            #[cfg(not(target_os = "linux"))]
                             let copied = slint_replay::win32::clipboard_read_text();
+                            #[cfg(target_os = "linux")]
+                            let copied = slint_replay::native::clipboard::read_primary();
                             diag!(
                                 "[overlay-host] sa1: copied {} chars from selection",
                                 copied.as_ref().map(|s| s.chars().count()).unwrap_or(0)
                             );
+                            #[cfg(not(target_os = "linux"))]
                             restore_text_clipboard(saved.as_ref());
+                            #[cfg(target_os = "linux")]
+                            let _ = saved;
                             if let Some(text) = copied.filter(|text| !text.trim().is_empty()) {
                                 // Spawn a visible tile showing the text + 🔊/⏯/📋/✕,
                                 // which auto-starts the read-aloud.

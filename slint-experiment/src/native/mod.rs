@@ -15,6 +15,16 @@ pub mod clipboard;
 #[path = "linux/clipboard.rs"]
 pub mod clipboard;
 
+#[cfg(target_os = "linux")]
+#[path = "linux/desktop.rs"]
+pub mod desktop;
+#[cfg(target_os = "linux")]
+#[path = "linux/window.rs"]
+pub mod window;
+#[cfg(target_os = "linux")]
+#[path = "linux/screen.rs"]
+pub mod screen;
+
 #[cfg(windows)]
 #[path = "windows/lifecycle.rs"]
 pub mod lifecycle;

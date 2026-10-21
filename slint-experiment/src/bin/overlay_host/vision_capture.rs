@@ -65,7 +65,7 @@ pub(crate) fn bgra_to_slint_image(bgra: &[u8], w: u32, h: u32) -> slint::Image {
 
 #[must_use]
 fn local_ocr_available() -> bool {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     {
         overlay_backend::ocr::is_available()
     }
@@ -73,14 +73,14 @@ fn local_ocr_available() -> bool {
     {
         true
     }
-    #[cfg(not(any(windows, target_os = "macos")))]
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     {
         false
     }
 }
 
 fn run_local_ocr(bgra: &[u8], width: u32, height: u32) -> Result<String, String> {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     {
         overlay_backend::ocr::run_ocr(bgra, width, height, overlay_backend::ocr::DEFAULT_OCR_LANG)
             .map_err(|error| format!("{error:#}"))
@@ -90,7 +90,7 @@ fn run_local_ocr(bgra: &[u8], width: u32, height: u32) -> Result<String, String>
         slint_replay::native::screen::recognize_text_from_bgra(bgra, width, height)
             .map_err(|error| error.to_string())
     }
-    #[cfg(not(any(windows, target_os = "macos")))]
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     {
         let _ = (bgra, width, height);
         Err("local OCR is unsupported".into())
@@ -210,6 +210,20 @@ pub(crate) fn fire_f8_vision_capture(
             );
             return;
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Native slurp selection works across scaled outputs without an X11 overlay.
+        let hidden = slint_replay::win32::hide_own_windows();
+        let captured = slint_replay::native::screen::capture_region();
+        slint_replay::win32::show_windows(&hidden);
+        match captured {
+            Ok((frame, _, _)) => launch_vision_for_bgra(frame, ep, mode, bridge, events, cfg, slint_rt, rt_handle, tiles, weak_overlay),
+            Err(error) if error.to_string() == "selection cancelled" => {},
+            Err(_) => spawn_vision_notice(events, cfg, "screen_capture_failed", "Не удалось получить кадр экрана.", "Could not capture the screen."),
+        }
+        return;
     }
 
     // Freeze the virtual desktop for region selection. Windows composes all

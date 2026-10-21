@@ -977,6 +977,8 @@ fn collect_redacted_log() -> std::io::Result<std::path::PathBuf> {
 /// `raw_arg` keeps the explicit quotes around the path so `/select` works even
 /// when the profile path contains a space (e.g. a username with a space).
 fn reveal_in_explorer(path: &std::path::Path) {
+    #[cfg(target_os = "linux")]
+    if let Some(parent) = path.parent() { let _ = slint_replay::native::desktop::open(parent.as_os_str()); }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

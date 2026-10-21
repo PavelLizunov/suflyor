@@ -2360,6 +2360,9 @@ pub(crate) fn wire_strata(
     }
 
     win.on_strata_license_clicked(|| {
+        #[cfg(target_os = "linux")]
+        let _ = slint_replay::native::desktop::open(std::ffi::OsStr::new(overlay_backend::local_ai::STRATA_MODEL_LICENSE_URL));
+        #[cfg(not(target_os = "linux"))]
         let _ = std::process::Command::new("explorer")
             .arg(overlay_backend::local_ai::STRATA_MODEL_LICENSE_URL)
             .spawn();
