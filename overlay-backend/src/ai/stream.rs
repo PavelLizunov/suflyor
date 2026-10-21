@@ -148,18 +148,21 @@ fn stream_chat_endpoint_with(
         if tx.is_closed() {
             return;
         }
-        if let Err(e) = stream_inner(
-            endpoint,
-            messages,
-            max_tokens,
-            allow_tools,
-            no_think,
-            tx.clone(),
-            request_id,
-            request_started_at,
-        )
-        .await
-        {
+        let result = tokio::select! {
+            biased;
+            () = tx.closed() => return,
+            result = stream_inner(
+                endpoint,
+                messages,
+                max_tokens,
+                allow_tools,
+                no_think,
+                tx.clone(),
+                request_id,
+                request_started_at,
+            ) => result,
+        };
+        if let Err(e) = result {
             let _ = tx
                 .send(AiEvent::Error {
                     message: format!("{e:#}"),
