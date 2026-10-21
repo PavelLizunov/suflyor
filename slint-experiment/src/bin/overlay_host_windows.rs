@@ -768,6 +768,8 @@ fn main() -> Result<(), slint::PlatformError> {
                     .with_resizable(false)
             })
             .select()?;
+        // Unlike the creation hook, the public application id survives Wayland remaps.
+        slint::set_xdg_app_id("suflyor")?;
     }
     let overlay = OverlayBarWindow::new()?;
     // Seed the process-global colour scheme from config, then apply to the bar's

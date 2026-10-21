@@ -6,6 +6,8 @@ hl.window_rule({
     float = true,
     size = "720 600",
     center = true,
+    -- Protect the first mapped frame; native presentation applies the saved toggle.
+    no_screen_share = true,
 })
 hl.window_rule({
     name = "suflyor-native-windows",

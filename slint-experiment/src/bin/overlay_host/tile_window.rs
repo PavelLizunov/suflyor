@@ -315,8 +315,8 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
         // that already existed). No-op when stealth is off. I1: a failed
         // exclusion is logged, never silently swallowed — the tile stays
         // capturable and the user must be able to diagnose it.
-        if global_stealth() {
-            if let Err(e) = set_stealth(hwnd, true) {
+        if global_stealth() || cfg!(target_os = "linux") {
+            if let Err(e) = set_stealth(hwnd, global_stealth()) {
                 diag!("[overlay-host] tile stealth apply failed (tile stays capturable): {e}");
             }
         }

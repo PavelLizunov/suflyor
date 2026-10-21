@@ -53,7 +53,7 @@ fn tile_native_setup_retries_mapping_without_reviving_a_closed_window() {
     assert!(
         setup.contains("let Ok(hwnd) = grab_hwnd(t.window()) else {\n            return false;")
     );
-    assert!(setup.contains("set_stealth(hwnd, true)"));
+    assert!(setup.contains("set_stealth(hwnd, global_stealth())"));
 }
 
 #[test]

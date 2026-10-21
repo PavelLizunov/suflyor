@@ -11,6 +11,26 @@ fn unavailable_native_features_do_not_fabricate_success() {
 }
 
 #[test]
+fn remapped_windows_keep_the_application_id_and_first_frame_protection() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let host = std::fs::read_to_string(root.join("src/bin/overlay_host_windows.rs")).unwrap();
+    let rules = std::fs::read_to_string(root.join("../scripts/suflyor-hyprland.lua")).unwrap();
+    assert!(host.contains("slint::set_xdg_app_id(\"suflyor\")?"));
+    let application = rules.split_once("name = \"suflyor-native-app\"").unwrap().1;
+    let application = application.split_once("})").unwrap().0;
+    assert!(application.contains("class = \"^suflyor$\""));
+    assert!(application.contains("no_screen_share = true"));
+    for relative in [
+        "src/bin/overlay_host/tile_window.rs",
+        "src/bin/overlay_host/window_lifecycle.rs",
+    ] {
+        let source = std::fs::read_to_string(root.join(relative)).unwrap();
+        assert!(source.contains("global_stealth() || cfg!(target_os = \"linux\")"));
+        assert!(source.contains("hwnd, global_stealth()"));
+    }
+}
+
+#[test]
 #[ignore = "requires an isolated live Wayland worker clipboard"]
 fn wayland_clipboard_round_trip() {
     use slint_replay::native::clipboard;

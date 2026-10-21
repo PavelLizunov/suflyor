@@ -333,9 +333,10 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
             diag!("[overlay-host] macOS floating-window configuration failed: {error}");
         }
         decorate(hwnd);
-        if global_stealth() {
-            // I1 — a failed exclusion is logged, never silently swallowed.
-            apply_stealth_one(hwnd, true);
+        // Linux compositor rules protect the first mapped frame even when the
+        // saved toggle is off; native presentation must apply both directions.
+        if global_stealth() || cfg!(target_os = "linux") {
+            apply_stealth_one(hwnd, global_stealth());
         }
         // The off-screen frame is now painted + decorated (+ WDA under stealth):
         // reveal it at the RESTORED position when one is saved and still visible
