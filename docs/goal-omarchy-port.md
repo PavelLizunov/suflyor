@@ -1,73 +1,106 @@
-# Omarchy port: first native milestone
+# Spec: fully functional Suflyor on Omarchy / Wayland
 
-Status: active development; not a supported release or feature-parity claim.
+## 1. Intent & Invariants
 
-## Goal
+The owner's October 21 instruction supersedes the former first-milestone scope:
+deliver a working Wayland-adapted equivalent of the complete Suflyor product.
+A compiling host, rendered demo, synthetic answer, green targeted gate or draft
+PR is an intermediate checkpoint, not completion. Continue implementation and
+actual-consumer verification until the full functional contract below is met.
 
-Start Suflyor on the dedicated Omarchy/Hyprland test worker using the existing
-Rust backend, Slint windows and shared host orchestration. The first milestone
-is a real Wayland application with Settings, typed questions and answer tiles.
-Do not rewrite the UI in QML merely to obtain a shell entry point.
+Reuse the existing Rust backend, Slint UI, session and model pipelines. Do not
+rewrite the product in QML. Use native PipeWire, Wayland and Hyprland mechanisms
+where Windows/macOS APIs do not exist. Hardware-specific engines may use a native
+functional equivalent, but a silent no-op or permanently disabled product feature
+does not satisfy parity. Record unavoidable platform constraints precisely.
 
-## Scope and reuse
+Preserve configuration, credentials, transcripts, download-versus-activation
+semantics, model integrity checks, routing and rollback. TTS and STT ONNX runtimes
+remain in separate processes. Keep Windows/macOS behavior and native gates intact.
+Do not fabricate native handles, geometry, successful capture, model readiness or
+capture exclusion. A configured screen-share exclusion must be verified in the
+actual compositor capture; describe its observable behavior accurately.
 
-- Repair the missing backend platform branches and select Linux portal dialogs.
-- Reuse the existing Unix singleton lock and provide Wayland clipboard access.
-- Compile the shared host on Linux. Unsupported audio, capture, local installers
-  and capture exclusion must remain explicit errors or unsupported capabilities,
-  not successful no-ops or Windows executables downloaded on Linux.
-- Let the compositor own placement where Wayland denies absolute coordinates.
-  Hyprland-specific placement, PipeWire capture, compositor global shortcuts and
-  a Quattro launcher plugin follow as separate measured slices, reusing installed
-  service/widget/overlay patterns and reviewed upstream licenses.
+Use the dedicated Omarchy worker and exact committed candidates. Keep the owner's
+original checkout, index and unrelated files unchanged. Do not use the owner's
+interactive desktop as the build or QA worker. Ordinary task-owned installation,
+service lifecycle, test-device creation and integration on the dedicated worker
+are part of this implementation. Stable release publication remains separate.
 
-## Acceptance
+## 2. Interface / Data Contract
 
-- [x] Record baseline and candidate commit/tree, worker resources and commands.
-- [x] Backend Linux check and relevant platform tests pass on the test worker.
-- [x] The shared host compiles and starts in the existing Wayland session.
-- [x] Inspect actual Slint MCP Settings, question and answer surfaces in EN/RU.
-- [x] A disposable local HTTP fixture proves typed dispatch and rendered answer;
-      this does not claim a real provider or model inference.
-- [x] Clipboard copy and singleton exclusion work on the native worker.
-- [x] Windows targeted gate remains green for the exact code candidate.
-- [x] Record unsupported shortcuts/audio/capture, deployment and inference gaps.
-- [x] Complete the scoped aggregate Linux test-driver invocation without interruption.
-      Candidate 68ed251: 236 passed, three deliberately ignored; exit 0.
-- [ ] Integrate the reviewed milestone into master; no Linux release is published.
+- Keep the public backend audio API: enumerate/select microphone and output;
+  simultaneous 16 kHz mono PCM chunks, push-to-talk and finite diagnostics;
+  bounded queues, prompt cancellation and owned capture processes.
+- Keep cloud/local STT and AI request/routing contracts. Implement Linux local
+  installation, validation, activation and lifecycle rather than requiring an
+  externally preconfigured server as the only route.
+- Keep neural TTS, selected-text reading, pause/resume/stop/rate/voice selection,
+  session playback, re-transcription and diarization through native Linux output.
+- Supply real screen buffers and region selection for OCR/Vision. Preserve
+  cancellation, multi-monitor scaling and exclusion of Suflyor's own surfaces.
+- Route compositor shortcuts, including press/release push-to-talk, into the same
+  host actions as bar controls. Use a private owned IPC/portal contract, not X11
+  registration misreported as Wayland support. Preserve non-US text-edit shortcuts.
+- Use compositor-backed monitor/window identity, placement, drag, pinning,
+  full/compact bar, tile cascade, lock modes, hide/restore and focus behavior.
+- Keep all Settings tabs, profiles, providers/authentication, import/export,
+  components, diagnostics, KB, history, memory, summaries and native file/URL opens.
+- Deliver an installable native launch surface, owned service lifecycle,
+  optional autostart and an appropriate Linux update route. Quattro integration
+  is a launcher/control surface, not a replacement application implementation.
+- Existing supported model engines and downloads must select Linux-compatible
+  assets, executable permissions and native resource/hardware discovery. Never
+  download or execute Windows installers on Linux.
 
-Observed native evidence and exact identities:
-[October 21 audit](audit-2026-10-21-omarchy/README.md). The working first slice is
-checkpointed on `codex/omarchy-port`; remaining port work is still active.
+Decision: Compose — existing Rust/Slint product and session pipelines with
+installed PipeWire Pulse-compatible capture tools, Wayland clipboard, compositor
+IPC/rules and native screenshot/OCR helpers. Reuse existing CPAL sidecar playback.
+Select additional libraries only after source/API/license inspection.
 
-## Developer launch
+## 3. Verification Checklist (Definition of Done)
 
-On the test worker, run `bash scripts/check-linux-port.sh` and build the QA host
-with `SLINT_EMIT_DEBUG_INFO=1 cargo build --locked --bin overlay-host --features
-ui-mcp --manifest-path slint-experiment/Cargo.toml`. For Omarchy 4.0.4's Lua
-Hyprland configuration, source the absolute checkout path to
-`scripts/suflyor-hyprland.lua` from the user's `hyprland.lua`, then validate with
-`hyprctl reload` and `hyprctl configerrors`. The snippet matches only Suflyor
-windows; it supplies the floating geometry that Wayland clients cannot enforce.
-The fixed-size winit hint alone did not make Hyprland float these windows.
+Previously observed foundation, not full acceptance:
+- [x] Backend and host compile on native Linux; actual Wayland windows render.
+- [x] EN/RU bar, Settings, question and synthetic streamed answer inspected.
+- [x] Actual clipboard copy and same-config singleton exclusion verified.
+- [x] Scoped Linux driver completes: 68ed251, 236 passed, three ignored, exit 0.
+- [x] Same-candidate Windows targeted gate: 1,109 passed, five ignored, exit 0.
 
-Start `overlay-host` with `SLINT_BACKEND=winit-software` and
-`WINIT_UNIX_BACKEND=wayland`. Use an isolated `XDG_CONFIG_HOME` for fixtures.
-No autostart, system package, Quattro plugin or release artifact is installed
-by these commands. Remove the explicit snippet source line to remove its rules.
+Full outcome, all still requiring implementation or final acceptance:
+- [ ] Microphone and system audio work simultaneously with selected/default
+      devices; real samples, route changes, stop/restart and no orphan processes.
+- [ ] Real speech reaches local/cloud STT and transcript/auto-answer paths;
+      held push-to-talk and release work without premature UI success.
+- [ ] Real AI text and image requests return rendered model answers; errors,
+      cancellation and retry preserve routes and session consistency.
+- [ ] Native screenshot, region selection, local OCR, Vision, cancellation and
+      scaled/multiple monitor scenarios work; own windows are excluded.
+- [ ] Every global shortcut is physically/compositor dispatched, including PTT
+      press/release; non-US text editing, selection reading and clipboard work.
+- [ ] Native drag, pinning, monitor placement, tile cascade, compact/full bar,
+      deep/reader locks and hide/restore work without fake geometry.
+- [ ] TTS voices download/activate and produce real output; read/pause/resume/
+      stop/rate, transcript playback, re-transcription and diarization work.
+- [ ] Managed local AI/STT installation, disk checks, resumable cancellation,
+      engine/model switching, inference and process cleanup pass on Linux.
+- [ ] All Settings tabs, provider sign-in, profiles/context, KB/history/memory,
+      recording/summary flows, import/export and native open/reveal are exercised.
+- [ ] Native installation/launcher, service stop/start, optional autostart,
+      update route and uninstall preserve user configuration.
+- [ ] Exact final candidate passes Linux checks and native EN/RU end-to-end QA;
+      Windows/macOS regressions and PR checks are resolved, not waved away.
+- [ ] Review and integrate the complete port; record installed, loaded, verified
+      and published status separately. Do not close on the former first slice.
 
-## Verification environment
+Evidence: [October 21 native audit](audit-2026-10-21-omarchy/README.md).
+Draft PR #307 contains the initial milestone and remains development work.
 
-Use `omarchy-test`, an approved dedicated worker. Its initial 4 GiB allocation
-proved insufficient for a practical full debug host build (heavy swap use).
-After checking physical-host headroom, only VM 107 was shut down cleanly and
-raised to 8 GiB; networking and the existing Hyprland session recovered. Use
-one owned managed build at a time, one Cargo job and one test thread for the
-Linux driver, disabled incremental builds, no debug symbols and a bounded
-service memory limit. The driver disables only the package demo-binaries feature
-and runs library, overlay-host, linux_platform and relevant backend regressions. Source and editing stay in
-an isolated task worktree. Do not build or alter the owner's desktop shell.
-
-Claude's scoped October 17/18 project note is reconnaissance, not current
-verification: it reported four backend missing branches and 26 host errors.
-The fresh baseline and exact-candidate evidence decide present status.
+Developer verification uses `bash scripts/check-linux-port.sh`. Build QA host with
+`SLINT_EMIT_DEBUG_INFO=1 cargo build --locked --no-default-features --bin
+overlay-host --features ui-mcp --manifest-path slint-experiment/Cargo.toml`.
+Use one managed build at a time, one Cargo job and one test thread, disabled
+incremental compilation and debug symbols, and bounded runtime/memory. The test
+VM has 8 GiB RAM; inspect available memory and disk before each heavy build.
+Hyprland configuration is Lua on the worker; validate any task-owned rule change
+with `hyprctl reload` and `hyprctl configerrors` in the existing graphical session.
