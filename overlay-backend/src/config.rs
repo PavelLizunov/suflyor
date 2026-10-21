@@ -829,7 +829,7 @@ impl Config {
                 reasoning_effort: None,
                 is_local: false,
             },
-            "codex" if cfg!(windows) => AiEndpoint {
+            "codex" if cfg!(any(windows, target_os = "linux")) => AiEndpoint {
                 protocol: AiProtocol::CodexSubscription,
                 base_url: String::new(),
                 bearer: String::new(),
@@ -838,10 +838,9 @@ impl Config {
                     .then(|| self.codex_reasoning_effort.clone()),
                 is_local: false,
             },
-            // The current Codex subscription adapter launches `codex.exe` and
-            // writes a Windows sandbox profile. Keep an imported/saved choice
-            // fail-closed on other platforms instead of silently billing the
-            // configured cloud bridge.
+            // The subscription adapter supports native Windows and Linux.
+            // Keep unsupported platforms fail-closed rather than silently
+            // billing the configured cloud bridge.
             "codex" => AiEndpoint {
                 protocol: AiProtocol::OpenAiCompatible,
                 base_url: String::new(),
@@ -906,7 +905,7 @@ impl Config {
             "mlx" => crate::mlx_install::catalog_model(&self.ai_mlx_model)
                 .is_some_and(|model| model.supports_images),
             "local" => self.ai_local_vision,
-            "codex" if cfg!(windows) => {
+            "codex" if cfg!(any(windows, target_os = "linux")) => {
                 !self.codex_model.trim().is_empty() && self.codex_model == self.codex_vision_model
             }
             _ => false,
@@ -999,7 +998,10 @@ impl Config {
                 reasoning_effort: None,
                 is_local: false,
             }),
-            "codex" if cfg!(windows) && !self.codex_vision_model.trim().is_empty() => {
+            "codex"
+                if cfg!(any(windows, target_os = "linux"))
+                    && !self.codex_vision_model.trim().is_empty() =>
+            {
                 Some(AiEndpoint {
                     protocol: AiProtocol::CodexSubscription,
                     base_url: String::new(),
