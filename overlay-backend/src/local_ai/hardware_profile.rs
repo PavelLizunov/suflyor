@@ -198,8 +198,7 @@ pub(super) fn detect_gpu() -> GpuKind {
 /// of a loader library.
 #[cfg(target_os = "linux")]
 pub(super) fn has_real_vulkan_device() -> bool {
-    let out = run_capture("vulkaninfo", &["--summary"])
-        .or_else(|_| run_capture("vulkaninfo", &[]));
+    let out = run_capture("vulkaninfo", &["--summary"]).or_else(|_| run_capture("vulkaninfo", &[]));
     let Ok(out) = out else {
         return false;
     };

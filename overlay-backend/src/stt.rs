@@ -47,7 +47,11 @@ mod gigaam_shim {
             transcribe_rs::OrtAccelerator::CpuOnly
         };
         #[cfg(target_os = "linux")]
-        let pref = if use_gpu { transcribe_rs::OrtAccelerator::Auto } else { transcribe_rs::OrtAccelerator::CpuOnly };
+        let pref = if use_gpu {
+            transcribe_rs::OrtAccelerator::Auto
+        } else {
+            transcribe_rs::OrtAccelerator::CpuOnly
+        };
         transcribe_rs::set_ort_accelerator(pref);
         log::info!("GigaAM ONNX Runtime accelerator = {pref}");
     }

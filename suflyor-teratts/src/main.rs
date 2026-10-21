@@ -126,6 +126,9 @@ trait Player {
     fn seek_seconds(&mut self, seconds: i32);
     fn set_speed(&mut self, speed: f32);
     fn stop(self);
+    fn failed(&self) -> bool {
+        false
+    }
 }
 
 /// Where [`SynthJob`]s go. Real builds hand them to the synth worker thread;
@@ -360,6 +363,7 @@ impl<P: Player> Controller<P> {
         if self.active != Some(id) {
             return;
         }
+        let failed = self.player.as_ref().map(|p| p.failed()).unwrap_or(false);
         if let Some(player) = self.player.take() {
             player.stop();
         }
@@ -369,7 +373,11 @@ impl<P: Player> Controller<P> {
         self.chunks_failed = 0;
         self.playing_emitted = false;
         self.generation.store(0, Ordering::Release);
-        self.emit_event(Event::Done { id });
+        if failed {
+            self.emit_failed(id, "playback");
+        } else {
+            self.emit_event(Event::Done { id });
+        }
     }
 
     fn on_cmd(&mut self, cmd: Cmd) {
@@ -437,6 +445,10 @@ impl Player for RealPlayer {
     }
     fn stop(self) {
         self.0.stop();
+    }
+    #[cfg(not(windows))]
+    fn failed(&self) -> bool {
+        self.0.failed()
     }
 }
 
@@ -684,6 +696,7 @@ mod tests {
     struct FakePlayer {
         utterance: u64,
         log: Rc<RefCell<Vec<String>>>,
+        failed: bool,
     }
 
     impl Player for FakePlayer {
@@ -721,6 +734,9 @@ mod tests {
             self.log
                 .borrow_mut()
                 .push(format!("stop:{}", self.utterance));
+        }
+        fn failed(&self) -> bool {
+            self.failed
         }
     }
 
@@ -764,6 +780,7 @@ mod tests {
             Ok(FakePlayer {
                 utterance,
                 log: log_for_player.clone(),
+                failed: false,
             })
         };
         let events_out = events.clone();
@@ -1074,6 +1091,39 @@ mod tests {
         take_events(&h);
         // Late notification from the stopped player: no second terminal event.
         h.controller.on_playback_done(1);
+        assert!(take_events(&h).is_empty());
+    }
+
+    #[test]
+    fn playback_failure_emits_failed_event_once_and_stale_is_ignored() {
+        let mut h = harness();
+        h.controller.make_player = Box::new(|_rate, utterance| {
+            Ok(FakePlayer {
+                utterance,
+                log: Rc::new(RefCell::new(Vec::new())),
+                failed: true,
+            })
+        });
+        h.controller.on_cmd(Cmd::Speak("Текст.".into()));
+        h.controller.on_synth_result(ok_audio(1));
+        assert_eq!(
+            take_events(&h),
+            vec![Event::Started { id: 1 }, Event::Playing { id: 1 }]
+        );
+
+        // Render loop errored: on_playback_done detects player.failed()
+        h.controller.on_playback_done(1);
+        assert_eq!(
+            take_events(&h),
+            vec![Event::Failed {
+                id: 1,
+                reason: "playback".into(),
+            }]
+        );
+
+        // Stale result or stale playback done is ignored
+        h.controller.on_playback_done(1);
+        h.controller.on_synth_result(ok_audio(1));
         assert!(take_events(&h).is_empty());
     }
 

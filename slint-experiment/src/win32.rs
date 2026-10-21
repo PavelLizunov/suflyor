@@ -1115,7 +1115,9 @@ mod posix_stubs {
             crate::native::window::view_id(window).map(HWND)
         }
         #[cfg(target_os = "linux")]
-        { crate::native::window::view_id(window).map(HWND) }
+        {
+            crate::native::window::view_id(window).map(HWND)
+        }
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         {
             let _ = window;
@@ -1145,9 +1147,14 @@ mod posix_stubs {
             }
         }
         #[cfg(target_os = "linux")]
-        { return crate::native::window::pin(hwnd.0, on); }
+        {
+            return crate::native::window::pin(hwnd.0, on);
+        }
         #[cfg(not(target_os = "linux"))]
-        { let _ = (hwnd, on); Ok(()) }
+        {
+            let _ = (hwnd, on);
+            Ok(())
+        }
     }
 
     /// Whether this platform can apply and verify capture exclusion.
@@ -1203,9 +1210,13 @@ mod posix_stubs {
                 .collect()
         }
         #[cfg(target_os = "linux")]
-        { crate::native::window::monitors().unwrap_or_default() }
+        {
+            crate::native::window::monitors().unwrap_or_default()
+        }
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-        { Vec::new() }
+        {
+            Vec::new()
+        }
     }
 
     pub fn virtual_screen_bounds() -> (i32, i32, i32, i32) {
@@ -1230,10 +1241,12 @@ mod posix_stubs {
             let top = monitors.iter().map(|m| m.top).min().unwrap_or(0);
             let right = monitors.iter().map(|m| m.right).max().unwrap_or(0);
             let bottom = monitors.iter().map(|m| m.bottom).max().unwrap_or(0);
-            (left, top, right-left, bottom-top)
+            (left, top, right - left, bottom - top)
         }
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-        { (0, 0, 0, 0) }
+        {
+            (0, 0, 0, 0)
+        }
     }
 
     pub fn cursor_pos() -> (i32, i32) {
@@ -1242,14 +1255,20 @@ mod posix_stubs {
             crate::native::screen::cursor_position().unwrap_or((0, 0))
         }
         #[cfg(target_os = "linux")]
-        { crate::native::window::cursor().unwrap_or((0,0)) }
+        {
+            crate::native::window::cursor().unwrap_or((0, 0))
+        }
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-        { (0, 0) }
+        {
+            (0, 0)
+        }
     }
 
     pub fn hide_own_windows() -> Vec<(isize, bool)> {
         #[cfg(target_os = "linux")]
-        { return crate::native::window::hide_own(); }
+        {
+            return crate::native::window::hide_own();
+        }
         #[cfg(not(target_os = "linux"))]
         Vec::new()
     }
@@ -1272,9 +1291,14 @@ mod posix_stubs {
 
     pub fn is_foreground_window(hwnd: HWND) -> bool {
         #[cfg(target_os = "linux")]
-        { return crate::native::window::foreground(hwnd.0); }
+        {
+            return crate::native::window::foreground(hwnd.0);
+        }
         #[cfg(not(target_os = "linux"))]
-        { let _ = hwnd; true }
+        {
+            let _ = hwnd;
+            true
+        }
     }
 
     pub fn reveal_window(hwnd: HWND) {
@@ -1301,9 +1325,14 @@ mod posix_stubs {
         h: i32,
     ) -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(target_os = "linux")]
-        { return crate::native::window::resize_move(hwnd.0,x,y,w,h); }
+        {
+            return crate::native::window::resize_move(hwnd.0, x, y, w, h);
+        }
         #[cfg(not(target_os = "linux"))]
-        { set_window_rect(hwnd, x, y, w, h); Ok(()) }
+        {
+            set_window_rect(hwnd, x, y, w, h);
+            Ok(())
+        }
     }
 
     pub fn move_window_pos_only(
@@ -1312,7 +1341,9 @@ mod posix_stubs {
         y: i32,
     ) -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(target_os = "linux")]
-        { return crate::native::window::move_to(hwnd.0,x,y); }
+        {
+            return crate::native::window::move_to(hwnd.0, x, y);
+        }
         #[cfg(not(target_os = "linux"))]
         if let Ok(mut guard) = POSIX_WINDOW_RECTS.lock() {
             let map = guard.get_or_insert_with(std::collections::HashMap::new);
@@ -1333,7 +1364,9 @@ mod posix_stubs {
         }
 
         #[cfg(target_os = "linux")]
-        { return crate::native::window::rect(hwnd.0); }
+        {
+            return crate::native::window::rect(hwnd.0);
+        }
         #[cfg(not(target_os = "linux"))]
         if let Ok(guard) = POSIX_WINDOW_RECTS.lock() {
             if let Some(map) = guard.as_ref() {
