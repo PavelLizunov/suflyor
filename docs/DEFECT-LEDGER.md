@@ -20,7 +20,7 @@ Closed by:
 
 ### D-078 Linux system capture cannot resolve an input offered by Settings   Severity: P2   Status: Open
 Evidence: Linux Settings intentionally offers output sinks plus capture inputs, matching the shared backend contract. `audio_linux::resolve(System, selected)` enumerates only sinks, so selecting an input or headset mix fails as unavailable despite appearing selectable. Source-confirmed during full-port review; live pinned-input regression remains required.
-Fix: resolve a pinned system choice against sink names first and then input sources without silently falling back to a default. Preserve ambiguity rejection and route identity. Exercise a real PipeWire input choice and cancellation.
+Fix: resolve a pinned system choice against sink names first and then input sources without silently falling back to a default. Preserve ambiguity rejection and route identity. Exercise a real PipeWire input choice and cancellation. Native 3633059 managed GigaAM/speech test passes for both streams and recorded WAVs, but a 500 ms pinned-input probe returns empty PCM because finite duration starts before PipeWire opens the stream. Start finite recording time at first PCM, bound startup separately, and preserve immediate stop cancellation; retain the failing live assertion.
 Closed by:
 
 ### D-077 Linux ONNX runtime aborts before main on a virtual CPU without AVX   Severity: P2   Status: Open

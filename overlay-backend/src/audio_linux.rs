@@ -412,9 +412,20 @@ fn record(
     }
     let mut capture = Capture::open(route)?;
     let start = Instant::now();
+    let mut recording_started = None;
     let mut samples = Vec::new();
-    while !stop.load(Ordering::Acquire) && start.elapsed() < duration.min(MAX_RECORDING) {
+    while !stop.load(Ordering::Acquire) {
         capture.read(&mut samples)?;
+        if !samples.is_empty() && recording_started.is_none() {
+            recording_started = Some(Instant::now());
+        }
+        if let Some(active) = recording_started {
+            if active.elapsed() >= duration.min(MAX_RECORDING) {
+                break;
+            }
+        } else if start.elapsed() >= Duration::from_secs(3) {
+            bail!("audio capture did not deliver PCM before its startup deadline");
+        }
         thread::sleep(Duration::from_millis(10));
     }
     Ok(samples)
