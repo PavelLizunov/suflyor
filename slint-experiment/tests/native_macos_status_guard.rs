@@ -64,8 +64,16 @@ fn production_host_owns_one_status_guard_through_the_event_loop() {
     let host = source(root, "src/bin/overlay_host_windows.rs");
     let bar_tray = source(root, "src/bin/overlay_host/bar_tray.rs");
 
-    assert_eq!(host.matches("native::status::install").count(), 1);
-    let install_at = host.find("native::status::install").unwrap();
+    let mac_owner_at = host
+        .find("let status_item = Rc::new(RefCell::new(None));")
+        .unwrap();
+    let linux_owner_at = host.find("let _native_status =").unwrap();
+    let mac_owner = &host[mac_owner_at..linux_owner_at];
+    assert_eq!(mac_owner.matches("native::status::install").count(), 1);
+    assert!(host[..mac_owner_at]
+        .trim_end()
+        .ends_with(r#"#[cfg(target_os = "macos")]"#));
+    let install_at = mac_owner_at + mac_owner.find("native::status::install").unwrap();
     let run_at = host.find("slint::run_event_loop_until_quit()").unwrap();
     assert!(install_at < run_at);
     let drop_at = host.find("status_item.borrow_mut().take()").unwrap();
