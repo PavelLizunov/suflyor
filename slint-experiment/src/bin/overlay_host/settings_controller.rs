@@ -127,10 +127,10 @@ pub(crate) fn open_settings(
             refresh_profiles(existing, &snap);
             populate_component_rows(existing, &snap);
         }
-        // An early close may cancel the first reveal while still parked.
-        // Re-enter presentation instead of re-showing it off the desktop.
+        // Wayland hide recreates the native surface. Reapply its exclusion;
+        // other platforms only need a retry when an early close left it parked.
         let position = existing.window().position();
-        if position.x <= -30000 || position.y <= -30000 {
+        if cfg!(target_os = "linux") || position.x <= -30000 || position.y <= -30000 {
             present_window_stealth_aware(existing, |hwnd| {
                 let _ = make_transparent_tile(hwnd);
                 let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
