@@ -27,6 +27,8 @@ use super::{
 /// NEVER persisted, so every startup is visible. While hidden, everything else
 /// keeps running: recording, hotkeys, TTS, session tasks, tiles, F6/F9.
 pub(super) static BAR_TRAY_HIDDEN: AtomicBool = AtomicBool::new(false);
+#[cfg(target_os = "linux")]
+thread_local! { static BAR_TRAY_POSITION: std::cell::Cell<Option<(i32, i32)>> = const { std::cell::Cell::new(None) }; }
 #[cfg(target_os = "macos")]
 pub(super) extern "C" fn sync_bar_status_visibility(visible: bool) {
     BAR_TRAY_HIDDEN.store(!visible, Ordering::Relaxed);
@@ -291,6 +293,10 @@ pub(super) fn hide_bar_to_tray(weak: &slint::Weak<OverlayBarWindow>) {
         diag!("hide-to-tray ignored: notification icon failed: {e}");
         return;
     }
+    #[cfg(target_os = "linux")]
+    if let Ok((x, y, _, _)) = grab_hwnd(o.window()).and_then(get_window_rect) {
+        BAR_TRAY_POSITION.with(|position| position.set(Some((x, y))));
+    }
     let _ = o.hide();
     slint_replay::win32::force_hide(o.window());
     BAR_TRAY_HIDDEN.store(true, Ordering::Relaxed);
@@ -307,6 +313,15 @@ pub(super) fn restore_bar_from_tray(weak: &slint::Weak<OverlayBarWindow>) {
     BAR_TRAY_HIDDEN.store(false, Ordering::Relaxed);
     #[cfg(windows)]
     slint_replay::tray::hide_icon();
+    #[cfg(target_os = "linux")]
+    {
+        super::present_window_stealth_aware_at(&o, BAR_TRAY_POSITION.with(|p| p.get()), |hwnd| {
+            let _ = make_transparent_overlay(hwnd);
+            let _ = set_always_on_top(hwnd, true);
+        });
+        diag!("bar restored from tray (compact mode unchanged)");
+        return;
+    }
     // Slint-side show first; the bar was SW_HIDE'd out from under Slint, so
     // the Win32 re-show below is what actually makes it visible again (same
     // stale-state reasoning as `win32::reveal_window`).
