@@ -2795,7 +2795,7 @@ fn pick_llama_linux(assets: &[GhAsset], gpu: GpuKind, arch: &str) -> Result<Llam
 
 /// Parse the CUDA version from a whisper cuBLAS asset name, e.g.
 /// `whisper-cublas-12.4.0-bin-x64.zip` -> `(12, 4, 0)`.
-#[cfg(any(windows, test))]
+#[cfg(any(not(target_os = "linux"), test))]
 fn whisper_cublas_version_of(name: &str) -> Option<(u32, u32, u32)> {
     // Old name "whisper-cublas-12.4.0-bin-x64.zip"; since October 2026
     // "whisper-bin-win-cuda-12.4.0-x64.zip". Both are x64 builds with the CUDA
