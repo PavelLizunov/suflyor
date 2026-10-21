@@ -41,6 +41,22 @@ fn retained_windows_cannot_be_revealed_after_close_by_native_setup() {
 }
 
 #[test]
+fn tile_native_setup_retries_mapping_without_reviving_a_closed_window() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source = std::fs::read_to_string(root.join("src/bin/overlay_host/tile_window.rs")).unwrap();
+    let setup = source
+        .split_once("pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {")
+        .unwrap()
+        .1;
+    assert!(setup.contains("super::realize_with_retries(tile, attempt, fallback)"));
+    assert!(setup.contains("if !t.window().is_visible() {\n            return true;"));
+    assert!(
+        setup.contains("let Ok(hwnd) = grab_hwnd(t.window()) else {\n            return false;")
+    );
+    assert!(setup.contains("set_stealth(hwnd, true)"));
+}
+
+#[test]
 fn tile_close_does_not_depend_on_a_destroyed_native_surface() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     for relative in [

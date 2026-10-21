@@ -35,8 +35,8 @@ use super::{
     apply_scheme_tile, drag_begin, drag_update, enum_monitors, get_window_rect, global_scheme,
     global_stealth, global_tile_monitor, global_tile_opacity, grab_hwnd, make_transparent_tile,
     move_window_pos_only, pick_monitor, set_always_on_top, set_platform_window_position,
-    set_skip_taskbar, set_stealth, work_area_for_window, ComponentHandle, Duration, TileWindow,
-    Timer, HWND_GRAB_DELAY_MS, TILE_DEFAULT_H, TILE_DEFAULT_W,
+    set_skip_taskbar, set_stealth, work_area_for_window, ComponentHandle, TileWindow,
+    TILE_DEFAULT_H, TILE_DEFAULT_W,
 };
 
 /// Atomic counter for tile-slot index — increments per spawn so
