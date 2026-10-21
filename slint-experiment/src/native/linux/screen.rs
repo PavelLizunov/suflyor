@@ -493,10 +493,13 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore = "requires the dedicated native Wayland compositor"]
     fn test_live_compositor() {
-        // Ignored live test against real compositor
-        let res_disp = capture_display();
-        let _ = res_disp;
+        let (frame, _, _) = capture_display().expect("native display capture");
+        assert!(frame.width > 0 && frame.height > 0);
+        assert_eq!(
+            frame.bgra.len(),
+            frame.width as usize * frame.height as usize * 4
+        );
     }
 }
