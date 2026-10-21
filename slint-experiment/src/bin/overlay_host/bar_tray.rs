@@ -322,18 +322,21 @@ pub(super) fn restore_bar_from_tray(weak: &slint::Weak<OverlayBarWindow>) {
         diag!("bar restored from tray (compact mode unchanged)");
         return;
     }
-    // Slint-side show first; the bar was SW_HIDE'd out from under Slint, so
-    // the Win32 re-show below is what actually makes it visible again (same
-    // stale-state reasoning as `win32::reveal_window`).
-    let _ = o.show();
-    if let Ok(hwnd) = grab_hwnd(o.window()) {
-        #[cfg(windows)]
-        let raw_h = hwnd.0 as isize;
-        #[cfg(not(windows))]
-        let raw_h = hwnd.0;
-        slint_replay::win32::show_windows(&[(raw_h, true)]);
+    #[cfg(not(target_os = "linux"))]
+    {
+        // Slint-side show first; the bar was SW_HIDE'd out from under Slint, so
+        // the Win32 re-show below is what actually makes it visible again (same
+        // stale-state reasoning as `win32::reveal_window`).
+        let _ = o.show();
+        if let Ok(hwnd) = grab_hwnd(o.window()) {
+            #[cfg(windows)]
+            let raw_h = hwnd.0 as isize;
+            #[cfg(not(windows))]
+            let raw_h = hwnd.0;
+            slint_replay::win32::show_windows(&[(raw_h, true)]);
+        }
+        diag!("bar restored from tray (compact mode unchanged)");
     }
-    diag!("bar restored from tray (compact mode unchanged)");
 }
 
 /// — tray menu / icon actions, all routed through the EXISTING session

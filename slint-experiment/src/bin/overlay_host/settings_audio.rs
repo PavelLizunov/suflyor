@@ -322,6 +322,8 @@ mod tests {
     fn window_state_tracks_selection_refresh_and_save_failure() {
         i_slint_backend_testing::init_no_event_loop();
         let win = SettingsWindow::new().unwrap();
+        win.global::<crate::ui::Platform>()
+            .set_is_linux(cfg!(target_os = "linux"));
         let cfg: config::SharedConfig = Default::default();
         cfg.write().system_audio_device = Some("Old headset".into());
         show_devices(
@@ -380,7 +382,11 @@ mod tests {
         show_devices(&win, &cfg, vec!["A50 Stream Out".into()], vec![]);
         assert_eq!(
             win.get_system_devices().row_data(0).unwrap(),
-            "По умолчанию Windows"
+            if cfg!(target_os = "linux") {
+                "Системное по умолчанию"
+            } else {
+                "По умолчанию Windows"
+            }
         );
         assert_eq!(
             win.get_system_devices().row_data(1).unwrap(),

@@ -24,7 +24,10 @@ pub(in super::super) fn open_help(
             return;
         }
     };
-    win.global::<ui::Platform>().set_is_macos(true);
+    win.global::<ui::Platform>()
+        .set_is_macos(cfg!(target_os = "macos"));
+    win.global::<ui::Platform>()
+        .set_is_linux(cfg!(target_os = "linux"));
     win.global::<ui::Theme>()
         .set_scheme(clamp_scheme(global_scheme()));
     // Light up the bar's 🆘 chip while help is open (same as ⚙ for Settings).

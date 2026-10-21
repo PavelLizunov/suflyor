@@ -4058,7 +4058,13 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
-                        if root.stt-provider-index == 1 : DarkCheck {
+                        if root.stt-provider-index == 1 && Platform.is-linux : Text {
+                            text: @tr("GigaAM uses the native ONNX Runtime CPU backend on Linux.");
+                            font-size: Metrics.font-caption;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        if root.stt-provider-index == 1 && !Platform.is-linux : DarkCheck {
                             text: Platform.is-macos
                                 ? @tr("Use Apple Core ML — faster on Apple Silicon")
                                 : @tr("Use GPU (DirectML) — faster on long audio, ~1s warm-up on first use");
