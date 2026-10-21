@@ -246,9 +246,9 @@ pub(super) fn refresh_lock_chip(o: &OverlayBarWindow, cfg: &config::SharedConfig
 mod tile_heading_tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)] // test asserts
     use super::{
-        active_stack_label, ai_perf_label, manual_tile_failure, manual_tile_heading,
-        manual_tile_not_configured, manual_tile_placeholder, memory_size_label, mic_busy_status,
-        summary_empty_copy,
+        active_stack_label, ai_perf_label, gigaam_accelerator_name, manual_tile_failure,
+        manual_tile_heading, manual_tile_not_configured, manual_tile_placeholder,
+        memory_size_label, mic_busy_status, summary_empty_copy,
     };
 
     #[cfg(target_os = "macos")]

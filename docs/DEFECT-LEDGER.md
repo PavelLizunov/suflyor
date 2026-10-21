@@ -10,7 +10,7 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ### D-082 First-map native identities remain unresolved after an early miss   Severity: P2   Status: Open
 Evidence: native ui-mcp 5b3b84e maps real Wayland bar/Settings/tiles, but logs native-handle realization failures and reports stealth unavailable. After a first map miss, view_id stores an unresolved entry; later title candidates cannot take the resolution branch because it requires no existing entry. Its own temporary title can also differ from the original Slint title. Native Settings hide/reopen loses its app_id in Slint 1.17.1 suspend/recreate, so class-only compositor rules cannot cover that reused window. The live stack also incorrectly labels Linux CPU inference as DirectML.
-Fix: resolve retries against the retained original title and unclaimed compositor identity; do not mutate titles before a surface maps. Preserve ambiguity rejection and verify live mapped handles, retained Settings, exclusion readback and placement. Describe the actual Linux CPU accelerator.
+Fix: resolve retries against the retained original title and unclaimed compositor identity; do not mutate titles before a surface maps. Preserve ambiguity rejection and verify live mapped handles, retained Settings, exclusion readback and placement. Describe the actual Linux CPU accelerator. Candidate 63d5358 adds the platform-label regression without importing its subject into the explicit test-module imports; native Linux/macOS reproduce E0425 in the test target. Add the missing import and rerun; this failed candidate is not accepted.
 Closed by:
 
 ### D-081 Linux installer omits compositor rules and singleton activation   Severity: P2   Status: Open
