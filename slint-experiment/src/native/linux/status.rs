@@ -15,6 +15,13 @@ impl ksni::Tray for Status {
     fn icon_name(&self) -> String {
         "audio-input-microphone".into()
     }
+    fn watcher_online(&self) {
+        let _ = super::desktop::send_command("tray-online");
+    }
+    fn watcher_offline(&self, _reason: ksni::OfflineReason) -> bool {
+        let _ = super::desktop::send_command("tray-offline");
+        true
+    }
     fn activate(&mut self, _x: i32, _y: i32) {
         let _ = super::desktop::send_command("show");
     }

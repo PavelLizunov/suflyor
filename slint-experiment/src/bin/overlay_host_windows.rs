@@ -5192,6 +5192,14 @@ fn main() -> Result<(), slint::PlatformError> {
                         "ptt-sys-up" => bar.invoke_ptt_sys_released(),
                         "show" => restore_bar_from_tray(&weak),
                         "hide" => bar.invoke_hide_to_tray_clicked(),
+                        "tray-online" | "tray-offline" => {
+                            let available = action == "tray-online";
+                            TRAY_AVAILABLE.store(available, Ordering::Relaxed);
+                            bar.set_tray_available(available);
+                            if !available && BAR_TRAY_HIDDEN.load(Ordering::Relaxed) {
+                                restore_bar_from_tray(&weak);
+                            }
+                        }
                         "settings" => bar.invoke_open_settings_clicked(),
                         "mic" => bar.invoke_mic_toggle_clicked(),
                         "system" => bar.invoke_sys_toggle_clicked(),

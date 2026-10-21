@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-085 Linux status watcher loss leaves hide availability stale   Severity: P2   Status: Open
+Evidence: native/linux/status.rs installs a ksni status item once but does not override its watcher_offline/watcher_online callbacks; the host sets TRAY_AVAILABLE only at initial install. If the shell watcher disappears after the bar is hidden, no command restores the bar and the hide chip remains available. ksni 0.3.5 exposes both callbacks for this lifecycle.
+Fix: forward watcher availability through the existing private command channel; clear hide availability and restore a hidden bar on loss, re-enable on return. Keep the status guard teardown bounded and avoid restarting unrelated shell processes for QA.
+Closed by:
+
 ### D-084 Closing a Wayland tile keeps its strong live-list entry   Severity: P2   Status: Open
 Evidence: every affected tile-close path records a native address, hides the Slint surface, then removes entries by resolving that address again. Wayland hide destroys the native surface, so the just-hidden tile can no longer resolve its address and remains in the live Vec. The same order exists in poll/drop, summary retry, F9, PTT, read-aloud, Vision and archive content tiles. New tiles already carry a process-unique sequence before native mapping.
 Fix: remove entries by their existing sequence rather than a destroyed OS handle; keep request abort, conversation cleanup and live tile-count refresh. Verify actual close/count/cap behavior in the native UI, including close before first mapping.
