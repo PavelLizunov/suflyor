@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-082 First-map native identities remain unresolved after an early miss   Severity: P2   Status: Open
+Evidence: native ui-mcp 5b3b84e maps real Wayland bar/Settings/tiles, but logs native-handle realization failures and reports stealth unavailable. After a first map miss, view_id stores an unresolved entry; later title candidates cannot take the resolution branch because it requires no existing entry. Its own temporary title can also differ from the original Slint title. Native Settings hide/reopen loses its app_id in Slint 1.17.1 suspend/recreate, so class-only compositor rules cannot cover that reused window. The live stack also incorrectly labels Linux CPU inference as DirectML.
+Fix: resolve retries against the retained original title and unclaimed compositor identity; do not mutate titles before a surface maps. Preserve ambiguity rejection and verify live mapped handles, retained Settings, exclusion readback and placement. Describe the actual Linux CPU accelerator.
+Closed by:
+
 ### D-081 Linux installer omits compositor rules and singleton activation   Severity: P2   Status: Open
 Evidence: source review of install-linux.sh shows no Hyprland snippet deployment/source, despite D-073 proving the first bar tiles without rules. Russian tiles translate their title to `Тайл` but the tile-specific rule matches only `tile`. The desktop entry directly launches a second process, which exits at the singleton lock instead of restoring the existing hidden bar. Custom XDG_CONFIG_HOME is not recorded in the service, so its IPC identity can differ from the launcher.
 Fix: install the checked rules/icon/native launch wrapper, source only the task-owned rules from the existing user Hyprland config, persist the same config identity for service and launcher, and activate the existing process before starting a new service. Keep uninstall limited to owned files/block and preserve configuration/models. Verify native install, mapped geometry, second launch, autostart and uninstall. The tested shared target directory contains all binaries; no missing shared library is established by current ldd output.

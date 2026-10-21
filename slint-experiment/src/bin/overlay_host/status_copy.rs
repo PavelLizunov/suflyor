@@ -1,6 +1,6 @@
+use crate::ui::OverlayBarWindow;
 use overlay_backend::config;
 use slint::SharedString;
-use crate::ui::OverlayBarWindow;
 
 /// Short, human display name for a model id: drop a `.gguf`/`.bin` extension,
 /// then take the first token (or the tier after "claude-"). Used by the bar's
@@ -43,7 +43,11 @@ pub(super) fn active_stack_label(c: &overlay_backend::config::Config) -> String 
     // can tell the fallback vs primary model apart at a glance (the user asked to see
     // the selected model more explicitly); cloud models keep the short id.
     let model = if c.ai_provider == "mlx" {
-        model_full.rsplit('/').next().unwrap_or(model_full).to_string()
+        model_full
+            .rsplit('/')
+            .next()
+            .unwrap_or(model_full)
+            .to_string()
     } else if ai_local {
         overlay_backend::local_ai::local_model_label(model_full)
     } else if c.ai_provider == "codex" {
@@ -122,7 +126,7 @@ pub(super) fn memory_size_label(bytes: Option<u64>) -> String {
 }
 
 pub(super) fn gigaam_accelerator_name(enabled: bool) -> &'static str {
-    if !enabled {
+    if !enabled || cfg!(target_os = "linux") {
         "CPU"
     } else if cfg!(target_os = "macos") {
         "Core ML"
@@ -187,7 +191,11 @@ pub(super) fn mic_busy_status(is_ru: bool) -> &'static str {
     }
 }
 
-pub(super) fn manual_tile_placeholder(deep_locked: bool, has_transcript: bool, is_ru: bool) -> &'static str {
+pub(super) fn manual_tile_placeholder(
+    deep_locked: bool,
+    has_transcript: bool,
+    is_ru: bool,
+) -> &'static str {
     if deep_locked {
         return overlay_backend::deep_lock::blocked_notice(is_ru);
     }
@@ -299,6 +307,19 @@ mod tile_heading_tests {
     }
 
     #[test]
+    fn gigaam_accelerator_matches_the_native_platform() {
+        assert_eq!(gigaam_accelerator_name(false), "CPU");
+        let enabled = if cfg!(target_os = "linux") {
+            "CPU"
+        } else if cfg!(target_os = "macos") {
+            "Core ML"
+        } else {
+            "GPU(DirectML)"
+        };
+        assert_eq!(gigaam_accelerator_name(true), enabled);
+    }
+
+    #[test]
     fn summary_empty_notice_has_both_ui_languages() {
         assert_eq!(summary_empty_copy(false).0, "Meeting summary");
         assert!(summary_empty_copy(false).1.starts_with("No transcript"));
@@ -359,12 +380,25 @@ pub(super) fn connection_failed(ru: bool, chain: &str) -> String {
         needles.iter().any(|n| lower.contains(n))
     };
     let (ru_text, en_text) = if has(&["no groq api key", "no api key", "missing api key"]) {
-        ("Нет ключа: добавьте его в Настройках", "No key yet: add it in Settings")
+        (
+            "Нет ключа: добавьте его в Настройках",
+            "No key yet: add it in Settings",
+        )
     } else if has(&["401", "403", "unauthorized", "forbidden", "invalid api key"]) {
         ("Ключ не подошёл", "The key was rejected")
     } else if has(&["404", "not found"]) {
-        ("По этому адресу ничего не найдено", "Nothing found at this address")
-    } else if has(&["timed out", "timeout", "refused", "error sending request", "dns", "connect"]) {
+        (
+            "По этому адресу ничего не найдено",
+            "Nothing found at this address",
+        )
+    } else if has(&[
+        "timed out",
+        "timeout",
+        "refused",
+        "error sending request",
+        "dns",
+        "connect",
+    ]) {
         ("Сервер не отвечает", "The server does not answer")
     } else {
         (
@@ -389,7 +423,13 @@ pub(super) enum GigaamAction {
 /// Result of the STT check for the local GigaAM model: what happened and the
 /// next step the STT tab offers. Other failures read as connection failures.
 pub(super) fn gigaam_check_failed(ru: bool, chain: &str, action: GigaamAction) -> String {
-    let accelerator = if cfg!(target_os = "macos") { "Apple Core ML" } else { "GPU (DirectML)" };
+    let accelerator = if cfg!(target_os = "macos") {
+        "Apple Core ML"
+    } else if cfg!(target_os = "linux") {
+        "ONNX Runtime"
+    } else {
+        "GPU (DirectML)"
+    };
     let (button_ru, button_en) = match action {
         GigaamAction::CheckFiles => ("«Проверить файлы»", "Check files"),
         _ => ("«Загрузить / Продолжить»", "Download / Resume"),
@@ -415,7 +455,12 @@ pub(super) fn gigaam_check_failed(ru: bool, chain: &str, action: GigaamAction) -
 /// A connection test that could not even start (no async runtime).
 pub(super) fn check_not_started(ru: bool, err: &dyn std::fmt::Display) -> String {
     log::warn!("connection test could not start: {err}");
-    if ru { "Проверка не запустилась" } else { "The check could not start" }.to_string()
+    if ru {
+        "Проверка не запустилась"
+    } else {
+        "The check could not start"
+    }
+    .to_string()
 }
 
 #[cfg(test)]
@@ -424,10 +469,22 @@ mod connection_text_tests {
 
     #[test]
     fn failures_read_as_plain_words() {
-        assert_eq!(connection_failed(true, "no Groq API key set"), "Нет ключа: добавьте его в Настройках");
-        assert_eq!(connection_failed(false, "HTTP 401 Unauthorized"), "The key was rejected");
-        assert_eq!(connection_failed(true, "error sending request: connection refused"), "Сервер не отвечает");
-        assert_eq!(connection_failed(false, "weird"), "Could not connect: check the address, key and model");
+        assert_eq!(
+            connection_failed(true, "no Groq API key set"),
+            "Нет ключа: добавьте его в Настройках"
+        );
+        assert_eq!(
+            connection_failed(false, "HTTP 401 Unauthorized"),
+            "The key was rejected"
+        );
+        assert_eq!(
+            connection_failed(true, "error sending request: connection refused"),
+            "Сервер не отвечает"
+        );
+        assert_eq!(
+            connection_failed(false, "weird"),
+            "Could not connect: check the address, key and model"
+        );
     }
 
     #[test]

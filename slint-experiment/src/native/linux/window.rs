@@ -47,7 +47,7 @@ fn selector(id: isize) -> Result<String, Error> {
 
 pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
     let all = clients()?;
-    window
+    let result = window
         .with_winit_window(|w| -> Result<isize, Error> {
             let mut ids = WINDOWS.lock().map_err(|_| "native identity lock failed")?;
             // Remove resolved windows no longer owned by this process.
@@ -58,25 +58,39 @@ pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
             if ids.len() > 128 {
                 ids.retain(|_, v| v.address.is_some());
             }
-            let title = w.title();
+            if let Some(address) = ids.get(&w.id()).and_then(|v| v.address) {
+                return Ok(address);
+            }
+            let title = ids
+                .get(&w.id())
+                .map_or_else(|| w.title(), |v| v.original.clone());
             let claimed: Vec<isize> = ids.values().filter_map(|v| v.address).collect();
             let candidates: Vec<isize> = all
                 .iter()
-                .filter(|c| c["title"].as_str() == Some(&title))
+                .filter(|c| {
+                    c["title"].as_str() == Some(&title)
+                        || c["initialTitle"].as_str() == Some(&title)
+                })
                 .filter_map(address)
                 .filter(|id| !claimed.contains(id))
                 .collect();
-            if !ids.contains_key(&w.id()) && candidates.len() == 1 {
+            if candidates.len() == 1 {
                 let address = candidates[0];
                 ids.insert(
                     w.id(),
                     Identity {
                         original: title.clone(),
-                        title,
+                        title: title.clone(),
                         address: Some(address),
                     },
                 );
+                if w.title() != title {
+                    w.set_title(&title);
+                }
                 return Ok(address);
+            }
+            if all.is_empty() {
+                return Err("compositor has not mapped this window yet".into());
             }
             let id = ids.entry(w.id()).or_insert_with(|| Identity {
                 original: w.title(),
@@ -100,11 +114,21 @@ pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
                 w.set_title(&id.original);
                 return Ok(found);
             }
-            w.set_title(&id.title);
+            if candidates.len() > 1 {
+                w.set_title(&id.title);
+                w.request_redraw();
+            }
             // The caller's normal realization retry gives Wayland its next roundtrip.
             Err("compositor has not mapped this window yet".into())
         })
-        .ok_or("Wayland window is not realized")?
+        .ok_or("Wayland window is not realized")?;
+    if let Err(error) = &result {
+        log::debug!(
+            "native identity unresolved: {error}; owned clients={}",
+            all.len()
+        );
+    }
+    result
 }
 
 pub fn rect(id: isize) -> Result<(i32, i32, i32, i32), Error> {
