@@ -37,7 +37,14 @@ PY
 fi
 [[ "$action" = install || "$action" = autostart || "$action" = no-autostart ]] || { printf 'Usage: %s [install|autostart|no-autostart|uninstall]\n' "$0" >&2; exit 2; }
 if [[ "$action" != install ]]; then
-    if [[ "$action" = autostart ]]; then systemctl --user enable suflyor.service; else systemctl --user disable suflyor.service; fi
+    if [[ "$action" = autostart ]]; then
+        systemctl --user enable suflyor.service
+    else
+        systemctl --user disable suflyor.service
+        # Disable also removes linked units; retain manual launch for custom XDG roots.
+        systemctl --user link "$config/systemd/user/suflyor.service" >/dev/null
+        systemctl --user daemon-reload
+    fi
     exit
 fi
 if [[ "$(uname -m)" = x86_64 ]] && ! grep -qw avx2 /proc/cpuinfo; then
