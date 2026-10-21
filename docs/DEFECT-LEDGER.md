@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-075 macOS window guard assumes macOS-only spelling for a shared non-Windows branch   Severity: P3   Status: Open
+Evidence: PR #307 CI 39572451692 macOS job fails at native_macos_window_guard.rs:78. The production lock-menu scale branch was correctly extended to all non-Windows targets, but the source-shape guard still requires the former macOS-only cfg text. The native AppKit, placement and scaling assertions remain relevant and must stay.
+Fix: align only the cfg spelling assertion with the shared non-Windows branch; retain the actual macOS bridge and geometry invariants and rerun native guards.
+Closed by:
+
 ### D-074 Linux test driver rebuilds unrelated demonstration binaries   Severity: P3   Status: Open
 Evidence: Linux drivers at 2bd39ad and 0eb2a9e were interrupted while Cargo built additional large binary targets. A minimal reproduction on the same Cargo 1.98.1 worker confirms that `cargo test --lib --bin overlay-host --test linux_platform` and `cargo rustc --test linux_platform` still build unrelated binaries for integration tests. Serialization alone does not restrict that target set.
 Fix: put the three non-product binaries behind a default-enabled `demo-binaries` feature, preserving normal developer/Windows behavior. Disable package defaults only in the Linux driver and explicitly select library, overlay-host and linux_platform tests. Keep one build job for tests and run the relevant backend capability, installer and update regressions. Require a complete exact-SHA driver exit, not direct executable results.

@@ -18,10 +18,10 @@ mod diar;
 mod engine;
 #[cfg(windows)]
 mod playback;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[path = "playback_macos.rs"]
 mod playback;
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 #[path = "playback_unavailable.rs"]
 mod playback;
 

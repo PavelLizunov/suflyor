@@ -58,6 +58,15 @@ fn tts_root() -> Option<PathBuf> {
     if let Some(a) = std::env::var_os("APPDATA") {
         return Some(PathBuf::from(a).join("suflyor").join("tts"));
     }
+    #[cfg(target_os = "linux")]
+    {
+        let config = std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute())
+            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")));
+        return config.map(|path| path.join("suflyor").join("tts"));
+    }
+    #[cfg(not(target_os = "linux"))]
     if let Some(h) = std::env::var_os("HOME") {
         return Some(
             PathBuf::from(h)
