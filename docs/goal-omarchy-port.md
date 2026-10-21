@@ -32,7 +32,8 @@ Do not rewrite the UI in QML merely to obtain a shell entry point.
 - [x] Clipboard copy and singleton exclusion work on the native worker.
 - [x] Windows targeted gate remains green for the exact code candidate.
 - [x] Record unsupported shortcuts/audio/capture, deployment and inference gaps.
-- [ ] Complete the aggregate Linux test-driver invocation without interruption.
+- [x] Complete the scoped aggregate Linux test-driver invocation without interruption.
+      Candidate 68ed251: 236 passed, three deliberately ignored; exit 0.
 - [ ] Integrate the reviewed milestone into master; no Linux release is published.
 
 Observed native evidence and exact identities:
@@ -61,8 +62,10 @@ Use `omarchy-test`, an approved dedicated worker. Its initial 4 GiB allocation
 proved insufficient for a practical full debug host build (heavy swap use).
 After checking physical-host headroom, only VM 107 was shut down cleanly and
 raised to 8 GiB; networking and the existing Hyprland session recovered. Use
-one owned managed build at a time, two Cargo jobs, disabled incremental builds,
-no debug symbols and a bounded service memory limit. Source and editing stay in
+one owned managed build at a time, one Cargo job and one test thread for the
+Linux driver, disabled incremental builds, no debug symbols and a bounded
+service memory limit. The driver disables only the package demo-binaries feature
+and runs library, overlay-host, linux_platform and relevant backend regressions. Source and editing stay in
 an isolated task worktree. Do not build or alter the owner's desktop shell.
 
 Claude's scoped October 17/18 project note is reconnaissance, not current

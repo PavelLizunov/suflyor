@@ -55,6 +55,49 @@ executable and its live clipboard test passed again at 0eb2a9e, but the serializ
 Cargo invocation was also stopped while rebuilding unrelated demo targets. Its
 full-driver exit marker is absent; no complete Linux gate PASS is claimed.
 
+## Completed scoped Linux driver correction
+
+The interrupted results above remain historical failures, not acceptance. The
+corrected entry point completed on the same dedicated worker without interruption:
+
+- Candidate: `68ed25134c11f4b57ac9f0242f64a75c963b3e1b`.
+- Tree: `99f2a9e50994230b4e694e9854675a7079077ddf`.
+- Command: `bash -x scripts/check-linux-port.sh`; exit marker **0** and
+  final `Linux port gate PASS`; worker checkout remained clean.
+- Run: October 21, 2026, 06:25:29–07:50:27 +03:00; 84m58s including initial
+  compilation of the requested large generated Slint test targets.
+- Cargo 1.98.1; one build job, one test thread, incremental compilation disabled,
+  dev debug symbols disabled, Slint debug metadata enabled. Managed task service
+  used a two-hour runtime bound, MemoryHigh=6G, MemoryMax=7G, MemorySwapMax=6G.
+- Host/library check passed in 9m45s. Cargo test completed in 72m24s:
+  library **82 passed / one ignored**, overlay-host **146 passed / one ignored**,
+  linux_platform **one passed / one ignored**.
+- Backend capability tests **three passed**; Linux installer rejection **one
+  passed**; update tests **three passed**. Total **236 passed, zero failed, three
+  ignored across six groups**. Filters intentionally exclude the unrelated backend
+  suite. The ignored tests are a microbenchmark, live audio and live clipboard.
+- This is a complete scoped Cargo driver PASS, not a full Linux test suite or
+  Clippy `-D warnings` pass. Existing Linux unused-code/variable and Slint warnings
+  remain. No real audio, capture, shortcuts or model inference is implied.
+- Windows targeted gate on the same candidate/tree: exit **0**, **1,109 passed
+  across 23 groups, five ignored**. Its scheduled-task wrapper was restored
+  byte-for-byte; the old S7 job remains disabled. No new macOS gate was run.
+
+D-074 was reproduced with a tiny broken unrelated demo on the installed Cargo:
+explicit `--bin` selection alone, and `cargo rustc --test`, both still compiled
+the demo. A default-enabled `demo-binaries` feature preserves ordinary builds;
+the Linux driver opts out with `--no-default-features`. The negative fixture then
+passed library, host and platform tests without compiling that demo, while a
+default invocation still selected it. The actual corrected driver ran the real
+project tests, not a substitute fixture or manually invoked test executable.
+A read-only independent source review found no blocking defect; it did not run
+the native checks.
+
+Private exact-SHA logs and manifests: task evidence directories
+`omarchy/linux-68ed251/` and `omarchy/windows-68ed251/`. Product Rust/UI sources
+still match the previously inspected native 5cadbb1 milestone. D-072, D-073 and
+D-074 remain open until reviewed integration, not closed by this branch checkpoint.
+
 ## Still not connected or verified
 
 PipeWire microphone/system audio, screen capture/OCR, external capture exclusion,

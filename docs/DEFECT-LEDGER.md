@@ -11,6 +11,7 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 ### D-074 Linux test driver rebuilds unrelated demonstration binaries   Severity: P3   Status: Open
 Evidence: Linux drivers at 2bd39ad and 0eb2a9e were interrupted while Cargo built additional large binary targets. A minimal reproduction on the same Cargo 1.98.1 worker confirms that `cargo test --lib --bin overlay-host --test linux_platform` and `cargo rustc --test linux_platform` still build unrelated binaries for integration tests. Serialization alone does not restrict that target set.
 Fix: put the three non-product binaries behind a default-enabled `demo-binaries` feature, preserving normal developer/Windows behavior. Disable package defaults only in the Linux driver and explicitly select library, overlay-host and linux_platform tests. Keep one build job for tests and run the relevant backend capability, installer and update regressions. Require a complete exact-SHA driver exit, not direct executable results.
+Verification: candidate 68ed25134c11f4b57ac9f0242f64a75c963b3e1b, tree 99f2a9e50994230b4e694e9854675a7079077ddf: complete scoped Linux driver exit 0, 236 passed / three ignored across six groups; Windows targeted gate exit 0, 1,109 passed / five ignored across 23 groups. Default-enabled demo gating preserves ordinary builds; a native negative fixture verifies the target-selection cause. Remains open until integration.
 Closed by:
 
 ### D-073 First Wayland runtime tiles the bar and probes unsupported startup capture   Severity: P3   Status: Open
