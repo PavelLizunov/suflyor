@@ -262,7 +262,9 @@ fn open_tray_menu(
         if set_skip_taskbar(hwnd, true).is_err() || set_always_on_top(hwnd, true).is_err() {
             return false;
         }
-        if global_stealth() && set_stealth(hwnd, true).is_err() {
+        if (global_stealth() || cfg!(target_os = "linux"))
+            && set_stealth(hwnd, global_stealth()).is_err()
+        {
             return false;
         }
         if move_window_pos_only(hwnd, x, y).is_err() {

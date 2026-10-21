@@ -4225,8 +4225,8 @@ fn main() -> Result<(), slint::PlatformError> {
                             *error_for_reveal.borrow_mut() = Some(format!("always-on-top: {e}"));
                             return false;
                         }
-                        if global_stealth() {
-                            if let Err(e) = set_stealth(hwnd, true) {
+                        if global_stealth() || cfg!(target_os = "linux") {
+                            if let Err(e) = set_stealth(hwnd, global_stealth()) {
                                 *error_for_reveal.borrow_mut() = Some(format!("stealth: {e}"));
                                 return false;
                             }
