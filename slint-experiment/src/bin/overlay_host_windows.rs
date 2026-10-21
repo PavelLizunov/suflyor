@@ -5217,7 +5217,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         "ptt-sys-down" => bar.invoke_ptt_sys_pressed(),
                         "ptt-sys-up" => bar.invoke_ptt_sys_released(),
                         "show" => restore_bar_from_tray(&weak),
-                        "hide" => hide_bar_to_tray(&weak),
+                        "hide" => bar.invoke_hide_to_tray_clicked(),
                         "settings" => bar.invoke_open_settings_clicked(),
                         "mic" => bar.invoke_mic_toggle_clicked(),
                         "system" => bar.invoke_sys_toggle_clicked(),

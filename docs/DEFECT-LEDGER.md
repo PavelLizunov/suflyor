@@ -15,7 +15,7 @@ Closed by:
 
 ### D-079 Hyprland Lua shortcut ownership is lost on application restart   Severity: P2   Status: Open
 Evidence: native Hyprland 0.56.2 probe registers a described Lua bind and reads `dispatcher=__lua`, `arg=13`, with the description preserved. The adapter instead recognizes ownership by searching `arg` for the command, so after a restart it treats its own keys as foreign conflicts. Action commands also stop the drain after one datagram, delaying rapid PTT release. Source review found temporary identity titles left visible after compositor resolution.
-Fix: mark bindings with a stable per-config description, compare that description and remove only owned bindings on teardown. Continue the bounded input drain for action commands, and restore original titles after identity resolves. Verify real relaunch and PTT press/release. Reviewer's claim that opacity_inactive and opacity_fullscreen do not exist was refuted by actual getprop values; preserve all three opacity values.
+Fix: mark bindings with a stable per-config description, compare that description and remove only owned bindings on teardown. Windows native 700ce89 tray_guard catches the IPC hide path bypassing the guarded explicit bar callback; route that command through the existing callback, retaining the guard assertion. Continue the bounded input drain for action commands, and restore original titles after identity resolves. Verify real relaunch and PTT press/release. Reviewer's claim that opacity_inactive and opacity_fullscreen do not exist was refuted by actual getprop values; preserve all three opacity values.
 Closed by:
 
 ### D-078 Linux system capture cannot resolve an input offered by Settings   Severity: P2   Status: Open
@@ -34,7 +34,7 @@ Fix: keep a stable mapped compositor identity, use the installed CLI contract, r
 Closed by:
 
 ### D-075 macOS window guard assumes macOS-only spelling for a shared non-Windows branch   Severity: P3   Status: Open
-Evidence: PR #307 CI 39572451692 macOS job fails at native_macos_window_guard.rs:78. At 6569979, CI 39611578690 compiles/runs Windows tests, then two macos_settings_guard assertions still demand Windows-only setup and pre-Linux STT cfg spelling. The macOS job was cancelled after the Windows failure, not proven failed in compilation. The production lock-menu scale branch was correctly extended to all non-Windows targets, but the source-shape guard still requires the former macOS-only cfg text. The native AppKit, placement and scaling assertions remain relevant and must stay.
+Evidence: PR #307 CI 39572451692 macOS job fails at native_macos_window_guard.rs:78. At 6569979, CI 39611578690 compiles/runs Windows tests, then two macos_settings_guard assertions still demand Windows-only setup and pre-Linux STT cfg spelling. The macOS job was cancelled after the Windows failure, not proven failed in compilation. Native ce89dee later reaches macos_app_packaging_guard and finds the same stale Windows-only cfg assertion for the updater; update the expected shared Windows/Linux scope while retaining macOS exclusion. The production lock-menu scale branch was correctly extended to all non-Windows targets, but the source-shape guard still requires the former macOS-only cfg text. The native AppKit, placement and scaling assertions remain relevant and must stay.
 Fix: align only the cfg spelling assertion with the shared non-Windows branch; retain the actual macOS bridge and geometry invariants and rerun native guards.
 Closed by:
 

@@ -331,11 +331,13 @@ fn dmg_script_uses_the_native_drag_install_layout() {
 #[test]
 fn windows_updater_is_absent_but_backup_remains_on_the_macos_settings_surface() {
     assert!(HOST.contains(
-        "#[cfg(windows)]\n#[path = \"overlay_host/settings_updates.rs\"]\nmod settings_updates;"
+        "#[cfg(any(windows, target_os = \"linux\"))]\n#[path = \"overlay_host/settings_updates.rs\"]\nmod settings_updates;"
     ));
-    assert!(HOST.contains("#[cfg(windows)]\nuse settings_updates::*;"));
-    assert!(SETTINGS_CONTROLLER.contains("#[cfg(windows)]\nuse super::wire_updates;"));
-    assert!(SETTINGS_CONTROLLER.contains("#[cfg(windows)]\n    wire_updates(&win);"));
+    assert!(HOST.contains("#[cfg(any(windows, target_os = \"linux\"))]\nuse settings_updates::*;"));
+    assert!(SETTINGS_CONTROLLER
+        .contains("#[cfg(any(windows, target_os = \"linux\"))]\nuse super::wire_updates;"));
+    assert!(SETTINGS_CONTROLLER
+        .contains("#[cfg(any(windows, target_os = \"linux\"))]\n    wire_updates(&win);"));
     assert!(SETTINGS_UI.contains("label: Platform.is-macos ? @tr(\"Backup\") : @tr(\"Updates\")"));
     assert!(SETTINGS_UI.contains("if root.active-tab == 4 : VerticalLayout"));
     let updates = SETTINGS_UI
