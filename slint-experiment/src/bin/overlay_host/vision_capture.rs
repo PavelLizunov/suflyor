@@ -215,14 +215,32 @@ pub(crate) fn fire_f8_vision_capture(
     #[cfg(target_os = "linux")]
     {
         // Native slurp selection works across scaled outputs without an X11 overlay.
+        thread_local! { static BUSY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+        if BUSY.with(|busy| busy.replace(true)) { return; }
         let hidden = slint_replay::win32::hide_own_windows();
-        let captured = slint_replay::native::screen::capture_region();
-        slint_replay::win32::show_windows(&hidden);
-        match captured {
-            Ok((frame, _, _)) => launch_vision_for_bgra(frame, ep, mode, bridge, events, cfg, slint_rt, rt_handle, tiles, weak_overlay),
-            Err(error) if error.to_string() == "selection cancelled" => {},
-            Err(_) => spawn_vision_notice(events, cfg, "screen_capture_failed", "Не удалось получить кадр экрана.", "Could not capture the screen."),
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        let worker = std::thread::spawn(move || {
+            let result = slint_replay::native::screen::capture_region().map_err(|e| e.to_string());
+            slint_replay::win32::show_windows(&hidden);
+            let _ = tx.send(result);
+        });
+        type CaptureResult = Result<(slint_replay::capture::CapturedBgra,i32,i32),String>;
+        fn poll(rx: std::sync::mpsc::Receiver<CaptureResult>, worker: std::thread::JoinHandle<()>, done: Box<dyn FnOnce(CaptureResult)>) {
+            match rx.try_recv() {
+                Ok(result) => { let _=worker.join(); done(result); },
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => { let _=worker.join(); done(Err("capture worker stopped".into())); },
+                Err(std::sync::mpsc::TryRecvError::Empty) => slint::Timer::single_shot(std::time::Duration::from_millis(30),move ||poll(rx,worker,done)),
+            }
         }
+        let (bridge,events,cfg,slint_rt,rt_handle,tiles,weak_overlay) = (bridge.clone(),events.clone(),cfg.clone(),slint_rt.clone(),rt_handle.clone(),tiles.clone(),weak_overlay.clone());
+        poll(rx,worker,Box::new(move |result|{
+            BUSY.with(|busy| busy.set(false));
+            match result {
+                Ok((frame, _, _)) => launch_vision_for_bgra(frame, ep, mode, &bridge, &events, &cfg, &slint_rt, &rt_handle, &tiles, &weak_overlay),
+                Err(error) if error == "selection cancelled" => {},
+                Err(_) => spawn_vision_notice(&events, &cfg, "screen_capture_failed", "Не удалось получить кадр экрана.", "Could not capture the screen."),
+            }
+        }));
         return;
     }
 

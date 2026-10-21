@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-076 In-flight Linux native adapters need lifecycle and compositor correctness fixes   Severity: P3   Status: Open
+Evidence: source review of the development candidates finds interactive slurp running synchronously on the Slint thread, a fresh generated title on every native identity miss, incorrect `dispatch setprop` spelling, IPC paths depending on migrating data roots, no PTT release action, and CPAL render-start failures reaching a completion callback without a failure outcome. The first native Linux compile also rejects an ambiguous window-geometry error type at 210cb31. A reviewer claim that Hyprland 0.56.2 lacks Lua/eval was refuted by actual installed-worker `hyprctl eval` bind/unbind success; no downgrade to obsolete syntax is warranted. The short-lived-thread PDEATHSIG concern applies to persistent local AI servers, not finite audio children owned until capture returns.
+Fix: keep a stable mapped compositor identity, use the installed CLI contract, resolve IPC from stable config identity, dispatch capture asynchronously, own press/release actions, propagate actual playback failures and keep persistent process ownership on a long-lived spawn thread. Validate with exact candidate builds and real compositor/audio consumers; these are development candidates, not deployed full-port acceptance.
+Closed by:
+
 ### D-075 macOS window guard assumes macOS-only spelling for a shared non-Windows branch   Severity: P3   Status: Open
 Evidence: PR #307 CI 39572451692 macOS job fails at native_macos_window_guard.rs:78. The production lock-menu scale branch was correctly extended to all non-Windows targets, but the source-shape guard still requires the former macOS-only cfg text. The native AppKit, placement and scaling assertions remain relevant and must stay.
 Fix: align only the cfg spelling assertion with the shared non-Windows branch; retain the actual macOS bridge and geometry invariants and rerun native guards.

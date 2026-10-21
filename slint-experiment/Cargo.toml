@@ -139,6 +139,7 @@ path = "../overlay-backend"
 # button (`clipboard-win`) only apply on Windows; target-gating keeps them out of
 # the macOS dependency graph.
 [target.'cfg(target_os = "linux")'.dependencies]
+sha2 = "0.11"
 rfd = { version = "0.17", default-features = false, features = ["xdg-portal", "wayland"] }
 
 [target.'cfg(windows)'.dependencies]

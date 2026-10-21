@@ -86,6 +86,11 @@ pub(crate) struct RegisteredHotkeys {
     pub sa3_id: u32,
 }
 
+#[cfg(target_os = "linux")]
+thread_local! { static ACTIONS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) }; }
+#[cfg(target_os = "linux")]
+pub(crate) fn take_actions() -> Vec<String> { ACTIONS.with(|slot|std::mem::take(&mut *slot.borrow_mut())) }
+
 pub(crate) fn next_event() -> Option<global_hotkey::GlobalHotKeyEvent> {
     #[cfg(target_os = "linux")]
     if let Some(command) = slint_replay::native::desktop::receive() {
@@ -100,7 +105,7 @@ pub(crate) fn next_event() -> Option<global_hotkey::GlobalHotKeyEvent> {
             "sa1" => (Code::Digit1, Some(Modifiers::SHIFT | Modifiers::ALT)),
             "sa2" => (Code::Digit2, Some(Modifiers::SHIFT | Modifiers::ALT)),
             "sa3" => (Code::Digit3, Some(Modifiers::SHIFT | Modifiers::ALT)),
-            _ => return None,
+            _ => { ACTIONS.with(|slot|slot.borrow_mut().push(command)); return None; },
         };
         return Some(global_hotkey::GlobalHotKeyEvent { id: HotKey::new(mods,key).id(), state: global_hotkey::HotKeyState::Pressed });
     }
@@ -237,6 +242,9 @@ pub(crate) fn register_hotkeys() -> RegisteredHotkeys {
                 ("CTRL + F8", "cf8"), ("F9", "f9"), ("SHIFT + F9", "sf9"),
                 ("SHIFT + ALT + 1", "sa1"), ("SHIFT + ALT + 2", "sa2"),
                 ("SHIFT + ALT + 3", "sa3"),
+                ("SUPER + F9", "ptt-mic-down"), ("SUPER + F9@release", "ptt-mic-up"),
+                ("SUPER + SHIFT + F9", "ptt-sys-down"), ("SUPER + SHIFT + F9@release", "ptt-sys-up"),
+                ("SUPER + F10", "show"),
             ];
             let installed = slint_replay::native::desktop::listen()
                 .and_then(|()| slint_replay::native::desktop::install_bindings(&bindings))

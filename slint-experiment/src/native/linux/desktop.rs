@@ -1,7 +1,6 @@
 //! Native Hyprland transport and per-config command socket.
 
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+use sha2::{Digest, Sha256};
 use std::io;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixDatagram;
@@ -28,9 +27,12 @@ pub fn dispatch(action: &str, value: &str) -> Result<(), Error> {
 
 fn socket_path() -> Result<PathBuf, Error> {
     let runtime = std::env::var_os("XDG_RUNTIME_DIR").ok_or("Wayland runtime directory unavailable")?;
-    let mut hash = DefaultHasher::new();
-    overlay_backend::paths::data_root().hash(&mut hash);
-    Ok(PathBuf::from(runtime).join(format!("suflyor-{:016x}.sock", hash.finish())))
+    let config = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from)
+        .filter(|p| p.is_absolute()).or_else(|| dirs::home_dir().map(|p|p.join(".config")))
+        .ok_or("configuration directory unavailable")?;
+    let hash = Sha256::digest(config.as_os_str().as_encoded_bytes());
+    let suffix: String = hash[..8].iter().map(|b|format!("{b:02x}")).collect();
+    Ok(PathBuf::from(runtime).join(format!("suflyor-{suffix}.sock")))
 }
 
 pub fn send_command(value: &str) -> Result<(), Error> {
@@ -71,7 +73,9 @@ pub fn receive() -> Option<String> {
 
 pub fn install_bindings(bindings: &[(&str, &str)]) -> Result<Vec<String>, Error> {
     let binary = std::env::current_exe()?;
-    let command = format!("'{}' --command ", binary.to_string_lossy().replace('\'', "'\\''"));
+    let quoted = |s: &str| format!("'{}'",s.replace('\'', "'\\''"));
+    let config = std::env::var("XDG_CONFIG_HOME").unwrap_or_else(|_|dirs::home_dir().unwrap_or_default().join(".config").to_string_lossy().into_owned());
+    let command = format!("env XDG_CONFIG_HOME={} {} --command ",quoted(&config),quoted(&binary.to_string_lossy()));
     let existing = query("binds")?;
     let existing = existing.as_array().ok_or("invalid compositor bindings")?;
     let mut installed = Vec::new();
@@ -83,7 +87,9 @@ pub fn install_bindings(bindings: &[(&str, &str)]) -> Result<Vec<String>, Error>
                 && !bind["arg"].as_str().is_some_and(|s| s == format!("{command}{action}"))
         });
         if conflict { continue; }
-        let lua = format!("hl.bind({}, hl.dsp.exec_cmd({}))", serde_json::to_string(keys)?, serde_json::to_string(&format!("{command}{action}"))?);
+        let release = action.ends_with("-up");
+        let keys = keys.strip_suffix("@release").unwrap_or(keys);
+        let lua = format!("hl.bind({}, hl.dsp.exec_cmd({}), {{ release = {} }})", serde_json::to_string(keys)?, serde_json::to_string(&format!("{command}{action}"))?,release);
         let result = hypr(&["eval", &lua])?;
         if result.to_ascii_lowercase().contains("error") { continue; }
         installed.push(action.to_string());
@@ -94,7 +100,7 @@ pub fn install_bindings(bindings: &[(&str, &str)]) -> Result<Vec<String>, Error>
 fn binding_parts(keys: &str) -> (u64, &str) {
     let mut mods = 0;
     let mut key = "";
-    for part in keys.split(" + ") {
+    for part in keys.trim_end_matches("@release").split(" + ") {
         match part { "SHIFT" => mods |= 1, "CTRL" => mods |= 4, "ALT" => mods |= 8, "SUPER" => mods |= 64, _ => key = part }
     }
     (mods, key)

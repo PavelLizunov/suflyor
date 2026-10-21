@@ -4,10 +4,16 @@ use super::desktop::{dispatch, query};
 use slint::winit_030::WinitWindowAccessor;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::collections::HashMap;
+use slint::winit_030::winit::window::WindowId;
+
+struct Identity { title: String, address: Option<isize> }
+static WINDOWS: std::sync::LazyLock<Mutex<HashMap<WindowId,Identity>>> = std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
 type Error = Box<dyn std::error::Error>;
 static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 static DRAG: Mutex<Option<(isize, i32, i32, i32, i32)>> = Mutex::new(None);
+static HIDDEN_ALPHA: std::sync::LazyLock<Mutex<HashMap<isize,serde_json::Value>>> = std::sync::LazyLock::new(||Mutex::new(HashMap::new()));
 
 fn clients() -> Result<Vec<serde_json::Value>, Error> {
     let value = query("clients")?;
@@ -24,15 +30,23 @@ fn address(v: &serde_json::Value) -> Option<isize> {
 fn selector(id: isize) -> Result<String, Error> { client(id)?; Ok(format!("address:0x{id:x}")) }
 
 pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
-    // A unique native title maps the exact Slint window to its compositor address.
-    let title = window.with_winit_window(|w| {
-        let title = w.title();
-        if title.contains(" [suflyor-") { return title; }
-        let unique = format!("{title} [suflyor-{}-{}]", std::process::id(), SEQUENCE.fetch_add(1,Ordering::Relaxed));
-        w.set_title(&unique); unique
-    }).ok_or("Wayland window is not realized")?;
-    clients()?.into_iter().find(|c| c["title"].as_str() == Some(&title))
-        .and_then(|c| address(&c)).ok_or_else(|| "compositor has not mapped this window yet".into())
+    let all = clients()?;
+    window.with_winit_window(|w| -> Result<isize, Error> {
+        let mut ids=WINDOWS.lock().map_err(|_| "native identity lock failed")?;
+        // Remove resolved windows no longer owned by this process.
+        ids.retain(|_,v| v.address.is_none_or(|id| all.iter().any(|c|address(c)==Some(id))));
+        if ids.len()>128 { ids.retain(|_,v|v.address.is_some()); }
+        let id=ids.entry(w.id()).or_insert_with(||Identity{
+            title:format!("{} [suflyor-{}-{}]",w.title(),std::process::id(),SEQUENCE.fetch_add(1,Ordering::Relaxed)),address:None,
+        });
+        if let Some(address)=id.address{return Ok(address);}
+        if let Some(found)=all.iter().find(|c|c["title"].as_str()==Some(&id.title)).and_then(address){
+            id.address=Some(found);return Ok(found);
+        }
+        w.set_title(&id.title);
+        // The caller's normal realization retry gives Wayland its next roundtrip.
+        Err("compositor has not mapped this window yet".into())
+    }).ok_or("Wayland window is not realized")?
 }
 
 pub fn rect(id: isize) -> Result<(i32,i32,i32,i32),Error> {
@@ -76,13 +90,27 @@ pub fn hide_own()->Vec<(isize,bool)>{
     for c in clients().unwrap_or_default(){
         if let Some(id)=address(&c){
             if c["hidden"].as_bool()==Some(true){continue;}
-            if dispatch("setprop",&format!("{} alpha 0 override",selector(id).unwrap_or_default())).is_ok(){hidden.push((id,true));}
+            let selector=format!("address:0x{id:x}");
+            let saved=super::desktop::hypr(&["-j","getprop",&selector,"alpha"]).ok().and_then(|v|serde_json::from_str(&v).ok());
+            if let Some(saved)=saved {
+                if super::desktop::hypr(&["setprop", &selector, "alpha", "0", "override"]).is_ok(){
+                    HIDDEN_ALPHA.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(id,saved);
+                    hidden.push((id,true));
+                }
+            }
         }
     }
     hidden
 }
 pub fn show_own(hidden:&[(isize,bool)]){
-    for (id,_) in hidden {if let Ok(s)=selector(*id){let _=dispatch("setprop",&format!("{s} alpha unset"));}}
+    for (id,_) in hidden {
+        let saved=HIDDEN_ALPHA.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(id);
+        if let (Some(saved),Ok(s))=(saved,selector(*id)){
+            let value=saved.get("value").unwrap_or(&saved);
+            if let Some(alpha)=value.as_f64(){let _=super::desktop::hypr(&["setprop", &s,"alpha",&alpha.to_string(),"override"]);}
+            else {let _=super::desktop::hypr(&["setprop", &s,"alpha","unset"]);}
+        }
+    }
 }
 pub fn drag_begin(id:isize){
     if let (Ok((cx,cy)),Ok((x,y,_,_)))=(cursor(),rect(id)){

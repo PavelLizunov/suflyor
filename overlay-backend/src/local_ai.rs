@@ -2145,6 +2145,13 @@ fn swap_engine_binaries(staging: &Path, live: &Path, backup: &Path) -> Result<()
         if dst.exists() {
             let _ = std::fs::copy(&dst, backup.join(name));
         }
+        #[cfg(target_os = "linux")]
+        {
+            let next = dst.with_file_name(format!(".{}.next",name.to_string_lossy()));
+            std::fs::copy(&src, &next).context("stage native engine replacement")?;
+            std::fs::rename(&next,&dst).context("replace native engine image")?;
+        }
+        #[cfg(not(target_os = "linux"))]
         std::fs::copy(&src, &dst)
             .with_context(|| format!("install engine file {}", name.to_string_lossy()))?;
         #[cfg(unix)]
@@ -2990,9 +2997,31 @@ fn download_and_extract(
     // Download the zip with LIVE byte progress + cancel support (was a silent
     // blocking curl before, so the bar sat empty during the binary downloads).
     curl_resumable(url, &zip, size, label, cancel, on)?;
+    #[cfg(target_os = "linux")]
+    {
+        let digest = github_asset_digest(url)?;
+        verify_sha256(&zip, &digest, label)?;
+    }
     extract_zip(&zip, dest_dir)?;
     let _ = std::fs::remove_file(&zip);
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn github_asset_digest(url: &str) -> Result<String> {
+    let path = url.strip_prefix("https://github.com/").ok_or_else(||anyhow!("release asset host is not supported"))?;
+    let (repository, release) = path.split_once("/releases/download/").ok_or_else(||anyhow!("invalid release asset URL"))?;
+    if !matches!(repository, LLAMA_REPO | WHISPER_REPO) { bail!("unrecognized engine repository"); }
+    let (tag, name) = release.split_once('/').ok_or_else(||anyhow!("invalid release asset path"))?;
+    let api = format!("https://api.github.com/repos/{repository}/releases/tags/{tag}");
+    let out = run_capture(curl_exe(), &["--fail", "-sL", "--max-time", "30", &api])?;
+    if !out.status.success() { bail!("cannot verify engine release manifest"); }
+    let value:serde_json::Value=serde_json::from_slice(&out.stdout)?;
+    let digest=value["assets"].as_array().and_then(|assets|assets.iter().find(|a|a["name"].as_str()==Some(name)))
+        .and_then(|a|a["digest"].as_str()).and_then(|d|d.strip_prefix("sha256:"))
+        .filter(|d|d.len()==64 && d.bytes().all(|b|b.is_ascii_hexdigit()))
+        .ok_or_else(||anyhow!("engine release has no SHA-256 digest"))?;
+    Ok(digest.to_owned())
 }
 
 /// Full path to the libarchive `tar.exe` under System32 (Win10 1803+), so PATH
@@ -3147,7 +3176,8 @@ fn validate_tar_links(listing: &str) -> Result<()> {
             if !archive_entry_is_safe(link_path) {
                 bail!("unsafe link path: {link_path}");
             }
-            if !archive_link_target_is_safe(link_path, target) {
+            let target_base = if trimmed.contains(" link to ") { "root-link" } else { link_path };
+            if !archive_link_target_is_safe(target_base, target) {
                 bail!("refusing unsafe archive link target: {link_path} -> {target}");
             }
         }

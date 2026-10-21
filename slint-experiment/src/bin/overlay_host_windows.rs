@@ -837,11 +837,11 @@ fn main() -> Result<(), slint::PlatformError> {
         let weak_tps = overlay.as_weak();
         let cfg_tps = cfg.clone();
         let loading_tps = mlx_prewarm_loading.clone();
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         let session_rt_tps = slint_rt.clone();
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         let app_state_tps = state.clone();
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         let last_system_state = Rc::new(std::cell::Cell::new(0_u8));
         _tps_timer.start(
             slint::TimerMode::Repeated,
@@ -860,7 +860,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     o.set_app_memory(SharedString::from(memory_size_label(memory.app_bytes)));
                     o.set_mlx_memory(SharedString::from(memory_size_label(memory.mlx_bytes)));
 
-                    #[cfg(target_os = "macos")]
+                    #[cfg(any(target_os = "macos", target_os = "linux"))]
                     {
                         use overlay_backend::audio::SystemCaptureState;
                         let system_state = {
@@ -5190,6 +5190,24 @@ fn main() -> Result<(), slint::PlatformError> {
             }
         });
     }
+
+    #[cfg(target_os = "linux")]
+    let command_timer = {
+        let weak=overlay.as_weak();
+        let timer=Timer::default();
+        timer.start(TimerMode::Repeated,Duration::from_millis(30),move || {
+            if let Some(bar)=weak.upgrade(){for action in hotkeys::take_actions(){match action.as_str(){
+                "ptt-mic-down"=>bar.invoke_ptt_mic_pressed(), "ptt-mic-up"=>bar.invoke_ptt_mic_released(),
+                "ptt-sys-down"=>bar.invoke_ptt_sys_pressed(), "ptt-sys-up"=>bar.invoke_ptt_sys_released(),
+                "show"=>restore_bar_from_tray(&weak), "hide"=>hide_bar_to_tray(&weak),
+                "settings"=>bar.invoke_open_settings_clicked(), "mic"=>bar.invoke_mic_toggle_clicked(),
+                "system"=>bar.invoke_sys_toggle_clicked(), "session"=>bar.invoke_timer_toggle_clicked(),
+                "pause"=>bar.invoke_pause_toggle_clicked(), "quit"=>{let _=slint::quit_event_loop();},
+                _=>{},
+            }}}
+        });
+        timer
+    };
 
     // `ComponentHandle::run()` exits as soon as the last Slint window is
     // hidden. Hidden-to-tray deliberately has no visible Slint window, so keep

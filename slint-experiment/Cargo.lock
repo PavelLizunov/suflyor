@@ -5674,6 +5674,7 @@ dependencies = [
  "rfd",
  "rodio",
  "serde_json",
+ "sha2",
  "slint",
  "slint-build",
  "suflyor-wsola",
