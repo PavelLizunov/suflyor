@@ -83,6 +83,70 @@ async fn queued_stream_stops_when_receiver_is_dropped() {
     );
 }
 
+#[tokio::test]
+async fn active_silent_stream_stops_when_receiver_is_dropped() {
+    let _stream_guard = STREAM_TEST_LOCK.lock().await;
+    for send_headers in [false, true] {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let (accepted, ready) = tokio::sync::oneshot::channel();
+        let (closed, retired) = tokio::sync::oneshot::channel();
+        let server = std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            let mut request = [0; 4096];
+            assert!(stream.read(&mut request).unwrap() > 0);
+            if send_headers {
+                stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\n\r\n").unwrap();
+                let frame = b"data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"private reasoning\"}}]}\n\n";
+                write!(stream, "{:X}\r\n", frame.len()).unwrap();
+                stream.write_all(frame).unwrap();
+                stream.write_all(b"\r\n").unwrap();
+                stream.flush().unwrap();
+            }
+            let _ = accepted.send(());
+            loop {
+                match stream.read(&mut request) {
+                    Ok(0) => break,
+                    Ok(_) => continue,
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::BrokenPipe
+                        ) =>
+                    {
+                        break
+                    }
+                    Err(error) => panic!("closed receiver kept silent provider alive: {error}"),
+                }
+            }
+            let _ = closed.send(());
+        });
+        let rx = stream_chat(url, String::new(), "model".into(), Vec::new(), 8);
+        tokio::time::timeout(std::time::Duration::from_secs(2), ready)
+            .await
+            .unwrap()
+            .unwrap();
+        drop(rx);
+        tokio::time::timeout(std::time::Duration::from_secs(2), retired)
+            .await
+            .expect("receiver loss must retire the silent HTTP request")
+            .unwrap();
+        server.join().unwrap();
+        let permits = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            AI_SEMAPHORE.acquire_many(2),
+        )
+        .await
+        .expect("cancelled stream must release its permit")
+        .unwrap();
+        drop(permits);
+    }
+}
+
 /// Structuring (`force = true`) must disable local thinking REGARDLESS of the
 /// global `ai_local_thinking` toggle — this is the v0.18.6 fix for the tester
 /// bug where "режим рассуждение" ON broke the meeting summary. The live-answer

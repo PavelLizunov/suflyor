@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-086 Closed image tiles do not promptly cancel a silent provider stream   Severity: P2   Status: Open
+Evidence: the Vision task discards its JoinHandle, assigns no registered tile-id and its close handler only hides/prunes the tile. The backend only observes receiver loss while queueing or sending visible content, not while awaiting headers or reasoning-only chunks. Thus a closed image tile can keep its HTTP request and AI semaphore permit until the 120-second deadline. Native CPU Vision attempts timed out without a useful answer; the exact model-output cause remains unverified because request payload/reasoning frames were not retained. Boot already disables local thinking for the tested configuration, contrary to the imported no-think hypothesis.
+Fix: reuse the existing per-tile task registry for Vision and cancel its task on close. Select receiver closure against the active stream future, including header and silent-frame waits; keep timeouts, provider reasoning privacy and other independent tiles unchanged. Add a silent-stream cancellation regression and verify actual native close/server retirement. Do not shorten image answers or force a new reasoning policy without evidence.
+Closed by:
+
 ### D-085 Linux status watcher loss leaves hide availability stale   Severity: P2   Status: Open
 Evidence: native/linux/status.rs installs a ksni status item once but does not override its watcher_offline/watcher_online callbacks; the host sets TRAY_AVAILABLE only at initial install. If the shell watcher disappears after the bar is hidden, no command restores the bar and the hide chip remains available. ksni 0.3.5 exposes both callbacks for this lifecycle.
 Fix: forward watcher availability through the existing private command channel; clear hide availability and restore a hidden bar on loss, re-enable on return. Keep the status guard teardown bounded and avoid restarting unrelated shell processes for QA.
