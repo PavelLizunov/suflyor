@@ -4144,18 +4144,6 @@ fn main() -> Result<(), slint::PlatformError> {
                     "[overlay-host] lock-menu event=prepared mode={mode} managed={managed}"
                 );
 
-                #[cfg(target_os = "linux")]
-                {
-                    let _ = (anchor_x, anchor_y);
-                    let generation = focus_for_open.borrow_mut().begin_open();
-                    if menu.show().is_ok() {
-                        focus_for_open.borrow_mut().mark_revealed(generation);
-                        focus_for_open.borrow_mut().arm(generation);
-                    } else {
-                        focus_for_open.borrow_mut().close();
-                    }
-                }
-                #[cfg(not(target_os = "linux"))]
                 {
                     let bar_hwnd = match grab_hwnd(bar.window()) {
                         Ok(hwnd) => hwnd,
@@ -4175,7 +4163,7 @@ fn main() -> Result<(), slint::PlatformError> {
                             .unwrap_or((pos.x, pos.y))
                         }
                     };
-                    #[cfg(target_os = "macos")]
+                    #[cfg(not(windows))]
                     let (bar_left, bar_top) = match get_window_rect(bar_hwnd) {
                         Ok((left, top, _, _)) => (left, top),
                         Err(e) => {
@@ -4967,7 +4955,6 @@ fn main() -> Result<(), slint::PlatformError> {
     // session remains the sole Core Audio owner instead of racing a startup
     // probe for the same process tap.
     //
-    #[cfg(not(target_os = "linux"))]
     if std::env::var("SLINT_OVERLAY_NO_AUTO_SYS").is_err() {
         let weak = overlay.as_weak();
         #[cfg(target_os = "macos")]

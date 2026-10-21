@@ -85,6 +85,7 @@ Type=exec
 ExecStart="%s"
 Environment=SLINT_BACKEND=winit-software
 Environment=WINIT_UNIX_BACKEND=wayland
+Environment=SUFLYOR_USER_SERVICE=suflyor.service
 Environment="XDG_CONFIG_HOME=%s"
 Restart=on-failure
 RestartSec=3

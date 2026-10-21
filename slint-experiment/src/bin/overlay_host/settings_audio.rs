@@ -396,7 +396,7 @@ mod tests {
     }
 
     /// Manual MCP audit surface. It never loads or saves the user's config.
-    #[cfg(feature = "ui-mcp")]
+    #[cfg(all(windows, feature = "ui-mcp"))]
     #[test]
     #[ignore = "interactive Slint MCP fixture; requires a Windows desktop"]
     fn live_audio_fixture() {

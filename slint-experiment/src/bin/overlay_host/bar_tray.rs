@@ -3,10 +3,10 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use crate::ui::{OverlayBarWindow, TrayMenuWindow};
 #[cfg(windows)]
 use overlay_backend::config;
 use slint::{ComponentHandle, SharedString, Timer};
-use crate::ui::{OverlayBarWindow, TrayMenuWindow};
 
 #[allow(unused_imports)]
 use slint_replay::win32::{
@@ -72,6 +72,13 @@ pub(super) fn get_sys_active(state: &slint_replay::app_state::SharedState) -> bo
 /// find/launch our own exe (then we must NOT quit — that would just close the
 /// app with nothing to replace it).
 pub(super) fn spawn_relaunch() -> bool {
+    #[cfg(target_os = "linux")]
+    if std::env::var("SUFLYOR_USER_SERVICE").as_deref() == Ok("suflyor.service") {
+        return std::process::Command::new("systemctl")
+            .args(["--user", "--no-block", "restart", "suflyor.service"])
+            .status()
+            .is_ok_and(|status| status.success());
+    }
     let exe = match std::env::current_exe() {
         Ok(p) => p,
         Err(e) => {
@@ -368,7 +375,10 @@ pub(super) fn tray_action_dispatch(
     }
 }
 
-pub(super) fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_replay::app_state::SharedState) {
+pub(super) fn apply_overlay_hwnd(
+    overlay: &OverlayBarWindow,
+    state: &slint_replay::app_state::SharedState,
+) {
     // Поток C (stealth bar-flash fix) + I3: park the bar OFF the virtual desktop
     // synchronously NOW (this fn runs before overlay.run(), which composites the
     // window), ALWAYS — mirrors present_window_stealth_aware. Without parking the
