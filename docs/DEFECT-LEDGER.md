@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-074 Linux test driver rebuilds unrelated demonstration binaries   Severity: P3   Status: Open
+Evidence: Linux drivers at 2bd39ad and 0eb2a9e were interrupted while Cargo built additional large binary targets. A minimal reproduction on the same Cargo 1.98.1 worker confirms that `cargo test --lib --bin overlay-host --test linux_platform` and `cargo rustc --test linux_platform` still build unrelated binaries for integration tests. Serialization alone does not restrict that target set.
+Fix: put the three non-product binaries behind a default-enabled `demo-binaries` feature, preserving normal developer/Windows behavior. Disable package defaults only in the Linux driver and explicitly select library, overlay-host and linux_platform tests. Keep one build job for tests and run the relevant backend capability, installer and update regressions. Require a complete exact-SHA driver exit, not direct executable results.
+Closed by:
+
 ### D-073 First Wayland runtime tiles the bar and probes unsupported startup capture   Severity: P3   Status: Open
 Evidence: exact 143a21ce5fd9f9b736833c19041a3074f04c5a79 builds and starts as a native Wayland client (`xwayland=false`). Hyprland reports the bar tiled at 1896x1030 instead of its preferred 1280x64; opening Settings splits it to 941x1030. The Windows off-screen capture-overlay precreation maps an unnecessary 1920x1080 surface, and automatic system-audio startup logs an unsupported capture error.
 Fix: give Linux windows a stable application identity and disable compositor tiling through winit's fixed-size window contract; skip Windows/macOS capture precreation and startup audio probing on Linux. Rebuild and inspect actual native windows before claiming acceptance.

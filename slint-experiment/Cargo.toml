@@ -17,6 +17,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "slint-replay"
 path = "src/main.rs"
+required-features = ["demo-binaries"]
 
 # Phase 0.5 spike: transparent always-on-top overlay via HWND-poking.
 # Validates that WS_EX_LAYERED / WS_EX_TRANSPARENT / WS_EX_TOOLWINDOW
@@ -25,6 +26,7 @@ path = "src/main.rs"
 [[bin]]
 name = "overlay-spike"
 path = "src/bin/overlay_spike.rs"
+required-features = ["demo-binaries"]
 
 # Phase 0.5 spike 3: pulldown-cmark → Slint Text/StyledText walker.
 # Plan's #1 risk. Validates feasibility of Phase 4's tile-markdown
@@ -33,6 +35,7 @@ path = "src/bin/overlay_spike.rs"
 [[bin]]
 name = "markdown-spike"
 path = "src/bin/markdown_spike.rs"
+required-features = ["demo-binaries"]
 
 # Phase 1 Day 2: multi-window manager. Single Arc<Mutex<AppState>>
 # shared across overlay bar + N tile windows + settings window.
@@ -42,7 +45,10 @@ path = "src/bin/markdown_spike.rs"
 name = "overlay-host"
 path = "src/bin/overlay_host.rs"
 
+# Preserve normal developer targets; the Linux gate opts out of demos.
 [features]
+default = ["demo-binaries"]
+demo-binaries = []
 ui-mcp = ["slint/mcp"]
 
 [build-dependencies]
