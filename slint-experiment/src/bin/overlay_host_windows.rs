@@ -826,7 +826,9 @@ fn main() -> Result<(), slint::PlatformError> {
             "Linux: experimental port"
         }));
         overlay.set_status_tone(crate::ui::StatusTone::Warning);
-        diag!("experimental Linux: audio, capture, global shortcuts and capture exclusion are not connected");
+        diag!(
+            "experimental native Linux adapters enabled; full-port acceptance remains in progress"
+        );
     }
     #[cfg(not(target_os = "linux"))]
     {

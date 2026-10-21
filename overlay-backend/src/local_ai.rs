@@ -2205,6 +2205,7 @@ fn is_known_executable_basename(name: &str) -> bool {
     KNOWN.contains(&bare)
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn is_so_library(name: &str) -> bool {
     if !name.starts_with("lib") {
         return false;
@@ -2700,6 +2701,7 @@ fn pick_llama(assets: &[GhAsset], _gpu: GpuKind) -> Result<LlamaPick> {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn linux_arch() -> Result<&'static str> {
     if cfg!(target_arch = "x86_64") {
         Ok("x64")
@@ -2710,6 +2712,7 @@ fn linux_arch() -> Result<&'static str> {
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn parse_linux_cuda_version(name: &str, arch: &str) -> Option<(u32, u32)> {
     let prefix = "-bin-ubuntu-cuda-";
     let suffix = format!("-{arch}.tar.gz");
@@ -2724,6 +2727,7 @@ fn parse_linux_cuda_version(name: &str, arch: &str) -> Option<(u32, u32)> {
     Some((maj, min))
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn pick_llama_linux(assets: &[GhAsset], gpu: GpuKind, arch: &str) -> Result<LlamaPick> {
     if gpu == GpuKind::Nvidia {
         let mut cuda_picks: Vec<((u32, u32), &GhAsset, &GhAsset)> = Vec::new();
@@ -2791,6 +2795,7 @@ fn pick_llama_linux(assets: &[GhAsset], gpu: GpuKind, arch: &str) -> Result<Llam
 
 /// Parse the CUDA version from a whisper cuBLAS asset name, e.g.
 /// `whisper-cublas-12.4.0-bin-x64.zip` -> `(12, 4, 0)`.
+#[cfg(any(windows, test))]
 fn whisper_cublas_version_of(name: &str) -> Option<(u32, u32, u32)> {
     // Old name "whisper-cublas-12.4.0-bin-x64.zip"; since October 2026
     // "whisper-bin-win-cuda-12.4.0-x64.zip". Both are x64 builds with the CUDA
@@ -2857,6 +2862,7 @@ fn pick_whisper(assets: &[GhAsset], force_cpu: bool) -> Result<(String, u64)> {
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn pick_whisper_linux(assets: &[GhAsset], arch: &str) -> Result<(String, u64)> {
     let expected = format!("whisper-bin-ubuntu-{arch}.tar.gz");
     assets
@@ -3162,6 +3168,7 @@ fn extract_zip(zip: &Path, dest_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn validate_tar_links(listing: &str) -> Result<()> {
     for line in listing.lines() {
         let trimmed = line.trim();
@@ -3201,6 +3208,7 @@ fn validate_tar_links(listing: &str) -> Result<()> {
     Ok(())
 }
 
+#[cfg(any(target_os = "linux", test))]
 fn archive_link_target_is_safe(link_path: &str, target: &str) -> bool {
     let t = target.trim().replace('\\', "/");
     let lp = link_path.trim().replace('\\', "/");

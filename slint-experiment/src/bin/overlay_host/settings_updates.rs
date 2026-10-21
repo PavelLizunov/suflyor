@@ -25,6 +25,46 @@
 //! the `mod settings_updates;` declaration); only the crate-root types are
 //! imported explicitly below.
 use super::{ComponentHandle, SettingsWindow, SharedString};
+#[cfg(target_os = "linux")]
+use slint_replay::native::desktop;
+
+const OFFICIAL_RELEASES_PREFIX: &str = "https://github.com/PavelLizunov/suflyor/releases";
+
+fn is_valid_release_url(url: &str) -> bool {
+    if let Some(rest) = url.strip_prefix(OFFICIAL_RELEASES_PREFIX) {
+        (rest.is_empty() || rest.starts_with('/')) && !url.chars().any(char::is_whitespace)
+    } else {
+        false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn release_page_is_official_and_boundary_checked() {
+        assert!(is_valid_release_url(OFFICIAL_RELEASES_PREFIX));
+        assert!(is_valid_release_url(
+            "https://github.com/PavelLizunov/suflyor/releases/tag/v1"
+        ));
+        for url in [
+            "http://github.com/PavelLizunov/suflyor/releases",
+            "https://github.com.evil.test/PavelLizunov/suflyor/releases",
+            "https://github.com/PavelLizunov/suflyor/releases-fake",
+            "https://github.com/PavelLizunov/suflyor/releases/\n",
+        ] {
+            assert!(!is_valid_release_url(url));
+        }
+    }
+}
+
+fn tr<'a>(is_ru: bool, en: &'a str, ru: &'a str) -> &'a str {
+    if is_ru {
+        ru
+    } else {
+        en
+    }
+}
 
 /// Wire the Updates-tab Settings callbacks onto the Settings window. Moved
 /// VERBATIM out of `open_settings` (P1 domain split) — same captures, same
@@ -42,9 +82,15 @@ pub(crate) fn wire_updates(win: &SettingsWindow) {
             let Some(w) = weak.upgrade() else {
                 return;
             };
+            let is_ru = w.get_ui_language_index() == 0;
             w.set_update_checking(true);
             w.set_update_available(false);
-            w.set_update_status(SharedString::from("Проверка GitHub…"));
+            w.set_update_download_url(SharedString::default());
+            w.set_update_status(SharedString::from(tr(
+                is_ru,
+                "Checking GitHub…",
+                "Проверка GitHub…",
+            )));
             diag!("update: checking GitHub for newer release");
             let weak2 = w.as_weak();
             std::thread::spawn(move || {
@@ -62,31 +108,69 @@ pub(crate) fn wire_updates(win: &SettingsWindow) {
                         return;
                     };
                     w.set_update_checking(false);
+                    let is_ru = w.get_ui_language_index() == 0;
                     match res {
+                        Ok(info) if cfg!(target_os = "linux") && info.newer => {
+                            let release_url = if is_valid_release_url(&info.release_url) {
+                                info.release_url.as_str()
+                            } else {
+                                OFFICIAL_RELEASES_PREFIX
+                            };
+                            w.set_update_download_url(SharedString::from(release_url));
+                            w.set_update_available(true);
+                            let status_en = format!(
+                                "Version {} available — open release page / manual package update",
+                                info.latest_version
+                            );
+                            let status_ru = format!(
+                                "Доступна версия {} — откройте страницу релиза / ручное обновление пакета",
+                                info.latest_version
+                            );
+                            w.set_update_status(SharedString::from(tr(is_ru, &status_en, &status_ru)));
+                        }
                         Ok(info) if info.newer && !info.download_url.is_empty() => {
                             w.set_update_download_url(SharedString::from(info.download_url));
                             w.set_update_available(true);
-                            w.set_update_status(SharedString::from(format!(
+                            let status_en = format!(
+                                "Version {} available — click \"Update Now\"",
+                                info.latest_version
+                            );
+                            let status_ru = format!(
                                 "Доступна версия {} — нажмите «Обновить сейчас»",
                                 info.latest_version
-                            )));
+                            );
+                            w.set_update_status(SharedString::from(tr(is_ru, &status_en, &status_ru)));
                         }
-                        Ok(info) if info.newer => w.set_update_status(SharedString::from(format!(
-                            "Есть версия {}, но в релизе нет установщика",
-                            info.latest_version
-                        ))),
-                        Ok(info) => w.set_update_status(SharedString::from(format!(
-                            "У вас последняя версия ({})",
-                            info.latest_version
-                        ))),
+                        Ok(info) if info.newer => {
+                            let status_en = format!(
+                                "Version {} is available, but the release has no installer",
+                                info.latest_version
+                            );
+                            let status_ru = format!(
+                                "Есть версия {}, но в релизе нет установщика",
+                                info.latest_version
+                            );
+                            w.set_update_status(SharedString::from(tr(is_ru, &status_en, &status_ru)));
+                        }
+                        Ok(info) => {
+                            let status_en = format!("No newer stable release (latest: {})", info.latest_version);
+                            let status_ru = format!("Более новой стабильной версии нет (последняя: {})", info.latest_version);
+                            w.set_update_status(SharedString::from(tr(is_ru, &status_en, &status_ru)));
+                        }
                         Err(e) => {
-                            w.set_update_status(SharedString::from(format!("Ошибка проверки: {e}")))
+                            diag!("update: check failed: {e:#}");
+                            w.set_update_status(SharedString::from(tr(
+                                is_ru,
+                                "Update check failed",
+                                "Ошибка проверки",
+                            )));
                         }
                     }
                 });
             });
         });
     }
+    #[cfg(target_os = "linux")]
     {
         let weak = win.as_weak();
         win.on_install_update_clicked(move || {
@@ -97,8 +181,72 @@ pub(crate) fn wire_updates(win: &SettingsWindow) {
             if url.is_empty() {
                 return;
             }
+            let is_ru = w.get_ui_language_index() == 0;
+            if !is_valid_release_url(&url) {
+                diag!("update: refusing to open invalid release URL");
+                w.set_update_status(SharedString::from(tr(
+                    is_ru,
+                    "Invalid release URL",
+                    "Недопустимый адрес релиза",
+                )));
+                return;
+            }
             w.set_update_checking(true);
-            w.set_update_status(SharedString::from("Скачивание установщика…"));
+            w.set_update_status(SharedString::from(tr(
+                is_ru,
+                "Opening release page…",
+                "Открытие страницы релиза…",
+            )));
+            diag!("update: opening release page in browser");
+            let weak2 = w.as_weak();
+            std::thread::spawn(move || {
+                let res = desktop::open(std::ffi::OsStr::new(&url));
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(w) = weak2.upgrade() else {
+                        return;
+                    };
+                    w.set_update_checking(false);
+                    let is_ru = w.get_ui_language_index() == 0;
+                    match res {
+                        Ok(_) => {
+                            diag!("update: release page opened in browser");
+                            w.set_update_status(SharedString::from(tr(
+                                is_ru,
+                                "Release page request sent to browser",
+                                "Запрос страницы релиза передан браузеру",
+                            )));
+                        }
+                        Err(e) => {
+                            diag!("update: desktop::open failed: {e:#}");
+                            w.set_update_status(SharedString::from(tr(
+                                is_ru,
+                                "Failed to open release page",
+                                "Не удалось открыть страницу релиза",
+                            )));
+                        }
+                    }
+                });
+            });
+        });
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let weak = win.as_weak();
+        win.on_install_update_clicked(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            let url = w.get_update_download_url().to_string();
+            if url.is_empty() {
+                return;
+            }
+            let is_ru = w.get_ui_language_index() == 0;
+            w.set_update_checking(true);
+            w.set_update_status(SharedString::from(tr(
+                is_ru,
+                "Downloading installer…",
+                "Скачивание установщика…",
+            )));
             diag!("update: downloading installer");
             let weak2 = w.as_weak();
             std::thread::spawn(move || {
@@ -126,20 +274,27 @@ pub(crate) fn wire_updates(win: &SettingsWindow) {
                             diag!("update: installer spawn FAILED: {e:#}");
                             let _ = slint::invoke_from_event_loop(move || {
                                 if let Some(w) = weak2.upgrade() {
+                                    let is_ru = w.get_ui_language_index() == 0;
                                     w.set_update_checking(false);
-                                    w.set_update_status(SharedString::from(
+                                    w.set_update_status(SharedString::from(tr(
+                                        is_ru,
+                                        "Failed to launch installer — application left open (see log)",
                                         "Не удалось запустить установщик — приложение оставлено открытым (см. лог)",
-                                    ));
+                                    )));
                                 }
                             });
                         }
                     },
                     Err(e) => {
+                        diag!("update: download installer failed: {e:#}");
                         let _ = slint::invoke_from_event_loop(move || {
                             if let Some(w) = weak2.upgrade() {
+                                let is_ru = w.get_ui_language_index() == 0;
                                 w.set_update_checking(false);
-                                w.set_update_status(SharedString::from(format!(
-                                    "Ошибка обновления: {e}"
+                                w.set_update_status(SharedString::from(tr(
+                                    is_ru,
+                                    "Update failed",
+                                    "Ошибка обновления",
                                 )));
                             }
                         });

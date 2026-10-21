@@ -1499,7 +1499,9 @@ export component SettingsWindow inherits Window {
                         if !Platform.is-macos : SettingsCard {
                         title: @tr("Updates");
                         Text {
-                            text: @tr("Check GitHub for a newer release. If one is found you can download + install it in one click (the app restarts).");
+                            text: Platform.is-linux
+                                ? @tr("Check GitHub for a newer release. Open its release page to update the native Linux package. Your configuration and models are retained.")
+                                : @tr("Check GitHub for a newer release. If one is found you can download + install it in one click (the app restarts).");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -1517,7 +1519,7 @@ export component SettingsWindow inherits Window {
                             }
                             // Shown only when a newer release was found.
                             if root.update-available : Button {
-                                text: @tr("Update now");
+                                text: Platform.is-linux ? @tr("Open release page") : @tr("Update now");
                                 enabled: !root.update-checking;
                                 clicked => {
                                     root.install-update-clicked();
@@ -1579,7 +1581,7 @@ export component SettingsWindow inherits Window {
                         // servers, keeps local profiles/devices/UI/snippets.
                         // Import shows a redacted preview before applying.
                         Text {
-                            text: Platform.is-macos
+                            text: Platform.is-macos || Platform.is-linux
                                 ? @tr("Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in this user's local credentials file. Local UI, profiles, devices and snippets stay unchanged.")
                                 : @tr("Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in Windows Credential Manager on this PC. Local UI, profiles, devices and snippets stay unchanged.");
                             font-size: Metrics.font-caption;
@@ -2572,7 +2574,7 @@ export component SettingsWindow inherits Window {
                                 SettingsLineEdit { placeholder-text: @tr("paste OpenAI API key"); text <=> root.openai-key-input; input-type: password; horizontal-stretch: 1; }
                                 Button { text: @tr("Save"); clicked => { root.openai-key-save(root.openai-key-input); root.openai-key-input = ""; } }
                             }
-                            Text { text: Platform.is-macos
+                            Text { text: Platform.is-macos || Platform.is-linux
                                 ? @tr("Stored in a user-only local credentials file and excluded from configuration exports.")
                                 : @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                             HorizontalLayout {
@@ -2629,7 +2631,7 @@ export component SettingsWindow inherits Window {
                                 SettingsLineEdit { placeholder-text: @tr("paste Anthropic API key"); text <=> root.anthropic-key-input; input-type: password; horizontal-stretch: 1; }
                                 Button { text: @tr("Save"); clicked => { root.anthropic-key-save(root.anthropic-key-input); root.anthropic-key-input = ""; } }
                             }
-                            Text { text: Platform.is-macos
+                            Text { text: Platform.is-macos || Platform.is-linux
                                 ? @tr("Stored in a user-only local credentials file and excluded from configuration exports.")
                                 : @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                             HorizontalLayout {

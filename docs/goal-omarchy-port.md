@@ -101,6 +101,6 @@ Developer verification uses `bash scripts/check-linux-port.sh`. Build QA host wi
 overlay-host --features ui-mcp --manifest-path slint-experiment/Cargo.toml`.
 Use one managed build at a time, one Cargo job and one test thread, disabled
 incremental compilation and debug symbols, and bounded runtime/memory. The test
-VM has 8 GiB RAM; inspect available memory and disk before each heavy build.
+VM has 8 GiB RAM and a verified x86-64-v3 CPU baseline; the linked Linux ONNX speech runtime requires AVX2. Inspect available memory and disk before each heavy build.
 Hyprland configuration is Lua on the worker; validate any task-owned rule change
 with `hyprctl reload` and `hyprctl configerrors` in the existing graphical session.

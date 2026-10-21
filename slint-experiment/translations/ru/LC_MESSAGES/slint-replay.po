@@ -511,6 +511,12 @@ msgstr "По умолчанию Windows"
 msgid "System default"
 msgstr "Системное по умолчанию"
 
+msgid "Check GitHub for a newer release. Open its release page to update the native Linux package. Your configuration and models are retained."
+msgstr "Проверьте новую версию на GitHub. Для обновления пакета Linux откройте страницу релиза. Настройки и модели сохраняются."
+
+msgid "Open release page"
+msgstr "Открыть страницу релиза"
+
 msgid "Pick the microphone. The list comes from PipeWire."
 msgstr "Выберите микрофон из списка устройств PipeWire."
 

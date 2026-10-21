@@ -126,7 +126,17 @@ fn select_device<'a>(devices: &'a [Device], selected: &str) -> Result<&'a Device
 }
 
 fn resolve(source: AudioSource, selected: Option<&str>) -> Result<(String, String)> {
-    let all = devices(source)?;
+    let mut all = devices(source)?;
+    let source = if source == AudioSource::System
+        && selected.is_some_and(|name| !all.iter().any(|d| d.name == name || d.description == name))
+    {
+        // A selected system stream may be a headset mix/capture input. Never
+        // replace a missing pinned choice with the default output monitor.
+        all = devices(AudioSource::Mic)?;
+        AudioSource::Mic
+    } else {
+        source
+    };
     let default;
     let name = match selected.filter(|s| !s.trim().is_empty()) {
         Some(name) => name,
@@ -450,7 +460,17 @@ pub fn rms_dbfs(samples: &[i16]) -> f64 {
 }
 
 pub fn play_tone_and_capture(device: Option<String>) -> Result<Vec<i16>> {
-    let (sink, route) = resolve(AudioSource::System, device.as_deref())?;
+    let (selected, route) = resolve(AudioSource::System, device.as_deref())?;
+    let sink = if devices(AudioSource::System)?
+        .iter()
+        .any(|d| d.name == selected)
+    {
+        selected
+    } else {
+        String::from_utf8(pactl(&["get-default-sink"])?)?
+            .trim()
+            .to_owned()
+    };
     let mut capture = Capture::open(route)?;
     let mut player = OwnedChild(
         command("paplay")
@@ -546,6 +566,19 @@ mod tests {
         let pcm = play_tone_and_capture(None).unwrap();
         assert!(pcm.len() > 16000, "short capture: {}", pcm.len());
         assert!(rms_dbfs(&pcm) > -30.0, "tone absent");
+    }
+    #[test]
+    #[ignore = "requires dedicated PipeWire worker with microphone fixture"]
+    fn live_system_capture_input_route() {
+        let input = String::from_utf8(pactl(&["get-default-source"]).unwrap()).unwrap();
+        let input = input.trim().to_owned();
+        let (_, route) = resolve(AudioSource::System, Some(&input)).unwrap();
+        assert_eq!(route, input);
+        let samples = record_sys_blocking(500, Some(input)).unwrap();
+        assert!(
+            samples.len() >= 3200,
+            "selected system input produced no PCM"
+        );
     }
     #[test]
     #[ignore = "requires dedicated PipeWire worker with microphone fixture"]

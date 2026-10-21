@@ -8,9 +8,14 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-078 Linux system capture cannot resolve an input offered by Settings   Severity: P2   Status: Open
+Evidence: Linux Settings intentionally offers output sinks plus capture inputs, matching the shared backend contract. `audio_linux::resolve(System, selected)` enumerates only sinks, so selecting an input or headset mix fails as unavailable despite appearing selectable. Source-confirmed during full-port review; live pinned-input regression remains required.
+Fix: resolve a pinned system choice against sink names first and then input sources without silently falling back to a default. Preserve ambiguity rejection and route identity. Exercise a real PipeWire input choice and cancellation.
+Closed by:
+
 ### D-077 Linux ONNX runtime aborts before main on a virtual CPU without AVX   Severity: P2   Status: Open
 Evidence: native candidate 697ceeb builds, but the backend test driver exits 101 with SIGILL before any test starts. The core identifies protobuf static initialization inside the linked ONNX runtime; disassembly shows `vxorps` at the faulting instruction. The dedicated VM exposes x86-64-v2-AES without AVX, while its physical Intel N150 supports AVX/AVX2. This is a native runtime requirement, not a failing asset-picker assertion or memory exhaustion.
-Fix: expose the physical worker's supported x86-64-v3 CPU baseline to the dedicated test VM, verify the same executable starts and completes through Cargo, and enforce/document the runtime CPU requirement for Linux installation. Keep unsupported hardware from silently appearing supported. No owner desktop configuration changes.
+Fix: expose the physical worker's supported x86-64-v3 CPU baseline to the dedicated test VM, verify the same executable starts and completes through Cargo, and enforce/document the runtime CPU requirement for Linux installation. Verification: the same 697ceeb Cargo driver now exits 0: nine asset-picker, one installer rejection, 12 audio/session, one console guard, 21 Piper and 74 Tera tests pass (118 total, two live audio tests ignored). Real inference and playback are separate acceptance paths. Keep unsupported hardware from silently appearing supported. No owner desktop configuration changes.
 Closed by:
 
 ### D-076 In-flight Linux native adapters need lifecycle and compositor correctness fixes   Severity: P3   Status: Open
@@ -19,7 +24,7 @@ Fix: keep a stable mapped compositor identity, use the installed CLI contract, r
 Closed by:
 
 ### D-075 macOS window guard assumes macOS-only spelling for a shared non-Windows branch   Severity: P3   Status: Open
-Evidence: PR #307 CI 39572451692 macOS job fails at native_macos_window_guard.rs:78. The production lock-menu scale branch was correctly extended to all non-Windows targets, but the source-shape guard still requires the former macOS-only cfg text. The native AppKit, placement and scaling assertions remain relevant and must stay.
+Evidence: PR #307 CI 39572451692 macOS job fails at native_macos_window_guard.rs:78. At 6569979, CI 39611578690 compiles/runs Windows tests, then two macos_settings_guard assertions still demand Windows-only setup and pre-Linux STT cfg spelling. The macOS job was cancelled after the Windows failure, not proven failed in compilation. The production lock-menu scale branch was correctly extended to all non-Windows targets, but the source-shape guard still requires the former macOS-only cfg text. The native AppKit, placement and scaling assertions remain relevant and must stay.
 Fix: align only the cfg spelling assertion with the shared non-Windows branch; retain the actual macOS bridge and geometry invariants and rerun native guards.
 Closed by:
 
