@@ -23,15 +23,21 @@ Do not rewrite the UI in QML merely to obtain a shell entry point.
 
 ## Acceptance
 
-- [ ] Record baseline and candidate commit/tree, worker resources and commands.
-- [ ] Backend Linux check and relevant platform tests pass on the test worker.
-- [ ] The shared host compiles and starts in the existing Wayland session.
-- [ ] Inspect actual Slint MCP Settings, question and answer surfaces in EN/RU.
-- [ ] A disposable local HTTP fixture proves typed dispatch and rendered answer;
+- [x] Record baseline and candidate commit/tree, worker resources and commands.
+- [x] Backend Linux check and relevant platform tests pass on the test worker.
+- [x] The shared host compiles and starts in the existing Wayland session.
+- [x] Inspect actual Slint MCP Settings, question and answer surfaces in EN/RU.
+- [x] A disposable local HTTP fixture proves typed dispatch and rendered answer;
       this does not claim a real provider or model inference.
-- [ ] Clipboard copy and singleton exclusion work on the native worker.
-- [ ] Windows targeted gate remains green for the exact candidate.
-- [ ] Record unsupported shortcuts/audio/capture, deployment and inference gaps.
+- [x] Clipboard copy and singleton exclusion work on the native worker.
+- [x] Windows targeted gate remains green for the exact code candidate.
+- [x] Record unsupported shortcuts/audio/capture, deployment and inference gaps.
+- [ ] Complete the aggregate Linux test-driver invocation without interruption.
+- [ ] Integrate the reviewed milestone into master; no Linux release is published.
+
+Observed native evidence and exact identities:
+[October 21 audit](audit-2026-10-21-omarchy/README.md). The working first slice is
+checkpointed on `codex/omarchy-port`; remaining port work is still active.
 
 ## Developer launch
 
