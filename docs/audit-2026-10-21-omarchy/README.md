@@ -1,6 +1,52 @@
-# Experimental Omarchy native milestone evidence
+# Omarchy full-port development evidence
 
-This is a development checkpoint, not Linux feature parity or a release.
+Full-product acceptance remains open. The owner superseded the initial scoped
+milestone with the complete contract in `docs/goal-omarchy-port.md`.
+
+## Current functional evidence, not full acceptance
+
+- `5b3b84e69025494aa1e50b117b96b985bbf542c6`: native host/library check and
+  ui-mcp build passed. QA binary SHA-256
+  `a283ab925078c5740557664046882289a3b3135dcc284b2707298d61426f179d`.
+  Its complete managed speech driver exits 0: real managed GigaAM recognizes
+  the pinned public Russian speech through both PipeWire streams and validates
+  both recorded WAV channels; the previously failing short pinned-input
+  recording also passes. Inputs are virtual, not a physical microphone.
+- The same QA host's Settings Test voice invokes real Piper synthesis and
+  produces a monitored native output waveform: 288,000 samples at 16 kHz,
+  RMS 703.04 and peak 15,306. This verifies output transport, not a human
+  listening verdict or all read-aloud controls.
+- `2c9f2fc3b1877729d19214fefd8d491754d6bd86`: native host check/build passed;
+  binary SHA-256
+  `79d6fa662cdd592c2fbeaa75ba69a48a6a9a4d6b95113c3343a495127ac2dc13`.
+  A real Apache-2.0 Qwen3.5-0.8B CPU server answered the typed native question
+  with a correct database-index definition; the Slint tile rendered it and
+  Wayland clipboard Copy returned the same text. First token 52.8 seconds,
+  total 59.3 seconds on the dedicated CPU worker. Earlier SmolVLM attempts
+  timed out or produced nonsense; they do not establish semantic acceptance.
+- The same host fixes the first-map identity failure: bar placement is native
+  at (320,24), and bar/first Settings exclusion reads true. Actual retained
+  Settings reopen reads false; D-082 records the reproduced surface-recreation
+  defect and subsequent source repair. The repair still needs native retest.
+- A real VM input event (`qm sendkey`, F1) reaches the compositor shortcut,
+  logs the distinct F1 dispatch and opens Help. Other physical shortcuts and
+  held PTT remain pending. Native region selection starts slurp and Esc
+  cancels it; no OCR/Vision result is claimed by this cancellation check.
+- Native Windows targeted gate passes at
+  `7fc843ce935d24759c00dec9c0988714b713003a`; wrapper restored byte-for-byte,
+  S7 disabled. Native macOS compile-seam gates pass at
+  `2c9f2fc3b1877729d19214fefd8d491754d6bd86` and
+  `3b5735f82d6e1365cb3f97d0a9650172c8159df1`, both exit 0. These are distinct
+  candidates; later UI changes are not covered by their evidence.
+- Native Codex 0.155.1 initializes with the preserved text-only permission
+  profile and reads signed-out account state under an isolated home and Unix
+  desktop environment. No user login or authenticated provider response was
+  performed.
+
+Private exact identities, logs, output PCM, MCP trees and captures remain in the
+worker's task-owned evidence directories. Current HEAD/gates and installed state
+must be checked afresh; the historical sections below are not current parity.
+No owner installation, Linux release, merge or stable publication occurred.
 
 ## Identity and baseline
 
@@ -98,12 +144,18 @@ Private exact-SHA logs and manifests: task evidence directories
 still match the previously inspected native 5cadbb1 milestone. D-072, D-073 and
 D-074 remain open until reviewed integration, not closed by this branch checkpoint.
 
-## Still not connected or verified
+## Remaining full-product acceptance
 
-PipeWire microphone/system audio, screen capture/OCR, external capture exclusion,
-compositor global shortcuts, native drag/multi-monitor placement, Quattro plugin,
-launcher/package/autostart and real inference are not delivered. Existing product
-controls can still describe Windows-only functions; this is explicitly experimental.
+Current native sources connect audio, capture, compositor IPC, local-model setup,
+Settings, native speech output and status controls. This is not full acceptance.
+Still required: latest EN/RU all-tab audit, physical-microphone evidence, complete
+speech-to-answer session, image/OCR answer, all physical shortcuts and PTT release,
+retained-surface protection, drag/multiple scaled monitors, both speech engines'
+controls, recording/history/summary/re-transcription/diarization, profiles,
+provider sign-in, KB/memory/import/export, managed installation/model switching,
+installer/autostart/update/uninstall, and final-candidate native regression gates.
+Quattro integration uses native launcher/status interfaces; no plugin rewrite is
+required or implemented.
 No Linux release or desktop-owner deployment was performed. The private QA process
 and wire fixture are task-owned services with bounded runtime. No owner desktop
 configuration or heavy local build was used.
