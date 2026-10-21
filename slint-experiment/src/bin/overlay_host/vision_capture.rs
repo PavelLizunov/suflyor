@@ -220,9 +220,9 @@ pub(crate) fn fire_f8_vision_capture(
         if BUSY.with(|busy| busy.replace(true)) {
             return;
         }
-        let hidden = slint_replay::win32::hide_own_windows();
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
         let worker = std::thread::spawn(move || {
+            let hidden = slint_replay::win32::hide_own_windows();
             let result = slint_replay::native::screen::capture_region().map_err(|e| e.to_string());
             slint_replay::win32::show_windows(&hidden);
             let _ = tx.send(result);

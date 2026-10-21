@@ -198,21 +198,35 @@ pub fn hide_own() -> Vec<(isize, bool)> {
                 continue;
             }
             let selector = format!("address:0x{id:x}");
-            let saved: Vec<_> = ["opacity", "opacity_inactive", "opacity_fullscreen"]
-                .iter()
-                .filter_map(|name| {
-                    super::desktop::property(&selector, name)
-                        .ok()
-                        .map(|v| (name.to_string(), v))
-                })
-                .collect();
-            if saved.len() == 3 {
+            let saved: Vec<_> = [
+                "opacity",
+                "opacity_inactive",
+                "opacity_fullscreen",
+                "no_screen_share",
+                "no_anim",
+            ]
+            .iter()
+            .filter_map(|name| {
+                super::desktop::property(&selector, name)
+                    .ok()
+                    .map(|v| (name.to_string(), v))
+            })
+            .collect();
+            if saved.len() == 5 {
+                let _ = super::desktop::set_property(&selector, "no_anim", "1");
+                let mut transparent = true;
+                for name in ["opacity", "opacity_inactive", "opacity_fullscreen"] {
+                    transparent &= super::desktop::set_property(&selector, name, "0").is_ok();
+                }
                 HIDDEN_ALPHA
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .insert(id, saved);
-                for name in ["opacity", "opacity_inactive", "opacity_fullscreen"] {
-                    let _ = super::desktop::set_property(&selector, name, "0");
+                if transparent {
+                    // Exclusion paints black even at zero opacity. Suspend it
+                    // only after the surface itself has become transparent.
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    let _ = super::desktop::set_property(&selector, "no_screen_share", "0");
                 }
                 hidden.push((id, true));
             }
@@ -226,10 +240,29 @@ pub fn show_own(hidden: &[(isize, bool)]) {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .remove(id);
-        if let (Some(saved), Ok(s)) = (saved, selector(*id)) {
+        if let (Some(mut saved), Ok(s)) = (saved, selector(*id)) {
+            // Restore capture protection before any content becomes visible.
+            saved.sort_by_key(|(name, _)| {
+                if name == "no_screen_share" {
+                    0
+                } else if name == "no_anim" {
+                    2
+                } else {
+                    1
+                }
+            });
             for (name, value) in saved {
-                if let Some(alpha) = value.as_f64() {
-                    let _ = super::desktop::set_property(&s, &name, &alpha.to_string());
+                let value = if let Some(flag) = value.as_bool() {
+                    Some(if flag {
+                        "1".to_string()
+                    } else {
+                        "0".to_string()
+                    })
+                } else {
+                    value.as_f64().map(|alpha| alpha.to_string())
+                };
+                if let Some(value) = value {
+                    let _ = super::desktop::set_property(&s, &name, &value);
                 }
             }
         }

@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-080 Native self-capture retains black exclusion rectangles   Severity: P2   Status: Open
+Evidence: actual Hyprland 0.56.2 grim before/after captures of a disposable native window show `no_screen_share=1` replaces window contents with a black rectangle, including when all opacity properties are zero. Thus setting opacity alone cannot remove Suflyor rectangles from its own OCR/Vision image while exclusion is enabled. Captures were inspected; this is compositor behavior, not transparent desktop recovery.
+Fix: while own surfaces are fully transparent, temporarily suspend their exclusion for the owned screenshot, then restore exclusion before restoring saved opacity. Keep external capture content protected and describe black-rectangle behavior accurately. Verify actual screenshot pixels and failure/cancel restoration.
+Closed by:
+
 ### D-079 Hyprland Lua shortcut ownership is lost on application restart   Severity: P2   Status: Open
 Evidence: native Hyprland 0.56.2 probe registers a described Lua bind and reads `dispatcher=__lua`, `arg=13`, with the description preserved. The adapter instead recognizes ownership by searching `arg` for the command, so after a restart it treats its own keys as foreign conflicts. Action commands also stop the drain after one datagram, delaying rapid PTT release. Source review found temporary identity titles left visible after compositor resolution.
 Fix: mark bindings with a stable per-config description, compare that description and remove only owned bindings on teardown. Continue the bounded input drain for action commands, and restore original titles after identity resolves. Verify real relaunch and PTT press/release. Reviewer's claim that opacity_inactive and opacity_fullscreen do not exist was refuted by actual getprop values; preserve all three opacity values.
