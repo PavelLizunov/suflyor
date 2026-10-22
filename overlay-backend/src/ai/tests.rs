@@ -136,13 +136,11 @@ async fn active_silent_stream_stops_when_receiver_is_dropped() {
             .expect("receiver loss must retire the silent HTTP request")
             .unwrap();
         server.join().unwrap();
-        let permits = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            acquire_exclusive_ai(),
-        )
-        .await
-        .expect("cancelled stream must release its permit")
-        .unwrap();
+        let permits =
+            tokio::time::timeout(std::time::Duration::from_secs(2), acquire_exclusive_ai())
+                .await
+                .expect("cancelled stream must release its permit")
+                .unwrap();
         drop(permits);
     }
 }
