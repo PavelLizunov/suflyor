@@ -139,13 +139,18 @@ pub(super) fn apply_bar_size(overlay: &OverlayBarWindow, compact: bool) {
     };
     overlay.window().set_size(slint::LogicalSize::new(w, h));
     #[cfg(target_os = "linux")]
-    resize_wayland_bar(overlay, w as i32, h as i32);
+    resize_wayland_bar(overlay, w as i32, h as i32, None);
     #[cfg(not(target_os = "linux"))]
     recenter_when_sized(overlay.as_weak(), w, 0);
 }
 
 #[cfg(target_os = "linux")]
-fn resize_wayland_bar(overlay: &OverlayBarWindow, width: i32, height: i32) {
+fn resize_wayland_bar(
+    overlay: &OverlayBarWindow,
+    width: i32,
+    height: i32,
+    saved_position: Option<(i32, i32)>,
+) {
     realize_with_retries(
         overlay,
         Rc::new(move |bar| {
@@ -156,11 +161,20 @@ fn resize_wayland_bar(overlay: &OverlayBarWindow, width: i32, height: i32) {
             let Ok(hwnd) = grab_hwnd(bar.window()) else {
                 return false;
             };
-            let Some(monitor) = enum_monitors().into_iter().find(|m| m.is_primary) else {
+            let monitors = enum_monitors();
+            let position = saved_position.filter(|p| super::pos_on_visible_monitor(*p, &monitors));
+            let (x, y) = if let Some(position) = position {
+                position
+            } else if let Some(monitor) =
+                monitors.iter().find(|m| m.is_primary).or(monitors.first())
+            {
+                (
+                    monitor.left + ((monitor.width() - width) / 2).max(0),
+                    monitor.top + 24,
+                )
+            } else {
                 return false;
             };
-            let x = monitor.left + ((monitor.width() - width) / 2).max(0);
-            let y = monitor.top + 24;
             if slint_replay::native::window::resize_move(hwnd.0, x, y, width, height).is_err() {
                 return false;
             }
@@ -347,10 +361,14 @@ pub(super) fn restore_bar_from_tray(weak: &slint::Weak<OverlayBarWindow>) {
     slint_replay::tray::hide_icon();
     #[cfg(target_os = "linux")]
     {
-        super::present_window_stealth_aware_at(&o, BAR_TRAY_POSITION.with(|p| p.get()), |hwnd| {
+        let position = BAR_TRAY_POSITION.with(|p| p.get());
+        super::present_window_stealth_aware_at(&o, position, |hwnd| {
             let _ = make_transparent_overlay(hwnd);
             let _ = set_always_on_top(hwnd, true);
         });
+        // Wayland remapping reapplies the compositor's initial full-bar size.
+        let width = if o.get_compact_bar() { 680 } else { 1280 };
+        resize_wayland_bar(&o, width, 64, position);
         diag!("bar restored from tray (compact mode unchanged)");
         return;
     }

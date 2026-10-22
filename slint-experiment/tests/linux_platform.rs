@@ -39,12 +39,14 @@ fn remapped_windows_keep_the_application_id_and_first_frame_protection() {
 fn bar_size_uses_compositor_resize_with_stale_toggle_cancellation() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let source = std::fs::read_to_string(root.join("src/bin/overlay_host/bar_tray.rs")).unwrap();
-    assert!(source.contains("resize_wayland_bar(overlay, w as i32, h as i32)"));
+    assert!(source.contains("resize_wayland_bar(overlay, w as i32, h as i32, None)"));
     assert!(source.contains("if bar.get_compact_bar() != (width == 680)"));
     assert!(
         source.contains("slint_replay::native::window::resize_move(hwnd.0, x, y, width, height)")
     );
     assert!(source.contains("w == width && h == height"));
+    assert!(source.contains("resize_wayland_bar(&o, width, 64, position)"));
+    assert!(source.contains("super::pos_on_visible_monitor(*p, &monitors)"));
 }
 
 #[test]

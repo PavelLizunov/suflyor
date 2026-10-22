@@ -5,6 +5,75 @@ milestone with the complete contract in `docs/goal-omarchy-port.md`.
 
 ## Current functional evidence, not full acceptance
 
+### October 22 continuation
+
+- Exact `b4413d05bbbba3cb11cfb8eebabecd9b9fb418aa` native Linux aggregate
+  driver completed with exit marker 0: 1,189 passed, zero failed, 11 ignored
+  across 23 Cargo groups. This includes the complete backend (800 passed,
+  four ignored), Linux port gate, selected guards, Piper, Tera and WSoLA.
+  The earlier b6980fb job was OOM-killed and has no successful exit marker;
+  its journal and interruption receipt remain retained, not relabeled PASS.
+- Exact `03403c52ad4d149e6e1d95eed40784747761035f` host check and ui-mcp
+  build passed on the dedicated worker; QA host SHA-256
+  `a4fe0feaffec7ec2da6402b9f7a71433a2c0e6a345ee9b5aa4a158ccaf5aefee`.
+  The installed QA process uses that exact executable. Its Windows targeted
+  gate and macOS compile-seam gate both exit 0. GitHub CI 39706932118 and
+  security 39706932177 passed. The Windows wrapper was restored byte-for-byte;
+  S7 remains disabled. These checks do not cover later source candidates.
+- Actual startup now completes native bar realization at (320,24), not the
+  class-rule fallback (20,40). EN/RU Stealth shows verified capture exclusion.
+  The before/after captures and actual compositor readbacks are retained.
+  A later reused Settings attempt still logged an unresolved native handle;
+  a subsequent close/reopen resolved it. Do not infer universal remap success.
+- A physical/compositor F8 selection completed real Qwen3.5-0.8B image inference:
+  the rendered and copied result identified the red square, blue circle and
+  `HELLO SUFLYOR 123`. Request completed in 54.8 seconds. Russian grammar and
+  speculative descriptions were imperfect; this is useful basic image-answer
+  evidence, not general visual accuracy. Earlier native timeouts remain failures.
+- Physical Ctrl+F8 on the measured text rectangle rendered exactly
+  `HELLO SUFLYOR 123` through local Tesseract, then Tera read-aloud reached
+  PLAYING and DONE. An earlier loosely selected crop returned inaccurate text;
+  the accurate bounded selection does not establish all crop/scale scenarios.
+- Closing an actual in-flight F8 tile caused llama-server to log cancellation
+  of its task and slot release rather than waiting for completion. Independent
+  completed Vision/OCR tiles survived until explicitly closed; live bar count
+  changed 2 to 1 to 0. General concurrency, cap and AI-pulse acceptance is open.
+- A real isolated session bus and disposable StatusNotifierWatcher registered
+  the actual QA host, hid its bar, restored it on watcher loss, registered again
+  after watcher recovery, and restored the bar through the actual SNI Activate
+  method. Driver exit 0. The user's real desktop watcher was not restarted.
+- Actual selected-text reading used the Wayland primary selection. Both Tera and
+  Piper native tile controls passed monitored pause, resume, playback-speed and
+  stop checks. Each steady-state window contains 40,000 samples at 16 kHz:
+  Tera playing/resumed RMS 1727.65/1411.93, Piper 1350.07/1296.72; paused and
+  stopped RMS 0. Earlier late/buffered captures failed and remain separately
+  retained. No human listening verdict or full synthesis-rate comparison follows.
+- Physical held microphone PTT captured the owned virtual input, transcribed
+  repeated public fixture speech as `Проверка связи`, and reached a real AI tile.
+  This is pipeline evidence, not physical-microphone or useful spoken-question
+  acceptance. Initial attempts recorded silence; timing receipts are retained.
+- All 16 EN and RU Settings tabs were captured at 720x600, top and bottom, using
+  actual scrollbar-thumb drags. Four long pages in each language reached their
+  continuation. Contact sheets and selected full-size provider/audio/diagnostic
+  pages were inspected. This is not acceptance of all callbacks or integrations.
+- Native installer lifecycle using the saved b6980fb executable and b4413d0
+  installer source passed disabling autostart while retaining manual launch.
+  Subsequent uninstall removed owned executables, launcher, desktop/icon and
+  service, preserved 390 configuration/model files totaling 694,145,174 bytes
+  byte-for-byte, and preserved unrelated compositor configuration exactly.
+  The app was then reinstalled for 03403c5 QA; final-candidate cleanup is open.
+- Further native UI acceptance exposed D-088: compact/full toggling changes the
+  contents but leaves the old compositor size, and expansion can leave controls
+  outside a 720px surface. Candidate eeca8ad adds compositor resize/readback;
+  build/live compact, startup and tray-restore verification remains pending.
+
+Private evidence roots on the worker: `final-native-b4413d0`, `native-03403c5`,
+`live-03403c5`, `status-03403c5`, `pages-{en,ru}-03403c5`, `uninstall-b6980fb`.
+Captured data, local endpoints and paths stay outside Git. Current source is a
+later candidate than the installed/verified 03403c5 product; keep them distinct.
+
+### Earlier independently observed slices
+
 - `5b3b84e69025494aa1e50b117b96b985bbf542c6`: native host/library check and
   ui-mcp build passed. QA binary SHA-256
   `a283ab925078c5740557664046882289a3b3135dcc284b2707298d61426f179d`.
@@ -148,12 +217,15 @@ D-074 remain open until reviewed integration, not closed by this branch checkpoi
 
 Current native sources connect audio, capture, compositor IPC, local-model setup,
 Settings, native speech output and status controls. This is not full acceptance.
-Still required: latest EN/RU all-tab audit, physical-microphone evidence, complete
-speech-to-answer session, image/OCR answer, all physical shortcuts and PTT release,
-retained-surface protection, drag/multiple scaled monitors, both speech engines'
-controls, recording/history/summary/re-transcription/diarization, profiles,
-provider sign-in, KB/memory/import/export, managed installation/model switching,
-installer/autostart/update/uninstall, and final-candidate native regression gates.
+Still required: final-candidate detailed EN/RU audit and callbacks,
+physical-microphone evidence, useful spoken-question-to-answer session, all
+physical shortcuts and both PTT routes, scaled/multiple-output image capture,
+retained-surface protection, native compact/full/drag/monitor/lock behavior,
+synthesis-rate/seek and session audio controls, recording/history/summary/
+re-transcription/diarization, profiles, provider sign-in, KB/memory/import/export,
+managed AI installation/model switching, final installer/autostart/update/uninstall,
+and final-candidate native regression gates. The October 22 basic image/OCR,
+output-control and watcher evidence above does not replace those broader checks.
 Quattro integration uses native launcher/status interfaces; no plugin rewrite is
 required or implemented.
 No Linux release or desktop-owner deployment was performed. The private QA process
