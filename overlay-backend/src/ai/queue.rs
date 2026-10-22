@@ -269,6 +269,8 @@ impl Drop for Pending {
         let mut state = self.queue.state();
         if let Some(index) = state.waiting.iter().position(|w| w.id == self.id) {
             state.waiting.remove(index);
+            // An abandoned server switch no longer holds back the requests behind it.
+            state.admit();
         } else if let Ok(true) = self.granted.try_recv() {
             state.release(self.kind);
         }
@@ -418,6 +420,25 @@ mod tests {
         assert!(!wanted.is_finished());
         drop(switch);
         drop(wanted.await.unwrap().unwrap());
+    }
+
+    #[tokio::test]
+    async fn an_abandoned_server_switch_admits_the_requests_behind_it() {
+        let q = queue();
+        let running = q.acquire_at(AiPriority::Background).await.unwrap();
+        let switch = tokio::spawn(q.acquire_exclusive());
+        settle().await;
+        let wanted = wait(q, AiPriority::Interactive);
+        settle().await;
+        assert!(!wanted.is_finished());
+        switch.abort();
+        let wanted = tokio::time::timeout(Duration::from_secs(1), wanted)
+            .await
+            .expect("a request stayed behind an abandoned server switch")
+            .unwrap()
+            .unwrap();
+        drop((running, wanted));
+        assert_eq!(q.snapshot(), (0, 0, false, 0));
     }
 
     #[tokio::test]
