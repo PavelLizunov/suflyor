@@ -4,10 +4,19 @@ use super::desktop::{dispatch, query};
 use slint::winit_030::winit::window::WindowId;
 use slint::winit_030::WinitWindowAccessor;
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::pin;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, Weak};
+use std::task::{Context, Poll, Wake, Waker};
+
+struct NoopWake;
+impl Wake for NoopWake {
+    fn wake(self: Arc<Self>) {}
+}
 
 struct Identity {
+    native: Weak<slint::winit_030::winit::window::Window>,
     original: String,
     title: String,
     address: Option<isize>,
@@ -47,13 +56,25 @@ fn selector(id: isize) -> Result<String, Error> {
 
 pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
     let all = clients()?;
+    // Poll only the already-created native window; never retain a strong owner
+    // across hide, which must destroy the Wayland surface.
+    let native = {
+        let waker = Waker::from(Arc::new(NoopWake));
+        let mut context = Context::from_waker(&waker);
+        let mut future = pin!(window.winit_window());
+        match future.as_mut().poll(&mut context) {
+            Poll::Ready(Ok(native)) => native,
+            _ => return Err("Wayland window is not realized".into()),
+        }
+    };
     let result = window
         .with_winit_window(|w| -> Result<isize, Error> {
             let mut ids = WINDOWS.lock().map_err(|_| "native identity lock failed")?;
-            // Remove resolved windows no longer owned by this process.
+            // Compositor addresses can be reused immediately after remapping.
             ids.retain(|_, v| {
-                v.address
-                    .is_none_or(|id| all.iter().any(|c| address(c) == Some(id)))
+                v.native.strong_count() > 0
+                    && v.address
+                        .is_none_or(|id| all.iter().any(|c| address(c) == Some(id)))
             });
             if ids.len() > 128 {
                 ids.retain(|_, v| v.address.is_some());
@@ -79,6 +100,7 @@ pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
                 ids.insert(
                     w.id(),
                     Identity {
+                        native: Arc::downgrade(&native),
                         original: title.clone(),
                         title: title.clone(),
                         address: Some(address),
@@ -93,6 +115,7 @@ pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
                 return Err("compositor has not mapped this window yet".into());
             }
             let id = ids.entry(w.id()).or_insert_with(|| Identity {
+                native: Arc::downgrade(&native),
                 original: w.title(),
                 title: format!(
                     "{} [suflyor-{}-{}]",

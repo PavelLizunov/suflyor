@@ -36,6 +36,15 @@ fn remapped_windows_keep_the_application_id_and_first_frame_protection() {
 }
 
 #[test]
+fn native_identity_does_not_keep_a_recreated_window_address_claimed() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source = std::fs::read_to_string(root.join("src/native/linux/window.rs")).unwrap();
+    assert!(source.contains("native: Weak<slint::winit_030::winit::window::Window>"));
+    assert!(source.contains("v.native.strong_count() > 0"));
+    assert_eq!(source.matches("native: Arc::downgrade(&native)").count(), 2);
+}
+
+#[test]
 fn bar_size_uses_compositor_resize_with_stale_toggle_cancellation() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let source = std::fs::read_to_string(root.join("src/bin/overlay_host/bar_tray.rs")).unwrap();
