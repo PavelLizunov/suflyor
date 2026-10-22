@@ -476,6 +476,8 @@ fn prepare_session_start(rt: &SharedSlintRuntime) -> Result<SystemAudioSessionSt
         s.session_name_at_len = 0;
         s.last_transcript_ms = 0;
         s.session_cost_microcents = 0;
+        // Cancel independent manual asks before replacing their session context.
+        s.cancel_session_requests();
         // New session generation — invalidates any in-flight auto-tile task
         // from a prior session (it bails post-AI-call on the gen mismatch).
         s.session_gen = s.session_gen.wrapping_add(1);
@@ -1771,6 +1773,8 @@ pub fn stop_session(rt: SharedSlintRuntime, cfg: &SharedConfig) -> Vec<Transcrip
         SYSTEM_AUDIO_SESSION_STUCK.store(true, Ordering::Release);
     }
     s.system_audio_collector = None;
+    // Independent manual asks must stop before their journal is closed.
+    s.cancel_session_requests();
     // Bump generation so an in-flight auto-tile call from this session
     // discards its result instead of spawning a tile after the stop.
     s.session_gen = s.session_gen.wrapping_add(1);
@@ -2495,6 +2499,23 @@ mod tests {
         let cfg = overlay_backend::config::shared_from(Default::default());
         let snap = stop_session(rt, &cfg);
         assert!(snap.is_empty());
+    }
+
+    #[tokio::test]
+    async fn stop_session_cancels_a_pending_manual_request_without_late_writeback() {
+        let rt = crate::runtime_state::shared_runtime();
+        let scope = lock(&rt).session_request_scope();
+        let cfg = overlay_backend::config::shared_from(Default::default());
+        let (answer_tx, answer_rx) = tokio::sync::oneshot::channel::<String>();
+        let pending = tokio::spawn(crate::runtime_state::until_session_changes(scope, async {
+            answer_rx.await.unwrap()
+        }));
+        stop_session(rt.clone(), &cfg);
+        let _ = answer_tx.send("late answer".into());
+        assert_eq!(pending.await.unwrap(), None);
+        let state = lock(&rt);
+        assert!(state.last_answer.is_none());
+        assert_eq!(state.session_cost_microcents, 0);
     }
 
     /// v0.12.0 — stop_session clears the rolling window (debrief snapshot

@@ -62,6 +62,18 @@ fn compositor_reload_restores_bindings_and_refreshes_diagnostics() {
 }
 
 #[test]
+fn manual_requests_share_session_boundary_cancellation_without_superseding_each_other() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let asks = std::fs::read_to_string(root.join("src/bin/overlay_host/tile_ask.rs")).unwrap();
+    let ptt = std::fs::read_to_string(root.join("src/bin/overlay_host/tile_ptt.rs")).unwrap();
+    let session = std::fs::read_to_string(root.join("src/slint_session.rs")).unwrap();
+    assert_eq!(asks.matches("until_session_changes(").count(), 2);
+    assert!(ptt.contains("until_session_changes(scope, request)"));
+    assert_eq!(session.matches("s.cancel_session_requests();").count(), 2);
+    assert_eq!(asks.matches("if s.session_gen != session_gen").count(), 2);
+}
+
+#[test]
 fn native_identity_does_not_keep_a_recreated_window_address_claimed() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let source = std::fs::read_to_string(root.join("src/native/linux/window.rs")).unwrap();
