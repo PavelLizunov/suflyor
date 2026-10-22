@@ -3,7 +3,8 @@
 //! summaries, memory), and background work holds at most one of the two slots,
 //! so a wanted answer waits behind at most one other request. A newer auto-tile
 //! question replaces an older one that has not started yet: on a call only the
-//! latest question is worth answering.
+//! latest question is worth answering. The idle prompt prime takes a slot only
+//! when nothing else runs or waits.
 //!
 //! The priority travels with the task: [`with_priority`] wraps the future that
 //! makes the request, and every request made inside it is admitted with that
@@ -54,6 +55,8 @@ enum Kind {
     Background,
     /// All slots, for a local server switch.
     Exclusive,
+    /// The idle prompt prime: a slot, but not one of background work's.
+    Idle,
 }
 
 struct Waiter {
@@ -66,6 +69,7 @@ struct Waiter {
 struct State {
     interactive: usize,
     background: usize,
+    idle: usize,
     exclusive: bool,
     next_id: u64,
     waiting: VecDeque<Waiter>,
@@ -83,6 +87,7 @@ impl Queue {
             state: Mutex::new(State {
                 interactive: 0,
                 background: 0,
+                idle: 0,
                 exclusive: false,
                 next_id: 0,
                 waiting: VecDeque::new(),
@@ -156,14 +161,14 @@ impl Queue {
 
     pub(crate) fn try_acquire_idle(&'static self) -> Option<AiPermit> {
         let mut state = self.state();
-        if state.exclusive || state.interactive + state.background > 0 || !state.waiting.is_empty()
-        {
+        let active = state.interactive + state.background + state.idle;
+        if state.exclusive || active > 0 || !state.waiting.is_empty() {
             return None;
         }
-        state.hold(Kind::Background);
+        state.hold(Kind::Idle);
         Some(AiPermit {
             queue: self,
-            kind: Kind::Background,
+            kind: Kind::Idle,
         })
     }
 
@@ -185,6 +190,7 @@ impl State {
             Kind::Interactive => self.interactive += 1,
             Kind::Background => self.background += 1,
             Kind::Exclusive => self.exclusive = true,
+            Kind::Idle => self.idle += 1,
         }
     }
 
@@ -193,6 +199,7 @@ impl State {
             Kind::Interactive => self.interactive = self.interactive.saturating_sub(1),
             Kind::Background => self.background = self.background.saturating_sub(1),
             Kind::Exclusive => self.exclusive = false,
+            Kind::Idle => self.idle = self.idle.saturating_sub(1),
         }
         self.admit();
     }
@@ -201,7 +208,7 @@ impl State {
         if self.exclusive {
             return None;
         }
-        let active = self.interactive + self.background;
+        let active = self.interactive + self.background + self.idle;
         // A server switch drains everything first and blocks new requests.
         if let Some(index) = self.waiting.iter().position(|w| w.kind == Kind::Exclusive) {
             return (active == 0).then_some(index);
@@ -418,9 +425,17 @@ mod tests {
         let q = queue();
         let prime = q.try_acquire_idle().unwrap();
         assert!(q.try_acquire_idle().is_none());
-        let wanted = q.acquire_at(AiPriority::Interactive).await.unwrap();
-        drop((prime, wanted));
+        // The prime does not hold back the auto tile it prepares.
+        let auto = tokio::time::timeout(Duration::from_secs(1), q.acquire_at(AiPriority::AutoTile))
+            .await
+            .expect("an auto tile waited behind the prime")
+            .unwrap();
+        drop((prime, auto));
         assert_eq!(q.snapshot(), (0, 0, false, 0));
+        let wanted = q.acquire_at(AiPriority::Interactive).await.unwrap();
+        assert!(q.try_acquire_idle().is_none());
+        drop(wanted);
+        assert!(q.try_acquire_idle().is_some());
     }
 
     #[tokio::test]
