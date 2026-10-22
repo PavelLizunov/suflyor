@@ -23,7 +23,7 @@ if p.is_file():
  s=p.read_text();start=s.find("-- BEGIN SUFLYOR NATIVE\n");end=s.find("-- END SUFLYOR NATIVE\n",start)
  if start>=0 and end>=0:p.write_text(s[:start]+s[end+len("-- END SUFLYOR NATIVE\n"):])
 PY
-    rm -f "$prefix/suflyor-hyprland.lua" "$prefix/launch"
+    rm -f "$prefix/suflyor-hyprland.lua" "$prefix/launch" "$prefix/stop"
     command -v hyprctl >/dev/null && hyprctl reload >/dev/null || true
     command -v update-desktop-database >/dev/null && update-desktop-database "$data/applications" || true
     if [[ -L "$bin_dir/suflyor" ]]; then
@@ -78,6 +78,13 @@ if [ "$#" -gt 0 ]; then exec {host} "$@"; fi
 exec systemctl --user start suflyor.service
 ''')
 launch.chmod(0o755)
+stop=prefix/"stop"
+stop.write_text(f'''#!/bin/sh
+export XDG_CONFIG_HOME={shlex.quote(str(config))}
+{host} --command quit 2>/dev/null || exit 0
+while [ -n "$MAINPID" ] && kill -0 "$MAINPID" 2>/dev/null; do sleep 0.1; done
+''')
+stop.chmod(0o755)
 if not hypr.is_file():raise SystemExit("Hyprland Lua configuration is unavailable")
 s=hypr.read_text()
 if "-- BEGIN SUFLYOR NATIVE\n" not in s:
@@ -90,6 +97,7 @@ PartOf=graphical-session.target
 [Service]
 Type=exec
 ExecStart="%s"
+ExecStop="%s"
 Environment=SLINT_BACKEND=winit-software
 Environment=WINIT_UNIX_BACKEND=wayland
 Environment=SUFLYOR_USER_SERVICE=suflyor.service
@@ -100,7 +108,7 @@ KillMode=control-group
 TimeoutStopSec=10
 [Install]
 WantedBy=graphical-session.target
-''' % (unit(prefix/'overlay-host'),unit(config)))
+''' % (unit(prefix/'overlay-host'),unit(prefix/'stop'),unit(config)))
 exe=str(prefix/'launch').replace('\\','\\\\').replace('"','\\"').replace('`','\\`').replace('$','\\$').replace('%','%%')
 (data/'applications/suflyor.desktop').write_text('''[Desktop Entry]
 Type=Application

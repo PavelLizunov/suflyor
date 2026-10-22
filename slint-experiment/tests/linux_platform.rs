@@ -74,6 +74,16 @@ fn manual_requests_share_session_boundary_cancellation_without_superseding_each_
 }
 
 #[test]
+fn managed_stop_uses_private_quit_and_waits_for_its_main_process() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let installer = std::fs::read_to_string(root.join("../scripts/install-linux.sh")).unwrap();
+    assert!(installer.contains("ExecStop=\"%s\""));
+    assert!(installer.contains("{host} --command quit 2>/dev/null || exit 0"));
+    assert!(installer.contains("kill -0 \"$MAINPID\""));
+    assert!(installer.contains("\"$prefix/stop\""));
+}
+
+#[test]
 fn native_identity_does_not_keep_a_recreated_window_address_claimed() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let source = std::fs::read_to_string(root.join("src/native/linux/window.rs")).unwrap();
