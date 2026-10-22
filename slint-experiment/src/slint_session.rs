@@ -177,6 +177,10 @@ async fn stream_auto_tile_answer(
                         last_push = Some(Instant::now());
                     }
                 }
+                // A newer question replaced this one before it started.
+                Some(ai::AiEvent::Done { reason }) if reason == ai::SUPERSEDED_REASON => {
+                    return Ok((String::new(), "cancelled".into()));
+                }
                 // A connection closed before any text is a failure to retry,
                 // as a truncated one-shot reply was.
                 Some(ai::AiEvent::Done { reason }) if reason == "eof" && answer.is_empty() => {
@@ -1526,13 +1530,18 @@ async fn maybe_spawn_auto_tile(
         max_tokens,
         no_think: fast,
     };
-    let streamed = stream_auto_tile_answer(
-        &endpoint,
-        &ask,
-        &events,
-        stream_label.as_deref(),
-        &rt,
-        session_gen,
+    // Background work in the AI queue: a wanted question goes first, and a
+    // newer auto-tile question replaces this one while it waits.
+    let streamed = ai::with_priority(
+        ai::AiPriority::AutoTile,
+        stream_auto_tile_answer(
+            &endpoint,
+            &ask,
+            &events,
+            stream_label.as_deref(),
+            &rt,
+            session_gen,
+        ),
     )
     .await;
     let (answer, finish_reason) = match streamed {

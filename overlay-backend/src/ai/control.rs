@@ -4,11 +4,8 @@ use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
-pub(crate) static AI_SEMAPHORE: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
-
-pub async fn acquire_exclusive_ai() -> Result<tokio::sync::SemaphorePermit<'static>> {
-    AI_SEMAPHORE
-        .acquire_many(2)
+pub async fn acquire_exclusive_ai() -> Result<super::queue::AiPermit> {
+    super::queue::acquire_exclusive()
         .await
         .map_err(|_| anyhow!("AI request queue closed"))
 }

@@ -1,6 +1,6 @@
 use super::control::{
     apply_local_no_think, apply_managed_gemma_sampler, apply_prompt_cache, apply_reasoning_effort,
-    http_client, resolve_managed_mlx_endpoint, transport_failure_kind, AI_SEMAPHORE, PROMPT_CACHE,
+    http_client, resolve_managed_mlx_endpoint, transport_failure_kind, PROMPT_CACHE,
 };
 use super::provider;
 use super::tps::{begin_request, record_stream_tps};
@@ -61,8 +61,9 @@ fn stream_chat_endpoint_with(
     let request_started_at = std::time::Instant::now();
     let request_id = begin_request();
     let (tx, rx) = mpsc::channel::<AiEvent>(64);
+    let priority = super::queue::current_priority();
 
-    tokio::spawn(async move {
+    tokio::spawn(super::queue::with_priority(priority, async move {
         let (endpoint, _mlx_lease) = match resolve_managed_mlx_endpoint(endpoint).await {
             Ok(resolved) => resolved,
             Err(error) => {
@@ -132,7 +133,17 @@ fn stream_chat_endpoint_with(
         let _permit = tokio::select! {
             biased;
             () = tx.closed() => return,
-            permit = AI_SEMAPHORE.acquire() => permit.ok(),
+            permit = super::queue::acquire() => match permit {
+                Ok(permit) => permit,
+                Err(_) => {
+                    let _ = tx
+                        .send(AiEvent::Done {
+                            reason: super::queue::SUPERSEDED_REASON.into(),
+                        })
+                        .await;
+                    return;
+                }
+            },
         };
         if tx.is_closed() {
             return;
@@ -155,7 +166,7 @@ fn stream_chat_endpoint_with(
                 })
                 .await;
         }
-    });
+    }));
 
     rx
 }

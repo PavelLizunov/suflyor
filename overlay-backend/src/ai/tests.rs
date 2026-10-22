@@ -49,7 +49,7 @@ async fn queued_stream_stops_when_receiver_is_dropped() {
     let _stream_guard = STREAM_TEST_LOCK.lock().await;
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let base_url = format!("http://{}", listener.local_addr().unwrap());
-    let permits = AI_SEMAPHORE.acquire_many(2).await.unwrap();
+    let permits = acquire_exclusive_ai().await.unwrap();
 
     let rx = stream_chat(base_url, String::new(), String::new(), Vec::new(), 1);
     tokio::task::yield_now().await;
@@ -57,7 +57,7 @@ async fn queued_stream_stops_when_receiver_is_dropped() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     drop(permits);
 
-    // The semaphore is process-wide: other tests in this binary queue behind the
+    // The queue is process-wide: other tests in this binary queue behind the
     // two permits held above and may then hold one for several seconds (a
     // refused local connection costs about two seconds per attempt on Windows).
     // The deadline covers that; a permit leaked by the dropped stream is never
@@ -67,7 +67,7 @@ async fn queued_stream_stops_when_receiver_is_dropped() {
     while start.elapsed() < std::time::Duration::from_secs(30) {
         if let Ok(Ok(p)) = tokio::time::timeout(
             std::time::Duration::from_millis(200),
-            AI_SEMAPHORE.acquire_many(2),
+            acquire_exclusive_ai(),
         )
         .await
         {
