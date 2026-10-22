@@ -157,6 +157,7 @@ pub(crate) fn fire_ptt_ask(
     let bridge_for_close = bridge.clone();
     tile.on_close_clicked(move || {
         if let Some(t) = weak_close.upgrade() {
+            bridge_for_close.cancel_tile_request(&t);
             // Closing the tile that's being read aloud must silence it.
             super::stop_if_speaking(t.get_convo_id());
             // FIX #8 — prune this tile's conversation (no-op if none).
@@ -246,6 +247,7 @@ pub(crate) fn fire_ptt_ask(
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
     let weak_for_title = tile.as_weak();
+    let tile_id = tile.get_tile_id();
     tiles.borrow_mut().push(tile);
     refresh_open_tiles(weak_overlay, tiles);
 
@@ -486,7 +488,7 @@ pub(crate) fn fire_ptt_ask(
         )
         .await;
     };
-    rt_handle.spawn(async move {
+    let task = rt_handle.spawn(async move {
         if slint_replay::runtime_state::until_session_changes(scope, request)
             .await
             .is_none()
@@ -503,6 +505,7 @@ pub(crate) fn fire_ptt_ask(
             });
         }
     });
+    super::register_tile_stream(tile_id, task.abort_handle());
 }
 
 #[cfg(test)]

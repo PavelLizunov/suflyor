@@ -266,6 +266,10 @@ struct RememberAnswer {
 }
 
 impl RuntimeEvents for RememberAnswer {
+    fn tile_request_open(&self, label: &str) -> bool {
+        self.inner.tile_request_open(label)
+    }
+
     fn emit(&self, channel: &str, payload: serde_json::Value) {
         if channel == "ai:event" {
             match payload.get("type").and_then(serde_json::Value::as_str) {
@@ -459,6 +463,7 @@ pub(crate) fn fire_f9_ask(
     tile.on_close_clicked(move || {
         eprintln!("[overlay-host] tile (F9) close_clicked fired");
         if let Some(t) = weak_close.upgrade() {
+            bridge_for_close.cancel_tile_request(&t);
             // Closing the tile that's being read aloud must silence it.
             super::stop_if_speaking(t.get_convo_id());
             // FIX #8 — prune this tile's conversation (no-op if none).
@@ -554,6 +559,7 @@ pub(crate) fn fire_f9_ask(
     );
     present_tile_window(&tile);
     apply_tile_hwnd_with_monitor(&tile);
+    let tile_id = tile.get_tile_id();
     let weak_for_stream = tile.as_weak();
     let weak_for_mlx_error = weak_for_stream.clone();
     tiles.borrow_mut().push(tile);
@@ -730,7 +736,9 @@ pub(crate) fn fire_f9_ask(
             // A newer ask may have superseded this one while the worker ran; the
             // generation check skips the fill/stream so the latest ask wins (the
             // same invariant gated_events enforces on the stream's emits).
-            if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation {
+            if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation
+                || !super::tile_request_open(tile_id)
+            {
                 return;
             }
             // Phase E6 v45 — record the sent messages in the streaming slot so
@@ -806,6 +814,7 @@ pub(crate) fn fire_f9_ask(
                 )
                 .await;
             });
+            super::register_tile_stream(tile_id, task.abort_handle());
             slint_replay::runtime_state::lock(&slint_rt_for_work).ai_task = Some(task);
         });
     });

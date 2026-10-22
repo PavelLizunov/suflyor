@@ -794,8 +794,10 @@ fn main() -> Result<(), slint::PlatformError> {
         cfg: cfg.clone(),
         spawn_tx,
         tile_seq: AtomicU64::new(0),
+        spawn_generation: AtomicU64::new(0),
+        auto_requests: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         current_streaming: std::sync::Mutex::new(None),
-        ai_in_flight: std::sync::atomic::AtomicI32::new(0),
+        ai_in_flight: Arc::new(std::sync::atomic::AtomicI32::new(0)),
         conversations: std::sync::Mutex::new(std::collections::HashMap::new()),
         stream_gen: Arc::new(AtomicU64::new(0)),
         last_tile_render: std::sync::Mutex::new(std::time::Instant::now()),
@@ -2072,6 +2074,9 @@ fn main() -> Result<(), slint::PlatformError> {
                 break;
             };
             processed += 1;
+            if req.generation != bridge_for_poll.spawn_generation.load(Ordering::SeqCst) {
+                continue;
+            }
             // A fast answer ends with its terms: shown as buttons, not as text.
             // Only auto tiles ask for them; a note or a summary keeps its text.
             let answer_terms = if req.kind == TileKind::Auto {
@@ -2094,6 +2099,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     continue;
                 };
                 if req.action == SpawnAction::Drop {
+                    bridge_for_poll.cancel_tile_request(&tile);
                     let sequence = tile.get_sequence();
                     let _ = tile.hide();
                     slint_replay::win32::force_hide(tile.window());
@@ -2111,7 +2117,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 let dropped = tiles_for_poll.borrow_mut().remove(0);
                 // Abort the evicted tile's in-flight AI request (keyed by the
                 // synchronous tile-id; -1 for non-"+ tile" tiles is a no-op).
-                abort_tile_stream(dropped.get_tile_id());
+                bridge_for_poll.cancel_tile_request(&dropped);
                 // FIX #8 — prune this tile's conversation too (no-op if it had
                 // none), so the map doesn't outlive the force-evicted tile.
                 bridge_for_poll.drop_conversation(dropped.get_convo_id());
@@ -2146,6 +2152,7 @@ fn main() -> Result<(), slint::PlatformError> {
             if reused.is_none() {
                 let seq = TILE_DISPLAY_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
                 tile.set_sequence(seq as i32);
+                tile.set_tile_id(req.tile_id);
             }
             wire_tile_drag(&tile);
             tile.set_source_label(SharedString::from(tile_text::kind_label(
@@ -2215,6 +2222,7 @@ fn main() -> Result<(), slint::PlatformError> {
             tile.on_close_clicked(move || {
                 eprintln!("[overlay-host] tile (poll/F3) close_clicked fired");
                 if let Some(t) = weak_tile.upgrade() {
+                    bridge_for_close.cancel_tile_request(&t);
                     // FIX #8 — prune this tile's conversation (no-op if none).
                     bridge_for_close.drop_conversation(t.get_convo_id());
                     let sequence = t.get_sequence();
@@ -2513,6 +2521,7 @@ fn main() -> Result<(), slint::PlatformError> {
                         // Dismiss the error tile (drop it from the live Vec like
                         // the close handler) — the resume spawns a fresh tile.
                         if let Some(t) = weak_retry.upgrade() {
+                            abort_tile_stream(t.get_tile_id());
                             let sequence = t.get_sequence();
                             let _ = t.hide();
                             slint_replay::win32::force_hide(t.window());
@@ -3413,6 +3422,9 @@ fn main() -> Result<(), slint::PlatformError> {
             // Abort every tile's in-flight AI request so bulk-close frees the
             // GPU instead of leaving the model generating for closed tiles.
             abort_all_tile_streams();
+            bridge_for_close_all.cancel_pending_tiles();
+            AUTO_STREAM_TILES.with(|m| m.borrow_mut().clear());
+            AUTO_STREAM_EARLY.with(|m| m.borrow_mut().clear());
             // Reset cascade placement — close-all clears the screen, so the next
             // tile must restart from the top-right cluster. This bulk path calls
             // refresh_tiles_chip (NOT refresh_open_tiles), so it would otherwise
@@ -3422,6 +3434,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 let mut v = tiles_ref.borrow_mut();
                 let count = v.len();
                 for t in v.iter() {
+                    bridge_for_close_all.cancel_tile_request(t);
                     bridge_for_close_all.drop_conversation(t.get_convo_id());
                     let _ = t.hide();
                     slint_replay::win32::force_hide(t.window());
@@ -3453,6 +3466,7 @@ fn main() -> Result<(), slint::PlatformError> {
         overlay.on_restore_tile_clicked(move || {
             let restored = LAST_CLOSED_READ_TILE.with(|slot| slot.borrow_mut().take());
             if let Some(tile) = restored {
+                open_tile_request(tile.get_tile_id());
                 present_tile_window(&tile);
                 apply_tile_hwnd_with_monitor(&tile);
                 tiles_ref.borrow_mut().push(tile);

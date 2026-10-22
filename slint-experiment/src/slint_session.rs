@@ -133,6 +133,11 @@ async fn stream_auto_tile_answer(
 ) -> Result<(String, String)> {
     let mut attempt = 1;
     loop {
+        if lock(rt).session_gen != session_gen
+            || label.is_some_and(|label| !events.tile_request_open(label))
+        {
+            return Ok((String::new(), "cancelled".into()));
+        }
         let mut rx = ai::stream_chat_endpoint_plain(
             endpoint.clone(),
             ask.messages.clone(),
@@ -142,6 +147,9 @@ async fn stream_auto_tile_answer(
         let mut answer = String::new();
         let mut last_push: Option<Instant> = None;
         let outcome = loop {
+            if label.is_some_and(|label| !events.tile_request_open(label)) {
+                return Ok((String::new(), "cancelled".into()));
+            }
             // Wake up now and then so a stopped session closes the tile even
             // while the request still waits for its first token.
             let next = match tokio::time::timeout(AUTO_TILE_STREAM_PUSH * 5, rx.recv()).await {
@@ -186,7 +194,8 @@ async fn stream_auto_tile_answer(
                 let retry = answer.is_empty()
                     && attempt < AUTO_TILE_AI_ATTEMPTS
                     && !ai::is_permanent_ai_error(&message)
-                    && lock(rt).session_gen == session_gen;
+                    && lock(rt).session_gen == session_gen
+                    && label.is_none_or(|label| events.tile_request_open(label));
                 if !retry {
                     return Err(anyhow::anyhow!(message));
                 }
@@ -1527,6 +1536,15 @@ async fn maybe_spawn_auto_tile(
     )
     .await;
     let (answer, finish_reason) = match streamed {
+        Ok((_, reason))
+            if reason == "cancelled"
+                || stream_label
+                    .as_deref()
+                    .is_some_and(|label| !events.tile_request_open(label)) =>
+        {
+            drop_placeholder(&events);
+            return;
+        }
         Ok((t, reason)) => {
             lock(&rt)
                 .health
@@ -1539,6 +1557,12 @@ async fn maybe_spawn_auto_tile(
         }
         Err(e) => {
             drop_placeholder(&events);
+            if stream_label
+                .as_deref()
+                .is_some_and(|label| !events.tile_request_open(label))
+            {
+                return;
+            }
             // V0.8.0 (Поток A) — the auto-tile AI call failed. Previously
             // this returned SILENTLY (log + journal only), so the user saw
             // auto-tiles simply stop with no explanation ("почему тайлы
@@ -2600,6 +2624,68 @@ mod tests {
         ) -> Result<String, String> {
             Ok("tile".into())
         }
+    }
+
+    struct ClosableEvents(Arc<AtomicBool>);
+
+    impl RuntimeEvents for ClosableEvents {
+        fn emit(&self, _channel: &str, _payload: serde_json::Value) {}
+        fn tile_request_open(&self, _label: &str) -> bool {
+            self.0.load(Ordering::SeqCst)
+        }
+        fn spawn_tile_full(
+            &self,
+            _: TileSpec,
+            _: MonitorHint,
+            _: bool,
+            _: TileKind,
+        ) -> Result<String, String> {
+            Ok("tile".into())
+        }
+    }
+
+    #[tokio::test]
+    async fn closing_an_auto_tile_retires_a_silent_request_without_retry_or_answer() {
+        use std::io::Read;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = sse_endpoint(format!("http://{}", listener.local_addr().unwrap()));
+        let (accepted, ready) = tokio::sync::oneshot::channel();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(4)))
+                .unwrap();
+            let mut bytes = [0; 16384];
+            assert!(stream.read(&mut bytes).unwrap() > 0);
+            accepted.send(()).unwrap();
+            loop {
+                match stream.read(&mut bytes) {
+                    Ok(0) => break,
+                    Ok(_) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::ConnectionReset => break,
+                    Err(e) => panic!("closed auto tile retained its HTTP request: {e}"),
+                }
+            }
+        });
+        let open = Arc::new(AtomicBool::new(true));
+        let events: Arc<dyn RuntimeEvents> = Arc::new(ClosableEvents(open.clone()));
+        let rt: SharedSlintRuntime = Arc::default();
+        let task = tokio::spawn(async move {
+            stream_auto_tile_answer(&endpoint, &test_ask(), &events, Some("tile"), &rt, 0).await
+        });
+        tokio::time::timeout(Duration::from_secs(5), ready)
+            .await
+            .unwrap()
+            .unwrap();
+        open.store(false, Ordering::SeqCst);
+        let (answer, reason) = tokio::time::timeout(Duration::from_secs(2), task)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert!(answer.is_empty());
+        assert_eq!(reason, "cancelled");
+        server.join().unwrap();
     }
 
     const SSE_ANSWER: &str =

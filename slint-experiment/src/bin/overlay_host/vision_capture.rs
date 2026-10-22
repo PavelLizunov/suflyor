@@ -618,6 +618,7 @@ pub(crate) fn launch_vision_for_bgra(
     tile.on_close_clicked(move || {
         super::abort_tile_stream(tile_id);
         if let Some(t) = weak_close.upgrade() {
+            bridge_for_close.cancel_tile_request(&t);
             // Closing the tile that's being read aloud must silence it.
             super::stop_if_speaking(t.get_convo_id());
             // FIX #8 — prune this tile's conversation (no-op if none).

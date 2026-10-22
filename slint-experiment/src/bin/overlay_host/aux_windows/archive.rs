@@ -899,6 +899,7 @@ pub(super) fn spawn_content_tile(
     let weak_overlay_close = weak_overlay.clone();
     tile.on_close_clicked(move || {
         if let Some(t) = weak_tile.upgrade() {
+            crate::abort_tile_stream(t.get_tile_id());
             let sequence = t.get_sequence();
             let _ = t.hide();
             slint_replay::win32::force_hide(t.window());
