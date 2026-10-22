@@ -5,6 +5,10 @@ milestone with the complete contract in `docs/goal-omarchy-port.md`.
 
 ## Current functional evidence, not full acceptance
 
+The owner-requested transfer state is in
+[the October 22 Claude Code handoff](../HANDOFF-OMARCHY-2026-10-22.md).
+Its fresh inventory supersedes older runtime-state statements below.
+
 ### October 22 queue cancellation correction
 
 The owner's accumulated-question report is reproduced in the real f6b6037 UI:
@@ -51,7 +55,15 @@ acceptance did not cover auto tiles, PTT, F9 or their continuations.
   and separate real physical-PTT-close checks above have distinct inputs.
   Follow-up Close reaches provider cancellation in the sibling probe; clicking
   Regenerate through MCP popup text/row does not establish dispatch, so that
-  native menu path and a cap-eviction stress scenario remain unaccepted.
+  native menu path is not established by that MCP attempt. Later actual QEMU
+  pointer input on the measured native popup does dispatch Regenerate and
+  renders a useful real answer. Physical Regenerate against the delayed provider
+  followed by Close also disconnects; receipt regenerate-close-result.json.
+  An actual 16-tile cap scenario evicts the oldest streaming auto and disconnects
+  its provider. Initial enumeration sees a destroyed handle during legitimate
+  eviction; a later settled readback verifies 16 remaining tiles and the canceled
+  request, then close-all. Receipt cap-result.json. These later checks do not
+  turn the initial failed MCP/handle assertions into passed driver runs.
 
 Private receipts: native-2f3f2fd and queue-live-2f3f2fd. The temporary transcript
 service override is removed; the bounded queue provider is stopped; English,
