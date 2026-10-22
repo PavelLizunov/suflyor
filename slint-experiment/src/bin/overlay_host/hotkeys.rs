@@ -27,9 +27,8 @@
 //! (`use hotkeys::*;` in the parent lifts `hotkey_diag_row` to crate root for
 //! `diagnostics.rs`).
 
-/// P1.2 — outcome of registering the global hotkeys at startup, captured ONCE so
-/// the Diagnostics tab can surface a per-key conflict (not just an eprintln!).
-/// Set in the registration loop; read by [`hotkey_diag_row`].
+/// Registration outcome for Diagnostics, refreshed after compositor reloads.
+/// The Diagnostics tab can surface a per-key conflict, not just an eprintln.
 #[allow(dead_code)]
 pub(crate) struct HotkeyDiag {
     /// Space-separated keys that registered, e.g. "F1 F3 F4 F6 F8 F9 Shift+F9".
@@ -41,7 +40,7 @@ pub(crate) struct HotkeyDiag {
     manager_missing: bool,
 }
 
-static HOTKEY_DIAG: std::sync::OnceLock<HotkeyDiag> = std::sync::OnceLock::new();
+static HOTKEY_DIAG: std::sync::RwLock<Option<HotkeyDiag>> = std::sync::RwLock::new(None);
 
 /// Render the captured hotkey-registration outcome (P1.2) into a (level, detail,
 /// failed) triple for the Diagnostics tab. level 0=all registered, 4=a key
@@ -49,7 +48,8 @@ static HOTKEY_DIAG: std::sync::OnceLock<HotkeyDiag> = std::sync::OnceLock::new()
 /// raw key list so the .slint composes the translated "conflict:" wording.
 #[allow(dead_code)]
 pub(crate) fn hotkey_diag_row() -> (i32, String, String) {
-    match HOTKEY_DIAG.get() {
+    let diag = HOTKEY_DIAG.read().unwrap_or_else(|p| p.into_inner());
+    match diag.as_ref() {
         None => (3, String::new(), String::new()),
         // Manager failed to init → level 4 (error) but EMPTY failed list, so the
         // UI/report render "unavailable", not a misleading "conflict: all".
@@ -87,6 +87,48 @@ pub(crate) struct RegisteredHotkeys {
 }
 
 #[cfg(target_os = "linux")]
+const WAYLAND_BINDINGS: &[(&str, &str)] = &[
+    ("F1", "f1"),
+    ("F3", "f3"),
+    ("F4", "f4"),
+    ("F6", "f6"),
+    ("F7", "f7"),
+    ("F8", "f8"),
+    ("SHIFT + F8", "sf8"),
+    ("CTRL + F8", "cf8"),
+    ("F9", "f9"),
+    ("SHIFT + F9", "sf9"),
+    ("SHIFT + ALT + 1", "sa1"),
+    ("SHIFT + ALT + 2", "sa2"),
+    ("SHIFT + ALT + 3", "sa3"),
+    ("SUPER + F9", "ptt-mic-down"),
+    ("SUPER + F9@release", "ptt-mic-up"),
+    ("SUPER + SHIFT + F9", "ptt-sys-down"),
+    ("SUPER + SHIFT + F9@release", "ptt-sys-up"),
+    ("SUPER + F10", "show"),
+];
+
+#[cfg(target_os = "linux")]
+fn wayland_hotkey_diag() -> HotkeyDiag {
+    let installed =
+        slint_replay::native::desktop::install_bindings(WAYLAND_BINDINGS).unwrap_or_default();
+    let mut registered = Vec::new();
+    let mut failed = Vec::new();
+    for &(label, action) in WAYLAND_BINDINGS {
+        if installed.iter().any(|key| key == action) {
+            registered.push(label);
+        } else {
+            failed.push(label);
+        }
+    }
+    HotkeyDiag {
+        registered: registered.join(" "),
+        failed: failed.join(", "),
+        manager_missing: false,
+    }
+}
+
+#[cfg(target_os = "linux")]
 thread_local! { static ACTIONS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) }; }
 #[cfg(target_os = "linux")]
 pub(crate) fn take_actions() -> Vec<String> {
@@ -101,6 +143,11 @@ pub(crate) fn next_event() -> Option<global_hotkey::GlobalHotKeyEvent> {
         };
         use global_hotkey::hotkey::{Code, HotKey, Modifiers};
         let (key, mods) = match command.as_str() {
+            "config-reloaded" => {
+                *HOTKEY_DIAG.write().unwrap_or_else(|p| p.into_inner()) =
+                    Some(wayland_hotkey_diag());
+                continue;
+            }
             "f1" => (Code::F1, None),
             "f3" => (Code::F3, None),
             "f4" => (Code::F4, None),
@@ -250,43 +297,21 @@ pub(crate) fn register_hotkeys() -> RegisteredHotkeys {
             }
         }
         #[cfg(target_os = "linux")]
-        {
-            let bindings = [
-                ("F1", "f1"),
-                ("F3", "f3"),
-                ("F4", "f4"),
-                ("F6", "f6"),
-                ("F7", "f7"),
-                ("F8", "f8"),
-                ("SHIFT + F8", "sf8"),
-                ("CTRL + F8", "cf8"),
-                ("F9", "f9"),
-                ("SHIFT + F9", "sf9"),
-                ("SHIFT + ALT + 1", "sa1"),
-                ("SHIFT + ALT + 2", "sa2"),
-                ("SHIFT + ALT + 3", "sa3"),
-                ("SUPER + F9", "ptt-mic-down"),
-                ("SUPER + F9@release", "ptt-mic-up"),
-                ("SUPER + SHIFT + F9", "ptt-sys-down"),
-                ("SUPER + SHIFT + F9@release", "ptt-sys-up"),
-                ("SUPER + F10", "show"),
-            ];
-            let installed = slint_replay::native::desktop::listen()
-                .and_then(|()| slint_replay::native::desktop::install_bindings(&bindings))
-                .unwrap_or_default();
-            for (label, action) in bindings {
-                if installed.iter().any(|key| key == action) {
-                    registered.push(label);
-                } else {
-                    failed.push(label);
-                }
-            }
-        }
-        let _ = HOTKEY_DIAG.set(HotkeyDiag {
+        let diag = match slint_replay::native::desktop::listen() {
+            Ok(()) => wayland_hotkey_diag(),
+            Err(_) => HotkeyDiag {
+                registered: String::new(),
+                failed: String::new(),
+                manager_missing: true,
+            },
+        };
+        #[cfg(not(target_os = "linux"))]
+        let diag = HotkeyDiag {
             registered: registered.join(" "),
             failed: failed.join(", "),
-            manager_missing: cfg!(not(target_os = "linux")) && hotkey_manager.is_none(),
-        });
+            manager_missing: hotkey_manager.is_none(),
+        };
+        *HOTKEY_DIAG.write().unwrap_or_else(|p| p.into_inner()) = Some(diag);
     }
 
     RegisteredHotkeys {

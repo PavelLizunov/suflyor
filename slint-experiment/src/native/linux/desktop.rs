@@ -1,9 +1,9 @@
 //! Native Hyprland transport and per-config command socket.
 
 use sha2::{Digest, Sha256};
-use std::io;
+use std::io::{self, Read};
 use std::os::unix::fs::PermissionsExt;
-use std::os::unix::net::UnixDatagram;
+use std::os::unix::net::{UnixDatagram, UnixStream};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
@@ -106,6 +106,21 @@ pub fn send_command(value: &str) -> Result<(), Error> {
 struct CommandSocket {
     socket: UnixDatagram,
     path: PathBuf,
+    events: UnixStream,
+    pending: Vec<u8>,
+}
+
+fn take_config_reload(pending: &mut Vec<u8>) -> bool {
+    let mut reloaded = false;
+    while let Some(end) = pending.iter().position(|&b| b == b'\n') {
+        reloaded |= &pending[..end] == b"configreloaded>>";
+        pending.drain(..=end);
+    }
+    // An incomplete unrelated event must not grow the input buffer indefinitely.
+    if pending.len() > 8192 {
+        pending.clear();
+    }
+    reloaded
 }
 impl Drop for CommandSocket {
     fn drop(&mut self) {
@@ -115,6 +130,16 @@ impl Drop for CommandSocket {
 static SOCKET: OnceLock<Mutex<Option<CommandSocket>>> = OnceLock::new();
 
 pub fn listen() -> Result<(), Error> {
+    let runtime = std::env::var_os("XDG_RUNTIME_DIR").ok_or("Wayland runtime unavailable")?;
+    let signature =
+        std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").ok_or("Hyprland instance unavailable")?;
+    let events = UnixStream::connect(
+        PathBuf::from(runtime)
+            .join("hypr")
+            .join(signature)
+            .join(".socket2.sock"),
+    )?;
+    events.set_nonblocking(true)?;
     let path = socket_path()?;
     if path.exists() {
         if UnixDatagram::unbound()?.connect(&path).is_ok() {
@@ -129,7 +154,12 @@ pub fn listen() -> Result<(), Error> {
         .get_or_init(|| Mutex::new(None))
         .lock()
         .map_err(|_| "command socket lock failed")?;
-    *slot = Some(CommandSocket { socket, path });
+    *slot = Some(CommandSocket {
+        socket,
+        path,
+        events,
+        pending: Vec::new(),
+    });
     Ok(())
 }
 
@@ -164,13 +194,19 @@ pub fn close() {
 }
 
 pub fn receive() -> Option<String> {
-    let slot = SOCKET.get()?.lock().ok()?;
-    let mut buffer = [0u8; 81];
-    let n = slot.as_ref()?.socket.recv(&mut buffer).ok()?;
-    if n > 80 {
-        return None;
+    let mut slot = SOCKET.get()?.lock().ok()?;
+    let owner = slot.as_mut()?;
+    let mut command = [0u8; 81];
+    if let Ok(n) = owner.socket.recv(&mut command) {
+        return (n <= 80)
+            .then(|| std::str::from_utf8(&command[..n]).ok().map(str::to_owned))
+            .flatten();
     }
-    std::str::from_utf8(&buffer[..n]).ok().map(str::to_owned)
+    let mut events = [0u8; 4096];
+    if let Ok(n) = owner.events.read(&mut events) {
+        owner.pending.extend_from_slice(&events[..n]);
+    }
+    take_config_reload(&mut owner.pending).then(|| "config-reloaded".to_string())
 }
 
 fn binding_owner() -> Result<String, Error> {
@@ -201,6 +237,7 @@ pub fn install_bindings(bindings: &[(&str, &str)]) -> Result<Vec<String>, Error>
     let existing = query("binds")?;
     let existing = existing.as_array().ok_or("invalid compositor bindings")?;
     let mut installed = Vec::new();
+    let mut script = String::new();
     for (keys, action) in bindings {
         let (mods, key) = binding_parts(keys);
         let conflict = existing.iter().any(|bind| {
@@ -216,10 +253,7 @@ pub fn install_bindings(bindings: &[(&str, &str)]) -> Result<Vec<String>, Error>
         let release = action.ends_with("-up");
         let keys = keys.strip_suffix("@release").unwrap_or(keys);
         if !release {
-            let _ = hypr(&[
-                "eval",
-                &format!("hl.unbind({})", serde_json::to_string(keys)?),
-            ]);
+            script.push_str(&format!("hl.unbind({});", serde_json::to_string(keys)?));
         }
         let lua = format!(
             "hl.bind({}, hl.dsp.exec_cmd({}), {{ description = {}, release = {} }})",
@@ -228,11 +262,16 @@ pub fn install_bindings(bindings: &[(&str, &str)]) -> Result<Vec<String>, Error>
             serde_json::to_string(&owner)?,
             release
         );
-        let result = hypr(&["eval", &lua])?;
-        if result.to_ascii_lowercase().contains("error") {
-            continue;
-        }
+        script.push_str(&lua);
+        script.push(';');
         installed.push(action.to_string());
+    }
+    if !script.is_empty()
+        && hypr(&["eval", &script])?
+            .to_ascii_lowercase()
+            .contains("error")
+    {
+        return Err("compositor bindings were rejected".into());
     }
     Ok(installed)
 }
@@ -250,6 +289,26 @@ fn binding_parts(keys: &str) -> (u64, &str) {
         }
     }
     (mods, key)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+    use super::take_config_reload;
+
+    #[test]
+    fn reload_events_preserve_partial_frames_and_ignore_other_events() {
+        let mut pending = b"windowtitle>>configreloaded\nconfigrelo".to_vec();
+        assert!(!take_config_reload(&mut pending));
+        assert_eq!(pending, b"configrelo");
+        pending.extend_from_slice(b"aded>>\nworkspace>>2\nconfigreloaded>>\n");
+        assert!(take_config_reload(&mut pending));
+        assert!(pending.is_empty());
+        assert!(!take_config_reload(&mut pending));
+        pending.resize(8193, b'x');
+        assert!(!take_config_reload(&mut pending));
+        assert!(pending.is_empty());
+    }
 }
 
 pub fn open(target: &std::ffi::OsStr) -> io::Result<()> {
