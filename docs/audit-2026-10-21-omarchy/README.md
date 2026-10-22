@@ -5,7 +5,65 @@ milestone with the complete contract in `docs/goal-omarchy-port.md`.
 
 ## Current functional evidence, not full acceptance
 
-### October 22 continuation
+### October 22 latest native continuation
+
+- Exact `a07c5ac48e0d20e7de1b174c9cbcea606d9379c2` host check and ui-mcp
+  build exit 0. Installed and QA executable SHA-256:
+  `6947b089102d09a64182fc7545b660cf39147ae4ceffaece2184ac6e9f0bdc2c`.
+  Windows targeted and macOS compile-seam gates exit 0; CI 39725243799 and
+  security 39725243814 pass. This is not a current complete Linux test-driver
+  run; the complete b4413d0 result below remains a distinct candidate.
+- Settled compositor geometry passes full 1280x64 at (320,24), compact 680x64
+  at (620,24), expansion, four compact hide/restore cycles and cold compact
+  service startup. All four retained Settings remaps also preserve native
+  identity and capture exclusion, including reused compositor addresses.
+  The cache keeps weak native owners so hide still destroys Wayland surfaces.
+- Actual GUI session start/stop records both owned virtual PipeWire streams.
+  GigaAM recognizes a useful spoken database-index question on both System
+  and Mic; three transcript lines and both WAV recordings persist. Archive
+  opens the completed session; View transcript and Copy all consume its real
+  lines. Physical microphone evidence remains unavailable, not implied.
+- Actual transcript timecode playback produces 84,800 monitored samples,
+  RMS 1890.181 and peak 16,306. Installing speaker models verifies both pinned
+  files; native one-speaker diarization completes after 1,276.7 seconds and
+  persists after closing/reopening the transcript. By voice shows the actual
+  inferred speaker. Multi-speaker accuracy, performance, cancellation and the
+  complete transcript-player control matrix remain open. Concurrent native
+  playback/inference logged CPAL buffer underrun/overrun; this is retained.
+- F1 Help, F4 Palette, F7 Archive, F3/F6 empty-state notices, typed-question Send
+  and Shift+F9 unconfigured-cloud feedback are physically dispatched. A useful
+  typed database-index definition renders, but later F9/F6 answers are late or
+  off-topic. One F6 result arrives after session stop without an ai_response
+  journal row; timely session AI/storage acceptance is not established.
+- Held System PTT recognizes the complete useful spoken question. Its first
+  AI attempt times out at 120 seconds. A byte-preserving local QA relay then
+  confirms the real request includes enable_thinking=false and contains no
+  reasoning output. The next request completes but merely repeats the question
+  as transcript text. This disproves the proposed missing-no-think explanation
+  for that run; it is not useful spoken-question answer acceptance.
+- Physical header dragging moves the question window and saves its position.
+  Reopening can add 7px Y repeatedly (D-089). A native A/B probe changes only
+  the owned compositor rule from 480x112 to the rendered 480x98: baseline
+  saved Y advances 606→613→620, while all three 98px-rule cycles retain 620.
+  The probe restores the original installed rule and validates empty compositor
+  configuration errors. The committed correction needs exact-candidate retest.
+- Actual Profile + context creates, selects and saves a disposable profile;
+  the question window displays that active profile. Delete removes the profile.
+  Real native portal dialogs export server JSON, preview import changes and
+  apply them while retaining language, devices, local GigaAM path and profile
+  fields. Full backup/import and provider authentication remain separate.
+- Scale-1.5 Settings renders at logical 720x600, raster 1080x900. A negative-X
+  owned headless-output OCR selection does not complete and is canceled with
+  Escape; all checked own windows restore capture exclusion. The owned output
+  is removed and the primary output returns to scale 1. No successful scaled
+  multi-output capture is claimed.
+
+Private latest receipts: `native-a07c5ac`, `live-a07c5ac`, its `stream-relay`
+subdirectory, and exact platform-gate evidence. QA audio fixtures remain owned
+and loaded for continuing acceptance; final restoration/cleanup remains open.
+No merge, Linux publication or owner-desktop installation occurred.
+
+### Earlier October 22 continuation
 
 - Exact `b4413d05bbbba3cb11cfb8eebabecd9b9fb418aa` native Linux aggregate
   driver completed with exit marker 0: 1,189 passed, zero failed, 11 ignored
@@ -16,7 +74,7 @@ milestone with the complete contract in `docs/goal-omarchy-port.md`.
 - Exact `03403c52ad4d149e6e1d95eed40784747761035f` host check and ui-mcp
   build passed on the dedicated worker; QA host SHA-256
   `a4fe0feaffec7ec2da6402b9f7a71433a2c0e6a345ee9b5aa4a158ccaf5aefee`.
-  The installed QA process uses that exact executable. Its Windows targeted
+  That QA run used the exact executable. Its Windows targeted
   gate and macOS compile-seam gate both exit 0. GitHub CI 39706932118 and
   security 39706932177 passed. The Windows wrapper was restored byte-for-byte;
   S7 remains disabled. These checks do not cover later source candidates.
@@ -69,8 +127,8 @@ milestone with the complete contract in `docs/goal-omarchy-port.md`.
 
 Private evidence roots on the worker: `final-native-b4413d0`, `native-03403c5`,
 `live-03403c5`, `status-03403c5`, `pages-{en,ru}-03403c5`, `uninstall-b6980fb`.
-Captured data, local endpoints and paths stay outside Git. Current source is a
-later candidate than the installed/verified 03403c5 product; keep them distinct.
+Captured data, local endpoints and paths stay outside Git. These historical
+03403c5 slices do not verify every state of the later installed a07c5ac product.
 
 ### Earlier independently observed slices
 

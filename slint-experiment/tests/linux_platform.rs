@@ -36,6 +36,16 @@ fn remapped_windows_keep_the_application_id_and_first_frame_protection() {
 }
 
 #[test]
+fn question_rule_matches_the_rendered_size_before_saved_position_restore() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let rules = std::fs::read_to_string(root.join("../scripts/suflyor-hyprland.lua")).unwrap();
+    let question = rules.split_once("name = \"suflyor-native-question\"").unwrap().1;
+    let question = question.split_once("})").unwrap().0;
+    assert!(question.contains("size = \"480 98\""));
+    assert!(!question.contains("size = \"480 112\""));
+}
+
+#[test]
 fn native_identity_does_not_keep_a_recreated_window_address_claimed() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let source = std::fs::read_to_string(root.join("src/native/linux/window.rs")).unwrap();

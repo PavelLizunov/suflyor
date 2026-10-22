@@ -25,7 +25,8 @@ hl.window_rule({
 hl.window_rule({
     name = "suflyor-native-question",
     match = { title = "^(Suflyor.*question|Суфлёр.*вопрос)$" },
-    size = "480 112",
+    -- Match the rendered layout; a later 112->98 resize shifts saved Y by 7px.
+    size = "480 98",
 })
 hl.window_rule({
     name = "suflyor-native-tile",
