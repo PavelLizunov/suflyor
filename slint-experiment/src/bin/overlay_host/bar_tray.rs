@@ -443,6 +443,18 @@ pub(super) fn tray_action_dispatch(
     }
 }
 
+/// Window width in the units the platform positions windows in: physical
+/// pixels on Windows, logical (compositor) units on Wayland and macOS.
+fn platform_window_width(window: &slint::Window) -> i32 {
+    let width = window.size().width as f32;
+    let scale = if cfg!(windows) {
+        1.0
+    } else {
+        window.scale_factor().max(0.1)
+    };
+    (width / scale).round() as i32
+}
+
 pub(super) fn apply_overlay_hwnd(
     overlay: &OverlayBarWindow,
     state: &slint_replay::app_state::SharedState,
@@ -493,7 +505,13 @@ pub(super) fn apply_overlay_hwnd(
         // would be locked out). Compute the target with safe fallbacks
         // (primary monitor → its origin → (60, 24)) and ALWAYS move.
         let primary = enum_monitors().into_iter().find(|m| m.is_primary);
-        let bar_w = get_window_rect(hwnd).map(|(_, _, w, _)| w).unwrap_or(0);
+        // A failed or not-yet-sized compositor readback falls back to the
+        // bar's own size, so the centre never assumes a zero-width bar.
+        let bar_w = get_window_rect(hwnd)
+            .ok()
+            .map(|(_, _, w, _)| w)
+            .filter(|w| *w > 0)
+            .unwrap_or_else(|| platform_window_width(o.window()));
         let (x, y) = match primary {
             Some(p) => (p.left + ((p.width() - bar_w) / 2).max(0), p.top + 24),
             None => (60, 24),

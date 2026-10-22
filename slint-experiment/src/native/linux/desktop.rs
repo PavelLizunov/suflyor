@@ -167,23 +167,11 @@ pub fn close() {
     if let Ok(owner) = binding_owner() {
         if let Ok(existing) = query("binds") {
             if let Some(bindings) = existing.as_array() {
-                for bind in bindings
-                    .iter()
-                    .filter(|b| b["description"].as_str() == Some(&owner))
-                {
-                    if let Some(key) = bind["key"].as_str() {
-                        let mask = bind["modmask"].as_u64().unwrap_or(0);
-                        let mut parts = Vec::new();
-                        for (bit, name) in [(64, "SUPER"), (1, "SHIFT"), (4, "CTRL"), (8, "ALT")] {
-                            if mask & bit != 0 {
-                                parts.push(name);
-                            }
-                        }
-                        parts.push(key);
-                        if let Ok(key) = serde_json::to_string(&parts.join(" + ")) {
-                            let _ = hypr(&["eval", &format!("hl.unbind({key})")]);
-                        }
-                    }
+                let script = unbind_script(bindings, &owner);
+                // One request for every binding: a slow compositor reply per
+                // binding used to push the service stop past its time limit.
+                if !script.is_empty() {
+                    let _ = hypr(&["eval", &script]);
                 }
             }
         }
@@ -191,6 +179,30 @@ pub fn close() {
     if let Some(slot) = SOCKET.get() {
         let _ = slot.lock().map(|mut slot| slot.take());
     }
+}
+
+fn unbind_script(bindings: &[serde_json::Value], owner: &str) -> String {
+    let mut script = String::new();
+    for bind in bindings
+        .iter()
+        .filter(|b| b["description"].as_str() == Some(owner))
+    {
+        let Some(key) = bind["key"].as_str() else {
+            continue;
+        };
+        let mask = bind["modmask"].as_u64().unwrap_or(0);
+        let mut parts = Vec::new();
+        for (bit, name) in [(64, "SUPER"), (1, "SHIFT"), (4, "CTRL"), (8, "ALT")] {
+            if mask & bit != 0 {
+                parts.push(name);
+            }
+        }
+        parts.push(key);
+        if let Ok(key) = serde_json::to_string(&parts.join(" + ")) {
+            script.push_str(&format!("hl.unbind({key});"));
+        }
+    }
+    script
 }
 
 pub fn receive() -> Option<String> {
@@ -294,7 +306,21 @@ fn binding_parts(keys: &str) -> (u64, &str) {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-    use super::take_config_reload;
+    use super::{take_config_reload, unbind_script};
+
+    #[test]
+    fn closing_removes_only_owned_bindings_in_one_script() {
+        let bindings = serde_json::json!([
+            {"key": "F8", "modmask": 5, "description": "suflyor-a"},
+            {"key": "F9", "modmask": 0, "description": "suflyor-a"},
+            {"key": "F9", "modmask": 0, "description": "someone-else"},
+        ]);
+        assert_eq!(
+            unbind_script(bindings.as_array().unwrap(), "suflyor-a"),
+            r#"hl.unbind("SHIFT + CTRL + F8");hl.unbind("F9");"#
+        );
+        assert_eq!(unbind_script(&[], "suflyor-a"), "");
+    }
 
     #[test]
     fn reload_events_preserve_partial_frames_and_ignore_other_events() {
