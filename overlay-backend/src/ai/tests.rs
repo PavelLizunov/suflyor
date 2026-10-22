@@ -138,7 +138,7 @@ async fn active_silent_stream_stops_when_receiver_is_dropped() {
         server.join().unwrap();
         let permits = tokio::time::timeout(
             std::time::Duration::from_secs(2),
-            AI_SEMAPHORE.acquire_many(2),
+            acquire_exclusive_ai(),
         )
         .await
         .expect("cancelled stream must release its permit")
