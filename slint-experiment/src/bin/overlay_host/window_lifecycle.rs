@@ -282,7 +282,10 @@ where
 /// visible monitor (with a small slack so a title bar dragged flush to an edge
 /// still counts). A stale position from an unplugged monitor fails → the
 /// caller centers instead. Pure — unit-tested below.
-fn pos_on_visible_monitor(pos: (i32, i32), monitors: &[slint_replay::win32::MonitorRect]) -> bool {
+pub(super) fn pos_on_visible_monitor(
+    pos: (i32, i32),
+    monitors: &[slint_replay::win32::MonitorRect],
+) -> bool {
     const SLACK: i32 = 8;
     monitors.iter().any(|m| {
         pos.0 >= m.left - SLACK
