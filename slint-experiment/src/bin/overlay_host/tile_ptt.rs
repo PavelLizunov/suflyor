@@ -284,9 +284,13 @@ pub(crate) fn fire_ptt_ask(
             .map(|l| format!("[{:?}] {}", l.source, l.text))
             .collect()
     };
-    let (journal_for_loop, health_for_stream) = {
-        let s = slint_replay::runtime_state::lock(slint_rt);
-        (s.journal.clone(), s.health.clone())
+    let (journal_for_loop, health_for_stream, scope) = {
+        let mut s = slint_replay::runtime_state::lock(slint_rt);
+        (
+            s.journal.clone(),
+            s.health.clone(),
+            s.session_request_scope(),
+        )
     };
 
     // ===== 5. Spawn transcribe → ask (detached: never stored in ai_task, so a
@@ -295,7 +299,8 @@ pub(crate) fn fire_ptt_ask(
     let events_inner = events.clone();
     let cfg_for_task = cfg.clone();
     let slint_rt_for_task = slint_rt.clone();
-    rt_handle.spawn(async move {
+    let weak_cancelled = weak_for_title.clone();
+    let request = async move {
         let whisper_prompt = stt::build_whisper_prompt(&trigger_keywords, &meeting_context);
         let result = if !stt_is_local && groq_key.is_empty() {
             Err(anyhow::anyhow!("Groq API key not set (Settings → STT)"))
@@ -480,6 +485,23 @@ pub(crate) fn fire_ptt_ask(
             cost_apply,
         )
         .await;
+    };
+    rt_handle.spawn(async move {
+        if slint_replay::runtime_state::until_session_changes(scope, request)
+            .await
+            .is_none()
+        {
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(tile) = weak_cancelled.upgrade() {
+                    tile.set_source_label(SharedString::from(if ui_is_ru {
+                        "ai · прервано (сессия изменена)"
+                    } else {
+                        "ai · interrupted (session changed)"
+                    }));
+                    tile.set_followup_busy(false);
+                }
+            });
+        }
     });
 }
 

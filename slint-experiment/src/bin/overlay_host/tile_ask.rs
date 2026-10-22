@@ -65,9 +65,9 @@ pub(crate) fn fire_f3_reask(
     slint_rt: &SharedSlintRuntime,
     rt_handle: &tokio::runtime::Handle,
 ) {
-    let inputs = {
-        let s = slint_replay::runtime_state::lock(slint_rt);
-        overlay_backend::runtime::ReaskInputs {
+    let (inputs, scope, session_gen) = {
+        let mut s = slint_replay::runtime_state::lock(slint_rt);
+        let inputs = overlay_backend::runtime::ReaskInputs {
             last_question: s.last_question.clone(),
             last_answer: s.last_answer.clone(),
             recent_transcript_iconized: s
@@ -86,7 +86,8 @@ pub(crate) fn fire_f3_reask(
                 .collect(),
             journal: s.journal.clone(),
             health: s.health.clone(),
-        }
+        };
+        (inputs, s.session_request_scope(), s.session_gen)
     };
     // The key must visibly react: with nothing to re-ask, say so in a notice
     // tile instead of doing nothing.
@@ -120,7 +121,7 @@ pub(crate) fn fire_f3_reask(
     let events_c = events.clone();
     let cfg_c = cfg.clone();
     let rt_c = slint_rt.clone();
-    rt_handle.spawn(async move {
+    let request = async move {
         let needs_mlx = {
             let config = cfg_c.read();
             route_needs_mlx(AskRoute::Text, &config)
@@ -142,6 +143,9 @@ pub(crate) fn fire_f3_reask(
         if let Some(out) = outcome {
             let total = {
                 let mut s = slint_replay::runtime_state::lock(&rt_c);
+                if s.session_gen != session_gen {
+                    return;
+                }
                 s.session_cost_microcents = s
                     .session_cost_microcents
                     .saturating_add(out.cost_microcents_delta);
@@ -151,7 +155,10 @@ pub(crate) fn fire_f3_reask(
             };
             events_c.emit("cost:update", serde_json::json!({ "session_usd": total }));
         }
-    });
+    };
+    rt_handle.spawn(slint_replay::runtime_state::until_session_changes(
+        scope, request,
+    ));
 }
 
 /// Phase E3 slice 3 — F6 manual spawn handler.
@@ -165,24 +172,25 @@ pub(crate) fn fire_f6_manual_spawn(
     slint_rt: &SharedSlintRuntime,
     rt_handle: &tokio::runtime::Handle,
 ) {
-    let inputs = {
-        let s = slint_replay::runtime_state::lock(slint_rt);
+    let (inputs, scope, session_gen) = {
+        let mut s = slint_replay::runtime_state::lock(slint_rt);
         let recent = select_recent_labeled(&s.transcript, 8);
         let last_line = s.transcript.back().cloned();
         let cap_usd = cfg.read().max_session_cost_usd;
         let cost_cap = cost_cap_reason(cap_usd, s.session_cost_microcents);
-        overlay_backend::runtime::ManualSpawnInputs {
+        let inputs = overlay_backend::runtime::ManualSpawnInputs {
             recent_transcript_labeled: recent,
             last_line,
             cost_cap_reason: cost_cap,
             journal: s.journal.clone(),
             health: s.health.clone(),
-        }
+        };
+        (inputs, s.session_request_scope(), s.session_gen)
     };
     let events_c = events.clone();
     let cfg_c = cfg.clone();
     let rt_c = slint_rt.clone();
-    rt_handle.spawn(async move {
+    let request = async move {
         let needs_mlx = {
             let config = cfg_c.read();
             route_needs_mlx(AskRoute::Text, &config)
@@ -205,6 +213,9 @@ pub(crate) fn fire_f6_manual_spawn(
         if let Some(out) = outcome {
             let total = {
                 let mut s = slint_replay::runtime_state::lock(&rt_c);
+                if s.session_gen != session_gen {
+                    return;
+                }
                 s.session_cost_microcents = s
                     .session_cost_microcents
                     .saturating_add(out.cost_microcents_delta);
@@ -214,7 +225,10 @@ pub(crate) fn fire_f6_manual_spawn(
             };
             events_c.emit("cost:update", serde_json::json!({ "session_usd": total }));
         }
-    });
+    };
+    rt_handle.spawn(slint_replay::runtime_state::until_session_changes(
+        scope, request,
+    ));
 }
 
 fn nothing_to_reask_copy(is_ru: bool) -> (&'static str, &'static str) {
