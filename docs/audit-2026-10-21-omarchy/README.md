@@ -5,7 +5,93 @@ milestone with the complete contract in `docs/goal-omarchy-port.md`.
 
 ## Current functional evidence, not full acceptance
 
-### October 22 latest native continuation
+### October 22 queue cancellation correction
+
+The owner's accumulated-question report is reproduced in the real f6b6037 UI:
+closing a speech-triggered auto tile leaves zero tile windows, but its silent
+HTTP generation is still active after three seconds. This is D-094, a shared
+host ownership defect, not a Linux-only provider problem. Previous Vision-close
+acceptance did not cover auto tiles, PTT, F9 or their continuations.
+
+- Exact candidate `2f3f2fd3ab2427452c2fa4300e52202dc5abc652` passes native
+  Linux host check/build. Installed ui-mcp host SHA-256:
+  `ec38f60293a85c9a3ab91c9cf4819fd0a7dedafa6b80147bfc951f913d756b36`.
+  Its targeted Cargo driver exits 0: 376 passed, zero failed, five ignored
+  across nine groups, including auto silent-close and independent task-owner
+  regressions. The separate actual scripts/check-linux-port.sh exits 0:
+  263 passed, zero failed, four ignored across six groups. These groups overlap;
+  their totals are not a combined unique-test count or a complete backend run.
+- Exact native Windows targeted and macOS compile-seam gates exit 0.
+  CI 39790776837 and security 39790776896 pass. The Windows job wrapper is
+  restored byte-for-byte; SuflyorClaudeS7Job remains disabled. The read-only
+  review found no remaining source blocker and executed no checks itself.
+- Actual GUI queue scenario uses the existing ui-mcp finite transcript input
+  and a bounded silent HTTP provider. Two auto requests occupy both permits;
+  a third visible auto tile waits. Closing the queued tile sends no HTTP.
+  After a wanted typed question queues, closing one active auto tile disconnects
+  only its provider request and admits the wanted request in 0.539 seconds.
+  Its controlled answer renders; the other active auto remains intact.
+  Close-all then retires the remaining connection, with no late tile or queued
+  request appearing. This validates scheduling/cancellation, not AI semantics.
+- Actual pending typed/F9 Close disconnects its provider in 0.271 seconds.
+  Physical held Mic PTT, real virtual PipeWire replay and native GigaAM reach
+  a pending HTTP request; its actual Close disconnects in 0.191 seconds.
+  Russian pending typed-tile Close also disconnects. EN/RU pending, queued and
+  completed screenshots are inspected at 460x360. No layout/translation source
+  was changed, and no general physical-microphone acceptance is inferred.
+- After restoring the real authenticated gateway, an actual typed answer
+  renders a useful database-index definition and SQL example. Real follow-ups
+  complete in about 4.6/4.3 seconds; the actual scrollbar exposes the product
+  SKU unique-index/SELECT result. Initial assertions inspected only clipped
+  viewport content and then required the exact phrase CREATE INDEX instead of
+  valid CREATE UNIQUE INDEX; those verifier failures remain retained.
+- The first combined speech/PTT queue attempt exceeds the provider fixture's
+  original 100-second hold while GigaAM runs, so its saturation assertion fails.
+  It is not the successful queue scenario. The later finite-transcript queue
+  and separate real physical-PTT-close checks above have distinct inputs.
+  Follow-up Close reaches provider cancellation in the sibling probe; clicking
+  Regenerate through MCP popup text/row does not establish dispatch, so that
+  native menu path and a cap-eviction stress scenario remain unaccepted.
+
+Private receipts: native-2f3f2fd and queue-live-2f3f2fd. The temporary transcript
+service override is removed; the bounded queue provider is stopped; English,
+real provider and detector configuration fields are restored. The app is stopped
+for subsequent checks. Original checkout HEAD, raw index and all 13 pre-existing
+file hashes remain unchanged. No owner deployment, release or merge occurred.
+
+### October 22 completed session and service checks
+
+- Exact 658d03e complete Linux driver exits 0: 1,197 passed, zero failed,
+  11 ignored across 23 Cargo groups. Exact f6b6037 affected Linux guard driver
+  passes eight tests with one ignored; exact host build produces the same bytes
+  as 658d03e because production Rust/UI inputs are unchanged:
+  `6fde3f07a97bc95f9b24d098d55d013b7402a06d7992ead242fe777c928e0999`.
+  f6b6037 native Windows/macOS gates and CI 39765001581/security 39765001611 pass.
+- Exact 55943c4 both physical held Mic/System requests render useful real
+  authenticated-gateway definitions/examples in approximately 7.95/7.18 seconds.
+  A real session persists six transcript lines, one successful AI response and
+  one tile. Pause suppresses transcript; Resume continues the same session;
+  Stop finalizes it. Summary, archive indexing and manual rename/reopen pass.
+  Generated-name success and summary reopen/persistence remain separate gaps.
+- Exact f6b6037 actual delayed F6 followed by Stop/new session produces no late
+  tile, old successful response or new-session AI rows. A pending native PTT
+  cancels at the new-session boundary and shows interrupted feedback. This is
+  a controlled delayed-provider lifecycle regression, not model inference.
+- Two actual managed service stops remove all owned shortcuts and capture.
+  A stop during active dual recording finalizes session_stop/session_summary
+  and both nonempty valid WAV files; observed stop is about 10 seconds.
+  The system journal shows normal stop, not a timeout kill. No-host stop,
+  final update/autostart/uninstall and arbitrary-load shutdown remain separate.
+- Exact f6b6037 transcript playback produces monitored sound after timecode
+  seek, pause/resume and speed 1.25x/volume changes. Each measured segment has
+  25,600 samples: playing RMS 1882.72, paused 0, resumed 1163.44 and changed
+  controls 5176.90. The high volume clips at 32767; this is not audio-quality
+  acceptance. Speed and volume return to 1x/1 afterward. Physical Ctrl+F8
+  again renders exact fixture text. Three reloads preserve the host PID,
+  18 owned shortcuts and a foreign conflict. Full/compact and four compact
+  tray restores preserve native dimensions and positions.
+
+### Earlier October 22 native continuation
 
 - Exact `a07c5ac48e0d20e7de1b174c9cbcea606d9379c2` host check and ui-mcp
   build exit 0. Installed and QA executable SHA-256:
