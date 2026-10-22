@@ -74,12 +74,10 @@ thread_local! {
     /// + close path runs on the Slint main thread), so a plain thread_local +
     /// RefCell is race-free.
     ///
-    /// SCOPE: only the non-streaming "+ tile" path registers here (its discarded
-    /// JoinHandle was the worst leak — the user's spam repro). Streaming tiles
-    /// (F9 / auto / PTT / followup) instead stop via the receiver-drop check in
-    /// `ai::stream_inner`; hard-aborting those on close is a separate follow-up.
+    /// An empty entry owns prompt preparation before its task is registered.
+    /// Removing it on close also prevents a late callback from starting work.
     static TILE_STREAMS: std::cell::RefCell<
-        std::collections::HashMap<i32, tokio::task::AbortHandle>,
+        std::collections::HashMap<i32, Option<tokio::task::AbortHandle>>,
     > = std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
@@ -91,8 +89,13 @@ pub(crate) fn register_tile_stream(tile_id: i32, handle: tokio::task::AbortHandl
         return;
     }
     TILE_STREAMS.with(|m| {
-        if let Some(old) = m.borrow_mut().insert(tile_id, handle) {
-            old.abort();
+        let mut streams = m.borrow_mut();
+        if let Some(slot) = streams.get_mut(&tile_id) {
+            if let Some(old) = slot.replace(handle) {
+                old.abort();
+            }
+        } else {
+            handle.abort();
         }
     });
 }
@@ -104,7 +107,7 @@ pub(crate) fn abort_tile_stream(tile_id: i32) {
         return;
     }
     TILE_STREAMS.with(|m| {
-        if let Some(h) = m.borrow_mut().remove(&tile_id) {
+        if let Some(Some(h)) = m.borrow_mut().remove(&tile_id) {
             h.abort();
         }
     });
@@ -116,8 +119,20 @@ pub(crate) fn abort_tile_stream(tile_id: i32) {
 pub(crate) fn abort_all_tile_streams() {
     TILE_STREAMS.with(|m| {
         for (_, h) in m.borrow_mut().drain() {
-            h.abort();
+            if let Some(h) = h {
+                h.abort();
+            }
         }
+    });
+}
+
+pub(crate) fn tile_request_open(tile_id: i32) -> bool {
+    TILE_STREAMS.with(|m| m.borrow().contains_key(&tile_id))
+}
+
+pub(crate) fn open_tile_request(tile_id: i32) {
+    TILE_STREAMS.with(|m| {
+        m.borrow_mut().entry(tile_id).or_insert(None);
     });
 }
 
@@ -210,6 +225,10 @@ pub(crate) fn toggle_tile_maximize(hwnd: slint_replay::win32::HWND, tile: &TileW
 /// TouchArea stuck "pressed" → tile became undraggable/unclickable.
 /// User: "вызванный тайл завис, двигается но ничего не прожимается".
 pub(crate) fn wire_tile_drag(tile: &TileWindow) {
+    if tile.get_tile_id() < 0 {
+        tile.set_tile_id(next_tile_id());
+    }
+    open_tile_request(tile.get_tile_id());
     // Seed this tile's Theme global from the process-global scheme. Called on
     // every tile-creation path, so newly-spawned tiles inherit the live choice
     // without threading the value through 5 call sites.
@@ -433,7 +452,37 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
 // by production items.
 #[cfg(test)]
 mod cascade_tests {
-    use super::cascade_cycle;
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+    use super::*;
+
+    #[tokio::test]
+    async fn closed_tiles_abort_active_queued_and_late_registered_tasks_independently() {
+        let first = next_tile_id();
+        let second = next_tile_id();
+        open_tile_request(first);
+        open_tile_request(second);
+        let pending = || tokio::spawn(std::future::pending::<()>());
+        let a = pending();
+        let b = pending();
+        register_tile_stream(first, a.abort_handle());
+        register_tile_stream(second, b.abort_handle());
+        abort_tile_stream(first);
+        assert!(a.await.unwrap_err().is_cancelled());
+        assert!(
+            !b.is_finished(),
+            "closing one tile must preserve another question"
+        );
+        assert!(!tile_request_open(first));
+        let late = pending();
+        register_tile_stream(first, late.abort_handle());
+        assert!(
+            late.await.unwrap_err().is_cancelled(),
+            "closed prompt callback cannot restart work"
+        );
+        abort_all_tile_streams();
+        assert!(b.await.unwrap_err().is_cancelled());
+        assert!(!tile_request_open(second));
+    }
 
     #[test]
     fn cascade_clamp_pins_in_band() {

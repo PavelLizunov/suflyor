@@ -92,6 +92,7 @@ pub(super) fn spawn_text_tile(
         let bridge_for_close = bridge.clone();
         tile.on_close_clicked(move || {
             if let Some(t) = weak_close.upgrade() {
+                bridge_for_close.cancel_tile_request(&t);
                 stop_if_speaking(t.get_convo_id());
                 let close_hwnd = grab_hwnd(t.window()).ok();
                 let _ = t.hide();

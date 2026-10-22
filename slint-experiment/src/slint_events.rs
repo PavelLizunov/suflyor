@@ -49,6 +49,10 @@ pub trait SlintUiBridge: Send + Sync {
     /// updates on the Slint main thread.
     fn forward_event(&self, channel: String, payload: serde_json::Value);
 
+    fn tile_request_open(&self, _label: &str) -> bool {
+        true
+    }
+
     /// Spawn a tile window matching the spec. Implementor schedules
     /// the `TileWindow::new()` call on the Slint main thread via
     /// `invoke_from_event_loop` and registers the resulting window
@@ -97,6 +101,10 @@ impl SlintEvents {
 impl RuntimeEvents for SlintEvents {
     fn emit(&self, channel: &str, payload: serde_json::Value) {
         self.bridge.forward_event(channel.to_string(), payload);
+    }
+
+    fn tile_request_open(&self, label: &str) -> bool {
+        self.bridge.tile_request_open(label)
     }
 
     fn spawn_tile_full(
