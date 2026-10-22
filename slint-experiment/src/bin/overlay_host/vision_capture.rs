@@ -503,6 +503,8 @@ pub(crate) fn launch_vision_for_bgra(
         }
     };
     let seq = TILE_DISPLAY_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
+    let tile_id = super::next_tile_id();
+    tile.set_tile_id(tile_id);
     // V5 — give the vision tile a real conversation id so its follow-up input
     // appears + PttStreamSink seeds the conversation (incl. the screenshot) on
     // done; follow-ups then route to the VISION endpoint (use_vision = true).
@@ -533,7 +535,9 @@ pub(crate) fn launch_vision_for_bgra(
     let weak_overlay_close = weak_overlay.clone();
     let bridge_for_close = bridge.clone();
     tile.on_close_clicked(move || {
+        super::abort_tile_stream(tile_id);
         if let Some(t) = weak_close.upgrade() {
+            bridge_for_close.cancel_tile_request(&t);
             // Closing the tile that's being read aloud must silence it.
             super::stop_if_speaking(t.get_convo_id());
             // FIX #8 — prune this tile's conversation (no-op if none).
@@ -764,7 +768,7 @@ pub(crate) fn launch_vision_for_bgra(
     let slint_rt_for_cost = slint_rt.clone();
 
     // ===== 5. Encode the frame off-thread, then stream the vision answer =====
-    rt_handle.spawn(async move {
+    let task = rt_handle.spawn(async move {
         let ep = if mlx_pending {
             let cfg_for_resolve = cfg_for_task.clone();
             match tokio::task::spawn_blocking(move || {
@@ -891,6 +895,7 @@ pub(crate) fn launch_vision_for_bgra(
         )
         .await;
     });
+    super::register_tile_stream(tile_id, task.abort_handle());
 }
 
 #[cfg(test)]

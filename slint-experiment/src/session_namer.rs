@@ -8,9 +8,9 @@
 //!
 //! - Fires ONLY when the resolved AI endpoint is LOCAL (`is_local`) — it never
 //!   spends cloud money on a title; a cloud-only user just stays unnamed.
-//! - Runs on a detached tokio task and goes through the shared `AI_SEMAPHORE`
-//!   (inside [`overlay_backend::ai::complete`]), so a live F9 answer keeps
-//!   priority — the namer can never starve the user's real question.
+//! - Runs on a detached tokio task as background work in the shared AI queue,
+//!   so a live F9 answer is admitted first — the namer can never starve the
+//!   user's real question.
 //! - Fires exactly once per session (the `session_name_requested` latch); every
 //!   later call is a cheap no-op under one lock.
 //! - The result is dropped if the session changed while the model was thinking
@@ -36,8 +36,8 @@ const NAME_MAX_TOKENS: u32 = 32;
 /// Re-gen throttle (v0.22.0): the name is refreshed at most once per
 /// [`REGEN_INTERVAL_MS`], only after [`REGEN_MIN_NEW_LINES`] of new transcript,
 /// and only when the triggering line follows a lull of ≥ [`REGEN_LULL_MS`] — so
-/// the refresh lands in a quiet gap, not mid-speech. The shared `AI_SEMAPHORE`
-/// keeps it behind live answers regardless.
+/// the refresh lands in a quiet gap, not mid-speech. The shared AI queue keeps
+/// it behind live answers regardless.
 const REGEN_INTERVAL_MS: u128 = 240_000; // 4 min
 const REGEN_MIN_NEW_LINES: usize = 25;
 const REGEN_LULL_MS: u128 = 6_000; // 6 s
@@ -199,7 +199,8 @@ pub async fn generate_name(ep: &AiEndpoint, lines: &[String]) -> Option<String> 
             content: MessageContent::Text(transcript),
         },
     ];
-    let raw = ai::complete_endpoint(ep, messages, NAME_MAX_TOKENS)
+    let request = ai::complete_endpoint(ep, messages, NAME_MAX_TOKENS);
+    let raw = ai::with_priority(ai::AiPriority::Background, request)
         .await
         .ok()?;
     let name = clean_name(&raw);

@@ -157,6 +157,7 @@ pub(crate) fn fire_ptt_ask(
     let bridge_for_close = bridge.clone();
     tile.on_close_clicked(move || {
         if let Some(t) = weak_close.upgrade() {
+            bridge_for_close.cancel_tile_request(&t);
             // Closing the tile that's being read aloud must silence it.
             super::stop_if_speaking(t.get_convo_id());
             // FIX #8 — prune this tile's conversation (no-op if none).
@@ -248,6 +249,7 @@ pub(crate) fn fire_ptt_ask(
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
     let weak_for_title = tile.as_weak();
+    let tile_id = tile.get_tile_id();
     tiles.borrow_mut().push(tile);
     refresh_open_tiles(weak_overlay, tiles);
 
@@ -284,9 +286,13 @@ pub(crate) fn fire_ptt_ask(
             .map(|l| format!("[{:?}] {}", l.source, l.text))
             .collect()
     };
-    let (journal_for_loop, health_for_stream) = {
-        let s = slint_replay::runtime_state::lock(slint_rt);
-        (s.journal.clone(), s.health.clone())
+    let (journal_for_loop, health_for_stream, scope) = {
+        let mut s = slint_replay::runtime_state::lock(slint_rt);
+        (
+            s.journal.clone(),
+            s.health.clone(),
+            s.session_request_scope(),
+        )
     };
 
     // ===== 5. Spawn transcribe → ask (detached: never stored in ai_task, so a
@@ -295,7 +301,8 @@ pub(crate) fn fire_ptt_ask(
     let events_inner = events.clone();
     let cfg_for_task = cfg.clone();
     let slint_rt_for_task = slint_rt.clone();
-    rt_handle.spawn(async move {
+    let weak_cancelled = weak_for_title.clone();
+    let request = async move {
         let whisper_prompt = stt::build_whisper_prompt(&trigger_keywords, &meeting_context);
         let result = if !stt_is_local && groq_key.is_empty() {
             Err(anyhow::anyhow!("Groq API key not set (Settings → STT)"))
@@ -480,7 +487,25 @@ pub(crate) fn fire_ptt_ask(
             cost_apply,
         )
         .await;
+    };
+    let task = rt_handle.spawn(async move {
+        if slint_replay::runtime_state::until_session_changes(scope, request)
+            .await
+            .is_none()
+        {
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(tile) = weak_cancelled.upgrade() {
+                    tile.set_source_label(SharedString::from(if ui_is_ru {
+                        "ai · прервано (сессия изменена)"
+                    } else {
+                        "ai · interrupted (session changed)"
+                    }));
+                    tile.set_followup_busy(false);
+                }
+            });
+        }
     });
+    super::register_tile_stream(tile_id, task.abort_handle());
 }
 
 #[cfg(test)]

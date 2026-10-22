@@ -28,6 +28,13 @@ pub trait RuntimeEvents: Send + Sync {
     /// "health:update" / "session:started" / "session:stopped".
     fn emit(&self, channel: &str, payload: serde_json::Value);
 
+    /// Whether a streamed placeholder still belongs to the UI. Closing it must
+    /// cancel generation, not just discard rendered deltas. Headless sinks keep
+    /// their existing behavior.
+    fn tile_request_open(&self, _label: &str) -> bool {
+        true
+    }
+
     /// Spawn a tile window with the full set of placement fields.
     /// Returns the assigned tile label/identifier (e.g. "tile-42")
     /// for downstream `pin_tile` / `close_tile` calls. For headless

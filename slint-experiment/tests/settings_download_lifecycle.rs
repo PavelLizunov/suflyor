@@ -41,6 +41,22 @@ fn retained_windows_cannot_be_revealed_after_close_by_native_setup() {
 }
 
 #[test]
+fn closing_a_vision_tile_aborts_its_registered_request() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source =
+        std::fs::read_to_string(root.join("src/bin/overlay_host/vision_capture.rs")).unwrap();
+    assert!(source.contains("tile.set_tile_id(tile_id)"));
+    assert!(source.contains("super::register_tile_stream(tile_id, task.abort_handle())"));
+    let close = source
+        .split_once("tile.on_close_clicked(move || {")
+        .unwrap()
+        .1;
+    assert!(close
+        .trim_start()
+        .starts_with("super::abort_tile_stream(tile_id);"));
+}
+
+#[test]
 fn hidden_settings_keep_download_and_shared_status_until_completion() {
     i_slint_backend_testing::init_no_event_loop();
     let win = ui::SettingsWindow::new().unwrap();

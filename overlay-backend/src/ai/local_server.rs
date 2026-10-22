@@ -9,7 +9,7 @@
 //! prompt to any other request, so during a session the prompt is read again
 //! in the background once the other request is done ("primed").
 
-use super::control::{apply_local_no_think, http_client, AI_SEMAPHORE};
+use super::control::{apply_local_no_think, http_client};
 use super::types::{AiEndpoint, AiProtocol, ChatMessage, MessageContent};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -312,10 +312,7 @@ pub async fn prime_hot_prompt() {
     };
     // Only when nothing else runs or waits, and with one permit, so a
     // question that comes in meanwhile is not held back by the prime.
-    if AI_SEMAPHORE.available_permits() < 2 {
-        return;
-    }
-    let Ok(_permit) = AI_SEMAPHORE.try_acquire() else {
+    let Some(_permit) = super::queue::try_acquire_idle() else {
         return;
     };
     // The session may have stopped, or deep lock come on, since the snapshot.

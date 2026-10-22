@@ -96,6 +96,10 @@ pub struct SlintRuntime {
     /// on rapid F9 re-press so responses don't stack.
     pub ai_task: Option<tokio::task::JoinHandle<()>>,
 
+    /// Independent manual asks share cancellation only at a session boundary,
+    /// never when another question is asked. Dropping the sender cancels waiters.
+    pub(crate) session_requests: Option<tokio::sync::watch::Sender<()>>,
+
     /// JoinHandle of the 2-second health emitter ticker. Aborted
     /// on session stop so it doesn't fire against stale state.
     pub health_task: Option<tokio::task::JoinHandle<()>>,
@@ -188,6 +192,31 @@ pub struct SlintRuntime {
     pub mic_down_notified: bool,
 }
 
+impl SlintRuntime {
+    pub fn session_request_scope(&mut self) -> tokio::sync::watch::Receiver<()> {
+        self.session_requests
+            .get_or_insert_with(|| tokio::sync::watch::channel(()).0)
+            .subscribe()
+    }
+
+    pub fn cancel_session_requests(&mut self) {
+        self.session_requests = None;
+    }
+}
+
+/// Drop the whole pending request on Stop/Start, including its provider receiver.
+/// Completion between session boundaries leaves independent asks unaffected.
+pub async fn until_session_changes<F: std::future::Future>(
+    mut scope: tokio::sync::watch::Receiver<()>,
+    request: F,
+) -> Option<F::Output> {
+    tokio::select! {
+        biased;
+        _ = scope.changed() => None,
+        result = request => Some(result),
+    }
+}
+
 /// Convenience alias matching src-tauri's `SharedRuntime`.
 pub type SharedSlintRuntime = Arc<Mutex<SlintRuntime>>;
 
@@ -276,6 +305,29 @@ mod tests {
         assert!(s.journal.is_none());
         assert!(s.capture.is_none());
         assert!(!s.mic_muted);
+    }
+
+    #[tokio::test]
+    async fn session_boundary_cancels_independent_requests_but_not_the_next_scope() {
+        let mut state = SlintRuntime::default();
+        let first = state.session_request_scope();
+        let second = state.session_request_scope();
+        state.cancel_session_requests();
+        // Cancellation wins even if the old provider result is already ready.
+        assert_eq!(until_session_changes(first, async { 1 }).await, None);
+        assert_eq!(until_session_changes(second, async { 2 }).await, None);
+        let next = state.session_request_scope();
+        assert_eq!(until_session_changes(next, async { 3 }).await, Some(3));
+        let pending = state.session_request_scope();
+        let task = tokio::spawn(until_session_changes(pending, std::future::pending::<()>()));
+        state.cancel_session_requests();
+        assert_eq!(
+            tokio::time::timeout(std::time::Duration::from_secs(1), task)
+                .await
+                .unwrap()
+                .unwrap(),
+            None
+        );
     }
 
     #[test]

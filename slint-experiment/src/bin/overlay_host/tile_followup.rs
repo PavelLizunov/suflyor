@@ -365,7 +365,9 @@ pub(crate) fn wire_escalate(
         // answer now came off-box — parity with the Shift+F9 🧠 badge. Egress is
         // a conscious action (the user clicked 🧠); this just makes it legible.
         if let Some(t) = weak.upgrade() {
-            t.set_trigger_label(SharedString::from(crate::tile_text::escalated_badge(cfg_c.read().ui_is_ru())));
+            t.set_trigger_label(SharedString::from(crate::tile_text::escalated_badge(
+                cfg_c.read().ui_is_ru(),
+            )));
             t.set_trigger_tone(crate::ui::TileTone::Sky);
         }
         fire_regenerate(
@@ -457,12 +459,21 @@ pub(crate) fn fire_followup_ask(
         user_turn_markdown(&question)
     );
 
+    let Some(tile) = tile_weak.upgrade() else {
+        return;
+    };
+    let tile_id = tile.get_tile_id();
+    if !super::tile_request_open(tile_id) {
+        return;
+    }
     // Show the question immediately + mark busy; register the slot so the
     // ai:event deltas land in this tile.
     if let Some(tile) = tile_weak.upgrade() {
         crate::clear_terms(&tile);
         tile.set_followup_busy(true);
-        tile.set_source_label(SharedString::from(crate::tile_text::asking_label(cfg.read().ui_is_ru())));
+        tile.set_source_label(SharedString::from(crate::tile_text::asking_label(
+            cfg.read().ui_is_ru(),
+        )));
         tile.set_plain_notice(false);
         // Plain ellipsis — no hourglass glyph (tofu on the skia font fallback).
         let shown = format!("{prefix}…");
@@ -561,7 +572,9 @@ pub(crate) fn fire_followup_ask(
         let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
         let purpose = "followup_ask";
         let _ = slint::invoke_from_event_loop(move || {
-            if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation {
+            if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation
+                || !super::tile_request_open(tile_id)
+            {
                 return;
             }
             // Journal the follow-up request so it pairs with the AiResponse that
@@ -617,6 +630,7 @@ pub(crate) fn fire_followup_ask(
                 )
                 .await;
             });
+            super::register_tile_stream(tile_id, task.abort_handle());
             slint_replay::runtime_state::lock(&slint_rt_for_work).ai_task = Some(task);
             diag!(
                 "followup sent (convo_id={convo_id}, {} chars)",
@@ -693,6 +707,13 @@ pub(crate) fn fire_regenerate(
         endpoint_hint.is_unmetered(),
         "regenerate",
     );
+    let Some(tile) = tile_weak.upgrade() else {
+        return;
+    };
+    let tile_id = tile.get_tile_id();
+    if !super::tile_request_open(tile_id) {
+        return;
+    }
     if let Some(t) = tile_weak.upgrade() {
         crate::clear_terms(&t);
         t.set_followup_busy(true);
@@ -796,7 +817,9 @@ pub(crate) fn fire_regenerate(
         let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
         let purpose = "regenerate";
         let _ = slint::invoke_from_event_loop(move || {
-            if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation {
+            if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation
+                || !super::tile_request_open(tile_id)
+            {
                 return;
             }
             if let Some(j) = journal_for_loop.as_ref() {
@@ -848,6 +871,7 @@ pub(crate) fn fire_regenerate(
                 )
                 .await;
             });
+            super::register_tile_stream(tile_id, task.abort_handle());
             slint_replay::runtime_state::lock(&slint_rt_for_work).ai_task = Some(task);
             diag!("regenerate sent (convo_id={convo_id}, route={route:?})");
         });
