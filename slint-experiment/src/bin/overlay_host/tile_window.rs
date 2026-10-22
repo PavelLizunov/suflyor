@@ -327,16 +327,20 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
         // / browser windows and the user can interact with them.
         // Without this, clicks land on whatever non-topmost window
         // is at the pixel under the tile.
-        let _ = set_always_on_top(hwnd, true);
+        // Linux applies the pin and capture exclusion together with the move
+        // in `place_tile`, in one compositor request.
+        if !cfg!(target_os = "linux") {
+            let _ = set_always_on_top(hwnd, true);
 
-        // #111 — inherit stealth: a tile spawned while stealth is on must
-        // also be excluded from screen capture (the toggle only covered tiles
-        // that already existed). No-op when stealth is off. I1: a failed
-        // exclusion is logged, never silently swallowed — the tile stays
-        // capturable and the user must be able to diagnose it.
-        if global_stealth() || cfg!(target_os = "linux") {
-            if let Err(e) = set_stealth(hwnd, global_stealth()) {
-                diag!("[overlay-host] tile stealth apply failed (tile stays capturable): {e}");
+            // #111 — inherit stealth: a tile spawned while stealth is on must
+            // also be excluded from screen capture (the toggle only covered tiles
+            // that already existed). No-op when stealth is off. I1: a failed
+            // exclusion is logged, never silently swallowed — the tile stays
+            // capturable and the user must be able to diagnose it.
+            if global_stealth() {
+                if let Err(e) = set_stealth(hwnd, global_stealth()) {
+                    diag!("[overlay-host] tile stealth apply failed (tile stays capturable): {e}");
+                }
             }
         }
 
@@ -432,14 +436,12 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             // Move-only — preserve Slint's natural size so HiDPI
             // rendering stays correct (text fills the dark fill area
             // instead of overflowing).
-            let _ = move_window_pos_only(hwnd, x_clamped, y_clamped);
-            set_platform_window_position(t.window(), x_clamped, y_clamped);
+            place_tile(t, hwnd, x_clamped, y_clamped);
         } else {
             // No monitor from pick_monitor (degenerate — no primary display).
             // A stealth-parked tile would otherwise stay off the virtual desktop
             // (permanently invisible), so bring it back to a safe on-screen spot.
-            let _ = move_window_pos_only(hwnd, 100, 100);
-            set_platform_window_position(t.window(), 100, 100);
+            place_tile(t, hwnd, 100, 100);
             eprintln!("[overlay-host] tile placement: no monitor from pick_monitor — fallback to (100, 100)");
         }
         true
@@ -450,6 +452,25 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
         }
     });
     super::realize_with_retries(tile, attempt, fallback);
+}
+
+/// Put a realized tile at (x, y). On Linux the move, pin and capture exclusion
+/// go in one compositor request: each separate `hyprctl` round trip kept a new
+/// tile centred for seconds on a busy compositor. I1 still holds there — a
+/// failed exclusion is logged, never silently swallowed.
+fn place_tile(t: &TileWindow, hwnd: slint_replay::win32::HWND, x: i32, y: i32) {
+    #[cfg(target_os = "linux")]
+    {
+        let stealth = global_stealth();
+        if let Err(e) = slint_replay::native::window::arrange(hwnd.0, x, y, stealth) {
+            diag!("[overlay-host] tile placement failed: {e}");
+        } else if slint_replay::native::window::exclusion(hwnd.0).ok() != Some(stealth) {
+            diag!("[overlay-host] tile stealth apply failed (tile stays capturable): readback mismatch");
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = move_window_pos_only(hwnd, x, y);
+    set_platform_window_position(t.window(), x, y);
 }
 
 // Tests live at the END of the module (clippy::items_after_test_module, denied

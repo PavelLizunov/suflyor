@@ -179,6 +179,38 @@ pub fn resize_move(id: isize, x: i32, y: i32, w: i32, h: i32) -> Result<(), Erro
     )?;
     move_to(id, x, y)
 }
+/// Move, pin and set capture exclusion in one compositor request, so a new
+/// window reaches its place in one round trip instead of one per property.
+pub fn arrange(id: isize, x: i32, y: i32, excluded: bool) -> Result<(), Error> {
+    let c = client(id)?;
+    let toggle_pin = !c["pinned"].as_bool().unwrap_or(false);
+    let script = arrange_script(id, x, y, toggle_pin, excluded)?;
+    if super::desktop::hypr(&["eval", &script])?
+        .to_ascii_lowercase()
+        .contains("error")
+    {
+        return Err("compositor placement was rejected".into());
+    }
+    Ok(())
+}
+fn arrange_script(
+    id: isize,
+    x: i32,
+    y: i32,
+    toggle_pin: bool,
+    excluded: bool,
+) -> Result<String, Error> {
+    let w = serde_json::to_string(&format!("address:0x{id:x}"))?;
+    let mut script = format!("hl.dispatch(hl.dsp.window.move({{window={w},x={x},y={y}}}));");
+    if toggle_pin {
+        script += &format!("hl.dispatch(hl.dsp.window.pin({{window={w}}}));");
+    }
+    script += &format!(
+        "hl.dispatch(hl.dsp.window.set_prop({{window={w},prop=\"no_screen_share\",value=\"{}\"}}));",
+        u8::from(excluded)
+    );
+    Ok(script)
+}
 pub fn focus(id: isize) -> Result<(), Error> {
     dispatch("focuswindow", &selector(id)?)
 }
@@ -336,4 +368,27 @@ pub fn drag_end() {
     *DRAG
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+    use super::arrange_script;
+
+    #[test]
+    fn arranging_sends_move_pin_and_exclusion_in_one_script() {
+        let w = "window=\"address:0x2a\"";
+        assert_eq!(
+            arrange_script(42, -792, 80, true, false).unwrap(),
+            format!(
+                "hl.dispatch(hl.dsp.window.move({{{w},x=-792,y=80}}));\
+                 hl.dispatch(hl.dsp.window.pin({{{w}}}));\
+                 hl.dispatch(hl.dsp.window.set_prop({{{w},prop=\"no_screen_share\",value=\"0\"}}));"
+            )
+        );
+        // An already pinned window keeps its pin: the dispatcher toggles.
+        let pinned = arrange_script(42, 1, 2, false, true).unwrap();
+        assert!(!pinned.contains("pin("));
+        assert!(pinned.ends_with("value=\"1\"}));"));
+    }
 }
