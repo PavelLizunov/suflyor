@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-091 Native shortcut teardown changes the registered modifier order   Severity: P3   Status: Open
+Evidence: desktop::close reconstructs modifier names as SHIFT, CTRL, ALT, SUPER, but the System PTT chord is registered as SUPER + SHIFT + F9. A real isolated compositor probe binds SUPER + SHIFT + F11, then unbinds SHIFT + SUPER + F11: the binding remains. Unbinding the original spelling removes it. The owned probe is removed and verified absent. Thus cleanup cannot assume equivalent modifier order is accepted by Hyprland's Lua unbind function.
+Fix: reconstruct owned teardown chords in the same SUPER-first order used by the actual binding table. Keep foreign-owner filtering and press/release cleanup. Verify clean host shutdown leaves no owned bindings and no probe binding; preserve unrelated shortcuts.
+Closed by:
+
 ### D-090 Hyprland config reload removes every runtime-installed shortcut   Severity: P2   Status: Open
 Evidence: exact native a07c5ac registers its owned compositor bindings at startup only. After the bounded question-size probe calls hyprctl reload, the live compositor has zero Suflyor-owned bindings; physical F1 and held Mic PTT do not dispatch, although the app and its command socket remain alive and startup diagnostics still list registration success. Restarting only the owned app restores bindings and physical Mic PTT reaches real capture/transcription. The first Qwen2.5 Mic replay fails waiting for capture; the second after restart plays into the actual route. Hyprland's native event socket emits configreloaded after configuration application.
 Fix: subscribe to the existing compositor event socket and restore only the owned, conflict-checked bindings on a completed config reload, without restarting the app or replacing foreign shortcuts. Keep input/event draining bounded, PTT release delivery and socket shutdown intact, and refresh diagnostics from the new installation result. Verify repeated real reloads, unchanged host PID, physical shortcut/PTT dispatch and preservation of unrelated bindings.

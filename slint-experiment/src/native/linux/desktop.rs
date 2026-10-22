@@ -174,7 +174,7 @@ pub fn close() {
                     if let Some(key) = bind["key"].as_str() {
                         let mask = bind["modmask"].as_u64().unwrap_or(0);
                         let mut parts = Vec::new();
-                        for (bit, name) in [(1, "SHIFT"), (4, "CTRL"), (8, "ALT"), (64, "SUPER")] {
+                        for (bit, name) in [(64, "SUPER"), (1, "SHIFT"), (4, "CTRL"), (8, "ALT")] {
                             if mask & bit != 0 {
                                 parts.push(name);
                             }

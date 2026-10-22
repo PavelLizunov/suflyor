@@ -58,6 +58,7 @@ fn compositor_reload_restores_bindings_and_refreshes_diagnostics() {
     assert!(hotkeys.contains("\"config-reloaded\" =>"));
     assert!(hotkeys.contains("Some(wayland_hotkey_diag())"));
     assert!(desktop.contains("bind[\"description\"].as_str() != Some(&owner)"));
+    assert!(desktop.contains("[(64, \"SUPER\"), (1, \"SHIFT\"), (4, \"CTRL\"), (8, \"ALT\")]"));
 }
 
 #[test]
