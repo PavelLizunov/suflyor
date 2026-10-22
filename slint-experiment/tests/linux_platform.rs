@@ -20,6 +20,11 @@ fn remapped_windows_keep_the_application_id_and_first_frame_protection() {
     let application = application.split_once("})").unwrap().0;
     assert!(application.contains("class = \"^suflyor$\""));
     assert!(application.contains("no_screen_share = true"));
+    let lifecycle =
+        std::fs::read_to_string(root.join("src/bin/overlay_host/window_lifecycle.rs")).unwrap();
+    assert!(lifecycle.contains("realize_wayland_window(win, attempt, fallback, 50)"));
+    assert!(lifecycle.contains("if !window.window().is_visible() || attempt(&window)"));
+    assert!(lifecycle.contains("remaining - 1"));
     for relative in [
         "src/bin/overlay_host/tile_window.rs",
         "src/bin/overlay_host/window_lifecycle.rs",
