@@ -138,7 +138,36 @@ pub(super) fn apply_bar_size(overlay: &OverlayBarWindow, compact: bool) {
         (1280.0_f32, 64.0_f32)
     };
     overlay.window().set_size(slint::LogicalSize::new(w, h));
+    #[cfg(target_os = "linux")]
+    resize_wayland_bar(overlay, w as i32, h as i32);
+    #[cfg(not(target_os = "linux"))]
     recenter_when_sized(overlay.as_weak(), w, 0);
+}
+
+#[cfg(target_os = "linux")]
+fn resize_wayland_bar(overlay: &OverlayBarWindow, width: i32, height: i32) {
+    realize_with_retries(
+        overlay,
+        Rc::new(move |bar| {
+            // A newer toggle supersedes an outstanding realization timer.
+            if bar.get_compact_bar() != (width == 680) {
+                return true;
+            }
+            let Ok(hwnd) = grab_hwnd(bar.window()) else {
+                return false;
+            };
+            let Some(monitor) = enum_monitors().into_iter().find(|m| m.is_primary) else {
+                return false;
+            };
+            let x = monitor.left + ((monitor.width() - width) / 2).max(0);
+            let y = monitor.top + 24;
+            if slint_replay::native::window::resize_move(hwnd.0, x, y, width, height).is_err() {
+                return false;
+            }
+            get_window_rect(hwnd).is_ok_and(|(_, _, w, h)| w == width && h == height)
+        }),
+        Rc::new(|_| diag!("[overlay-host] Wayland bar resize was not confirmed")),
+    );
 }
 
 /// Re-center the bar on the primary monitor for its NEW width — but only once the
@@ -148,6 +177,7 @@ pub(super) fn apply_bar_size(overlay: &OverlayBarWindow, compact: bool) {
 /// left-of-centre). Poll every 50 ms (≤ ~0.6 s) until the rect width matches the
 /// requested size in native geometry units (DPI-scaled pixels on Windows,
 /// logical points on macOS), then center by the ACTUAL width.
+#[cfg(not(target_os = "linux"))]
 fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f32, attempt: u32) {
     Timer::single_shot(Duration::from_millis(50), move || {
         let Some(o) = weak.upgrade() else { return };

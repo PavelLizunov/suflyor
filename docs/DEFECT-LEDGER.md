@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-088 Wayland compact/full bar changes content without changing its surface size   Severity: P2   Status: Open
+Evidence: exact native 03403c5 UI toggles compact_bar=true, but Hyprland and Slint MCP both retain 1280x64; compact controls remain spread across the old width. A direct compositor resize to 680x64 succeeds. Expanding through the real bar callback then clamps the surface to its 720px minimum instead of restoring 1280px, leaving full-bar Settings/control coordinates outside the surface. apply_bar_size only calls Slint set_size, which is not a compositor floating-window resize on this Wayland path.
+Fix: use the existing bounded native realization helper to resize and center the actual owned Linux surface and verify its final dimensions. Preserve the Windows/macOS size path, hidden/drop cancellation and compositor-backed geometry. Retest compact/full, cold compact startup and hide/restore against the exact candidate.
+Closed by:
+
 ### D-087 Native Linux backend gate retains Windows-only installer fixtures   Severity: P2   Status: Open
 Evidence: the complete eb8e1df Linux driver passes its named Linux port gate, then local_ai::tests fails five executed cases: four engine-swap fixtures still provide DLLs although the native selector intentionally installs ELF executables/shared objects, and the Whisper Windows asset-selection fixture executes its Windows expectation on Linux. Observed result: 64 passed, five failed, one ignored in that group; aggregate driver exit 101. This is not a demonstrated engine swap or download failure.
 Fix: run the same backup/model-preservation, nested/flat layout and duplicate-rejection invariants using each platform's actual executable/library names. Keep Windows fixture coverage and assert the Linux Whisper asset choice separately rather than skipping the test group. Rerun the complete Cargo driver on the corrected candidate.

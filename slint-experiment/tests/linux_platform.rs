@@ -36,6 +36,18 @@ fn remapped_windows_keep_the_application_id_and_first_frame_protection() {
 }
 
 #[test]
+fn bar_size_uses_compositor_resize_with_stale_toggle_cancellation() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source = std::fs::read_to_string(root.join("src/bin/overlay_host/bar_tray.rs")).unwrap();
+    assert!(source.contains("resize_wayland_bar(overlay, w as i32, h as i32)"));
+    assert!(source.contains("if bar.get_compact_bar() != (width == 680)"));
+    assert!(
+        source.contains("slint_replay::native::window::resize_move(hwnd.0, x, y, width, height)")
+    );
+    assert!(source.contains("w == width && h == height"));
+}
+
+#[test]
 #[ignore = "requires an isolated live Wayland worker clipboard"]
 fn wayland_clipboard_round_trip() {
     use slint_replay::native::clipboard;
