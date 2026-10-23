@@ -3754,15 +3754,37 @@ fn ensure_disk_space(root: &Path, need: u64, on: &dyn Fn(Progress)) -> Result<()
         free / GIB
     )));
     if free < want {
-        bail!(
-            "not enough free disk space — the local AI needs about {} GB on the drive holding {}, but only {} GB is free; free up space and retry",
-            want.div_ceil(GIB),
-            root.display(),
-            free / GIB
-        );
+        return Err(DiskSpaceError {
+            need_gib: want.div_ceil(GIB),
+            free_gib: free / GIB,
+            root: root.to_path_buf(),
+        }
+        .into());
     }
     Ok(())
 }
+
+/// The local-AI volume is too small for a download; Settings names both sizes.
+#[derive(Debug)]
+pub struct DiskSpaceError {
+    pub need_gib: u64,
+    pub free_gib: u64,
+    pub root: PathBuf,
+}
+
+impl std::fmt::Display for DiskSpaceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "not enough free disk space — the local AI needs about {} GB on the drive holding {}, but only {} GB is free; free up space and retry",
+            self.need_gib,
+            self.root.display(),
+            self.free_gib
+        )
+    }
+}
+
+impl std::error::Error for DiskSpaceError {}
 
 fn find_exe(dir: &Path, name: &str) -> Option<PathBuf> {
     let want = name.to_ascii_lowercase();
