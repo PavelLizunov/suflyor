@@ -535,8 +535,16 @@ Worker restored after this pass: binary ec38f602, config identical to the
 saved copy (English UI), service stopped, the four database backups made by
 "Check & repair database" removed.
 
+Profiles, QA build 8632229, English UI (`profile.py`): "Add profile" with
+"QA profile" selects the new profile; "Rename" to "QA renamed" updates the
+list; "Delete" returns to "none yet — name one and Add" and the config holds
+`context_profiles: []`. "Add profile" with an empty name adds nothing, and
+"Rename" stays disabled while the name field is empty. The app keeps a rolling
+`config.json.bak`; after the run it held the test profile, so it was reset to
+the saved original config.
+
 Not yet done for item 5: file dialogs (export/import), Hermes install, setup
-wizard, profile add/rename/delete, and the destructive "Clear …" buttons.
+wizard, and the destructive "Clear …" buttons.
 
 ### Other findings, not port defects
 
