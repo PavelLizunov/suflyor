@@ -427,6 +427,47 @@ arch, throwaway).
 - Fixture restored afterwards: config byte-identical to the backup (debrief off
   again), installed host `ec38f602…`, service inactive, zero owned bindings.
 
+### Managed local AI on the test VM (section 7 item 3, in progress)
+
+Gates for 4f6aba7 passed: Windows backend 818/0, host 97 + 159; Linux host 158/0, linux_platform 8/0, backend local_ai 95/0, fmt clean. The new EN disk message is not yet checked live.
+
+Live, October 23, QA build 1b1da11, English UI. Settings ▸ Components lists the
+llama.cpp engine and local model as optional; "Open" jumps to AI providers.
+The first MCP click on a standard Button in this window is sometimes lost; a
+second click works. Slint 1.17 has no MCP scroll: drag the real scrollbar thumb
+with QEMU `mouse_button` plus `hyprctl` cursor moves (wheel events from the PS/2,
+tablet and vmmouse devices did not scroll).
+
+- On this VM (8 GiB RAM, 4 vCPU, no GPU, 7.8 GiB free) the profile is Unknown
+  and the only offer is "Built-in engine + Gemma 4 12B — about 7 GB with speech
+  components". Unknown maps to the 12B fallback on every platform; a CPU-only
+  8 GiB machine cannot run it usefully. Product decision, not changed here.
+- The disk pre-check refused correctly: about 9 GB needed (12B, projector,
+  binaries allowance, GigaAM), 7 GB free. The row's "about 7 GB" understates it.
+- The UI then showed "Ошибка установки локального AI. Подробности в журнале." in
+  the English UI: wrong language and no cause or next step. 49 status lines in
+  `settings_local_ai.rs` were Russian-only on every platform.
+- 4f6aba7 fixes both: a typed `DiskSpaceError` lets Settings say "Not enough
+  disk space: about 9 GB needed, 7 GB free. Free up space, then press Install
+  again."; other failures name a recognised cause (network, integrity,
+  unpacking, no engine build, server start) and the button, never the raw
+  chain (it can carry a home path or URL); the remaining local-AI statuses
+  follow the UI language. Gates for 4f6aba7 are listed below when done.
+- There is no engine-only install: the disk pre-check always counts the 12B
+  model, and "Choose GGUF…" appears only once the engine is installed. A small
+  CPU-only machine cannot reach a small custom model through the managed path.
+  Product gap on every platform, not changed here.
+- The worker cannot pass the pre-check without about 1.2 GiB more free space.
+  Superseded task QA binaries free about 0.9 GiB; the rest is Codex evidence
+  (keep) and the unrelated `vpnrouter-omarchy-checks` tree. Growing VM 107's disk
+  or removing other data is the owner's decision.
+- Still open for this item: engine download, cancel and resume, custom GGUF
+  through the native file chooser (rfd), activation, switching, inference and
+  cleanup. The small models already on the worker
+  (`~/suflyor-evidence/real-inference/`: Qwen3.5 0.8B, SmolVLM 500M, Qwen2.5
+  1.5B) are the intended custom-GGUF fixtures. The local namer and a debrief
+  with enough user speech (item 2 leftovers) need the same local model.
+
 ### Other findings, not port defects
 
 All are shared host or backend behaviour, seen on Linux:
