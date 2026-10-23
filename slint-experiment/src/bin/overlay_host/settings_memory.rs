@@ -139,9 +139,9 @@ pub(crate) fn wire_memory(win: &SettingsWindow, cfg: &overlay_backend::config::S
             }
             let ru = cfg_c.read().ui_is_ru();
             w.set_memory_status(SharedString::from(if ru {
-                "Ищу предложения в последних сессиях…"
+                "Ищу предложения…"
             } else {
-                "Looking for suggestions in recent sessions…"
+                "Looking for suggestions…"
             }));
             let done = w.as_weak();
             std::thread::spawn(move || {
@@ -370,9 +370,9 @@ fn run_extract() -> usize {
 /// Status line after Extract: how many new suggestions landed, or that none did.
 fn extract_status(ru: bool, inserted: usize) -> String {
     match (ru, inserted) {
-        (true, 0) => "Новых предложений нет в последних сессиях.".to_string(),
+        (true, 0) => "Новых предложений нет".to_string(),
         (true, n) => format!("Новых предложений: {n}"),
-        (false, 0) => "No new suggestions in recent sessions.".to_string(),
+        (false, 0) => "No new suggestions".to_string(),
         (false, n) => format!("New suggestions: {n}"),
     }
 }
@@ -421,15 +421,9 @@ mod tests {
 
     #[test]
     fn extract_status_follows_ui_language() {
-        assert_eq!(
-            extract_status(false, 0),
-            "No new suggestions in recent sessions."
-        );
+        assert_eq!(extract_status(false, 0), "No new suggestions");
         assert_eq!(extract_status(false, 19), "New suggestions: 19");
-        assert_eq!(
-            extract_status(true, 0),
-            "Новых предложений нет в последних сессиях."
-        );
+        assert_eq!(extract_status(true, 0), "Новых предложений нет");
         assert_eq!(extract_status(true, 3), "Новых предложений: 3");
     }
 }

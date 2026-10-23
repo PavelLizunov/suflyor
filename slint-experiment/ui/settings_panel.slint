@@ -4216,12 +4216,14 @@ export component SettingsWindow inherits Window {
                                 text: @tr("Extract from recent sessions");
                                 clicked => { root.memory-extract(); }
                             }
+                            // Wraps so a long status (a failed save) cannot widen the row past the card.
                             if root.memory-status != "" : Text {
                                 text: root.memory-status;
                                 horizontal-stretch: 0;
                                 font-size: Metrics.font-label;
                                 color: Theme.accent;
                                 vertical-alignment: center;
+                                wrap: word-wrap;
                             }
                         }
 
