@@ -338,9 +338,15 @@ fn labelled_secret_len(rest: &str, label: &str) -> Option<usize> {
         return None;
     }
     let after = rest.get(label.len()..)?;
+    let is_quoted_label = after.starts_with(['"', '\'']);
     let unquoted = after.strip_prefix(['"', '\'']).unwrap_or(after);
-    let separated = unquoted.trim_start_matches([' ', '\t', ':', '=']);
+    let sep_len = unquoted.len() - unquoted.trim_start_matches([' ', '\t', ':', '=']).len();
+    let sep = &unquoted[..sep_len];
+    let separated = &unquoted[sep_len..];
     let value = separated.strip_prefix(['"', '\'']).unwrap_or(separated);
+    if label != "bearer" && !is_quoted_label && !sep.contains([':', '=']) {
+        return None;
+    }
     if value.len() == after.len() {
         return None;
     }
