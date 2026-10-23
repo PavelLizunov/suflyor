@@ -468,6 +468,76 @@ tablet and vmmouse devices did not scroll).
   1.5B) are the intended custom-GGUF fixtures. The local namer and a debrief
   with enough user speech (item 2 leftovers) need the same local model.
 
+### Settings, all 16 tabs in EN and RU (section 7 item 5, layout pass)
+
+Live, October 23, QA build 4f6aba7 at 720x600. A script
+(`tabs.py` in the private evidence folder) opens every tab and pages through it by
+dragging the content scrollbar thumb with the MCP `drag_element` tool, which
+does exist in Slint 1.17, so the QEMU thumb drag described above is no longer
+needed. EN: 22 pages, RU: 22 pages, each tab read to its
+end. No Russian text in the English UI and no English in the Russian UI.
+
+Port defects found and fixed:
+
+- On Linux `Theme.font-sans` ("Segoe UI") falls back to the wider Liberation
+  Sans, so two Russian labels ran past their equal-width buttons:
+  "Структурировать (AI)" (Profile) and "Взять ключ из локального Hermes"
+  (Hermes). 192834c shortens them to "Упорядочить (AI)" and "Ключ из
+  локального Hermes".
+- Diagnostics showed "Global hotkeys: registered: 50". The row counts
+  space-separated keys, and the Wayland labels such as "SHIFT + ALT + 1" contain
+  spaces. 1c94292 compacts the labels; the row should read 18 (the compositor
+  bindings, including push-to-talk press and release).
+
+Shared, not port (also visible on Windows by code):
+
+- English copy uses Russian guillemets: «Off», «Model default», «Determine
+  speakers».
+- Auto-tiles: the "Fast answers" hint is elided ("…open their d…").
+- RU AI providers: the bearer-token placeholder is cut off ("…нажмите «Сохрани").
+- Diagnostics: the two red "Clear …" buttons use a smaller font than the other
+  buttons.
+
+Callbacks, QA build 1c94292, EN and RU (`callbacks.py`): 13 safe buttons per
+language, each answered in the UI language.
+
+- Profile "Structure via AI" with no context: "Nothing to process yet".
+- AI providers and Screenshots connection tests: "Connection works".
+- STT test: "The model loaded; recognition is ready".
+- Hermes "Check" (no Hermes on the worker): "API: The server does not answer".
+  This names the cause but not the next step (shared copy, not port).
+- Audio microphone test (no microphone in the VM): "Too quiet (-inf dBFS) —
+  speak or check the microphone".
+- Updates: "No newer stable release (latest: 0.38.1)".
+- Diagnostics "Check all": every row Ready, test tone captured at -12 dBFS,
+  "Global hotkeys: registered: 18" (the 1c94292 fix, seen live).
+- "Check & repair database": "Database healthy. Backup: …". The line sits
+  below the window edge; scroll to read it.
+- Components "Open" switches to AI providers.
+- "Test voice" plays through Piper (journal: sidecar started and finished); "refresh" and
+  "Refresh devices" change no text, as designed.
+
+The MCP element tree leaves out elements clipped by a ScrollView, so a probe
+must scroll before it reads a status line.
+
+The RU run still showed "Структурировать (AI)": `build.rs` did not report the
+`.po` files to cargo, so the cached worker build kept the old strings. 8632229
+adds `rerun-if-changed=translations`. With the 8632229 QA build both Russian
+labels fit (Profile and Hermes screenshots) and "Упорядочить (AI)" answers
+"Пусто — нечего обрабатывать".
+
+Gates for 8632229: Windows backend 818/0, host 97 + 159. Linux host build
+passed; the first test run was OOM-killed while the app was running (5.3 GB
+peak), and the rerun with the app stopped passed: i18n_guard 3/0, host
+158/0, linux_platform 8/0.
+
+Worker restored after this pass: binary ec38f602, config identical to the
+saved copy (English UI), service stopped, the four database backups made by
+"Check & repair database" removed.
+
+Not yet done for item 5: file dialogs (export/import), Hermes install, setup
+wizard, profile add/rename/delete, and the destructive "Clear …" buttons.
+
 ### Other findings, not port defects
 
 All are shared host or backend behaviour, seen on Linux:
