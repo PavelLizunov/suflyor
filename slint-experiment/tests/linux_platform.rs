@@ -25,14 +25,14 @@ fn remapped_windows_keep_the_application_id_and_first_frame_protection() {
     assert!(lifecycle.contains("realize_wayland_window(win, attempt, fallback, 50)"));
     assert!(lifecycle.contains("if !window.window().is_visible() || attempt(&window)"));
     assert!(lifecycle.contains("remaining - 1"));
-    for relative in [
-        "src/bin/overlay_host/tile_window.rs",
-        "src/bin/overlay_host/window_lifecycle.rs",
-    ] {
-        let source = std::fs::read_to_string(root.join(relative)).unwrap();
-        assert!(source.contains("global_stealth() || cfg!(target_os = \"linux\")"));
-        assert!(source.contains("hwnd, global_stealth()"));
-    }
+    assert!(lifecycle.contains("global_stealth() || cfg!(target_os = \"linux\")"));
+    assert!(lifecycle.contains("hwnd, global_stealth()"));
+    // Tiles set the exclusion in the same compositor request as their move.
+    let tile = std::fs::read_to_string(root.join("src/bin/overlay_host/tile_window.rs")).unwrap();
+    assert!(tile.contains("let stealth = global_stealth();"));
+    assert!(tile.contains("native::window::arrange(hwnd.0, x, y, stealth)"));
+    let window = std::fs::read_to_string(root.join("src/native/linux/window.rs")).unwrap();
+    assert!(window.contains("prop=\\\"no_screen_share\\\""));
 }
 
 #[test]
