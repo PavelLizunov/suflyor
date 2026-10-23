@@ -139,9 +139,9 @@ pub(crate) fn wire_memory(win: &SettingsWindow, cfg: &overlay_backend::config::S
             }
             let ru = cfg_c.read().ui_is_ru();
             w.set_memory_status(SharedString::from(if ru {
-                "⏳ Ищу предложения в последних сессиях…"
+                "Ищу предложения в последних сессиях…"
             } else {
-                "⏳ Looking for suggestions in recent sessions…"
+                "Looking for suggestions in recent sessions…"
             }));
             let done = w.as_weak();
             std::thread::spawn(move || {
@@ -213,9 +213,9 @@ pub(crate) fn wire_memory(win: &SettingsWindow, cfg: &overlay_backend::config::S
                                     w.set_memory_add_text(SharedString::default());
                                 }
                                 w.set_memory_status(SharedString::from(if ru {
-                                    "➕ Факт добавлен"
+                                    "Факт добавлен"
                                 } else {
-                                    "➕ Fact added"
+                                    "Fact added"
                                 }));
                             }
                             Err(e) => {
@@ -371,9 +371,9 @@ fn run_extract() -> usize {
 fn extract_status(ru: bool, inserted: usize) -> String {
     match (ru, inserted) {
         (true, 0) => "Новых предложений нет в последних сессиях.".to_string(),
-        (true, n) => format!("➕ Новых предложений: {n}"),
+        (true, n) => format!("Новых предложений: {n}"),
         (false, 0) => "No new suggestions in recent sessions.".to_string(),
-        (false, n) => format!("➕ New suggestions: {n}"),
+        (false, n) => format!("New suggestions: {n}"),
     }
 }
 
@@ -425,11 +425,11 @@ mod tests {
             extract_status(false, 0),
             "No new suggestions in recent sessions."
         );
-        assert_eq!(extract_status(false, 19), "➕ New suggestions: 19");
+        assert_eq!(extract_status(false, 19), "New suggestions: 19");
         assert_eq!(
             extract_status(true, 0),
             "Новых предложений нет в последних сессиях."
         );
-        assert_eq!(extract_status(true, 3), "➕ Новых предложений: 3");
+        assert_eq!(extract_status(true, 3), "Новых предложений: 3");
     }
 }
