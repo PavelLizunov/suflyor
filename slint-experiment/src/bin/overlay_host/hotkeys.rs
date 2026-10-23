@@ -114,7 +114,9 @@ fn wayland_hotkey_diag() -> HotkeyDiag {
         slint_replay::native::desktop::install_bindings(WAYLAND_BINDINGS).unwrap_or_default();
     let mut registered = Vec::new();
     let mut failed = Vec::new();
-    for &(label, action) in WAYLAND_BINDINGS {
+    for &(spec, action) in WAYLAND_BINDINGS {
+        // Diagnostics counts space-separated keys, so "SHIFT + F8" must stay one word.
+        let label = spec.replace(" + ", "+");
         if installed.iter().any(|key| key == action) {
             registered.push(label);
         } else {
