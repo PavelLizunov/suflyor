@@ -311,8 +311,18 @@ fn labelled_secret(rest: &str, mid_word: bool) -> Option<(&'static str, usize)> 
         return Some(("apikey: <redacted>", len));
     }
     // Config field names start mid-word for the labels above (`groq_api_key`).
+    // SECURITY: Redact ai_bearer, hermes_bridge_token, and hermes_api_key fields to prevent bearer/token leaks in diagnostic exports
+    if let Some(len) = labelled_secret_len(rest, "ai_bearer") {
+        return Some(("ai_bearer: <redacted>", len));
+    }
     if let Some(len) = labelled_secret_len(rest, "groq_api_key") {
         return Some(("groq_api_key: <redacted>", len));
+    }
+    if let Some(len) = labelled_secret_len(rest, "hermes_bridge_token") {
+        return Some(("hermes_bridge_token: <redacted>", len));
+    }
+    if let Some(len) = labelled_secret_len(rest, "hermes_api_key") {
+        return Some(("hermes_api_key: <redacted>", len));
     }
     let len = labelled_secret_len(rest, "password")?;
     Some(("password: <redacted>", len))
@@ -1295,8 +1305,11 @@ mod tests {
     #[test]
     fn redact_secrets_masks_config_labels_and_hugging_face_tokens() {
         for (sample, mask) in [
+            ("ai_bearer: secret_value_123", "ai_bearer: <redacted>"),
             ("groq_api_key: secret_value_123", "groq_api_key: <redacted>"),
             ("\"groq_api_key\": \"secret_value_123\"", "groq_api_key: <redacted>"),
+            ("hermes_bridge_token: secret_value_123", "hermes_bridge_token: <redacted>"),
+            ("hermes_api_key: secret_value_123", "hermes_api_key: <redacted>"),
             ("password: secret_value_123", "password: <redacted>"),
             ("token hf_secret_value_123 end", "hf_<redacted>"),
         ] {
