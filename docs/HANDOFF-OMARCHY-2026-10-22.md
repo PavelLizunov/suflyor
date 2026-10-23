@@ -407,9 +407,13 @@ are therefore unreliable; wait for settled geometry.
   TTS 21, Tera 73); Linux host build plus lib 94, host 155, linux_platform 8.
 - 1b1da11: Windows targeted gate exit 0 (backend 818/0, host 97 + 156). Linux
   host build passed; the first test build was killed by systemd-oomd at the 6 GiB
-  unit limit (no EXIT marker, `Result=oom-kill`). A tests-only rerun is unit
-  `suflyor-tests-1b1da11`, evidence `~/suflyor-evidence/tests-1b1da11/`. Check its
-  unit state and EXIT marker before claiming a Linux test result for 1b1da11.
+  unit limit (no EXIT marker, `Result=oom-kill`). The tests-only rerun passed lib
+  95 and host 155 but failed one `linux_platform` guard that looked for the old
+  per-property stealth call in `tile_window.rs`.
+- 9bc8814 updates that guard to the batched placement path (`arrange(...,
+  stealth)` plus `no_screen_share` in the Linux window module). Linux
+  `fmt --check` and `--test linux_platform`: 8 passed, 0 failed, 1 ignored
+  (live clipboard). Production code is unchanged from 1b1da11.
 - A Linux slint test build takes hours on this VM (f2df413: 22:53 to 01:07) and
   swaps at about 4.8 GiB for the library test crate. Wait on the unit state, not
   only on the EXIT marker: an OOM kill leaves none.
