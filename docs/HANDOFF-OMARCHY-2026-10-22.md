@@ -15,7 +15,7 @@ product defect, not a replacement for the full port.
 - Task worktree: `~/Work/sufloyr-omarchy`, branch `codex/omarchy-port`.
 - Repository: <https://github.com/PavelLizunov/suflyor>.
 - Draft PR: <https://github.com/PavelLizunov/suflyor/pull/307>, OPEN, unmerged.
-- Last code candidate: `2f3f2fd3ab2427452c2fa4300e52202dc5abc652`.
+- Last code candidate: `2f3f2fd3ab2427452c2fa4300e52202dc5abc652` (Codex); see section 10 for later commits.
 - Evidence checkpoint before this handoff: `5d739d9652ecddc3c25b0e19d45bc8680b93ec72`.
   This handoff is a later documentation-only commit; obtain its SHA from Git.
 - Integration base used for native gates:
@@ -322,3 +322,105 @@ inference and the owner's historical graphical-session OOM growth trigger.
 The kernel killed quickshell, not a demonstrated machine reboot. They are not
 silently resolved by this port's gates. Current local self-improvement H03/H07
 records are evidence, not instructions to perform unrelated tasks.
+
+## 10. Continuation by Claude Code, October 22–23
+
+The owner asked to fix the queue, optimize its algorithm, then continue the
+port. Sections 1–9 above are the Codex handoff and stay as written; this
+section supersedes their "last candidate" and worker-state lines.
+
+### Queue redesign (D-094 follow-up)
+
+The two-slot first-come semaphore became a priority queue in
+`overlay-backend/src/ai/queue.rs`:
+
+- Interactive requests (F9, typed ask, PTT, Vision, continuations) are admitted
+  before Background ones (session naming, debrief, summaries, memory).
+- Background work holds at most one of the two slots.
+- A newer waiting AutoTile supersedes older waiting ones; the superseded
+  placeholder is removed silently (`"cancelled"`, no retry or error tile).
+- Exclusive (managed local-server switch) waits for zero active requests and
+  blocks new admissions; an abandoned switch wakes the queue again (659d415).
+- The idle prompt prime has its own slot and never takes a background one.
+
+Master-based branch `claude/ai-queue-priority` @ `50ae142`, draft PR
+<https://github.com/PavelLizunov/suflyor/pull/309>. The same commits are on this
+branch through `659d415`. Evidence:
+
+- Windows targeted gate on 50ae142: exit 0, backend 809 passed, host 154, all
+  eight queue tests.
+- Linux `ai::` tests at 659d415: 176 passed, 0 failed.
+- Live Omarchy run with a controlled provider (QA build f1d0412): one active
+  auto tile, the middle waiting auto superseded, a typed question admitted
+  without waiting behind autos, the newest auto admitted about 10 ms after the
+  active one was closed, no late tiles after close-all.
+- Independent gpt-sol review found the abandoned-switch wake-up defect (fixed in
+  659d415). Two pre-existing findings are left open: the Codex subscription
+  route bypasses the queue, and two tests race on `LOCAL_NO_THINK`.
+
+### Scaled and multi-output capture (section 7 item 1)
+
+A headless output `SUFTEST` (1200x1920, scale 1.5, at -800,0) was attached for
+the test and removed afterwards. Physical F8 via QEMU, slurp region drag; the
+frame sent to a capturing provider was compared with `grim` of the same area:
+
+| Region | grim | sent | RMSE |
+| --- | --- | --- | --- |
+| inside the scaled output | 680x500 | 681x501 | 3.4% (JPEG) |
+| across both outputs | 500x200 | 501x201 | 2.7% (JPEG) |
+
+The extra pixel is slurp including the selection edge. Tiles open on the focused
+output, which is where the capture was made.
+
+### Port defects found and fixed
+
+- f2df413: the bar landed at x=960 instead of 320 on the first start with a
+  second output, because the compositor width read failed and 0 was used. It now
+  falls back to the window's own logical width. Rechecked live: (320, 24).
+- f2df413: service stop hit the 10 s systemd timeout once. `close()` removed the
+  18 owned bindings with 18 separate `hyprctl` processes; they now go in one
+  `eval`, like installation. Rechecked live: stop 4.0 s, result success, on a
+  compositor answering in about 0.5 s per request.
+- 1b1da11: a new tile sat centred for 4–10 s before moving to its slot. Each
+  realization attempt made about eleven sequential `hyprctl` calls with the move
+  last (ownership re-checks, pin, set/readback exclusion, rect, monitors, move).
+  Move, pin and capture exclusion now go in one Lua eval after one ownership
+  check. The ownership check stays: a dispatcher on an unknown address still
+  answers "ok", so it cannot replace it. Rechecked live on the scaled output
+  with QA build 1b1da11 (host SHA-256 `07667c93…f8746`): F6 to placement 2.95 s
+  instead of 5.3 s, visibly centred under 1.5 s instead of about 4 s; the tile is
+  pinned and `no_screen_share` reads back true (stealth on); stop 1.6 s, success.
+
+Hyprland latency matters for every Linux window operation. On the test VM it was
+about 40 ms per request when idle and 200–600 ms with Hyprland at 100–200% CPU
+(software rendering, RustDesk capture, 14% steal). Fixed-delay checks on this VM
+are therefore unreliable; wait for settled geometry.
+
+### Other findings, not port defects
+
+- The Russian `DEFAULT_VISION_PROMPT` (`overlay-backend/src/vision.rs:18`) shows
+  as the user's own turn in the English UI on every platform.
+
+### Gates and worker state at the end of this pass
+
+- f2df413: Windows targeted gate exit 0 (backend 818/0, host 97 + 156, guards,
+  TTS 21, Tera 73); Linux host build plus lib 94, host 155, linux_platform 8.
+- 1b1da11: Windows targeted gate exit 0 (backend 818/0, host 97 + 156). Linux
+  host build passed; the first test build was killed by systemd-oomd at the 6 GiB
+  unit limit (no EXIT marker, `Result=oom-kill`). A tests-only rerun is unit
+  `suflyor-tests-1b1da11`, evidence `~/suflyor-evidence/tests-1b1da11/`. Check its
+  unit state and EXIT marker before claiming a Linux test result for 1b1da11.
+- A Linux slint test build takes hours on this VM (f2df413: 22:53 to 01:07) and
+  swaps at about 4.8 GiB for the library test crate. Wait on the unit state, not
+  only on the EXIT marker: an OOM kill leaves none.
+- Omarchy fixture restored after each live run: one output (Virtual-1,
+  1920x1080, scale 1), no configuration errors, zero owned bindings, config
+  restored, installed host back to `ec38f602…` (2f3f2fd), service inactive.
+  Scripts live in `~/suflyor-evidence/scaled-capture/` (setup, teardown, probe,
+  settle, stop-probe, hyprlat).
+- Another session was working on the same VM at the same time: quickshell exited
+  "due to IPC request" four times while reloading the local plugin
+  `io.github.pavellizunov.vpnrouter`. It is not ours; leave it alone, and expect
+  the extra load in timings.
+- Windows wrapper restored after both gates, SHA-256 `972DC146…F728`;
+  PostReleaseDocs Ready, S7 Disabled.
