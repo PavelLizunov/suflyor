@@ -429,7 +429,7 @@ arch, throwaway).
 
 ### Managed local AI on the test VM (section 7 item 3, in progress)
 
-Gates for 4f6aba7 passed: Windows backend 818/0, host 97 + 159; Linux host 158/0, linux_platform 8/0, backend local_ai 95/0, fmt clean. The new EN disk message is not yet checked live.
+Gates for 4f6aba7 passed: Windows backend 818/0, host 97 + 159; Linux host 158/0, linux_platform 8/0, backend local_ai 95/0, fmt clean. Live with the 4f6aba7 QA build (English UI), Install now shows "Not enough disk space: about 9 GB needed, 7 GB free. Free up space, then press Install again." The worker was restored afterwards (binary ec38f602, config unchanged, service stopped).
 
 Live, October 23, QA build 1b1da11, English UI. Settings ▸ Components lists the
 llama.cpp engine and local model as optional; "Open" jumps to AI providers.
