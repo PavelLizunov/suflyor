@@ -667,7 +667,7 @@ msgid "Stop recording"
 msgstr "Остановить запись"
 
 msgid "Structure via AI"
-msgstr "Структурировать (AI)"
+msgstr "Упорядочить (AI)"
 
 msgid "Structuring…"
 msgstr "Обработка…"
@@ -2732,7 +2732,7 @@ msgid "Changes apply at the next capture start; restart an active session."
 msgstr "Изменения — со следующего захвата; текущую сессию перезапустите."
 
 msgid "Get key from local Hermes"
-msgstr "Взять ключ из локального Hermes"
+msgstr "Ключ из локального Hermes"
 
 msgid "Import replaces the current settings."
 msgstr "Импорт заменяет текущие настройки."
