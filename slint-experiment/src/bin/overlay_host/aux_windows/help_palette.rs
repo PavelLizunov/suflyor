@@ -214,15 +214,7 @@ fn kb_to_palette_results(entries: &[kb::KBEntry]) -> Vec<PaletteResult> {
     entries
         .iter()
         .map(|e| {
-            // First sentence (or first 160 chars) of body for preview.
-            let preview = e
-                .body
-                .split_terminator(['.', '\n'])
-                .next()
-                .unwrap_or("")
-                .chars()
-                .take(160)
-                .collect::<String>();
+            let preview = preview_line(&e.body);
             PaletteResult {
                 key: SharedString::from(e.key.clone()),
                 title: SharedString::from(e.heading.clone()),
@@ -231,6 +223,14 @@ fn kb_to_palette_results(entries: &[kb::KBEntry]) -> Vec<PaletteResult> {
             }
         })
         .collect()
+}
+
+/// First sentence of the first body line, capped at 160 chars. A sentence ends
+/// at ". ", so dots inside `manifest.yaml` or `~/.kube` stay in the preview.
+fn preview_line(body: &str) -> String {
+    let line = body.lines().next().unwrap_or("");
+    let sentence = line.find(". ").map_or(line, |end| &line[..end]);
+    sentence.trim_end_matches('.').chars().take(160).collect()
 }
 
 /// PaletteResult ergonomic extension — `heading_or_key` returns the
@@ -247,5 +247,24 @@ impl PaletteResultExt for PaletteResult {
         } else {
             self.title.to_string()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preview_keeps_dots_inside_commands_and_paths() {
+        assert_eq!(
+            preview_line("CLI for Kubernetes API. Reads ~/.kube/config for auth."),
+            "CLI for Kubernetes API"
+        );
+        assert_eq!(
+            preview_line("- `kubectl apply -f manifest.yaml` — declarative create\n- next"),
+            "- `kubectl apply -f manifest.yaml` — declarative create"
+        );
+        assert_eq!(preview_line("Shell abbreviation."), "Shell abbreviation");
+        assert_eq!(preview_line(""), "");
     }
 }

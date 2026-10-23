@@ -726,7 +726,7 @@ pub(crate) fn open_settings(
     // Pending candidates (approve/reject) + approved items (delete) over the
     // SQLite memory tables, + Extract (heuristic over recent sessions).
     // Extracted to settings_memory.rs.
-    wire_memory(&win);
+    wire_memory(&win, cfg);
 
     // P1.7 — config parsed from a picked server-settings file, awaiting the
     // user's explicit Apply (set by the import-preview handler, taken by Apply,

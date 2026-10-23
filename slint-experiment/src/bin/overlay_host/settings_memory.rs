@@ -58,8 +58,9 @@ fn is_latest_refresh(gen: u64) -> bool {
 }
 
 /// Wire the 💭 Memory tab: load the candidate + item lists and bind the
-/// approve / reject / delete / extract callbacks.
-pub(crate) fn wire_memory(win: &SettingsWindow) {
+/// approve / reject / delete / extract callbacks. `cfg` only picks the status
+/// language at click time, so a live language switch applies to the next action.
+pub(crate) fn wire_memory(win: &SettingsWindow, cfg: &overlay_backend::config::SharedConfig) {
     reload_memory(win);
 
     // Mutations open the catalog (blocking SQLite open + write) and reload both
@@ -124,6 +125,7 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
     }
     {
         let weak = win.as_weak();
+        let cfg_c = cfg.clone();
         win.on_memory_extract(move || {
             let Some(w) = weak.upgrade() else { return };
             // P1-3: the extractor scans candidate texts + reads AI turns for the
@@ -135,14 +137,19 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
             if EXTRACT_RUNNING.swap(true, std::sync::atomic::Ordering::SeqCst) {
                 return;
             }
-            w.set_memory_status(SharedString::from("⏳ извлекаю…"));
+            let ru = cfg_c.read().ui_is_ru();
+            w.set_memory_status(SharedString::from(if ru {
+                "⏳ Ищу предложения в последних сессиях…"
+            } else {
+                "⏳ Looking for suggestions in recent sessions…"
+            }));
             let done = w.as_weak();
             std::thread::spawn(move || {
                 let inserted = run_extract();
                 let _ = slint::invoke_from_event_loop(move || {
                     EXTRACT_RUNNING.store(false, std::sync::atomic::Ordering::SeqCst);
                     if let Some(w) = done.upgrade() {
-                        w.set_memory_status(SharedString::from(format!("➕ {inserted}")));
+                        w.set_memory_status(SharedString::from(extract_status(ru, inserted)));
                         reload_memory(&w);
                     }
                 });
@@ -154,12 +161,14 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
     // consent the approve step otherwise provides); empty input is a no-op.
     {
         let weak = win.as_weak();
+        let cfg_c = cfg.clone();
         win.on_memory_add_fact(move |text| {
             let Some(w) = weak.upgrade() else { return };
             let trimmed = text.trim();
             if trimmed.is_empty() {
                 return;
             }
+            let ru = cfg_c.read().ui_is_ru();
             let fact = trimmed.to_string();
             let submitted = fact.clone();
             let done = w.as_weak();
@@ -203,13 +212,19 @@ pub(crate) fn wire_memory(win: &SettingsWindow) {
                                 if w.get_memory_add_text().trim() == submitted.as_str() {
                                     w.set_memory_add_text(SharedString::default());
                                 }
-                                w.set_memory_status(SharedString::from("➕ факт добавлен"));
+                                w.set_memory_status(SharedString::from(if ru {
+                                    "➕ Факт добавлен"
+                                } else {
+                                    "➕ Fact added"
+                                }));
                             }
                             Err(e) => {
                                 eprintln!("[overlay-host] memory add-fact failed: {e}");
-                                w.set_memory_status(SharedString::from(
-                                    "Не удалось сохранить факт, попробуйте ещё раз",
-                                ));
+                                w.set_memory_status(SharedString::from(if ru {
+                                    "Факт не сохранён: локальная база памяти недоступна. Нажмите «Добавить» ещё раз."
+                                } else {
+                                    "Fact not saved: the local memory database is unavailable. Press Add again."
+                                }));
                             }
                         }
                         apply_memory_rows(&w, &cands, &items);
@@ -352,6 +367,16 @@ fn run_extract() -> usize {
     inserted
 }
 
+/// Status line after Extract: how many new suggestions landed, or that none did.
+fn extract_status(ru: bool, inserted: usize) -> String {
+    match (ru, inserted) {
+        (true, 0) => "Новых предложений нет в последних сессиях.".to_string(),
+        (true, n) => format!("➕ Новых предложений: {n}"),
+        (false, 0) => "No new suggestions in recent sessions.".to_string(),
+        (false, n) => format!("➕ New suggestions: {n}"),
+    }
+}
+
 /// Candidate → row: kind glyph + the heuristic reason + the candidate text.
 /// The DB id is i64; an out-of-range value down-casts to `-1` (a guaranteed
 /// no-op on the next callback) rather than silently wrapping onto a real row.
@@ -387,5 +412,24 @@ fn kind_glyph(kind: &str) -> &'static str {
         "experience" => "⭐",
         "note" => "📌",
         _ => "•",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_status_follows_ui_language() {
+        assert_eq!(
+            extract_status(false, 0),
+            "No new suggestions in recent sessions."
+        );
+        assert_eq!(extract_status(false, 19), "➕ New suggestions: 19");
+        assert_eq!(
+            extract_status(true, 0),
+            "Новых предложений нет в последних сессиях."
+        );
+        assert_eq!(extract_status(true, 3), "➕ Новых предложений: 3");
     }
 }
