@@ -88,7 +88,7 @@ pub fn open_private_append(path: &Path) -> std::io::Result<std::fs::File> {
 
 /// Create `dir` and, on Unix, restrict it to its owner (mode 0700). A filesystem that cannot
 /// change the mode is logged and tolerated: losing the journal would be worse.
-pub(crate) fn ensure_private_dir(dir: &Path) -> std::io::Result<()> {
+pub fn ensure_private_dir(dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)?;
     #[cfg(unix)]
     {
@@ -172,6 +172,20 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), b"new");
         let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_private_dir_enforces_mode_0700() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("recordings");
+
+        ensure_private_dir(&dir).unwrap();
+
+        let mode = std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700);
     }
 
     #[cfg(unix)]

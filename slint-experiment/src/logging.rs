@@ -70,7 +70,7 @@ pub fn init() {
         return;
     };
     if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
+        let _ = overlay_backend::paths::ensure_private_dir(parent);
     }
     // Rotate when the log passes ~2 MiB so it can't grow without bound.
     if let Ok(meta) = std::fs::metadata(&path) {
