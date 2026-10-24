@@ -174,7 +174,7 @@ pub(in super::super) fn open_palette(
         let md = format!("# {}\n\n{body}\n", result.heading_or_key());
         spawn_content_tile(
             result.title.as_str(),
-            &format!("kb · {}", result.source),
+            &format!("kb · {}", p.invoke_source_label(result.source.clone())),
             &md,
             &tiles_ref2,
             &s_ref,
