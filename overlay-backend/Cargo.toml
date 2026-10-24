@@ -127,6 +127,11 @@ windows-core = "0.62"
 transcribe-rs = { version = "=0.3.12", default-features = false, features = ["onnx", "ort-coreml"] }
 ort = { version = "=2.0.0-rc.12", default-features = false }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+transcribe-rs = { version = "=0.3.12", default-features = false, features = ["onnx"] }
+ort = { version = "=2.0.0-rc.12", default-features = false }
+
 # macOS-only BUILD dependency — compiles the tiny Objective-C AVAudioEngine
 # microphone bridge (native/macos/mic_capture.m) via build.rs. No new runtime
 # dependency: the bridge links only the system Foundation + AVFoundation

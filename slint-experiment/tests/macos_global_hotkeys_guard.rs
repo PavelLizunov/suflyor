@@ -18,7 +18,8 @@ fn canonical_runtime_registers_and_polls_all_product_hotkeys() {
     assert!(host.contains("} = register_hotkeys();"));
     assert!(host.contains("hotkey_poll.start("));
     assert!(host.contains("TimerMode::Repeated"));
-    assert!(host.contains("global_hotkey::GlobalHotKeyEvent::receiver()"));
+    assert!(host.contains("hotkeys::next_event()"));
+    assert!(hotkeys.contains("global_hotkey::GlobalHotKeyEvent::receiver().try_recv().ok()"));
     assert!(host.contains("open_text_ask("));
 
     for label in [

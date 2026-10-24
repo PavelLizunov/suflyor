@@ -3,10 +3,10 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use crate::ui::{OverlayBarWindow, TrayMenuWindow};
 #[cfg(windows)]
 use overlay_backend::config;
 use slint::{ComponentHandle, SharedString, Timer};
-use crate::ui::{OverlayBarWindow, TrayMenuWindow};
 
 #[allow(unused_imports)]
 use slint_replay::win32::{
@@ -27,6 +27,8 @@ use super::{
 /// NEVER persisted, so every startup is visible. While hidden, everything else
 /// keeps running: recording, hotkeys, TTS, session tasks, tiles, F6/F9.
 pub(super) static BAR_TRAY_HIDDEN: AtomicBool = AtomicBool::new(false);
+#[cfg(target_os = "linux")]
+thread_local! { static BAR_TRAY_POSITION: std::cell::Cell<Option<(i32, i32)>> = const { std::cell::Cell::new(None) }; }
 #[cfg(target_os = "macos")]
 pub(super) extern "C" fn sync_bar_status_visibility(visible: bool) {
     BAR_TRAY_HIDDEN.store(!visible, Ordering::Relaxed);
@@ -72,6 +74,13 @@ pub(super) fn get_sys_active(state: &slint_replay::app_state::SharedState) -> bo
 /// find/launch our own exe (then we must NOT quit — that would just close the
 /// app with nothing to replace it).
 pub(super) fn spawn_relaunch() -> bool {
+    #[cfg(target_os = "linux")]
+    if std::env::var("SUFLYOR_USER_SERVICE").as_deref() == Ok("suflyor.service") {
+        return std::process::Command::new("systemctl")
+            .args(["--user", "--no-block", "restart", "suflyor.service"])
+            .status()
+            .is_ok_and(|status| status.success());
+    }
     let exe = match std::env::current_exe() {
         Ok(p) => p,
         Err(e) => {
@@ -129,7 +138,50 @@ pub(super) fn apply_bar_size(overlay: &OverlayBarWindow, compact: bool) {
         (1280.0_f32, 64.0_f32)
     };
     overlay.window().set_size(slint::LogicalSize::new(w, h));
+    #[cfg(target_os = "linux")]
+    resize_wayland_bar(overlay, w as i32, h as i32, None);
+    #[cfg(not(target_os = "linux"))]
     recenter_when_sized(overlay.as_weak(), w, 0);
+}
+
+#[cfg(target_os = "linux")]
+fn resize_wayland_bar(
+    overlay: &OverlayBarWindow,
+    width: i32,
+    height: i32,
+    saved_position: Option<(i32, i32)>,
+) {
+    realize_with_retries(
+        overlay,
+        Rc::new(move |bar| {
+            // A newer toggle supersedes an outstanding realization timer.
+            if bar.get_compact_bar() != (width == 680) {
+                return true;
+            }
+            let Ok(hwnd) = grab_hwnd(bar.window()) else {
+                return false;
+            };
+            let monitors = enum_monitors();
+            let position = saved_position.filter(|p| super::pos_on_visible_monitor(*p, &monitors));
+            let (x, y) = if let Some(position) = position {
+                position
+            } else if let Some(monitor) =
+                monitors.iter().find(|m| m.is_primary).or(monitors.first())
+            {
+                (
+                    monitor.left + ((monitor.width() - width) / 2).max(0),
+                    monitor.top + 24,
+                )
+            } else {
+                return false;
+            };
+            if slint_replay::native::window::resize_move(hwnd.0, x, y, width, height).is_err() {
+                return false;
+            }
+            get_window_rect(hwnd).is_ok_and(|(_, _, w, h)| w == width && h == height)
+        }),
+        Rc::new(|_| diag!("[overlay-host] Wayland bar resize was not confirmed")),
+    );
 }
 
 /// Re-center the bar on the primary monitor for its NEW width — but only once the
@@ -139,6 +191,7 @@ pub(super) fn apply_bar_size(overlay: &OverlayBarWindow, compact: bool) {
 /// left-of-centre). Poll every 50 ms (≤ ~0.6 s) until the rect width matches the
 /// requested size in native geometry units (DPI-scaled pixels on Windows,
 /// logical points on macOS), then center by the ACTUAL width.
+#[cfg(not(target_os = "linux"))]
 fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f32, attempt: u32) {
     Timer::single_shot(Duration::from_millis(50), move || {
         let Some(o) = weak.upgrade() else { return };
@@ -150,7 +203,7 @@ fn recenter_when_sized(weak: slint::Weak<OverlayBarWindow>, target_w_logical: f3
         };
         #[cfg(windows)]
         let target_width = (target_w_logical * o.window().scale_factor()).round() as i32;
-        #[cfg(target_os = "macos")]
+        #[cfg(not(windows))]
         let target_width = target_w_logical.round() as i32;
         let cur_w = get_window_rect(hwnd).map(|(_, _, bw, _)| bw).unwrap_or(0);
         if (cur_w - target_width).abs() > 24 && attempt < 12 {
@@ -253,7 +306,9 @@ fn open_tray_menu(
         if set_skip_taskbar(hwnd, true).is_err() || set_always_on_top(hwnd, true).is_err() {
             return false;
         }
-        if global_stealth() && set_stealth(hwnd, true).is_err() {
+        if (global_stealth() || cfg!(target_os = "linux"))
+            && set_stealth(hwnd, global_stealth()).is_err()
+        {
             return false;
         }
         if move_window_pos_only(hwnd, x, y).is_err() {
@@ -284,6 +339,10 @@ pub(super) fn hide_bar_to_tray(weak: &slint::Weak<OverlayBarWindow>) {
         diag!("hide-to-tray ignored: notification icon failed: {e}");
         return;
     }
+    #[cfg(target_os = "linux")]
+    if let Ok((x, y, _, _)) = grab_hwnd(o.window()).and_then(get_window_rect) {
+        BAR_TRAY_POSITION.with(|position| position.set(Some((x, y))));
+    }
     let _ = o.hide();
     slint_replay::win32::force_hide(o.window());
     BAR_TRAY_HIDDEN.store(true, Ordering::Relaxed);
@@ -300,18 +359,34 @@ pub(super) fn restore_bar_from_tray(weak: &slint::Weak<OverlayBarWindow>) {
     BAR_TRAY_HIDDEN.store(false, Ordering::Relaxed);
     #[cfg(windows)]
     slint_replay::tray::hide_icon();
-    // Slint-side show first; the bar was SW_HIDE'd out from under Slint, so
-    // the Win32 re-show below is what actually makes it visible again (same
-    // stale-state reasoning as `win32::reveal_window`).
-    let _ = o.show();
-    if let Ok(hwnd) = grab_hwnd(o.window()) {
-        #[cfg(windows)]
-        let raw_h = hwnd.0 as isize;
-        #[cfg(not(windows))]
-        let raw_h = hwnd.0;
-        slint_replay::win32::show_windows(&[(raw_h, true)]);
+    #[cfg(target_os = "linux")]
+    {
+        let position = BAR_TRAY_POSITION.with(|p| p.get());
+        super::present_window_stealth_aware_at(&o, position, |hwnd| {
+            let _ = make_transparent_overlay(hwnd);
+            let _ = set_always_on_top(hwnd, true);
+        });
+        // Wayland remapping reapplies the compositor's initial full-bar size.
+        let width = if o.get_compact_bar() { 680 } else { 1280 };
+        resize_wayland_bar(&o, width, 64, position);
+        diag!("bar restored from tray (compact mode unchanged)");
+        return;
     }
-    diag!("bar restored from tray (compact mode unchanged)");
+    #[cfg(not(target_os = "linux"))]
+    {
+        // Slint-side show first; the bar was SW_HIDE'd out from under Slint, so
+        // the Win32 re-show below is what actually makes it visible again (same
+        // stale-state reasoning as `win32::reveal_window`).
+        let _ = o.show();
+        if let Ok(hwnd) = grab_hwnd(o.window()) {
+            #[cfg(windows)]
+            let raw_h = hwnd.0 as isize;
+            #[cfg(not(windows))]
+            let raw_h = hwnd.0;
+            slint_replay::win32::show_windows(&[(raw_h, true)]);
+        }
+        diag!("bar restored from tray (compact mode unchanged)");
+    }
 }
 
 /// — tray menu / icon actions, all routed through the EXISTING session
@@ -368,7 +443,22 @@ pub(super) fn tray_action_dispatch(
     }
 }
 
-pub(super) fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_replay::app_state::SharedState) {
+/// Window width in the units the platform positions windows in: physical
+/// pixels on Windows, logical (compositor) units on Wayland and macOS.
+fn platform_window_width(window: &slint::Window) -> i32 {
+    let width = window.size().width as f32;
+    let scale = if cfg!(windows) {
+        1.0
+    } else {
+        window.scale_factor().max(0.1)
+    };
+    (width / scale).round() as i32
+}
+
+pub(super) fn apply_overlay_hwnd(
+    overlay: &OverlayBarWindow,
+    state: &slint_replay::app_state::SharedState,
+) {
     // Поток C (stealth bar-flash fix) + I3: park the bar OFF the virtual desktop
     // synchronously NOW (this fn runs before overlay.run(), which composites the
     // window), ALWAYS — mirrors present_window_stealth_aware. Without parking the
@@ -415,7 +505,13 @@ pub(super) fn apply_overlay_hwnd(overlay: &OverlayBarWindow, state: &slint_repla
         // would be locked out). Compute the target with safe fallbacks
         // (primary monitor → its origin → (60, 24)) and ALWAYS move.
         let primary = enum_monitors().into_iter().find(|m| m.is_primary);
-        let bar_w = get_window_rect(hwnd).map(|(_, _, w, _)| w).unwrap_or(0);
+        // A failed or not-yet-sized compositor readback falls back to the
+        // bar's own size, so the centre never assumes a zero-width bar.
+        let bar_w = get_window_rect(hwnd)
+            .ok()
+            .map(|(_, _, w, _)| w)
+            .filter(|w| *w > 0)
+            .unwrap_or_else(|| platform_window_width(o.window()));
         let (x, y) = match primary {
             Some(p) => (p.left + ((p.width() - bar_w) / 2).max(0), p.top + 24),
             None => (60, 24),

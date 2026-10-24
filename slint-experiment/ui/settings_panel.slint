@@ -478,8 +478,8 @@ export component SettingsWindow inherits Window {
     in-out property <string> mic-test-result: "";
     callback mic-device-selected(string);
     callback mic-test-clicked();
-    // Windows only. Names stay raw; default is mapped by index, not its label.
-    out property <string> audio-default-label: @tr("Windows default");
+    // Names stay raw; default is mapped by index, not its translated label.
+    out property <string> audio-default-label: Platform.is-linux ? @tr("System default") : @tr("Windows default");
     in-out property <[string]> system-devices;
     in-out property <int> system-device-index: 0;
     in-out property <bool> audio-devices-loading: false;
@@ -1008,6 +1008,7 @@ export component SettingsWindow inherits Window {
                             Text {
                                 text: Platform.is-macos
                                     ? @tr("macOS has no public API that can hide the overlay from other screen-sharing apps. Suflyor only excludes its own windows from its own screenshots.")
+                                    : Platform.is-linux ? @tr("Uses Hyprland capture exclusion. Availability depends on the compositor and the sharing application.")
                                     : @tr("Hides the overlay from screen capture and sharing (Print Screen, Teams, Meet, OBS).");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-muted;
@@ -1498,7 +1499,9 @@ export component SettingsWindow inherits Window {
                         if !Platform.is-macos : SettingsCard {
                         title: @tr("Updates");
                         Text {
-                            text: @tr("Check GitHub for a newer release. If one is found you can download + install it in one click (the app restarts).");
+                            text: Platform.is-linux
+                                ? @tr("Check GitHub for a newer release. Open its release page to update the native Linux package. Your configuration and models are retained.")
+                                : @tr("Check GitHub for a newer release. If one is found you can download + install it in one click (the app restarts).");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -1516,7 +1519,7 @@ export component SettingsWindow inherits Window {
                             }
                             // Shown only when a newer release was found.
                             if root.update-available : Button {
-                                text: @tr("Update now");
+                                text: Platform.is-linux ? @tr("Open release page") : @tr("Update now");
                                 enabled: !root.update-checking;
                                 clicked => {
                                     root.install-update-clicked();
@@ -1578,7 +1581,7 @@ export component SettingsWindow inherits Window {
                         // servers, keeps local profiles/devices/UI/snippets.
                         // Import shows a redacted preview before applying.
                         Text {
-                            text: Platform.is-macos
+                            text: Platform.is-macos || Platform.is-linux
                                 ? @tr("Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in this user's local credentials file. Local UI, profiles, devices and snippets stay unchanged.")
                                 : @tr("Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in Windows Credential Manager on this PC. Local UI, profiles, devices and snippets stay unchanged.");
                             font-size: Metrics.font-caption;
@@ -1678,6 +1681,7 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: Platform.is-macos
                                 ? @tr("Microphone device selection. The list comes from the audio devices available to macOS.")
+                                : Platform.is-linux ? @tr("Pick the microphone. The list comes from PipeWire.")
                                 : @tr("Pick the microphone. The list comes from Windows.");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
@@ -1731,7 +1735,8 @@ export component SettingsWindow inherits Window {
                             }
                         }
                         if !Platform.is-macos && !root.audio-devices-loading && !root.audio-devices-failed && root.mic-device-missing : Text {
-                            text: @tr("Saved device is unavailable. Choose another device or Windows default.");
+                            text: Platform.is-linux ? @tr("Saved device is unavailable. Choose another device or system default.")
+                                : @tr("Saved device is unavailable. Choose another device or Windows default.");
                             font-size: Metrics.font-label;
                             color: Theme.warning;
                             wrap: word-wrap;
@@ -1759,7 +1764,9 @@ export component SettingsWindow inherits Window {
                         if !Platform.is-macos : SettingsCard {
                             title: @tr("System audio - headphones / speakers");
                             Text {
-                                text: @tr("Capture sound played through this device. Capture inputs also include headset mixes such as A50 Stream Out. This does not change Windows or read-aloud playback.");
+                                text: Platform.is-linux
+                                    ? @tr("Capture the selected PipeWire output monitor or input. This does not change system or read-aloud playback.")
+                                    : @tr("Capture sound played through this device. Capture inputs also include headset mixes such as A50 Stream Out. This does not change Windows or read-aloud playback.");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
@@ -1772,7 +1779,8 @@ export component SettingsWindow inherits Window {
                                 selected(val) => { root.system-device-selected(root.system-device-index); }
                             }
                             if !root.audio-devices-loading && !root.audio-devices-failed && root.system-device-missing : Text {
-                                text: @tr("Saved device is unavailable. Choose another device or Windows default.");
+                                text: Platform.is-linux ? @tr("Saved device is unavailable. Choose another device or system default.")
+                                    : @tr("Saved device is unavailable. Choose another device or Windows default.");
                                 font-size: Metrics.font-label;
                                 color: Theme.warning;
                                 wrap: word-wrap;
@@ -2566,7 +2574,7 @@ export component SettingsWindow inherits Window {
                                 SettingsLineEdit { placeholder-text: @tr("paste OpenAI API key"); text <=> root.openai-key-input; input-type: password; horizontal-stretch: 1; }
                                 Button { text: @tr("Save"); clicked => { root.openai-key-save(root.openai-key-input); root.openai-key-input = ""; } }
                             }
-                            Text { text: Platform.is-macos
+                            Text { text: Platform.is-macos || Platform.is-linux
                                 ? @tr("Stored in a user-only local credentials file and excluded from configuration exports.")
                                 : @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                             HorizontalLayout {
@@ -2623,7 +2631,7 @@ export component SettingsWindow inherits Window {
                                 SettingsLineEdit { placeholder-text: @tr("paste Anthropic API key"); text <=> root.anthropic-key-input; input-type: password; horizontal-stretch: 1; }
                                 Button { text: @tr("Save"); clicked => { root.anthropic-key-save(root.anthropic-key-input); root.anthropic-key-input = ""; } }
                             }
-                            Text { text: Platform.is-macos
+                            Text { text: Platform.is-macos || Platform.is-linux
                                 ? @tr("Stored in a user-only local credentials file and excluded from configuration exports.")
                                 : @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                             HorizontalLayout {
@@ -4050,7 +4058,13 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
-                        if root.stt-provider-index == 1 : DarkCheck {
+                        if root.stt-provider-index == 1 && Platform.is-linux : Text {
+                            text: @tr("GigaAM uses the native ONNX Runtime CPU backend on Linux.");
+                            font-size: Metrics.font-caption;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        if root.stt-provider-index == 1 && !Platform.is-linux : DarkCheck {
                             text: Platform.is-macos
                                 ? @tr("Use Apple Core ML — faster on Apple Silicon")
                                 : @tr("Use GPU (DirectML) — faster on long audio, ~1s warm-up on first use");
@@ -4196,19 +4210,17 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        HorizontalLayout {
-                            spacing: Metrics.space-sm;
-                            Button {
-                                text: @tr("Extract from recent sessions");
-                                clicked => { root.memory-extract(); }
-                            }
-                            if root.memory-status != "" : Text {
-                                text: root.memory-status;
-                                horizontal-stretch: 0;
-                                font-size: Metrics.font-label;
-                                color: Theme.accent;
-                                vertical-alignment: center;
-                            }
+                        Button {
+                            text: @tr("Extract from recent sessions");
+                            clicked => { root.memory-extract(); }
+                        }
+                        // Own line under the button, so the button keeps the card width and a
+                        // long status (a failed save) wraps instead of widening the card.
+                        if root.memory-status != "" : Text {
+                            text: root.memory-status;
+                            font-size: Metrics.font-label;
+                            color: Theme.accent;
+                            wrap: word-wrap;
                         }
 
                         Text {

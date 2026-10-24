@@ -589,7 +589,8 @@ pub async fn normalize_fact(
     //   heuristic text, mark terminal), else the row would stick 'pending' FOREVER and be re-hammered
     //   on every sweep trigger for an error retry can't fix — and a permanent-error row at the head of
     //   the queue would break the whole sweep, starving the retryable rows behind it.
-    let resp = match ai::complete(base_url, bearer, model, messages, 500).await {
+    let request = ai::complete(base_url, bearer, model, messages, 500);
+    let resp = match ai::with_priority(ai::AiPriority::Background, request).await {
         Ok(r) => r,
         Err(e) if ai::is_permanent_ai_error(&format!("{e:#}")) => return Ok(None),
         Err(e) => return Err(e),

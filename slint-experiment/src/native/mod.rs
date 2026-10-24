@@ -11,13 +11,31 @@ pub mod clipboard;
 #[path = "macos/clipboard.rs"]
 pub mod clipboard;
 
+#[cfg(target_os = "linux")]
+#[path = "linux/clipboard.rs"]
+pub mod clipboard;
+
+#[cfg(target_os = "linux")]
+#[path = "linux/desktop.rs"]
+pub mod desktop;
+#[cfg(target_os = "linux")]
+#[path = "linux/screen.rs"]
+pub mod screen;
+#[cfg(target_os = "linux")]
+#[path = "linux/window.rs"]
+pub mod window;
+
 #[cfg(windows)]
 #[path = "windows/lifecycle.rs"]
 pub mod lifecycle;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[path = "macos/lifecycle.rs"]
 pub mod lifecycle;
+
+#[cfg(target_os = "linux")]
+#[path = "linux/status.rs"]
+pub mod status;
 
 #[cfg(target_os = "macos")]
 #[path = "macos/status.rs"]

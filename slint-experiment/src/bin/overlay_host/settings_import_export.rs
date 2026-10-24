@@ -81,7 +81,7 @@ pub(crate) fn wire_import_export(
                             // Generic + log: the error chain can carry a path /
                             // internals into this screen-shared field (audit Q8).
                             eprintln!("[overlay-host] server export failed: {e:#}");
-                            if ru { "Экспорт не удался, подробности в журнале" } else { "Export failed, details are in the log" }.to_string()
+                            if ru { "Серверные настройки не экспортированы: в эту папку не удалось записать файл. Выберите другую папку и нажмите «Экспортировать серверные настройки» ещё раз." } else { "Server settings not exported: the file could not be written to that folder. Choose another folder, then press Export server settings again." }.to_string()
                         }
                     }
                 }
@@ -129,9 +129,9 @@ pub(crate) fn wire_import_export(
                     w.set_server_preview_ready(false);
                     eprintln!("[overlay-host] server import preview failed: {e:#}");
                     w.set_profile_io_result(SharedString::from(if ru {
-                        "Не удалось прочитать файл, подробности в журнале"
+                        "Серверные настройки не прочитаны: файл не читается или это не экспорт настроек Суфлёра. Выберите экспортированный .json и нажмите «Импортировать серверные настройки» ещё раз."
                     } else {
-                        "Could not read the file, details are in the log"
+                        "Server settings not read: the file cannot be read or is not a Suflyor settings export. Pick the exported .json file, then press Import server settings again."
                     }));
                 }
             }
@@ -171,7 +171,7 @@ pub(crate) fn wire_import_export(
                 }
                 Err(e) => {
                     eprintln!("[overlay-host] server settings apply/save failed: {e:#}");
-                    if ru { "Не удалось применить, подробности в журнале" } else { "Could not apply, details are in the log" }.to_string()
+                    if ru { "Серверные настройки не применены: не удалось сохранить файл настроек приложения. Проверьте свободное место на диске и нажмите «Импортировать серверные настройки» ещё раз." } else { "Server settings not applied: the app's settings file could not be saved. Check free disk space, then press Import server settings again." }.to_string()
                 }
             };
             w.set_profile_io_result(SharedString::from(msg));
@@ -234,7 +234,7 @@ pub(crate) fn apply_server_preview(
     win.set_server_preview_stt(SharedString::from(line(&p.stt)));
     // GigaAM local model path: kept from THIS PC on apply. Show the incoming
     // path only when one side carries it, to keep the line useful.
-    // SECURITY: Redact user home directory paths (→ %USERPROFILE%) so screen-sharing
+    // SECURITY: Redact user home directory paths (→ %USERPROFILE% or ~) so screen-sharing
     // or copying the Settings preview never leaks the OS username (C:\Users\<name> or /Users/<name>).
     let gig = if p.gigaam_dir_incoming.trim().is_empty() && p.gigaam_dir_current.trim().is_empty() {
         String::new()
@@ -250,7 +250,7 @@ pub(crate) fn apply_server_preview(
 
 #[cfg(test)]
 mod tests {
-    use super::super::diagnostics::redact_user_home;
+    use super::super::diagnostics::{redact_user_home, HOME_PLACEHOLDER};
 
     #[test]
     fn gigaam_preview_path_redacts_user_home_directory() {
@@ -264,6 +264,6 @@ mod tests {
             !redacted.contains("alice"),
             "leaked OS username in preview: {redacted}"
         );
-        assert!(redacted.contains("%USERPROFILE%"));
+        assert!(redacted.contains(HOME_PLACEHOLDER));
     }
 }

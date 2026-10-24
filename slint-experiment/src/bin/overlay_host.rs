@@ -15,10 +15,10 @@ mod ui {
     slint::include_modules!();
 }
 
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 include!("overlay_host_windows.rs");
 
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     Err("overlay-host is not supported on this platform".into())
 }

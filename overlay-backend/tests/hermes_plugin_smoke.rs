@@ -19,7 +19,7 @@ fn install_into_scratch_hermes_home() {
     let status =
         overlay_backend::hermes_install::install_plugin("http://127.0.0.1:8654", "smoke-token-123")
             .expect("install_plugin failed");
-    println!("status: {status}");
+    println!("status: {status:?}");
 
     let root = std::path::Path::new(&home);
     let yaml = std::fs::read_to_string(root.join("plugins/suflyor/plugin.yaml"))
@@ -37,8 +37,10 @@ fn install_into_scratch_hermes_home() {
     let again =
         overlay_backend::hermes_install::install_plugin("http://127.0.0.1:8654", "smoke-token-123")
             .expect("re-install failed");
-    println!("again: {again}");
-    assert!(again.contains("уже включён"));
+    assert_eq!(
+        again,
+        overlay_backend::hermes_install::PluginInstalled::Updated
+    );
 
     // «Взять ключ из локального Hermes»: first run creates api_server+key,
     // second run reads the SAME key back without touching the file.

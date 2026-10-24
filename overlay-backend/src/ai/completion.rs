@@ -1,6 +1,6 @@
 use super::control::{
     apply_local_no_think, apply_managed_gemma_sampler, apply_prompt_cache, apply_reasoning_effort,
-    http_client, resolve_managed_mlx_endpoint, transport_failure_kind, AI_SEMAPHORE, PROMPT_CACHE,
+    http_client, resolve_managed_mlx_endpoint, transport_failure_kind, PROMPT_CACHE,
 };
 use super::pricing::TokenUsage;
 use super::provider;
@@ -145,10 +145,9 @@ pub(crate) async fn complete_with_usage_inner(
 ) -> Result<(String, TokenUsage)> {
     check_deep_lock(base_url)?;
     // Keep the permit through retries, as in v0.38.0.
-    let _permit = AI_SEMAPHORE
-        .acquire()
+    let _permit = super::queue::acquire()
         .await
-        .map_err(|_| anyhow!("AI request queue closed"))?;
+        .map_err(|_| anyhow!("AI request replaced by a newer one"))?;
     complete_with_usage_unlocked(
         protocol,
         base_url,

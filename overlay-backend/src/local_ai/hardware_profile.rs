@@ -1,7 +1,9 @@
 #[cfg(windows)]
 use std::path::PathBuf;
 
-use super::{run_capture, GIB};
+use super::run_capture;
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
+use super::GIB;
 
 /// Confirmed hardware matrix supplied by the owner. Values outside the matrix
 /// remain unknown; they are never rounded into a stronger profile.
@@ -162,6 +164,16 @@ pub(super) enum GpuKind {
 /// cheap `nvidia-smi`; only a non-NVIDIA machine pays the WMI query for an AMD /
 /// Intel adapter (Vulkan). No detectable GPU → CPU.
 pub(super) fn detect_gpu() -> GpuKind {
+    #[cfg(target_os = "linux")]
+    {
+        if detect_nvidia() {
+            GpuKind::Nvidia
+        } else if has_real_vulkan_device() {
+            GpuKind::Other
+        } else {
+            GpuKind::None
+        }
+    }
     #[cfg(target_os = "macos")]
     {
         GpuKind::Other // Metal GPU acceleration on macOS / Apple Silicon
@@ -176,6 +188,32 @@ pub(super) fn detect_gpu() -> GpuKind {
             GpuKind::None
         }
     }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+    {
+        GpuKind::None
+    }
+}
+
+/// True if a real Vulkan device is enumerated on Linux, not merely the presence
+/// of a loader library.
+#[cfg(target_os = "linux")]
+pub(super) fn has_real_vulkan_device() -> bool {
+    let out = run_capture("vulkaninfo", &["--summary"]).or_else(|_| run_capture("vulkaninfo", &[]));
+    let Ok(out) = out else {
+        return false;
+    };
+    if !out.status.success() {
+        return false;
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let lower = text.to_lowercase();
+    let is_software = lower.contains("llvmpipe") || lower.contains("lavapipe");
+    let has_device = text.contains("GPU0")
+        || text.contains("PHYSICAL_DEVICE_TYPE_DISCRETE_GPU")
+        || text.contains("PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU")
+        || text.contains("deviceName")
+        || text.contains("deviceType");
+    has_device && !is_software
 }
 
 /// True if the Vulkan loader (`vulkan-1.dll`) is present in System32 — required for
@@ -273,7 +311,20 @@ pub(super) fn detect_system_ram_gib() -> Option<u64> {
             .ok()
             .map(|bytes| bytes.div_ceil(GIB))
     }
-    #[cfg(not(any(windows, target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
+        for line in meminfo.lines() {
+            if let Some(rest) = line.strip_prefix("MemTotal:") {
+                let kb_str = rest.trim().split_whitespace().next()?;
+                let kb = kb_str.parse::<u64>().ok()?;
+                let bytes = kb.checked_mul(1024)?;
+                return Some(bytes.div_ceil(GIB));
+            }
+        }
+        None
+    }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     None
 }
 
@@ -295,6 +346,17 @@ pub(super) fn detected_hardware_model_profile(force_cpu: bool) -> HardwareModelP
         );
         hardware_profile_from_discovery(force_cpu, raw_vram, raw_ram)
     }
+    #[cfg(target_os = "linux")]
+    {
+        let raw_vram = detect_nvidia_vram_gib();
+        let raw_ram = detect_system_ram_gib();
+        log::info!(
+            "local-ai hardware discovery: raw_vram_gib={raw_vram:?} raw_ram_gib={raw_ram:?}"
+        );
+        hardware_profile_from_discovery(force_cpu, raw_vram, raw_ram)
+    }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+    HardwareModelProfile::Unknown
 }
 
 /// Detect whether this machine is currently in the confirmed 26B-A4B matrix.

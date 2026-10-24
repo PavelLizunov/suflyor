@@ -114,19 +114,32 @@ mod tests {
         assert!(!AskRoute::Text.has_required_auth(&config));
         assert!(!AskRoute::Cloud.has_required_auth(&config));
         config.codex_model = "gpt-safe".into();
-        assert_eq!(AskRoute::Text.has_required_auth(&config), cfg!(windows));
-        assert_eq!(AskRoute::Cloud.has_required_auth(&config), cfg!(windows));
+        assert_eq!(
+            AskRoute::Text.has_required_auth(&config),
+            cfg!(any(windows, target_os = "linux"))
+        );
+        assert_eq!(
+            AskRoute::Cloud.has_required_auth(&config),
+            cfg!(any(windows, target_os = "linux"))
+        );
         for route in [AskRoute::Text, AskRoute::Cloud] {
             let endpoint = route.endpoint(&config);
             assert_eq!(
                 endpoint.protocol,
-                if cfg!(windows) {
+                if cfg!(any(windows, target_os = "linux")) {
                     overlay_backend::ai::AiProtocol::CodexSubscription
                 } else {
                     overlay_backend::ai::AiProtocol::OpenAiCompatible
                 }
             );
-            assert_eq!(endpoint.model, if cfg!(windows) { "gpt-safe" } else { "" });
+            assert_eq!(
+                endpoint.model,
+                if cfg!(any(windows, target_os = "linux")) {
+                    "gpt-safe"
+                } else {
+                    ""
+                }
+            );
             assert!(endpoint.base_url.is_empty());
             assert!(endpoint.bearer.is_empty());
         }

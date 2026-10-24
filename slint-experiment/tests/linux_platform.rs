@@ -1,0 +1,123 @@
+//! Explicit boundaries of the experimental Wayland port.
+#![cfg(target_os = "linux")]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+#[test]
+fn unavailable_native_features_do_not_fabricate_success() {
+    assert!(slint_replay::win32::stealth_supported());
+    assert!(slint_replay::win32::set_stealth(slint_replay::win32::HWND(0), true).is_err());
+    // Real monitor/capture adapters are exercised only in the live Wayland checks.
+    // This headless guard keeps the unimplemented exclusion boundary explicit.
+}
+
+#[test]
+fn remapped_windows_keep_the_application_id_and_first_frame_protection() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let host = std::fs::read_to_string(root.join("src/bin/overlay_host_windows.rs")).unwrap();
+    let rules = std::fs::read_to_string(root.join("../scripts/suflyor-hyprland.lua")).unwrap();
+    assert!(host.contains("slint::set_xdg_app_id(\"suflyor\")?"));
+    let application = rules.split_once("name = \"suflyor-native-app\"").unwrap().1;
+    let application = application.split_once("})").unwrap().0;
+    assert!(application.contains("class = \"^suflyor$\""));
+    assert!(application.contains("no_screen_share = true"));
+    let lifecycle =
+        std::fs::read_to_string(root.join("src/bin/overlay_host/window_lifecycle.rs")).unwrap();
+    assert!(lifecycle.contains("realize_wayland_window(win, attempt, fallback, 50)"));
+    assert!(lifecycle.contains("if !window.window().is_visible() || attempt(&window)"));
+    assert!(lifecycle.contains("remaining - 1"));
+    assert!(lifecycle.contains("global_stealth() || cfg!(target_os = \"linux\")"));
+    assert!(lifecycle.contains("hwnd, global_stealth()"));
+    // Tiles set the exclusion in the same compositor request as their move.
+    let tile = std::fs::read_to_string(root.join("src/bin/overlay_host/tile_window.rs")).unwrap();
+    assert!(tile.contains("let stealth = global_stealth();"));
+    assert!(tile.contains("native::window::arrange(hwnd.0, x, y, stealth)"));
+    let window = std::fs::read_to_string(root.join("src/native/linux/window.rs")).unwrap();
+    assert!(window.contains("prop=\\\"no_screen_share\\\""));
+}
+
+#[test]
+fn question_rule_matches_the_rendered_size_before_saved_position_restore() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let rules = std::fs::read_to_string(root.join("../scripts/suflyor-hyprland.lua")).unwrap();
+    let question = rules
+        .split_once("name = \"suflyor-native-question\"")
+        .unwrap()
+        .1;
+    let question = question.split_once("})").unwrap().0;
+    assert!(question.contains("size = \"480 98\""));
+    assert!(!question.contains("size = \"480 112\""));
+}
+
+#[test]
+fn compositor_reload_restores_bindings_and_refreshes_diagnostics() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let desktop = std::fs::read_to_string(root.join("src/native/linux/desktop.rs")).unwrap();
+    let hotkeys = std::fs::read_to_string(root.join("src/bin/overlay_host/hotkeys.rs")).unwrap();
+    assert!(desktop.contains(".socket2.sock"));
+    assert!(desktop.contains("b\"configreloaded>>\""));
+    assert!(hotkeys.contains("\"config-reloaded\" =>"));
+    assert!(hotkeys.contains("Some(wayland_hotkey_diag())"));
+    assert!(desktop.contains("bind[\"description\"].as_str() != Some(&owner)"));
+    assert!(desktop.contains("[(64, \"SUPER\"), (1, \"SHIFT\"), (4, \"CTRL\"), (8, \"ALT\")]"));
+}
+
+#[test]
+fn manual_requests_share_session_boundary_cancellation_without_superseding_each_other() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let asks = std::fs::read_to_string(root.join("src/bin/overlay_host/tile_ask.rs")).unwrap();
+    let ptt = std::fs::read_to_string(root.join("src/bin/overlay_host/tile_ptt.rs")).unwrap();
+    let session = std::fs::read_to_string(root.join("src/slint_session.rs")).unwrap();
+    assert_eq!(asks.matches("until_session_changes(").count(), 2);
+    assert!(ptt.contains("until_session_changes(scope, request)"));
+    assert_eq!(session.matches("s.cancel_session_requests();").count(), 2);
+    assert_eq!(asks.matches("if s.session_gen != session_gen").count(), 2);
+}
+
+#[test]
+fn managed_stop_uses_private_quit_and_waits_for_its_main_process() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let installer = std::fs::read_to_string(root.join("../scripts/install-linux.sh")).unwrap();
+    assert!(installer.contains("ExecStop=\"%s\""));
+    assert!(installer.contains("{host} --command quit 2>/dev/null || exit 0"));
+    assert!(installer.contains("kill -0 \"$MAINPID\""));
+    assert!(installer.contains("\"$prefix/stop\""));
+}
+
+#[test]
+fn native_identity_does_not_keep_a_recreated_window_address_claimed() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source = std::fs::read_to_string(root.join("src/native/linux/window.rs")).unwrap();
+    assert!(source.contains("native: Weak<slint::winit_030::winit::window::Window>"));
+    assert!(source.contains("v.native.strong_count() > 0"));
+    assert_eq!(source.matches("native: Arc::downgrade(&native)").count(), 2);
+}
+
+#[test]
+fn bar_size_uses_compositor_resize_with_stale_toggle_cancellation() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source = std::fs::read_to_string(root.join("src/bin/overlay_host/bar_tray.rs")).unwrap();
+    assert!(source.contains("resize_wayland_bar(overlay, w as i32, h as i32, None)"));
+    assert!(source.contains("if bar.get_compact_bar() != (width == 680)"));
+    assert!(
+        source.contains("slint_replay::native::window::resize_move(hwnd.0, x, y, width, height)")
+    );
+    assert!(source.contains("w == width && h == height"));
+    assert!(source.contains("resize_wayland_bar(&o, width, 64, position)"));
+    assert!(source.contains("super::pos_on_visible_monitor(*p, &monitors)"));
+}
+
+#[test]
+#[ignore = "requires an isolated live Wayland worker clipboard"]
+fn wayland_clipboard_round_trip() {
+    use slint_replay::native::clipboard;
+    let saved = clipboard::read_text();
+    let text = "Suflyor Wayland clipboard test 123";
+    let write = clipboard::set_text(text);
+    let read = clipboard::read_text();
+    match saved {
+        Some(saved) => clipboard::write_text(&saved),
+        None => clipboard::clear(),
+    }
+    assert!(write.is_ok());
+    assert_eq!(read.as_deref(), Some(text));
+}

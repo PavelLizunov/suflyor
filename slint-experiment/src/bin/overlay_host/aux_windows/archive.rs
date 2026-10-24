@@ -899,15 +899,14 @@ pub(super) fn spawn_content_tile(
     let weak_overlay_close = weak_overlay.clone();
     tile.on_close_clicked(move || {
         if let Some(t) = weak_tile.upgrade() {
-            let close_hwnd = grab_hwnd(t.window()).ok();
+            crate::abort_tile_stream(t.get_tile_id());
+            let sequence = t.get_sequence();
             let _ = t.hide();
             slint_replay::win32::force_hide(t.window());
-            if let Some(target) = close_hwnd {
-                vec_for_close
-                    .borrow_mut()
-                    .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
-                refresh_open_tiles(&weak_overlay_close, &vec_for_close);
-            }
+            vec_for_close
+                .borrow_mut()
+                .retain(|item| item.get_sequence() != sequence);
+            refresh_open_tiles(&weak_overlay_close, &vec_for_close);
         }
     });
     let weak_pin = tile.as_weak();
@@ -938,7 +937,12 @@ pub(super) fn spawn_content_tile(
 /// A line the archive shows above the list until the next search or action.
 /// (`retranscribe-status` is drawn only while a job runs, so a message for a
 /// request that could not start has to go here to be seen.)
-fn show_notice(win: &ArchiveWindow, cfg: &overlay_backend::config::SharedConfig, en: &str, ru: &str) {
+fn show_notice(
+    win: &ArchiveWindow,
+    cfg: &overlay_backend::config::SharedConfig,
+    en: &str,
+    ru: &str,
+) {
     let text = if cfg.read().ui_is_ru() { ru } else { en };
     win.set_notice(SharedString::from(text));
 }

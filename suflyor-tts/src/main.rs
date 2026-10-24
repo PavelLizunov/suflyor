@@ -18,10 +18,10 @@ mod diar;
 mod engine;
 #[cfg(windows)]
 mod playback;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[path = "playback_macos.rs"]
 mod playback;
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 #[path = "playback_unavailable.rs"]
 mod playback;
 
@@ -69,6 +69,16 @@ impl PlaybackSpeed {
     fn factor(self) -> f32 {
         self.0 as f32 / 100.0
     }
+}
+
+#[cfg(not(windows))]
+fn playback_failed(pb: &Playback) -> bool {
+    pb.failed()
+}
+
+#[cfg(windows)]
+fn playback_failed(_pb: &Playback) -> bool {
+    false
 }
 
 fn take_finished_playback<P>(current: &mut Option<(u64, P)>, id: u64) -> Option<P> {
@@ -296,8 +306,13 @@ fn worker(rx: mpsc::Receiver<Message>, events: mpsc::Sender<Message>) {
             }
             Some(Message::PlaybackDone(id)) => {
                 if let Some(pb) = take_finished_playback(&mut current, id) {
+                    let failed = playback_failed(&pb);
                     pb.stop();
-                    emit_playback_event(&mut out, "DONE", id);
+                    if failed {
+                        emit_playback_failure(&mut out, id, "playback");
+                    } else {
+                        emit_playback_event(&mut out, "DONE", id);
+                    }
                 }
             }
             Some(Message::Shutdown) => break,
@@ -389,6 +404,23 @@ mod tests {
         assert_eq!(take_finished_playback(&mut current, 6), None);
         assert_eq!(take_finished_playback(&mut current, 7), Some("player"));
         assert_eq!(take_finished_playback(&mut current, 7), None);
+    }
+
+    #[test]
+    fn emit_playback_failure_formats_playback_error() {
+        let mut out = Vec::new();
+        emit_playback_failure(&mut out, 1, "playback");
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            "FAILED id=1 reason=playback\n"
+        );
+    }
+
+    #[test]
+    fn emit_playback_done_formats_done_event() {
+        let mut out = Vec::new();
+        emit_playback_event(&mut out, "DONE", 1);
+        assert_eq!(String::from_utf8(out).unwrap(), "DONE id=1\n");
     }
 
     #[test]

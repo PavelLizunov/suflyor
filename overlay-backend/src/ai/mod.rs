@@ -9,6 +9,7 @@ pub mod local_server;
 pub mod pricing;
 pub mod prompt;
 pub(crate) mod provider;
+pub mod queue;
 pub mod stream;
 pub mod tools;
 pub mod tps;
@@ -24,6 +25,7 @@ pub use self::control::{
 pub use self::inspect::*;
 pub use self::pricing::*;
 pub use self::prompt::*;
+pub use self::queue::{with_priority, AiPermit, AiPriority, SUPERSEDED_REASON};
 pub use self::stream::*;
 pub use self::tools::set_agent_tools;
 pub use self::tps::{avg_tps, clear_request_perf, latest_request_perf, record_tps, RequestPerf};

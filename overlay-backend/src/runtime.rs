@@ -139,7 +139,8 @@ pub async fn run_post_meeting_debrief(
             content: ai::MessageContent::Text(mic_text),
         },
     ];
-    let answer = match ai::complete_endpoint(&endpoint, messages, 1024).await {
+    let request = ai::complete_endpoint(&endpoint, messages, 1024);
+    let answer = match ai::with_priority(ai::AiPriority::Background, request).await {
         Ok(text) => text,
         Err(e) => {
             log::warn!("post-meeting debrief AI call failed: {e:#}");
@@ -435,7 +436,7 @@ pub async fn retry_meeting_summary(
 }
 
 struct ManagedPrepSession {
-    _ai: tokio::sync::SemaphorePermit<'static>,
+    _ai: ai::AiPermit,
     _lifecycle: tokio::sync::OwnedSemaphorePermit,
     root: std::path::PathBuf,
     model: crate::local_ai::ManagedModel,
@@ -589,19 +590,16 @@ async fn summary_complete(
     if exclusive {
         ai::complete_exclusive(base_url, bearer, model, messages, max_tokens).await
     } else {
-        ai::complete_endpoint(
-            &ai::AiEndpoint {
-                protocol,
-                base_url: base_url.to_string(),
-                bearer: bearer.to_string(),
-                model: model.to_string(),
-                reasoning_effort: None,
-                is_local: false,
-            },
-            messages,
-            max_tokens,
-        )
-        .await
+        let endpoint = ai::AiEndpoint {
+            protocol,
+            base_url: base_url.to_string(),
+            bearer: bearer.to_string(),
+            model: model.to_string(),
+            reasoning_effort: None,
+            is_local: false,
+        };
+        let request = ai::complete_endpoint(&endpoint, messages, max_tokens);
+        ai::with_priority(ai::AiPriority::Background, request).await
     }
 }
 

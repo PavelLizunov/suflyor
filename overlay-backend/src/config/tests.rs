@@ -720,7 +720,7 @@ fn codex_subscription_profile_round_trips_selected_model_without_secrets() {
     let endpoint = cfg.ai_endpoint(false);
     assert_eq!(
         endpoint.protocol,
-        if cfg!(windows) {
+        if cfg!(any(windows, target_os = "linux")) {
             crate::ai::AiProtocol::CodexSubscription
         } else {
             crate::ai::AiProtocol::OpenAiCompatible
@@ -728,11 +728,19 @@ fn codex_subscription_profile_round_trips_selected_model_without_secrets() {
     );
     assert_eq!(
         endpoint.model,
-        if cfg!(windows) { "gpt-5.4-codex" } else { "" }
+        if cfg!(any(windows, target_os = "linux")) {
+            "gpt-5.4-codex"
+        } else {
+            ""
+        }
     );
     assert_eq!(
         endpoint.reasoning_effort.as_deref(),
-        if cfg!(windows) { Some("xhigh") } else { None }
+        if cfg!(any(windows, target_os = "linux")) {
+            Some("xhigh")
+        } else {
+            None
+        }
     );
     assert!(endpoint.base_url.is_empty());
     assert!(endpoint.bearer.is_empty());
@@ -740,7 +748,7 @@ fn codex_subscription_profile_round_trips_selected_model_without_secrets() {
     let cloud_endpoint = cfg.ai_endpoint_cloud();
     assert_eq!(
         cloud_endpoint.protocol,
-        if cfg!(windows) {
+        if cfg!(any(windows, target_os = "linux")) {
             crate::ai::AiProtocol::CodexSubscription
         } else {
             crate::ai::AiProtocol::OpenAiCompatible
@@ -924,7 +932,7 @@ fn vision_endpoint_same_uses_only_catalog_confirmed_codex_model() {
     d.ai_provider = "codex".into();
     d.codex_model = "gpt-image".into();
     d.codex_vision_model = "gpt-image".into();
-    if cfg!(windows) {
+    if cfg!(any(windows, target_os = "linux")) {
         let endpoint = d.vision_endpoint().expect("confirmed same Codex model");
         assert_eq!(endpoint.protocol, crate::ai::AiProtocol::CodexSubscription);
         assert_eq!(endpoint.model, "gpt-image");
@@ -980,7 +988,7 @@ fn vision_endpoint_codex_requires_an_explicit_image_capable_selection() {
     d.vision_provider = "codex".into();
     assert!(d.vision_endpoint().is_none());
     d.codex_vision_model = "gpt-account-vision".into();
-    if !cfg!(windows) {
+    if !cfg!(any(windows, target_os = "linux")) {
         assert!(d.vision_endpoint().is_none());
         assert!(!d.readiness().vision.configured);
         return;

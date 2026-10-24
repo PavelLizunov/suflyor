@@ -3,18 +3,18 @@ use std::rc::Rc;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
+use crate::ui::{OverlayBarWindow, TileWindow};
 use overlay_backend::ai;
 use overlay_backend::events::RuntimeEvents;
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, VecModel};
 use slint_replay::runtime_state::SharedSlintRuntime;
 use slint_replay::win32::grab_hwnd;
-use crate::ui::{OverlayBarWindow, TileWindow};
 
 use super::{
     apply_tile_hwnd_with_monitor, fire_followup_ask, live_route, present_tile_window,
     refresh_open_tiles, speak_explicit, stop_if_speaking, to_md_blocks, toggle_tile_maximize,
     user_turn_markdown, wire_copy, wire_speak, wire_tile_drag, wire_voice_followup, AskRoute,
-    ConvoState, OverlayBarBridge, TILE_DISPLAY_SEQ, CONVO_SEQ, TileWindows,
+    ConvoState, OverlayBarBridge, TileWindows, CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
 
 thread_local! {
@@ -92,16 +92,15 @@ pub(super) fn spawn_text_tile(
         let bridge_for_close = bridge.clone();
         tile.on_close_clicked(move || {
             if let Some(t) = weak_close.upgrade() {
+                bridge_for_close.cancel_tile_request(&t);
                 stop_if_speaking(t.get_convo_id());
-                let close_hwnd = grab_hwnd(t.window()).ok();
+                let sequence = t.get_sequence();
                 let _ = t.hide();
                 slint_replay::win32::force_hide(t.window());
-                if let Some(target) = close_hwnd {
-                    vec_for_close
-                        .borrow_mut()
-                        .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
-                    refresh_open_tiles(&weak_overlay_close, &vec_for_close);
-                }
+                vec_for_close
+                    .borrow_mut()
+                    .retain(|item| item.get_sequence() != sequence);
+                refresh_open_tiles(&weak_overlay_close, &vec_for_close);
                 let replaced = LAST_CLOSED_READ_TILE.with(|slot| slot.borrow_mut().replace(t));
                 if let Some(old) = replaced {
                     bridge_for_close.drop_conversation(old.get_convo_id());

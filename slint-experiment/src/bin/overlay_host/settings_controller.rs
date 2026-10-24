@@ -47,17 +47,17 @@
 mod settings_mlx {
     include!("settings_mlx.rs");
 }
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 #[path = "settings_audio.rs"]
 mod settings_audio;
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 use super::open_wizard;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 use super::wire_local_ai;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 use super::wire_strata;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 use super::wire_updates;
 use super::{
     active_stack_label, ai, apply_bar_stealth, apply_scheme_bar, apply_scheme_settings, audio,
@@ -65,13 +65,13 @@ use super::{
     global_stealth_effective, grab_hwnd, invalidate_codex_snapshot_ui, make_transparent_tile,
     parse_tile_monitor_pin, populate_diagnostics, present_window_stealth_aware,
     preset_for_tts_rate, refresh_codex_account_status, refresh_local_context_controls,
-    refresh_local_engine_controls,
-    refresh_local_model_resource_warning, set_always_on_top, set_global_scheme, set_global_stealth,
-    set_global_tile_monitor, set_global_tile_opacity, spawn_ptt_watchdog, stt, stt_provider_index,
-    try_acquire_mic, ui, wire_ai_settings, wire_diagnostics, wire_import_export, wire_memory,
-    wire_stt_settings, wire_vision_settings, wire_voice_settings, Arc, AtomicBool, ComponentHandle,
-    ComponentRow, ModelRc, ModelTarget, Ordering, OverlayBarWindow, Rc, RefCell, SettingsWindow,
-    SharedString, TileWindows, VecModel, WindowRegistry,
+    refresh_local_engine_controls, refresh_local_model_resource_warning, set_always_on_top,
+    set_global_scheme, set_global_stealth, set_global_tile_monitor, set_global_tile_opacity,
+    spawn_ptt_watchdog, stt, stt_provider_index, try_acquire_mic, ui, wire_ai_settings,
+    wire_diagnostics, wire_import_export, wire_memory, wire_stt_settings, wire_vision_settings,
+    wire_voice_settings, Arc, AtomicBool, ComponentHandle, ComponentRow, ModelRc, ModelTarget,
+    Ordering, OverlayBarWindow, Rc, RefCell, SettingsWindow, SharedString, TileWindows, VecModel,
+    WindowRegistry,
 };
 
 pub(crate) fn ai_provider_index(provider: &str, is_macos: bool) -> i32 {
@@ -110,7 +110,7 @@ pub(crate) fn open_settings(
         // Refresh token status + profiles — config might have changed since last open.
         reset_component_install_state(existing);
         populate_token_status(existing, cfg);
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "linux"))]
         settings_audio::refresh(existing, cfg);
         {
             let snap = cfg.read();
@@ -127,10 +127,10 @@ pub(crate) fn open_settings(
             refresh_profiles(existing, &snap);
             populate_component_rows(existing, &snap);
         }
-        // An early close may cancel the first reveal while still parked.
-        // Re-enter presentation instead of re-showing it off the desktop.
+        // Wayland hide recreates the native surface. Reapply its exclusion;
+        // other platforms only need a retry when an early close left it parked.
         let position = existing.window().position();
-        if position.x <= -30000 || position.y <= -30000 {
+        if cfg!(target_os = "linux") || position.x <= -30000 || position.y <= -30000 {
             present_window_stealth_aware(existing, |hwnd| {
                 let _ = make_transparent_tile(hwnd);
                 let _ = slint_replay::win32::set_skip_taskbar(hwnd, true);
@@ -158,6 +158,8 @@ pub(crate) fn open_settings(
     };
     win.global::<ui::Platform>()
         .set_is_macos(cfg!(target_os = "macos"));
+    win.global::<ui::Platform>()
+        .set_is_linux(cfg!(target_os = "linux"));
     reset_component_install_state(&win);
     {
         let st = state.lock().ok();
@@ -323,11 +325,11 @@ pub(crate) fn open_settings(
         });
     }
 
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     settings_audio::wire(&win, cfg);
 
     // Preserve the existing macOS microphone settings behavior.
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         // V0.8.4 — WASAPI device enumeration (cold COM + a per-endpoint
         // friendly-name RPC to the audio service) was ~30-300ms of SYNCHRONOUS
@@ -364,7 +366,7 @@ pub(crate) fn open_settings(
             });
         });
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     {
         let cfg_c = cfg.clone();
         win.on_mic_device_selected(move |name| {
@@ -480,7 +482,7 @@ pub(crate) fn open_settings(
 
     // V0.8.4 — Windows Settings → Interface setup wizard button. Re-opens the
     // guided first-run wizard on demand (it is also auto-shown on first launch).
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     {
         // The wizard slot lives in the registry; forward the same registry so the
         // wizard's stealth toggle reaches every open window (Phase 1 §5.1).
@@ -528,7 +530,7 @@ pub(crate) fn open_settings(
     // ===== V4 — vision (screenshot) channel: provider switch + field saves + test =====
     // Extracted to settings_vision.rs (P1 domain split) — wired verbatim there.
     wire_vision_settings(&win, cfg);
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     super::settings_strata_vision::wire(&win, cfg, state);
 
     // ===== Read-aloud (Озвучка): voice chooser + speed preset + test =====
@@ -538,9 +540,9 @@ pub(crate) fn open_settings(
     // Extracted to settings_local_ai.rs (P1 domain split) — wired verbatim there.
     // SECURITY: download -> verify -> spawn stays in overlay_backend::local_ai;
     // this only CALLs install(); the sequence is byte-for-byte unchanged.
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     wire_local_ai(&win, cfg, state, overlay_weak);
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     wire_strata(&win, cfg, state, overlay_weak);
 
     // Phase E6 v20 — tile opacity slider. Persists to config AND
@@ -648,7 +650,7 @@ pub(crate) fn open_settings(
                         snap.ui_language == "ru",
                     ),
                 ));
-                #[cfg(windows)]
+                #[cfg(any(windows, target_os = "linux"))]
                 settings_audio::refresh(&w, &cfg_lang);
                 w.set_tts_install_label(SharedString::from(
                     overlay_backend::tts_install::relocalize_voice_labels(
@@ -724,7 +726,7 @@ pub(crate) fn open_settings(
     // Pending candidates (approve/reject) + approved items (delete) over the
     // SQLite memory tables, + Extract (heuristic over recent sessions).
     // Extracted to settings_memory.rs.
-    wire_memory(&win);
+    wire_memory(&win, cfg);
 
     // P1.7 — config parsed from a picked server-settings file, awaiting the
     // user's explicit Apply (set by the import-preview handler, taken by Apply,
@@ -747,7 +749,12 @@ pub(crate) fn open_settings(
                 .save_file();
             let Some(w) = weak.upgrade() else { return };
             let msg = match picked {
-                None => if ru { "Экспорт отменён" } else { "Export cancelled" }.to_string(),
+                None => if ru {
+                    "Экспорт отменён"
+                } else {
+                    "Export cancelled"
+                }
+                .to_string(),
                 Some(path) => match overlay_backend::config::export_to(&path, &snapshot) {
                     Ok(()) => {
                         if ru {
@@ -759,7 +766,12 @@ pub(crate) fn open_settings(
                     Err(e) => {
                         // Generic + log: the chain can carry a path (audit Q8).
                         eprintln!("[overlay-host] settings export failed: {e:#}");
-                        if ru { "Экспорт не удался, подробности в журнале" } else { "Export failed, details are in the log" }.to_string()
+                        if ru {
+                            "Настройки не экспортированы: в эту папку не удалось записать файл. Выберите другую папку и нажмите «Экспорт настроек (с ключами)» ещё раз."
+                        } else {
+                            "Settings not exported: the file could not be written to that folder. Choose another folder, then press Export settings again."
+                        }
+                        .to_string()
                     }
                 },
             };
@@ -783,7 +795,12 @@ pub(crate) fn open_settings(
             let Some(w) = weak.upgrade() else { return };
             let ru = cfg_c.read().ui_is_ru();
             let msg = match picked {
-                None => if ru { "Импорт отменён" } else { "Import cancelled" }.to_string(),
+                None => if ru {
+                    "Импорт отменён"
+                } else {
+                    "Import cancelled"
+                }
+                .to_string(),
                 Some(path) => {
                     let local_deep_lock = cfg_c.read().deep_lock;
                     match overlay_backend::config::import_from(&path, local_deep_lock) {
@@ -799,7 +816,12 @@ pub(crate) fn open_settings(
                         }
                         Err(e) => {
                             eprintln!("[overlay-host] settings import failed: {e:#}");
-                            if ru { "Импорт не удался: файл не подходит, подробности в журнале" } else { "Import failed: the file does not fit, details are in the log" }.to_string()
+                            if ru {
+                                "Настройки не импортированы: файл не читается или это не экспорт настроек Суфлёра. Выберите экспортированный .json и нажмите «Импорт настроек» ещё раз."
+                            } else {
+                                "Settings not imported: the file cannot be read or is not a Suflyor settings export. Pick the exported .json file, then press Import settings again."
+                            }
+                            .to_string()
                         }
                     }
                 }
@@ -1066,6 +1088,8 @@ pub(crate) fn open_settings(
                     let _ = std::process::Command::new("open").arg(&dir).spawn();
                     #[cfg(windows)]
                     let _ = std::process::Command::new("explorer").arg(&dir).spawn();
+                    #[cfg(target_os = "linux")]
+                    let _ = slint_replay::native::desktop::open(dir.as_os_str());
                 }
                 Err(e) => eprintln!("[overlay-host] cannot resolve recordings dir: {e:#}"),
             }
@@ -1083,6 +1107,8 @@ pub(crate) fn open_settings(
                 let _ = std::process::Command::new("open").arg(&dir).spawn();
                 #[cfg(windows)]
                 let _ = std::process::Command::new("explorer").arg(&dir).spawn();
+                #[cfg(target_os = "linux")]
+                let _ = slint_replay::native::desktop::open(dir.as_os_str());
             }
             None => eprintln!("[overlay-host] cannot resolve data folder"),
         });
@@ -1094,6 +1120,8 @@ pub(crate) fn open_settings(
             let _ = std::process::Command::new("open").arg(url).spawn();
             #[cfg(windows)]
             let _ = std::process::Command::new("explorer").arg(url).spawn();
+            #[cfg(target_os = "linux")]
+            let _ = slint_replay::native::desktop::open(std::ffi::OsStr::new(url));
         });
     }
     {
@@ -1426,7 +1454,7 @@ pub(crate) fn open_settings(
     // Extracted to settings_updates.rs (P1 domain split) — wired verbatim there.
     // SECURITY: download -> verify -> spawn stays in overlay_backend::update;
     // this only CALLs it; the sequence is byte-for-byte unchanged.
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     wire_updates(&win);
 
     let weak_close = win.as_weak();
@@ -1509,10 +1537,7 @@ pub(crate) fn component_row_copy(
                     "Настройки → AI-провайдеры → Выбрать модель",
                 )
             } else {
-                (
-                    "Local AI model",
-                    "Settings → AI providers → Choose a model",
-                )
+                ("Local AI model", "Settings → AI providers → Choose a model")
             }
         }
         ComponentKind::Stt => {
@@ -1524,7 +1549,10 @@ pub(crate) fn component_row_copy(
         }
         ComponentKind::Voices => {
             if ru {
-                ("Голоса (TTS)", "Устанавливаются здесь или в Настройки → TTS")
+                (
+                    "Голоса (TTS)",
+                    "Устанавливаются здесь или в Настройки → TTS",
+                )
             } else {
                 ("Voices (TTS)", "Install here or in Settings → TTS")
             }
@@ -1536,10 +1564,7 @@ pub(crate) fn component_row_copy(
                     "Устанавливается здесь, около 53 МБ",
                 )
             } else {
-                (
-                    "Text recognition (OCR)",
-                    "Installs here, about 53 MB",
-                )
+                ("Text recognition (OCR)", "Installs here, about 53 MB")
             }
         }
     }
@@ -1623,8 +1648,10 @@ pub(crate) fn populate_component_rows(
             };
             // Local assets can be downloaded ahead of time from AI providers;
             // keep their Open action available even while answers use the cloud.
-            let optional_local = matches!(c.kind, ComponentKind::Engine | ComponentKind::LocalModel)
-                && snap.ai_provider != "local" && snap.vision_provider != "local";
+            let optional_local =
+                matches!(c.kind, ComponentKind::Engine | ComponentKind::LocalModel)
+                    && snap.ai_provider != "local"
+                    && snap.vision_provider != "local";
             let needed = match c.kind {
                 ComponentKind::Stt => is_macos || snap.stt_provider == "gigaam",
                 _ => true,
@@ -1750,7 +1777,11 @@ pub(crate) fn active_rows(snap: &overlay_backend::config::Config) -> Vec<Compone
         snap.vision_provider.as_str()
     };
     let vision_row = row(
-        if ru { "Скриншоты (F8)" } else { "Screenshots (F8)" },
+        if ru {
+            "Скриншоты (F8)"
+        } else {
+            "Screenshots (F8)"
+        },
         vision.as_ref().is_some_and(|ep| {
             endpoint_ready(
                 ep,
@@ -1778,13 +1809,21 @@ pub(crate) fn active_rows(snap: &overlay_backend::config::Config) -> Vec<Compone
                 && overlay_backend::local_ai::gigaam_model_present(std::path::Path::new(
                     snap.stt_gigaam_dir.trim(),
                 )),
-            if ru { "GigaAM, на этом ПК" } else { "GigaAM, on this PC" },
+            if ru {
+                "GigaAM, на этом ПК"
+            } else {
+                "GigaAM, on this PC"
+            },
         ),
         "whisper" => (!snap.stt_whisper_url.trim().is_empty(), "Whisper"),
         _ => (!snap.groq_api_key.trim().is_empty(), "Groq Whisper"),
     };
     let speech_row = row(
-        if ru { "Распознавание речи" } else { "Speech recognition" },
+        if ru {
+            "Распознавание речи"
+        } else {
+            "Speech recognition"
+        },
         speech_ready,
         speech_detail.to_string(),
         match (snap.stt_provider.as_str(), ru) {
@@ -2090,7 +2129,9 @@ pub(crate) fn populate_token_status(
     win.set_ai_base_url_input(SharedString::from(c.ai_base_url.clone()));
     win.set_openai_base_url_input(SharedString::from(c.openai_base_url.clone()));
     win.set_openai_model_input(SharedString::from(c.openai_model.clone()));
-    win.set_ai_reasoning_index(super::settings_ai::reasoning_level_index(&c.ai_reasoning_effort));
+    win.set_ai_reasoning_index(super::settings_ai::reasoning_level_index(
+        &c.ai_reasoning_effort,
+    ));
     win.set_openai_reasoning_index(super::settings_ai::reasoning_level_index(
         &c.openai_reasoning_effort,
     ));
@@ -2203,11 +2244,11 @@ pub(crate) fn populate_token_status(
         overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url);
     win.set_managed_local_server(managed_local_server);
     refresh_local_engine_controls(win, &c);
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     super::search_found_models(win, cfg);
     // RAM/VRAM discovery runs PowerShell and nvidia-smi: off the UI thread.
     win.set_strata_hardware_note(SharedString::from(""));
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     {
         let ru = c.ui_is_ru();
         let hardware_weak = win.as_weak();
@@ -2284,7 +2325,7 @@ pub(crate) fn populate_token_status(
         effective_local_model.clone(),
     );
     win.set_ai_local_vision(c.ai_local_vision);
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     super::settings_strata_vision::refresh(win, &c);
     win.set_vision_phonetics(c.vision_phonetics);
     win.set_vision_test_practice(c.vision_test_practice);
@@ -2401,8 +2442,15 @@ mod tests {
         let rows = active_rows(&c);
         assert_eq!(rows.len(), 3);
         assert!(rows[0].installed, "answers with key + model are set up");
-        assert!(rows[0].detail.contains("answer-model"), "{}", rows[0].detail);
-        assert!(rows[1].installed, "screenshot bridge reuses the answers key");
+        assert!(
+            rows[0].detail.contains("answer-model"),
+            "{}",
+            rows[0].detail
+        );
+        assert!(
+            rows[1].installed,
+            "screenshot bridge reuses the answers key"
+        );
         assert!(!rows[2].installed, "Groq without a key is not set up");
         assert!(!rows[2].hint.is_empty());
         for row in &rows {
@@ -2415,7 +2463,10 @@ mod tests {
         c.vision_base_url = String::new();
         let rows = active_rows(&c);
         assert!(!rows[0].installed, "a bridge without a key is not set up");
-        assert!(!rows[1].installed, "screenshots without a key or address are not set up");
+        assert!(
+            !rows[1].installed,
+            "screenshots without a key or address are not set up"
+        );
         assert_eq!(rows[1].jump_tab, 17);
 
         c.vision_provider = "off".into();

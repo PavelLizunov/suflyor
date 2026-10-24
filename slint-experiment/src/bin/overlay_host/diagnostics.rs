@@ -20,8 +20,8 @@
 //! NOTE (§7): the parent crate-root symbols this module references are imported
 //! explicitly below.
 use super::{
-    global_stealth_effective, hotkey_diag_row, try_acquire_mic,
-    ComponentHandle, Duration, SettingsWindow, SharedString, Timer,
+    global_stealth_effective, hotkey_diag_row, try_acquire_mic, ComponentHandle, Duration,
+    SettingsWindow, SharedString, Timer,
 };
 
 /// #131 — push the config-only readiness snapshot + the active-stack summary
@@ -355,7 +355,10 @@ fn key_prefix(rest: &str, mid_word: bool) -> Option<&'static str> {
     dashed.find(|p| rest.starts_with(*p))
 }
 
-/// Replace the current user's home directory with the `%USERPROFILE%` placeholder
+/// What a masked home directory reads as: the variable Windows users know, `~` elsewhere.
+pub(crate) const HOME_PLACEHOLDER: &str = if cfg!(windows) { "%USERPROFILE%" } else { "~" };
+
+/// Replace the current user's home directory with [`HOME_PLACEHOLDER`]
 /// so the copied report never leaks the OS username via a model/cache path
 /// (`C:\Users\alice\suflyor-local-ai\…` → `%USERPROFILE%\suflyor-local-ai\…`).
 /// The report is advertised "safe to paste into a support thread", but the host /
@@ -396,7 +399,7 @@ fn redact_home_all_forms(s: &str, home: &str) -> String {
 }
 
 /// Pure core of `redact_user_home`: replace every ASCII-case-INSENSITIVE
-/// occurrence of `home` with `%USERPROFILE%`. Windows paths are case-insensitive
+/// occurrence of `home` with [`HOME_PLACEHOLDER`]. Windows paths are case-insensitive
 /// and the STT model dir is a USER-PICKED folder (not derived from `USERPROFILE`),
 /// so its casing can legitimately differ from the env var — a case-sensitive match
 /// would silently miss and leak the username. `to_ascii_lowercase` preserves byte
@@ -416,7 +419,7 @@ fn redact_home_in(s: &str, home: &str) -> String {
     while let Some(rel) = hay[last..].find(&needle) {
         let start = last + rel;
         out.push_str(&s[last..start]);
-        out.push_str("%USERPROFILE%");
+        out.push_str(HOME_PLACEHOLDER);
         last = start + needle.len();
     }
     out.push_str(&s[last..]);
@@ -600,7 +603,9 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                 let msg =
                     match overlay_backend::persistence::maintenance::diagnose_and_repair_default() {
                         Ok(h) => {
-                            let backup = h.backup_path.unwrap_or_else(|| "—".to_string());
+                            let backup = h
+                                .backup_path
+                                .map_or_else(|| "—".to_string(), |p| redact_user_home(&p));
                             if h.healthy {
                                 if ru { format!("База в порядке. Резервная копия: {backup}") } else { format!("Database healthy. Backup: {backup}") }
                             } else {
@@ -611,7 +616,15 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                                 ) }
                             }
                         }
-                        Err(e) => if ru { format!("Не удалось проверить базу: {e}") } else { format!("Could not check database: {e}") },
+                        Err(e) => {
+                            eprintln!("[overlay-host] database check failed: {e:#}");
+                            if ru {
+                                "База не проверена: не удалось создать папку резервных копий. Проверьте свободное место на диске и нажмите «Проверить и починить базу» ещё раз."
+                            } else {
+                                "Database not checked: the backups folder could not be created. Check free disk space, then press Check & repair database again."
+                            }
+                            .to_string()
+                        }
                     };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = done.upgrade() {
@@ -643,11 +656,14 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                 let msg =
                     match overlay_backend::persistence::maintenance::clear_memory_candidates_default() {
                         Ok(r) => if ru { format!("Очередь предложений очищена: удалено {}. Резервная копия: {}",
-                            r.cleared, r.backup_path
+                            r.cleared, redact_user_home(&r.backup_path)
                         ) } else { format!("Suggestions cleared: {} removed. Backup: {}",
-                            r.cleared, r.backup_path
+                            r.cleared, redact_user_home(&r.backup_path)
                         ) },
-                        Err(e) => if ru { format!("Очистка отменена: {e}") } else { format!("Clear cancelled: {e}") },
+                        Err(e) => {
+                            eprintln!("[overlay-host] clear suggestions failed: {e:#}");
+                            clear_failed_status(ru, CLEAR_QUEUE_BUTTON)
+                        }
                     };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = done.upgrade() {
@@ -680,21 +696,20 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                             if ru {
                                 format!(
                                     "Одобренная память очищена: удалено {}. Резервная копия: {}",
-                                    r.cleared, r.backup_path
+                                    r.cleared,
+                                    redact_user_home(&r.backup_path)
                                 )
                             } else {
                                 format!(
                                     "Approved memory cleared: {} removed. Backup: {}",
-                                    r.cleared, r.backup_path
+                                    r.cleared,
+                                    redact_user_home(&r.backup_path)
                                 )
                             }
                         }
                         Err(e) => {
-                            if ru {
-                                format!("Очистка отменена: {e}")
-                            } else {
-                                format!("Clear cancelled: {e}")
-                            }
+                            eprintln!("[overlay-host] clear memory failed: {e:#}");
+                            clear_failed_status(ru, CLEAR_MEMORY_BUTTON)
                         }
                     };
                 let _ = slint::invoke_from_event_loop(move || {
@@ -920,9 +935,11 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
     // large); the redaction reuses the same passes as "Copy report".
     {
         let weak = win.as_weak();
+        let cfg_c = cfg.clone();
         win.on_diagnostics_collect_logs_clicked(move || {
             let Some(w) = weak.upgrade() else { return };
             let weak_done = w.as_weak();
+            let ru = cfg_c.read().ui_is_ru();
             std::thread::spawn(move || {
                 let msg = match collect_redacted_log() {
                     Ok(out) => {
@@ -931,16 +948,13 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                         // even if the Explorer reveal misses (AppData is hidden +
                         // cluttered, which tripped the v0.24.0 tester).
                         // Mask the username in the shown path (Settings can be
-                        // screen-shared); %USERPROFILE% still resolves if the
-                        // tester pastes it into Explorer's address bar.
-                        format!(
-                            "Сохранён лог: {}",
-                            redact_user_home(&out.display().to_string())
-                        )
+                        // screen-shared); %USERPROFILE% or ~ still resolves if the
+                        // tester pastes it into a file manager's address bar.
+                        collect_logs_status(ru, Ok(&redact_user_home(&out.display().to_string())))
                     }
                     Err(e) => {
                         eprintln!("[overlay-host] collect logs failed: {e}");
-                        "Не удалось собрать лог — подробности в overlay-host.log".to_string()
+                        collect_logs_status(ru, Err(&e.to_string()))
                     }
                 };
                 let _ = slint::invoke_from_event_loop(move || {
@@ -950,6 +964,34 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                 });
             });
         });
+    }
+}
+
+/// Clear-button labels as `settings_panel.slint` and `ru.po` show them, `(en, ru)`.
+const CLEAR_QUEUE_BUTTON: (&str, &str) =
+    ("Clear suggestions queue", "Очистить очередь предложений");
+const CLEAR_MEMORY_BUTTON: (&str, &str) = ("Clear approved memory", "Очистить одобренную память");
+
+/// A failed clear: a single DELETE after a mandatory backup, so nothing was removed.
+fn clear_failed_status(ru: bool, (en_b, ru_b): (&str, &str)) -> String {
+    if ru {
+        format!("Очистка отменена, ничего не удалено: не удалось сохранить резервную копию или изменить базу. Проверьте свободное место на диске и нажмите «{ru_b}» ещё раз.")
+    } else {
+        format!("Clear cancelled, nothing was deleted: the backup or the database could not be written. Check free disk space, then press {en_b} again.")
+    }
+}
+
+/// Status after "Collect logs": the saved path, or the cause and the button to press again.
+fn collect_logs_status(ru: bool, saved: Result<&str, &str>) -> String {
+    match (saved, ru) {
+        (Ok(path), true) => format!("Лог сохранён: {path}"),
+        (Ok(path), false) => format!("Log saved: {path}"),
+        (Err(cause), true) => format!(
+            "Лог не собран: {cause}. Проверьте свободное место и права на папку и нажмите «Собрать логи» ещё раз."
+        ),
+        (Err(cause), false) => format!(
+            "Log not collected: {cause}. Check free disk space and folder permissions, then press Collect logs again."
+        ),
     }
 }
 
@@ -977,6 +1019,10 @@ fn collect_redacted_log() -> std::io::Result<std::path::PathBuf> {
 /// `raw_arg` keeps the explicit quotes around the path so `/select` works even
 /// when the profile path contains a space (e.g. a username with a space).
 fn reveal_in_explorer(path: &std::path::Path) {
+    #[cfg(target_os = "linux")]
+    if let Some(parent) = path.parent() {
+        let _ = slint_replay::native::desktop::open(parent.as_os_str());
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -1059,6 +1105,26 @@ mod tests {
     // user home) leaked the OS username verbatim. Lock that the user-home →
     // %USERPROFILE% masking holds and is path-safe.
     #[test]
+    fn clear_failure_names_the_button() {
+        assert!(clear_failed_status(false, CLEAR_QUEUE_BUTTON)
+            .ends_with("press Clear suggestions queue again."));
+        assert!(clear_failed_status(true, CLEAR_MEMORY_BUTTON)
+            .ends_with("нажмите «Очистить одобренную память» ещё раз."));
+    }
+
+    #[test]
+    fn collect_logs_status_follows_ui_language() {
+        assert_eq!(
+            collect_logs_status(false, Ok("~/Desktop/suflyor-log.txt")),
+            "Log saved: ~/Desktop/suflyor-log.txt"
+        );
+        assert_eq!(collect_logs_status(true, Ok("~/x")), "Лог сохранён: ~/x");
+        assert!(collect_logs_status(false, Err("disk full")).ends_with("press Collect logs again."));
+        assert!(collect_logs_status(true, Err("disk full"))
+            .ends_with("нажмите «Собрать логи» ещё раз."));
+    }
+
+    #[test]
     fn redact_user_home_masks_profile_dir_keeps_rest() {
         // Canonical: home is a prefix of the STT model dir.
         assert_eq!(
@@ -1066,18 +1132,18 @@ mod tests {
                 "STT: ready — gigaam · C:\\Users\\alice\\suflyor-local-ai\\gigaam-v3",
                 "C:\\Users\\alice"
             ),
-            "STT: ready — gigaam · %USERPROFILE%\\suflyor-local-ai\\gigaam-v3"
+            format!("STT: ready — gigaam · {HOME_PLACEHOLDER}\\suflyor-local-ai\\gigaam-v3")
         );
         // Case-INSENSITIVE: a user-picked dir can differ in casing from USERPROFILE
         // (drive letter or any segment) — must still be masked, not leaked.
         assert_eq!(
             redact_home_in("models at c:\\users\\Alice\\m", "C:\\Users\\alice"),
-            "models at %USERPROFILE%\\m"
+            format!("models at {HOME_PLACEHOLDER}\\m")
         );
         // EVERY occurrence is masked (a future line could embed the home twice).
         assert_eq!(
             redact_home_in("C:\\Users\\bob\\a and C:\\Users\\bob\\b", "C:\\Users\\bob"),
-            "%USERPROFILE%\\a and %USERPROFILE%\\b"
+            format!("{HOME_PLACEHOLDER}\\a and {HOME_PLACEHOLDER}\\b")
         );
         // A bare / implausibly short home must NOT blanket the whole report.
         assert_eq!(redact_home_in("C:\\x is fine", "C:\\"), "C:\\x is fine");
@@ -1099,16 +1165,16 @@ mod tests {
             home,
         );
         assert!(!dbl.to_ascii_lowercase().contains("alice"), "leaked: {dbl}");
-        assert!(dbl.contains("%USERPROFILE%"));
+        assert!(dbl.contains(HOME_PLACEHOLDER));
         // Forward-slash paths (std / cargo) are masked too.
         assert_eq!(
             redact_home_all_forms("cache at C:/Users/alice/.cargo", home),
-            "cache at %USERPROFILE%/.cargo"
+            format!("cache at {HOME_PLACEHOLDER}/.cargo")
         );
         // Single-backslash still works (no regression).
         assert_eq!(
             redact_home_all_forms("at C:\\Users\\alice\\x", home),
-            "at %USERPROFILE%\\x"
+            format!("at {HOME_PLACEHOLDER}\\x")
         );
     }
 
@@ -1118,8 +1184,11 @@ mod tests {
         let home = "/Users/alice";
         let sample = "STT: ready — gigaam · /Users/alice/suflyor-local-ai/gigaam-v3";
         let redacted = redact_home_all_forms(sample, home);
-        assert!(!redacted.contains("alice"), "leaked OS username: {redacted}");
-        assert!(redacted.contains("%USERPROFILE%"));
+        assert!(
+            !redacted.contains("alice"),
+            "leaked OS username: {redacted}"
+        );
+        assert!(redacted.contains(HOME_PLACEHOLDER));
     }
 
     #[test]
@@ -1225,9 +1294,18 @@ mod tests {
                       OpenAI: sk-proj-secret_key_789\n\
                       Normal word: desk-1 task-2\n";
         let redacted = redact_secrets(sample);
-        assert!(!redacted.contains("secret_token_123"), "leaked bearer token: {redacted}");
-        assert!(!redacted.contains("secret_key_456"), "leaked gsk key: {redacted}");
-        assert!(!redacted.contains("secret_key_789"), "leaked sk key: {redacted}");
+        assert!(
+            !redacted.contains("secret_token_123"),
+            "leaked bearer token: {redacted}"
+        );
+        assert!(
+            !redacted.contains("secret_key_456"),
+            "leaked gsk key: {redacted}"
+        );
+        assert!(
+            !redacted.contains("secret_key_789"),
+            "leaked sk key: {redacted}"
+        );
         assert!(redacted.contains("Bearer <redacted>"));
         assert!(redacted.contains("gsk_<redacted>"));
         assert!(redacted.contains("sk-<redacted>"));
@@ -1239,7 +1317,10 @@ mod tests {
     fn redact_secrets_masks_bearer_in_any_ascii_case() {
         for scheme in ["bearer", "BEARER", "bEaReR"] {
             let redacted = redact_secrets(&format!("Authorization: {scheme} secret_token_123\n"));
-            assert!(!redacted.contains("secret_token_123"), "leaked for {scheme}: {redacted}");
+            assert!(
+                !redacted.contains("secret_token_123"),
+                "leaked for {scheme}: {redacted}"
+            );
         }
     }
 
@@ -1254,24 +1335,30 @@ mod tests {
             "\"bearer\": \"secret_token_123\"",
         ] {
             let redacted = redact_secrets(sample);
-            assert!(!redacted.contains("secret_token_123"), "leaked from {sample:?}: {redacted}");
+            assert!(
+                !redacted.contains("secret_token_123"),
+                "leaked from {sample:?}: {redacted}"
+            );
         }
     }
 
     #[test]
     fn redact_secrets_stops_bearer_token_at_a_quote() {
         let json = "{\"authorization\":\"bearer secret_token_123\",\"n\":1}";
-        assert_eq!(redact_secrets(json), "{\"authorization\":\"Bearer <redacted>\",\"n\":1}");
+        assert_eq!(
+            redact_secrets(json),
+            "{\"authorization\":\"Bearer <redacted>\",\"n\":1}"
+        );
     }
 
     #[test]
     fn redact_secrets_masks_x_api_key_header_value() {
-        for sample in [
-            "x-api-key: secret_value_123",
-            "X-API-Key:secret_value_123",
-        ] {
+        for sample in ["x-api-key: secret_value_123", "X-API-Key:secret_value_123"] {
             let redacted = redact_secrets(sample);
-            assert!(!redacted.contains("secret_value_123"), "leaked from {sample:?}: {redacted}");
+            assert!(
+                !redacted.contains("secret_value_123"),
+                "leaked from {sample:?}: {redacted}"
+            );
         }
     }
 
@@ -1296,13 +1383,22 @@ mod tests {
     fn redact_secrets_masks_config_labels_and_hugging_face_tokens() {
         for (sample, mask) in [
             ("groq_api_key: secret_value_123", "groq_api_key: <redacted>"),
-            ("\"groq_api_key\": \"secret_value_123\"", "groq_api_key: <redacted>"),
+            (
+                "\"groq_api_key\": \"secret_value_123\"",
+                "groq_api_key: <redacted>",
+            ),
             ("password: secret_value_123", "password: <redacted>"),
             ("token hf_secret_value_123 end", "hf_<redacted>"),
         ] {
             let redacted = redact_secrets(sample);
-            assert!(!redacted.contains("secret_value_123"), "leaked from {sample:?}: {redacted}");
-            assert!(redacted.contains(mask), "missing mask in {sample:?}: {redacted}");
+            assert!(
+                !redacted.contains("secret_value_123"),
+                "leaked from {sample:?}: {redacted}"
+            );
+            assert!(
+                redacted.contains(mask),
+                "missing mask in {sample:?}: {redacted}"
+            );
         }
         // The prefix needs a word boundary, so identifiers stay readable.
         assert_eq!(redact_secrets("graph_hf_cache"), "graph_hf_cache");
@@ -1311,9 +1407,18 @@ mod tests {
     #[test]
     fn redact_secrets_masks_xai_and_nvapi_keys() {
         let redacted = redact_secrets("xai-secret_key_123 nvapi-secret_key_456 maxai-1");
-        assert!(!redacted.contains("secret_key_123"), "leaked xai key: {redacted}");
-        assert!(!redacted.contains("secret_key_456"), "leaked nvapi key: {redacted}");
-        assert!(redacted.contains("maxai-1"), "over-redacted a plain word: {redacted}");
+        assert!(
+            !redacted.contains("secret_key_123"),
+            "leaked xai key: {redacted}"
+        );
+        assert!(
+            !redacted.contains("secret_key_456"),
+            "leaked nvapi key: {redacted}"
+        );
+        assert!(
+            redacted.contains("maxai-1"),
+            "over-redacted a plain word: {redacted}"
+        );
     }
 
     #[test]

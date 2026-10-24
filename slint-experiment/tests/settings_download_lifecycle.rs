@@ -41,6 +41,66 @@ fn retained_windows_cannot_be_revealed_after_close_by_native_setup() {
 }
 
 #[test]
+fn tile_native_setup_retries_mapping_without_reviving_a_closed_window() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source = std::fs::read_to_string(root.join("src/bin/overlay_host/tile_window.rs")).unwrap();
+    let setup = source
+        .split_once("pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {")
+        .unwrap()
+        .1;
+    assert!(setup.contains("super::realize_with_retries(tile, attempt, fallback)"));
+    assert!(setup.contains("if !t.window().is_visible() {\n            return true;"));
+    assert!(
+        setup.contains("let Ok(hwnd) = grab_hwnd(t.window()) else {\n            return false;")
+    );
+    assert!(setup.contains("set_stealth(hwnd, global_stealth())"));
+}
+
+#[test]
+fn tile_close_does_not_depend_on_a_destroyed_native_surface() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    for relative in [
+        "src/bin/overlay_host_windows.rs",
+        "src/bin/overlay_host/tile_ask.rs",
+        "src/bin/overlay_host/tile_ptt.rs",
+        "src/bin/overlay_host/read_aloud.rs",
+        "src/bin/overlay_host/vision_capture.rs",
+        "src/bin/overlay_host/aux_windows/archive.rs",
+    ] {
+        let source = std::fs::read_to_string(root.join(relative)).unwrap();
+        assert!(
+            !source.contains("let close_hwnd ="),
+            "surface-dependent close: {relative}"
+        );
+        assert!(
+            source.contains("item.get_sequence() != sequence"),
+            "stable close identity: {relative}"
+        );
+    }
+}
+
+#[test]
+fn closing_a_vision_tile_aborts_its_registered_request() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source =
+        std::fs::read_to_string(root.join("src/bin/overlay_host/vision_capture.rs")).unwrap();
+    assert!(source.contains("tile.set_tile_id(tile_id)"));
+    assert!(source.contains("super::register_tile_stream(tile_id, task.abort_handle())"));
+    let close = source
+        .split_once("tile.on_close_clicked(move || {")
+        .unwrap()
+        .1;
+    assert!(close
+        .trim_start()
+        .starts_with("super::abort_tile_stream(tile_id);"));
+    let controller =
+        std::fs::read_to_string(root.join("src/bin/overlay_host/tile_controller.rs")).unwrap();
+    assert!(controller.contains("impl Drop for PttStreamSink"));
+    assert!(controller.contains("if self.in_flight.swap(false, Ordering::SeqCst)"));
+    assert!(controller.contains("self.finish_in_flight();"));
+}
+
+#[test]
 fn hidden_settings_keep_download_and_shared_status_until_completion() {
     i_slint_backend_testing::init_no_event_loop();
     let win = ui::SettingsWindow::new().unwrap();

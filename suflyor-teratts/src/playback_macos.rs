@@ -33,6 +33,7 @@ pub struct Playback {
     eos: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
     paused: Arc<AtomicBool>,
+    failed: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
 }
 
@@ -41,12 +42,17 @@ enum PlaybackControl {
     SetSpeed(f32),
 }
 
-struct ExitNotifier(Option<Box<dyn FnOnce() + Send>>);
+struct ExitNotifier {
+    notify: Option<Box<dyn FnOnce() + Send>>,
+    enabled: Arc<AtomicBool>,
+}
 
 impl Drop for ExitNotifier {
     fn drop(&mut self) {
-        if let Some(notify) = self.0.take() {
-            notify();
+        if self.enabled.load(Ordering::Acquire) {
+            if let Some(notify) = self.notify.take() {
+                notify();
+            }
         }
     }
 }
@@ -130,29 +136,81 @@ impl Playback {
     pub fn start(sample_rate: u32, on_exit: Option<Box<dyn FnOnce() + Send>>) -> Result<Self> {
         let (feed_tx, feed_rx) = std::sync::mpsc::channel::<Vec<f32>>();
         let (control_tx, control_rx) = std::sync::mpsc::channel::<PlaybackControl>();
+        let (startup_tx, startup_rx) = std::sync::mpsc::channel::<Result<()>>();
         let eos = Arc::new(AtomicBool::new(false));
         let stop = Arc::new(AtomicBool::new(false));
         let paused = Arc::new(AtomicBool::new(false));
+        let failed = Arc::new(AtomicBool::new(false));
+        let startup_ok = Arc::new(AtomicBool::new(false));
 
-        let (eos2, stop2, paused2) = (eos.clone(), stop.clone(), paused.clone());
-        let handle = std::thread::Builder::new()
-            .name("tts-playback".into())
-            .spawn(move || {
-                let _exit_notifier = ExitNotifier(on_exit);
-                let result = render_loop(sample_rate, feed_rx, control_rx, eos2, stop2, paused2);
-                if let Err(e) = result {
-                    eprintln!("[suflyor-tts] macOS playback error: {e:#}");
+        let (eos2, stop2, paused2, failed2, startup_ok2) = (
+            eos.clone(),
+            stop.clone(),
+            paused.clone(),
+            failed.clone(),
+            startup_ok.clone(),
+        );
+        let mut handle = Some(
+            std::thread::Builder::new()
+                .name("tts-playback".into())
+                .spawn(move || {
+                    let _exit_notifier = ExitNotifier {
+                        notify: on_exit,
+                        enabled: startup_ok2.clone(),
+                    };
+                    let result = render_loop(
+                        sample_rate,
+                        feed_rx,
+                        control_rx,
+                        eos2,
+                        stop2,
+                        paused2,
+                        startup_tx,
+                        startup_ok2,
+                    );
+                    if let Err(e) = result {
+                        eprintln!("[suflyor-tts] macOS playback error: {e:#}");
+                        failed2.store(true, Ordering::Release);
+                    }
+                })?,
+        );
+
+        match startup_rx.recv_timeout(std::time::Duration::from_secs(5)) {
+            Ok(Ok(())) => {
+                startup_ok.store(true, Ordering::Release);
+                Ok(Self {
+                    feed_tx,
+                    control_tx,
+                    eos,
+                    stop,
+                    paused,
+                    failed,
+                    handle,
+                })
+            }
+            Ok(Err(err)) => {
+                stop.store(true, Ordering::Release);
+                if let Some(h) = handle.take() {
+                    let _ = h.join();
                 }
-            })?;
+                Err(anyhow!("playback startup failed: {err:#}"))
+            }
+            Err(err) => {
+                stop.store(true, Ordering::Release);
+                if let Some(h) = handle.take() {
+                    if h.is_finished() {
+                        let _ = h.join();
+                    }
+                    // Native initialization cannot be interrupted. It observes stop
+                    // when it returns; this isolated sidecar remains responsive.
+                }
+                Err(anyhow!("playback startup timed out: {err}"))
+            }
+        }
+    }
 
-        Ok(Self {
-            feed_tx,
-            control_tx,
-            eos,
-            stop,
-            paused,
-            handle: Some(handle),
-        })
+    pub fn failed(&self) -> bool {
+        self.failed.load(Ordering::Acquire)
     }
 
     pub fn feed(&self, samples: Vec<f32>) {
@@ -332,6 +390,32 @@ impl ContinuousResampler {
     }
 }
 
+fn choose_f32_config(device: &cpal::Device) -> Result<cpal::SupportedStreamConfig> {
+    if let Ok(default) = device.default_output_config() {
+        if default.sample_format() == cpal::SampleFormat::F32 {
+            return Ok(default);
+        }
+    }
+    let supported = device
+        .supported_output_configs()
+        .map_err(|e| anyhow!("supported output configs error: {e}"))?;
+    let mut best: Option<cpal::SupportedStreamConfigRange> = None;
+    for range in supported {
+        if range.sample_format() == cpal::SampleFormat::F32 {
+            best = Some(range);
+            break;
+        }
+    }
+    let range = best.ok_or_else(|| anyhow!("no supported F32 output configuration found"))?;
+    if let Ok(default) = device.default_output_config() {
+        let rate = default.sample_rate();
+        if rate >= range.min_sample_rate() && rate <= range.max_sample_rate() {
+            return Ok(range.with_sample_rate(rate));
+        }
+    }
+    Ok(range.with_max_sample_rate())
+}
+
 fn render_loop(
     sample_rate: u32,
     feed_rx: Receiver<Vec<f32>>,
@@ -339,15 +423,26 @@ fn render_loop(
     eos: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
     paused: Arc<AtomicBool>,
+    startup_tx: Sender<Result<()>>,
+    startup_ok: Arc<AtomicBool>,
 ) -> Result<()> {
     let host = cpal::default_host();
-    let device = host
-        .default_output_device()
-        .ok_or_else(|| anyhow!("no audio default output device"))?;
+    let device = match host.default_output_device() {
+        Some(d) => d,
+        None => {
+            let err = anyhow!("no audio default output device");
+            let _ = startup_tx.send(Err(anyhow!("no audio default output device")));
+            return Err(err);
+        }
+    };
 
-    let supported_config = device
-        .default_output_config()
-        .map_err(|e| anyhow!("default output config error: {e}"))?;
+    let supported_config = match choose_f32_config(&device) {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = startup_tx.send(Err(anyhow!("{e:#}")));
+            return Err(e);
+        }
+    };
     let config: cpal::StreamConfig = supported_config.into();
     let channels = config.channels as usize;
     let device_rate = config.sample_rate.0;
@@ -364,24 +459,32 @@ fn render_loop(
     )));
     let pcm_queue_callback = Arc::clone(&pcm_queue);
 
-    let stream = device
-        .build_output_stream(
-            &config,
-            move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                let mut guard = pcm_queue_callback
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                for frame in data.chunks_mut(channels) {
-                    let sample = guard.pop_front().unwrap_or(0.0);
-                    for out in frame.iter_mut() {
-                        *out = sample;
-                    }
+    let stream = match device.build_output_stream(
+        &config,
+        move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+            let mut guard = pcm_queue_callback
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            for frame in data.chunks_mut(channels) {
+                let sample = guard.pop_front().unwrap_or(0.0);
+                for out in frame.iter_mut() {
+                    *out = sample;
                 }
-            },
-            |err| eprintln!("[suflyor-tts] cpal error: {err}"),
-            None,
-        )
-        .map_err(|e| anyhow!("build_output_stream: {e}"))?;
+            }
+        },
+        |err| eprintln!("[suflyor-tts] cpal error: {err}"),
+        None,
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            let err = anyhow!("build_output_stream: {e}");
+            let _ = startup_tx.send(Err(anyhow!("build_output_stream: {e}")));
+            return Err(err);
+        }
+    };
+
+    startup_ok.store(true, Ordering::Release);
+    let _ = startup_tx.send(Ok(()));
 
     let mut resampler = ContinuousResampler::new(sample_rate, device_rate);
     let mut stream_started = false;
@@ -495,12 +598,32 @@ mod tests {
     fn exit_notifier_runs_when_its_scope_ends() {
         let notified = Arc::new(AtomicBool::new(false));
         let flag = notified.clone();
+        let enabled = Arc::new(AtomicBool::new(true));
         {
-            let _notifier = ExitNotifier(Some(Box::new(move || {
-                flag.store(true, Ordering::Release);
-            })));
+            let _notifier = ExitNotifier {
+                notify: Some(Box::new(move || {
+                    flag.store(true, Ordering::Release);
+                })),
+                enabled,
+            };
         }
         assert!(notified.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn exit_notifier_does_not_run_when_disabled() {
+        let notified = Arc::new(AtomicBool::new(false));
+        let flag = notified.clone();
+        let enabled = Arc::new(AtomicBool::new(false));
+        {
+            let _notifier = ExitNotifier {
+                notify: Some(Box::new(move || {
+                    flag.store(true, Ordering::Release);
+                })),
+                enabled,
+            };
+        }
+        assert!(!notified.load(Ordering::Acquire));
     }
 
     #[test]

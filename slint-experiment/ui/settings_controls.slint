@@ -305,7 +305,7 @@ export component SettingsDangerButton inherits Rectangle {
         width: parent.width;
         height: parent.height;
         text: root.text;
-        font-size: Metrics.font-body;
+        // No font-size: the window default, as the std Button uses.
         color: Theme.danger;
         horizontal-alignment: center;
         vertical-alignment: center;

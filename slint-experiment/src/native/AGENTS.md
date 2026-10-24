@@ -39,7 +39,7 @@ Native platform adapters isolate OS-specific FFI, window manipulation, single-in
 | **Single-Instance Mutex** | Win32 named mutex `Global\suflyor-overlay-singleton`. | File lock `suflyor-overlay-singleton.lock` via `try_lock()`. |
 | **Clipboard & Copy** | `clipboard-win` crate + synthetic `SendInput` Ctrl+C (with hardware scan codes). | `NSPasteboard` FFI + synthetic `CGEventPost` Command+C (`AXIsProcessTrusted`). |
 | **Status Bar / Tray** | Windows Notification Area Tray (`Shell_NotifyIconW`). | AppKit `NSStatusItem` status item + menu delegate. |
-| **Linux Support** | **Explicitly unsupported**. `posix_stubs` provides fallback defaults; do not invent Linux support. | N/A |
+| **Experimental Linux port** | Shared Slint host on Wayland; native clipboard uses `linux/clipboard.rs`, and the existing Unix file lock is reused. Capture, audio and compositor shortcuts are not connected yet. | No feature-parity or released-Linux claim. |
 
 ---
 
@@ -73,7 +73,7 @@ Native platform adapters isolate OS-specific FFI, window manipulation, single-in
 
 ## 5. Key Invariants
 
-1. **No Linux Support:** Linux is not a supported target. Non-Windows and non-macOS platforms fall into default `posix_stubs` in `src/win32.rs`. Do not add Linux-specific native code.
+1. **Experimental Linux Semantics:** Follow `docs/goal-omarchy-port.md`. Wayland owns placement; unavailable native handles and geometry return errors rather than fabricated HWNDs or monitor sizes. Capture exclusion remains unsupported. Windows installers must not be selected or launched on Linux.
 2. **Effective Stealth Verification (I1):** Windows stealth (`set_stealth`) requires readback confirmation via `GetWindowDisplayAffinity`. `presentable_stealth` returns `true` only when the exclusion is confirmed by OS readback.
 3. **Taskbar Baseline Standard (I2):** `skip_taskbar_exstyle` forces `WS_EX_TOOLWINDOW` on and `WS_EX_APPWINDOW` off in both directions, preventing winit re-shows from corrupting taskbar state.
 4. **GDI Capture Window Hiding:** Windows GDI `BitBlt` ignores `WDA_EXCLUDEFROMCAPTURE`. Before capturing screen rectangles, all application overlay windows must be hidden via `hide_own_windows()` and flushed with `DwmFlush()`, then restored with `show_windows()`.

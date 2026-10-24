@@ -19,9 +19,8 @@ use super::{
     enum_monitors, get_mic_active, get_sys_active, get_window_rect, grab_hwnd,
     move_window_pos_only, pick_monitor, refresh_status, set_stealth, stealth_supported, ui,
     ArchiveWindow, ComponentHandle, Duration, HelpWindow, LockModeMenuWindow, OverlayBarWindow,
-    PaletteWindow, Rc,
-    RecoverOfferWindow, RefCell, SettingsWindow, TextAskWindow, TileWindow, TileWindows, Timer,
-    TranscriptWindow, WizardWindow, HWND_GRAB_DELAY_MS, HWND_REVEAL_FAST_MS,
+    PaletteWindow, Rc, RecoverOfferWindow, RefCell, SettingsWindow, TextAskWindow, TileWindow,
+    TileWindows, Timer, TranscriptWindow, WizardWindow, HWND_GRAB_DELAY_MS, HWND_REVEAL_FAST_MS,
 };
 
 /// Phase E6 v36 — process-global tile body opacity (raw f32 bits in an
@@ -39,6 +38,15 @@ pub(crate) fn set_platform_window_position(window: &slint::Window, x: i32, y: i3
     window.set_position(slint::PhysicalPosition::new(x, y));
     #[cfg(target_os = "macos")]
     window.set_position(slint::LogicalPosition::new(x as f32, y as f32));
+    #[cfg(target_os = "linux")]
+    {
+        // Windows sentinel parking is not a Wayland operation.
+        if x > -30000 && y > -30000 {
+            if let Ok(id) = slint_replay::native::window::view_id(window) {
+                let _ = slint_replay::native::window::move_to(id, x, y);
+            }
+        }
+    }
 }
 
 /// Store the current global tile body opacity (clamped 0.5..=1.0).
@@ -274,7 +282,10 @@ where
 /// visible monitor (with a small slack so a title bar dragged flush to an edge
 /// still counts). A stale position from an unplugged monitor fails → the
 /// caller centers instead. Pure — unit-tested below.
-fn pos_on_visible_monitor(pos: (i32, i32), monitors: &[slint_replay::win32::MonitorRect]) -> bool {
+pub(super) fn pos_on_visible_monitor(
+    pos: (i32, i32),
+    monitors: &[slint_replay::win32::MonitorRect],
+) -> bool {
     const SLACK: i32 = 8;
     monitors.iter().any(|m| {
         pos.0 >= m.left - SLACK
@@ -325,9 +336,10 @@ pub(crate) fn present_window_stealth_aware_at<W, F>(
             diag!("[overlay-host] macOS floating-window configuration failed: {error}");
         }
         decorate(hwnd);
-        if global_stealth() {
-            // I1 — a failed exclusion is logged, never silently swallowed.
-            apply_stealth_one(hwnd, true);
+        // Linux compositor rules protect the first mapped frame even when the
+        // saved toggle is off; native presentation must apply both directions.
+        if global_stealth() || cfg!(target_os = "linux") {
+            apply_stealth_one(hwnd, global_stealth());
         }
         // The off-screen frame is now painted + decorated (+ WDA under stealth):
         // reveal it at the RESTORED position when one is saved and still visible
@@ -406,35 +418,63 @@ pub(crate) fn realize_with_retries<W>(
 ) where
     W: slint::ComponentHandle + 'static,
 {
-    let weak = win.as_weak();
-    Timer::single_shot(Duration::from_millis(HWND_REVEAL_FAST_MS), move || {
-        let Some(w) = weak.upgrade() else { return };
-        if attempt(&w) {
-            return;
-        }
-        // Retry #1 SOON (80ms, not the full 200ms) — the heavy Settings window
-        // often isn't HWND-realized by the 33ms fast attempt, so the old 200ms
-        // gap was the "Settings opens with a delay" the user saw. Still only
-        // reveals once grab_hwnd succeeds (window painted off-screen → no flash).
-        let weak2 = w.as_weak();
-        let attempt2 = attempt.clone();
-        let fallback2 = fallback.clone();
-        Timer::single_shot(Duration::from_millis(80), move || {
-            let Some(w) = weak2.upgrade() else { return };
-            if attempt2(&w) {
+    #[cfg(target_os = "linux")]
+    realize_wayland_window(win, attempt, fallback, 50);
+    #[cfg(not(target_os = "linux"))]
+    {
+        let weak = win.as_weak();
+        Timer::single_shot(Duration::from_millis(HWND_REVEAL_FAST_MS), move || {
+            let Some(w) = weak.upgrade() else { return };
+            if attempt(&w) {
                 return;
             }
-            // Retry #2 (final) at a longer delay; on a final miss, run the fallback.
-            let weak3 = w.as_weak();
-            let attempt3 = attempt2.clone();
-            let fallback3 = fallback2.clone();
-            Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS * 2), move || {
-                let Some(w) = weak3.upgrade() else { return };
-                if !attempt3(&w) {
-                    fallback3(&w);
+            // Retry #1 SOON (80ms, not the full 200ms) — the heavy Settings window
+            // often isn't HWND-realized by the 33ms fast attempt, so the old 200ms
+            // gap was the "Settings opens with a delay" the user saw. Still only
+            // reveals once grab_hwnd succeeds (window painted off-screen → no flash).
+            let weak2 = w.as_weak();
+            let attempt2 = attempt.clone();
+            let fallback2 = fallback.clone();
+            Timer::single_shot(Duration::from_millis(80), move || {
+                let Some(w) = weak2.upgrade() else { return };
+                if attempt2(&w) {
+                    return;
                 }
+                // Retry #2 (final) at a longer delay; on a final miss, run the fallback.
+                let weak3 = w.as_weak();
+                let attempt3 = attempt2.clone();
+                let fallback3 = fallback2.clone();
+                Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS * 2), move || {
+                    let Some(w) = weak3.upgrade() else { return };
+                    if !attempt3(&w) {
+                        fallback3(&w);
+                    }
+                });
             });
         });
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn realize_wayland_window<W>(
+    win: &W,
+    attempt: Rc<dyn Fn(&W) -> bool>,
+    fallback: Rc<dyn Fn(&W)>,
+    remaining: u32,
+) where
+    W: slint::ComponentHandle + 'static,
+{
+    let weak = win.as_weak();
+    Timer::single_shot(Duration::from_millis(200), move || {
+        let Some(window) = weak.upgrade() else { return };
+        if !window.window().is_visible() || attempt(&window) {
+            return;
+        }
+        if remaining > 1 {
+            realize_wayland_window(&window, attempt, fallback, remaining - 1);
+        } else {
+            fallback(&window);
+        }
     });
 }
 
