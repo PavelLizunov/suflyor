@@ -468,14 +468,16 @@ tablet and vmmouse devices did not scroll).
   1.5B) are the intended custom-GGUF fixtures. The local namer and a debrief
   with enough user speech (item 2 leftovers) need the same local model.
 
-### Settings, all 16 tabs in EN and RU (section 7 item 5, layout pass)
+### Settings tabs in EN and RU (section 7 item 5, layout pass)
 
 Live, October 23, QA build 4f6aba7 at 720x600. A script
 (`tabs.py` in the private evidence folder) opens every tab and pages through it by
 dragging the content scrollbar thumb with the MCP `drag_element` tool, which
 does exist in Slint 1.17, so the QEMU thumb drag described above is no longer
 needed. EN: 22 pages, RU: 22 pages, each tab read to its
-end. No Russian text in the English UI and no English in the Russian UI.
+end. The sidebar has 17 items: "Memory" is the last one and sits below the
+600 px window, so the MCP tree (which omits clipped elements) left it out of
+this pass. It is covered separately below. No Russian text in the English UI and no English in the Russian UI.
 
 Port defects found and fixed:
 
@@ -546,6 +548,63 @@ the saved original config.
 Not yet done for item 5: file dialogs (export/import), Hermes install, setup
 wizard, and the destructive "Clear …" buttons.
 
+### Knowledge palette and personal memory (section 7 item 4, part)
+
+Live, October 23, QA build 8632229, English UI (`kbmem.py` and `tile.py` in
+the private evidence folder). F4 is pressed on the VM keyboard
+(`qm sendkey 107 f4`).
+
+- F4 opens the "Knowledge palette". "kubectl" lists glossary and command
+  entries with source chips; "zzqxv" shows `No results for "zzqxv".`; Enter
+  closes the palette and opens a read-only tile "kubectl" (`kb · glossary`)
+  with the full entry; the tile's Close works. The MCP `dispatch_key_event`
+  for Enter reports "Attempting to access deleted window" because the palette
+  closes while the key is delivered; the action itself succeeds.
+- Memory (reached by dragging the sidebar thumb): Add, Edit and Delete of one
+  fact work and the list returns to "No approved memory yet."
+
+Defects found and fixed in 55a7a64 and accf626 (shared code, visible on
+Windows too):
+
+- The Memory statuses were hard-coded Russian, so the English UI showed
+  "➕ факт добавлен", "⏳ извлекаю…" and a bare "➕ 19" after Extract.
+  `wire_memory` now takes the shared config and picks the language at click
+  time; Extract reports "New suggestions: N" or "No new suggestions"; a
+  failed save says the local memory database is unavailable and to press Add
+  again.
+- Palette previews were cut at the first dot, so `kubectl apply -f
+  manifest.yaml` showed as "kubectl apply -f manifest". The preview now ends at
+  ". " on the first body line.
+
+accf626 drops the emoji from these new statuses: see the next point. In the
+accf626 Russian run the longer "no new suggestions" status widened the row
+past the card (a horizontal scrollbar appeared and "Добавить" moved to the
+edge), because the status Text did not wrap. 1a89391 wraps it and shortens the
+extract statuses.
+
+Russian live check on the 1a89391 QA build (`memstatus.py`): Add, Edit and
+Delete work; Extract on an empty candidate list shows "Новых предложений нет"
+with no horizontal scrollbar and "Добавить" stays at x=603. With the catalog
+file made read-only for the test, Add shows "Факт не сохранён: локальная база
+памяти недоступна. Нажмите «Добавить» ещё раз." on two lines inside the card
+(journal: "attempt to write a readonly database"). File mode, config and
+catalog were restored afterwards and compared byte for byte with the copies.
+
+Port finding, not changed: Linux draws no emoji in the software renderer. The
+memory rows lose their kind glyph (📌, 📝) and a suggestion's reason "📝 415"
+reads as a bare "415". The glyphs come from `kind_glyph` and the backend
+candidate reason; replacing them with SVG icons or words is a design change.
+
+Shared, not changed: a tile opened from the palette keeps the English source
+chip "kb · glossary" in the Russian UI (`help_palette.rs`, `format!("kb · {}",
+…)`), while the palette itself shows "глоссарий".
+
+Shared, not changed: "Extract from recent sessions" turns every stored AI turn
+into a suggestion whose text is the whole prompt the app sent ("Последние
+реплики разговора …" plus the transcript), because `ai_turns.question` stores
+the built prompt, not the user's question. 19 such suggestions appeared on the
+worker. The catalog database was restored from a byte copy afterwards.
+
 ### Other findings, not port defects
 
 All are shared host or backend behaviour, seen on Linux:
@@ -577,9 +636,21 @@ All are shared host or backend behaviour, seen on Linux:
   stealth)` plus `no_screen_share` in the Linux window module). Linux
   `fmt --check` and `--test linux_platform`: 8 passed, 0 failed, 1 ignored
   (live clipboard). Production code is unchanged from 1b1da11.
+- accf626: Windows targeted gate exit 0 (backend 818/0, host 97 + 161); Linux
+  host 160, linux_platform 8, i18n guard 3.
+- 1a89391: Windows targeted gate exit 0 (backend 818/0, host 97 + 161). Linux
+  QA build passed; the combined build-and-test unit was killed by
+  systemd-oomd again (5 GiB memory peak, 3.7 GiB swap peak, 1 h 14 min CPU in
+  2 h 25 min). The tests-only rerun with the app stopped passed i18n guard 3,
+  host 160 (1 ignored) and linux_platform 8 (1 ignored).
 - A Linux slint test build takes hours on this VM (f2df413: 22:53 to 01:07) and
   swaps at about 4.8 GiB for the library test crate. Wait on the unit state, not
   only on the EXIT marker: an OOM kill leaves none.
+- VM 107 has 4 vCPU (all four cores of the host's Intel N150) and 8 GiB; the
+  idle desktop already holds a load average near 9 because Hyprland and
+  quickshell render in software. More CPU is not available. 12 to 16 GiB of
+  memory would remove the swap stalls; building on a stronger Linux node and
+  copying only the QA binary here would cut the build from hours to minutes.
 - Omarchy fixture restored after each live run: one output (Virtual-1,
   1920x1080, scale 1), no configuration errors, zero owned bindings, config
   restored, installed host back to `ec38f602…` (2f3f2fd), service inactive.
