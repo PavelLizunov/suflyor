@@ -234,7 +234,7 @@ pub(crate) fn apply_server_preview(
     win.set_server_preview_stt(SharedString::from(line(&p.stt)));
     // GigaAM local model path: kept from THIS PC on apply. Show the incoming
     // path only when one side carries it, to keep the line useful.
-    // SECURITY: Redact user home directory paths (→ %USERPROFILE%) so screen-sharing
+    // SECURITY: Redact user home directory paths (→ %USERPROFILE% or ~) so screen-sharing
     // or copying the Settings preview never leaks the OS username (C:\Users\<name> or /Users/<name>).
     let gig = if p.gigaam_dir_incoming.trim().is_empty() && p.gigaam_dir_current.trim().is_empty() {
         String::new()
@@ -250,7 +250,7 @@ pub(crate) fn apply_server_preview(
 
 #[cfg(test)]
 mod tests {
-    use super::super::diagnostics::redact_user_home;
+    use super::super::diagnostics::{redact_user_home, HOME_PLACEHOLDER};
 
     #[test]
     fn gigaam_preview_path_redacts_user_home_directory() {
@@ -264,6 +264,6 @@ mod tests {
             !redacted.contains("alice"),
             "leaked OS username in preview: {redacted}"
         );
-        assert!(redacted.contains("%USERPROFILE%"));
+        assert!(redacted.contains(HOME_PLACEHOLDER));
     }
 }
