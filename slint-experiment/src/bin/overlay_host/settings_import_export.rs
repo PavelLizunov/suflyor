@@ -81,7 +81,7 @@ pub(crate) fn wire_import_export(
                             // Generic + log: the error chain can carry a path /
                             // internals into this screen-shared field (audit Q8).
                             eprintln!("[overlay-host] server export failed: {e:#}");
-                            if ru { "Экспорт не удался, подробности в журнале" } else { "Export failed, details are in the log" }.to_string()
+                            if ru { "Серверные настройки не экспортированы: в эту папку не удалось записать файл. Выберите другую папку и нажмите «Экспортировать серверные настройки» ещё раз." } else { "Server settings not exported: the file could not be written to that folder. Choose another folder, then press Export server settings again." }.to_string()
                         }
                     }
                 }
@@ -129,9 +129,9 @@ pub(crate) fn wire_import_export(
                     w.set_server_preview_ready(false);
                     eprintln!("[overlay-host] server import preview failed: {e:#}");
                     w.set_profile_io_result(SharedString::from(if ru {
-                        "Не удалось прочитать файл, подробности в журнале"
+                        "Серверные настройки не прочитаны: файл не читается или это не экспорт настроек Суфлёра. Выберите экспортированный .json и нажмите «Импортировать серверные настройки» ещё раз."
                     } else {
-                        "Could not read the file, details are in the log"
+                        "Server settings not read: the file cannot be read or is not a Suflyor settings export. Pick the exported .json file, then press Import server settings again."
                     }));
                 }
             }
@@ -171,7 +171,7 @@ pub(crate) fn wire_import_export(
                 }
                 Err(e) => {
                     eprintln!("[overlay-host] server settings apply/save failed: {e:#}");
-                    if ru { "Не удалось применить, подробности в журнале" } else { "Could not apply, details are in the log" }.to_string()
+                    if ru { "Серверные настройки не применены: не удалось сохранить файл настроек приложения. Проверьте свободное место на диске и нажмите «Импортировать серверные настройки» ещё раз." } else { "Server settings not applied: the app's settings file could not be saved. Check free disk space, then press Import server settings again." }.to_string()
                 }
             };
             w.set_profile_io_result(SharedString::from(msg));

@@ -767,9 +767,9 @@ pub(crate) fn open_settings(
                         // Generic + log: the chain can carry a path (audit Q8).
                         eprintln!("[overlay-host] settings export failed: {e:#}");
                         if ru {
-                            "Экспорт не удался, подробности в журнале"
+                            "Настройки не экспортированы: в эту папку не удалось записать файл. Выберите другую папку и нажмите «Экспорт настроек (с ключами)» ещё раз."
                         } else {
-                            "Export failed, details are in the log"
+                            "Settings not exported: the file could not be written to that folder. Choose another folder, then press Export settings again."
                         }
                         .to_string()
                     }
@@ -817,9 +817,9 @@ pub(crate) fn open_settings(
                         Err(e) => {
                             eprintln!("[overlay-host] settings import failed: {e:#}");
                             if ru {
-                                "Импорт не удался: файл не подходит, подробности в журнале"
+                                "Настройки не импортированы: файл не читается или это не экспорт настроек Суфлёра. Выберите экспортированный .json и нажмите «Импорт настроек» ещё раз."
                             } else {
-                                "Import failed: the file does not fit, details are in the log"
+                                "Settings not imported: the file cannot be read or is not a Suflyor settings export. Pick the exported .json file, then press Import settings again."
                             }
                             .to_string()
                         }
