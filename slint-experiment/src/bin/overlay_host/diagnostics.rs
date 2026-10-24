@@ -603,7 +603,9 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                 let msg =
                     match overlay_backend::persistence::maintenance::diagnose_and_repair_default() {
                         Ok(h) => {
-                            let backup = h.backup_path.unwrap_or_else(|| "—".to_string());
+                            let backup = h
+                                .backup_path
+                                .map_or_else(|| "—".to_string(), |p| redact_user_home(&p));
                             if h.healthy {
                                 if ru { format!("База в порядке. Резервная копия: {backup}") } else { format!("Database healthy. Backup: {backup}") }
                             } else {
@@ -614,7 +616,15 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                                 ) }
                             }
                         }
-                        Err(e) => if ru { format!("Не удалось проверить базу: {e}") } else { format!("Could not check database: {e}") },
+                        Err(e) => {
+                            eprintln!("[overlay-host] database check failed: {e:#}");
+                            if ru {
+                                "База не проверена: не удалось создать папку резервных копий. Проверьте свободное место на диске и нажмите «Проверить и починить базу» ещё раз."
+                            } else {
+                                "Database not checked: the backups folder could not be created. Check free disk space, then press Check & repair database again."
+                            }
+                            .to_string()
+                        }
                     };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = done.upgrade() {
@@ -646,11 +656,14 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                 let msg =
                     match overlay_backend::persistence::maintenance::clear_memory_candidates_default() {
                         Ok(r) => if ru { format!("Очередь предложений очищена: удалено {}. Резервная копия: {}",
-                            r.cleared, r.backup_path
+                            r.cleared, redact_user_home(&r.backup_path)
                         ) } else { format!("Suggestions cleared: {} removed. Backup: {}",
-                            r.cleared, r.backup_path
+                            r.cleared, redact_user_home(&r.backup_path)
                         ) },
-                        Err(e) => if ru { format!("Очистка отменена: {e}") } else { format!("Clear cancelled: {e}") },
+                        Err(e) => {
+                            eprintln!("[overlay-host] clear suggestions failed: {e:#}");
+                            clear_failed_status(ru, CLEAR_QUEUE_BUTTON)
+                        }
                     };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = done.upgrade() {
@@ -683,21 +696,20 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                             if ru {
                                 format!(
                                     "Одобренная память очищена: удалено {}. Резервная копия: {}",
-                                    r.cleared, r.backup_path
+                                    r.cleared,
+                                    redact_user_home(&r.backup_path)
                                 )
                             } else {
                                 format!(
                                     "Approved memory cleared: {} removed. Backup: {}",
-                                    r.cleared, r.backup_path
+                                    r.cleared,
+                                    redact_user_home(&r.backup_path)
                                 )
                             }
                         }
                         Err(e) => {
-                            if ru {
-                                format!("Очистка отменена: {e}")
-                            } else {
-                                format!("Clear cancelled: {e}")
-                            }
+                            eprintln!("[overlay-host] clear memory failed: {e:#}");
+                            clear_failed_status(ru, CLEAR_MEMORY_BUTTON)
                         }
                     };
                 let _ = slint::invoke_from_event_loop(move || {
@@ -955,6 +967,20 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
     }
 }
 
+/// Clear-button labels as `settings_panel.slint` and `ru.po` show them, `(en, ru)`.
+const CLEAR_QUEUE_BUTTON: (&str, &str) =
+    ("Clear suggestions queue", "Очистить очередь предложений");
+const CLEAR_MEMORY_BUTTON: (&str, &str) = ("Clear approved memory", "Очистить одобренную память");
+
+/// A failed clear: a single DELETE after a mandatory backup, so nothing was removed.
+fn clear_failed_status(ru: bool, (en_b, ru_b): (&str, &str)) -> String {
+    if ru {
+        format!("Очистка отменена, ничего не удалено: не удалось сохранить резервную копию или изменить базу. Проверьте свободное место на диске и нажмите «{ru_b}» ещё раз.")
+    } else {
+        format!("Clear cancelled, nothing was deleted: the backup or the database could not be written. Check free disk space, then press {en_b} again.")
+    }
+}
+
 /// Status after "Collect logs": the saved path, or the cause and the button to press again.
 fn collect_logs_status(ru: bool, saved: Result<&str, &str>) -> String {
     match (saved, ru) {
@@ -1078,6 +1104,14 @@ mod tests {
     // redaction never masked LOCAL FILE PATHS — so the STT model dir (under the
     // user home) leaked the OS username verbatim. Lock that the user-home →
     // %USERPROFILE% masking holds and is path-safe.
+    #[test]
+    fn clear_failure_names_the_button() {
+        assert!(clear_failed_status(false, CLEAR_QUEUE_BUTTON)
+            .ends_with("press Clear suggestions queue again."));
+        assert!(clear_failed_status(true, CLEAR_MEMORY_BUTTON)
+            .ends_with("нажмите «Очистить одобренную память» ещё раз."));
+    }
+
     #[test]
     fn collect_logs_status_follows_ui_language() {
         assert_eq!(
