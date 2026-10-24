@@ -93,14 +93,17 @@ fn plugin_installed_label(done: &PluginInstalled, bridge_on: bool, ru: bool) -> 
 /// A Hermes file error: the cause, then the button (`(en, ru)` label) to press again.
 fn hermes_error_label(error: &HermesError, button: (&str, &str), ru: bool) -> String {
     let (en_b, ru_b) = button;
+    // Settings can be screen-shared: show the home folder masked, as Diagnostics does.
+    let shown =
+        |p: &std::path::Path| super::diagnostics::redact_user_home(&p.display().to_string());
     match (error, ru) {
         (HermesError::NotFound(Some(home)), true) => format!(
             "Hermes не найден: нет папки {}. Установите Hermes и нажмите «{ru_b}» ещё раз.",
-            home.display()
+            shown(home)
         ),
         (HermesError::NotFound(Some(home)), false) => format!(
             "Hermes not found: there is no {} folder. Install Hermes, then press {en_b} again.",
-            home.display()
+            shown(home)
         ),
         (HermesError::NotFound(None), true) => format!(
             "Hermes не найден: не задан домашний каталог. Укажите HERMES_HOME и нажмите «{ru_b}» ещё раз."
@@ -110,11 +113,11 @@ fn hermes_error_label(error: &HermesError, button: (&str, &str), ru: bool) -> St
         ),
         (HermesError::Io(path, e), true) => format!(
             "Нет доступа к {}: {e}. Проверьте права на файл и нажмите «{ru_b}» ещё раз.",
-            path.display()
+            shown(path)
         ),
         (HermesError::Io(path, e), false) => format!(
             "Cannot access {}: {e}. Check the file permissions, then press {en_b} again.",
-            path.display()
+            shown(path)
         ),
         (HermesError::UnsupportedConfig, true) => format!(
             "config.yaml в Hermes нестандартный: впишите platforms.api_server.extra.key вручную и нажмите «{ru_b}» ещё раз."

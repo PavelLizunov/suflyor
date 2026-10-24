@@ -545,8 +545,8 @@ list; "Delete" returns to "none yet — name one and Add" and the config holds
 `config.json.bak`; after the run it held the test profile, so it was reset to
 the saved original config.
 
-Not yet done for item 5: file dialogs (export/import), Hermes install, setup
-wizard, and the destructive "Clear …" buttons.
+File dialogs, Hermes install and the "Clear …" buttons are covered in the
+section "Settings file dialogs, Hermes install and database clears" below.
 
 ### Knowledge palette and personal memory (section 7 item 4, part)
 
@@ -604,6 +604,63 @@ into a suggestion whose text is the whole prompt the app sent ("Последни
 реплики разговора …" plus the transcript), because `ai_turns.question` stores
 the built prompt, not the user's question. 19 such suggestions appeared on the
 worker. The catalog database was restored from a byte copy afterwards.
+
+### Settings file dialogs, Hermes install and database clears (section 7 item 5, rest)
+
+Live, October 24, after VM 107 moved to `pve-ninitux` (8 vCPU, 16 GiB). A
+Linux build plus the targeted tests now takes about 5 minutes instead of
+2–3 hours. QA builds ef69853 and 77fbabd, English UI (`tabclick.py`, `io.py`,
+`clear.py` in the private evidence folder; `vmctl.py` sends real keys and takes
+the real framebuffer).
+
+- `grim` cannot show which window is on top: Hyprland paints every
+  `no_screen_share` window as a black box over the capture, whatever covers it.
+  Use the QEMU framebuffer (`qm monitor screendump`) for z-order questions. On
+  that frame the GTK portal dialog sits above Settings and is fully usable.
+- `wtype` does not reach the GTK portal dialog; `qm sendkey` does. In the open
+  dialog Ctrl+L opens the path bar.
+- Export settings: the portal "Save" dialog proposes `suflyor-settings.json` in
+  Home; Enter saves it (mode 600, 2.9 kB) and the tab shows "Settings exported
+  to /home/tester/suflyor-settings.json". Escape gives "Export cancelled". The
+  app's event loop waits while the dialog is open (the MCP click returns when
+  it closes); Hyprland showed no "not responding" dialog.
+- Import settings of that file: "Settings imported — restart the app for full
+  effect". A file that is not a settings export (`qa-not-settings.json`) now
+  reports "Settings not imported: the file cannot be read or is not a Suflyor
+  settings export. Pick the exported .json file, then press Import settings
+  again."
+- Import server settings: the redacted preview appears, but it showed the
+  GigaAM path as `%USERPROFILE%/suflyor-evidence/…`; 7a45e45 masks the home as
+  `~` outside Windows.
+- Hermes, no Hermes home (`HERMES_HOME` pointed at a missing folder): ef69853
+  showed "Error: Hermes не найден на этой машине (нет …)" in the English UI for
+  both "Install plugin in Hermes" and "Get key from local Hermes". 77fbabd
+  shows "Hermes not found: there is no … folder. Install Hermes, then press
+  Install plugin in Hermes again." With a scratch Hermes home: "Plugin installed
+  and enabled — restart Hermes · enable the Hermes bridge above", then "Plugin
+  updated (already enabled)", the plugin files, `- suflyor` in `config.yaml`
+  and `.env` with mode 600; "Get key" answers "API server enabled, key saved —
+  restart Hermes"; with `.env` at mode 000 the install reports "Cannot access
+  …/.env: Permission denied (os error 13). Check the file permissions, then
+  press Install plugin in Hermes again." The real `~/.hermes` was not touched.
+- Memory: Extract keeps the card width after a status (ef69853); the status
+  sits on its own line.
+- Diagnostics "Clear suggestions queue" and "Clear approved memory": the first
+  press arms ("Tap again — …"), the second clears; the catalog then held 0
+  candidates and 0 live items, and a backup was written first. The status
+  showed the full backup path with the user name, while the log path on the
+  same tab is masked; 2f77266 masks it and gives failed clears and checks a
+  cause and the button to press again instead of the backend's Russian error.
+
+Defects fixed in this pass (shared code, visible on Windows too unless noted):
+
+- ef69853: the Extract button jumped between card width and text width with
+  each status; the palette tile chip stayed "kb · glossary" in Russian.
+- 77fbabd: five settings I/O failures said "details are in the log" with no
+  next step; Hermes install and key setup returned Russian backend strings.
+- 7a45e45: `%USERPROFILE%` as the home mask on Linux and macOS (now `~`);
+  "Collect logs" answered in Russian in both UIs.
+- 2f77266: unmasked backup paths and next-step-free database errors.
 
 ### Other findings, not port defects
 
