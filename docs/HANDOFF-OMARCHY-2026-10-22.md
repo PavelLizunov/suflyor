@@ -661,6 +661,35 @@ Defects fixed in this pass (shared code, visible on Windows too unless noted):
 - 7a45e45: `%USERPROFILE%` as the home mask on Linux and macOS (now `~`);
   "Collect logs" answered in Russian in both UIs.
 - 2f77266: unmasked backup paths and next-step-free database errors.
+- 20f0ab1: the wizard's last step cut the Russian "Требует внимания" to
+  "Требует внима"; the status now wraps. Hermes error paths use the home mask.
+- 06bb51d: the red "Clear …" buttons used 12px while the buttons beside them use
+  the window default; they now match.
+
+Setup wizard, Russian, 2f77266 and 06bb51d (`wizard.py`): seven steps; "Проверить
+AI" and "Проверить STT" answer "Подключение работает", the microphone step marks
+"Требует внимания / Не удалось открыть микрофон" (no microphone in the VM),
+system audio records the test tone at -12 dBFS, "Начать работу" closes the
+wizard. Russian Hermes, clear and log statuses checked on 2f77266: "Hermes не
+найден: нет папки … Установите Hermes и нажмите «Установить плагин в Hermes»
+ещё раз.", "Одобренная память очищена: удалено 0. Резервная копия: ~/…",
+"Лог сохранён: ~/…". The server-preview GigaAM line stays English in the
+Russian UI (the preview lines are raw data by design).
+
+Gates: Linux host build plus targeted tests passed on every commit of this
+pass (06bb51d: host 164, linux_platform 8, i18n guard 3, backend
+hermes_install 24, `hermes_plugin_smoke` builds). Windows targeted gate on
+06bb51d: exit 0, backend 818/0, host 97 + 165, TTS 21, Tera 73; wrapper
+restored (`972DC146…F728`), PostReleaseDocs Ready, S7 Disabled.
+
+Worker state after this pass: Omarchy service stopped, binary `ec38f602…`,
+config and catalog equal to the saved copies, backups folder removed, the
+exported settings file (it holds keys) and the scratch Hermes home deleted,
+`HERMES_HOME` unset in the user manager, real `~/.hermes` untouched. VMs 100,
+101 and 107 now share `pve-ninitux` through `permanent-worker-mutex.py`
+(`acquire <vmid> --request-id …` / `release --request-id …`); only one runs at
+a time, so the Windows gate and Omarchy work run in turn. All three were
+released at the end.
 
 ### Other findings, not port defects
 
