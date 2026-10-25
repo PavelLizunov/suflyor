@@ -92,9 +92,11 @@ fn check_slurp_status(output: &Output) -> Result<(), RegionSelectionError> {
         Some(124 | 137) => RegionSelectionError::TimedOut,
         None if output.status.signal() == Some(9) => RegionSelectionError::TimedOut,
         Some(127) => RegionSelectionError::SlurpMissing,
+        // Esc / right click: slurp exits 1 and prints "selection cancelled".
         Some(1)
             if output.stdout.iter().all(u8::is_ascii_whitespace)
-                && output.stderr.iter().all(u8::is_ascii_whitespace) =>
+                && (output.stderr.iter().all(u8::is_ascii_whitespace)
+                    || String::from_utf8_lossy(&output.stderr).contains("selection cancelled")) =>
         {
             RegionSelectionError::Cancelled
         }
@@ -448,10 +450,12 @@ mod tests {
             stderr: stderr.to_vec(),
         };
         assert_eq!(check_slurp_status(&output(0, b"0,0 10x10", b"")), Ok(()));
-        assert_eq!(
-            check_slurp_status(&output(1, b"", b"")),
-            Err(RegionSelectionError::Cancelled)
-        );
+        for stderr in [&b""[..], b"selection cancelled\n"] {
+            assert_eq!(
+                check_slurp_status(&output(1, b"", stderr)),
+                Err(RegionSelectionError::Cancelled)
+            );
+        }
         assert_eq!(
             check_slurp_status(&output(1, b"", b"failed to connect to Wayland display")),
             Err(RegionSelectionError::SlurpFailed)

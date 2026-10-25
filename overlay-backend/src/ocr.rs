@@ -88,21 +88,30 @@ pub fn tesseract_exe() -> Option<PathBuf> {
 /// use Tesseract vs. fall back to the vision-LLM.
 #[must_use]
 pub fn is_available() -> bool {
-    #[cfg(target_os = "linux")]
-    {
-        tesseract_root().is_some_and(|root| {
-            let tessdata = linux_tessdata(&root);
-            missing_language_packages(DEFAULT_OCR_LANG, |language| {
-                tessdata.join(format!("{language}.traineddata")).is_file()
-            })
-            .is_empty()
-        })
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        tesseract_exe().is_some()
+    tesseract_exe().is_some()
+}
+
+/// An OCR failure the user can fix. The host words it in the UI language;
+/// every other failure stays a generic tile with the detail in the log.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OcrFailure {
+    /// Tesseract runs, but these language packages are not installed.
+    MissingLanguageData(String),
+    TimedOut,
+}
+
+impl std::fmt::Display for OcrFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingLanguageData(packages) => {
+                write!(f, "OCR language data is missing: {packages}")
+            }
+            Self::TimedOut => f.write_str("tesseract timed out after 60 s"),
+        }
     }
 }
+
+impl std::error::Error for OcrFailure {}
 
 #[cfg(target_os = "linux")]
 fn linux_tessdata(root: &Path) -> PathBuf {
@@ -156,15 +165,7 @@ pub fn run_ocr(bgra: &[u8], width: u32, height: u32, lang: &str) -> Result<Strin
             tessdata.join(format!("{language}.traineddata")).is_file()
         });
         if !missing.is_empty() {
-            let packages = missing.join(", ");
-            let ui_is_ru = crate::config::load().ui_is_ru();
-            bail!(if ui_is_ru {
-                format!("Нет языковых данных OCR; установите {packages} и повторите захват текста.")
-            } else {
-                format!(
-                    "OCR language data is missing; install {packages} and capture the text again."
-                )
-            });
+            return Err(OcrFailure::MissingLanguageData(missing.join(", ")).into());
         }
     }
     let bmp = bgra_to_bmp(bgra, width, height);
@@ -190,12 +191,7 @@ pub fn run_ocr(bgra: &[u8], width: u32, height: u32, lang: &str) -> Result<Strin
     {
         use std::os::unix::process::ExitStatusExt;
         if matches!(out.status.code(), Some(124) | Some(137)) || out.status.signal() == Some(9) {
-            let ui_is_ru = crate::config::load().ui_is_ru();
-            bail!(if ui_is_ru {
-                "Превышено время OCR (60 с); выберите меньшую область и повторите захват текста."
-            } else {
-                "OCR timed out after 60 s; select a smaller region and capture the text again."
-            });
+            return Err(OcrFailure::TimedOut.into());
         }
     }
     if !out.status.success() {

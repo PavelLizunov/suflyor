@@ -1642,13 +1642,22 @@ async fn maybe_spawn_auto_tile(
                     );
                     return;
                 }
-                let reason = crate::app_state::classify_ai_error(&chain);
+                let reason = crate::app_state::ai_error_text(
+                    crate::app_state::classify_ai_error(&chain),
+                    ui_is_ru,
+                );
                 let _ = events.spawn_tile_full(
                         TileSpec {
-                            question: "AI недоступен".into(),
-                            answer: format!(
-                                "**Не получаю ответ от AI:** {reason}\n\nАвто-подсказки приостановлены, пока AI не ответит. Проверьте локальный AI-сервер или AI-мост (Настройки -> AI). Можно перезапустить приложение кнопкой restart на панели."
-                            ),
+                            question: if ui_is_ru { "AI недоступен" } else { "AI unavailable" }.into(),
+                            answer: if ui_is_ru {
+                                format!(
+                                    "**Не получаю ответ от AI:** {reason}\n\nАвто-подсказки приостановлены, пока AI не ответит. Проверьте локальный AI-сервер или AI-мост (Настройки -> AI). Можно перезапустить приложение кнопкой restart на панели."
+                                )
+                            } else {
+                                format!(
+                                    "**No answer from the AI:** {reason}\n\nAuto hints are paused until the AI answers. Check the local AI server or the AI bridge (Settings -> AI). You can restart the app with the restart button on the bar."
+                                )
+                            },
                             source: "ai_error".into(),
                             is_translation: false,
                             highlights: vec!["AI error".into()],

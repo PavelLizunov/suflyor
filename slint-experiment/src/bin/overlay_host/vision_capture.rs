@@ -80,21 +80,39 @@ fn local_ocr_available() -> bool {
     }
 }
 
-fn run_local_ocr(bgra: &[u8], width: u32, height: u32) -> Result<String, String> {
+fn run_local_ocr(bgra: &[u8], width: u32, height: u32) -> anyhow::Result<String> {
     #[cfg(any(windows, target_os = "linux"))]
     {
         overlay_backend::ocr::run_ocr(bgra, width, height, overlay_backend::ocr::DEFAULT_OCR_LANG)
-            .map_err(|error| format!("{error:#}"))
     }
     #[cfg(target_os = "macos")]
     {
         slint_replay::native::screen::recognize_text_from_bgra(bgra, width, height)
-            .map_err(|error| error.to_string())
+            .map_err(|error| anyhow::anyhow!(error.to_string()))
     }
     #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     {
         let _ = (bgra, width, height);
-        Err("local OCR is unsupported".into())
+        Err(anyhow::anyhow!("local OCR is unsupported"))
+    }
+}
+
+/// Tile text for an OCR failure the user can fix, in the UI language.
+fn ocr_failure_text(failure: &overlay_backend::ocr::OcrFailure, ui_is_ru: bool) -> String {
+    use overlay_backend::ocr::OcrFailure;
+    match (failure, ui_is_ru) {
+        (OcrFailure::MissingLanguageData(packages), true) => format!(
+            "Нет языковых данных для распознавания текста. Установите {packages} и снова нажмите Ctrl+F8."
+        ),
+        (OcrFailure::MissingLanguageData(packages), false) => format!(
+            "Text recognition has no language data. Install {packages}, then press Ctrl+F8 again."
+        ),
+        (OcrFailure::TimedOut, true) => {
+            "Распознавание текста не уложилось в 60 с. Выделите область поменьше и снова нажмите Ctrl+F8.".into()
+        }
+        (OcrFailure::TimedOut, false) => {
+            "Text recognition took longer than 60 s. Select a smaller region, then press Ctrl+F8 again.".into()
+        }
     }
 }
 
@@ -795,23 +813,23 @@ pub(crate) fn launch_vision_for_bgra(
         rt_handle.spawn(async move {
             let res = tokio::task::spawn_blocking(move || run_local_ocr(&bgra, w, h)).await;
             let text = match res {
-                Ok(Ok(text)) => Some(text),
+                Ok(Ok(text)) => Ok(text),
                 Ok(Err(e)) => {
-                    // Detail to the local log only; the tile stays generic.
+                    // Detail to the local log only; the tile names a cause
+                    // only when the user can fix it.
                     diag!("[overlay-host] OCR failed: {e:#}");
-                    None
+                    Err(e
+                        .downcast_ref::<overlay_backend::ocr::OcrFailure>()
+                        .map(|failure| ocr_failure_text(failure, ui_is_ru)))
                 }
                 Err(e) => {
                     diag!("[overlay-host] OCR task join error: {e}");
-                    None
+                    Err(None)
                 }
             };
-            let _ = slint::invoke_from_event_loop(move || {
-                if let Some(text) = text {
-                    super::fill_ocr_tile(weak_ocr, convo_id, &bridge_ocr, &text, ui_is_ru);
-                } else {
-                    super::fill_ocr_error_tile(weak_ocr, ui_is_ru);
-                }
+            let _ = slint::invoke_from_event_loop(move || match text {
+                Ok(text) => super::fill_ocr_tile(weak_ocr, convo_id, &bridge_ocr, &text, ui_is_ru),
+                Err(detail) => super::fill_ocr_error_tile(weak_ocr, ui_is_ru, detail.as_deref()),
             });
         });
         return;
@@ -1021,6 +1039,19 @@ pub(crate) fn launch_vision_for_bgra(
 mod tests {
     use super::vision_tile_copy;
     use overlay_backend::vision::VisionMode;
+
+    #[test]
+    fn fixable_ocr_failures_name_the_step_in_both_languages() {
+        use overlay_backend::ocr::OcrFailure;
+        let missing = OcrFailure::MissingLanguageData("tesseract-data-rus".into());
+        assert_eq!(
+            super::ocr_failure_text(&missing, false),
+            "Text recognition has no language data. Install tesseract-data-rus, then press Ctrl+F8 again."
+        );
+        assert!(super::ocr_failure_text(&missing, true).contains("Установите tesseract-data-rus"));
+        assert!(super::ocr_failure_text(&OcrFailure::TimedOut, false).contains("smaller region"));
+        assert!(super::ocr_failure_text(&OcrFailure::TimedOut, true).contains("поменьше"));
+    }
 
     #[cfg(target_os = "linux")]
     #[test]

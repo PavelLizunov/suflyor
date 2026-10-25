@@ -244,16 +244,21 @@ pub(super) fn fill_ocr_tile(
 }
 
 /// Finish an existing OCR tile after the platform-local engine fails. Called
-/// on the Slint UI thread; diagnostic detail stays in the worker-side log.
-pub(super) fn fill_ocr_error_tile(weak: slint::Weak<TileWindow>, ui_is_ru: bool) {
+/// on the Slint UI thread; diagnostic detail stays in the worker-side log, and
+/// `detail` is a cause the user can fix.
+pub(super) fn fill_ocr_error_tile(
+    weak: slint::Weak<TileWindow>,
+    ui_is_ru: bool,
+    detail: Option<&str>,
+) {
     let Some(tile) = weak.upgrade() else {
         return;
     };
-    let message = if ui_is_ru {
+    let message = detail.unwrap_or(if ui_is_ru {
         "Не удалось распознать текст."
     } else {
         "Text recognition failed."
-    };
+    });
     tile.set_followup_busy(false);
     tile.set_can_regenerate(false);
     tile.set_can_speak(false);

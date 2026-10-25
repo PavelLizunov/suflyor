@@ -130,6 +130,8 @@ jobs:
           --test lock_mode_menu_guard
           --test macos_settings_guard
           --test rc3_regression_guard
+          --test settings_download_lifecycle
+          --test settings_provider_geometry
           --test settings_reset_guard
           --test tera_tts_layout_guard
           --test tile_player_layout_guard
