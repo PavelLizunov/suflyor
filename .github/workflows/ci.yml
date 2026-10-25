@@ -215,7 +215,7 @@ jobs:
             slint-experiment
 
       - name: backend unit tests (Linux)
-        run: cargo test --locked --lib --manifest-path overlay-backend/Cargo.toml
+        run: cargo test --lib --manifest-path overlay-backend/Cargo.toml
       - name: slint unit, Linux platform and i18n tests
         run: >-
           cargo test --locked --no-default-features --features ui-mcp
