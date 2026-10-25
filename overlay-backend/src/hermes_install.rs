@@ -154,7 +154,7 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<PluginInstalled, 
 }
 
 /// Ensure the local Hermes API server is enabled with a key, creating both
-/// when missing (the «Настроить локальный Hermes» button — the tester should
+/// when missing (the «Ключ из локального Hermes» button — the tester should
 /// never have to hand-edit YAML to learn what an API_SERVER_KEY is).
 /// Returns `(key, changed)`; `changed` says config.yaml was rewritten (⇒ the
 /// user must restart Hermes).

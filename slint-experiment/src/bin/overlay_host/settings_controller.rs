@@ -1363,9 +1363,9 @@ pub(crate) fn open_settings(
             spawn_ptt_watchdog(stop.clone());
             w.set_context_dictating(true);
             w.set_meeting_context_result(SharedString::from(if ru {
-                "Запись… (нажмите «Остановить»)"
+                "Запись… (нажмите «Остановить запись»)"
             } else {
-                "Recording… (press Stop)"
+                "Recording… (press Stop recording)"
             }));
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
@@ -1795,7 +1795,7 @@ pub(crate) fn active_rows(snap: &overlay_backend::config::Config) -> Vec<Compone
         match (snap.vision_provider.as_str(), ru) {
             ("off", true) => "Выключено: выберите модель для скриншотов",
             ("off", false) => "Off: choose a model for screenshots",
-            (_, true) => "Не настроено: выберите «Как у модели ответов» или другую модель",
+            (_, true) => "Не настроено: выберите «Та же, что отвечает» или другую модель",
             (_, false) => "Not set up: choose Same as the answer model or another model",
         },
         17,
