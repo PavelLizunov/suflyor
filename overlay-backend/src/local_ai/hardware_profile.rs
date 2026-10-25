@@ -56,11 +56,6 @@ impl HardwareModelProfile {
             (Self::Unknown, _) => 8_192,
         }
     }
-
-    #[must_use]
-    pub const fn requires_prep_switch(self) -> bool {
-        matches!(self, Self::Primary26Vram8 | Self::Primary26Vram12)
-    }
 }
 
 /// Whether a profile is in the owner's confirmed 26B-A4B matrix.

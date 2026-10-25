@@ -473,23 +473,6 @@ fn safe_display_label(value: &str) -> Option<String> {
     .then(|| value.to_string())
 }
 
-/// Read current subscription-account state without exposing email or tokens.
-#[must_use]
-pub fn account_state() -> AccountState {
-    match account_state_inner() {
-        Ok(state) => state,
-        Err(RpcFailure::NotInstalled) => AccountState::NotInstalled,
-        Err(_) => AccountState::Error,
-    }
-}
-
-fn account_state_inner() -> Result<AccountState, RpcFailure> {
-    let mut server = AppServer::start()?;
-    server.initialize()?;
-    let result = server.request(2, "account/read", json!({"refreshToken":false}))?;
-    parse_account_state(&result)
-}
-
 /// Reserve a device-login attempt before its worker thread starts. Starting a
 /// new attempt invalidates any older one, including workers not scheduled yet.
 #[must_use]

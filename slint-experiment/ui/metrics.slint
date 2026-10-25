@@ -53,12 +53,11 @@ export global Metrics {
     out property <length> control-md: 22px;       // bar chip height — Chip/LiveChip/RecordBtn/status pill + replay chip `height: 22px`
     out property <length> control-lg: 28px;       // header / icon-button row height — tile chrome buttons + help header `height: 28px`
     out property <length> icon-button-size: 30px; // square icon-button width — tile copy/regen/escalate/close `width: 30px`
-    // Redesign «Glacier» control scale 28 / 36 / 44 (extends the harvested
+    // Redesign «Glacier» control scale 28 / 36 (extends the harvested
     // 20/22/28 above; 28 == control-lg). NEW visual values — consume per surface
     // with a check, and NEVER feed one into apply_bar_size / a window preferred-
     // size without the paired Rust change (window sizes are Slint↔Rust-synced).
     out property <length> control-xl: 36px;       // fields, search rows, archive rows, segmented control (redesign .inp/.ibtn h36)
-    out property <length> control-xxl: 44px;      // large primary actions (top of the redesign 28/36/44 scale)
 
     // ---- Typography (SIZES only) ----
     // The font FAMILY stays in Theme.font-sans / Theme.font-mono; these are the

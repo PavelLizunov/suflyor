@@ -157,11 +157,6 @@ pub fn begin_intent() -> u64 {
     state.generation
 }
 
-#[must_use]
-pub fn intent_is_current(generation: u64) -> bool {
-    state().lock().generation == generation
-}
-
 pub fn start(model: &str) -> Result<MlxEndpoint> {
     let _lifecycle = lifecycle().lock();
     start_locked(model)

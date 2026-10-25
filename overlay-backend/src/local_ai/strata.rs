@@ -50,7 +50,6 @@ const STRATA_HEALTH_URL: &str = "http://127.0.0.1:8090/health";
 #[cfg(any(windows, target_os = "linux"))]
 const STRATA_FAMILY: &str = "qwen";
 const STRATA_SIZE: &str = "IQ2_XS";
-pub const STRATA_MODEL_LABEL: &str = "Qwen3.8-Flash-Next IQ2_XS";
 pub const STRATA_MODEL_LICENSE_URL: &str = "https://huggingface.co/Qwen/Qwen3.8-Flash-Next";
 
 /// ~66 GB of model files, ~6 GB MTP draft layer, the engine and the venv.

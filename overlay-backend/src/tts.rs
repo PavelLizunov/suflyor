@@ -1486,11 +1486,6 @@ pub fn set_engine(engine_raw: &str) {
     let kind = parse_engine(engine_raw);
     with(|t| t.set_engine(kind));
 }
-/// The engine currently selected for read-aloud.
-#[must_use]
-pub fn active_engine() -> EngineKind {
-    with(|t| t.engine_kind()).unwrap_or(EngineKind::Piper)
-}
 /// Latest READY handshake of the Tera sidecar (Settings status + tests).
 #[must_use]
 pub fn tera_ready() -> Option<TeraReady> {
