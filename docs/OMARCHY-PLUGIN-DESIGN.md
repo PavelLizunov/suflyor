@@ -139,3 +139,31 @@ gates.
   hide-before-capture order applies.
 - The macOS and Windows builds must not change. The remote-window build is a
   separate cargo feature and binary, checked by the existing guard suites.
+
+## 6. Status, 2026-10-26
+
+Evidence levels: *CI* is a green run of `.github/workflows/omarchy-plugin.yml` at
+the named commit; *offscreen* is a render through `qml-preview-mcp` with the
+installed Omarchy shell modules (no live shell, no compositor); *live* would be
+an Omarchy session, and none has run yet because VM 107 is reserved by another
+session.
+
+| Part | State | Evidence |
+| --- | --- | --- |
+| Schema dump, generator, runtime, protocol | Done | CI: generated files fresh, runtime tests |
+| Host compiled against remote windows | Done, no host logic edits | CI build |
+| suflyord headless | Starts, mirrors bar/wizard/lock/tray windows, opens Settings on a shell call, sends the interface language | CI smoke log |
+| Native window seam (placement, focus, conceal around capture) | Done | CI build; no live check |
+| Stealth layer rule (`no_screen_share`, `^suflyor-`) | Done, toggled by stealth | Unit test of the script; Hyprland docs; no live check |
+| Plugin service, socket client, window mirror | Done | qmllint; offscreen via fixtures |
+| Bar widget and bar panel | Done | offscreen, idle and running session |
+| Answer tile | Done | offscreen, RU and EN |
+| Settings frame and tabs 10, 1, 0, 3, 2 | Done | offscreen from a recorded SettingsWindow snapshot |
+| Settings tabs 11, 15, 17, 12, 5, 7, 9, 16, 6, 4, 13, 14 | In progress | — |
+| Archive, transcript, palette, help, wizard, recovery, text ask | Done | offscreen |
+| Installer for the plugin build | Done | `omarchy plugin validate` passes; not run on a host |
+
+Still to do: the remaining Settings tabs; a live Omarchy pass (plugin enable,
+layers, stealth with an actual screen share, hotkeys, a real session); a
+release artifact and the one-command Marketplace install, which need the
+owner's release decision.
