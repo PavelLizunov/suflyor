@@ -185,6 +185,43 @@ jobs:
       - name: macOS compile-seam gate
         run: bash scripts/git-gate-macos.sh
 
+  # Advisory Linux (Wayland port) job, like macOS: not a dependency of "gate".
+  # It compiles the Linux adapters and runs their unit and guard tests; live
+  # compositor, audio and clipboard checks stay on the Omarchy worker.
+  linux:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-24.04
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config \
+            libasound2-dev libfontconfig1-dev libfreetype-dev libxkbcommon-dev \
+            libwayland-dev libudev-dev libdbus-1-dev
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            overlay-backend
+            slint-experiment
+
+      - name: backend unit tests (Linux)
+        run: cargo test --locked --lib --manifest-path overlay-backend/Cargo.toml
+      - name: slint unit, Linux platform and i18n tests
+        run: >-
+          cargo test --locked --no-default-features --features ui-mcp
+          --manifest-path slint-experiment/Cargo.toml
+          --lib --bin overlay-host --test linux_platform --test i18n_guard
+
   # Stable required context: "gate".  `if: always()` is load-bearing:
   # docs-only PRs skip the rust job, and without always() GitHub would skip
   # gate too (a needed job was skipped), leaving the required context missing.
