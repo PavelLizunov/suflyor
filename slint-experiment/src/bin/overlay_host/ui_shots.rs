@@ -77,7 +77,9 @@ fn save(adapter: &MinimalSoftwareWindow, w: u32, h: u32, name: &str, trim: bool)
 }
 
 fn select(lang: &str) {
-    slint::select_bundled_translation(lang).expect("select translation");
+    if let Err(e) = slint::select_bundled_translation(lang) {
+        assert_eq!(lang, "en", "select {lang}: {e:?}");
+    }
 }
 
 fn settings(lang: &str, tab: i32, name: &str, setup: impl FnOnce(&crate::ui::SettingsWindow)) {
@@ -97,6 +99,9 @@ fn render() {
     slint::platform::set_platform(Box::new(ShotPlatform)).expect("platform");
     std::fs::create_dir_all(out_dir()).expect("out dir");
     let after = std::env::var("UI_SHOTS_SET").map_or(true, |s| s != "before");
+    // Slint registers the bundled translations with the first component.
+    let _warm = crate::ui::SettingsWindow::new().expect("warm-up window");
+    let _ = take_adapter();
     for lang in ["en", "ru"] {
         select(lang);
         let ru = lang == "ru";
