@@ -19,10 +19,18 @@ pub mod clipboard;
 #[path = "linux/desktop.rs"]
 pub mod desktop;
 #[cfg(target_os = "linux")]
+#[path = "linux/displays.rs"]
+mod displays;
+#[cfg(target_os = "linux")]
 #[path = "linux/screen.rs"]
 pub mod screen;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(feature = "remote-ui")))]
 #[path = "linux/window.rs"]
+pub mod window;
+// The Omarchy plugin build: windows are shell layers, placed through suflyord's
+// remote windows instead of Hyprland clients.
+#[cfg(all(target_os = "linux", feature = "remote-ui"))]
+#[path = "remote/window.rs"]
 pub mod window;
 
 #[cfg(windows)]

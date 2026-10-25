@@ -19,7 +19,9 @@ PanelWindow {
   // Until suflyord places the tile, cascade from the top-left by tile number.
   readonly property int fallbackOffset: Style.space(24) * (win.prop("sequence", 0) % 8)
 
-  visible: win.visible
+  // The host parks a window far off screen while it prepares it.
+  readonly property bool parked: typeof g.x === "number" && (g.x < -10000 || g.y < -10000)
+  visible: win.visible && !parked && !(service && service.client.concealed)
   color: "transparent"
   screen: Quickshell.screens.length ? Quickshell.screens[0] : null
 

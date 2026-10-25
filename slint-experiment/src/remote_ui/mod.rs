@@ -215,6 +215,8 @@ struct Registry {
     next_id: u64,
     objects: BTreeMap<String, Weak<dyn RemoteObject>>,
     adapters: BTreeMap<String, Weak<RemoteAdapter>>,
+    /// The same adapters by number: the "native id" native::window hands out.
+    natives: BTreeMap<isize, Weak<RemoteAdapter>>,
     globals: BTreeMap<(String, String), Value>,
     sent_models: HashMap<(String, String), Value>,
     last_adapter: Option<Rc<RemoteAdapter>>,
@@ -294,7 +296,10 @@ impl RemoteBase {
             let mut r = r.borrow_mut();
             r.next_id += 1;
             let id = format!("{kind}-{}", r.next_id);
+            let num = isize::try_from(r.next_id).unwrap_or(isize::MAX);
             r.adapters.insert(id.clone(), Rc::downgrade(&adapter));
+            r.natives.insert(num, Rc::downgrade(&adapter));
+            adapter.num.set(num);
             id
         });
         *adapter.id.borrow_mut() = id.clone();
@@ -371,6 +376,7 @@ impl RemoteBase {
             let mut r = r.borrow_mut();
             r.objects.remove(&self.id);
             r.adapters.remove(&self.id);
+            r.natives.remove(&self.adapter.num.get());
             r.sent_models.retain(|(win, _), _| win != &self.id);
         });
         send(json!({ "t": "close", "win": self.id }));
@@ -385,6 +391,7 @@ pub struct RemoteAdapter {
     window: slint::Window,
     renderer: SoftwareRenderer,
     id: RefCell<String>,
+    num: Cell<isize>,
     size: Cell<PhysicalSize>,
     position: Cell<Option<PhysicalPosition>>,
 }
@@ -445,6 +452,82 @@ impl WindowAdapter for RemoteAdapter {
     }
 }
 
+// ---------------------------------------------------------------- native window seam
+
+// What native::window does with a remote window in the plugin build. Ids are
+// the window numbers; geometry and requests go to the shell, which places the
+// layer. Event-loop thread only, like the windows themselves.
+
+fn native(id: isize) -> Option<Rc<RemoteAdapter>> {
+    REGISTRY.with(|r| r.borrow().natives.get(&id).and_then(Weak::upgrade))
+}
+
+/// The native id of the remote window behind `window`.
+pub fn native_id(window: &slint::Window) -> Option<isize> {
+    REGISTRY.with(|r| {
+        r.borrow().natives.iter().find_map(|(id, adapter)| {
+            adapter
+                .upgrade()
+                .filter(|a| std::ptr::eq(&a.window, window))
+                .map(|_| *id)
+        })
+    })
+}
+
+/// Position and size; `None` until the size is known.
+pub fn native_rect(id: isize) -> Option<(i32, i32, i32, i32)> {
+    let adapter = native(id)?;
+    let size = adapter.size.get();
+    if size.width == 0 || size.height == 0 {
+        return None;
+    }
+    let position = adapter
+        .position
+        .get()
+        .unwrap_or(PhysicalPosition::new(0, 0));
+    Some((
+        position.x,
+        position.y,
+        i32::try_from(size.width).unwrap_or(i32::MAX),
+        i32::try_from(size.height).unwrap_or(i32::MAX),
+    ))
+}
+
+pub fn native_move(id: isize, x: i32, y: i32) -> bool {
+    let Some(adapter) = native(id) else {
+        return false;
+    };
+    adapter.position.set(Some(PhysicalPosition::new(x, y)));
+    adapter.send_geometry();
+    true
+}
+
+pub fn native_resize_move(id: isize, x: i32, y: i32, w: i32, h: i32) -> bool {
+    let Some(adapter) = native(id) else {
+        return false;
+    };
+    adapter.size.set(PhysicalSize::new(
+        u32::try_from(w.max(1)).unwrap_or(1),
+        u32::try_from(h.max(1)).unwrap_or(1),
+    ));
+    native_move(id, x, y)
+}
+
+/// A window request the shell carries out on the layer: `focus`, `pin`.
+pub fn native_request(id: isize, request: &str, value: Value) -> bool {
+    let Some(adapter) = native(id) else {
+        return false;
+    };
+    send(json!({ "t": request, "win": *adapter.id.borrow(), "value": value }));
+    true
+}
+
+/// Asks the shell to take every Suflyor surface off screen (`true`) or bring
+/// them back, around a screen capture.
+pub fn conceal(on: bool) {
+    send(json!({ "t": "conceal", "value": on }));
+}
+
 // ---------------------------------------------------------------- platform
 
 enum Task {
@@ -493,6 +576,7 @@ impl Platform for RemotePlatform {
             window: slint::Window::new(weak.clone()),
             renderer: SoftwareRenderer::new(),
             id: RefCell::new(String::new()),
+            num: Cell::new(0),
             size: Cell::new(PhysicalSize::new(0, 0)),
             position: Cell::new(None),
         });

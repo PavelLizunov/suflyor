@@ -12,6 +12,9 @@ QtObject {
   property var props: ({})
   property int rev: 0
 
+  // suflyord asked for keyboard focus (follow-up input, palette search).
+  signal focusRequested()
+
   function prop(name, fallback) {
     var _ = win.rev
     var value = win.props[name]

@@ -21,6 +21,8 @@ Item {
   property var windows: ({})
   property var windowList: []
   // "Theme.is-light" -> value, from `global` messages.
+  // suflyord takes every Suflyor surface off screen around a screen capture.
+  property bool concealed: false
   property var globals: ({})
   property int globalsRev: 0
 
@@ -116,6 +118,12 @@ Item {
       var done = client.pending[message.id]
       delete client.pending[message.id]
       if (done) done(message.value, message.error || "")
+      break
+    case "conceal":
+      client.concealed = !!message.value
+      break
+    case "focus":
+      if (w) w.focusRequested()
       break
     case "ready":
       client.ready = true
