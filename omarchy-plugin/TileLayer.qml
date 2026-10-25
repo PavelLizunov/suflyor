@@ -7,7 +7,7 @@ import qs.Commons
 // `suflyor-tile` namespace, which the stealth layer rule hides from screen share.
 // Position and size follow the tile's geometry; dragging writes it back.
 PanelWindow {
-  id: layer
+  id: surface
 
   required property var modelData
   readonly property var win: modelData
@@ -39,16 +39,16 @@ PanelWindow {
 
   TileView {
     anchors.fill: parent
-    win: layer.win
-    service: layer.service
+    win: surface.win
+    service: surface.service
     onMoveBy: function (dx, dy) {
-      layer.service.client.reportGeometry(layer.win.winId, {
-        x: Math.round(layer.margins.left + dx),
-        y: Math.round(layer.margins.top + dy),
-        width: layer.tileWidth,
-        height: layer.tileHeight,
+      surface.service.client.reportGeometry(surface.win.winId, {
+        x: Math.round(surface.margins.left + dx),
+        y: Math.round(surface.margins.top + dy),
+        width: surface.tileWidth,
+        height: surface.tileHeight,
       })
-      layer.win.geometry = Object.assign({}, layer.g, { x: Math.round(layer.margins.left + dx), y: Math.round(layer.margins.top + dy) })
+      surface.win.geometry = Object.assign({}, surface.g, { x: Math.round(surface.margins.left + dx), y: Math.round(surface.margins.top + dy) })
     }
   }
 }

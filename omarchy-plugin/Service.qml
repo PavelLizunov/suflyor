@@ -70,6 +70,11 @@ Item {
     delegate: TileLayer { service: service }
   }
 
+  Variants {
+    model: remoteClient.windowList.filter(function (w) { return w.type === "SettingsWindow" })
+    delegate: SettingsLayer { service: service }
+  }
+
   Timer {
     interval: 2000
     repeat: true
