@@ -279,7 +279,11 @@ pub(crate) fn wire_voice_followup(
         *voice_stop.borrow_mut() = Some(stop.clone());
         spawn_ptt_watchdog(stop.clone());
         t.set_voice_recording(true);
-        t.set_source_label(SharedString::from("recording... (click stop)"));
+        t.set_source_label(SharedString::from(if cfg_c.read().ui_is_ru() {
+            "Запись… (нажмите значок остановки)"
+        } else {
+            "Recording… (click the stop icon)"
+        }));
         // V0.8.1 — snapshot the LIVE route NOW (UI thread, click time) into a
         // plain Copy value; the worker thread can't hold the !Send Rc<Cell>. So
         // a 🎤 follow-up after 🧠-escalation correctly routes to Cloud.

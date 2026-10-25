@@ -77,10 +77,10 @@ fn plugin_installed_label(done: &PluginInstalled, bridge_on: bool, ru: bool) -> 
         }
         (PluginInstalled::Updated, false) => "Plugin updated (already enabled) — restart Hermes",
         (PluginInstalled::FilesOnly, true) => {
-            "Файлы плагина установлены. Включите его вручную: hermes plugins enable suflyor, затем перезапустите Hermes."
+            "Файлы плагина установлены. Выполните hermes plugins enable suflyor или добавьте suflyor в plugins.enabled в файле config.yaml Hermes, затем перезапустите Hermes."
         }
         (PluginInstalled::FilesOnly, false) => {
-            "Plugin files installed. Enable suflyor manually in Hermes config.yaml, then restart Hermes."
+            "Plugin files installed. Run hermes plugins enable suflyor or add suflyor to plugins.enabled in Hermes config.yaml, then restart Hermes."
         }
     };
     match (bridge_on, ru) {
@@ -618,6 +618,21 @@ mod tests {
             plugin_installed_label(&PluginInstalled::Enabled, false, true),
             "Готово: плагин установлен и включён — перезапустите Hermes · включите «Мост для Hermes» выше"
         );
+    }
+
+    #[test]
+    fn files_only_plugin_status_gives_the_same_enable_steps_in_both_languages() {
+        for ru in [false, true] {
+            let text = plugin_installed_label(&PluginInstalled::FilesOnly, true, ru);
+            assert!(text.contains("hermes plugins enable suflyor"));
+            assert!(text.contains("suflyor") && text.contains("plugins.enabled"));
+            assert!(text.contains("config.yaml"));
+            assert!(text.ends_with(if ru {
+                "перезапустите Hermes."
+            } else {
+                "restart Hermes."
+            }));
+        }
     }
 
     #[test]

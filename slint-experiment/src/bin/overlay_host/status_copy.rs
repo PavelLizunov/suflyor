@@ -209,17 +209,17 @@ pub(super) fn manual_tile_placeholder(
 
 pub(super) fn manual_tile_not_configured(is_ru: bool) -> &'static str {
     if is_ru {
-        "**AI не настроен.** Откройте Настройки → AI и выберите провайдера (локальный сервер или облачный мост)."
+        "**AI не настроен.** Откройте Настройки → AI-провайдеры и выберите провайдера (локальный сервер или облачный мост)."
     } else {
-        "**AI is not configured.** Open Settings → AI and choose a provider (local server or cloud bridge)."
+        "**AI is not configured.** Open Settings → AI providers and choose a provider (local server or cloud bridge)."
     }
 }
 
 pub(super) fn manual_tile_failure(heading: &str, category: &str, is_ru: bool) -> String {
     if is_ru {
-        format!("# {heading}\n\n**Не удалось получить ответ AI:** {category}\n\nПроверьте локальный AI-сервер или AI-мост (Настройки → AI).")
+        format!("# {heading}\n\n**Не удалось получить ответ AI:** {category}\n\nПроверьте локальный AI-сервер или AI-мост (Настройки → AI-провайдеры).")
     } else {
-        format!("# {heading}\n\n**AI could not return an answer:** {category}\n\nCheck the local AI server or AI bridge in Settings → AI.")
+        format!("# {heading}\n\n**AI could not return an answer:** {category}\n\nCheck the local AI server or AI bridge in Settings → AI providers.")
     }
 }
 
@@ -289,11 +289,15 @@ mod tile_heading_tests {
         assert_eq!(manual_tile_heading(false, false), "Tile");
         assert!(manual_tile_placeholder(false, false, false).starts_with("The transcript"));
         assert!(manual_tile_not_configured(false).contains("not configured"));
+        assert!(manual_tile_not_configured(false).contains("Settings → AI providers"));
+        assert!(manual_tile_failure("Tile", "offline", false).contains("Settings → AI providers"));
         assert!(manual_tile_failure("Tile", "offline", false).contains("could not"));
 
         assert_eq!(manual_tile_heading(false, true), "Тайл");
         assert!(manual_tile_placeholder(false, false, true).starts_with("Стенограмма"));
         assert!(manual_tile_not_configured(true).contains("не настроен"));
+        assert!(manual_tile_not_configured(true).contains("Настройки → AI-провайдеры"));
+        assert!(manual_tile_failure("Тайл", "offline", true).contains("Настройки → AI-провайдеры"));
         assert!(manual_tile_failure("Тайл", "offline", true).contains("Не удалось"));
 
         assert_eq!(

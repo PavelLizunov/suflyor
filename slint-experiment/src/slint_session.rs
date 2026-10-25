@@ -1128,12 +1128,12 @@ fn mic_down_notice(ui_is_ru: bool) -> (&'static str, &'static str) {
     if ui_is_ru {
         (
             "Микрофон не слышен",
-            "Микрофон не передаёт звук: ваша речь не расшифровывается.\n\nПроверьте устройство ввода (Настройки -> STT) и убедитесь, что микрофон не отключён и не занят другим приложением.",
+            "Микрофон не передаёт звук: ваша речь не расшифровывается.\n\nПроверьте Настройки → Аудио → Устройство микрофона и убедитесь, что микрофон не отключён и не занят другим приложением.",
         )
     } else {
         (
             "Microphone unavailable",
-            "The microphone is not providing audio, so your speech cannot be transcribed.\n\nCheck the input device in Settings -> STT and make sure the microphone is enabled and not used by another app.",
+            "The microphone is not providing audio, so your speech cannot be transcribed.\n\nCheck Settings → Audio → Microphone device and make sure the microphone is enabled and not used by another app.",
         )
     }
 }
@@ -1651,11 +1651,11 @@ async fn maybe_spawn_auto_tile(
                             question: if ui_is_ru { "AI недоступен" } else { "AI unavailable" }.into(),
                             answer: if ui_is_ru {
                                 format!(
-                                    "**Не получаю ответ от AI:** {reason}\n\nАвто-подсказки приостановлены, пока AI не ответит. Проверьте локальный AI-сервер или AI-мост (Настройки -> AI). Можно перезапустить приложение кнопкой restart на панели."
+                                    "**Не получаю ответ от AI:** {reason}\n\nАвто-подсказки приостановлены, пока AI не ответит. Проверьте локальный AI-сервер или AI-мост (Настройки -> AI-провайдеры). Можно перезапустить приложение значком «Аварийный перезапуск» на панели."
                                 )
                             } else {
                                 format!(
-                                    "**No answer from the AI:** {reason}\n\nAuto hints are paused until the AI answers. Check the local AI server or the AI bridge (Settings -> AI). You can restart the app with the restart button on the bar."
+                                    "**No answer from the AI:** {reason}\n\nAuto hints are paused until the AI answers. Check the local AI server or the AI bridge (Settings -> AI providers). You can restart the app using the 'Emergency restart' icon on the bar."
                                 )
                             },
                             source: "ai_error".into(),
@@ -1952,7 +1952,8 @@ const DEBRIEF_MIN_MIC_LINES: usize = 5;
 /// (producer) and `maybe_run_debrief` (the notice mapping) cannot drift apart if
 /// the wording changes. The other reasons (disabled / too-short / no-speech) stay
 /// silent and need no constant.
-const SKIP_AI_NOT_CONFIGURED: &str = "AI not configured — enable a provider in Settings → AI";
+const SKIP_AI_NOT_CONFIGURED: &str =
+    "AI not configured — enable a provider in Settings → AI providers";
 const SKIP_NOT_ENOUGH_MIC: &str = "not enough mic lines for meaningful debrief";
 
 /// Phase E5 — gate the debrief call. `Ok(())` means the debrief
@@ -2027,9 +2028,10 @@ pub fn maybe_run_debrief(
                 .count();
             let notice: Option<String> = if reason == SKIP_AI_NOT_CONFIGURED {
                 Some(if is_ru {
-                    "Коучинг включён, но AI не настроен — откройте Настройки → AI.".to_string()
+                    "Коучинг включён, но AI не настроен — откройте Настройки → AI-провайдеры."
+                        .to_string()
                 } else {
-                    "Coaching is on, but no AI provider is configured — open Settings → AI."
+                    "Coaching is on, but no AI provider is configured — open Settings → AI providers."
                         .to_string()
                 })
             } else if reason == SKIP_NOT_ENOUGH_MIC && mic_lines >= 1 {
@@ -2470,8 +2472,14 @@ mod tests {
     fn mic_down_notice_follows_ui_language() {
         assert_eq!(mic_down_notice(false).0, "Microphone unavailable");
         assert!(mic_down_notice(false).1.starts_with("The microphone"));
+        assert!(mic_down_notice(false)
+            .1
+            .contains("Settings → Audio → Microphone device"));
         assert_eq!(mic_down_notice(true).0, "Микрофон не слышен");
         assert!(mic_down_notice(true).1.starts_with("Микрофон"));
+        assert!(mic_down_notice(true)
+            .1
+            .contains("Настройки → Аудио → Устройство микрофона"));
     }
 
     #[test]

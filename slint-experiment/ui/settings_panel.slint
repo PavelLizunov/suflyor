@@ -1803,7 +1803,7 @@ export component SettingsWindow inherits Window {
                             }
                         }
                         Text {
-                            text: @tr("Saved locally as separate mic + system WAVs per session — nothing is uploaded. ~230 MB/hour. Used by the archive's re-Summary.");
+                            text: @tr("Saved locally as separate mic + system WAVs per session — nothing is uploaded. ~230 MB/hour. Used when you click 'Generate' or the regenerate icon in the session archive.");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -2212,7 +2212,7 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             if root.profile-names.length == 0 : Text {
-                                text: @tr("none yet — name one and Add");
+                                text: @tr("None yet — enter a name and click 'Add profile'.");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-muted;
                                 vertical-alignment: center;
@@ -2373,7 +2373,7 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: root.mlx-text-model-index == 1
-                                    ? @tr("Apache-2.0. Gemma 4 26B-A4B VLM (4B active) with MSQ 2.6-bit mixed-precision quantization. Supports vision/screenshot tasks under 'Same as text model'.")
+                                    ? @tr("Apache-2.0. Gemma 4 26B-A4B VLM (4B active) with MSQ 2.6-bit mixed-precision quantization. Supports vision/screenshot tasks under 'Same as the answer model'.")
                                     : @tr("LFM Open License v1.0 has commercial-use conditions. Review the license before commercial use. Russian response quality is not guaranteed.");
                                 font-size: Metrics.font-caption;
                                 color: root.mlx-text-model-index == 1 ? Theme.text-secondary : Theme.warning;
@@ -2532,7 +2532,7 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: @tr("Sent with every request. «Off» makes thinking models such as Gemini answer without reasoning first; a server that does not know the setting may reject requests — choose «Model default» then.");
+                                text: @tr("Sent with every request. «Off — answer at once» makes thinking models such as Gemini answer without reasoning first; a server that does not know the setting may reject requests — choose «Model default» then.");
                                 font-size: Metrics.font-caption;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
@@ -2608,7 +2608,7 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: @tr("Sent with every request. «Off» makes thinking models such as Gemini answer without reasoning first; a server that does not know the setting may reject requests — choose «Model default» then.");
+                                text: @tr("Sent with every request. «Off — answer at once» makes thinking models such as Gemini answer without reasoning first; a server that does not know the setting may reject requests — choose «Model default» then.");
                                 font-size: Metrics.font-caption;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
@@ -3507,7 +3507,7 @@ export component SettingsWindow inherits Window {
                         }
                         // Only while that option is the selected one.
                         if !root.vision-same-available && root.vision-provider-index == 1 : Text {
-                            text: @tr("Same as text model is unavailable because the selected text model does not declare image input. Choose another Vision provider or model.");
+                            text: @tr("The 'Same as the answer model' option is unavailable because the selected answer model does not declare image input. Choose another screenshot provider or model.");
                             font-size: Metrics.font-caption;
                             color: Theme.warning;
                             wrap: word-wrap;
@@ -4230,7 +4230,7 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-primary;
                         }
                         if root.memory-candidates.length == 0 : Text {
-                            text: @tr("No suggestions yet — click Extract after a session.");
+                            text: @tr("No suggestions yet — click 'Extract from recent sessions' after a session.");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                             wrap: word-wrap;

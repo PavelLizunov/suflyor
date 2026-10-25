@@ -743,7 +743,11 @@ pub(crate) fn open_settings(
             let ru = cfg_c.read().ui_is_ru();
             let snapshot = cfg_c.read().clone();
             let picked = rfd::FileDialog::new()
-                .set_title("Export suflyor settings (contains API keys)")
+                .set_title(if ru {
+                    "Экспорт настроек Суфлёра (содержит API-ключи)"
+                } else {
+                    "Export suflyor settings (contains API keys)"
+                })
                 .set_file_name("suflyor-settings.json")
                 .add_filter("JSON", &["json"])
                 .save_file();
@@ -788,12 +792,12 @@ pub(crate) fn open_settings(
         let weak = win.as_weak();
         let overlay = overlay_weak.clone();
         win.on_import_profile_clicked(move || {
+            let ru = cfg_c.read().ui_is_ru();
             let picked = rfd::FileDialog::new()
-                .set_title("Import suflyor settings")
+                .set_title(if ru { "Импорт настроек Суфлёра" } else { "Import suflyor settings" })
                 .add_filter("JSON", &["json"])
                 .pick_file();
             let Some(w) = weak.upgrade() else { return };
-            let ru = cfg_c.read().ui_is_ru();
             let msg = match picked {
                 None => if ru {
                     "Импорт отменён"
@@ -1534,7 +1538,7 @@ pub(crate) fn component_row_copy(
             if ru {
                 (
                     "Локальная модель AI",
-                    "Настройки → AI-провайдеры → Выбрать модель",
+                    "Настройки → AI-провайдеры → Выберите модель",
                 )
             } else {
                 ("Local AI model", "Settings → AI providers → Choose a model")
@@ -1635,12 +1639,12 @@ pub(crate) fn populate_component_rows(
                 if ru {
                     (
                         "Распознавание речи (STT)",
-                        "Настройки → STT → Облако, GigaAM или External Whisper",
+                        "Настройки → STT → Облако (Groq Whisper), Локально GigaAM-v3 (русский) или Внешний Whisper (whisper-server)",
                     )
                 } else {
                     (
                         "Speech recognition (STT)",
-                        "Settings → STT → Cloud, GigaAM or External Whisper",
+                        "Settings → STT → Cloud (Groq Whisper), Local GigaAM-v3 (Russian), or External Whisper (whisper-server)",
                     )
                 }
             } else {
@@ -2493,6 +2497,14 @@ mod tests {
             assert_ne!(hint_ru, hint_en, "kind {kind:?} hint must be localized");
         }
         // Spot-check the wording the tester sees.
+        assert_eq!(
+            component_row_copy(ComponentKind::LocalModel, true).1,
+            "Настройки → AI-провайдеры → Выберите модель"
+        );
+        assert_eq!(
+            component_row_copy(ComponentKind::LocalModel, false).1,
+            "Settings → AI providers → Choose a model"
+        );
         assert_eq!(
             component_row_copy(ComponentKind::Engine, false).0,
             "Engine (llama.cpp)"

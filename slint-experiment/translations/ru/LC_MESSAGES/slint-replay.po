@@ -341,7 +341,7 @@ msgid "Import server settings…"
 msgstr "Импортировать серверные настройки…"
 
 msgid "Review changes before applying (keys shown as set/— only, never the value):"
-msgstr "Проверьте изменения перед применением (ключи показаны только как set/—, без значения):"
+msgstr "Проверьте изменения перед применением (ключи показаны только как задан/—, без значения):"
 
 msgid "Apply server settings"
 msgstr "Применить серверные настройки"
@@ -411,8 +411,8 @@ msgstr "Устройства системного звука не найдены
 msgid "Test microphone (3s record)"
 msgstr "Проверить микрофон (запись 3 сек)"
 
-msgid "Saved locally as separate mic + system WAVs per session — nothing is uploaded. ~230 MB/hour. Used by the archive's re-Summary."
-msgstr "Сохраняется локально — отдельные WAV для микрофона и системы по каждой сессии, никуда не отправляется. ~230 МБ/час. Используется для «Сводки» из архива."
+msgid "Saved locally as separate mic + system WAVs per session — nothing is uploaded. ~230 MB/hour. Used when you click 'Generate' or the regenerate icon in the session archive."
+msgstr "Сохраняется локально — отдельные WAV для микрофона и системы по каждой сессии, никуда не отправляется. ~230 МБ/час. Используется при нажатии «Сформировать» или значка пересоздания в архиве сессий."
 
 msgid "Open recordings folder"
 msgstr "Открыть папку записей"
@@ -574,8 +574,8 @@ msgstr "Использовать Apple Core ML — быстрее на Apple Sil
 msgid "Profile:"
 msgstr "Профиль:"
 
-msgid "none yet — name one and Add"
-msgstr "пока нет — введите имя и «Добавить»"
+msgid "None yet — enter a name and click 'Add profile'."
+msgstr "Профилей пока нет — введите имя и нажмите «Добавить профиль»."
 
 msgid "profile name"
 msgstr "имя профиля"
@@ -767,8 +767,8 @@ msgstr "Как это работает"
 msgid "1) Start capture — press start on the bar. The mic records you; system audio records the other side."
 msgstr "1) Начните захват — нажмите «старт» на панели. Микрофон записывает вас, системный звук — собеседника."
 
-msgid "3) Stop and review — press stop to end the session; open the session archive (F7) for transcripts and summaries."
-msgstr "3) Остановите и посмотрите — нажмите стоп для завершения сессии, затем откройте архив сессий (F7) для стенограмм и сводок."
+msgid "3) Stop and review — click the timer with the stop icon ('Stop session'), then open the session archive (F7) for transcripts and summaries."
+msgstr "3) Завершите сессию и просмотрите итоги — нажмите таймер со значком остановки («Остановить сессию»), затем откройте архив сессий (F7) со стенограммами и сводками."
 
 msgid "Bar icons"
 msgstr "Значки панели"
@@ -868,8 +868,8 @@ msgstr "Извлечь из последних сессий"
 msgid "Suggestions ({})"
 msgstr "Предложения ({})"
 
-msgid "No suggestions yet — click Extract after a session."
-msgstr "Пока нет предложений — нажмите «Извлечь» после сессии."
+msgid "No suggestions yet — click 'Extract from recent sessions' after a session."
+msgstr "Пока нет предложений — после сессии нажмите «Извлечь из последних сессий»."
 
 msgid "Approve"
 msgstr "Принять"
@@ -1390,8 +1390,8 @@ msgstr "Выберите отдельную модель Codex для скрин
 msgid "No image-capable Codex account models are available. Sign in or refresh."
 msgstr "Нет доступных моделей Codex аккаунта с поддержкой изображений. Войдите или обновите список."
 
-msgid "Same as text model is unavailable because the selected text model does not declare image input. Choose another Vision provider or model."
-msgstr "Режим «как у текстовой модели» недоступен: выбранная текстовая модель не заявляет поддержку изображений. Выберите другого провайдера или модель для зрения."
+msgid "The 'Same as the answer model' option is unavailable because the selected answer model does not declare image input. Choose another screenshot provider or model."
+msgstr "Вариант «Та же, что отвечает» недоступен: выбранная модель для ответов не заявляет поддержку изображений. Выберите другого провайдера или модель для скриншотов."
 
 msgid "Preparing voice..."
 msgstr "Подготовка голоса..."
@@ -1577,8 +1577,8 @@ msgstr "Gemma 4 26B-A4B VLM 2.6-бит (Текст + Vision)"
 msgid "Download size: 9.48 GiB (VLM: Text + Vision)."
 msgstr "Размер загрузки: 9,48 ГиБ (VLM: Текст + Vision)."
 
-msgid "Apache-2.0. Gemma 4 26B-A4B VLM (4B active) with MSQ 2.6-bit mixed-precision quantization. Supports vision/screenshot tasks under 'Same as text model'."
-msgstr "Apache-2.0. Gemma 4 26B-A4B VLM (4B активных параметров) с квантованием MSQ 2.6-бит. Поддерживает скриншоты в режиме «Как у текстовой модели»."
+msgid "Apache-2.0. Gemma 4 26B-A4B VLM (4B active) with MSQ 2.6-bit mixed-precision quantization. Supports vision/screenshot tasks under 'Same as the answer model'."
+msgstr "Apache-2.0. Gemma 4 26B-A4B VLM (4B активных параметров) с квантованием MSQ 2.6-бит. Поддерживает скриншоты в режиме «Та же, что отвечает»."
 
 msgid "Gemma 4 26B-A4B VLM 2.6-bit (Vision)"
 msgstr "Gemma 4 26B-A4B VLM 2.6-бит (Vision)"
@@ -2191,8 +2191,8 @@ msgstr "Средний"
 msgid "High"
 msgstr "Высокий"
 
-msgid "Sent with every request. «Off» makes thinking models such as Gemini answer without reasoning first; a server that does not know the setting may reject requests — choose «Model default» then."
-msgstr "Передаётся с каждым запросом. «Выключено» заставляет думающие модели вроде Gemini отвечать без предварительных рассуждений; сервер, который не знает этой настройки, может отклонять запросы — тогда выберите «По умолчанию модели»."
+msgid "Sent with every request. «Off — answer at once» makes thinking models such as Gemini answer without reasoning first; a server that does not know the setting may reject requests — choose «Model default» then."
+msgstr "Передаётся с каждым запросом. «Выключено — отвечать сразу» заставляет думающие модели вроде Gemini отвечать без предварительных рассуждений; сервер, который не знает этой настройки, может отклонять запросы — тогда выберите «По умолчанию модели»."
 
 msgid "Models on this PC"
 msgstr "Модели на этом ПК"

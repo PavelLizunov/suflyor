@@ -1118,10 +1118,10 @@ fn spawn_summary_error_tile(
 ) {
     let msg = if ui_is_ru {
         "Не получилось составить summary — AI недоступен. \
-         Проверьте Настройки → AI и попробуйте ещё раз."
+         Проверьте Настройки → AI-провайдеры и попробуйте ещё раз."
     } else {
         "Couldn't build the summary — the AI endpoint is unavailable. \
-         Check Settings → AI and try again."
+         Check Settings → AI providers and try again."
     };
     if let Err(e2) = events.spawn_tile_full(
         TileSpec {
@@ -1367,9 +1367,9 @@ pub async fn reask_last(
                         answer: if crate::deep_lock::is_blocked_error(&format!("{e:#}")) {
                             crate::deep_lock::blocked_notice(ui_is_ru)
                         } else if ui_is_ru {
-                            "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI)."
+                            "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI-провайдеры)."
                         } else {
-                            "Couldn't get a response from AI. Check that the selected provider is running (Settings → AI)."
+                            "Couldn't get a response from AI. Check that the selected provider is running (Settings → AI providers)."
                         }
                         .into(),
                         source: "reask".into(),
@@ -1686,9 +1686,9 @@ pub async fn manual_spawn_tile(
                         answer: if crate::deep_lock::is_blocked_error(&format!("{e:#}")) {
                             crate::deep_lock::blocked_notice(ui_is_ru)
                         } else if ui_is_ru {
-                            "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI)."
+                            "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI-провайдеры)."
                         } else {
-                            "Couldn't get a response from AI. Check that the selected provider is running (Settings → AI)."
+                            "Couldn't get a response from AI. Check that the selected provider is running (Settings → AI providers)."
                         }
                         .into(),
                         source: "manual_spawn".into(),

@@ -34,6 +34,22 @@ use super::{
 };
 use super::{SettingsWindow, SharedString};
 
+#[cfg(any(test, windows, target_os = "linux"))]
+fn model_downloaded_label(
+    model: overlay_backend::local_ai::ManagedModel,
+    ru: bool,
+) -> &'static str {
+    use overlay_backend::local_ai::ManagedModel;
+    match (model, ru) {
+        (ManagedModel::Legacy4B, true) => "Быстрая модель (4B) загружена. Нажмите «Использовать» в её строке, чтобы включить.",
+        (ManagedModel::Legacy4B, false) => "The fast model (4B) is downloaded. Click 'Use' in its row to activate it.",
+        (ManagedModel::Fallback12B, true) => "Сбалансированная модель (12B QAT) загружена. Нажмите «Использовать» в её строке, чтобы включить.",
+        (ManagedModel::Fallback12B, false) => "The balanced model (12B QAT) is downloaded. Click 'Use' in its row to activate it.",
+        (ManagedModel::Primary26B, true) => "Основная модель 26B-A4B загружена. Нажмите «Использовать» в её строке, чтобы включить.",
+        (ManagedModel::Primary26B, false) => "The primary model 26B-A4B is downloaded. Click 'Use' in its row to activate it.",
+    }
+}
+
 pub(crate) fn refresh_local_context_controls(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::Config,
@@ -1276,18 +1292,7 @@ pub(crate) fn wire_local_ai(
                                     w.set_quality_model_present(true);
                                 }
                             }
-                            let done = match model {
-                                _ if !ru => "Model downloaded. Press its profile to turn it on.",
-                                overlay_backend::local_ai::ManagedModel::Legacy4B => {
-                                    "Быстрая модель (4B) загружена. Нажмите её профиль, чтобы включить."
-                                }
-                                overlay_backend::local_ai::ManagedModel::Fallback12B => {
-                                    "Сбалансированная модель (12B QAT) загружена. Нажмите её профиль, чтобы включить."
-                                }
-                                overlay_backend::local_ai::ManagedModel::Primary26B => {
-                                    "Основная модель 26B-A4B загружена. Нажмите её профиль, чтобы включить."
-                                }
-                            };
+                            let done = model_downloaded_label(model, ru);
                             w.set_quality_status(SharedString::from(done));
                         }
                         Err(e) => {
@@ -2085,6 +2090,21 @@ pub(crate) fn search_found_models(
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
 mod now_answering_tests {
+    #[test]
+    fn downloaded_model_names_identity_and_use_button_in_both_languages() {
+        use overlay_backend::local_ai::ManagedModel;
+        for (model, identity) in [
+            (ManagedModel::Legacy4B, "4B"),
+            (ManagedModel::Fallback12B, "12B QAT"),
+            (ManagedModel::Primary26B, "26B-A4B"),
+        ] {
+            let en = super::model_downloaded_label(model, false);
+            let ru = super::model_downloaded_label(model, true);
+            assert!(en.contains(identity) && en.contains("Click 'Use'"));
+            assert!(ru.contains(identity) && ru.contains("Нажмите «Использовать»"));
+        }
+    }
+
     #[test]
     fn caption_keeps_only_the_endpoint_authority() {
         for (url, expected) in [

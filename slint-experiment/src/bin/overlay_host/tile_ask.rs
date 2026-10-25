@@ -314,12 +314,12 @@ fn missing_cloud_auth_copy(is_ru: bool) -> (&'static str, &'static str) {
     if is_ru {
         (
             "Облачный запрос (Shift+F9)",
-            "Облачный AI не настроен. Добавьте токен доступа в Настройки → AI и повторите Shift+F9.",
+            "Облачный AI не настроен. Добавьте токен доступа в Настройки → AI-провайдеры и повторите Shift+F9.",
         )
     } else {
         (
             "Cloud ask (Shift+F9)",
-            "Cloud AI is not configured. Add its access token in Settings → AI, then press Shift+F9 again.",
+            "Cloud AI is not configured. Add its access token in Settings → AI providers, then press Shift+F9 again.",
         )
     }
 }
@@ -898,10 +898,16 @@ mod tests {
     fn cloud_auth_notice_has_both_ui_languages() {
         assert_eq!(missing_cloud_auth_copy(false).0, "Cloud ask (Shift+F9)");
         assert!(missing_cloud_auth_copy(false).1.starts_with("Cloud AI"));
+        assert!(missing_cloud_auth_copy(false)
+            .1
+            .contains("Settings → AI providers"));
         assert_eq!(
             missing_cloud_auth_copy(true).0,
             "Облачный запрос (Shift+F9)"
         );
         assert!(missing_cloud_auth_copy(true).1.starts_with("Облачный AI"));
+        assert!(missing_cloud_auth_copy(true)
+            .1
+            .contains("Настройки → AI-провайдеры"));
     }
 }

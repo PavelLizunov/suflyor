@@ -251,9 +251,9 @@ pub fn blocked_test_result(ru: bool, msg: &str) -> Option<String> {
 #[must_use]
 pub fn unlock_failed_notice(ru: bool) -> &'static str {
     if ru {
-        "Не удалось запустить локальный AI — блокировка сохранена. Проверьте установку в Настройки → AI и попробуйте ещё раз."
+        "Не удалось запустить локальный AI — блокировка сохранена. Проверьте установку в Настройки → AI-провайдеры и попробуйте ещё раз."
     } else {
-        "Couldn't start the local AI — the lock is kept. Check Settings → AI and try again."
+        "Couldn't start the local AI — the lock is kept. Check Settings → AI providers and try again."
     }
 }
 
@@ -458,6 +458,8 @@ mod tests {
             }
         }
         assert_ne!(blocked_notice(true), blocked_notice(false));
+        assert!(unlock_failed_notice(true).contains("Настройки → AI-провайдеры"));
+        assert!(unlock_failed_notice(false).contains("Settings → AI providers"));
         assert_ne!(
             status_text(true, LockStatus::Unloaded),
             status_text(false, LockStatus::Unloaded)
