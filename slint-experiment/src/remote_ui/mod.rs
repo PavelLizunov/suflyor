@@ -11,6 +11,7 @@
 //! Slint semantics; [`RemoteAdapter`] forwards visibility and geometry.
 
 pub mod generated;
+mod pure;
 
 mod host {
     slint::include_modules!();

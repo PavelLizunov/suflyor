@@ -28,6 +28,8 @@ QtObject {
     property bool concealed: false
     property bool connected: true
     property bool ready: true
+    property var globals: ({ "Platform.is-linux": true, "Suflyor.locale": service.locale })
+    property int globalsRev: 0
     signal invoked(var win, string name, var args)
     function call(win, name, args, done) { service.calls = service.calls.concat([[win, name, args]]); if (done) done(null, "") }
     function set(win, name, value) {}

@@ -15,6 +15,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCHEMA = ROOT / "tools/remote-ui/schema.json"
 OUT = ROOT / "slint-experiment/src/remote_ui/generated.rs"
 
+# Value-returning Slint functions mirrored in Rust (slint-experiment/src/remote_ui/pure.rs).
+PURE = {("PaletteWindow", "source-label"): "super::pure::palette_source_label"}
+
 # Windows the host never creates in the plugin build: demos and macOS-only.
 SKIP = {"MainWindow", "MarkdownSpike", "OverlaySpike", "MacAiSetupWindow"}
 
@@ -177,8 +180,14 @@ def gen_window(name, api, out):
         params = args_sig(sig["args"])
         args_json = ", ".join(f"arg{i}.to_json()" for i in range(len(sig["args"])))
         out.append(f"    pub fn invoke_{snake(f)}(&self{', ' + params if params else ''}) -> {ret} {{")
-        out.append(f'        self.0.base.send_invoke("{f}", vec![{args_json}]);')
-        out.append("        Default::default()")
+        if (name, f) in PURE:
+            names = ", ".join(f"arg{i}" for i in range(len(sig["args"])))
+            out.append(f"        {PURE[(name, f)]}({names})")
+        elif sig["ret"].get("prim") != "void":
+            raise SystemExit(f"{name}.{f} returns a value: add it to PURE")
+        else:
+            out.append(f'        self.0.base.send_invoke("{f}", vec![{args_json}]);')
+            out.append("        Default::default()")
         out.append("    }")
     out.append("}")
     out.append("")

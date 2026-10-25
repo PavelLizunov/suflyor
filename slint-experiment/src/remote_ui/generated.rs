@@ -3125,10 +3125,7 @@ impl PaletteWindow {
         Default::default()
     }
     pub fn invoke_source_label(&self, arg0: slint::SharedString) -> slint::SharedString {
-        self.0
-            .base
-            .send_invoke("source-label", vec![arg0.to_json()]);
-        Default::default()
+        super::pure::palette_source_label(arg0)
     }
 }
 

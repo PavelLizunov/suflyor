@@ -1,4 +1,6 @@
 {
  "Suflyor could not start. Reinstall the plugin, then restart the shell.": "Суфлёр не запустился. Переустановите плагин, затем перезапустите оболочку.",
- "Suflyor is starting…": "Суфлёр запускается…"
+ "Suflyor is starting…": "Суфлёр запускается…",
+ "The check did not provide a failure reason. Press \"{}\" to try again.": "Проверка не сообщила причину сбоя. Нажмите «{}», чтобы повторить.",
+ "The session catalog could not be opened. Press Close, then reopen Session archive to try again.": "Не удалось открыть каталог сессий. Нажмите «Закрыть», затем снова откройте «Архив сессий», чтобы повторить попытку."
 }
