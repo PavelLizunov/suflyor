@@ -60,6 +60,12 @@ Item {
     onConnectedChanged: if (connected) service.startAttempts = 0
   }
 
+  // One layer per tile; Variants keeps a tile's surface while others open and close.
+  Variants {
+    model: remoteClient.windowList.filter(function (w) { return w.type === "TileWindow" })
+    delegate: TileLayer { service: service }
+  }
+
   Timer {
     interval: 2000
     repeat: true

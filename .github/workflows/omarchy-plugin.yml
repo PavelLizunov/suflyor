@@ -38,8 +38,24 @@ jobs:
         run: >-
           cargo test --no-default-features --features remote-ui
           --manifest-path slint-experiment/Cargo.toml --lib remote_ui
-      - name: Host against remote windows
+      - name: Build suflyord (host against remote windows)
         run: >-
-          cargo check --no-default-features --features remote-ui
+          cargo build --no-default-features --features remote-ui
           --manifest-path slint-experiment/Cargo.toml --bin overlay-host
           --message-format short
+      - name: Smoke suflyord without a shell
+        run: |
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/xdg" HOME="$RUNNER_TEMP/home"
+          mkdir -p -m 700 "$XDG_RUNTIME_DIR"; mkdir -p "$HOME" "$RUNNER_TEMP/smoke"
+          slint-experiment/target/debug/overlay-host > "$RUNNER_TEMP/smoke/suflyord.log" 2>&1 &
+          daemon=$!
+          rc=0
+          python3 tools/remote-ui/smoke.py "$XDG_RUNTIME_DIR/suflyor/shell.sock" "$RUNNER_TEMP/smoke/messages.jsonl" || rc=$?
+          kill "$daemon" 2>/dev/null || true
+          tail -60 "$RUNNER_TEMP/smoke/suflyord.log"
+          exit $rc
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: suflyord-smoke
+          path: ${{ runner.temp }}/smoke

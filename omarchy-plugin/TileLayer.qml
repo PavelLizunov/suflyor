@@ -1,0 +1,52 @@
+import QtQuick
+import Quickshell
+import Quickshell.Wayland
+import qs.Commons
+
+// The shell surface of one suflyord TileWindow: a layer above windows in the
+// `suflyor-tile` namespace, which the stealth layer rule hides from screen share.
+// Position and size follow the tile's geometry; dragging writes it back.
+PanelWindow {
+  id: layer
+
+  required property var modelData
+  readonly property var win: modelData
+  property var service: null
+
+  readonly property var g: win.geometry || ({})
+  readonly property int tileWidth: g.width > 0 ? g.width : 460
+  readonly property int tileHeight: g.height > 0 ? g.height : 360
+  // Until suflyord places the tile, cascade from the top-left by tile number.
+  readonly property int fallbackOffset: Style.space(24) * (win.prop("sequence", 0) % 8)
+
+  visible: win.visible
+  color: "transparent"
+  screen: Quickshell.screens.length ? Quickshell.screens[0] : null
+
+  WlrLayershell.namespace: "suflyor-tile"
+  WlrLayershell.layer: WlrLayer.Overlay
+  // Follow-up questions are typed into the tile; focus only when clicked.
+  WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+  exclusionMode: ExclusionMode.Ignore
+
+  anchors { top: true; left: true }
+  margins.left: typeof g.x === "number" ? g.x : Style.space(80) + fallbackOffset
+  margins.top: typeof g.y === "number" ? g.y : Style.space(80) + fallbackOffset
+  implicitWidth: tileWidth
+  implicitHeight: tileHeight
+
+  TileView {
+    anchors.fill: parent
+    win: layer.win
+    service: layer.service
+    onMoveBy: function (dx, dy) {
+      layer.service.client.reportGeometry(layer.win.winId, {
+        x: Math.round(layer.margins.left + dx),
+        y: Math.round(layer.margins.top + dy),
+        width: layer.tileWidth,
+        height: layer.tileHeight,
+      })
+      layer.win.geometry = Object.assign({}, layer.g, { x: Math.round(layer.margins.left + dx), y: Math.round(layer.margins.top + dy) })
+    }
+  }
+}
