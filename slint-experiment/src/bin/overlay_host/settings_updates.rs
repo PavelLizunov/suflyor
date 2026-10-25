@@ -56,6 +56,95 @@ mod tests {
             assert!(!is_valid_release_url(url));
         }
     }
+
+    #[test]
+    fn update_failures_name_the_cause_and_the_actual_next_step() {
+        let cases = [
+            (
+                "this release has no SHA-256 digest to verify the installer",
+                "This release has no installer checksum. Update manually from the GitHub releases page.",
+                "В этом релизе нет контрольной суммы установщика. Обновите приложение вручную со страницы релизов GitHub.",
+            ),
+            (
+                "installer SHA-256 mismatch — refusing to run (expected abc, got def)",
+                "The installer checksum does not match. Press Check for updates, then Update now to download it again.",
+                "Контрольная сумма установщика не совпадает. Нажмите «Проверить обновления», затем «Обновить сейчас», чтобы скачать его заново.",
+            ),
+            (
+                "could not fetch the release digest to verify the installer (GET releases/latest (for digest))",
+                "The GitHub update request failed. Check your connection, then press Check for updates again.",
+                "Запрос обновления к GitHub не выполнен. Проверьте подключение и снова нажмите «Проверить обновления».",
+            ),
+        ];
+        for (message, en, ru) in cases {
+            let e = anyhow::anyhow!(message).context("update /home/someone/private");
+            assert_eq!(update_failure_copy(&e, false), en);
+            assert_eq!(update_failure_copy(&e, true), ru);
+        }
+    }
+
+    #[test]
+    fn network_and_local_failures_do_not_echo_private_details() {
+        for message in [
+            "GET releases/latest",
+            "releases/latest returned an error status",
+            "parse releases/latest JSON",
+            "GET installer asset",
+            "installer download returned an error status",
+            "read installer bytes",
+        ] {
+            let e = anyhow::anyhow!(message)
+                .context("https://private.example/update /home/someone/private");
+            assert!(update_failure_copy(&e, false).starts_with("The GitHub update request failed."));
+            assert!(update_failure_copy(&e, true)
+                .starts_with("Запрос обновления к GitHub не выполнен."));
+        }
+        for message in ["create temp update dir", "write installer to temp"] {
+            let e = anyhow::anyhow!(message).context("/home/someone/private");
+            assert_eq!(update_failure_copy(&e, false), "Could not save the installer in the temporary folder. Check free space and folder permissions, then press Update now again.");
+            assert_eq!(update_failure_copy(&e, true), "Не удалось сохранить установщик во временную папку. Проверьте свободное место и права на папку, затем снова нажмите «Обновить сейчас».");
+        }
+        let e = anyhow::anyhow!("unexpected failure at /home/someone/private");
+        assert_eq!(update_failure_copy(&e, false), "The updater encountered an unexpected error. Press Check for updates again; if it persists, use Diagnostics → Collect logs.");
+        assert_eq!(update_failure_copy(&e, true), "В средстве обновления произошла непредвиденная ошибка. Снова нажмите «Проверить обновления»; если ошибка повторится, выберите «Диагностика» → «Собрать логи».");
+    }
+}
+
+fn update_failure_copy(e: &anyhow::Error, ui_is_ru: bool) -> String {
+    let chain = super::diagnostics::redact_user_home(&format!("{e:#}")).to_ascii_lowercase();
+    let (en, ru) = if chain.contains("no sha-256 digest") {
+        (
+            "This release has no installer checksum. Update manually from the GitHub releases page.",
+            "В этом релизе нет контрольной суммы установщика. Обновите приложение вручную со страницы релизов GitHub.",
+        )
+    } else if chain.contains("sha-256 mismatch") {
+        (
+            "The installer checksum does not match. Press Check for updates, then Update now to download it again.",
+            "Контрольная сумма установщика не совпадает. Нажмите «Проверить обновления», затем «Обновить сейчас», чтобы скачать его заново.",
+        )
+    } else if chain.contains("releases/latest")
+        || chain.contains("could not fetch the release digest")
+        || chain.contains("get installer asset")
+        || chain.contains("installer download returned an error status")
+        || chain.contains("read installer bytes")
+    {
+        (
+            "The GitHub update request failed. Check your connection, then press Check for updates again.",
+            "Запрос обновления к GitHub не выполнен. Проверьте подключение и снова нажмите «Проверить обновления».",
+        )
+    } else if chain.contains("create temp update dir") || chain.contains("write installer to temp")
+    {
+        (
+            "Could not save the installer in the temporary folder. Check free space and folder permissions, then press Update now again.",
+            "Не удалось сохранить установщик во временную папку. Проверьте свободное место и права на папку, затем снова нажмите «Обновить сейчас».",
+        )
+    } else {
+        (
+            "The updater encountered an unexpected error. Press Check for updates again; if it persists, use Diagnostics → Collect logs.",
+            "В средстве обновления произошла непредвиденная ошибка. Снова нажмите «Проверить обновления»; если ошибка повторится, выберите «Диагностика» → «Собрать логи».",
+        )
+    };
+    tr(ui_is_ru, en, ru).to_string()
 }
 
 fn tr<'a>(is_ru: bool, en: &'a str, ru: &'a str) -> &'a str {
@@ -159,11 +248,7 @@ pub(crate) fn wire_updates(win: &SettingsWindow) {
                         }
                         Err(e) => {
                             diag!("update: check failed: {e:#}");
-                            w.set_update_status(SharedString::from(tr(
-                                is_ru,
-                                "Update check failed",
-                                "Ошибка проверки",
-                            )));
+                            w.set_update_status(SharedString::from(update_failure_copy(&e, is_ru)));
                         }
                     }
                 });
@@ -291,11 +376,7 @@ pub(crate) fn wire_updates(win: &SettingsWindow) {
                             if let Some(w) = weak2.upgrade() {
                                 let is_ru = w.get_ui_language_index() == 0;
                                 w.set_update_checking(false);
-                                w.set_update_status(SharedString::from(tr(
-                                    is_ru,
-                                    "Update failed",
-                                    "Ошибка обновления",
-                                )));
+                                w.set_update_status(SharedString::from(update_failure_copy(&e, is_ru)));
                             }
                         });
                     }

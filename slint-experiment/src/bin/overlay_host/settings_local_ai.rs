@@ -1747,6 +1747,22 @@ fn local_ai_stop_copy(e: &anyhow::Error, ru: bool, (button_ru, button_en): (&str
         };
     }
     let has = |words: &[&str]| words.iter().any(|w| chain.contains(w));
+    if has(&["curl not found", "curl.exe not found"]) {
+        return match (ru, cfg!(windows)) {
+            (true, true) => format!(
+                "curl.exe отсутствует в PATH (входит в Windows 10 и новее). Добавьте его в PATH и нажмите «{button_ru}» снова."
+            ),
+            (false, true) => format!(
+                "curl.exe is missing from PATH (included with Windows 10 and later). Add it to PATH, then press {button_en} again."
+            ),
+            (true, false) => format!(
+                "curl не установлен. Установите curl и нажмите «{button_ru}» снова."
+            ),
+            (false, false) => format!(
+                "curl is not installed. Install curl, then press {button_en} again."
+            ),
+        };
+    }
     let (cause_ru, cause_en) = if has(&["sha-256", "sha256", "digest", "integrity"]) {
         (
             "Скачанный файл не прошёл проверку целостности",
@@ -2123,6 +2139,29 @@ mod stop_copy_tests {
         assert!(!local_ai_stop_copy(&e, true, INSTALL).contains("/home"));
         let e = anyhow::anyhow!("release asset host is not supported");
         assert!(!local_ai_stop_copy(&e, false, INSTALL).contains("server did not start"));
+    }
+
+    #[test]
+    fn missing_curl_names_the_tool_and_setup_step_before_retrying() {
+        for message in ["curl not found", "curl.exe not found"] {
+            let e =
+                anyhow::anyhow!(message).context("download engine /home/someone/suflyor-local-ai");
+            let en = local_ai_stop_copy(&e, false, INSTALL);
+            let ru = local_ai_stop_copy(&e, true, INSTALL);
+            if cfg!(windows) {
+                assert_eq!(en, "curl.exe is missing from PATH (included with Windows 10 and later). Add it to PATH, then press Install again.");
+                assert_eq!(ru, "curl.exe отсутствует в PATH (входит в Windows 10 и новее). Добавьте его в PATH и нажмите «Установить» снова.");
+            } else {
+                assert_eq!(
+                    en,
+                    "curl is not installed. Install curl, then press Install again."
+                );
+                assert_eq!(
+                    ru,
+                    "curl не установлен. Установите curl и нажмите «Установить» снова."
+                );
+            }
+        }
     }
 
     #[test]

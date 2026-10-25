@@ -1565,11 +1565,13 @@ async fn maybe_spawn_auto_tile(
             (t.to_string(), reason)
         }
         Err(e) => {
-            drop_placeholder(&events);
-            if stream_label
+            // Read the owner first: dropping our placeholder also retires it,
+            // which must not look like a user cancel.
+            let cancelled = stream_label
                 .as_deref()
-                .is_some_and(|label| !events.tile_request_open(label))
-            {
+                .is_some_and(|label| !events.tile_request_open(label));
+            drop_placeholder(&events);
+            if cancelled {
                 return;
             }
             // V0.8.0 (Поток A) — the auto-tile AI call failed. Previously

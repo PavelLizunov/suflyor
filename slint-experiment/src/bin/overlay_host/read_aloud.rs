@@ -93,6 +93,7 @@ pub(super) fn spawn_text_tile(
         tile.on_close_clicked(move || {
             if let Some(t) = weak_close.upgrade() {
                 bridge_for_close.cancel_tile_request(&t);
+                t.set_followup_busy(false);
                 stop_if_speaking(t.get_convo_id());
                 let sequence = t.get_sequence();
                 let _ = t.hide();
