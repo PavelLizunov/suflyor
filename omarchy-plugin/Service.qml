@@ -75,6 +75,15 @@ Item {
     delegate: SettingsLayer { service: service }
   }
 
+  // Shown on Omarchy by other means: the tray menu by the bar widget, the lock menu
+  // inside the bar panel, region capture by slurp.
+  readonly property var auxTypes: ["ArchiveWindow", "TranscriptWindow", "PaletteWindow", "HelpWindow",
+    "WizardWindow", "RecoverOfferWindow", "TextAskWindow"]
+  Variants {
+    model: remoteClient.windowList.filter(function (w) { return service.auxTypes.indexOf(w.type) >= 0 })
+    delegate: AuxLayer { service: service }
+  }
+
   Timer {
     interval: 2000
     repeat: true

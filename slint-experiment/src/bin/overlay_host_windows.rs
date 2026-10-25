@@ -5192,7 +5192,14 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    #[cfg(target_os = "linux")]
+    // The Omarchy plugin's bar widget is the tray there; a second StatusNotifierItem
+    // would show Suflyor twice in the Omarchy bar.
+    #[cfg(feature = "remote-ui")]
+    {
+        TRAY_AVAILABLE.store(true, Ordering::Relaxed);
+        overlay.set_tray_available(true);
+    }
+    #[cfg(all(target_os = "linux", not(feature = "remote-ui")))]
     let _native_status = match slint_replay::native::status::install(cfg.read().ui_is_ru()) {
         Ok(guard) => {
             TRAY_AVAILABLE.store(true, Ordering::Relaxed);
@@ -5261,6 +5268,7 @@ fn main() -> Result<(), slint::PlatformError> {
     TRAY_AVAILABLE.store(false, Ordering::Relaxed);
     #[cfg(target_os = "linux")]
     {
+        #[cfg(not(feature = "remote-ui"))]
         drop(_native_status);
         slint_replay::native::desktop::close();
     }
