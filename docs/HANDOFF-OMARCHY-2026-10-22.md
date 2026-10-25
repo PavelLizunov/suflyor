@@ -750,3 +750,71 @@ All are shared host or backend behaviour, seen on Linux:
   the extra load in timings.
 - Windows wrapper restored after both gates, SHA-256 `972DC146…F728`;
   PostReleaseDocs Ready, S7 Disabled.
+
+## 11. gpt-sol review, fix and cleanup iterations, October 25
+
+The owner asked for several gpt-sol iterations (2–6 h): finishing work, bug and
+contradiction hunting, repository cleanup. gpt-sol workers reviewed and edited;
+every finding was checked against the code before it was kept, and every diff
+was read before commit. Branch `claude/sol-fixes-1`, 16 commits on `389e436`.
+
+### Fixed
+
+- Linux window and capture: a failed compositor query no longer drops the saved
+  opacity (window stuck at 0); a failed `no_screen_share` restore keeps the
+  window transparent and retries instead of showing it capturable; tiles made
+  while `slurp` waits are hidden before `grim`; two same-title windows no
+  longer share one compositor address; a missing `slurp`, a Wayland error and
+  the timeout (exit 137) show the cause, Esc (`selection cancelled`) stays
+  silent.
+- Linux helpers: system audio reports Failed with the cause after a missing
+  `parec` or repeated quick exits (logged once per cause); `tesseract` runs
+  under a 60 s timeout; missing rus/eng data shows the package names on the OCR
+  tile (typed `ocr::OcrFailure`, worded by the host); the `--command` socket send
+  and the tray restart are bounded. `install-linux.sh`: valid Lua path for a
+  non-ASCII home, the include is replaced on a new prefix, a warning names the
+  missing tessdata packages.
+- Shared code: update and missing-`curl` failures name the cause and button;
+  a read-aloud tile closed during a follow-up no longer reopens busy; an
+  auto-tile AI error reaches its error tile again, now in the UI language.
+- Texts: 19 hints named tabs, buttons or options that no longer exist (for
+  example "Settings → AI", STT for the microphone, "Same as text model"), and
+  runtime text was English in the Russian UI (follow-up recording, read-aloud
+  badge, archive re-transcription progress, file dialog titles, server-import
+  preview). The summary title, microphone failure and STT path mask from the
+  first pass are included.
+- Cleanup: dead code (9 items), 278 unused msgids, two stale pre-Slint docs and
+  three unreferenced 2026-05 screenshots.
+- Tooling: `clipboard-win` 5.4.1 was yanked upstream on 2026-10-23, which failed
+  cargo-deny on every PR; the lockfile uses 5.4.3. The macOS window guard
+  follows `place_tile` (it had failed since 1b1da11). CI gets an advisory
+  Linux job (ubuntu-24.04, Segoe UI → Liberation Sans as on Omarchy).
+
+Left as is: Hyprland binding cleanup unbinds by chord and can drop another
+owner's binding on the same keys; no removal by identity exists in the Lua API
+used. Seven `linux_platform` tests check source text, not behaviour.
+
+### Verified
+
+CI run 40193979073 on `93ebfa7`: Windows `rust` job (fmt, backend suite, Slint
+unit and guard tests) and gate passed; Linux job passed backend lib 812/0, Slint
+lib 100/0, host 175/0, linux_platform 8/0, i18n 3/0. macOS passed on `4a75b1d`
+(the later commits change only the workflow). Not verified live: VM 107 was held
+by another session (`vpnrouter-a3-20261024`) the whole day, and the mutex
+blocks VM 100 too, so no Omarchy UI check and no Windows install smoke ran.
+The gate script for the next live run is `native-93ebfa7.sh` in the private
+omarchy folder.
+
+### Outside the port branch
+
+- PR #313 (from master): the verified bot batch (#312, #310, #296, #311, #305,
+  rodio 0.23, global-hotkey 0.9) plus `clipboard-win` 5.4.3; all CI checks
+  pass. It waits for a Windows smoke of hotkeys and playback before merging.
+  #289 (would swallow chmod errors), #288 and #308 (duplicates) are closed;
+  their branches are in a local bundle.
+- PR #314 (from master): the native gate treats compiled knowledge files as
+  code, skips fmt on docs commits, and CI runs the two missing guards. Its
+  cargo-deny check passes once #313 lands.
+- Ten merged worktrees and their local branches were removed.
+- The owner's uncommitted instruction files were not edited. Contradictions
+  found in them are listed in the session report, not fixed here.
