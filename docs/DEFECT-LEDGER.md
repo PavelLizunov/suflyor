@@ -189,12 +189,13 @@ Scenario: AI providers with OpenAI selected; its reasoning help wraps to three l
 Verified: existing WrapBlock restores8px separation in native EN/RU720px captures; selected native gate includes the passing720/600/480px regression.
 Closed by: #295, published v0.38.1-rc.14, merge92438f4eb9bc7e0957dc5128706a0df729009de0.
 
-### D-056 Closing Settings disconnects an active local-model download from its UI   Severity: **P1**   Status: Open
+### D-056 Closing Settings disconnects an active local-model download from its UI   Severity: **P1**   Status: Closed
 Evidence: at 3b00939d3927e9baa58d58e42b5453e63f7dec21, `settings_controller.rs` removes the Settings instance in `on_close_clicked`; local-AI progress/completion callbacks hold only that instance's weak handle.
 Scenario: start the built-in download, close Settings, then reopen it. The transfer continues but progress and Cancel disappear; the new window presents idle download actions.
 Demonstrated on the Windows worker: the first Settings handle showed Gemma 298 / 6405 MB and Cancel; after close/reopen the handle changed and Download model returned while the original curl process remained active. Private captures are retained outside Git.
-Fix proposed: retain the hidden Settings instance and preserve all job-source/shared status text during active work; idle reopen still clears completed transient results. Candidate branch: codex/rc13-checkpoint. Required acceptance: exact-candidate close/reopen/cancel and resumed full download, plus idle reset.
-Closed by:
+Fix: PR #294 retains the hidden Settings instance and preserves active local-model job status, progress and Cancel state. Idle reopen clears completed transient results. `settings_reset_guard.rs::settings_close_preserves_the_window_and_active_download_state` covers the retained instance and conditional reset in source.
+Acceptance: exact-candidate live close/reopen/cancel, resumed full download and idle-reset results are not recorded in this entry. The rc.13 retest checklist states expected behavior, not a completed run; D-063 records later close/reopen and download-state regression success without those complete results.
+Closed by: PR #294, merge b3211e39770960152f5a75e561e28162aab5ed3c.
 
 ### D-057 Download-only completion rewrites an inherited local Vision route   Severity: P1   Status: Open
 Evidence: `apply_download_result` at a5abc4a replaces local answer URL/model; `Config::vision_endpoint` inherits those fields for local Vision when specific fields are blank.

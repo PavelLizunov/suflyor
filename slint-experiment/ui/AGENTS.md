@@ -35,7 +35,7 @@ Guide for inspecting, authoring, and verifying Slint UI components (`ui/*.slint`
 
 - **Reused Window Pattern:** Unlike tile or palette windows which are recreated per invocation, `SettingsWindow` is instantiated once and reused across `show()` calls.
 - **Stale State Hazard:** Any transient property (such as `*-status` or `*-result` strings, e.g., `ai-bearer-status`, `tts-download-status`, `whisper-model-status`) will linger across opens unless explicitly reset.
-- **Reset Invariant:** Every `in-out property <string>` ending in `-status` or `-result` in `ui/settings_panel.slint` MUST be explicitly cleared or reseeded inside `populate_token_status()` (`slint-experiment/src/bin/overlay_host/settings_controller.rs`) on every window open.
+- **Reset Invariant:** `populate_token_status()` (`slint-experiment/src/bin/overlay_host/settings_controller.rs`) must cover every `in-out property <string>` ending in `-status` or `-result` in `ui/settings_panel.slint` on open. Clear or reseed idle results. Preserve active local-model install, download, switch, engine-update and Strata status, progress and Cancel state until the worker finishes. Preserve Strata Vision status while its job is active.
 - **Async State Rule:** Do not optimistically flip UI properties prior to async Rust operation completion. Update UI state only on verified completion callbacks.
 - **Static Reset Guard Test:** Enforce reset coverage with:
   ```powershell

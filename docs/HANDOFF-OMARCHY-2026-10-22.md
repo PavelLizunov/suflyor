@@ -598,6 +598,7 @@ candidate reason; replacing them with SVG icons or words is a design change.
 Shared, not changed: a tile opened from the palette keeps the English source
 chip "kb · glossary" in the Russian UI (`help_palette.rs`, `format!("kb · {}",
 …)`), while the palette itself shows "глоссарий".
+Correction: superseded by ef69853; the palette tile chip now uses the translated source label.
 
 Shared, not changed: "Extract from recent sessions" turns every stored AI turn
 into a suggestion whose text is the whole prompt the app sent ("Последние
@@ -737,6 +738,7 @@ All are shared host or backend behaviour, seen on Linux:
   quickshell render in software. More CPU is not available. 12 to 16 GiB of
   memory would remove the swap stalls; building on a stronger Linux node and
   copying only the QA binary here would cut the build from hours to minutes.
+  Correction: this is historical, before the October 24 migration; VM 107 now has 8 vCPU and 16 GiB, as recorded in the Settings file-dialog pass above.
 - Omarchy fixture restored after each live run: one output (Virtual-1,
   1920x1080, scale 1), no configuration errors, zero owned bindings, config
   restored, installed host back to `ec38f602…` (2f3f2fd), service inactive.

@@ -59,8 +59,13 @@ tests.
 
 Visible UI changes also require the repository's Slint MCP audit against the
 exact binary being reviewed. Keep matching before/after screenshots for every
-changed surface. Shared Settings layout changes require all 16 tabs at 720×600,
-followed by the complete 13-shortcut smoke test.
+changed surface. Shared Settings layout changes require every sidebar entry
+(currently 17) at 720×600, followed by the platform's complete shortcut smoke test.
+Windows registers 13 shortcuts: F1, F3, F4, F6, F7, F8, Shift+F8, Ctrl+F8,
+F9, Shift+F9, and Shift+Alt+1/2/3. Wayland uses those same shortcuts plus
+Super+F9 (microphone PTT press and release), Super+Shift+F9 (system-audio PTT
+press and release), and Super+F10 (show). That is 18 Hyprland binding entries,
+including the two release bindings.
 
 The MCP server is compiled in **only** by the `ui-mcp` Cargo feature;
 `SLINT_MCP_PORT` / `SLINT_EMIT_DEBUG_INFO` alone do not enable it. Build the

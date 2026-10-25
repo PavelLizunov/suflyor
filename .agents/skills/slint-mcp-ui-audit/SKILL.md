@@ -53,6 +53,25 @@ Treat live visual verification as mandatory for UI changes. Compilation and test
    again. In Slint layouts, `height`/`min-height` can change rendered geometry
    without increasing a parent ScrollView's extent; verify `preferred-height`.
 
+## Linux / Hyprland QA
+
+Keep the Windows procedure above for Windows. On the Omarchy worker, build the
+same candidate with Slint debug metadata and the QA feature:
+
+```bash
+CARGO_INCREMENTAL=0 SLINT_EMIT_DEBUG_INFO=1 cargo build --locked --no-default-features --bin overlay-host --features ui-mcp --manifest-path slint-experiment/Cargo.toml
+SLINT_EMIT_DEBUG_INFO=1 SLINT_MCP_PORT=9123 slint-experiment/target/debug/overlay-host
+```
+
+Use `python3 scripts/slint_mcp.py` for the same window, element, click and
+screenshot commands. `overlay-host.exe`, HWND coordinates and `sim_click.ps1`
+are Windows-only. Use `hyprctl -j clients` and `hyprctl -j monitors` for native
+window geometry. For actual composed frames and z-order, use a compositor or VM
+framebuffer dump (for example, `qm monitor screendump` on the VM host). `grim`
+draws `no_screen_share` windows black, even when another window covers them; it
+cannot establish their visible content or z-order. Keep MCP captures for Slint
+content and colour comparisons.
+
 ## Required coverage
 
 - Before the first edit, create `docs/audit-YYYY-MM-DD-<task>/` and capture the
@@ -66,7 +85,7 @@ Treat live visual verification as mandatory for UI changes. Compilation and test
   expose the defect: empty, one/few rows, enough rows to show the scrollbar,
   no-match/long text, selected/busy where applicable, and declared minimum
   window size.
-- For a shared Settings primitive or layout change, visit all 16 Settings tabs at 720×600.
+- For a shared Settings primitive or layout change, visit every Settings sidebar entry (currently 17) at 720×600.
 - Check clipping, overflow, accidental stretching, large gaps, scroll reachability, button enabled/selected state, translations, and status accuracy.
 - Treat geometry as pass/fail, not taste: header icon/grip/text centres differ
   by at most 2 px; fixed-row top/bottom gaps differ by at most 2 px; controls
@@ -83,12 +102,16 @@ Treat live visual verification as mandatory for UI changes. Compilation and test
 ## Global-hotkey smoke
 
 Run this once against the exact MCP-audited binary, after the page pass. Do not
-repeat it on every Settings tab: hotkeys are process-global, so that would add
-208 duplicate actions without increasing coverage.
+repeat it on every Settings tab: hotkeys are process-global, so that would
+repeat the same actions without increasing coverage.
 
-- Exercise every registered shortcut through Windows input:
+- Windows: exercise all 13 registered shortcuts through Windows input:
   `F1`, `F3`, `F4`, `F6`, `F7`, `F8`, `Shift+F8`, `Ctrl+F8`, `F9`,
   `Shift+F9`, `Shift+Alt+1`, `Shift+Alt+2`, `Shift+Alt+3`.
+- Wayland: dispatch those same 13 shortcuts through Hyprland, plus `Super+F9`
+  microphone PTT press/release, `Super+Shift+F9` system-audio PTT press/release,
+  and `Super+F10` show. `WAYLAND_BINDINGS` in `hotkeys.rs` has 18 entries,
+  including the two release bindings. Check both PTT edges, not only key-down.
 - Confirm both registration in Settings > Diagnostics and the distinct dispatch
   log/result for every shortcut. Registration alone is not a functional pass.
 - Cancel region-capture surfaces with `Esc` before continuing. Use disposable
@@ -131,10 +154,11 @@ Every UI diff passes these three checks before the user is shown. Present the re
 
 Check the `.rs` side, not just `.slint`:
 
-1. **Stale status on a REUSED window** — the Settings window is reused, so
-   every transient `*_status`/`*_result` string survives the next open unless
-   `populate_token_status` clears it. (Caused the user's lingering
-   "Готово: умная модель (12B)".)
+1. **Stale status on a REUSED window** — `populate_token_status` clears or
+   reseeds idle transient `*_status`/`*_result` strings on reopen. It preserves
+   active local-model download/switch and Strata Vision job status until the
+   worker finishes. Do not erase live progress or Cancel state. (Idle stale
+   status caused the user's lingering "Готово: умная модель (12B)".)
 2. **Optimistic state-flip before an async result** — writing config + UI to
    the new value *before* the operation confirms; on failure the UI lies.
    Commit only on the confirmed-success branch.

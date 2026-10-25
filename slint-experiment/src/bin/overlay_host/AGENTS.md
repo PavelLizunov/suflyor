@@ -42,7 +42,7 @@ The host orchestration layer lives under `slint-experiment/src/bin/overlay_host/
 | | `bar_tray.rs` | Bar status/size/placement, hide-to-tray lifecycle, tray menu dispatch, and macOS status visibility synchronization. |
 | | `local_watchdog.rs` | Pure local-AI watchdog cooldown/failure policy and its unit tests; live probes and process starts remain in `main()`. |
 | | `status_copy.rs` | Active-stack labels, model/status copy, manual-tile naming, and related pure formatting helpers. |
-| | `vision_capture.rs` | Screen capture execution (F8 monitor, Shift+F8 drag region), BGRA to Slint image conversion, AI vision endpoint stream dispatch (`fire_f8_vision_capture`, `launch_vision_for_bgra`). |
+| | `vision_capture.rs` | Region capture for F8 describe/test-practice, Shift+F8 translate and Ctrl+F8 OCR, BGRA to Slint image conversion, AI vision endpoint stream dispatch (`fire_f8_vision_capture`, `launch_vision_for_bgra`). Linux uses `slurp`/`grim` region selection for all three modes. |
 | | `recovery.rs` | Crash context recovery markers (`build_recovery_block`, `strip_recovery_block`, `compose_recovery_context`), recovery dialog (`open_recover_offer`). |
 | | `wizard.rs` | First-run setup onboarding wizard (`open_wizard`), step-by-step setup, mic check, summary generation. |
 | | `diagnostics.rs` | Self-diagnostics tab population (`populate_diagnostics`), redacted diagnostic report generator (`build_diag_report`, `redact_ipv4`, `redact_urls`). |
@@ -90,14 +90,14 @@ Slint requires all window instantiation, widget property updates, and event call
 
 ### Global Hotkeys (`hotkeys.rs`)
 
-- Registered once at startup via `register_hotkeys()` using `global_hotkey::GlobalHotKeyManager`.
+- Registered at startup via `register_hotkeys()`. Windows/macOS use `global_hotkey::GlobalHotKeyManager`. Linux installs Hyprland bindings through the native desktop adapter and restores them after compositor config reloads.
 - System-wide hotkey table:
   - **F1:** Help window (`open_help`)
   - **F3:** Re-ask last question (`fire_f3_reask`)
   - **F4:** KB Palette inline search (`open_palette`)
   - **F6:** Manual AI prompt tile (`fire_f6_manual_spawn`)
   - **F7:** Session archive
-  - **F8 / Shift+F8:** Vision capture (full monitor / drag region)
+  - **F8 / Shift+F8 / Ctrl+F8:** Region capture: describe (or test-practice when enabled) / translate / OCR. Linux uses native `slurp`/`grim` region selection for all three.
   - **F9 / Shift+F9:** Text ask main / variant (`fire_f9_ask`)
   - **Shift+Alt+1 / +2 / +3:** Neural read-aloud (read selection / OCR region / pause)
 - Polled in `overlay_host_windows.rs` `main()` event loop. Registration state is exposed to diagnostics via `HotkeyDiag`.
@@ -147,7 +147,7 @@ Hotkey / UI Trigger
 Unlike transient tiles, `SettingsWindow` is instantiated once and shown on demand.
 
 - **Stale State Hazard:** Any transient property (ending in `-status` or `-result`, e.g. `ai-bearer-status`, `tts-download-status`) persists across window opens unless explicitly reset.
-- **Mandatory Reset Rule:** Every transient status property MUST be cleared or reseeded inside `populate_token_status()` in `settings_controller.rs` whenever Settings opens.
+- **Reset Rule:** `populate_token_status()` in `settings_controller.rs` must cover every transient status property on open. Clear or reseed idle results. Preserve active local-model install, download, switch, engine-update and Strata status, progress and Cancel state until the worker finishes. Preserve Strata Vision status while its job is active. Closing Settings must retain the hidden instance used by worker callbacks.
 - Enforced by integration test: `cargo test --manifest-path slint-experiment/Cargo.toml --test settings_reset_guard`.
 
 ### Domain Tab Wiring
@@ -194,7 +194,7 @@ cargo clippy --manifest-path slint-experiment/Cargo.toml --bin overlay-host
 ### Static Guard Tests
 
 ```powershell
-# Settings transient reset guard (verifies populate_token_status resets all -status/-result fields)
+# Settings reset guard (setter coverage, idle resets and active local-job preservation)
 cargo test --manifest-path slint-experiment/Cargo.toml --test settings_reset_guard
 
 # i18n translation parity guard (@tr msgid / ru.po msgstr match)

@@ -43,10 +43,12 @@ Tests in `tests/*.rs` fall into two primary categories:
 
 ### Gate Script Selection (`scripts/git-gate-native.ps1`)
 
-- **UI-Only Targeted Gate:** When a diff in `slint-experiment` touches ONLY `.slint` files, assets, or `.po` translations (with zero changes to `.rs`, `.toml`, `.lock`, or `build.rs`), `git-gate-native.ps1` runs a targeted UI check executing a specific array of static guards:
-  `codex_copy_guard`, `i18n_guard`, `icon_guard`, `lock_chip_geometry_guard`, `lock_chip_layout_guard`, `lock_mode_menu_guard`, `rc3_regression_guard`, `settings_reset_guard`, `tera_tts_layout_guard`, `tray_guard`, `version_guard`.
-- **Registering New Static Guards:** If you author a new static UI guard test that should run during UI-only targeted gates, add its test name to the `$guards` list in `scripts/git-gate-native.ps1` (and `scripts/git-gate-macos.sh` if applicable).
-- **Full Rust Diff:** Any Rust file change in `slint-experiment` triggers a full `cargo test`, running all test targets in `tests/*.rs`.
+- **Targeted Slint Gate:** For non-docs Slint changes, `git-gate-native.ps1` runs `cargo fmt --all -- --check` and `cargo check --locked --bin overlay-host`. Both UI-only and Rust changes run these 15 test targets:
+  `codex_copy_guard`, `i18n_guard`, `icon_guard`, `lock_chip_geometry_guard`, `lock_chip_layout_guard`, `lock_mode_menu_guard`, `macos_settings_guard`, `rc3_regression_guard`, `settings_download_lifecycle`, `settings_provider_geometry`, `settings_reset_guard`, `tera_tts_layout_guard`, `tile_player_layout_guard`, `tray_guard`, `version_guard`.
+- **Unit Tests:** If the Slint diff contains `.rs`, `.toml`, `.lock` or `build.rs`, the targeted gate also runs `cargo test --locked --lib --bin overlay-host`. It does not run every integration target. The gate builds the selected unit and guard binaries with `--no-run`, stages DirectML, then runs them.
+- **GitHub CI:** The non-full Slint step in `.github/workflows/ci.yml` runs lib/bin tests and the same targets; keep the two lists equal.
+- **Registering New Guards:** Update the `$guards` list in `scripts/git-gate-native.ps1` and the applicable lists in `scripts/git-gate-macos.sh` and `.github/workflows/ci.yml` when adding a guard to targeted coverage.
+- **Full Gate:** The explicit stable-release full gate runs all integration targets. A Rust change alone does not select it.
 
 ---
 
