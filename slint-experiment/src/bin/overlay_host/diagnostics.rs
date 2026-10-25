@@ -344,7 +344,13 @@ fn labelled_secret_len(rest: &str, label: &str) -> Option<usize> {
     let sep = &unquoted[..sep_len];
     let separated = &unquoted[sep_len..];
     let value = separated.strip_prefix(['"', '\'']).unwrap_or(separated);
-    if label != "bearer" && !is_quoted_label && !sep.contains([':', '=']) {
+    // The newer labels also appear in plain log text ("ai_bearer save
+    // failed: ..."), so they need a real `:`/`=` separator or a quoted key.
+    let needs_separator = matches!(
+        label,
+        "ai_bearer" | "hermes_bridge_token" | "hermes_api_key"
+    );
+    if needs_separator && !is_quoted_label && !sep.contains([':', '=']) {
         return None;
     }
     if value.len() == after.len() {
@@ -1325,6 +1331,11 @@ mod tests {
         }
         // The prefix needs a word boundary, so identifiers stay readable.
         assert_eq!(redact_secrets("graph_hf_cache"), "graph_hf_cache");
+        // Older labels still mask a value after plain whitespace; the newer
+        // ones need `:`/`=`, so a log line that names the field stays intact.
+        assert!(!redact_secrets("password secret_value_123").contains("secret_value_123"));
+        let line = "hermes_api_key save failed: io";
+        assert_eq!(redact_secrets(line), line);
     }
 
     #[test]

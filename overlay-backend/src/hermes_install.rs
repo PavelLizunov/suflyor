@@ -134,7 +134,9 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
         }
         EnableEdit::AlreadyEnabled => {
             if cfg_path.exists() {
-                let _ = crate::paths::restrict_to_owner(&cfg_path);
+                if let Err(e) = crate::paths::restrict_to_owner(&cfg_path) {
+                    log::warn!("hermes config: could not restrict permissions: {e}");
+                }
             }
             Ok("готово: плагин обновлён (уже включён) — перезапустите Hermes".to_string())
         }
@@ -168,7 +170,9 @@ pub fn ensure_api_server() -> Result<(String, bool), String> {
     match ensure_api_server_text(&old, crate::bridge::generate_token) {
         ApiEdit::Ready(key) => {
             if cfg_path.exists() {
-                let _ = crate::paths::restrict_to_owner(&cfg_path);
+                if let Err(e) = crate::paths::restrict_to_owner(&cfg_path) {
+                    log::warn!("hermes config: could not restrict permissions: {e}");
+                }
             }
             Ok((key, false))
         }
