@@ -253,9 +253,10 @@ pub async fn download_installer(url: &str) -> Result<PathBuf> {
         ),
     }
     let dir = std::env::temp_dir().join("suflyor-update");
-    std::fs::create_dir_all(&dir).context("create temp update dir")?;
+    // SECURITY: restrict temp update directory and executable permissions to owner only (mode 0700/0600 on POSIX).
+    crate::paths::ensure_private_dir(&dir).context("create temp update dir")?;
     let path = dir.join(INSTALLER_ASSET);
-    std::fs::write(&path, &bytes).context("write installer to temp")?;
+    crate::paths::write_private(&path, &bytes).context("write installer to temp")?;
     Ok(path)
 }
 
