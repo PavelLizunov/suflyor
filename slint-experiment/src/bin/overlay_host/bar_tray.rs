@@ -76,8 +76,16 @@ pub(super) fn get_sys_active(state: &slint_replay::app_state::SharedState) -> bo
 pub(super) fn spawn_relaunch() -> bool {
     #[cfg(target_os = "linux")]
     if std::env::var("SUFLYOR_USER_SERVICE").as_deref() == Ok("suflyor.service") {
-        return std::process::Command::new("systemctl")
-            .args(["--user", "--no-block", "restart", "suflyor.service"])
+        return std::process::Command::new("timeout")
+            .args([
+                "--signal=KILL",
+                "1s",
+                "systemctl",
+                "--user",
+                "--no-block",
+                "restart",
+                "suflyor.service",
+            ])
             .status()
             .is_ok_and(|status| status.success());
     }

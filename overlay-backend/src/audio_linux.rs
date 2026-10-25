@@ -9,7 +9,7 @@ use std::os::fd::AsRawFd;
 use std::os::unix::process::CommandExt;
 use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
@@ -187,11 +187,40 @@ fn nonblocking(stdout: &ChildStdout) -> Result<()> {
     Ok(())
 }
 
+#[derive(Default)]
+struct SystemCaptureStatus {
+    state: AtomicU8,
+    error: Mutex<Option<String>>,
+}
+
+impl SystemCaptureStatus {
+    fn fail(&self, error: &anyhow::Error) {
+        let cause = format!("{error:#}");
+        if let Ok(mut slot) = self.error.lock() {
+            // The route is re-resolved every second; log a cause once.
+            if slot.as_deref() != Some(cause.as_str()) {
+                eprintln!("[audio] system capture failed: {cause}");
+                *slot = Some(cause);
+            }
+        }
+        self.state.store(2, Ordering::Release);
+    }
+}
+
+fn consecutive_quick_exits(previous: u8, elapsed: Duration) -> u8 {
+    if elapsed < Duration::from_secs(3) {
+        previous.saturating_add(1)
+    } else {
+        0
+    }
+}
+
 struct Capture {
     child: OwnedChild,
     stdout: ChildStdout,
     route: String,
     tail: Option<u8>,
+    started: Instant,
 }
 
 impl Capture {
@@ -211,7 +240,13 @@ impl Capture {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
                 .spawn()
-                .context("audio capture tool unavailable")?,
+                .map_err(|error| {
+                    if error.kind() == std::io::ErrorKind::NotFound {
+                        anyhow!("parec is missing; install parec and restart the session")
+                    } else {
+                        anyhow!(error).context("could not start parec")
+                    }
+                })?,
         );
         let stdout = child
             .0
@@ -224,20 +259,26 @@ impl Capture {
             stdout,
             route,
             tail: None,
+            started: Instant::now(),
         })
     }
 
     fn read(&mut self, into: &mut Vec<i16>) -> Result<()> {
         let mut bytes = [0u8; 8192];
         match self.stdout.read(&mut bytes) {
-            Ok(0) => bail!("audio capture stream closed"),
+            Ok(0) => {
+                if let Some(status) = self.child.0.try_wait().context("parec status read error")? {
+                    bail!("parec exited with status {status}");
+                }
+                bail!("parec closed its audio stream");
+            }
             Ok(n) => decode(&bytes[..n], &mut self.tail, into),
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                if self.child.0.try_wait()?.is_some() {
-                    bail!("audio capture process stopped");
+                if let Some(status) = self.child.0.try_wait().context("parec status read error")? {
+                    bail!("parec exited with status {status}");
                 }
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => return Err(e).context("parec audio read error"),
         }
         Ok(())
     }
@@ -262,7 +303,7 @@ fn decode(bytes: &[u8], tail: &mut Option<u8>, samples: &mut Vec<i16>) {
 pub struct CaptureHandle {
     stop: Arc<AtomicBool>,
     workers: Vec<JoinHandle<()>>,
-    system: Arc<AtomicU8>,
+    system: Arc<SystemCaptureStatus>,
     metrics: Arc<AudioMetrics>,
 }
 impl CaptureHandle {
@@ -270,11 +311,18 @@ impl CaptureHandle {
         self.metrics.snapshot()
     }
     pub fn system_capture_state(&self) -> SystemCaptureState {
-        match self.system.load(Ordering::Acquire) {
+        match self.system.state.load(Ordering::Acquire) {
             0 => SystemCaptureState::Pending,
             1 => SystemCaptureState::Running,
             _ => SystemCaptureState::Failed,
         }
+    }
+    pub fn system_capture_error(&self) -> Option<String> {
+        self.system
+            .error
+            .lock()
+            .ok()
+            .and_then(|error| error.clone())
     }
 }
 impl Drop for CaptureHandle {
@@ -300,7 +348,7 @@ pub fn start_capture(
     let mut handle = CaptureHandle {
         stop: Arc::new(AtomicBool::new(false)),
         workers: Vec::new(),
-        system: Arc::new(AtomicU8::new(0)),
+        system: Arc::new(SystemCaptureStatus::default()),
         metrics: Arc::new(AudioMetrics::default()),
     };
     let start = Instant::now();
@@ -327,7 +375,7 @@ fn capture_worker(
     selected: Option<String>,
     tx: mpsc::Sender<AudioChunk>,
     stop: Arc<AtomicBool>,
-    system: Arc<AtomicU8>,
+    system: Arc<SystemCaptureStatus>,
     metrics: Arc<AudioMetrics>,
     start: Instant,
 ) {
@@ -339,6 +387,7 @@ fn capture_worker(
     let mut capture: Option<Capture> = None;
     let mut samples = Vec::new();
     let mut next_route = Instant::now();
+    let mut quick_exits = 0;
     while !stop.load(Ordering::Acquire) && !tx.is_closed() {
         if Instant::now() >= next_route {
             next_route = Instant::now() + Duration::from_secs(1);
@@ -347,31 +396,51 @@ fn capture_worker(
                 Ok((_, route)) if capture.as_ref().is_none_or(|c| c.route != route) => {
                     drop(capture.take());
                     samples.clear();
-                    capture = Capture::open(route).ok();
+                    match Capture::open(route) {
+                        Ok(active) => capture = Some(active),
+                        Err(error) => {
+                            if source == AudioSource::System {
+                                system.fail(&error);
+                            }
+                        }
+                    }
                 }
-                Err(_) => {
+                Err(error) => {
                     capture = None;
                     samples.clear();
+                    if source == AudioSource::System {
+                        system.fail(&error);
+                    }
                 }
                 _ => {}
             }
-            if source == AudioSource::System && capture.is_none() {
-                system.store(0, Ordering::Release);
-            }
         }
         if let Some(active) = capture.as_mut() {
-            if active.read(&mut samples).is_err() {
+            if let Err(error) = active.read(&mut samples) {
+                quick_exits = consecutive_quick_exits(quick_exits, active.started.elapsed());
                 capture = None;
                 samples.clear();
                 if source == AudioSource::System {
-                    system.store(0, Ordering::Release);
+                    if quick_exits >= 3 {
+                        system.fail(&error);
+                    } else {
+                        let _ = system.state.compare_exchange(
+                            1,
+                            0,
+                            Ordering::AcqRel,
+                            Ordering::Acquire,
+                        );
+                    }
                 }
             }
         }
         metrics.observe_pending_samples(stream, samples.len() as u64);
         while samples.len() >= CHUNK {
             if source == AudioSource::System {
-                system.store(1, Ordering::Release);
+                if let Ok(mut error) = system.error.lock() {
+                    *error = None;
+                }
+                system.state.store(1, Ordering::Release);
             }
             let timestamp_ms = start.elapsed().as_millis() as u64;
             let chunk = AudioChunk {
@@ -391,7 +460,7 @@ fn capture_worker(
         thread::sleep(Duration::from_millis(10));
     }
     if source == AudioSource::System {
-        system.store(2, Ordering::Release);
+        system.state.store(2, Ordering::Release);
     }
 }
 
@@ -535,6 +604,34 @@ pub fn play_tone_and_capture(device: Option<String>) -> Result<Vec<i16>> {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
+    #[test]
+    fn repeated_quick_exits_fail_but_a_stable_run_resets_the_count() {
+        let mut exits = 0;
+        for expected in 1..=3 {
+            exits = consecutive_quick_exits(exits, Duration::from_millis(100));
+            assert_eq!(exits, expected);
+        }
+        assert_eq!(consecutive_quick_exits(exits, Duration::from_secs(3)), 0);
+        assert_eq!(consecutive_quick_exits(u8::MAX, Duration::ZERO), u8::MAX);
+    }
+
+    #[test]
+    fn failed_system_capture_retains_the_cause() {
+        let status = Arc::new(SystemCaptureStatus::default());
+        status.fail(&anyhow!("parec exited with status 1"));
+        let handle = CaptureHandle {
+            stop: Arc::new(AtomicBool::new(false)),
+            workers: Vec::new(),
+            system: status,
+            metrics: Arc::new(AudioMetrics::default()),
+        };
+        assert_eq!(handle.system_capture_state(), SystemCaptureState::Failed);
+        assert_eq!(
+            handle.system_capture_error().as_deref(),
+            Some("parec exited with status 1")
+        );
+    }
+
     #[test]
     fn pcm_keeps_partial_bytes() {
         let (mut tail, mut samples) = (None, Vec::new());

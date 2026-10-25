@@ -99,7 +99,28 @@ pub fn send_command(value: &str) -> Result<(), Error> {
     {
         return Err("invalid Suflyor command".into());
     }
-    UnixDatagram::unbound()?.send_to(value.as_bytes(), socket_path()?)?;
+    let socket = UnixDatagram::unbound()?;
+    socket.set_write_timeout(Some(std::time::Duration::from_millis(200)))?;
+    socket
+        .send_to(value.as_bytes(), socket_path()?)
+        .map_err(|error| {
+            if matches!(
+                error.kind(),
+                io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+            ) {
+                let ui_is_ru = overlay_backend::config::load().ui_is_ru();
+                io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    if ui_is_ru {
+                        "Очередь команд Suflyor заполнена (тайм-аут 200 мс); повторите команду."
+                    } else {
+                        "Suflyor command queue is full (200 ms timeout); retry the command."
+                    },
+                )
+            } else {
+                error
+            }
+        })?;
     Ok(())
 }
 
