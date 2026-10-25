@@ -765,7 +765,8 @@ fn main() -> Result<(), slint::PlatformError> {
             .select();
         diag!("[overlay-host] Slint windows excluded from taskbar at creation");
     }
-    #[cfg(target_os = "linux")]
+    // The plugin build has its own headless platform (remote_ui::install).
+    #[cfg(all(target_os = "linux", not(feature = "remote-ui")))]
     {
         use slint::winit_030::winit::platform::wayland::WindowAttributesExtWayland;
         slint::BackendSelector::new()
