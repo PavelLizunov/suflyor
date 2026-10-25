@@ -720,10 +720,13 @@ pub(in super::super) fn open_archive(
             }
             match overlay_backend::conspect::load(&sid).and_then(|c| c.final_summary) {
                 Some(text) if !text.trim().is_empty() => {
-                    let stealth = cfg_c.read().stealth_enabled;
+                    let (stealth, ui_is_ru) = {
+                        let c = cfg_c.read();
+                        (c.stealth_enabled, c.ui_is_ru())
+                    };
                     let _ = events_c.spawn_tile_full(
                         overlay_backend::events::TileSpec {
-                            question: format!("Сводка · {}", row.title),
+                            question: summary_tile_title(row.title.as_str(), ui_is_ru),
                             answer: text,
                             source: "summary".into(),
                             is_translation: false,
@@ -945,6 +948,10 @@ fn show_notice(
 ) {
     let text = if cfg.read().ui_is_ru() { ru } else { en };
     win.set_notice(SharedString::from(text));
+}
+
+fn summary_tile_title(title: &str, ui_is_ru: bool) -> String {
+    format!("{} · {title}", if ui_is_ru { "Сводка" } else { "Summary" })
 }
 
 fn archive_row_at(model: &slint::ModelRc<ArchiveRow>, idx: i32) -> Option<ArchiveRow> {
@@ -1253,6 +1260,12 @@ fn build_session_markdown(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
+
+    #[test]
+    fn summary_tile_title_follows_ui_language() {
+        assert_eq!(summary_tile_title("Meeting", false), "Summary · Meeting");
+        assert_eq!(summary_tile_title("Встреча", true), "Сводка · Встреча");
+    }
 
     #[test]
     fn pretty_label_parses_stem() {

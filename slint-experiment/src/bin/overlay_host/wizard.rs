@@ -263,7 +263,7 @@ pub(crate) fn wire_wizard_steps(
                         }
                         Err(e) => {
                             log::warn!("wizard: mic check failed: {e}");
-                            (4, if ui_is_ru { "Не удалось открыть микрофон" } else { "Could not open the microphone" }.to_string())
+                            (4, super::diagnostics::mic_open_failed(ui_is_ru, ("Record test", "Записать тест")))
                         }
                     }
                 };

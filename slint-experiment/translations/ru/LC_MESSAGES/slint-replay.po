@@ -3087,3 +3087,6 @@ msgstr "Не скачано"
 
 msgid "Enable for F8"
 msgstr "Включить для F8"
+
+msgid "Stop session"
+msgstr "Остановить сессию"

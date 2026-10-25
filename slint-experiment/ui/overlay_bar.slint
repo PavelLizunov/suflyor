@@ -876,6 +876,7 @@ export component OverlayBarWindow inherits Window {
                     : @image-url("../assets/icons/session-start.svg");
                 has-icon: true;
                 label: root.timer-active ? root.timer-label : @tr("start");
+                a11y: root.timer-active ? @tr("Stop session") + " · " + root.timer-label : @tr("start");
                 active: root.timer-active;
                 checkable: true;
                 accent: #fbbf24;
@@ -1352,6 +1353,7 @@ export component OverlayBarWindow inherits Window {
                         : @image-url("../assets/icons/session-start.svg");
                     has-icon: true;
                     label: root.timer-active ? root.timer-label : @tr("start");
+                    a11y: root.timer-active ? @tr("Stop session") + " · " + root.timer-label : @tr("start");
                     active: root.timer-active;
                     checkable: true;
                     accent: #fbbf24;

@@ -48,7 +48,7 @@ pub(crate) fn populate_diagnostics(
         String::new()
     }));
     win.set_diag_stt_level(if r.stt.configured { 0 } else { 2 });
-    win.set_diag_stt_detail(SharedString::from(r.stt.detail));
+    win.set_diag_stt_detail(SharedString::from(redact_user_home(&r.stt.detail)));
     // mic/sys: neutral ("—") until "Check all" records a live sample (#133) —
     // a configured device is NOT proof it actually hears.
     win.set_diag_mic_level(3);
@@ -882,7 +882,7 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
                         }
                         Err(e) => {
                             log::warn!("diagnostics: mic check failed: {e}");
-                            (4, if ui_is_ru { "Не удалось открыть микрофон" } else { "Could not open the microphone" }.to_string())
+                            (4, mic_open_failed(ui_is_ru, ("Check all", "Проверить всё")))
                         }
                     }
                 };
@@ -967,6 +967,14 @@ pub(crate) fn wire_diagnostics(win: &SettingsWindow, cfg: &overlay_backend::conf
     }
 }
 
+pub(crate) fn mic_open_failed(ru: bool, (en_b, ru_b): (&str, &str)) -> String {
+    if ru {
+        format!("Не удалось открыть микрофон. Проверьте, что микрофон подключён и доступ к нему разрешён. Выберите его в разделе Настройки > Аудио > Устройство микрофона, затем вернитесь и нажмите «{ru_b}» ещё раз.")
+    } else {
+        format!("Could not open the microphone. Check that a microphone is connected and access is allowed. Select it in Settings > Audio > Microphone device, then return and press {en_b} again.")
+    }
+}
+
 /// Clear-button labels as `settings_panel.slint` and `ru.po` show them, `(en, ru)`.
 const CLEAR_QUEUE_BUTTON: (&str, &str) =
     ("Clear suggestions queue", "Очистить очередь предложений");
@@ -1047,6 +1055,42 @@ mod tests {
     //! useful and safe to paste into a support thread. Pure: no bridge, no UI,
     //! no network.
     use super::*;
+
+    #[test]
+    fn mic_open_failure_names_settings_and_the_screen_button() {
+        for buttons in [
+            ("Check all", "Проверить всё"),
+            ("Record test", "Записать тест"),
+        ] {
+            let en = mic_open_failed(false, buttons);
+            assert!(en.starts_with("Could not open the microphone."));
+            assert!(en.contains("connected and access is allowed"));
+            assert!(en.contains("Settings > Audio > Microphone device"));
+            assert!(en.ends_with(&format!("return and press {} again.", buttons.0)));
+            let ru = mic_open_failed(true, buttons);
+            assert!(ru.starts_with("Не удалось открыть микрофон."));
+            assert!(ru.contains("подключён и доступ к нему разрешён"));
+            assert!(ru.contains("Настройки > Аудио > Устройство микрофона"));
+            assert!(ru.ends_with(&format!("вернитесь и нажмите «{}» ещё раз.", buttons.1)));
+        }
+    }
+
+    #[test]
+    fn stt_readiness_detail_masks_home_and_keeps_model_folder() {
+        let mut c = overlay_backend::config::Config::defaults();
+        c.stt_provider = "gigaam".into();
+        for (home, suffix) in [
+            (r"C:\Users\alice", r"\suflyor-local-ai\gigaam-v3"),
+            ("/Users/alice", "/suflyor-local-ai/gigaam-v3"),
+            ("/home/alice", "/suflyor-local-ai/gigaam-v3"),
+        ] {
+            c.stt_gigaam_dir = format!("{home}{suffix}");
+            assert_eq!(
+                redact_home_all_forms(&c.readiness().stt.detail, home),
+                format!("gigaam · {HOME_PLACEHOLDER}{suffix}")
+            );
+        }
+    }
 
     #[test]
     fn settings_summary_uses_plain_localized_roles() {
