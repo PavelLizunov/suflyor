@@ -88,6 +88,7 @@ fn settings(lang: &str, tab: i32, name: &str, setup: impl FnOnce(&crate::ui::Set
     let (w, h) = (720, 3200);
     win.window().set_size(PhysicalSize::new(w, h));
     win.set_active_tab(tab);
+    win.global::<crate::ui::Platform>().set_is_linux(true);
     setup(&win);
     win.show().expect("show");
     save(&adapter, w, h, &format!("{lang}-settings-{name}"), true);
@@ -117,6 +118,7 @@ fn render() {
         let help = crate::ui::HelpWindow::new().expect("Help");
         let adapter = take_adapter();
         help.window().set_size(PhysicalSize::new(640, 2400));
+        help.global::<crate::ui::Platform>().set_is_linux(true);
         help.show().expect("show");
         save(&adapter, 640, 2400, &format!("{lang}-help"), true);
         help.hide().expect("hide");
