@@ -35,10 +35,16 @@ impl Store {
     /// pending, then migrate to [`migrations::LATEST_VERSION`].
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).context("create catalog dir")?;
+            // Security: Enforce owner-only directory permissions (0o700 on POSIX).
+            crate::paths::ensure_private_dir(parent).context("create catalog dir")?;
         }
         let preexisting = path.exists();
         let mut conn = Connection::open(path).context("open catalog")?;
+        // Security: Enforce owner-only permissions (0o600 on POSIX) on catalog.sqlite
+        // as it contains sensitive session transcripts, AI turns, and personal memory.
+        if let Err(e) = crate::paths::restrict_to_owner(path) {
+            log::warn!("could not restrict catalog file permissions: {e}");
+        }
         // WAL keeps reads non-blocking while the indexer writes; foreign keys
         // power the ON DELETE CASCADE that makes re-indexing clean.
         // busy_timeout (v0.17.2): the stop-session indexer thread and the
@@ -827,6 +833,20 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(v, migrations::LATEST_VERSION);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn open_enforces_private_permissions_on_posix() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("catalog.sqlite");
+
+        let _store = Store::open(&db_path).unwrap();
+
+        let mode = std::fs::metadata(&db_path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
     }
 
     #[test]

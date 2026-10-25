@@ -101,7 +101,7 @@ pulldown-cmark = { version = "0.13", default-features = false, features = ["html
 # Phase D2 — global F4 hotkey. global-hotkey is maintained by the
 # tauri-apps org (Tauri itself uses it). Provides a thread-safe
 # event channel that UI code can poll from a Slint Timer.
-global-hotkey = "0.8"
+global-hotkey = "0.9"
 
 # Phase E6 v28 — native file dialogs for Settings import/export.
 # rfd (PolyMeilex) wraps the OS-native picker (IFileDialog on Windows);
@@ -120,7 +120,7 @@ base64 = "0.23"
 # the already-mixed i16 PCM (overlay_backend::session_audio) as a raw SamplesBuffer
 # and implement SEEK by re-slicing the buffer, so NO file decoders are needed —
 # default-features off keeps the dep tree (and the cargo-deny surface) lean.
-rodio = { version = "0.22", default-features = false, features = ["playback"] }
+rodio = { version = "0.23", default-features = false, features = ["playback"] }
 suflyor-wsola = { path = "../suflyor-wsola" }
 
 # overlay-backend — the shared no-UI crate (audio, STT, AI, journal,

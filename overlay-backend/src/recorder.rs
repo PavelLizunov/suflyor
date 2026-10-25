@@ -36,7 +36,7 @@
 
 use crate::audio::{AudioChunk, AudioSource};
 use anyhow::{Context, Result};
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -164,7 +164,7 @@ impl SessionRecorder {
 
     /// Open a recorder writing into an explicit directory (test seam).
     pub fn start_in(dir: PathBuf) -> Result<Self> {
-        std::fs::create_dir_all(&dir)
+        crate::paths::ensure_private_dir(&dir)
             .with_context(|| format!("create recordings dir {}", dir.display()))?;
         let (tx, rx) = sync_channel::<RecMsg>(WRITER_QUEUE);
         let dropped = Arc::new(AtomicU64::new(0));
@@ -408,11 +408,8 @@ fn writer_loop(rx: &Receiver<RecMsg>, dir: &Path) {
                             AudioSource::System => "system",
                         };
                         if mask.is_none() {
-                            match OpenOptions::new()
-                                .create(true)
-                                .append(true)
-                                .open(dir.join(TTS_MASK_FILE))
-                            {
+                            // SECURITY: Use open_private_append to restrict TTS mask file to mode 0o600 on Unix targets.
+                            match crate::paths::open_private_append(&dir.join(TTS_MASK_FILE)) {
                                 Ok(file) => mask = Some(BufWriter::new(file)),
                                 Err(error) => {
                                     log::warn!("recorder: cannot create TTS mask: {error}");
@@ -1349,5 +1346,22 @@ mod tests {
                 end_sample: 960,
             }]
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tts_mask_is_created_with_owner_only_mode_0600() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("session");
+        let recorder = SessionRecorder::start_in(dir.clone()).unwrap();
+        let raw = vec![7i16; 320];
+        recorder.feed_with_tts_mask(&chunk_ts(AudioSource::System, &raw, 20), true);
+        drop(recorder);
+
+        let path = dir.join(TTS_MASK_FILE);
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
     }
 }

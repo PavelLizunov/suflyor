@@ -75,6 +75,18 @@ fn sync_env(path: &std::path::Path, old: &str, new: &str) -> std::io::Result<()>
     Ok(())
 }
 
+/// Bring Hermes `config.yaml`, which holds API server keys, from `old` to `new`: owner-only
+/// (mode 0600) on Unix. An unchanged file is not rewritten, only restricted.
+fn sync_config(path: &std::path::Path, old: Option<&str>, new: &str) -> std::io::Result<()> {
+    if old != Some(new) {
+        return crate::paths::write_private(path, new.as_bytes());
+    }
+    if path.exists() {
+        crate::paths::restrict_to_owner(path)?;
+    }
+    Ok(())
+}
+
 /// Install the plugin into the local Hermes: files + `.env` + `config.yaml`.
 /// Returns an RU status line for the Settings label (no secrets).
 pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
@@ -116,10 +128,16 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
     let outcome = enable_in_config_text(cfg_old.as_deref().unwrap_or(""));
     match outcome {
         EnableEdit::Updated(new_text) => {
-            std::fs::write(&cfg_path, new_text).map_err(|e| format!("запись config.yaml: {e}"))?;
+            sync_config(&cfg_path, cfg_old.as_deref(), &new_text)
+                .map_err(|e| format!("запись config.yaml: {e}"))?;
             Ok("готово: плагин установлен и включён — перезапустите Hermes".to_string())
         }
         EnableEdit::AlreadyEnabled => {
+            if cfg_path.exists() {
+                if let Err(e) = crate::paths::restrict_to_owner(&cfg_path) {
+                    log::warn!("hermes config: could not restrict permissions: {e}");
+                }
+            }
             Ok("готово: плагин обновлён (уже включён) — перезапустите Hermes".to_string())
         }
         EnableEdit::Unsupported => Ok(
@@ -150,9 +168,17 @@ pub fn ensure_api_server() -> Result<(String, bool), String> {
         Err(e) => return Err(format!("чтение config.yaml: {e}")),
     };
     match ensure_api_server_text(&old, crate::bridge::generate_token) {
-        ApiEdit::Ready(key) => Ok((key, false)),
+        ApiEdit::Ready(key) => {
+            if cfg_path.exists() {
+                if let Err(e) = crate::paths::restrict_to_owner(&cfg_path) {
+                    log::warn!("hermes config: could not restrict permissions: {e}");
+                }
+            }
+            Ok((key, false))
+        }
         ApiEdit::Updated(text, key) => {
-            std::fs::write(&cfg_path, text).map_err(|e| format!("запись config.yaml: {e}"))?;
+            sync_config(&cfg_path, Some(old.as_str()), &text)
+                .map_err(|e| format!("запись config.yaml: {e}"))?;
             Ok((key, true))
         }
         ApiEdit::Unsupported => Err(
@@ -654,6 +680,49 @@ mod tests {
         assert_eq!(unix_mode(&wide), 0o600, "an unchanged .env is tightened");
         // Nothing to restrict when the file does not exist and nothing is to be written.
         sync_env(&temp.path().join("absent.env"), "", "").unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn config_file_is_owner_only_on_unix() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let fresh = temp.path().join("fresh.yaml");
+        sync_config(
+            &fresh,
+            None,
+            "platforms:\n  api_server:\n    enabled: true\n",
+        )
+        .unwrap();
+        assert_eq!(
+            unix_mode(&fresh),
+            0o600,
+            "a new config.yaml must be owner-only"
+        );
+
+        let wide = temp.path().join("wide.yaml");
+        std::fs::write(&wide, "OLD=1\n").unwrap();
+        std::fs::set_permissions(&wide, std::fs::Permissions::from_mode(0o644)).unwrap();
+        sync_config(&wide, Some("OLD=1\n"), "SUFLYOR_BRIDGE_TOKEN=b\n").unwrap();
+        assert_eq!(
+            unix_mode(&wide),
+            0o600,
+            "an existing config.yaml is tightened"
+        );
+
+        std::fs::set_permissions(&wide, std::fs::Permissions::from_mode(0o644)).unwrap();
+        sync_config(
+            &wide,
+            Some("SUFLYOR_BRIDGE_TOKEN=b\n"),
+            "SUFLYOR_BRIDGE_TOKEN=b\n",
+        )
+        .unwrap();
+        assert_eq!(
+            unix_mode(&wide),
+            0o600,
+            "an unchanged config.yaml is tightened"
+        );
     }
 
     #[test]

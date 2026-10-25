@@ -311,8 +311,18 @@ fn labelled_secret(rest: &str, mid_word: bool) -> Option<(&'static str, usize)> 
         return Some(("apikey: <redacted>", len));
     }
     // Config field names start mid-word for the labels above (`groq_api_key`).
+    // SECURITY: Redact ai_bearer, hermes_bridge_token, and hermes_api_key fields to prevent bearer/token leaks in diagnostic exports
+    if let Some(len) = labelled_secret_len(rest, "ai_bearer") {
+        return Some(("ai_bearer: <redacted>", len));
+    }
     if let Some(len) = labelled_secret_len(rest, "groq_api_key") {
         return Some(("groq_api_key: <redacted>", len));
+    }
+    if let Some(len) = labelled_secret_len(rest, "hermes_bridge_token") {
+        return Some(("hermes_bridge_token: <redacted>", len));
+    }
+    if let Some(len) = labelled_secret_len(rest, "hermes_api_key") {
+        return Some(("hermes_api_key: <redacted>", len));
     }
     let len = labelled_secret_len(rest, "password")?;
     Some(("password: <redacted>", len))
@@ -328,9 +338,21 @@ fn labelled_secret_len(rest: &str, label: &str) -> Option<usize> {
         return None;
     }
     let after = rest.get(label.len()..)?;
+    let is_quoted_label = after.starts_with(['"', '\'']);
     let unquoted = after.strip_prefix(['"', '\'']).unwrap_or(after);
-    let separated = unquoted.trim_start_matches([' ', '\t', ':', '=']);
+    let sep_len = unquoted.len() - unquoted.trim_start_matches([' ', '\t', ':', '=']).len();
+    let sep = &unquoted[..sep_len];
+    let separated = &unquoted[sep_len..];
     let value = separated.strip_prefix(['"', '\'']).unwrap_or(separated);
+    // The newer labels also appear in plain log text ("ai_bearer save
+    // failed: ..."), so they need a real `:`/`=` separator or a quoted key.
+    let needs_separator = matches!(
+        label,
+        "ai_bearer" | "hermes_bridge_token" | "hermes_api_key"
+    );
+    if needs_separator && !is_quoted_label && !sep.contains([':', '=']) {
+        return None;
+    }
     if value.len() == after.len() {
         return None;
     }
@@ -1295,8 +1317,11 @@ mod tests {
     #[test]
     fn redact_secrets_masks_config_labels_and_hugging_face_tokens() {
         for (sample, mask) in [
+            ("ai_bearer: secret_value_123", "ai_bearer: <redacted>"),
             ("groq_api_key: secret_value_123", "groq_api_key: <redacted>"),
             ("\"groq_api_key\": \"secret_value_123\"", "groq_api_key: <redacted>"),
+            ("hermes_bridge_token: secret_value_123", "hermes_bridge_token: <redacted>"),
+            ("hermes_api_key: secret_value_123", "hermes_api_key: <redacted>"),
             ("password: secret_value_123", "password: <redacted>"),
             ("token hf_secret_value_123 end", "hf_<redacted>"),
         ] {
@@ -1306,6 +1331,11 @@ mod tests {
         }
         // The prefix needs a word boundary, so identifiers stay readable.
         assert_eq!(redact_secrets("graph_hf_cache"), "graph_hf_cache");
+        // Older labels still mask a value after plain whitespace; the newer
+        // ones need `:`/`=`, so a log line that names the field stays intact.
+        assert!(!redact_secrets("password secret_value_123").contains("secret_value_123"));
+        let line = "hermes_api_key save failed: io";
+        assert_eq!(redact_secrets(line), line);
     }
 
     #[test]
