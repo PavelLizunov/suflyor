@@ -37,7 +37,7 @@ jobs:
       - name: Remote window runtime tests
         run: >-
           cargo test --no-default-features --features remote-ui
-          --manifest-path slint-experiment/Cargo.toml --lib remote_ui
+          --manifest-path slint-experiment/Cargo.toml --lib -- remote_ui native::window
       - name: Build suflyord (host against remote windows)
         run: >-
           cargo build --no-default-features --features remote-ui

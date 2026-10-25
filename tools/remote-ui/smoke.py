@@ -29,6 +29,7 @@ def main():
     log = open(LOG, "w", encoding="utf-8")
     buf = b""
     windows = {}
+    globals_ = {}
 
     def pump(seconds, until=None):
         nonlocal buf
@@ -53,6 +54,8 @@ def main():
                     windows[m["win"]]["props"][m["name"]] = m["value"]
                 elif m["t"] in ("show", "hide") and m["win"] in windows:
                     windows[m["win"]]["visible"] = m["t"] == "show"
+                elif m["t"] == "global":
+                    globals_[m["global"] + "." + m["name"]] = m["value"]
                 elif m["t"] == "close":
                     windows.pop(m["win"], None)
             if until and until():
@@ -79,6 +82,9 @@ def main():
     print("settings:", settings(), "tab", st.get("active-tab"), "props", len(st))
 
     print("windows:", sorted({w["type"] for w in windows.values()}))
+    if globals_.get("Suflyor.locale") not in ("ru", "en"):
+        raise SystemExit(f"no interface language from suflyord: {globals_.get('Suflyor.locale')!r}")
+    print("locale:", globals_["Suflyor.locale"])
     log.close()
 
 

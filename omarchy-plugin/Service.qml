@@ -14,8 +14,12 @@ Item {
   readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl(".")).replace("file://", "")).replace(/\/$/, "")
   readonly property string binDir: service.pluginDir + "/bin/"
 
-  // The interface language of the shell until suflyord reports its own setting.
-  readonly property string locale: String(Commons.I18n.language || "en").indexOf("ru") === 0 ? "ru" : "en"
+  // Suflyor's own interface language once suflyord reports it, the shell's before that.
+  readonly property string shellLocale: String(Commons.I18n.language || "en").indexOf("ru") === 0 ? "ru" : "en"
+  readonly property string locale: {
+    var _ = remoteClient.globalsRev
+    return remoteClient.globals["Suflyor.locale"] || service.shellLocale
+  }
   // Strings of the Slint catalog (locales/ru.json) plus the plugin's own (plugin.ru.json).
   property var slintCatalog: ({})
   property var pluginCatalog: ({})
@@ -56,7 +60,7 @@ Item {
 
   RemoteClient {
     id: remoteClient
-    locale: service.locale
+    locale: service.shellLocale
     onConnectedChanged: if (connected) service.startAttempts = 0
   }
 

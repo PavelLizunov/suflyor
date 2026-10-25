@@ -830,6 +830,8 @@ fn main() -> Result<(), slint::PlatformError> {
         Ok(()) => eprintln!("[overlay-host] translation set to {lang}"),
         Err(e) => eprintln!("[overlay-host] translation {lang} not available: {e}"),
     }
+    #[cfg(feature = "remote-ui")]
+    slint_replay::remote_ui::set_locale(&lang);
 
     #[cfg(target_os = "linux")]
     {

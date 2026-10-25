@@ -617,6 +617,8 @@ pub(crate) fn open_settings(
                 Ok(()) => eprintln!("[overlay-host] UI language -> {lang}"),
                 Err(e) => eprintln!("[overlay-host] language {lang} not available: {e}"),
             }
+            #[cfg(feature = "remote-ui")]
+            slint_replay::remote_ui::set_locale(lang);
             {
                 let mut c = cfg_lang.write();
                 c.ui_language = lang.to_string();

@@ -251,6 +251,12 @@ pub fn send_global(global: &str, name: &str, value: Value) {
     send(json!({ "t": "global", "global": global, "name": name, "value": value }));
 }
 
+/// The interface language the host selected (`ru`, `en`); the shell's views
+/// translate with it. Kept as the `Suflyor.locale` global, so `hello` resends it.
+pub fn set_locale(lang: &str) {
+    send_global("Suflyor", "locale", json!(lang));
+}
+
 pub fn global_value(global: &str, name: &str) -> Option<Value> {
     REGISTRY.with(|r| {
         r.borrow()
