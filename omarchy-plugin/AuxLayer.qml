@@ -16,7 +16,7 @@ PanelWindow {
   // Logical size per window, close to the Slint windows' preferred sizes.
   readonly property var sizes: ({
     "ArchiveWindow": [860, 600], "TranscriptWindow": [900, 640], "PaletteWindow": [640, 460],
-    "HelpWindow": [680, 600], "WizardWindow": [760, 560], "RecoverOfferWindow": [460, 220],
+    "HelpWindow": [680, 600], "WizardWindow": [760, 560], "RecoverOfferWindow": [460, 270],
     "TextAskWindow": [560, 150],
   })
   readonly property var size: sizes[win.type] || [600, 400]
