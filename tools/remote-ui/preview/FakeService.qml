@@ -10,6 +10,9 @@ QtObject {
   property string locale: "ru"
   property var catalog: ({})
   property var calls: []
+  property bool running: true
+  // type -> RemoteWindow the fixture provides.
+  property var windows: ({})
 
   function tr(msgid, args) {
     var text = service.locale === "ru" && service.catalog[msgid] ? service.catalog[msgid] : msgid
@@ -29,8 +32,8 @@ QtObject {
     function call(win, name, args, done) { service.calls = service.calls.concat([[win, name, args]]); if (done) done(null, "") }
     function set(win, name, value) {}
     function reportGeometry(win, geometry) {}
-    function first(type) { return null }
-    function byType(type) { return [] }
+    function first(type) { return service.windows[type] || null }
+    function byType(type) { return service.windows[type] ? [service.windows[type]] : [] }
   }
 
   property FileView slintCatalog: FileView {

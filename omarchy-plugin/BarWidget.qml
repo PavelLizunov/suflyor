@@ -4,7 +4,7 @@ import qs.Commons as Commons
 import qs.Ui as Ui
 
 // Suflyor in the Omarchy bar: the session state of suflyord's OverlayBarWindow.
-// Left click opens Suflyor, right click starts or stops the session, middle click asks.
+// Left click opens the panel, right click starts or stops the session, middle click asks.
 Ui.BarWidget {
   id: root
 
@@ -50,6 +50,52 @@ Ui.BarWidget {
     if (root.barWin) root.effectiveService.client.call(root.barWin.winId, name, [])
   }
 
+  readonly property var panelItem: panelLoader.item
+  readonly property bool opened: panelItem ? panelItem.opened : false
+  readonly property bool popoutSwitchClosing: panelItem ? panelItem.popoutSwitchClosing : false
+
+  function syncPanel() {
+    if (!panelLoader.item) return
+    panelLoader.item.bar = root.bar
+    panelLoader.item.settings = root.settings
+    panelLoader.item.hostWidget = root
+    panelLoader.item.anchorItem = button
+    panelLoader.item.service = root.effectiveService
+  }
+
+  function open() {
+    panelLoader.active = true
+    Qt.callLater(function () {
+      root.syncPanel()
+      if (root.panelItem) root.panelItem.open()
+    })
+  }
+
+  function close() {
+    if (root.panelItem) root.panelItem.close()
+  }
+
+  function toggle() {
+    if (opened) close()
+    else open()
+  }
+
+  function closeForPopoutSwitch() {
+    if (root.panelItem) root.panelItem.closeForPopoutSwitch()
+  }
+
+  onBarChanged: syncPanel()
+  onSettingsChanged: syncPanel()
+  onEffectiveServiceChanged: syncPanel()
+
+  Loader {
+    id: panelLoader
+    active: false
+    visible: false
+    source: Qt.resolvedUrl("BarPanel.qml")
+    onLoaded: root.syncPanel()
+  }
+
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
@@ -64,12 +110,12 @@ Ui.BarWidget {
 
     Accessible.role: Accessible.Button
     Accessible.name: root.tooltip
+    Accessible.onPressAction: root.toggle()
 
     onPressed: function (buttonCode) {
-      if (!root.running) return
-      if (buttonCode === Qt.RightButton) root.fire("timer-toggle-clicked")
-      else if (buttonCode === Qt.MiddleButton) root.fire("text-ask-clicked")
-      else root.fire("open-settings-clicked")
+      if (buttonCode === Qt.RightButton) { if (root.running) root.fire("timer-toggle-clicked") }
+      else if (buttonCode === Qt.MiddleButton) { if (root.running) root.fire("text-ask-clicked") }
+      else root.toggle()
     }
 
     Row {
