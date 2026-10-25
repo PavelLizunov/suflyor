@@ -1,0 +1,13 @@
+[package]
+name = "slint-remote-schema"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Dumps the public API of the Slint windows as JSON for the Omarchy remote UI"
+
+[dependencies]
+# Same compiler as slint-build 1.17 in slint-experiment, so the schema matches
+# the generated Rust API the host code is written against.
+i-slint-compiler = "=1.17.1"
+serde_json = "1"
+spin_on = "0.1"

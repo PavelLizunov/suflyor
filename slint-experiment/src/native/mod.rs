@@ -53,7 +53,8 @@ pub mod screen;
 #[path = "macos/screen.rs"]
 pub mod screen;
 
-#[cfg(test)]
+// The remote-ui build compiles only ui/remote_host.slint, so these real-window tests do not apply.
+#[cfg(all(test, not(feature = "remote-ui")))]
 mod tests {
     #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 

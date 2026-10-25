@@ -215,6 +215,8 @@ jobs:
 
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -229,6 +231,11 @@ jobs:
           cargo test --locked --no-default-features --features ui-mcp
           --manifest-path slint-experiment/Cargo.toml
           --lib --bin overlay-host --test linux_platform --test i18n_guard
+      - name: Omarchy plugin remote windows (generator freshness, runtime)
+        run: |
+          python3 tools/remote-ui/generate.py --check
+          cargo test --no-default-features --features remote-ui \
+            --manifest-path slint-experiment/Cargo.toml --lib remote_ui
 
   # Stable required context: "gate".  `if: always()` is load-bearing:
   # docs-only PRs skip the rust job, and without always() GitHub would skip

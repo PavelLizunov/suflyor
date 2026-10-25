@@ -1,0 +1,6587 @@
+{
+  "globals": {
+    "Metrics": {
+      "callbacks": {},
+      "functions": {},
+      "properties": {
+        "border-focus": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "border-thin": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "control-lg": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "control-md": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "control-sm": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "control-xl": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "disabled-opacity": {
+          "dir": "out",
+          "type": {
+            "prim": "float"
+          }
+        },
+        "font-body": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "font-caption": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "font-heading": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "font-label": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "font-title": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "icon-button-size": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "motion-fast": {
+          "dir": "out",
+          "type": {
+            "prim": "duration"
+          }
+        },
+        "motion-normal": {
+          "dir": "out",
+          "type": {
+            "prim": "duration"
+          }
+        },
+        "muted-opacity": {
+          "dir": "out",
+          "type": {
+            "prim": "float"
+          }
+        },
+        "radius-control": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "radius-field": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "radius-panel": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "radius-pill": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "radius-window": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "space-lg": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "space-md": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "space-sm": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "space-xl": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "space-xs": {
+          "dir": "out",
+          "type": {
+            "prim": "length"
+          }
+        },
+        "surface-opacity": {
+          "dir": "out",
+          "type": {
+            "prim": "float"
+          }
+        }
+      }
+    },
+    "Platform": {
+      "callbacks": {},
+      "functions": {},
+      "properties": {
+        "is-linux": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "is-macos": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        }
+      }
+    },
+    "Theme": {
+      "callbacks": {},
+      "functions": {
+        "on-tint": {
+          "args": [
+            {
+              "name": "c",
+              "type": {
+                "prim": "color"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "color"
+          }
+        },
+        "tint": {
+          "args": [
+            {
+              "name": "c",
+              "type": {
+                "prim": "color"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "color"
+          }
+        }
+      },
+      "properties": {
+        "accent": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "accent-hover": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "accent-subtle": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "bg-base": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "bg-elevated": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "bg-surface": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "border": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "border-strong": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "cat-cyan": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "cat-green": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "cat-indigo": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "cat-orange": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "cat-red": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "cat-sky": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "cat-violet": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "code-bg": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "code-text": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "danger": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "font-mono": {
+          "dir": "out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "font-sans": {
+          "dir": "out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "is-light": {
+          "dir": "out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "on-accent": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "scheme": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "scrim": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "success": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "text-muted": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "text-primary": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "text-secondary": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        },
+        "warning": {
+          "dir": "out",
+          "type": {
+            "prim": "color"
+          }
+        }
+      }
+    }
+  },
+  "types": {
+    "ArchiveRow": {
+      "struct": {
+        "has-data": {
+          "prim": "bool"
+        },
+        "has-debrief": {
+          "prim": "bool"
+        },
+        "has-recordings": {
+          "prim": "bool"
+        },
+        "has-summary": {
+          "prim": "bool"
+        },
+        "id": {
+          "prim": "string"
+        },
+        "meta": {
+          "prim": "string"
+        },
+        "name": {
+          "prim": "string"
+        },
+        "subtitle": {
+          "prim": "string"
+        },
+        "title": {
+          "prim": "string"
+        }
+      }
+    },
+    "ComponentRow": {
+      "struct": {
+        "detail": {
+          "prim": "string"
+        },
+        "hint": {
+          "prim": "string"
+        },
+        "installable": {
+          "prim": "bool"
+        },
+        "installed": {
+          "prim": "bool"
+        },
+        "jump-tab": {
+          "prim": "int"
+        },
+        "name": {
+          "prim": "string"
+        },
+        "needed": {
+          "prim": "bool"
+        }
+      }
+    },
+    "FilterChip": {
+      "struct": {
+        "accent": {
+          "prim": "color"
+        },
+        "count": {
+          "prim": "int"
+        },
+        "hidden": {
+          "prim": "bool"
+        },
+        "kind": {
+          "prim": "string"
+        }
+      }
+    },
+    "FoundModel": {
+      "struct": {
+        "active": {
+          "prim": "bool"
+        },
+        "detail": {
+          "prim": "string"
+        },
+        "kind": {
+          "prim": "int"
+        },
+        "title": {
+          "prim": "string"
+        }
+      }
+    },
+    "MarkdownBlock": {
+      "struct": {
+        "display-text": {
+          "prim": "string"
+        },
+        "kind": {
+          "prim": "int"
+        },
+        "lang": {
+          "prim": "string"
+        },
+        "marked": {
+          "prim": "bool"
+        },
+        "text": {
+          "prim": "string"
+        }
+      }
+    },
+    "MemoryRow": {
+      "struct": {
+        "id": {
+          "prim": "int"
+        },
+        "kind": {
+          "prim": "string"
+        },
+        "norm-status": {
+          "prim": "string"
+        },
+        "reason": {
+          "prim": "string"
+        },
+        "source-text": {
+          "prim": "string"
+        },
+        "text": {
+          "prim": "string"
+        }
+      }
+    },
+    "PaletteResult": {
+      "struct": {
+        "key": {
+          "prim": "string"
+        },
+        "preview": {
+          "prim": "string"
+        },
+        "source": {
+          "prim": "string"
+        },
+        "title": {
+          "prim": "string"
+        }
+      }
+    },
+    "ReplayEvent": {
+      "struct": {
+        "accent": {
+          "prim": "color"
+        },
+        "body": {
+          "prim": "string"
+        },
+        "kind": {
+          "prim": "string"
+        },
+        "label": {
+          "prim": "string"
+        },
+        "time": {
+          "prim": "string"
+        }
+      }
+    },
+    "SpeakerRow": {
+      "struct": {
+        "color": {
+          "prim": "color"
+        },
+        "id": {
+          "prim": "int"
+        },
+        "label": {
+          "prim": "string"
+        }
+      }
+    },
+    "StatusTone": {
+      "enum": [
+        "neutral",
+        "ok",
+        "warning",
+        "danger",
+        "info"
+      ]
+    },
+    "TermRow": {
+      "struct": {
+        "items": {
+          "array": {
+            "prim": "string"
+          }
+        }
+      }
+    },
+    "TileTone": {
+      "enum": [
+        "accent",
+        "violet",
+        "sky",
+        "green",
+        "cyan",
+        "red",
+        "orange"
+      ]
+    },
+    "TranscriptLine": {
+      "struct": {
+        "checked": {
+          "prim": "bool"
+        },
+        "display-text": {
+          "prim": "string"
+        },
+        "marked": {
+          "prim": "bool"
+        },
+        "matched": {
+          "prim": "bool"
+        },
+        "offset-label": {
+          "prim": "string"
+        },
+        "speaker": {
+          "prim": "string"
+        },
+        "speaker-color": {
+          "prim": "color"
+        },
+        "start-ms": {
+          "prim": "int"
+        },
+        "text": {
+          "prim": "string"
+        }
+      }
+    }
+  },
+  "windows": {
+    "ArchiveWindow": {
+      "callbacks": {
+        "close-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "delete-cancelled": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "delete-confirmed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "delete-requested": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-moved": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-start-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "query-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "regen-name-requested": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "rename-cancelled": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "rename-confirmed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "rename-requested": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "result-activated": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "resummary-cancelled": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "resummary-confirmed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "retranscribe-requested": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "transcript-requested": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "view-debrief-requested": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "view-summary-requested": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "functions": {
+        "clear-focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "properties": {
+        "confirm-delete-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "confirm-delete-title": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "confirm-resummary-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "confirm-resummary-title": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "notice": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "query": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "rename-text": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "renaming-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "results": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "ref": "ArchiveRow"
+            }
+          }
+        },
+        "retranscribe-busy": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "retranscribe-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "selected-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "stt-is-cloud": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "summary": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "unavailable": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        }
+      }
+    },
+    "CaptureOverlay": {
+      "callbacks": {
+        "cancelled": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "region-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "length"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "length"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "length"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "length"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "functions": {
+        "clear-focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "properties": {
+        "dragging": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "frozen": {
+          "dir": "in",
+          "type": {
+            "prim": "image"
+          }
+        },
+        "practice-mode": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "shown": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "translate-mode": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        }
+      }
+    },
+    "HelpWindow": {
+      "callbacks": {
+        "cancelled": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-moved": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-start-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "functions": {
+        "clear-focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "properties": {}
+    },
+    "LockModeMenuWindow": {
+      "callbacks": {
+        "dismissed": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "mode-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "functions": {
+        "clear-focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "properties": {
+        "managed": {
+          "dir": "in",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mode": {
+          "dir": "in",
+          "type": {
+            "prim": "int"
+          }
+        }
+      }
+    },
+    "MacAiSetupWindow": {
+      "callbacks": {
+        "cancel-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-start-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "save-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "functions": {
+        "clear-focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "properties": {
+        "bridge-url": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "status-kind": {
+          "dir": "in",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "token-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "token-stored": {
+          "dir": "in",
+          "type": {
+            "prim": "bool"
+          }
+        }
+      }
+    },
+    "MainWindow": {
+      "callbacks": {
+        "back-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "chip-clicked": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "reset-filter": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "session-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "functions": {},
+      "properties": {
+        "ai-response-count": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "any-hidden": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "events": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "ref": "ReplayEvent"
+            }
+          }
+        },
+        "filter-chips": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "ref": "FilterChip"
+            }
+          }
+        },
+        "selected-session-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "session-labels": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "total-cost-display": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "total-events": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        }
+      }
+    },
+    "MarkdownSpike": {
+      "callbacks": {},
+      "functions": {},
+      "properties": {
+        "blocks": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "ref": "MarkdownBlock"
+            }
+          }
+        },
+        "source-name": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        }
+      }
+    },
+    "OverlayBarWindow": {
+      "callbacks": {
+        "aggressive-toggle-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "archive-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "capture-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "close-all-tiles-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "compact-toggle-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-moved": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-start-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "help-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "hide-to-tray-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "lock-menu-opened": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "length"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "length"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "lock-mode-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "mic-toggle-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "open-settings-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "pause-toggle-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ptt-mic-pressed": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ptt-mic-released": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ptt-sys-pressed": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ptt-sys-released": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "quit-cancel": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "quit-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "quit-confirm": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "restart-cancel": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "restart-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "restart-confirm": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "restore-tile-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "spawn-tile-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "stealth-toggle-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "summary-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "sys-toggle-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "text-ask-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "timer-toggle-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "functions": {},
+      "properties": {
+        "active-stack": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "aggressive-active": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "ai-streaming": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "app-memory": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "archive-open": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "bootstrap-mode": {
+          "dir": "in",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "can-restore-tile": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "compact-bar": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "deep-lock": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "help-open": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "last-transcript-line": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "last-transcript-source": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "lock-a11y": {
+          "dir": "in",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "lock-icon-unlocked": {
+          "dir": "out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "lock-menu-managed": {
+          "dir": "in",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mic-active": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mic-capture-state": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "mic-muted": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mic-permission-state": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "mic-recording": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mlx-memory": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "open-tiles": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "quit-armed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "restart-armed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "session-name": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "session-paused": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "settings-open": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "status-text": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "status-tone": {
+          "dir": "in-out",
+          "type": {
+            "ref": "StatusTone"
+          }
+        },
+        "stealth-active": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "stealth-fault": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "summary-busy": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "suppress-tiles": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "sys-active": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "sys-recording": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "tiles-spawned": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "timer-active": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "timer-label": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "tok-per-sec": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "tray-available": {
+          "dir": "in",
+          "type": {
+            "prim": "bool"
+          }
+        }
+      }
+    },
+    "OverlaySpike": {
+      "callbacks": {},
+      "functions": {},
+      "properties": {}
+    },
+    "PaletteWindow": {
+      "callbacks": {
+        "chip-clicked": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "close-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-moved": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-start-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "query-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "result-activated": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "functions": {
+        "clear-focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "source-label": {
+          "args": [
+            {
+              "name": "source",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "string"
+          }
+        }
+      },
+      "properties": {
+        "query": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "recent-chips": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "results": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "ref": "PaletteResult"
+            }
+          }
+        },
+        "selected-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        }
+      }
+    },
+    "RecoverOfferWindow": {
+      "callbacks": {
+        "dismissed": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-moved": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-start-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "recover-accepted": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "functions": {},
+      "properties": {
+        "has-qa": {
+          "dir": "in",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "last-answer": {
+          "dir": "in",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "last-question": {
+          "dir": "in",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "transcript-preview": {
+          "dir": "in",
+          "type": {
+            "prim": "string"
+          }
+        }
+      }
+    },
+    "SettingsWindow": {
+      "callbacks": {
+        "ai-agent-tools-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-base-url-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-bearer-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-bridge-test-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-local-base-url-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-local-bearer-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-local-context-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-local-context-preview-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "float"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-local-model-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-local-models-refresh": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-local-test-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-local-thinking-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-local-vision-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-model-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-models-refresh": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-prompt-cache-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-provider-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-reasoning-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ai-web-search-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "always-on-top-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "anthropic-base-url-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "anthropic-key-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "anthropic-model-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "apply-server-settings-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "audio-devices-refresh": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "auto-tiles-enabled-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "backup-status-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "builtin-model-use": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "cancel-local-ai-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "cancel-server-settings-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "check-updates-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "choose-custom-gguf-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "close-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "coaching-debrief-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "coaching-live-tiles-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "codex-connect-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "codex-copy-code-clicked": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "codex-disconnect-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "codex-model-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "codex-models-refresh": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "codex-open-signin-clicked": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "codex-reasoning-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "codex-vision-model-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "color-scheme-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "component-install": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "context-dictate-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "context-process-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "db-clear-memory-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "db-clear-queue-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "db-repair-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "diagnostics-check-all-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "diagnostics-collect-logs-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "diagnostics-copy-report-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "diar-install-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "download-model-clicked": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "download-vision12b-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-moved": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-start-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "export-profile-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "export-server-settings-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "fast-answers-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "found-model-use": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "found-models-search": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "groq-api-key-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "hermes-api-key-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "hermes-api-setup": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "hermes-api-test": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "hermes-api-url-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "hermes-bridge-host-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "hermes-bridge-port-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "hermes-bridge-regen-token": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "hermes-bridge-toggled": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "hermes-plugin-install": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "hermes-prepare-profile": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "import-profile-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "import-server-settings-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "install-local-ai-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "install-update-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "journal-retention-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "kb-open-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "language-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "local-engine-activate": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "meeting-context-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "memory-add-fact": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "memory-approve": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "memory-delete-item": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "memory-edit-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "memory-extract": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "memory-reject": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "memory-restore-item": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "mic-device-index-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "mic-device-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "mic-test-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "mlx-text-cancel": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "mlx-text-download": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "mlx-text-enable": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "mlx-text-model-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "mlx-vision-cancel": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "mlx-vision-download": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "mlx-vision-enable": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "mlx-vision-model-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "model-profile-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "now-refresh-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "ocr-install-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "open-data-folder-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "open-groq-keys-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "open-recordings-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "open-wizard-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "openai-base-url-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "openai-key-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "openai-model-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "openai-reasoning-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "profile-add": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "profile-delete": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "profile-rename": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "profile-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "record-audio-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "retention-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "stealth-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "strata-choose": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "strata-find-folder-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "strata-install-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "strata-license-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "strata-vision-download": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "strata-vision-enable": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "stt-cloud-model-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "stt-gigaam-dir-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "stt-gigaam-gpu-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "stt-gigaam-install": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "stt-gigaam-install-cancel": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "stt-language-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "stt-provider-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "stt-test-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "stt-whisper-bearer-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "stt-whisper-model-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "stt-whisper-url-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "suppress-tiles-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "system-device-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "tab-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "tera-install-cancel-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "tera-install-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "tile-body-opacity-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "float"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "tile-monitor-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "trigger-keywords-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "tts-engine-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "tts-install-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "tts-rate-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "tts-test-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "tts-voice-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "update-engine-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "vision-base-url-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "vision-bearer-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "vision-local-base-url-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "vision-local-bearer-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "vision-local-model-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "vision-model-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "vision-phonetics-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "vision-provider-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "vision-test-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "vision-test-practice-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "functions": {},
+      "properties": {
+        "active-profile-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "active-rows": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "ref": "ComponentRow"
+            }
+          }
+        },
+        "active-tab": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "ai-agent-tools": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "ai-base-url-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "ai-bearer-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "ai-bearer-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "ai-bridge-test-result": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "ai-local-base-url-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "ai-local-bearer-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "ai-local-context-auto-k": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "ai-local-context-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "ai-local-context-max-k": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "ai-local-context-preview-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "ai-local-context-vram-hint": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "ai-local-custom-active": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "ai-local-custom-model-name": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "ai-local-hardware-profile-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "ai-local-model-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "ai-local-model-profile-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "ai-local-models": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "ai-local-quality": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "ai-local-test-result": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "ai-local-thinking": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "ai-local-vision": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "ai-local-vision-available": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "ai-model-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "ai-models": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "ai-prompt-cache": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "ai-provider-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "ai-reasoning-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "ai-web-search": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "always-on-top-toggle": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "anthropic-base-url-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "anthropic-key-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "anthropic-key-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "anthropic-model-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "app-version": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "audio-default-label": {
+          "dir": "out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "audio-devices-failed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "audio-devices-loading": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "audio-save-state": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "auto-tiles-enabled": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "backup-has-secrets": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "coaching-debrief": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "coaching-live-tiles": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "codex-auth-busy": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "codex-auth-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "codex-copy-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "codex-login-url": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "codex-model-ids": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "codex-model-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "codex-model-labels": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "codex-models-busy": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "codex-rate-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "codex-reasoning-ids": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "codex-reasoning-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "codex-reasoning-labels": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "codex-user-code": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "codex-vision-model-ids": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "codex-vision-model-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "codex-vision-model-labels": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "color-scheme-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "component-busy-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "component-busy-label": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "component-busy-phase": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "component-rows": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "ref": "ComponentRow"
+            }
+          }
+        },
+        "context-dictating": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "context-processing": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "db-clear-armed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "db-repair-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "diag-ai-detail": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "diag-ai-level": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "diag-copied": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "diag-hotkeys-detail": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "diag-hotkeys-failed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "diag-hotkeys-level": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "diag-logs-path": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "diag-mic-detail": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "diag-mic-level": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "diag-stealth-on": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "diag-stt-detail": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "diag-stt-level": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "diag-summary": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "diag-sys-detail": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "diag-sys-level": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "diag-vision-detail": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "diag-vision-level": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "diar-install-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "diar-installing": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "diar-models-installed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "engine-build": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "engine-update-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "engine-updating": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "fallback-model-present": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "fast-answers": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "found-models": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "ref": "FoundModel"
+            }
+          }
+        },
+        "found-models-note": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "found-models-searching": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "groq-api-key-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "groq-api-key-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "hermes-api-key": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "hermes-api-setup-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "hermes-api-test-result": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "hermes-api-url": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "hermes-bridge-enabled": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "hermes-bridge-host": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "hermes-bridge-port": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "hermes-bridge-remote": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "hermes-bridge-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "hermes-bridge-token": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "hermes-more-open": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "hermes-plugin-install-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "hermes-profile-seed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "hermes-profile-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "journal-keep-value": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "journal-mb-value": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "kb-entry-count": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "legacy-model-present": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "llama-installed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "local-ai-gpu": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "local-ai-installing": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "local-ai-on-gpu": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "local-ai-progress": {
+          "dir": "in-out",
+          "type": {
+            "prim": "float"
+          }
+        },
+        "local-ai-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "local-choice-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "local-connect-auto": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "local-connect-open": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "local-download-profile": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "local-engine-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "local-hardware-line": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "local-model-resource-warning": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "local-more-open": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "local-strata-job": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "managed-local-server": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "meeting-context-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "meeting-context-result": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "memory-add-text": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "memory-candidates": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "ref": "MemoryRow"
+            }
+          }
+        },
+        "memory-edit-text": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "memory-editing-id": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "memory-items": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "ref": "MemoryRow"
+            }
+          }
+        },
+        "memory-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "mic-device-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "mic-device-missing": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mic-devices": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "mic-devices-empty": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mic-test-result": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "mlx-text-active": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mlx-text-busy": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mlx-text-cancelled": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mlx-text-checking": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mlx-text-done": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "mlx-text-failed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mlx-text-installed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mlx-text-model-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "mlx-text-progress": {
+          "dir": "in-out",
+          "type": {
+            "prim": "float"
+          }
+        },
+        "mlx-text-total": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "mlx-vision-active": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mlx-vision-busy": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mlx-vision-cancelled": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mlx-vision-checking": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mlx-vision-done": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "mlx-vision-failed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mlx-vision-installed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "mlx-vision-model-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "mlx-vision-progress": {
+          "dir": "in-out",
+          "type": {
+            "prim": "float"
+          }
+        },
+        "mlx-vision-total": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "model-switching": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "now-detail": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "now-notice": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "now-state": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "now-title": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "ocr-install-phase": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "ocr-installed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "ocr-installing": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "openai-base-url-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "openai-key-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "openai-key-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "openai-model-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "openai-reasoning-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "profile-io-result": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "profile-name-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "profile-names": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "quality-downloading": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "quality-model-present": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "quality-progress": {
+          "dir": "in-out",
+          "type": {
+            "prim": "float"
+          }
+        },
+        "quality-selection-allowed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "quality-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "quality-vision-present": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "quality-vision-supported": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "record-audio": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "retention-mode": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "retention-value": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "server-preview-cloud": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "server-preview-gigaam": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "server-preview-local": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "server-preview-ready": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "server-preview-stt": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "server-preview-vision": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "stealth-effective": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "stealth-toggle": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "strata-active": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "strata-adopted": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "strata-busy": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "strata-external": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "strata-hardware-fits": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "strata-hardware-note": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "strata-installed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "strata-running": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "strata-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "strata-vision-downloaded": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "strata-vision-enabled": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "strata-vision-installable": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "strata-vision-job": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "strata-vision-progress": {
+          "dir": "in-out",
+          "type": {
+            "prim": "float"
+          }
+        },
+        "strata-vision-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "stt-cloud-model-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "stt-gigaam-custom": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "stt-gigaam-dir-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "stt-gigaam-gpu": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "stt-gigaam-install-cancelled": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "stt-gigaam-install-done": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "stt-gigaam-install-failed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "stt-gigaam-install-progress": {
+          "dir": "in-out",
+          "type": {
+            "prim": "float"
+          }
+        },
+        "stt-gigaam-install-total": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "stt-gigaam-installed": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "stt-gigaam-installing": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "stt-language-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "stt-provider-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "stt-test-result": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "stt-whisper-bearer-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "stt-whisper-model-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "stt-whisper-url-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "suppress-tiles": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "system-device-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "system-device-missing": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "system-devices": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "system-devices-empty": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "tera-install-label": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "tera-install-phase": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "tera-installing": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "tera-model-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "tile-body-opacity": {
+          "dir": "in-out",
+          "type": {
+            "prim": "float"
+          }
+        },
+        "tile-monitor-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "tile-monitors": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "trigger-keywords-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "tts-available": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "tts-engine-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "tts-engine-names": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "tts-install-label": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "tts-install-phase": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "tts-installing": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "tts-rate-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "tts-test-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "tts-voice-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "tts-voice-names": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "ui-language-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "update-available": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "update-checking": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "update-download-url": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "update-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "vision-base-url-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "vision-bearer-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "vision-local-base-url-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "vision-local-bearer-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "vision-local-model-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "vision-model-input": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "vision-phonetics": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "vision-provider-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "vision-same-available": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "vision-test-practice": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "vision-test-result": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "vision12b-downloading": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "vision12b-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        }
+      }
+    },
+    "TextAskWindow": {
+      "callbacks": {
+        "cancelled": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-moved": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-start-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "submitted": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "functions": {
+        "clear-focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "properties": {
+        "active-profile": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "query": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        }
+      }
+    },
+    "TileWindow": {
+      "callbacks": {
+        "cancel-capture": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "capture-selection": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "clear-marks": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "close-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "copy-block-clicked": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "copy-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "copy-marked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-moved": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-start-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "escalate-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "followup-submitted": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "followup-voice-toggled": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "maximize-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "pin-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "regenerate-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "retry-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "save-capture": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "save-marked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "speak-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "speak-pause-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "speak-seek-clicked": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "speak-speed-next-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "term-closed": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "term-crumb": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "term-opened": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "toggle-block-marked": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "toggle-select-mode": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "functions": {},
+      "properties": {
+        "answer-terms": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "ref": "TermRow"
+            }
+          }
+        },
+        "blocks": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "ref": "MarkdownBlock"
+            }
+          }
+        },
+        "body-opacity": {
+          "dir": "in-out",
+          "type": {
+            "prim": "float"
+          }
+        },
+        "can-copy": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "can-escalate": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "can-regenerate": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "can-retry": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "can-speak": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "capture-block-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "capture-pending": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "capture-text": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "convo-id": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "copied": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "copied-block-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "followup-busy": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "followup-text": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "mark-anchor": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "marked-count": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "pinned": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "plain-notice": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "question-text": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "select-mode": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "select-text": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "sequence": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "source-label": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "speak-active": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "speak-error": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "speak-loading": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "speak-paused": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "speak-speed-label": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "term-busy": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "term-definition": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "term-path": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "term-subterms": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "ref": "TermRow"
+            }
+          }
+        },
+        "tile-id": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "tile-maximized": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "tile-title": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "trigger-label": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "trigger-tone": {
+          "dir": "in-out",
+          "type": {
+            "ref": "TileTone"
+          }
+        },
+        "voice-recording": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        }
+      }
+    },
+    "TranscriptWindow": {
+      "callbacks": {
+        "cancel-capture": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "capture-line-selection": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "clear-marks": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "close-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "copy-all-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "copy-selected-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-moved": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-start-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "install-diar-models": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "play-line": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "rename-speaker": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "run-diarization": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "save-capture": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "save-marked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "search-edited": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "search-jump": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "seek-fraction": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "float"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "set-speed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "float"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "set-volume": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "float"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "toggle-all": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "toggle-by-voice": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "toggle-line": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "toggle-line-marked": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "toggle-play": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "functions": {
+        "clear-focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "scroll-to-line": {
+          "args": [
+            {
+              "name": "idx",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "properties": {
+        "active-line": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "all-selected": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "by-voice": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "can-diarize": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "capture-line-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "capture-pending": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "capture-text": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "confirm-rediar": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "copied": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "diar-status": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "diarizing": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "empty": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "has-audio": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "has-diarization": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "has-speaker-names": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "heading": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "installing-diar-models": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "lines": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "ref": "TranscriptLine"
+            }
+          }
+        },
+        "mark-anchor": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "marked-count": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "needs-diar-models": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "overflow-count": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "playing": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "progress": {
+          "dir": "in-out",
+          "type": {
+            "prim": "float"
+          }
+        },
+        "search-count": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "search-pos": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "search-query": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "speaker-count": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "speakers": {
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "ref": "SpeakerRow"
+            }
+          }
+        },
+        "speed-index": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "time-text": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "timeline-unreliable": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "volume": {
+          "dir": "in-out",
+          "type": {
+            "prim": "float"
+          }
+        },
+        "with-timecodes": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        }
+      }
+    },
+    "TrayMenuWindow": {
+      "callbacks": {
+        "action-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "dismissed": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "functions": {
+        "clear-focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "properties": {
+        "pause-resume-label": {
+          "dir": "in",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "quit-label": {
+          "dir": "in",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "session-running": {
+          "dir": "in",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "show-hide-label": {
+          "dir": "in",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "stop-label": {
+          "dir": "in",
+          "type": {
+            "prim": "string"
+          }
+        }
+      }
+    },
+    "WizardWindow": {
+      "callbacks": {
+        "ai-test-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "cancelled": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-moved": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "drag-start-requested": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "finished": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "install-local-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "mic-test-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "mode-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "nav-back": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "nav-next": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "nav-skip": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "open-diagnostics": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "stealth-toggled": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "stt-test-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "sys-test-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "functions": {
+        "clear-focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "focus": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        }
+      },
+      "properties": {
+        "ai-detail": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "ai-level": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "mic-detail": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "mic-level": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "mode": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "stealth-on": {
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "step": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "stt-detail": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "stt-level": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "summary-ai": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "summary-mic": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "summary-stt": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "summary-sys": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "sys-detail": {
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "sys-level": {
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        }
+      }
+    }
+  }
+}

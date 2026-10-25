@@ -50,6 +50,9 @@ path = "src/bin/overlay_host.rs"
 default = ["demo-binaries"]
 demo-binaries = []
 ui-mcp = ["slint/mcp"]
+# Omarchy plugin build: windows are mirrored to the Omarchy shell and drawn in
+# QML there (docs/OMARCHY-PLUGIN-DESIGN.md). Linux only.
+remote-ui = []
 
 [build-dependencies]
 # Compiles ui/*.slint into Rust at build time. include_modules!() in
