@@ -30,7 +30,7 @@ Column {
     }
     C.DarkCheck {
       text: root.service ? root.service.tr("Fast answers for calls and interviews", []) : ""
-      checked: root.win ? root.win.prop("fast-answers", false) : false
+      checked: root.win ? root.win.prop("fast-answers", true) : true
       onToggled: function(checked) {
         if (!root.win || !root.service) return
         root.service.client.set(root.win.winId, "fast-answers", checked)

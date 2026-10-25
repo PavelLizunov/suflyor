@@ -9,16 +9,16 @@ Column {
   id: root
   property var win: null
   property var service: null
-  readonly property int hotkeysLevel: win ? win.prop("diag-hotkeys-level", -1) : -1
+  readonly property int hotkeysLevel: win ? win.prop("diag-hotkeys-level", 3) : 3
   readonly property string hotkeysFailed: win ? win.prop("diag-hotkeys-failed", "") : ""
   readonly property string hotkeysDetail: win ? win.prop("diag-hotkeys-detail", "") : ""
   readonly property string armed: win ? win.prop("db-clear-armed", "") : ""
   readonly property var readiness: [
-    { label: "AI (answers)", level: win ? win.prop("diag-ai-level", -1) : -1, detail: win ? win.prop("diag-ai-detail", "") : "" },
-    { label: "Speech recognition (STT)", level: win ? win.prop("diag-stt-level", -1) : -1, detail: win ? win.prop("diag-stt-detail", "") : "" },
-    { label: "Screenshots (F8)", level: win ? win.prop("diag-vision-level", -1) : -1, detail: (win ? win.prop("diag-vision-detail", "") : "") || (service ? service.tr("off", []) : "") },
-    { label: "Microphone", level: win ? win.prop("diag-mic-level", -1) : -1, detail: (win ? win.prop("diag-mic-detail", "") : "") || (service ? service.tr("default", []) : "") },
-    { label: "System audio", level: win ? win.prop("diag-sys-level", -1) : -1, detail: (win ? win.prop("diag-sys-detail", "") : "") || (service ? service.tr("default", []) : "") },
+    { label: "AI (answers)", level: win ? win.prop("diag-ai-level", 0) : 0, detail: win ? win.prop("diag-ai-detail", "") : "" },
+    { label: "Speech recognition (STT)", level: win ? win.prop("diag-stt-level", 0) : 0, detail: win ? win.prop("diag-stt-detail", "") : "" },
+    { label: "Screenshots (F8)", level: win ? win.prop("diag-vision-level", 3) : 3, detail: (win ? win.prop("diag-vision-detail", "") : "") || (service ? service.tr("off", []) : "") },
+    { label: "Microphone", level: win ? win.prop("diag-mic-level", 3) : 3, detail: (win ? win.prop("diag-mic-detail", "") : "") || (service ? service.tr("default", []) : "") },
+    { label: "System audio", level: win ? win.prop("diag-sys-level", 3) : 3, detail: (win ? win.prop("diag-sys-detail", "") : "") || (service ? service.tr("default", []) : "") },
     { label: "Global hotkeys", level: hotkeysLevel, detail: hotkeysLevel === 3 ? (service ? service.tr("registering…", []) : "") : hotkeysFailed !== "" ? (service ? service.tr("conflict: {}", [hotkeysFailed]) : "") : hotkeysDetail !== "" ? hotkeysDetail : (service ? service.tr("hotkey system unavailable", []) : "") },
     { label: "Stealth", level: 3, detail: service ? service.tr((win ? win.prop("diag-stealth-on", false) : false) ? "on — verify with a screen-share preview" : "off", []) : "" }
   ]
@@ -41,7 +41,7 @@ Column {
         id: row
         required property var modelData
         width: parent.width
-        implicitHeight: Math.max(label.implicitHeight, state.implicitHeight, detail.implicitHeight) + Style.space(8)
+        implicitHeight: Math.max(label.implicitHeight, levelText.implicitHeight, detail.implicitHeight) + Style.space(8)
         height: implicitHeight
         C.SettingsCaption {
           id: label
@@ -54,7 +54,7 @@ Column {
           font.weight: Font.DemiBold
         }
         C.SettingsCaption {
-          id: state
+          id: levelText
           x: label.x + label.width + Style.space(10)
           y: Style.space(4)
           width: Math.min(Style.space(100), row.width * 0.23)
@@ -70,7 +70,7 @@ Column {
         }
         C.SettingsCaption {
           id: detail
-          x: state.x + state.width + Style.space(10)
+          x: levelText.x + levelText.width + Style.space(10)
           y: Style.space(4)
           width: Math.max(0, row.width - x - Style.space(4))
           text: row.modelData.detail

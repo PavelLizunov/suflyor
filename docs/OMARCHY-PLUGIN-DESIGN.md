@@ -158,12 +158,11 @@ session.
 | Plugin service, socket client, window mirror | Done | qmllint; offscreen via fixtures |
 | Bar widget and bar panel | Done | offscreen, idle and running session |
 | Answer tile | Done | offscreen, RU and EN |
-| Settings frame and tabs 10, 1, 0, 3, 2 | Done | offscreen from a recorded SettingsWindow snapshot |
-| Settings tabs 11, 15, 17, 12, 5, 7, 9, 16, 6, 4, 13, 14 | In progress | — |
+| Settings, all 17 tabs | Done | offscreen from a recorded SettingsWindow snapshot |
 | Archive, transcript, palette, help, wizard, recovery, text ask | Done | offscreen |
 | Installer for the plugin build | Done | `omarchy plugin validate` passes; not run on a host |
 
-Still to do: the remaining Settings tabs; a live Omarchy pass (plugin enable,
+Still to do: install-error texts in settings_panel.slint that say "retry" without naming the button (both front ends; the plugin appends the button name for now); a live Omarchy pass (plugin enable,
 layers, stealth with an actual screen share, hotkeys, a real session); a
 release artifact and the one-command Marketplace install, which need the
 owner's release decision.

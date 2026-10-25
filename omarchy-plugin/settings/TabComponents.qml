@@ -134,9 +134,8 @@ Column {
           text: root.installStatus()
           tone: root.p("component-busy-phase", 0) === 7 || root.p("component-busy-phase", 0) === 9 || root.p("component-busy-phase", 0) === 8 || root.p("component-busy-phase", 0) === 0 ? "warning" : "accent"
         }
-        // Failed terminal phases retain their status, with an explicit retry action.
         C.SettingsButtonsRow {
-          visible: !componentRow.busy || [7, 8, 9].indexOf(root.p("component-busy-phase", 0)) >= 0
+          visible: !componentRow.busy && (componentRow.canInstall || componentRow.canOpen)
           C.SettingsButton {
             visible: componentRow.canInstall
             text: root.tr("Install")

@@ -89,11 +89,16 @@ Column {
         }
       }
       C.StatusLine {
-        text: root.service ? root.service.tr(root.installing ? "Downloading and verifying…"
-          : root.failed ? "Download or activation failed. Retry when ready."
-          : root.installed ? "Installed"
-          : root.win && root.win.prop("stt-gigaam-install-cancelled", false) ? "Download cancelled. Resume keeps verified files."
-          : "Not installed", []) : ""
+        text: {
+          if (!root.service) return ""
+          if (root.installing) return root.service.tr("Downloading and verifying…", [])
+          if (root.failed) return root.service.tr("Download or activation failed. Retry when ready.", [])
+            + " (" + root.service.tr(root.installed ? "Check files" : "Download / Resume", []) + ")"
+          if (root.installed) return root.service.tr("Installed", [])
+          if (root.win && root.win.prop("stt-gigaam-install-cancelled", false))
+            return root.service.tr("Download cancelled. Resume keeps verified files.", [])
+          return root.service.tr("Not installed", [])
+        }
         tone: root.failed ? "danger" : root.installed ? "good" : "neutral"
         font.pixelSize: Style.font.body
       }
@@ -177,7 +182,7 @@ Column {
       spacing: Style.space(6)
       C.SettingsSeparator {}
       C.StatusLine {
-        text: root.win ? root.win.prop("groq-api-key-status", "(loading...)") : ""
+        text: root.win ? root.win.prop("groq-api-key-status", root.service ? root.service.tr("(loading...)", []) : "") : ""
         font.pixelSize: Style.font.body
       }
       C.SettingsFieldRow {

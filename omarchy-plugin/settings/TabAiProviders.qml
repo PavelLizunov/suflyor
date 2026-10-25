@@ -397,8 +397,8 @@ Column {
         C.SettingsCaption { text: root.p("now-detail", "") }
         Rectangle {
           id: nowPill
-          readonly property int state: root.strataBusy || root.builtinBusy ? 2 : root.p("now-state", 4)
-          readonly property color tone: state === 1 ? Commons.Color.accent : state === 2 || state === 3 ? Commons.Color.urgent : Commons.Color.muted
+          readonly property int nowState: root.strataBusy || root.builtinBusy ? 2 : root.p("now-state", 4)
+          readonly property color tone: nowState === 1 ? Commons.Color.accent : nowState === 2 || nowState === 3 ? Commons.Color.urgent : Commons.Color.muted
           width: parent.width
           height: pillText.implicitHeight + Style.space(8)
           radius: Style.cornerRadius
@@ -408,7 +408,7 @@ Column {
             x: Style.space(4)
             y: Style.space(4)
             width: parent.width - Style.space(8)
-            text: root.tr(nowPill.state === 1 ? "Working" : nowPill.state === 2 ? "Starting/Loading" : nowPill.state === 3 ? "Not answering" : nowPill.state === 4 ? "Not set up" : "Checking…")
+            text: root.tr(nowPill.nowState === 1 ? "Working" : nowPill.nowState === 2 ? "Starting/Loading" : nowPill.nowState === 3 ? "Not answering" : nowPill.nowState === 4 ? "Not set up" : "Checking…")
             color: nowPill.tone
           }
         }

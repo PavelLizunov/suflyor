@@ -75,16 +75,12 @@ Column {
           if (root.phase === 4) return root.service.tr("Unpacking: {}…", [root.installLabel])
           if (root.phase === 5) return root.service.tr("{} — already installed", [root.installLabel])
           if (root.phase === 6) return root.service.tr("Voices installed", [])
-          if (root.phase === 7) return root.service.tr("Installed partially; failed: {}", [root.installLabel])
-          if (root.phase === 9) return root.service.tr("{} — download failed (retry later)", [root.installLabel])
-          return root.service.tr("Couldn't install the voices — check the connection and retry.", [])
+          var retry = " (" + root.service.tr("Install voices", []) + ")"
+          if (root.phase === 7) return root.service.tr("Installed partially; failed: {}", [root.installLabel]) + retry
+          if (root.phase === 9) return root.service.tr("{} — download failed (retry later)", [root.installLabel]) + retry
+          return root.service.tr("Couldn't install the voices — check the connection and retry.", []) + retry
         }
         font.pixelSize: Style.font.body
-      }
-      C.SettingsCaption {
-        visible: root.phase === 7 || root.phase === 9 || root.phase === 8 || root.phase < 0 || root.phase > 9
-        // Existing msgid supplies the action missing from the phase's cause text.
-        text: root.service ? root.service.tr("Install voices", []) : ""
       }
     }
     C.WrapBlock {
@@ -133,6 +129,7 @@ Column {
           if (root.teraPhase === 6) return root.service.tr("Model installed", [])
           if (root.teraPhase === 8) return root.service.tr("Install cancelled", [])
           return root.service.tr("Couldn't install the model — check the connection and retry.", [])
+            + " (" + root.service.tr("Install model", []) + ")"
         }
         font.pixelSize: Style.font.body
       }

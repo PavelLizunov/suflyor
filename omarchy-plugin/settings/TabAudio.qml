@@ -130,7 +130,7 @@ Column {
     title: root.service ? root.service.tr("Storage", []) : ""
     C.DarkCheck {
       text: root.service ? root.service.tr("Record call audio (mic + system)", []) : ""
-      checked: root.win ? root.win.prop("record-audio", false) : false
+      checked: root.win ? root.win.prop("record-audio", true) : true
       onToggled: function(checked) {
         if (!root.win || !root.service) return
         root.service.client.set(root.win.winId, "record-audio", checked)

@@ -194,24 +194,23 @@ Column {
             }
           }
         }
-        C.SettingsFieldRow {
+        C.WrapBlock {
           visible: root.editingId === memory.modelData.id
+          spacing: Style.space(4)
           C.SettingsLineEdit {
-            Layout.fillWidth: true
-            Layout.minimumWidth: 0
             text: root.editText
             onTextEdited: if (root.win && root.service) root.service.client.set(root.win.winId, "memory-edit-text", text)
             onAccepted: if (root.win && root.service) root.service.client.call(root.win.winId, "memory-edit-save", [memory.modelData.id, text])
           }
-          C.SettingsButton {
-            compact: true
-            text: root.service ? root.service.tr("Save", []) : ""
-            onClicked: if (root.win && root.service) root.service.client.call(root.win.winId, "memory-edit-save", [memory.modelData.id, root.editText])
-          }
-          C.SettingsButton {
-            compact: true
-            text: root.service ? root.service.tr("Cancel", []) : ""
-            onClicked: if (root.win && root.service) root.service.client.set(root.win.winId, "memory-editing-id", -1)
+          C.SettingsButtonsRow {
+            C.SettingsButton {
+              text: root.service ? root.service.tr("Save", []) : ""
+              onClicked: if (root.win && root.service) root.service.client.call(root.win.winId, "memory-edit-save", [memory.modelData.id, root.editText])
+            }
+            C.SettingsButton {
+              text: root.service ? root.service.tr("Cancel", []) : ""
+              onClicked: if (root.win && root.service) root.service.client.set(root.win.winId, "memory-editing-id", -1)
+            }
           }
         }
       }
