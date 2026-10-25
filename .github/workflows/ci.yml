@@ -203,7 +203,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends pkg-config \
             libasound2-dev libfontconfig1-dev libfreetype-dev libxkbcommon-dev \
-            libwayland-dev libudev-dev libdbus-1-dev
+            libwayland-dev libudev-dev libdbus-1-dev fonts-liberation
+          # The UI asks for Segoe UI; Omarchy resolves it to Liberation Sans, so
+          # the layout tests measure the same metrics here.
+          mkdir -p ~/.config/fontconfig
+          printf '%s\n' '<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd">' \
+            '<fontconfig><alias><family>Segoe UI</family><prefer><family>Liberation Sans</family></prefer></alias>' \
+            '<alias><family>sans-serif</family><prefer><family>Liberation Sans</family></prefer></alias></fontconfig>' \
+            > ~/.config/fontconfig/fonts.conf
+          fc-match "Segoe UI"
 
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
