@@ -90,8 +90,10 @@ fn production_macos_window_uses_the_proven_minimal_appkit_bridge() {
     assert!(!lock_menu.contains("set_position(slint::PhysicalPosition"));
     assert!(maximize.contains("#[cfg(not(windows))]\n    let scale = 1.0_f32;"));
     assert!(maximize.contains("set_platform_window_position(tile.window(), nx, ny)"));
-    assert!(tiles.contains("set_platform_window_position(t.window(), x_clamped, y_clamped)"));
-    assert!(tiles.contains("set_platform_window_position(t.window(), 100, 100)"));
+    // Both placements go through place_tile, which ends in the platform move.
+    assert!(tiles.contains("place_tile(t, hwnd, x_clamped, y_clamped)"));
+    assert!(tiles.contains("place_tile(t, hwnd, 100, 100)"));
+    assert!(tiles.contains("set_platform_window_position(t.window(), x, y)"));
     assert!(!lifecycle.contains("center_window"));
     assert!(!host.contains("center_window"));
     assert!(!bar_tray.contains("center_window"));
