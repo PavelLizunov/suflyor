@@ -10,7 +10,9 @@ Item {
   height: 660
   property string locale: "ru"
   property string scene: "idle"
-  property bool ready: service.catalog["Settings"] !== undefined || locale !== "ru"
+  // Ready once the data is in and switch/hover animations have finished.
+  property bool ready: settled.fired
+  Timer { id: settled; property bool fired: false; interval: 700; running: service.catalog["Settings"] !== undefined || locale !== "ru"; onTriggered: fired = true }
 
   readonly property var idle: ({
     "active-stack": "STT: Groq · AI: haiku", "lock-a11y": "Блокировка тайлов — режим прослушивания (без всплывающих окон)",

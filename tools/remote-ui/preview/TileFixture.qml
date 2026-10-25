@@ -8,7 +8,9 @@ Item {
   width: 460
   height: 420
   property string locale: "ru"
-  property bool ready: service.catalog["Close"] !== undefined || locale !== "ru"
+  // Ready once the data is in and switch/hover animations have finished.
+  property bool ready: settled.fired
+  Timer { id: settled; property bool fired: false; interval: 700; running: service.catalog["Close"] !== undefined || locale !== "ru"; onTriggered: fired = true }
 
   FakeService { id: service; locale: root.locale }
 
