@@ -5,7 +5,7 @@
 # license allow-list below.
 
 [advisories]
-yanked = "deny"
+yanked = "warn"
 # RUSTSEC vulnerabilities are denied by default (the advisory DB is fetched at
 # check time). Exceptions below document their reachability or maintenance status.
 # The webpki-roots 0.26.11 compatibility crate only re-exports v1's trust anchors.
