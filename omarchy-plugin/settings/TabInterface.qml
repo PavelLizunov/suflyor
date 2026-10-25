@@ -3,7 +3,7 @@ import QtQuick
 import qs.Commons
 import "controls" as C
 
-// SettingsWindow tab 3. Slint scheme choice is retained; the QML chrome follows Omarchy.
+// SettingsWindow tab 3. The colour scheme follows the Omarchy theme here.
 Column {
   id: root
   property var win: null
@@ -69,15 +69,12 @@ Column {
         text: root.service ? root.service.tr("Lower values let you see the meeting through tiles. 100% = opaque, 50% = half-transparent.", []) : ""
       }
     }
+    // Suflyor's own schemes (Glacier, Graphite, …) colour the Slint windows only; in
+    // Omarchy every Suflyor surface takes the Omarchy theme, so the row explains that.
     C.SettingsRow {
       label: root.service ? root.service.tr("Colour scheme", []) : ""
-      C.SettingsComboBox {
-        // Proper names are literal model labels in Slint, not catalog msgids.
-        model: root.service ? [root.service.tr("Glacier", []), root.service.tr("Graphite", []), root.service.tr("Obsidian", []), root.service.tr("Light Frost", [])] : []
-        currentIndex: root.win ? root.win.prop("color-scheme-index", 0) : 0
-        onSelected: function(index) {
-          if (root.win && root.service) root.service.client.call(root.win.winId, "color-scheme-selected", [index])
-        }
+      C.SettingsCaption {
+        text: root.service ? root.service.tr("Follows the Omarchy theme. Change it in the Omarchy menu: Style > Theme.", []) : ""
       }
     }
     C.SettingsRow {

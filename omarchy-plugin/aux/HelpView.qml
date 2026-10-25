@@ -24,7 +24,6 @@ Item {
     return tr(names[key] || key)
   }
   readonly property var icons: [
-    { glyph: "\uf142", description: root.tr("Drag to move the bar; its colour shows the state") },
     { glyph: "\uf130", description: root.tr("Microphone: turn recording of your voice on or off") },
     { glyph: "\uf028", description: root.tr("System audio: turn recording of the other side on or off") },
     { glyph: root.tr("ask"), description: root.tr("Hold to ask by voice; swipe up so you do not have to hold") },
@@ -43,7 +42,6 @@ Item {
     { glyph: "\uf059", description: root.tr("This help (also F1)") },
     { glyph: "\uf021", description: root.tr("Restart Suflyor (two clicks; settings are kept)") },
     { glyph: "\uf068", description: root.tr("Compact mode: only the main buttons") },
-    { glyph: "\uf2d0", description: root.tr("Hide to tray") },
     { glyph: "\uf00d", description: root.tr("Quit (two clicks)") }
   ]
   readonly property var hotkeys: [
@@ -75,6 +73,23 @@ Item {
       ColumnLayout {
         width: Math.max(0, viewport.availableWidth - Commons.Style.spacing.lg)
         spacing: Commons.Style.spacing.sm
+        // On Omarchy Suflyor lives in the bar: the widget replaces the floating bar,
+        // so its grip and hide-to-tray rows of help.slint do not apply here.
+        Tile.Label { Layout.fillWidth: true; text: root.tr("Suflyor in the Omarchy bar"); font.bold: true; color: Commons.Color.accent; }
+        Repeater {
+          model: [
+            { glyph: "\u{f02ce}", description: root.tr("Click: open the Suflyor panel") },
+            { glyph: "\u{f02ce}", description: root.tr("Right click: start or stop the session") },
+            { glyph: "\u{f02ce}", description: root.tr("Middle click: write a question") },
+          ]
+          delegate: Small.ReferenceRow {
+            required property var modelData
+            Layout.fillWidth: true
+            glyph: modelData.glyph
+            description: modelData.description
+          }
+        }
+        Item { implicitHeight: Commons.Style.spacing.lg }
         Tile.Label { Layout.fillWidth: true; text: root.tr("How it works"); font.bold: true; color: Commons.Color.accent; }
         Tile.Label { Layout.fillWidth: true; text: root.tr("1) Start capture — press start on the bar. The mic records you; system audio records the other side."); }
         Tile.Label { Layout.fillWidth: true; text: root.tr("2) Get help — hold ask to ask by voice, hold grab to send the other side's last words to AI, or press F9. Answers appear in tiles."); }

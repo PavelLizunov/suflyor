@@ -1,5 +1,10 @@
 {
+ "Click: open the Suflyor panel": "Клик: открыть панель Суфлёра",
+ "Follows the Omarchy theme. Change it in the Omarchy menu: Style > Theme.": "Берётся из темы Omarchy. Сменить её можно в меню Omarchy: «Стиль» > «Тема».",
+ "Middle click: write a question": "Средний клик: написать вопрос",
+ "Right click: start or stop the session": "Правый клик: начать или остановить сессию",
  "Suflyor could not start. Reinstall the plugin, then restart the shell.": "Суфлёр не запустился. Переустановите плагин, затем перезапустите оболочку.",
+ "Suflyor in the Omarchy bar": "Суфлёр в баре Omarchy",
  "Suflyor is starting…": "Суфлёр запускается…",
  "The check did not provide a failure reason. Press \"{}\" to try again.": "Проверка не сообщила причину сбоя. Нажмите «{}», чтобы повторить.",
  "The session catalog could not be opened. Press Close, then reopen Session archive to try again.": "Не удалось открыть каталог сессий. Нажмите «Закрыть», затем снова откройте «Архив сессий», чтобы повторить попытку."
