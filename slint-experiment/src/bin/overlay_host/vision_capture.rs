@@ -134,6 +134,32 @@ fn spawn_vision_notice(
     }
 }
 
+#[cfg(target_os = "linux")]
+fn linux_capture_error_copy(
+    error: Option<slint_replay::native::screen::RegionSelectionError>,
+) -> Option<(&'static str, &'static str)> {
+    use slint_replay::native::screen::RegionSelectionError;
+    match error {
+        Some(RegionSelectionError::Cancelled) => None,
+        Some(RegionSelectionError::SlurpMissing) => Some((
+            "Выбор области недоступен: slurp не установлен. Установите slurp и снова нажмите сочетание клавиш для снимка экрана.",
+            "Region selection is unavailable: slurp is not installed. Install slurp and press the capture shortcut again.",
+        )),
+        Some(RegionSelectionError::TimedOut) => Some((
+            "Время выбора области истекло (120 с). Снова нажмите сочетание клавиш для снимка экрана и выберите область.",
+            "Region selection timed out after 120 seconds. Press the capture shortcut again and select a region.",
+        )),
+        Some(RegionSelectionError::SlurpFailed) => Some((
+            "slurp не смог выбрать область экрана Wayland. Убедитесь, что сеанс Wayland доступен, и снова нажмите сочетание клавиш для снимка экрана.",
+            "slurp could not select a Wayland screen region. Make sure the Wayland session is available and press the capture shortcut again.",
+        )),
+        None => Some((
+            "Сбой захвата экрана. Убедитесь, что grim, slurp и timeout установлены, и снова нажмите сочетание клавиш для снимка экрана.",
+            "Screen capture failed. Make sure grim, slurp and timeout are installed and press the capture shortcut again.",
+        )),
+    }
+}
+
 /// V3 — F8 screenshot. Freezes the whole virtual desktop, shows a Lightshot-
 /// style selection overlay, and on release crops the frozen frame to the chosen
 /// region and hands it to `launch_vision_for_bgra`. Esc / right-click / a tiny
@@ -222,12 +248,26 @@ pub(crate) fn fire_f8_vision_capture(
         }
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
         let worker = std::thread::spawn(move || {
-            let hidden = slint_replay::win32::hide_own_windows();
-            let result = slint_replay::native::screen::capture_region().map_err(|e| e.to_string());
+            let mut hidden = slint_replay::win32::hide_own_windows();
+            let result = slint_replay::native::screen::capture_region(|| {
+                // Tiles can appear while slurp waits for the user's selection.
+                for window in slint_replay::win32::hide_own_windows() {
+                    if !hidden.iter().any(|(id, _)| *id == window.0) {
+                        hidden.push(window);
+                    }
+                }
+            })
+            .map_err(|e| {
+                e.downcast_ref::<slint_replay::native::screen::RegionSelectionError>()
+                    .copied()
+            });
             slint_replay::win32::show_windows(&hidden);
             let _ = tx.send(result);
         });
-        type CaptureResult = Result<(slint_replay::capture::CapturedBgra, i32, i32), String>;
+        type CaptureResult = Result<
+            (slint_replay::capture::CapturedBgra, i32, i32),
+            Option<slint_replay::native::screen::RegionSelectionError>,
+        >;
         fn poll(
             rx: std::sync::mpsc::Receiver<CaptureResult>,
             worker: std::thread::JoinHandle<()>,
@@ -240,7 +280,7 @@ pub(crate) fn fire_f8_vision_capture(
                 }
                 Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                     let _ = worker.join();
-                    done(Err("capture worker stopped".into()));
+                    done(Err(None));
                 }
                 Err(std::sync::mpsc::TryRecvError::Empty) => {
                     slint::Timer::single_shot(std::time::Duration::from_millis(30), move || {
@@ -276,14 +316,12 @@ pub(crate) fn fire_f8_vision_capture(
                         &tiles,
                         &weak_overlay,
                     ),
-                    Err(error) if error == "selection cancelled" => {}
-                    Err(_) => spawn_vision_notice(
-                        &events,
-                        &cfg,
-                        "screen_capture_failed",
-                        "Не удалось получить кадр экрана.",
-                        "Could not capture the screen.",
-                    ),
+                    Err(kind) => {
+                        if let Some((ru, en)) = linux_capture_error_copy(kind) {
+                            diag!("[overlay-host] F8: Linux capture failed: {kind:?}");
+                            spawn_vision_notice(&events, &cfg, "screen_capture_failed", ru, en);
+                        }
+                    }
                 }
             }),
         );
@@ -983,6 +1021,27 @@ pub(crate) fn launch_vision_for_bgra(
 mod tests {
     use super::vision_tile_copy;
     use overlay_backend::vision::VisionMode;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_capture_only_cancellation_is_silent() {
+        use slint_replay::native::screen::RegionSelectionError;
+        assert_eq!(
+            super::linux_capture_error_copy(Some(RegionSelectionError::Cancelled)),
+            None
+        );
+        for error in [
+            Some(RegionSelectionError::SlurpMissing),
+            Some(RegionSelectionError::SlurpFailed),
+            Some(RegionSelectionError::TimedOut),
+            None,
+        ] {
+            let copy = super::linux_capture_error_copy(error);
+            assert!(copy.is_some_and(|(ru, en)| {
+                ru.contains("сочетание клавиш") && en.contains("capture shortcut again")
+            }));
+        }
+    }
 
     #[test]
     fn deterministic_vision_copy_follows_ui_language() {

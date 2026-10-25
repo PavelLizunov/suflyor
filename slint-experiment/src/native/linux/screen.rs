@@ -5,6 +5,7 @@
 
 use std::error::Error;
 use std::io::Read;
+use std::os::unix::process::ExitStatusExt;
 use std::process::{Command, Output, Stdio};
 
 use crate::capture::CapturedBgra;
@@ -64,23 +65,59 @@ pub fn capture_display() -> Result<(CapturedBgra, i32, i32), Box<dyn Error>> {
     Ok((bgra, mon.x, mon.y))
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RegionSelectionError {
+    Cancelled,
+    SlurpMissing,
+    SlurpFailed,
+    TimedOut,
+}
+impl std::fmt::Display for RegionSelectionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Cancelled => "selection cancelled",
+            Self::SlurpMissing => "slurp is not installed",
+            Self::SlurpFailed => "slurp failed to select a Wayland region",
+            Self::TimedOut => "slurp timed out after 120s",
+        })
+    }
+}
+impl Error for RegionSelectionError {}
+
+fn check_slurp_status(output: &Output) -> Result<(), RegionSelectionError> {
+    if output.status.success() {
+        return Ok(());
+    }
+    Err(match output.status.code() {
+        Some(124 | 137) => RegionSelectionError::TimedOut,
+        None if output.status.signal() == Some(9) => RegionSelectionError::TimedOut,
+        Some(127) => RegionSelectionError::SlurpMissing,
+        Some(1)
+            if output.stdout.iter().all(u8::is_ascii_whitespace)
+                && output.stderr.iter().all(u8::is_ascii_whitespace) =>
+        {
+            RegionSelectionError::Cancelled
+        }
+        _ => RegionSelectionError::SlurpFailed,
+    })
+}
+
 /// Prompt the user to select a screen region via `slurp`, then capture it via `grim`.
 ///
+/// Runs `before_capture` after selection, immediately before starting `grim`.
 /// Returns the captured BGRA frame and the region's global origin `(x, y)`.
-pub fn capture_region() -> Result<(CapturedBgra, i32, i32), Box<dyn Error>> {
+pub fn capture_region(
+    before_capture: impl FnOnce(),
+) -> Result<(CapturedBgra, i32, i32), Box<dyn Error>> {
     let slurp_out = run_cmd("120s", "slurp", &[])?;
-    if !slurp_out.status.success() {
-        if slurp_out.status.code() == Some(124) {
-            return Err("slurp timed out after 120s".into());
-        }
-        return Err("selection cancelled".into());
-    }
+    check_slurp_status(&slurp_out)?;
 
     let slurp_str =
         std::str::from_utf8(&slurp_out.stdout).map_err(|_| "invalid UTF-8 in slurp output")?;
     let (x, y, w, h) = parse_slurp_output(slurp_str)?;
     let geom = format!("{x},{y} {w}x{h}");
 
+    before_capture();
     let grim_out = run_cmd("10s", "grim", &["-s", "1", "-g", &geom, "-t", "ppm", "-"])?;
     if !grim_out.status.success() {
         if grim_out.status.code() == Some(124) {
@@ -99,8 +136,18 @@ fn run_cmd(timeout_sec: &str, program: &str, args: &[&str]) -> Result<Output, Bo
         .args(["--signal=KILL", timeout_sec, program])
         .args(args)
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()?;
+    let mut stderr = child
+        .stderr
+        .take()
+        .ok_or("capture error pipe unavailable")?;
+    let stderr = std::thread::spawn(move || -> std::io::Result<Vec<u8>> {
+        let mut bytes = Vec::new();
+        (&mut stderr).take(16 * 1024).read_to_end(&mut bytes)?;
+        std::io::copy(&mut stderr, &mut std::io::sink())?;
+        Ok(bytes)
+    });
     let mut bytes = Vec::new();
     let result = child
         .stdout
@@ -111,12 +158,15 @@ fn run_cmd(timeout_sec: &str, program: &str, args: &[&str]) -> Result<Output, Bo
     if result.is_err() || bytes.len() > MAX_OUTPUT_BYTES {
         let _ = child.kill();
         let _ = child.wait();
+        let _ = stderr.join();
         return Err("capture output exceeded its limit or could not be read".into());
     }
     Ok(Output {
         status: child.wait()?,
         stdout: bytes,
-        stderr: Vec::new(),
+        stderr: stderr
+            .join()
+            .map_err(|_| "capture error reader stopped")??,
     })
 }
 
@@ -389,6 +439,51 @@ fn parse_ppm(data: &[u8]) -> Result<CapturedBgra, Box<dyn Error>> {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
+
+    #[test]
+    fn slurp_status_distinguishes_cancellation_from_failures() {
+        let output = |code, stdout: &[u8], stderr: &[u8]| Output {
+            status: std::process::ExitStatus::from_raw(code << 8),
+            stdout: stdout.to_vec(),
+            stderr: stderr.to_vec(),
+        };
+        assert_eq!(check_slurp_status(&output(0, b"0,0 10x10", b"")), Ok(()));
+        assert_eq!(
+            check_slurp_status(&output(1, b"", b"")),
+            Err(RegionSelectionError::Cancelled)
+        );
+        assert_eq!(
+            check_slurp_status(&output(1, b"", b"failed to connect to Wayland display")),
+            Err(RegionSelectionError::SlurpFailed)
+        );
+        assert_eq!(
+            check_slurp_status(&output(1, b"unexpected output", b"")),
+            Err(RegionSelectionError::SlurpFailed)
+        );
+        assert_eq!(
+            check_slurp_status(&output(127, b"", b"slurp: No such file or directory")),
+            Err(RegionSelectionError::SlurpMissing)
+        );
+        assert_eq!(
+            check_slurp_status(&output(126, b"", b"permission denied")),
+            Err(RegionSelectionError::SlurpFailed)
+        );
+        for code in [124, 137] {
+            assert_eq!(
+                check_slurp_status(&output(code, b"", b"")),
+                Err(RegionSelectionError::TimedOut)
+            );
+        }
+        let killed = Output {
+            status: std::process::ExitStatus::from_raw(9),
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        };
+        assert_eq!(
+            check_slurp_status(&killed),
+            Err(RegionSelectionError::TimedOut)
+        );
+    }
 
     #[test]
     fn test_malformed_ppm() {

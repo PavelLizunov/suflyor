@@ -54,6 +54,13 @@ fn selector(id: isize) -> Result<String, Error> {
     Ok(format!("address:0x{id:x}"))
 }
 
+fn single_title_candidate(candidates: &[isize], unresolved_peer: bool) -> Option<isize> {
+    match candidates {
+        [id] if !unresolved_peer => Some(*id),
+        _ => None,
+    }
+}
+
 pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
     let all = clients()?;
     // Poll only the already-created native window; never retain a strong owner
@@ -95,8 +102,10 @@ pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
                 .filter_map(address)
                 .filter(|id| !claimed.contains(id))
                 .collect();
-            if candidates.len() == 1 {
-                let address = candidates[0];
+            let unresolved_peer = ids
+                .iter()
+                .any(|(key, v)| *key != w.id() && v.original == title && v.address.is_none());
+            if let Some(address) = single_title_candidate(&candidates, unresolved_peer) {
                 ids.insert(
                     w.id(),
                     Identity {
@@ -110,9 +119,6 @@ pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
                     w.set_title(&title);
                 }
                 return Ok(address);
-            }
-            if all.is_empty() {
-                return Err("compositor has not mapped this window yet".into());
             }
             let id = ids.entry(w.id()).or_insert_with(|| Identity {
                 native: Arc::downgrade(&native),
@@ -137,7 +143,7 @@ pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
                 w.set_title(&id.original);
                 return Ok(found);
             }
-            if candidates.len() > 1 {
+            if candidates.len() > 1 || unresolved_peer {
                 w.set_title(&id.title);
                 w.request_redraw();
             }
@@ -276,6 +282,14 @@ pub fn hide_own() -> Vec<(isize, bool)> {
             if c["hidden"].as_bool() == Some(true) {
                 continue;
             }
+            if HIDDEN_ALPHA
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .contains_key(&id)
+            {
+                hidden.push((id, true));
+                continue;
+            }
             let selector = format!("address:0x{id:x}");
             let saved: Vec<_> = [
                 "opacity",
@@ -315,37 +329,65 @@ pub fn hide_own() -> Vec<(isize, bool)> {
 }
 pub fn show_own(hidden: &[(isize, bool)]) {
     for (id, _) in hidden {
+        let Ok(s) = selector(*id) else {
+            continue;
+        };
         let saved = HIDDEN_ALPHA
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(id);
-        if let (Some(mut saved), Ok(s)) = (saved, selector(*id)) {
-            // Restore capture protection before any content becomes visible.
-            saved.sort_by_key(|(name, _)| {
-                if name == "no_screen_share" {
-                    0
-                } else if name == "no_anim" {
-                    2
-                } else {
-                    1
-                }
-            });
-            for (name, value) in saved {
-                let value = if let Some(flag) = value.as_bool() {
-                    Some(if flag {
-                        "1".to_string()
-                    } else {
-                        "0".to_string()
-                    })
-                } else {
-                    value.as_f64().map(|alpha| alpha.to_string())
-                };
-                if let Some(value) = value {
-                    let _ = super::desktop::set_property(&s, &name, &value);
-                }
+            .get(id)
+            .cloned();
+        if let Some(mut saved) = saved {
+            if restore_properties(&mut saved, |name, value| {
+                super::desktop::set_property(&s, name, value)
+            }) {
+                HIDDEN_ALPHA
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .remove(id);
+            } else {
+                log::warn!(
+                    "capture protection restore failed twice; window kept transparent for retry"
+                );
             }
         }
     }
+}
+fn restore_properties(
+    saved: &mut [(String, serde_json::Value)],
+    mut set: impl FnMut(&str, &str) -> Result<(), Error>,
+) -> bool {
+    // Restore capture protection before any content becomes visible.
+    saved.sort_by_key(|(name, _)| {
+        if name == "no_screen_share" {
+            0
+        } else if name == "no_anim" {
+            2
+        } else {
+            1
+        }
+    });
+    for (name, value) in saved {
+        let value = if let Some(flag) = value.as_bool() {
+            Some(if flag {
+                "1".to_string()
+            } else {
+                "0".to_string()
+            })
+        } else {
+            value.as_f64().map(|alpha| alpha.to_string())
+        };
+        if let Some(value) = value {
+            if set(name, &value).is_err()
+                && name.as_str() == "no_screen_share"
+                && value == "1"
+                && set(name, &value).is_err()
+            {
+                return false;
+            }
+        }
+    }
+    true
 }
 pub fn drag_begin(id: isize) {
     if let (Ok((cx, cy)), Ok((x, y, _, _))) = (cursor(), rect(id)) {
@@ -373,7 +415,66 @@ pub fn drag_end() {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-    use super::arrange_script;
+    use super::{arrange_script, restore_properties, single_title_candidate};
+
+    #[test]
+    fn single_candidate_waits_for_unresolved_same_title_peer() {
+        assert_eq!(single_title_candidate(&[42], true), None);
+        assert_eq!(single_title_candidate(&[42], false), Some(42));
+        assert_eq!(single_title_candidate(&[], false), None);
+        assert_eq!(single_title_candidate(&[42, 43], false), None);
+    }
+
+    #[test]
+    fn failed_protection_restore_never_restores_opacity() {
+        let mut saved = vec![
+            ("opacity".into(), serde_json::json!(0.8)),
+            ("no_screen_share".into(), serde_json::json!(1)),
+        ];
+        let mut calls = Vec::new();
+        assert!(!restore_properties(&mut saved, |name, value| {
+            calls.push((name.to_string(), value.to_string()));
+            Err("compositor unavailable".into())
+        }));
+        assert_eq!(calls, vec![("no_screen_share".into(), "1".into()); 2]);
+        assert_eq!(saved.len(), 2);
+    }
+
+    #[test]
+    fn protection_retry_succeeds_before_opacity_and_animation() {
+        let mut saved = vec![
+            ("no_anim".into(), serde_json::json!(false)),
+            ("opacity".into(), serde_json::json!(0.8)),
+            ("no_screen_share".into(), serde_json::json!(true)),
+        ];
+        let mut calls = Vec::new();
+        assert!(restore_properties(&mut saved, |name, _| {
+            calls.push(name.to_string());
+            if calls.len() == 1 {
+                Err("compositor unavailable".into())
+            } else {
+                Ok(())
+            }
+        }));
+        assert_eq!(
+            calls,
+            ["no_screen_share", "no_screen_share", "opacity", "no_anim"]
+        );
+    }
+
+    #[test]
+    fn stealth_off_does_not_retry_or_block_opacity() {
+        let mut saved = vec![
+            ("opacity".into(), serde_json::json!(0.8)),
+            ("no_screen_share".into(), serde_json::json!(false)),
+        ];
+        let mut calls = Vec::new();
+        assert!(restore_properties(&mut saved, |name, _| {
+            calls.push(name.to_string());
+            Err("compositor unavailable".into())
+        }));
+        assert_eq!(calls, ["no_screen_share", "opacity"]);
+    }
 
     #[test]
     fn arranging_sends_move_pin_and_exclusion_in_one_script() {
