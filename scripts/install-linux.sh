@@ -54,6 +54,10 @@ fi
 for tool in pactl parec paplay grim slurp wl-copy wl-paste hyprctl xdg-open tesseract python3; do
     command -v "$tool" >/dev/null || { printf 'Missing required native tool: %s\n' "$tool" >&2; exit 1; }
 done
+ocr_languages=$(tesseract --list-langs 2>/dev/null) || ocr_languages=''
+if ! grep -qx rus <<< "$ocr_languages" || ! grep -qx eng <<< "$ocr_languages"; then
+    printf 'Warning: Tesseract rus/eng language data is missing or unavailable. Install tesseract-data-rus and tesseract-data-eng to enable Russian/English OCR.\n' >&2
+fi
 [[ -f "$hypr_config" ]] || { printf 'Missing Hyprland Lua config: %s\n' "$hypr_config" >&2; exit 1; }
 for name in overlay-host suflyor-tts suflyor-teratts; do
     [[ -x "$source_dir/$name" ]] || { printf 'Missing native executable: %s\n' "$source_dir/$name" >&2; exit 1; }
@@ -67,7 +71,7 @@ for name in overlay-host suflyor-tts suflyor-teratts; do
 done
 ln -sfn "$prefix/launch" "$bin_dir/suflyor"
 python3 - "$prefix" "$config" "$data" "$hypr_config" <<'PY'
-import pathlib,sys,shlex,json
+import pathlib,sys,shlex
 prefix,config,data,hypr=map(pathlib.Path,sys.argv[1:])
 launch=prefix/"launch"
 host=shlex.quote(str(prefix/"overlay-host"))
@@ -87,8 +91,15 @@ while [ -n "$MAINPID" ] && kill -0 "$MAINPID" 2>/dev/null; do sleep 0.1; done
 stop.chmod(0o755)
 if not hypr.is_file():raise SystemExit("Hyprland Lua configuration is unavailable")
 s=hypr.read_text()
-if "-- BEGIN SUFLYOR NATIVE\n" not in s:
- hypr.write_text(s+"\n-- BEGIN SUFLYOR NATIVE\ndofile("+json.dumps(str(prefix/"suflyor-hyprland.lua"))+ ")\n-- END SUFLYOR NATIVE\n")
+begin="-- BEGIN SUFLYOR NATIVE\n";end="-- END SUFLYOR NATIVE\n"
+lua_path=str(prefix/"suflyor-hyprland.lua").replace('\\','\\\\').replace('"','\\"').replace('\n','\\n').replace('\r','\\r')
+block=begin+'dofile("'+lua_path+'")\n'+end
+start=s.find(begin);finish=s.find(end,start)
+if start>=0 and finish>=0:
+ updated=s[:start]+block+s[finish+len(end):]
+else:
+ updated=s+"\n"+block if start<0 else s
+if updated!=s:hypr.write_text(updated)
 def unit(value): return str(value).replace('\\','\\\\').replace('"','\\"').replace('%','%%')
 (config/'systemd/user/suflyor.service').write_text('''[Unit]
 Description=Suflyor native Wayland assistant
