@@ -98,7 +98,7 @@ fn run_local_ocr(bgra: &[u8], width: u32, height: u32) -> anyhow::Result<String>
 }
 
 /// Tile text for an OCR failure the user can fix, in the UI language.
-fn ocr_failure_text(failure: &overlay_backend::ocr::OcrFailure, ui_is_ru: bool) -> String {
+pub(crate) fn ocr_failure_text(failure: &overlay_backend::ocr::OcrFailure, ui_is_ru: bool) -> String {
     use overlay_backend::ocr::OcrFailure;
     match (failure, ui_is_ru) {
         (OcrFailure::MissingLanguageData(packages), true) => format!(
@@ -552,7 +552,7 @@ pub(crate) fn fire_f8_vision_capture(
 /// no endpoint). If a non-OCR path is reached with `ep == None` — only possible
 /// if the OCR engine vanished between the `is_available()` checks (TOCTOU) — a
 /// generic "OCR недоступен" tile is shown instead of a network call.
-fn vision_tile_copy(
+pub(crate) fn vision_tile_copy(
     mode: vision::VisionMode,
     is_ru: bool,
 ) -> (&'static str, &'static str, &'static str, &'static str) {

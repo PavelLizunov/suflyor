@@ -5357,3 +5357,7 @@ mod mic_guard_tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "overlay_host/ui_shots.rs"]
+mod ui_shots;

@@ -1,272 +1,53 @@
-# Machine-independent gate (added 2026-06-14 from the regression-risk audit).
-#
-# Local `.githooks` route commits and pushes through the native gate selector,
-# but a different machine or `--no-verify` can still bypass local enforcement.
-# This workflow recomputes the checks on GitHub regardless of how the commit
-# was made, so a broken fmt/clippy/test can't reach a release unnoticed.
-#
-# Windows remains the required product gate. An independent advisory Apple
-# Silicon job compiles only the macOS surfaces that are already honest: the
-# backend, portable Slint/UI core, and TTS sidecar with unsupported playback.
-# It is visible on code changes but is intentionally not a dependency of the
-# stable required `gate` context yet.
-#
-# Selected-path contract (docs-only fast path):
-#   Classification lives in .github/scripts/is-docs-only.sh (single source of
-#   truth, shared with security.yml).  A PR is docs-only when EVERY changed
-#   path in the raw git diff (--name-only --no-renames base..head) matches
-#   *.md OR lives under docs/.  Embedded overlay-backend/knowledge/*.md files
-#   are code inputs and always select Rust checks. Any other path — Rust source, Cargo.toml /
-#   Cargo.lock, *.slint, workflow YAML, scripts/, deny.toml, .gitleaks.toml,
-#   etc. — selects the fast Rust set (full only for stable tags or manual full).
-#   Detection never reads PR title, body,
-#   or labels.  Docs-only PRs skip the Windows rust job; the gate still
-#   concludes green.  Classifier failure fails the gate (fail-closed).
+# Scratch branch claude/ui-shots-1025 only: offscreen renders of the windows
+# changed on 2026-10-25. Never merge this file.
 name: CI
-
 on:
-  push:
-    branches: [master]
-    tags: ['v[0-9]+.[0-9]+.[0-9]+']
-  pull_request:
-    branches: [master]
   workflow_dispatch:
-    inputs:
-      full:
-        description: Run the full stable-release gate (Clippy and all tests)
-        type: boolean
-        default: false
-
-# A newer push to the same ref cancels the in-flight run; the replacement
-# run emits its own gate check for the new HEAD.
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      rust: ${{ steps.classify.outputs.rust }}
-      full: ${{ steps.classify.outputs.full }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - id: classify
-        shell: bash
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          HEAD_SHA: ${{ github.sha }}
-          EVENT_NAME: ${{ github.event_name }}
-          REF: ${{ github.ref }}
-          FULL_REQUEST: ${{ inputs.full }}
-        run: |
-          full=false
-          if [[ "$EVENT_NAME" == workflow_dispatch && "$FULL_REQUEST" == true ]] ||
-             [[ "$EVENT_NAME" == push && "$REF" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            full=true
-          fi
-          echo "full=$full" >> "$GITHUB_OUTPUT"
-          # Manual runs and tag creation have no usable before/base diff.
-          if [[ "$EVENT_NAME" == workflow_dispatch || "$REF" == refs/tags/* ]]; then
-            echo "rust=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          result="$(bash .github/scripts/is-docs-only.sh "$BASE_SHA" "$HEAD_SHA")"
-          case "$result" in
-            true)  echo "rust=false" >> "$GITHUB_OUTPUT" ;;
-            false) echo "rust=true"  >> "$GITHUB_OUTPUT" ;;
-            *) echo "unexpected classifier output: '$result'" >&2; exit 1 ;;
-          esac
-
-  rust:
-    needs: changes
-    if: needs.changes.outputs.rust == 'true'
-    runs-on: windows-latest
-    env:
-      CARGO_PROFILE_DEV_DEBUG: "0"
-      CARGO_PROFILE_TEST_DEBUG: "0"
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust (stable + rustfmt + clippy)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      # sherpa-onnx native archives are not safe to restore independently of
-      # their build-script state, so suflyor-tts deliberately builds fresh.
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            overlay-backend
-            slint-experiment
-
-      # ---- overlay-backend (shared logic) ----
-      - name: backend fmt --check
-        run: cargo fmt --manifest-path overlay-backend/Cargo.toml --all -- --check
-      - name: backend clippy -D warnings
-        if: needs.changes.outputs.full == 'true'
-        run: cargo clippy --manifest-path overlay-backend/Cargo.toml --all-targets -- -D warnings
-      - name: backend test (full suite, incl. tests/)
-        run: cargo test --manifest-path overlay-backend/Cargo.toml
-
-      # ---- slint-experiment (overlay-host binary + UI) ----
-      - name: slint fmt --check
-        run: cargo fmt --manifest-path slint-experiment/Cargo.toml --all -- --check
-      - name: slint clippy -D warnings
-        if: needs.changes.outputs.full == 'true'
-        run: cargo clippy --manifest-path slint-experiment/Cargo.toml --all-targets -- -D warnings
-      - name: slint test (unit tests and the static guards of scripts/git-gate-native.ps1)
-        if: needs.changes.outputs.full != 'true'
-        run: >-
-          cargo test --locked --manifest-path slint-experiment/Cargo.toml --lib --bin overlay-host
-          --test codex_copy_guard
-          --test i18n_guard
-          --test icon_guard
-          --test lock_chip_geometry_guard
-          --test lock_chip_layout_guard
-          --test lock_mode_menu_guard
-          --test macos_settings_guard
-          --test rc3_regression_guard
-          --test settings_download_lifecycle
-          --test settings_provider_geometry
-          --test settings_reset_guard
-          --test tera_tts_layout_guard
-          --test tile_player_layout_guard
-          --test tray_guard
-          --test version_guard
-      - name: slint test (full suite, incl. i18n + reset + version guards)
-        if: needs.changes.outputs.full == 'true'
-        run: cargo test --manifest-path slint-experiment/Cargo.toml
-      # QA-only rot guard: default builds intentionally omit the embedded MCP
-      # server, so this path needs its own fast compile check. Not a release feature.
-      - name: slint ui-mcp feature check (QA rot guard)
-        run: cargo check --locked --manifest-path slint-experiment/Cargo.toml --bin overlay-host --features ui-mcp
-
-      # ---- suflyor-tts (read-aloud sidecar — SHIPPED in the installer) ----
-      # It declares deny-lints that were never enforced; gate it like the rest.
-      - name: tts fmt --check
-        run: cargo fmt --manifest-path suflyor-tts/Cargo.toml --all -- --check
-      - name: tts clippy -D warnings
-        if: needs.changes.outputs.full == 'true'
-        run: cargo clippy --manifest-path suflyor-tts/Cargo.toml --all-targets -- -D warnings
-      - name: tts test
-        run: cargo test --manifest-path suflyor-tts/Cargo.toml
-
-  macos:
-    needs: changes
-    if: needs.changes.outputs.rust == 'true'
-    runs-on: macos-26
-    env:
-      CARGO_PROFILE_DEV_DEBUG: "0"
-      CARGO_PROFILE_TEST_DEBUG: "0"
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Select Xcode 26.6
-        run: |
-          sudo xcode-select --switch /Applications/Xcode_26.6.app/Contents/Developer
-          xcodebuild -version
-          swift package --version
-
-      - name: Install Rust (stable + rustfmt + clippy)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            overlay-backend
-            slint-experiment
-
-      - name: macOS compile-seam gate
-        run: bash scripts/git-gate-macos.sh
-
-  # Advisory Linux (Wayland port) job, like macOS: not a dependency of "gate".
-  # It compiles the Linux adapters and runs their unit and guard tests; live
-  # compositor, audio and clipboard checks stay on the Omarchy worker.
-  linux:
-    needs: changes
-    if: needs.changes.outputs.rust == 'true'
+  ui-shots:
     runs-on: ubuntu-24.04
     env:
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0
       - name: Install native build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends pkg-config \
             libasound2-dev libfontconfig1-dev libfreetype-dev libxkbcommon-dev \
             libwayland-dev libudev-dev libdbus-1-dev fonts-liberation
-          # The UI asks for Segoe UI; Omarchy resolves it to Liberation Sans, so
-          # the layout tests measure the same metrics here.
           mkdir -p ~/.config/fontconfig
           printf '%s\n' '<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd">' \
             '<fontconfig><alias><family>Segoe UI</family><prefer><family>Liberation Sans</family></prefer></alias>' \
             '<alias><family>sans-serif</family><prefer><family>Liberation Sans</family></prefer></alias></fontconfig>' \
             > ~/.config/fontconfig/fonts.conf
           fc-match "Segoe UI"
-
-      - name: Install Rust (stable)
-        uses: dtolnay/rust-toolchain@stable
-
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            overlay-backend
-            slint-experiment
-
-      - name: backend unit tests (Linux)
-        run: cargo test --lib --manifest-path overlay-backend/Cargo.toml
-      - name: slint unit, Linux platform and i18n tests
+          workspaces: slint-experiment
+      - name: render after (7c7693f)
+        env:
+          UI_SHOTS_DIR: ${{ github.workspace }}/shots/after
         run: >-
-          cargo test --locked --no-default-features --features ui-mcp
-          --manifest-path slint-experiment/Cargo.toml
-          --lib --bin overlay-host --test linux_platform --test i18n_guard
-
-  # Stable required context: "gate".  `if: always()` is load-bearing:
-  # docs-only PRs skip the rust job, and without always() GitHub would skip
-  # gate too (a needed job was skipped), leaving the required context missing.
-  # With always(), gate runs, validates the selector, and concludes.
-  gate:
-    if: always()
-    needs: [changes, rust]
-    runs-on: ubuntu-latest
-    steps:
-      - env:
-          CHANGES_RESULT: ${{ needs.changes.result }}
-          RUST_NEEDED: ${{ needs.changes.outputs.rust }}
-          RUST_RESULT: ${{ needs.rust.result }}
+          cargo test --no-default-features --features ui-mcp
+          --manifest-path slint-experiment/Cargo.toml --bin overlay-host
+          ui_shots::render -- --exact --nocapture
+      - name: render before (389e436 UI and translations)
+        continue-on-error: true
+        env:
+          UI_SHOTS_DIR: ${{ github.workspace }}/shots/before
+          UI_SHOTS_SET: before
         run: |
-          # The path selector must have completed — without its output we
-          # cannot distinguish "docs-only, rust legitimately skipped" from
-          # "changes job crashed, rust never scheduled".  Fail closed.
-          test "$CHANGES_RESULT" = "success" || exit 1
-          case "$RUST_NEEDED" in
-            true|false) ;;
-            *) echo "invalid rust value: '$RUST_NEEDED'" >&2; exit 1 ;;
-          esac
-          # Docs-only (rust != true): gate passes regardless of rust result
-          # (rust is expected to be "skipped").
-          # Code/mixed (rust == true): rust must have succeeded.
-          test "$RUST_NEEDED" != "true" || test "$RUST_RESULT" = "success"
-
-  # Advisory regression tests for the path selector and gate logic.
-  # Uses only bash + git already on the runner — no downloads.
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: docs-only classifier regression test
-        run: bash .github/scripts/test-docs-only-detection.sh
-      - name: gate logic regression test
-        run: bash .github/scripts/test-gate-logic.sh
-      - name: release documentation guard regression test
-        shell: pwsh
-        run: ./.github/scripts/test-release-docs.ps1
+          git checkout 389e436 -- slint-experiment/ui slint-experiment/translations
+          cargo test --no-default-features --features ui-mcp \
+            --manifest-path slint-experiment/Cargo.toml --bin overlay-host \
+            ui_shots::render -- --exact --nocapture
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-shots
+          path: shots

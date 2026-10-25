@@ -110,7 +110,7 @@ mod tests {
     }
 }
 
-fn update_failure_copy(e: &anyhow::Error, ui_is_ru: bool) -> String {
+pub(crate) fn update_failure_copy(e: &anyhow::Error, ui_is_ru: bool) -> String {
     let chain = super::diagnostics::redact_user_home(&format!("{e:#}")).to_ascii_lowercase();
     let (en, ru) = if chain.contains("no sha-256 digest") {
         (
