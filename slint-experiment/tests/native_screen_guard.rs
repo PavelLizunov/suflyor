@@ -105,7 +105,7 @@ fn canonical_ocr_route_uses_the_platform_local_engine_off_thread() {
     assert!(capture.contains("overlay_backend::ocr::is_available()"));
     assert!(capture.contains("slint_replay::native::screen::recognize_text_from_bgra"));
     assert!(capture.contains("tokio::task::spawn_blocking(move || run_local_ocr"));
-    assert!(capture.contains("super::fill_ocr_error_tile(weak_ocr, ui_is_ru)"));
+    assert!(capture.contains("super::fill_ocr_error_tile(weak_ocr, ui_is_ru, detail.as_deref())"));
     assert!(host.contains("#[path = \"overlay_host/read_aloud.rs\"]"));
     assert!(read_aloud.contains("fn fill_ocr_error_tile"));
     assert!(read_aloud.contains("Text recognition failed."));
