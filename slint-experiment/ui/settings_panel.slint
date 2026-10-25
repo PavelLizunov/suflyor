@@ -2216,6 +2216,9 @@ export component SettingsWindow inherits Window {
                                 font-size: Metrics.font-label;
                                 color: Theme.text-muted;
                                 vertical-alignment: center;
+                                // The Russian hint is wider than the card at 720px.
+                                wrap: word-wrap;
+                                horizontal-stretch: 1;
                             }
                             SettingsLineEdit {
                                 placeholder-text: @tr("profile name");
