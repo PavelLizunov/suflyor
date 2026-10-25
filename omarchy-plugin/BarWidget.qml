@@ -1,0 +1,101 @@
+import QtQuick
+import qs.Commons
+import qs.Commons as Commons
+import qs.Ui as Ui
+
+// Suflyor in the Omarchy bar: the session state of suflyord's OverlayBarWindow.
+// Left click opens Suflyor, right click starts or stops the session, middle click asks.
+Ui.BarWidget {
+  id: root
+
+  moduleName: "io.github.pavellizunov.suflyor"
+
+  property var shell: null
+  readonly property var effectiveShell: shell ? shell : (bar && bar.shell ? bar.shell : null)
+  property var service: null
+  readonly property var effectiveService: {
+    if (service) return service
+    var sh = effectiveShell
+    return sh && typeof sh.serviceFor === "function" ? sh.serviceFor(moduleName) : null
+  }
+
+  readonly property var barWin: effectiveService ? effectiveService.client.first("OverlayBarWindow") : null
+  function p(name, fallback) { return root.barWin ? root.barWin.prop(name, fallback) : fallback }
+  function tr(msgid, args) { return root.effectiveService ? root.effectiveService.tr(msgid, args) : msgid }
+
+  readonly property bool running: !!effectiveService && effectiveService.running && !!barWin
+  readonly property bool sessionActive: running && p("timer-active", false)
+  readonly property bool recording: running && (p("mic-recording", false) || p("sys-recording", false))
+  readonly property string tone: running ? p("status-tone", "neutral") : "neutral"
+
+  // md-headset; md-microphone while a push-to-talk recording runs.
+  readonly property string glyph: recording ? "\u{f036c}" : "\u{f02ce}"
+  readonly property color ink: !running ? Commons.Color.muted
+    : tone === "danger" ? Commons.Color.urgent
+    : sessionActive || recording ? Commons.Color.accent
+    : Commons.Color.bar.text
+
+  readonly property string tooltip: {
+    if (!effectiveService) return "Suflyor"
+    if (effectiveService.daemonFailed) return root.tr("Suflyor could not start. Reinstall the plugin, then restart the shell.")
+    if (!running) return root.tr("Suflyor is starting…")
+    var lines = [p("session-name", "") || "Suflyor"]
+    if (sessionActive) lines.push(root.tr("Stop session") + " · " + p("timer-label", ""))
+    var status = p("status-text", "")
+    if (status) lines.push(status)
+    return lines.join("\n")
+  }
+
+  function fire(name) {
+    if (root.barWin) root.effectiveService.client.call(root.barWin.winId, name, [])
+  }
+
+  implicitWidth: button.implicitWidth
+  implicitHeight: button.implicitHeight
+
+  Ui.WidgetButton {
+    id: button
+    bar: root.bar
+    hasVisualContent: true
+    labelVisible: false
+    fixedWidth: root.vertical ? -1 : row.implicitWidth
+    fixedHeight: root.vertical ? (row.implicitHeight + Style.space(12)) : -1
+    tooltipText: root.tooltip
+
+    Accessible.role: Accessible.Button
+    Accessible.name: root.tooltip
+
+    onPressed: function (buttonCode) {
+      if (!root.running) return
+      if (buttonCode === Qt.RightButton) root.fire("timer-toggle-clicked")
+      else if (buttonCode === Qt.MiddleButton) root.fire("text-ask-clicked")
+      else root.fire("open-settings-clicked")
+    }
+
+    Row {
+      id: row
+      anchors.centerIn: parent
+      spacing: Style.space(5)
+
+      Ui.BarIconButton {
+        bar: root.bar
+        text: root.glyph
+        foreground: root.ink
+        interactive: false
+        pressable: false
+        anchors.verticalCenter: parent.verticalCenter
+      }
+
+      Text {
+        visible: !root.vertical && root.sessionActive
+        textFormat: Text.PlainText
+        text: root.p("timer-label", "")
+        color: root.ink
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+        font.features: { "tnum": 1 }
+        anchors.verticalCenter: parent.verticalCenter
+      }
+    }
+  }
+}

@@ -503,6 +503,14 @@ fn main() -> Result<(), slint::PlatformError> {
     };
     let _is_relaunch = bootstrap.is_relaunch;
     let _singleton = bootstrap._singleton;
+    // After the singleton, so a second instance never replaces the live socket,
+    // and before any window exists: windows go to the Omarchy shell.
+    #[cfg(feature = "remote-ui")]
+    {
+        let socket = slint_replay::remote_ui::default_socket_path()
+            .ok_or_else(|| slint::PlatformError::Other("XDG_RUNTIME_DIR is not set".into()))?;
+        slint_replay::remote_ui::install(&socket).map_err(slint::PlatformError::Other)?;
+    }
     let tokio_rt = bootstrap.tokio_rt;
     let rt_handle = tokio_rt.handle().clone();
     let first_run = bootstrap.first_run;

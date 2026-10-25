@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.pavellizunov.suflyor",
+  "name": "Suflyor",
+  "version": "0.1.0-dev",
+  "author": "PavelLizunov",
+  "license": "GPL-3.0-or-later",
+  "description": "Live interview and meeting assistant: hears the call, answers in tiles hidden from screen share, in your Omarchy theme.",
+  "kinds": ["service", "bar-widget"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Suflyor",
+    "description": "Session state, timer and quick actions of the Suflyor assistant",
+    "category": "Productivity",
+    "aliases": ["suflyor", "суфлёр", "assistant", "interview", "meeting"],
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

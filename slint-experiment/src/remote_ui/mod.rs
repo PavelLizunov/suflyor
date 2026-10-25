@@ -332,9 +332,20 @@ impl RemoteBase {
         send(json!({ "t": "prop", "win": self.id, "name": name, "value": value }));
     }
 
+    /// Sends a model property that changed in place since it was last sent.
+    /// A model never set keeps its default, which the shell already assumes.
     pub fn poll_model(&self, name: &str, value: Value) {
         let key = (self.id.clone(), name.to_owned());
-        let changed = REGISTRY.with(|r| r.borrow().sent_models.get(&key) != Some(&value));
+        let changed = REGISTRY.with(|r| {
+            let mut r = r.borrow_mut();
+            match r.sent_models.get(&key) {
+                Some(sent) => sent != &value,
+                None => {
+                    r.sent_models.insert(key.clone(), value.clone());
+                    false
+                }
+            }
+        });
         if changed {
             self.send_prop(name, value);
         }
