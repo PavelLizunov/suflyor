@@ -24,9 +24,25 @@ PanelWindow {
 
   readonly property var g: win.geometry || ({})
   readonly property bool parked: typeof g.x === "number" && (g.x < -10000 || g.y < -10000)
-  visible: win.visible && !parked && !(service && service.client.concealed)
+  readonly property bool shown: win.visible && !parked && !(service && service.client.concealed)
+  property var targetScreen: null
+  visible: shown
   color: "transparent"
-  screen: Quickshell.screens.length ? Quickshell.screens[0] : null
+  screen: targetScreen
+  onShownChanged: if (shown) targetScreen = service.focusedScreen()
+
+  // Presented again (hotkey, bar panel): come to the monitor in use.
+  Connections {
+    target: surface.win
+    function onFocusRequested() { surface.targetScreen = surface.service.focusedScreen() }
+  }
+
+  Connections {
+    target: Quickshell
+    function onScreensChanged() {
+      if (Quickshell.screens.indexOf(surface.targetScreen) < 0) surface.targetScreen = surface.service.focusedScreen()
+    }
+  }
 
   WlrLayershell.namespace: "suflyor-" + viewName.toLowerCase()
   WlrLayershell.layer: WlrLayer.Top
@@ -45,5 +61,8 @@ PanelWindow {
     }
   }
 
-  Component.onCompleted: service.client.reportGeometry(win.winId, { width: implicitWidth, height: implicitHeight })
+  Component.onCompleted: {
+    targetScreen = service.focusedScreen()
+    service.client.reportGeometry(win.winId, { width: implicitWidth, height: implicitHeight })
+  }
 }

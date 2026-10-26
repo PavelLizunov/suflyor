@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import qs.Commons as Commons
 
@@ -57,6 +58,16 @@ Item {
     root.lastStart = now
     root.startAttempts++
     Quickshell.execDetached([root.binDir + "suflyord"])
+  }
+
+  // A surface opens on the focused monitor, as the shell's own overlays do, and stays there.
+  function focusedScreen() {
+    var monitor = Hyprland.focusedMonitor
+    var name = monitor ? String(monitor.name || "") : ""
+    for (var i = 0; i < Quickshell.screens.length; i++) {
+      if (Quickshell.screens[i].name === name) return Quickshell.screens[i]
+    }
+    return Quickshell.screens.length > 0 ? Quickshell.screens[0] : null
   }
 
   RemoteClient {

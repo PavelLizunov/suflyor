@@ -21,9 +21,19 @@ PanelWindow {
 
   // The host parks a window far off screen while it prepares it.
   readonly property bool parked: typeof g.x === "number" && (g.x < -10000 || g.y < -10000)
-  visible: win.visible && !parked && !(service && service.client.concealed)
+  readonly property bool shown: win.visible && !parked && !(service && service.client.concealed)
+  property var targetScreen: null
+  visible: shown
   color: "transparent"
-  screen: Quickshell.screens.length ? Quickshell.screens[0] : null
+  screen: targetScreen
+  onShownChanged: if (shown) targetScreen = service.focusedScreen()
+
+  Connections {
+    target: Quickshell
+    function onScreensChanged() {
+      if (Quickshell.screens.indexOf(surface.targetScreen) < 0) surface.targetScreen = surface.service.focusedScreen()
+    }
+  }
 
   WlrLayershell.namespace: "suflyor-tile"
   WlrLayershell.layer: WlrLayer.Overlay
@@ -51,4 +61,6 @@ PanelWindow {
       surface.win.geometry = Object.assign({}, surface.g, { x: Math.round(surface.margins.left + dx), y: Math.round(surface.margins.top + dy) })
     }
   }
+
+  Component.onCompleted: targetScreen = service.focusedScreen()
 }
