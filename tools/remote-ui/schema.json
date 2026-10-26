@@ -41,6 +41,7 @@
           }
         },
         "disabled-opacity": {
+          "default": 0.5,
           "dir": "out",
           "type": {
             "prim": "float"
@@ -95,6 +96,7 @@
           }
         },
         "muted-opacity": {
+          "default": 0.05,
           "dir": "out",
           "type": {
             "prim": "float"
@@ -161,6 +163,7 @@
           }
         },
         "surface-opacity": {
+          "default": 0.92,
           "dir": "out",
           "type": {
             "prim": "float"
@@ -173,12 +176,14 @@
       "functions": {},
       "properties": {
         "is-linux": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "is-macos": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
@@ -326,12 +331,14 @@
           }
         },
         "font-mono": {
+          "default": "Cascadia Mono",
           "dir": "out",
           "type": {
             "prim": "string"
           }
         },
         "font-sans": {
+          "default": "Segoe UI",
           "dir": "out",
           "type": {
             "prim": "string"
@@ -350,6 +357,7 @@
           }
         },
         "scheme": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
@@ -851,54 +859,63 @@
       },
       "properties": {
         "confirm-delete-index": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "confirm-delete-title": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "confirm-resummary-index": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "confirm-resummary-title": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "notice": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "query": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "rename-text": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "renaming-index": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "results": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -907,36 +924,42 @@
           }
         },
         "retranscribe-busy": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "retranscribe-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "selected-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "stt-is-cloud": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "summary": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "unavailable": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
@@ -1000,6 +1023,7 @@
       },
       "properties": {
         "dragging": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
@@ -1012,18 +1036,21 @@
           }
         },
         "practice-mode": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "shown": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "translate-mode": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
@@ -1106,12 +1133,14 @@
       },
       "properties": {
         "managed": {
+          "default": false,
           "dir": "in",
           "type": {
             "prim": "bool"
           }
         },
         "mode": {
+          "default": 0.0,
           "dir": "in",
           "type": {
             "prim": "int"
@@ -1162,6 +1191,7 @@
           }
         },
         "status-kind": {
+          "default": 0.0,
           "dir": "in",
           "type": {
             "prim": "int"
@@ -1174,6 +1204,7 @@
           }
         },
         "token-stored": {
+          "default": false,
           "dir": "in",
           "type": {
             "prim": "bool"
@@ -1225,18 +1256,21 @@
       "functions": {},
       "properties": {
         "ai-response-count": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "any-hidden": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "events": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -1245,6 +1279,7 @@
           }
         },
         "filter-chips": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -1253,12 +1288,16 @@
           }
         },
         "selected-session-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "session-labels": {
+          "default": [
+            "(no sessions found)"
+          ],
           "dir": "in-out",
           "type": {
             "array": {
@@ -1267,12 +1306,14 @@
           }
         },
         "total-cost-display": {
+          "default": "—",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "total-events": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
@@ -1285,6 +1326,7 @@
       "functions": {},
       "properties": {
         "blocks": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -1293,6 +1335,7 @@
           }
         },
         "source-name": {
+          "default": "(no source loaded)",
           "dir": "in-out",
           "type": {
             "prim": "string"
@@ -1512,78 +1555,91 @@
       "functions": {},
       "properties": {
         "active-stack": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "aggressive-active": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "ai-streaming": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "app-memory": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "archive-open": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "bootstrap-mode": {
+          "default": false,
           "dir": "in",
           "type": {
             "prim": "bool"
           }
         },
         "can-restore-tile": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "compact-bar": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "deep-lock": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "help-open": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "last-transcript-line": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "last-transcript-source": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "lock-a11y": {
+          "default": "",
           "dir": "in",
           "type": {
             "prim": "string"
@@ -1596,156 +1652,182 @@
           }
         },
         "lock-menu-managed": {
+          "default": false,
           "dir": "in",
           "type": {
             "prim": "bool"
           }
         },
         "mic-active": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mic-capture-state": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "mic-muted": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mic-permission-state": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "mic-recording": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mlx-memory": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "open-tiles": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "quit-armed": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "restart-armed": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "session-name": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "session-paused": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "settings-open": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "status-text": {
+          "default": "idle",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "status-tone": {
+          "default": "neutral",
           "dir": "in-out",
           "type": {
             "ref": "StatusTone"
           }
         },
         "stealth-active": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "stealth-fault": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "summary-busy": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "suppress-tiles": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "sys-active": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "sys-recording": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "tiles-spawned": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "timer-active": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "timer-label": {
+          "default": "00:00",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "tok-per-sec": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "tray-available": {
+          "default": false,
           "dir": "in",
           "type": {
             "prim": "bool"
@@ -1847,12 +1929,14 @@
       },
       "properties": {
         "query": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "recent-chips": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -1861,6 +1945,7 @@
           }
         },
         "results": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -1869,6 +1954,7 @@
           }
         },
         "selected-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
@@ -3559,12 +3645,14 @@
       "functions": {},
       "properties": {
         "active-profile-index": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "active-rows": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -3573,114 +3661,133 @@
           }
         },
         "active-tab": {
+          "default": 10.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "ai-agent-tools": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "ai-base-url-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "ai-bearer-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "ai-bearer-status": {
+          "default": "(loading...)",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "ai-bridge-test-result": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "ai-local-base-url-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "ai-local-bearer-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "ai-local-context-auto-k": {
+          "default": 16.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "ai-local-context-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "ai-local-context-max-k": {
+          "default": 32.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "ai-local-context-preview-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "ai-local-context-vram-hint": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "ai-local-custom-active": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "ai-local-custom-model-name": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "ai-local-hardware-profile-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "ai-local-model-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "ai-local-model-profile-index": {
+          "default": 1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "ai-local-models": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -3689,42 +3796,49 @@
           }
         },
         "ai-local-quality": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "ai-local-test-result": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "ai-local-thinking": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "ai-local-vision": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "ai-local-vision-available": {
+          "default": true,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "ai-model-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "ai-models": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -3733,60 +3847,70 @@
           }
         },
         "ai-prompt-cache": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "ai-provider-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "ai-reasoning-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "ai-web-search": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "always-on-top-toggle": {
+          "default": true,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "anthropic-base-url-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "anthropic-key-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "anthropic-key-status": {
+          "default": "(loading...)",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "anthropic-model-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "app-version": {
+          "default": "0.0.0",
           "dir": "in-out",
           "type": {
             "prim": "string"
@@ -3799,72 +3923,84 @@
           }
         },
         "audio-devices-failed": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "audio-devices-loading": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "audio-save-state": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "auto-tiles-enabled": {
+          "default": true,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "backup-has-secrets": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "coaching-debrief": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "coaching-live-tiles": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "codex-auth-busy": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "codex-auth-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "codex-copy-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "codex-login-url": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "codex-model-ids": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -3873,12 +4009,14 @@
           }
         },
         "codex-model-index": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "codex-model-labels": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -3887,18 +4025,21 @@
           }
         },
         "codex-models-busy": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "codex-rate-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "codex-reasoning-ids": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -3907,12 +4048,14 @@
           }
         },
         "codex-reasoning-index": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "codex-reasoning-labels": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -3921,12 +4064,14 @@
           }
         },
         "codex-user-code": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "codex-vision-model-ids": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -3935,12 +4080,14 @@
           }
         },
         "codex-vision-model-index": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "codex-vision-model-labels": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -3949,12 +4096,14 @@
           }
         },
         "color-scheme-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "component-busy-index": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
@@ -3967,12 +4116,14 @@
           }
         },
         "component-busy-phase": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "component-rows": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -3981,180 +4132,210 @@
           }
         },
         "context-dictating": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "context-processing": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "db-clear-armed": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "db-repair-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "diag-ai-detail": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "diag-ai-level": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "diag-copied": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "diag-hotkeys-detail": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "diag-hotkeys-failed": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "diag-hotkeys-level": {
+          "default": 3.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "diag-logs-path": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "diag-mic-detail": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "diag-mic-level": {
+          "default": 3.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "diag-stealth-on": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "diag-stt-detail": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "diag-stt-level": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "diag-summary": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "diag-sys-detail": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "diag-sys-level": {
+          "default": 3.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "diag-vision-detail": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "diag-vision-level": {
+          "default": 3.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "diar-install-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "diar-installing": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "diar-models-installed": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "engine-build": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "engine-update-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "engine-updating": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "fallback-model-present": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "fast-answers": {
+          "default": true,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "found-models": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -4163,252 +4344,294 @@
           }
         },
         "found-models-note": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "found-models-searching": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "groq-api-key-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "groq-api-key-status": {
+          "default": "(loading...)",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "hermes-api-key": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "hermes-api-setup-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "hermes-api-test-result": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "hermes-api-url": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "hermes-bridge-enabled": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "hermes-bridge-host": {
+          "default": "127.0.0.1",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "hermes-bridge-port": {
+          "default": "8654",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "hermes-bridge-remote": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "hermes-bridge-status": {
+          "default": "выключен",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "hermes-bridge-token": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "hermes-more-open": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "hermes-plugin-install-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "hermes-profile-seed": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "hermes-profile-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "journal-keep-value": {
+          "default": "100",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "journal-mb-value": {
+          "default": "500",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "kb-entry-count": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "legacy-model-present": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "llama-installed": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "local-ai-gpu": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "local-ai-installing": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "local-ai-on-gpu": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "local-ai-progress": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "float"
           }
         },
         "local-ai-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "local-choice-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "local-connect-auto": {
+          "default": true,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "local-connect-open": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "local-download-profile": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "local-engine-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "local-hardware-line": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "local-model-resource-warning": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "local-more-open": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "local-strata-job": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "managed-local-server": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "meeting-context-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "meeting-context-result": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "memory-add-text": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "memory-candidates": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -4417,18 +4640,21 @@
           }
         },
         "memory-edit-text": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "memory-editing-id": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "memory-items": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -4437,24 +4663,30 @@
           }
         },
         "memory-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "mic-device-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "mic-device-missing": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mic-devices": {
+          "default": [
+            "(loading devices…)"
+          ],
           "dir": "in-out",
           "type": {
             "array": {
@@ -4463,228 +4695,266 @@
           }
         },
         "mic-devices-empty": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mic-test-result": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "mlx-text-active": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mlx-text-busy": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mlx-text-cancelled": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mlx-text-checking": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mlx-text-done": {
+          "default": "0",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "mlx-text-failed": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mlx-text-installed": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mlx-text-model-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "mlx-text-progress": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "float"
           }
         },
         "mlx-text-total": {
+          "default": "4627",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "mlx-vision-active": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mlx-vision-busy": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mlx-vision-cancelled": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mlx-vision-checking": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mlx-vision-done": {
+          "default": "0",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "mlx-vision-failed": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mlx-vision-installed": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "mlx-vision-model-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "mlx-vision-progress": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "float"
           }
         },
         "mlx-vision-total": {
+          "default": "1668",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "model-switching": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "now-detail": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "now-notice": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "now-state": {
+          "default": 4.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "now-title": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "ocr-install-phase": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "ocr-installed": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "ocr-installing": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "openai-base-url-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "openai-key-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "openai-key-status": {
+          "default": "(loading...)",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "openai-model-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "openai-reasoning-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "profile-io-result": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "profile-name-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "profile-names": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -4693,318 +4963,371 @@
           }
         },
         "quality-downloading": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "quality-model-present": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "quality-progress": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "float"
           }
         },
         "quality-selection-allowed": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "quality-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "quality-vision-present": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "quality-vision-supported": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "record-audio": {
+          "default": true,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "retention-mode": {
+          "default": 1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "retention-value": {
+          "default": "10",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "server-preview-cloud": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "server-preview-gigaam": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "server-preview-local": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "server-preview-ready": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "server-preview-stt": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "server-preview-vision": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "stealth-effective": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "stealth-toggle": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "strata-active": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "strata-adopted": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "strata-busy": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "strata-external": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "strata-hardware-fits": {
+          "default": true,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "strata-hardware-note": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "strata-installed": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "strata-running": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "strata-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "strata-vision-downloaded": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "strata-vision-enabled": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "strata-vision-installable": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "strata-vision-job": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "strata-vision-progress": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "float"
           }
         },
         "strata-vision-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "stt-cloud-model-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "stt-gigaam-custom": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "stt-gigaam-dir-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "stt-gigaam-gpu": {
+          "default": true,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "stt-gigaam-install-cancelled": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "stt-gigaam-install-done": {
+          "default": "0",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "stt-gigaam-install-failed": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "stt-gigaam-install-progress": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "float"
           }
         },
         "stt-gigaam-install-total": {
+          "default": "214",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "stt-gigaam-installed": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "stt-gigaam-installing": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "stt-language-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "stt-provider-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "stt-test-result": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "stt-whisper-bearer-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "stt-whisper-model-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "stt-whisper-url-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "suppress-tiles": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "system-device-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "system-device-missing": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
@@ -5019,6 +5342,7 @@
           }
         },
         "system-devices-empty": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
@@ -5031,12 +5355,14 @@
           }
         },
         "tera-install-phase": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "tera-installing": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
@@ -5049,18 +5375,21 @@
           }
         },
         "tile-body-opacity": {
+          "default": 1.0,
           "dir": "in-out",
           "type": {
             "prim": "float"
           }
         },
         "tile-monitor-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "tile-monitors": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -5069,18 +5398,21 @@
           }
         },
         "trigger-keywords-input": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "tts-available": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "tts-engine-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
@@ -5101,18 +5433,21 @@
           }
         },
         "tts-install-phase": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "tts-installing": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "tts-rate-index": {
+          "default": 1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
@@ -5125,6 +5460,7 @@
           }
         },
         "tts-voice-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
@@ -5139,30 +5475,35 @@
           }
         },
         "ui-language-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "update-available": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "update-checking": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "update-download-url": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "update-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
@@ -5205,24 +5546,28 @@
           }
         },
         "vision-phonetics": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "vision-provider-index": {
+          "default": 3.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "vision-same-available": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "vision-test-practice": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
@@ -5235,12 +5580,14 @@
           }
         },
         "vision12b-downloading": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "vision12b-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
@@ -5558,6 +5905,7 @@
       "functions": {},
       "properties": {
         "answer-terms": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -5566,6 +5914,7 @@
           }
         },
         "blocks": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -5574,78 +5923,91 @@
           }
         },
         "body-opacity": {
+          "default": 1.0,
           "dir": "in-out",
           "type": {
             "prim": "float"
           }
         },
         "can-copy": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "can-escalate": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "can-regenerate": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "can-retry": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "can-speak": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "capture-block-index": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "capture-pending": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "capture-text": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "convo-id": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "copied": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "copied-block-index": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "followup-busy": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
@@ -5658,102 +6020,119 @@
           }
         },
         "mark-anchor": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "marked-count": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "pinned": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "plain-notice": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "question-text": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "select-mode": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "select-text": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "sequence": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "source-label": {
+          "default": "—",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "speak-active": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "speak-error": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "speak-loading": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "speak-paused": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "speak-speed-label": {
+          "default": "1.0x",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "term-busy": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "term-definition": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "term-path": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -5762,6 +6141,7 @@
           }
         },
         "term-subterms": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -5770,36 +6150,42 @@
           }
         },
         "tile-id": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "tile-maximized": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "tile-title": {
+          "default": "Untitled tile",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "trigger-label": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "trigger-tone": {
+          "default": "accent",
           "dir": "in-out",
           "type": {
             "ref": "TileTone"
           }
         },
         "voice-recording": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
@@ -6091,108 +6477,126 @@
       },
       "properties": {
         "active-line": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "all-selected": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "by-voice": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "can-diarize": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "capture-line-index": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "capture-pending": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "capture-text": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "confirm-rediar": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "copied": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "diar-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "diarizing": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "empty": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "has-audio": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "has-diarization": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "has-speaker-names": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "heading": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "installing-diar-models": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "lines": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -6201,66 +6605,77 @@
           }
         },
         "mark-anchor": {
+          "default": -1.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "marked-count": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "needs-diar-models": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "overflow-count": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "playing": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "progress": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "float"
           }
         },
         "search-count": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "search-pos": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "search-query": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "speaker-count": {
+          "default": 2.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "speakers": {
+          "default": [],
           "dir": "in-out",
           "type": {
             "array": {
@@ -6269,30 +6684,35 @@
           }
         },
         "speed-index": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "time-text": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"
           }
         },
         "timeline-unreliable": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
           }
         },
         "volume": {
+          "default": 1.0,
           "dir": "in-out",
           "type": {
             "prim": "float"
           }
         },
         "with-timecodes": {
+          "default": false,
           "dir": "in-out",
           "type": {
             "prim": "bool"
@@ -6350,6 +6770,7 @@
           }
         },
         "session-running": {
+          "default": false,
           "dir": "in",
           "type": {
             "prim": "bool"
@@ -6498,6 +6919,7 @@
           }
         },
         "ai-level": {
+          "default": 3.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
@@ -6510,12 +6932,14 @@
           }
         },
         "mic-level": {
+          "default": 3.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
           }
         },
         "mode": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
@@ -6528,6 +6952,7 @@
           }
         },
         "step": {
+          "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
@@ -6540,6 +6965,7 @@
           }
         },
         "stt-level": {
+          "default": 3.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
@@ -6576,6 +7002,7 @@
           }
         },
         "sys-level": {
+          "default": 3.0,
           "dir": "in-out",
           "type": {
             "prim": "int"

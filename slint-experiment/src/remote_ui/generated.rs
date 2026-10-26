@@ -582,7 +582,6 @@ impl RemoteValue for TranscriptLine {
 }
 
 // ---- ArchiveWindow
-#[derive(Default)]
 struct ArchiveWindowProps {
     confirm_delete_index: i32,
     confirm_delete_title: slint::SharedString,
@@ -599,6 +598,32 @@ struct ArchiveWindowProps {
     stt_is_cloud: bool,
     summary: slint::SharedString,
     unavailable: bool,
+}
+impl Default for ArchiveWindowProps {
+    fn default() -> Self {
+        Self {
+            confirm_delete_index: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            confirm_delete_title: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            confirm_resummary_index: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            confirm_resummary_title: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            notice: <slint::SharedString>::from_json(&serde_json::json!("")).unwrap_or_default(),
+            query: <slint::SharedString>::from_json(&serde_json::json!("")).unwrap_or_default(),
+            rename_text: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            renaming_index: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            results: <slint::ModelRc<ArchiveRow>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            retranscribe_busy: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            retranscribe_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            selected_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            stt_is_cloud: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            summary: <slint::SharedString>::from_json(&serde_json::json!("")).unwrap_or_default(),
+            unavailable: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+        }
+    }
 }
 #[derive(Default)]
 struct ArchiveWindowCallbacks {
@@ -640,6 +665,7 @@ impl ArchiveWindow {
             inner.base.id(),
             Rc::downgrade(&inner) as std::rc::Weak<dyn RemoteObject>,
         );
+        inner.base.send_snapshot(inner.snapshot());
         Ok(Self(inner))
     }
     pub fn set_confirm_delete_index(&self, value: i32) {
@@ -1290,13 +1316,23 @@ impl slint::ComponentHandle for ArchiveWindow {
 }
 
 // ---- CaptureOverlay
-#[derive(Default)]
 struct CaptureOverlayProps {
     dragging: bool,
     frozen: slint::Image,
     practice_mode: bool,
     shown: bool,
     translate_mode: bool,
+}
+impl Default for CaptureOverlayProps {
+    fn default() -> Self {
+        Self {
+            dragging: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            frozen: Default::default(),
+            practice_mode: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            shown: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            translate_mode: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+        }
+    }
 }
 #[derive(Default)]
 struct CaptureOverlayCallbacks {
@@ -1322,6 +1358,7 @@ impl CaptureOverlay {
             inner.base.id(),
             Rc::downgrade(&inner) as std::rc::Weak<dyn RemoteObject>,
         );
+        inner.base.send_snapshot(inner.snapshot());
         Ok(Self(inner))
     }
     pub fn set_dragging(&self, value: bool) {
@@ -1496,8 +1533,12 @@ impl slint::ComponentHandle for CaptureOverlay {
 }
 
 // ---- HelpWindow
-#[derive(Default)]
 struct HelpWindowProps {}
+impl Default for HelpWindowProps {
+    fn default() -> Self {
+        Self {}
+    }
+}
 #[derive(Default)]
 struct HelpWindowCallbacks {
     cancelled: Handler<dyn FnMut() -> ()>,
@@ -1523,6 +1564,7 @@ impl HelpWindow {
             inner.base.id(),
             Rc::downgrade(&inner) as std::rc::Weak<dyn RemoteObject>,
         );
+        inner.base.send_snapshot(inner.snapshot());
         Ok(Self(inner))
     }
     pub fn on_cancelled(&self, f: impl FnMut() -> () + 'static) {
@@ -1652,10 +1694,17 @@ impl slint::ComponentHandle for HelpWindow {
 }
 
 // ---- LockModeMenuWindow
-#[derive(Default)]
 struct LockModeMenuWindowProps {
     managed: bool,
     mode: i32,
+}
+impl Default for LockModeMenuWindowProps {
+    fn default() -> Self {
+        Self {
+            managed: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mode: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+        }
+    }
 }
 #[derive(Default)]
 struct LockModeMenuWindowCallbacks {
@@ -1681,6 +1730,7 @@ impl LockModeMenuWindow {
             inner.base.id(),
             Rc::downgrade(&inner) as std::rc::Weak<dyn RemoteObject>,
         );
+        inner.base.send_snapshot(inner.snapshot());
         Ok(Self(inner))
     }
     pub fn set_managed(&self, value: bool) {
@@ -1811,7 +1861,6 @@ impl slint::ComponentHandle for LockModeMenuWindow {
 }
 
 // ---- OverlayBarWindow
-#[derive(Default)]
 struct OverlayBarWindowProps {
     active_stack: slint::SharedString,
     aggressive_active: bool,
@@ -1853,6 +1902,61 @@ struct OverlayBarWindowProps {
     timer_label: slint::SharedString,
     tok_per_sec: slint::SharedString,
     tray_available: bool,
+}
+impl Default for OverlayBarWindowProps {
+    fn default() -> Self {
+        Self {
+            active_stack: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            aggressive_active: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            ai_streaming: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            app_memory: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            archive_open: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            bootstrap_mode: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            can_restore_tile: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            compact_bar: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            deep_lock: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            help_open: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            last_transcript_line: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            last_transcript_source: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            lock_a11y: <slint::SharedString>::from_json(&serde_json::json!("")).unwrap_or_default(),
+            lock_icon_unlocked: Default::default(),
+            lock_menu_managed: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mic_active: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mic_capture_state: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            mic_muted: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mic_permission_state: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            mic_recording: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mlx_memory: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            open_tiles: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            quit_armed: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            restart_armed: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            session_name: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            session_paused: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            settings_open: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            status_text: <slint::SharedString>::from_json(&serde_json::json!("idle"))
+                .unwrap_or_default(),
+            status_tone: <StatusTone>::from_json(&serde_json::json!("neutral")).unwrap_or_default(),
+            stealth_active: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            stealth_fault: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            summary_busy: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            suppress_tiles: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            sys_active: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            sys_recording: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            tiles_spawned: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            timer_active: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            timer_label: <slint::SharedString>::from_json(&serde_json::json!("00:00"))
+                .unwrap_or_default(),
+            tok_per_sec: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            tray_available: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+        }
+    }
 }
 #[derive(Default)]
 struct OverlayBarWindowCallbacks {
@@ -1907,6 +2011,7 @@ impl OverlayBarWindow {
             inner.base.id(),
             Rc::downgrade(&inner) as std::rc::Weak<dyn RemoteObject>,
         );
+        inner.base.send_snapshot(inner.snapshot());
         Ok(Self(inner))
     }
     pub fn set_active_stack(&self, value: slint::SharedString) {
@@ -2973,12 +3078,23 @@ impl slint::ComponentHandle for OverlayBarWindow {
 }
 
 // ---- PaletteWindow
-#[derive(Default)]
 struct PaletteWindowProps {
     query: slint::SharedString,
     recent_chips: slint::ModelRc<slint::SharedString>,
     results: slint::ModelRc<PaletteResult>,
     selected_index: i32,
+}
+impl Default for PaletteWindowProps {
+    fn default() -> Self {
+        Self {
+            query: <slint::SharedString>::from_json(&serde_json::json!("")).unwrap_or_default(),
+            recent_chips: <slint::ModelRc<slint::SharedString>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            results: <slint::ModelRc<PaletteResult>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            selected_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+        }
+    }
 }
 #[derive(Default)]
 struct PaletteWindowCallbacks {
@@ -3008,6 +3124,7 @@ impl PaletteWindow {
             inner.base.id(),
             Rc::downgrade(&inner) as std::rc::Weak<dyn RemoteObject>,
         );
+        inner.base.send_snapshot(inner.snapshot());
         Ok(Self(inner))
     }
     pub fn set_query(&self, value: slint::SharedString) {
@@ -3259,12 +3376,21 @@ impl slint::ComponentHandle for PaletteWindow {
 }
 
 // ---- RecoverOfferWindow
-#[derive(Default)]
 struct RecoverOfferWindowProps {
     has_qa: bool,
     last_answer: slint::SharedString,
     last_question: slint::SharedString,
     transcript_preview: slint::SharedString,
+}
+impl Default for RecoverOfferWindowProps {
+    fn default() -> Self {
+        Self {
+            has_qa: Default::default(),
+            last_answer: Default::default(),
+            last_question: Default::default(),
+            transcript_preview: Default::default(),
+        }
+    }
 }
 #[derive(Default)]
 struct RecoverOfferWindowCallbacks {
@@ -3292,6 +3418,7 @@ impl RecoverOfferWindow {
             inner.base.id(),
             Rc::downgrade(&inner) as std::rc::Weak<dyn RemoteObject>,
         );
+        inner.base.send_snapshot(inner.snapshot());
         Ok(Self(inner))
     }
     pub fn set_has_qa(&self, value: bool) {
@@ -3464,7 +3591,6 @@ impl slint::ComponentHandle for RecoverOfferWindow {
 }
 
 // ---- SettingsWindow
-#[derive(Default)]
 struct SettingsWindowProps {
     active_profile_index: i32,
     active_rows: slint::ModelRc<ComponentRow>,
@@ -3742,6 +3868,432 @@ struct SettingsWindowProps {
     vision12b_downloading: bool,
     vision12b_status: slint::SharedString,
 }
+impl Default for SettingsWindowProps {
+    fn default() -> Self {
+        Self {
+            active_profile_index: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            active_rows: <slint::ModelRc<ComponentRow>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            active_tab: <i32>::from_json(&serde_json::json!(10.0)).unwrap_or_default(),
+            ai_agent_tools: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            ai_base_url_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            ai_bearer_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            ai_bearer_status: <slint::SharedString>::from_json(&serde_json::json!("(loading...)"))
+                .unwrap_or_default(),
+            ai_bridge_test_result: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            ai_local_base_url_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            ai_local_bearer_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            ai_local_context_auto_k: <i32>::from_json(&serde_json::json!(16.0)).unwrap_or_default(),
+            ai_local_context_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            ai_local_context_max_k: <i32>::from_json(&serde_json::json!(32.0)).unwrap_or_default(),
+            ai_local_context_preview_index: <i32>::from_json(&serde_json::json!(0.0))
+                .unwrap_or_default(),
+            ai_local_context_vram_hint: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            ai_local_custom_active: <bool>::from_json(&serde_json::json!(false))
+                .unwrap_or_default(),
+            ai_local_custom_model_name: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            ai_local_hardware_profile_index: <i32>::from_json(&serde_json::json!(0.0))
+                .unwrap_or_default(),
+            ai_local_model_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            ai_local_model_profile_index: <i32>::from_json(&serde_json::json!(1.0))
+                .unwrap_or_default(),
+            ai_local_models: <slint::ModelRc<slint::SharedString>>::from_json(&serde_json::json!(
+                []
+            ))
+            .unwrap_or_default(),
+            ai_local_quality: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            ai_local_test_result: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            ai_local_thinking: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            ai_local_vision: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            ai_local_vision_available: <bool>::from_json(&serde_json::json!(true))
+                .unwrap_or_default(),
+            ai_model_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            ai_models: <slint::ModelRc<slint::SharedString>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            ai_prompt_cache: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            ai_provider_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            ai_reasoning_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            ai_web_search: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            always_on_top_toggle: <bool>::from_json(&serde_json::json!(true)).unwrap_or_default(),
+            anthropic_base_url_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            anthropic_key_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            anthropic_key_status: <slint::SharedString>::from_json(&serde_json::json!(
+                "(loading...)"
+            ))
+            .unwrap_or_default(),
+            anthropic_model_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            app_version: <slint::SharedString>::from_json(&serde_json::json!("0.0.0"))
+                .unwrap_or_default(),
+            audio_default_label: Default::default(),
+            audio_devices_failed: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            audio_devices_loading: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            audio_save_state: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            auto_tiles_enabled: <bool>::from_json(&serde_json::json!(true)).unwrap_or_default(),
+            backup_has_secrets: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            coaching_debrief: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            coaching_live_tiles: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            codex_auth_busy: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            codex_auth_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            codex_copy_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            codex_login_url: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            codex_model_ids: <slint::ModelRc<slint::SharedString>>::from_json(&serde_json::json!(
+                []
+            ))
+            .unwrap_or_default(),
+            codex_model_index: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            codex_model_labels: <slint::ModelRc<slint::SharedString>>::from_json(
+                &serde_json::json!([]),
+            )
+            .unwrap_or_default(),
+            codex_models_busy: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            codex_rate_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            codex_reasoning_ids: <slint::ModelRc<slint::SharedString>>::from_json(
+                &serde_json::json!([]),
+            )
+            .unwrap_or_default(),
+            codex_reasoning_index: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            codex_reasoning_labels: <slint::ModelRc<slint::SharedString>>::from_json(
+                &serde_json::json!([]),
+            )
+            .unwrap_or_default(),
+            codex_user_code: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            codex_vision_model_ids: <slint::ModelRc<slint::SharedString>>::from_json(
+                &serde_json::json!([]),
+            )
+            .unwrap_or_default(),
+            codex_vision_model_index: <i32>::from_json(&serde_json::json!(-1.0))
+                .unwrap_or_default(),
+            codex_vision_model_labels: <slint::ModelRc<slint::SharedString>>::from_json(
+                &serde_json::json!([]),
+            )
+            .unwrap_or_default(),
+            color_scheme_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            component_busy_index: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            component_busy_label: Default::default(),
+            component_busy_phase: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            component_rows: <slint::ModelRc<ComponentRow>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            context_dictating: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            context_processing: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            db_clear_armed: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            db_repair_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            diag_ai_detail: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            diag_ai_level: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            diag_copied: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            diag_hotkeys_detail: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            diag_hotkeys_failed: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            diag_hotkeys_level: <i32>::from_json(&serde_json::json!(3.0)).unwrap_or_default(),
+            diag_logs_path: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            diag_mic_detail: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            diag_mic_level: <i32>::from_json(&serde_json::json!(3.0)).unwrap_or_default(),
+            diag_stealth_on: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            diag_stt_detail: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            diag_stt_level: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            diag_summary: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            diag_sys_detail: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            diag_sys_level: <i32>::from_json(&serde_json::json!(3.0)).unwrap_or_default(),
+            diag_vision_detail: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            diag_vision_level: <i32>::from_json(&serde_json::json!(3.0)).unwrap_or_default(),
+            diar_install_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            diar_installing: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            diar_models_installed: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            engine_build: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            engine_update_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            engine_updating: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            fallback_model_present: <bool>::from_json(&serde_json::json!(false))
+                .unwrap_or_default(),
+            fast_answers: <bool>::from_json(&serde_json::json!(true)).unwrap_or_default(),
+            found_models: <slint::ModelRc<FoundModel>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            found_models_note: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            found_models_searching: <bool>::from_json(&serde_json::json!(false))
+                .unwrap_or_default(),
+            groq_api_key_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            groq_api_key_status: <slint::SharedString>::from_json(&serde_json::json!(
+                "(loading...)"
+            ))
+            .unwrap_or_default(),
+            hermes_api_key: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            hermes_api_setup_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            hermes_api_test_result: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            hermes_api_url: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            hermes_bridge_enabled: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            hermes_bridge_host: <slint::SharedString>::from_json(&serde_json::json!("127.0.0.1"))
+                .unwrap_or_default(),
+            hermes_bridge_port: <slint::SharedString>::from_json(&serde_json::json!("8654"))
+                .unwrap_or_default(),
+            hermes_bridge_remote: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            hermes_bridge_status: <slint::SharedString>::from_json(&serde_json::json!("выключен"))
+                .unwrap_or_default(),
+            hermes_bridge_token: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            hermes_more_open: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            hermes_plugin_install_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            hermes_profile_seed: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            hermes_profile_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            journal_keep_value: <slint::SharedString>::from_json(&serde_json::json!("100"))
+                .unwrap_or_default(),
+            journal_mb_value: <slint::SharedString>::from_json(&serde_json::json!("500"))
+                .unwrap_or_default(),
+            kb_entry_count: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            legacy_model_present: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            llama_installed: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            local_ai_gpu: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            local_ai_installing: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            local_ai_on_gpu: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            local_ai_progress: <f32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            local_ai_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            local_choice_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            local_connect_auto: <bool>::from_json(&serde_json::json!(true)).unwrap_or_default(),
+            local_connect_open: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            local_download_profile: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            local_engine_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            local_hardware_line: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            local_model_resource_warning: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            local_more_open: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            local_strata_job: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            managed_local_server: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            meeting_context_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            meeting_context_result: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            memory_add_text: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            memory_candidates: <slint::ModelRc<MemoryRow>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            memory_edit_text: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            memory_editing_id: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            memory_items: <slint::ModelRc<MemoryRow>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            memory_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            mic_device_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            mic_device_missing: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mic_devices: <slint::ModelRc<slint::SharedString>>::from_json(&serde_json::json!([
+                "(loading devices…)"
+            ]))
+            .unwrap_or_default(),
+            mic_devices_empty: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mic_test_result: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            mlx_text_active: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mlx_text_busy: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mlx_text_cancelled: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mlx_text_checking: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mlx_text_done: <slint::SharedString>::from_json(&serde_json::json!("0"))
+                .unwrap_or_default(),
+            mlx_text_failed: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mlx_text_installed: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mlx_text_model_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            mlx_text_progress: <f32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            mlx_text_total: <slint::SharedString>::from_json(&serde_json::json!("4627"))
+                .unwrap_or_default(),
+            mlx_vision_active: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mlx_vision_busy: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mlx_vision_cancelled: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mlx_vision_checking: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mlx_vision_done: <slint::SharedString>::from_json(&serde_json::json!("0"))
+                .unwrap_or_default(),
+            mlx_vision_failed: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mlx_vision_installed: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            mlx_vision_model_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            mlx_vision_progress: <f32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            mlx_vision_total: <slint::SharedString>::from_json(&serde_json::json!("1668"))
+                .unwrap_or_default(),
+            model_switching: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            now_detail: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            now_notice: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            now_state: <i32>::from_json(&serde_json::json!(4.0)).unwrap_or_default(),
+            now_title: <slint::SharedString>::from_json(&serde_json::json!("")).unwrap_or_default(),
+            ocr_install_phase: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            ocr_installed: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            ocr_installing: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            openai_base_url_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            openai_key_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            openai_key_status: <slint::SharedString>::from_json(&serde_json::json!("(loading...)"))
+                .unwrap_or_default(),
+            openai_model_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            openai_reasoning_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            profile_io_result: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            profile_name_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            profile_names: <slint::ModelRc<slint::SharedString>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            quality_downloading: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            quality_model_present: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            quality_progress: <f32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            quality_selection_allowed: <bool>::from_json(&serde_json::json!(false))
+                .unwrap_or_default(),
+            quality_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            quality_vision_present: <bool>::from_json(&serde_json::json!(false))
+                .unwrap_or_default(),
+            quality_vision_supported: <bool>::from_json(&serde_json::json!(false))
+                .unwrap_or_default(),
+            record_audio: <bool>::from_json(&serde_json::json!(true)).unwrap_or_default(),
+            retention_mode: <i32>::from_json(&serde_json::json!(1.0)).unwrap_or_default(),
+            retention_value: <slint::SharedString>::from_json(&serde_json::json!("10"))
+                .unwrap_or_default(),
+            server_preview_cloud: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            server_preview_gigaam: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            server_preview_local: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            server_preview_ready: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            server_preview_stt: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            server_preview_vision: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            stealth_effective: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            stealth_toggle: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            strata_active: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            strata_adopted: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            strata_busy: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            strata_external: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            strata_hardware_fits: <bool>::from_json(&serde_json::json!(true)).unwrap_or_default(),
+            strata_hardware_note: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            strata_installed: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            strata_running: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            strata_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            strata_vision_downloaded: <bool>::from_json(&serde_json::json!(false))
+                .unwrap_or_default(),
+            strata_vision_enabled: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            strata_vision_installable: <bool>::from_json(&serde_json::json!(false))
+                .unwrap_or_default(),
+            strata_vision_job: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            strata_vision_progress: <f32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            strata_vision_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            stt_cloud_model_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            stt_gigaam_custom: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            stt_gigaam_dir_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            stt_gigaam_gpu: <bool>::from_json(&serde_json::json!(true)).unwrap_or_default(),
+            stt_gigaam_install_cancelled: <bool>::from_json(&serde_json::json!(false))
+                .unwrap_or_default(),
+            stt_gigaam_install_done: <slint::SharedString>::from_json(&serde_json::json!("0"))
+                .unwrap_or_default(),
+            stt_gigaam_install_failed: <bool>::from_json(&serde_json::json!(false))
+                .unwrap_or_default(),
+            stt_gigaam_install_progress: <f32>::from_json(&serde_json::json!(0.0))
+                .unwrap_or_default(),
+            stt_gigaam_install_total: <slint::SharedString>::from_json(&serde_json::json!("214"))
+                .unwrap_or_default(),
+            stt_gigaam_installed: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            stt_gigaam_installing: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            stt_language_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            stt_provider_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            stt_test_result: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            stt_whisper_bearer_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            stt_whisper_model_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            stt_whisper_url_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            suppress_tiles: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            system_device_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            system_device_missing: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            system_devices: Default::default(),
+            system_devices_empty: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            tera_install_label: Default::default(),
+            tera_install_phase: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            tera_installing: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            tera_model_status: Default::default(),
+            tile_body_opacity: <f32>::from_json(&serde_json::json!(1.0)).unwrap_or_default(),
+            tile_monitor_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            tile_monitors: <slint::ModelRc<slint::SharedString>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            trigger_keywords_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            tts_available: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            tts_engine_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            tts_engine_names: Default::default(),
+            tts_install_label: Default::default(),
+            tts_install_phase: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            tts_installing: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            tts_rate_index: <i32>::from_json(&serde_json::json!(1.0)).unwrap_or_default(),
+            tts_test_status: Default::default(),
+            tts_voice_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            tts_voice_names: Default::default(),
+            ui_language_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            update_available: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            update_checking: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            update_download_url: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            update_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            vision_base_url_input: Default::default(),
+            vision_bearer_input: Default::default(),
+            vision_local_base_url_input: Default::default(),
+            vision_local_bearer_input: Default::default(),
+            vision_local_model_input: Default::default(),
+            vision_model_input: Default::default(),
+            vision_phonetics: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            vision_provider_index: <i32>::from_json(&serde_json::json!(3.0)).unwrap_or_default(),
+            vision_same_available: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            vision_test_practice: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            vision_test_result: Default::default(),
+            vision12b_downloading: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            vision12b_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+        }
+    }
+}
 #[derive(Default)]
 struct SettingsWindowCallbacks {
     ai_agent_tools_changed: Handler<dyn FnMut(bool) -> ()>,
@@ -3924,6 +4476,7 @@ impl SettingsWindow {
             inner.base.id(),
             Rc::downgrade(&inner) as std::rc::Weak<dyn RemoteObject>,
         );
+        inner.base.send_snapshot(inner.snapshot());
         Ok(Self(inner))
     }
     pub fn set_active_profile_index(&self, value: i32) {
@@ -11215,10 +11768,17 @@ impl slint::ComponentHandle for SettingsWindow {
 }
 
 // ---- TextAskWindow
-#[derive(Default)]
 struct TextAskWindowProps {
     active_profile: slint::SharedString,
     query: slint::SharedString,
+}
+impl Default for TextAskWindowProps {
+    fn default() -> Self {
+        Self {
+            active_profile: Default::default(),
+            query: Default::default(),
+        }
+    }
 }
 #[derive(Default)]
 struct TextAskWindowCallbacks {
@@ -11246,6 +11806,7 @@ impl TextAskWindow {
             inner.base.id(),
             Rc::downgrade(&inner) as std::rc::Weak<dyn RemoteObject>,
         );
+        inner.base.send_snapshot(inner.snapshot());
         Ok(Self(inner))
     }
     pub fn set_active_profile(&self, value: slint::SharedString) {
@@ -11418,7 +11979,6 @@ impl slint::ComponentHandle for TextAskWindow {
 }
 
 // ---- TileWindow
-#[derive(Default)]
 struct TileWindowProps {
     answer_terms: slint::ModelRc<TermRow>,
     blocks: slint::ModelRc<MarkdownBlock>,
@@ -11460,6 +12020,64 @@ struct TileWindowProps {
     trigger_label: slint::SharedString,
     trigger_tone: TileTone,
     voice_recording: bool,
+}
+impl Default for TileWindowProps {
+    fn default() -> Self {
+        Self {
+            answer_terms: <slint::ModelRc<TermRow>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            blocks: <slint::ModelRc<MarkdownBlock>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            body_opacity: <f32>::from_json(&serde_json::json!(1.0)).unwrap_or_default(),
+            can_copy: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            can_escalate: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            can_regenerate: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            can_retry: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            can_speak: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            capture_block_index: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            capture_pending: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            capture_text: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            convo_id: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            copied: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            copied_block_index: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            followup_busy: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            followup_text: Default::default(),
+            mark_anchor: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            marked_count: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            pinned: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            plain_notice: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            question_text: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            select_mode: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            select_text: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            sequence: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            source_label: <slint::SharedString>::from_json(&serde_json::json!("—"))
+                .unwrap_or_default(),
+            speak_active: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            speak_error: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            speak_loading: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            speak_paused: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            speak_speed_label: <slint::SharedString>::from_json(&serde_json::json!("1.0x"))
+                .unwrap_or_default(),
+            term_busy: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            term_definition: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            term_path: <slint::ModelRc<slint::SharedString>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            term_subterms: <slint::ModelRc<TermRow>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            tile_id: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            tile_maximized: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            tile_title: <slint::SharedString>::from_json(&serde_json::json!("Untitled tile"))
+                .unwrap_or_default(),
+            trigger_label: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            trigger_tone: <TileTone>::from_json(&serde_json::json!("accent")).unwrap_or_default(),
+            voice_recording: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+        }
+    }
 }
 #[derive(Default)]
 struct TileWindowCallbacks {
@@ -11510,6 +12128,7 @@ impl TileWindow {
             inner.base.id(),
             Rc::downgrade(&inner) as std::rc::Weak<dyn RemoteObject>,
         );
+        inner.base.send_snapshot(inner.snapshot());
         Ok(Self(inner))
     }
     pub fn set_answer_terms(&self, value: slint::ModelRc<TermRow>) {
@@ -12538,7 +13157,6 @@ impl slint::ComponentHandle for TileWindow {
 }
 
 // ---- TranscriptWindow
-#[derive(Default)]
 struct TranscriptWindowProps {
     active_line: i32,
     all_selected: bool,
@@ -12574,6 +13192,52 @@ struct TranscriptWindowProps {
     timeline_unreliable: bool,
     volume: f32,
     with_timecodes: bool,
+}
+impl Default for TranscriptWindowProps {
+    fn default() -> Self {
+        Self {
+            active_line: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            all_selected: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            by_voice: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            can_diarize: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            capture_line_index: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            capture_pending: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            capture_text: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            confirm_rediar: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            copied: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            diar_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            diarizing: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            empty: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            has_audio: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            has_diarization: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            has_speaker_names: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            heading: <slint::SharedString>::from_json(&serde_json::json!("")).unwrap_or_default(),
+            installing_diar_models: <bool>::from_json(&serde_json::json!(false))
+                .unwrap_or_default(),
+            lines: <slint::ModelRc<TranscriptLine>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            mark_anchor: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
+            marked_count: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            needs_diar_models: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            overflow_count: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            playing: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            progress: <f32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            search_count: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            search_pos: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            search_query: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            speaker_count: <i32>::from_json(&serde_json::json!(2.0)).unwrap_or_default(),
+            speakers: <slint::ModelRc<SpeakerRow>>::from_json(&serde_json::json!([]))
+                .unwrap_or_default(),
+            speed_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            time_text: <slint::SharedString>::from_json(&serde_json::json!("")).unwrap_or_default(),
+            timeline_unreliable: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            volume: <f32>::from_json(&serde_json::json!(1.0)).unwrap_or_default(),
+            with_timecodes: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+        }
+    }
 }
 #[derive(Default)]
 struct TranscriptWindowCallbacks {
@@ -12621,6 +13285,7 @@ impl TranscriptWindow {
             inner.base.id(),
             Rc::downgrade(&inner) as std::rc::Weak<dyn RemoteObject>,
         );
+        inner.base.send_snapshot(inner.snapshot());
         Ok(Self(inner))
     }
     pub fn set_active_line(&self, value: i32) {
@@ -13550,13 +14215,23 @@ impl slint::ComponentHandle for TranscriptWindow {
 }
 
 // ---- TrayMenuWindow
-#[derive(Default)]
 struct TrayMenuWindowProps {
     pause_resume_label: slint::SharedString,
     quit_label: slint::SharedString,
     session_running: bool,
     show_hide_label: slint::SharedString,
     stop_label: slint::SharedString,
+}
+impl Default for TrayMenuWindowProps {
+    fn default() -> Self {
+        Self {
+            pause_resume_label: Default::default(),
+            quit_label: Default::default(),
+            session_running: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            show_hide_label: Default::default(),
+            stop_label: Default::default(),
+        }
+    }
 }
 #[derive(Default)]
 struct TrayMenuWindowCallbacks {
@@ -13582,6 +14257,7 @@ impl TrayMenuWindow {
             inner.base.id(),
             Rc::downgrade(&inner) as std::rc::Weak<dyn RemoteObject>,
         );
+        inner.base.send_snapshot(inner.snapshot());
         Ok(Self(inner))
     }
     pub fn set_pause_resume_label(&self, value: slint::SharedString) {
@@ -13736,7 +14412,6 @@ impl slint::ComponentHandle for TrayMenuWindow {
 }
 
 // ---- WizardWindow
-#[derive(Default)]
 struct WizardWindowProps {
     ai_detail: slint::SharedString,
     ai_level: i32,
@@ -13753,6 +14428,27 @@ struct WizardWindowProps {
     summary_sys: slint::SharedString,
     sys_detail: slint::SharedString,
     sys_level: i32,
+}
+impl Default for WizardWindowProps {
+    fn default() -> Self {
+        Self {
+            ai_detail: Default::default(),
+            ai_level: <i32>::from_json(&serde_json::json!(3.0)).unwrap_or_default(),
+            mic_detail: Default::default(),
+            mic_level: <i32>::from_json(&serde_json::json!(3.0)).unwrap_or_default(),
+            mode: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            stealth_on: Default::default(),
+            step: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            stt_detail: Default::default(),
+            stt_level: <i32>::from_json(&serde_json::json!(3.0)).unwrap_or_default(),
+            summary_ai: Default::default(),
+            summary_mic: Default::default(),
+            summary_stt: Default::default(),
+            summary_sys: Default::default(),
+            sys_detail: Default::default(),
+            sys_level: <i32>::from_json(&serde_json::json!(3.0)).unwrap_or_default(),
+        }
+    }
 }
 #[derive(Default)]
 struct WizardWindowCallbacks {
@@ -13791,6 +14487,7 @@ impl WizardWindow {
             inner.base.id(),
             Rc::downgrade(&inner) as std::rc::Weak<dyn RemoteObject>,
         );
+        inner.base.send_snapshot(inner.snapshot());
         Ok(Self(inner))
     }
     pub fn set_ai_detail(&self, value: slint::SharedString) {
