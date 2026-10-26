@@ -8,16 +8,16 @@ import qs.Ui as Ui
 Ui.BorderSurface {
   id: root
   property string title: ""
-  padding: Style.space(12)
-  property real spacing: Style.space(8)
+  padding: Style.spacing.xxl
+  property real spacing: Style.spacing.lg
   default property alias content: contentColumn.data
   width: parent ? parent.width : implicitWidth
   implicitWidth: Style.space(400)
   implicitHeight: contentColumn.implicitHeight + padding * 2
   height: implicitHeight
   radius: Style.cornerRadius
-  color: Style.normalFillFor(Commons.Color.foreground, Commons.Color.accent)
-  borderSpec: Commons.Border.controlSpec("normal", Commons.Color.foreground, Commons.Color.accent)
+  color: "transparent"
+  borderSpec: Commons.Border.flat(Style.normalBorderColor, 1)
 
   property Column body: Column {
     id: contentColumn

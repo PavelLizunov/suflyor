@@ -22,13 +22,15 @@ Column {
   spacing: Style.space(10)
 
   C.SettingsCard {
+    objectName: "profile-card"
     width: Math.max(0, root.width - root.padding * 2)
     C.SettingsCaption {
       text: root.service ? root.service.tr("Persistent context sent with every AI request — your role, focus areas, vocabulary. Saved to config; applied to new AI calls immediately.", []) : ""
       font.pixelSize: Style.font.body
     }
-    // Keep the profile picker and name field on one row; the empty-state hint wraps.
+    // The empty-state hint keeps a full row instead of squeezing the name field.
     RowLayout {
+      objectName: "profile-picker-row"
       width: parent.width
       spacing: Style.space(6)
       C.SettingsCaption {
@@ -50,15 +52,8 @@ Column {
           root.service.client.call(root.win.winId, "profile-selected", [index])
         }
       }
-      C.SettingsCaption {
-        Layout.fillWidth: true
-        Layout.preferredWidth: Style.space(170)
-        Layout.minimumWidth: 0
-        visible: root.profileNames.length === 0
-        text: root.service ? root.service.tr("None yet — enter a name and click 'Add profile'.", []) : ""
-        font.pixelSize: Style.font.body
-      }
       C.SettingsLineEdit {
+        objectName: "profile-name-field"
         Layout.fillWidth: true
         Layout.preferredWidth: Style.space(150)
         Layout.minimumWidth: 0
@@ -67,8 +62,15 @@ Column {
         onTextEdited: if (root.win && root.service) root.service.client.set(root.win.winId, "profile-name-input", text)
       }
     }
+    C.SettingsCaption {
+      visible: root.profileNames.length === 0
+      text: root.service ? root.service.tr("None yet — enter a name and click 'Add profile'.", []) : ""
+      font.pixelSize: Style.font.bodySmall
+    }
     C.SettingsButtonsRow {
       C.SettingsButton {
+        objectName: "profile-add"
+        iconName: "plus"
         text: root.service ? root.service.tr("Add profile", []) : ""
         onClicked: {
           if (!root.win || !root.service) return
@@ -77,6 +79,8 @@ Column {
         }
       }
       C.SettingsButton {
+        objectName: "profile-rename"
+        iconName: "pencil"
         text: root.service ? root.service.tr("Rename", []) : ""
         enabled: root.profileIndex >= 0 && root.profileName !== ""
         onClicked: {
@@ -86,6 +90,8 @@ Column {
         }
       }
       C.SettingsButton {
+        objectName: "profile-delete"
+        iconName: "trash"
         text: root.service ? root.service.tr("Delete", []) : ""
         enabled: root.profileIndex >= 0
         onClicked: if (root.win && root.service) root.service.client.call(root.win.winId, "profile-delete", [])
@@ -101,14 +107,17 @@ Column {
     }
     C.SettingsButtonsRow {
       C.SettingsButton {
+        iconName: root.dictating ? "stop" : "mic"
         text: root.service ? root.service.tr(root.dictating ? "Stop recording" : "Dictate", []) : ""
         onClicked: if (root.win && root.service) root.service.client.call(root.win.winId, "context-dictate-clicked", [])
       }
       C.SettingsButton {
+        iconName: "check"
         text: root.service ? root.service.tr("Save context", []) : ""
         onClicked: if (root.win && root.service) root.service.client.call(root.win.winId, "meeting-context-save", [root.context])
       }
       C.SettingsButton {
+        iconName: "ai"
         text: root.service ? root.service.tr(root.processing ? "Structuring…" : "Structure via AI", []) : ""
         enabled: !root.processing
         onClicked: if (root.win && root.service) root.service.client.call(root.win.winId, "context-process-clicked", [])

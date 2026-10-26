@@ -41,6 +41,7 @@ Ui.Panel {
   property bool localLockOpen: false
   // Offscreen previews draw this subtree on their own canvas (tools/remote-ui/preview).
   readonly property Item contentRoot: keyCatcher
+  readonly property int scrollGutter: Style.space(14)
   readonly property bool lockMenuOpen: localLockOpen || remoteLockVisible
 
   function p(name, fallback) { return root.win ? root.win.prop(name, fallback) : fallback }
@@ -188,10 +189,11 @@ Ui.Panel {
     // Match the daemon's suflyor-* stealth layer-rule namespace.
     WlrLayershell.namespace: "suflyor-bar-panel"
     contentWidth: fittedContentWidth(Style.space(440))
-    contentHeight: fittedContentHeight(Style.space(root.bootstrap ? 260 : root.compact ? 390 : 650), Style.space(720))
+    contentHeight: fittedContentHeight(Style.space(root.bootstrap ? 260 : root.compact ? 390 : 670), Style.space(720))
 
     FocusScope {
       id: keyCatcher
+      objectName: "bar-content"
       anchors.fill: parent
       focus: true
       Keys.onEscapePressed: function(event) {
@@ -202,7 +204,9 @@ Ui.Panel {
 
       Flickable {
         id: viewport
+        objectName: "bar-viewport"
         anchors.fill: parent
+        anchors.rightMargin: -root.scrollGutter
         contentWidth: width
         contentHeight: body.implicitHeight
         clip: true
@@ -212,26 +216,33 @@ Ui.Panel {
 
         Column {
           id: body
-          width: viewport.width
-          spacing: Style.spacing.rowGap
+          objectName: "bar-body"
+          width: Math.max(0, viewport.width - root.scrollGutter)
+          spacing: Style.spacing.md
 
           Row {
+            objectName: "bar-heading"
             width: parent.width
             spacing: Style.spacing.controlGap
             Icons.SuflyorMark {
-              width: Style.space(18)
+              width: Style.space(28)
               height: width
               ink: root.p("ai-streaming", false) || root.sessionActive || root.recording
                 ? Commons.Color.accent : Commons.Color.popups.text
-              recording: root.recording
+              assistantActive: root.p("ai-streaming", false)
               anchors.verticalCenter: parent.verticalCenter
             }
-            Readout {
+            Column {
               width: parent.width - x
-              text: root.presentedStatus
-              color: root.statusColor
-              font.pixelSize: Style.font.title
-              font.bold: true
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.spacing.xxs
+              Readout { text: "Suflyor"; font.pixelSize: Style.font.title; font.bold: true }
+              Readout {
+                width: parent.width
+                text: root.presentedStatus
+                color: root.statusColor
+                font.pixelSize: Style.font.caption
+              }
             }
           }
           // Bootstrap is deliberately exclusive: never expose dead audio/AI controls.
@@ -262,11 +273,13 @@ Ui.Panel {
             width: parent.width
             visible: !root.bootstrap
             enabled: root.ready
-            spacing: Style.spacing.rowGap
+            spacing: Style.spacing.md
 
             Ui.PanelSectionHeader { text: root.tr("SESSION") }
             Bar.ButtonsRow {
+              objectName: "bar-session-row"
               Action {
+                objectName: "bar-session-start"
                 text: root.p("timer-active", false) ? root.p("timer-label", "00:00") : root.tr("start")
                 accessibleLabel: root.p("timer-active", false) ? root.tr("Stop session") + " · " + text : text
                 iconText: root.p("timer-active", false) ? "\u{f04db}" : "\u{f040a}"
@@ -314,15 +327,19 @@ Ui.Panel {
             Ui.PanelSectionHeader { text: root.tr("Audio"); visible: !root.compact }
             Column {
               width: parent.width
-              spacing: Style.spacing.controlGap
+              spacing: Style.spacing.sm
               visible: !root.compact
               Switch {
+                objectName: "bar-microphone"
+                iconName: "mic"
                 label: root.tr("Microphone")
                 accessibleLabel: root.p("mic-muted", false) ? root.tr("Mic muted (click to unmute)") : root.tr("Mic live (click to mute)")
                 checked: !root.p("mic-muted", false)
                 onClicked: root.fire("mic-toggle-clicked")
               }
               Switch {
+                objectName: "bar-system-audio"
+                iconName: "system-audio"
                 label: root.tr("System audio")
                 accessibleLabel: root.tr("System audio capture")
                 checked: root.p("sys-active", false)
@@ -341,6 +358,7 @@ Ui.Panel {
             Bar.ButtonsRow {
               Bar.RecordButton {
                 id: micRecord
+                objectName: "bar-hold-mic"
                 text: root.tr("ask")
                 iconText: "\u{f036c}"
                 recording: root.p("mic-recording", false)
@@ -350,6 +368,7 @@ Ui.Panel {
               }
               Bar.RecordButton {
                 id: sysRecord
+                objectName: "bar-hold-system"
                 text: root.tr("grab")
                 iconText: "\u{f057e}"
                 recording: root.p("sys-recording", false)
@@ -363,9 +382,11 @@ Ui.Panel {
             Ui.PanelSectionHeader { text: root.tr("AI"); visible: !root.compact }
             Column {
               width: parent.width
-              spacing: Style.spacing.controlGap
+              spacing: Style.spacing.sm
               visible: !root.compact
               Switch {
+                objectName: "bar-stealth"
+                iconName: "stealth"
                 label: root.tr("Stealth")
                 accessibleLabel: root.tr("Stealth (hide from capture)")
                 checked: root.stealth
@@ -373,6 +394,8 @@ Ui.Panel {
                 onClicked: root.fire("stealth-toggle-clicked")
               }
               Switch {
+                objectName: "bar-auto-tiles"
+                iconName: "tiles"
                 label: root.tr("Auto-tiles")
                 accessibleLabel: root.tr("Aggressive auto-tile")
                 checked: root.p("aggressive-active", false)
@@ -444,7 +467,7 @@ Ui.Panel {
 
             Column {
               width: parent.width
-              spacing: Style.spacing.rowGap
+              spacing: Style.spacing.md
               visible: !root.compact && !root.confirming
               Bar.ButtonsRow {
                 visible: root.p("open-tiles", 0) > 0 || root.p("can-restore-tile", false)
@@ -462,8 +485,8 @@ Ui.Panel {
             Ui.PanelSectionHeader { text: root.tr("APP"); visible: !root.compact || root.confirming }
             Bar.ButtonsRow {
               visible: !root.compact && !root.confirming
-              Action { text: root.tr("Settings"); iconText: "\u{f0493}"; selected: root.p("settings-open", false); checkable: true; onClicked: root.fire("open-settings-clicked") }
-              Action { text: root.tr("Help"); iconText: "\u{f02d6}"; selected: root.p("help-open", false); checkable: true; onClicked: root.fire("help-clicked") }
+              Action { objectName: "bar-settings"; text: root.tr("Settings"); iconText: "\u{f0493}"; selected: root.p("settings-open", false); checkable: true; onClicked: root.fire("open-settings-clicked") }
+              Action { objectName: "bar-help"; text: root.tr("Help"); iconText: "\u{f02d6}"; selected: root.p("help-open", false); checkable: true; onClicked: root.fire("help-clicked") }
             }
             Bar.ButtonsRow {
               visible: (!root.compact || root.confirming) && (!root.p("restart-armed", false) || !root.p("quit-armed", false))
@@ -500,7 +523,7 @@ Ui.Panel {
           Readout {
             width: parent.width
             visible: !root.bootstrap && text !== ""
-            text: root.p("active-stack", "") + root.p("tok-per-sec", "")
+            text: root.p("active-stack", "") + (root.p("tok-per-sec", "") !== "" ? " · " + root.p("tok-per-sec", "") : "")
             color: Commons.Color.accent
             font.pixelSize: Style.font.caption
             font.bold: true
@@ -514,6 +537,7 @@ Ui.Panel {
           }
           Ui.PanelSectionHeader { text: root.tr("Transcript") }
           Row {
+            objectName: "bar-transcript"
             width: parent.width
             spacing: Style.spacing.controlGap
             Rectangle {

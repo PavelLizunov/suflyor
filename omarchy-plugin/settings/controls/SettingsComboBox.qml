@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Layouts
 import qs.Commons
 import qs.Ui as Ui
 
@@ -10,7 +11,8 @@ Ui.Dropdown {
   property var model: []
   property int currentIndex: -1
   signal selected(int index)
-  width: parent ? parent.width : implicitWidth
+  readonly property bool layoutManaged: parent instanceof RowLayout || parent instanceof ColumnLayout || parent instanceof GridLayout
+  width: layoutManaged ? implicitWidth : parent ? parent.width : implicitWidth
   height: implicitHeight
   showLabel: false
   options: root.model.map(function(label, index) { return {value: String(index), label: label} })

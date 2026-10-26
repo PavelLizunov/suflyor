@@ -98,6 +98,7 @@ Column {
     }
     C.SettingsButton {
       compact: true
+      iconName: "check"
       text: field.buttonText
       onClicked: {
         root.call(field.callbackName, [root.p(field.propertyName, "")])
@@ -204,6 +205,7 @@ Column {
         }
         C.SettingsButton {
           compact: true
+          iconName: "refresh"
           text: root.tr("refresh")
           onClicked: root.call("ai-models-refresh")
         }
@@ -213,7 +215,7 @@ Column {
         text: root.tr("No models found — check the bridge URL/token, then press refresh.")
       }
       Reasoning { propertyName: "ai-reasoning-index"; callbackName: "ai-reasoning-changed" }
-      C.SettingsButton { text: root.tr("Test AI bridge connection"); onClicked: root.call("ai-bridge-test-clicked") }
+      C.SettingsButton { iconName: "diag"; text: root.tr("Test AI bridge connection"); onClicked: root.call("ai-bridge-test-clicked") }
       C.StatusLine { text: root.p("ai-bridge-test-result", ""); tone: "accent" }
       C.DarkCheck {
         text: root.tr("Prompt-caching (experimental — needs bridge support)")
@@ -250,7 +252,7 @@ Column {
         buttonText: root.tr("Save model")
       }
       Reasoning { propertyName: "openai-reasoning-index"; callbackName: "openai-reasoning-changed" }
-      C.SettingsButton { text: root.tr("Test OpenAI connection"); onClicked: root.call("ai-bridge-test-clicked") }
+      C.SettingsButton { iconName: "diag"; text: root.tr("Test OpenAI connection"); onClicked: root.call("ai-bridge-test-clicked") }
       C.StatusLine { text: root.p("ai-bridge-test-result", ""); tone: "accent" }
     }
 
@@ -278,7 +280,7 @@ Column {
         placeholder: root.tr("Anthropic model ID")
         buttonText: root.tr("Save model")
       }
-      C.SettingsButton { text: root.tr("Test Anthropic connection"); onClicked: root.call("ai-bridge-test-clicked") }
+      C.SettingsButton { iconName: "diag"; text: root.tr("Test Anthropic connection"); onClicked: root.call("ai-bridge-test-clicked") }
       C.StatusLine { text: root.p("ai-bridge-test-result", ""); tone: "accent" }
       C.DarkCheck {
         text: root.tr("Prompt caching")

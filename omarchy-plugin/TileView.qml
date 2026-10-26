@@ -24,7 +24,7 @@ Item {
   readonly property bool selecting: p("select-mode", false)
   readonly property bool capturing: p("capture-pending", false)
   readonly property bool memoryVisible: p("marked-count", 0) >= 1 || capturing
-  readonly property real gutter: Commons.Style.spacing.xxl + Commons.Style.space(2)
+  readonly property real gutter: Commons.Style.space(14)
   readonly property string triggerTone: p("trigger-tone", "accent")
   readonly property color triggerColor: {
     if (triggerTone === "accent") return Commons.Color.accent
@@ -79,8 +79,9 @@ Item {
   Accessible.name: root.service ? root.service.tr("tile", []) : ""
 
   Rectangle {
+    objectName: "tile-frame"
     anchors.fill: parent
-    color: Commons.Color.background
+    color: Commons.Color.popups.background
     border.color: Commons.Style.normalBorderColor
     radius: Commons.Style.cornerRadius
     // Slint fades the entire card, including its chrome and descendants.

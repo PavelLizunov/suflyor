@@ -84,6 +84,7 @@ Column {
         }
         C.SettingsButton {
           compact: true
+          iconName: "check"
           text: root.service ? root.service.tr("Save", []) : ""
           onClicked: if (root.win && root.service) root.service.client.call(root.win.winId, "stt-gigaam-dir-save", [root.win.prop("stt-gigaam-dir-input", "")])
         }
@@ -139,6 +140,7 @@ Column {
         }
         C.SettingsButton {
           compact: true
+          iconName: "check"
           text: root.service ? root.service.tr("Save", []) : ""
           onClicked: if (root.win && root.service) root.service.client.call(root.win.winId, "stt-whisper-url-save", [root.win.prop("stt-whisper-url-input", "")])
         }
@@ -154,6 +156,7 @@ Column {
         }
         C.SettingsButton {
           compact: true
+          iconName: "check"
           text: root.service ? root.service.tr("Save", []) : ""
           onClicked: {
             if (!root.win || !root.service) return
@@ -172,6 +175,7 @@ Column {
         }
         C.SettingsButton {
           compact: true
+          iconName: "check"
           text: root.service ? root.service.tr("Save", []) : ""
           onClicked: if (root.win && root.service) root.service.client.call(root.win.winId, "stt-whisper-model-save", [root.win.prop("stt-whisper-model-input", "")])
         }
@@ -196,6 +200,7 @@ Column {
         }
         C.SettingsButton {
           compact: true
+          iconName: "check"
           text: root.service ? root.service.tr("Save", []) : ""
           onClicked: {
             if (!root.win || !root.service) return
@@ -211,6 +216,7 @@ Column {
     }
     C.SettingsSeparator {}
     C.SettingsButton {
+      iconName: "diag"
       text: root.service ? root.service.tr("Test STT connection", []) : ""
       onClicked: if (root.win && root.service) root.service.client.call(root.win.winId, "stt-test-clicked", [])
     }

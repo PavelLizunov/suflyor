@@ -26,7 +26,9 @@ Item {
   Ui.BorderSurface {
     anchors.fill: parent
     color: Style.controlFill(root.activeFocus, hover.hovered, Commons.Color.foreground, Commons.Color.accent)
-    borderSpec: Commons.Border.controlSpec(root.activeFocus ? "focus" : hover.hovered ? "hover-cursor" : "normal", Commons.Color.foreground, Commons.Color.accent)
+    borderSpec: root.activeFocus || hover.hovered
+      ? Commons.Border.controlSpec(root.activeFocus ? "focus" : "hover-cursor", Commons.Color.foreground, Commons.Color.accent)
+      : Commons.Border.none()
     radius: Style.cornerRadius
   }
   SettingsCaption {
@@ -44,6 +46,7 @@ Item {
     anchors.rightMargin: Style.space(8)
     anchors.verticalCenter: parent.verticalCenter
     interactive: false
+    trackHeight: Style.space(16)
     checked: root.checked
   }
   HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }

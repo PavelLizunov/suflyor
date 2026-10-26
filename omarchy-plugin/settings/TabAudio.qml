@@ -47,6 +47,7 @@ Column {
       }
       C.SettingsButton {
         compact: true
+        iconName: "refresh"
         text: root.service ? root.service.tr(root.loading ? "Loading audio devices..." : "Refresh devices", []) : ""
         enabled: !root.loading
         onClicked: if (root.win && root.service) root.service.client.call(root.win.winId, "audio-devices-refresh", [])
@@ -83,6 +84,7 @@ Column {
       font.pixelSize: Style.font.body
     }
     C.SettingsButton {
+      iconName: "mic"
       text: root.service ? root.service.tr("Test microphone (3s record)", []) : ""
       enabled: root.devicesReady && !root.micMissing && !root.micEmpty
       onClicked: if (root.win && root.service) root.service.client.call(root.win.winId, "mic-test-clicked", [])
@@ -178,6 +180,7 @@ Column {
       font.pixelSize: Style.font.body
     }
     C.SettingsButton {
+      iconName: "archive"
       text: root.service ? root.service.tr("Open recordings folder", []) : ""
       onClicked: if (root.win && root.service) root.service.client.call(root.win.winId, "open-recordings-clicked", [])
     }

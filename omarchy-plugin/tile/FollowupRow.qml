@@ -3,9 +3,11 @@ import QtQuick
 import QtQuick.Layouts
 import qs.Ui as Ui
 import qs.Commons as Commons
+import "../icons" as Icons
 
 RowLayout {
   id: root
+  objectName: "tile-followup"
   required property var view
   readonly property bool recording: view.p("voice-recording", false)
   property bool locked: false
@@ -32,9 +34,9 @@ RowLayout {
     opacity: enabled ? 1 : 0.45
     Accessible.role: Accessible.Button
     Accessible.name: root.view.service.tr("Continue the dialog…", [])
-    Label {
+    Icons.ProjectIcon {
       anchors.centerIn: parent
-      text: root.locked ? "\uf04d" : root.recording ? "\uf062" : "\uf130"
+      name: root.locked ? "stop" : root.recording ? "arrow-up" : "mic"
       color: root.locked ? Commons.Color.urgent : root.recording ? Commons.Color.accent : Commons.Color.foreground
     }
     MouseArea {
@@ -96,7 +98,9 @@ RowLayout {
     }
   }
   ActionButton {
-    text: root.view.p("followup-busy", false) ? "…" : "→"
+    text: ""
+    iconName: root.view.p("followup-busy", false) ? "refresh" : "arrow-up"
+    iconSpinning: root.view.p("followup-busy", false)
     enabled: !root.view.p("followup-busy", false)
     // The Slint send button has only an arrow; reuse its input's msgid for a11y.
     label: root.view.service.tr("Continue the dialog…", [])

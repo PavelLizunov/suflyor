@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui as Ui
+import "../icons" as Icons
 
 // Slint RecordBtn: hold, swipe up to lock, then click again to stop/send.
 Item {
@@ -20,7 +21,6 @@ Item {
   signal recordPressed()
   signal recordReleased()
 
-  width: parent ? parent.width : implicitWidth
   Layout.fillWidth: true
   Layout.preferredWidth: 1
   Layout.minimumWidth: 0
@@ -96,7 +96,7 @@ Item {
     if (!event.isAutoRepeat) release()
   }
 
-  Ui.Button {
+  Icons.ActionButton {
     id: face
     anchors.fill: parent
     // Presentation only: the MouseArea below owns press/release, not clicked.
@@ -105,10 +105,11 @@ Item {
     iconText: root.locked ? "\u{f04db}" : root.iconText
     selected: root.recording
     hasCursor: mouse.containsMouse || root.activeFocus
-    bordered: true
+    bordered: false
     foreground: root.recording ? Commons.Color.urgent : Commons.Color.popups.text
     accent: root.recording ? Commons.Color.urgent : root.accent
-    horizontalPadding: Style.space(20)
+    horizontalPadding: Style.spacing.lg
+    verticalPadding: Style.spacing.sm
     opacity: root.enabled ? 1 : 0.5
   }
 
@@ -122,16 +123,15 @@ Item {
     border.width: root.recording ? 0 : 1
     border.color: root.accent
   }
-  Text {
+  Icons.ProjectIcon {
     anchors.right: parent.right
     anchors.rightMargin: Style.space(5)
     anchors.verticalCenter: parent.verticalCenter
     visible: root.recording && !root.locked
-    textFormat: Text.PlainText
-    text: "\u{f005d}"
+    name: "arrow-up"
+    width: Style.font.iconSmall
+    height: width
     color: Commons.Color.accent
-    font.family: Style.font.family
-    font.pixelSize: Style.font.iconSmall
   }
   MouseArea {
     id: mouse

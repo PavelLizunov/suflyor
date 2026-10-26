@@ -2,22 +2,24 @@ import QtQuick
 import QtQuick.Layouts
 import qs.Commons
 import qs.Commons as Commons
-import qs.Ui as Ui
+import "../icons" as Icons
 
-Ui.Button {
+Icons.ActionButton {
   id: root
 
   property bool checkable: false
   property bool forceArrow: false
   property string accessibleLabel: text
 
-  width: parent ? parent.width : implicitWidth
   Layout.fillWidth: true
   Layout.preferredWidth: 1
   Layout.minimumWidth: 0
   Layout.fillHeight: true
   focusable: true
-  bordered: true
+  bordered: false
+  horizontalPadding: Style.spacing.lg
+  verticalPadding: Style.spacing.sm
+  fontSize: Style.font.body
   foreground: Commons.Color.popups.text
   opacity: enabled ? 1 : 0.5
   tooltipText: accessibleLabel

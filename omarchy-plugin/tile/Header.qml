@@ -3,9 +3,11 @@ import QtQuick
 import QtQuick.Controls as Controls
 import QtQuick.Layouts
 import qs.Commons as Commons
+import "../icons" as Icons
 
 RowLayout {
   id: root
+  objectName: "tile-header"
   required property var view
   signal moveBy(real dx, real dy)
   spacing: Commons.Style.spacing.sm
@@ -15,10 +17,10 @@ RowLayout {
     Layout.minimumWidth: 0
     implicitHeight: Commons.Style.space(30)
     clip: true
-    Label {
+    Icons.ProjectIcon {
       anchors.verticalCenter: parent.verticalCenter
-      text: "\uf142"
-      color: Commons.Color.accent
+      name: "grip"
+      color: Commons.Color.muted
       Accessible.name: root.view.service.tr("Drag to move the window", [])
     }
     Label {
@@ -69,6 +71,7 @@ RowLayout {
   }
   RowLayout {
     id: buttons
+    objectName: "tile-header-actions"
     spacing: Commons.Style.spacing.sm
     ActionButton {
       visible: root.view.p("can-copy", false)

@@ -41,8 +41,9 @@ values (`"cyan"`), colors `#rrggbbaa`.
   `Style.font.*`, motion `Style.duration(ms)` respecting `Style.reduceMotion`.
   Reuse `qs.Ui` controls (`Button`, `TextField`, `Toggle`, `Dropdown`,
   `PanelSectionHeader`, `PanelSeparator`) where one fits.
-- Icons are Nerd Font glyphs in `Style.font.family`, as the shell's own
-  widgets use; no emoji.
+- Reuse Suflyor's original head/penguin brand and action SVGs through `icons/`.
+  Native Nerd Font glyphs in `Style.font.family` remain the fallback for actions
+  without a matching product asset. Icons supplement localized labels.
 - A view starts no process, reads no file and holds no timer that polls.
   Anything that needs the system goes through a callback to suflyord.
 - No symlinks in this directory (Omarchy rejects plugin trees with links).

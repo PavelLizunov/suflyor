@@ -152,7 +152,7 @@ Ui.BarWidget {
       Ui.BarIconButton {
         bar: root.bar
         iconComponent: Component {
-          Icons.SuflyorMark { ink: root.ink; recording: root.recording }
+          Icons.SuflyorMark { ink: root.ink; assistantActive: root.p("ai-streaming", false) }
         }
         foreground: root.ink
         interactive: false

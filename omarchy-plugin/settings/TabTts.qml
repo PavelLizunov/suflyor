@@ -66,6 +66,7 @@ Column {
           font.pixelSize: Style.font.body
         }
         C.SettingsButton {
+          iconName: "update"
           text: root.service ? root.service.tr(root.installing ? "Installing…" : "Install voices", []) : ""
           enabled: !root.installing
           onClicked: if (root.win && root.service) root.service.client.call(root.win.winId, "tts-install-clicked", [])
@@ -114,6 +115,7 @@ Column {
       C.SettingsButtonsRow {
         visible: !root.available || root.teraInstalling
         C.SettingsButton {
+          iconName: "update"
           text: root.service ? root.service.tr(root.teraInstalling ? "Installing…" : "Install model", []) : ""
           enabled: !root.teraInstalling && !root.available
           onClicked: if (root.win && root.service) root.service.client.call(root.win.winId, "tera-install-clicked", [])
@@ -152,6 +154,7 @@ Column {
       }
     }
     C.SettingsButton {
+      iconName: "voice"
       text: root.service ? root.service.tr("Test voice", []) : ""
       enabled: root.available
       onClicked: if (root.win && root.service) root.service.client.call(root.win.winId, "tts-test-clicked", [])

@@ -40,8 +40,8 @@ PanelWindow {
   WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
   exclusionMode: ExclusionMode.Ignore
 
-  implicitWidth: Style.space(900)
-  implicitHeight: Style.space(640)
+  implicitWidth: Math.min(Style.space(960), screen ? Math.max(1, screen.width - Style.gapsOut * 2) : Style.space(960))
+  implicitHeight: Math.min(Style.space(680), screen ? Math.max(1, screen.height - Style.space(60)) : Style.space(680))
 
   SettingsView {
     anchors.fill: parent

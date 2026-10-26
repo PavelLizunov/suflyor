@@ -2,22 +2,22 @@ import QtQuick
 import QtQuick.Layouts
 import qs.Commons
 import qs.Commons as Commons
-import qs.Ui as Ui
+import "../../icons" as Icons
 
 // Properties: text, iconText, compact (only beside a field), enabled; signal clicked().
 // Fills a card, or an equal share of SettingsButtonsRow; compact uses natural width.
-Ui.Button {
+Icons.ActionButton {
   id: root
-  property bool compact: false
-  width: compact ? implicitWidth : parent ? parent.width : implicitWidth
-  height: Math.max(Style.spacing.controlHeight, implicitHeight)
   Layout.fillWidth: !compact
   Layout.preferredWidth: compact ? implicitWidth : 1
   Layout.minimumWidth: 0
   Layout.minimumHeight: Style.spacing.controlHeight
   Layout.fillHeight: true
+  wrapLabel: !compact
   focusable: true
   bordered: true
+  horizontalPadding: Style.spacing.lg
+  verticalPadding: Style.spacing.sm
   opacity: enabled ? 1 : 0.5
   Accessible.role: Accessible.Button
   Accessible.name: text
