@@ -45,7 +45,9 @@ Item {
   }
 
   function send(message) {
-    if (!client.connected) return false
+    // The socket itself, not `connected`: that binding may not have caught up yet inside the
+    // socket's own connection handler, which is where hello is sent.
+    if (!client.sock || !client.sock.connected) return false
     client.sock.write(JSON.stringify(message) + "\n")
     client.sock.flush()
     return true

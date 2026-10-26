@@ -144,9 +144,9 @@ gates.
 
 Evidence levels: *CI* is a green run of `.github/workflows/omarchy-plugin.yml` at
 the named commit; *offscreen* is a render through `qml-preview-mcp` with the
-installed Omarchy shell modules (no live shell, no compositor); *live* would be
-an Omarchy session, and none has run yet because VM 107 is reserved by another
-session.
+installed Omarchy shell modules (no live shell, no compositor); *live* is the
+owner's Omarchy 4 laptop (one 1920x1080 screen at scale 1.25) on 2026-10-26, with
+the release build installed by the installer.
 
 | Part | State | Evidence |
 | --- | --- | --- |
@@ -155,14 +155,14 @@ session.
 | suflyord headless | Starts, mirrors bar/wizard/lock/tray windows, opens Settings on a shell call, sends the interface language | CI smoke log |
 | Native window seam (placement, focus, conceal around capture) | Done | CI build; no live check |
 | Stealth layer rule (`no_screen_share`, `^suflyor-`) | Done, toggled by stealth | Unit test of the script; Hyprland docs; no live check |
-| Plugin service, socket client, window mirror | Done | qmllint; offscreen via fixtures |
-| Bar widget and bar panel | Done | offscreen, idle and running session |
+| Plugin service, socket client, window mirror | Done | qmllint; offscreen via fixtures; live: windows arrive after a shell restart and after a daemon restart |
+| Bar widget and bar panel | Done | offscreen, idle and running session; live: the widget sits in the bar, the panel was not opened |
 | Answer tile | Done | offscreen, RU and EN |
 | Settings, all 17 tabs | Done | offscreen from a recorded SettingsWindow snapshot |
-| Archive, transcript, palette, help, wizard, recovery, text ask | Done | offscreen |
-| Installer for the plugin build | Done | `omarchy plugin validate` passes; not run on a host |
+| Archive, transcript, palette, help, wizard, recovery, text ask | Done | offscreen; live: the first-run wizard, RU and EN |
+| Installer for the plugin build | Done | `omarchy plugin validate` passes; live install and enable with both speech sidecars |
 
-Still to do: install-error texts in settings_panel.slint that say "retry" without naming the button (both front ends; the plugin appends the button name for now); a live Omarchy pass (plugin enable,
-layers, stealth with an actual screen share, hotkeys, a real session); a
+Still to do: install-error texts in settings_panel.slint that say "retry" without naming the button (both front ends; the plugin appends the button name for now); the rest of the live pass (bar panel, tiles,
+Settings, stealth with an actual screen share, hotkeys, a real session); a
 release artifact and the one-command Marketplace install, which need the
 owner's release decision.

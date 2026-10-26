@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -7,23 +8,23 @@ import qs.Commons as Commons
 // Starts the daemon like the telebar service starts omagramd: with a cleared
 // environment, restarted after an exit, never twice.
 Item {
-  id: service
+  id: root
 
   property var manifest: null
   // This file sits at the plugin root, next to bin/ and locales/.
   readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl(".")).replace("file://", "")).replace(/\/$/, "")
-  readonly property string binDir: service.pluginDir + "/bin/"
+  readonly property string binDir: root.pluginDir + "/bin/"
 
   // Suflyor's own interface language once suflyord reports it, the shell's before that.
   readonly property string shellLocale: String(Commons.I18n.language || "en").indexOf("ru") === 0 ? "ru" : "en"
   readonly property string locale: {
     var _ = remoteClient.globalsRev
-    return remoteClient.globals["Suflyor.locale"] || service.shellLocale
+    return remoteClient.globals["Suflyor.locale"] || root.shellLocale
   }
   // Strings of the Slint catalog (locales/ru.json) plus the plugin's own (plugin.ru.json).
   property var slintCatalog: ({})
   property var pluginCatalog: ({})
-  readonly property var catalog: Object.assign({}, service.slintCatalog, service.pluginCatalog)
+  readonly property var catalog: Object.assign({}, root.slintCatalog, root.pluginCatalog)
 
   readonly property alias client: remoteClient
   readonly property bool running: remoteClient.connected && remoteClient.ready
@@ -34,7 +35,7 @@ Item {
 
   // English msgid in, the language's text out; `{}` and `{0}` holes as in Slint's @tr.
   function tr(msgid, args) {
-    var text = service.locale === "ru" && service.catalog[msgid] ? service.catalog[msgid] : msgid
+    var text = root.locale === "ru" && root.catalog[msgid] ? root.catalog[msgid] : msgid
     if (!args) return text
     var next = 0
     return text.replace(/\{(\d*)\}/g, function (_, index) {
@@ -46,33 +47,33 @@ Item {
   // suflyord runs detached, so a shell restart does not end a session; its singleton
   // lock makes a second start exit at once. Started only while nobody answers.
   function ensureDaemon() {
-    if (remoteClient.connected || service.daemonFailed) return
+    if (remoteClient.connected || root.daemonFailed) return
     var now = Date.now()
-    if (now - service.lastStart < 10000) return
-    if (service.startAttempts >= 3) {
-      service.daemonFailed = true
+    if (now - root.lastStart < 10000) return
+    if (root.startAttempts >= 3) {
+      root.daemonFailed = true
       return
     }
-    service.lastStart = now
-    service.startAttempts++
-    Quickshell.execDetached([service.binDir + "suflyord"])
+    root.lastStart = now
+    root.startAttempts++
+    Quickshell.execDetached([root.binDir + "suflyord"])
   }
 
   RemoteClient {
     id: remoteClient
-    locale: service.shellLocale
-    onConnectedChanged: if (connected) service.startAttempts = 0
+    locale: root.shellLocale
+    onConnectedChanged: if (connected) root.startAttempts = 0
   }
 
   // One layer per tile; Variants keeps a tile's surface while others open and close.
   Variants {
     model: remoteClient.windowList.filter(function (w) { return w.type === "TileWindow" })
-    delegate: TileLayer { service: service }
+    delegate: TileLayer { service: root }
   }
 
   Variants {
     model: remoteClient.windowList.filter(function (w) { return w.type === "SettingsWindow" })
-    delegate: SettingsLayer { service: service }
+    delegate: SettingsLayer { service: root }
   }
 
   // Shown on Omarchy by other means: the tray menu by the bar widget, the lock menu
@@ -80,30 +81,30 @@ Item {
   readonly property var auxTypes: ["ArchiveWindow", "TranscriptWindow", "PaletteWindow", "HelpWindow",
     "WizardWindow", "RecoverOfferWindow", "TextAskWindow"]
   Variants {
-    model: remoteClient.windowList.filter(function (w) { return service.auxTypes.indexOf(w.type) >= 0 })
-    delegate: AuxLayer { service: service }
+    model: remoteClient.windowList.filter(function (w) { return root.auxTypes.indexOf(w.type) >= 0 })
+    delegate: AuxLayer { service: root }
   }
 
   Timer {
     interval: 2000
     repeat: true
-    running: !remoteClient.connected && !service.daemonFailed
-    onTriggered: service.ensureDaemon()
+    running: !remoteClient.connected && !root.daemonFailed
+    onTriggered: root.ensureDaemon()
   }
 
   FileView {
-    path: service.pluginDir + "/locales/ru.json"
+    path: root.pluginDir + "/locales/ru.json"
     printErrors: false
     onLoaded: {
-      try { service.slintCatalog = JSON.parse(text()) } catch (e) { service.slintCatalog = ({}) }
+      try { root.slintCatalog = JSON.parse(text()) } catch (e) { root.slintCatalog = ({}) }
     }
   }
 
   FileView {
-    path: service.pluginDir + "/locales/plugin.ru.json"
+    path: root.pluginDir + "/locales/plugin.ru.json"
     printErrors: false
     onLoaded: {
-      try { service.pluginCatalog = JSON.parse(text()) } catch (e) { service.pluginCatalog = ({}) }
+      try { root.pluginCatalog = JSON.parse(text()) } catch (e) { root.pluginCatalog = ({}) }
     }
   }
 }
