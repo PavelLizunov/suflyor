@@ -24,6 +24,15 @@ Column {
   topPadding: 0
   spacing: Style.space(10)
 
+  function deviceNames(propertyName) {
+    var names = root.win ? root.win.prop(propertyName, []) : []
+    // Index zero is the backend's default-device sentinel. Its translated Slint
+    // out binding has no value in the headless host, so label it on the QML side.
+    return names.map(function(label, index) {
+      return index === 0 && label === "" && root.service ? root.service.tr("System default", []) : label
+    })
+  }
+
   C.SettingsCard {
     width: Math.max(0, root.width - root.padding * 2)
     title: root.service ? root.service.tr("Microphone", []) : ""
@@ -36,7 +45,7 @@ Column {
         Layout.fillWidth: true
         Layout.minimumWidth: 0
         Accessible.name: root.service ? root.service.tr("Microphone device", []) : ""
-        model: root.win ? root.win.prop("mic-devices", []) : []
+        model: root.deviceNames("mic-devices")
         currentIndex: root.win ? root.win.prop("mic-device-index", 0) : 0
         enabled: root.devicesReady
         onSelected: function(index) {
@@ -105,7 +114,7 @@ Column {
     }
     C.SettingsComboBox {
       Accessible.name: root.service ? root.service.tr("System audio device", []) : ""
-      model: root.win ? root.win.prop("system-devices", []) : []
+      model: root.deviceNames("system-devices")
       currentIndex: root.win ? root.win.prop("system-device-index", 0) : 0
       enabled: root.devicesReady
       onSelected: function(index) {

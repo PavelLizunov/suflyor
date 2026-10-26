@@ -19,6 +19,7 @@ Icons.ActionButton {
   horizontalPadding: Style.spacing.lg
   verticalPadding: Style.spacing.sm
   opacity: enabled ? 1 : 0.5
+  tooltipText: text
   Accessible.role: Accessible.Button
   Accessible.name: text
   Accessible.onPressAction: if (root.enabled) root.clicked()
