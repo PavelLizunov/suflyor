@@ -6,6 +6,7 @@
 //! `slint-remote-schema slint-experiment/ui/index.slint > remote-ui.json`
 
 use i_slint_compiler::diagnostics::BuildDiagnostics;
+use i_slint_compiler::expression_tree::{Expression, Unit};
 use i_slint_compiler::generator::OutputFormat;
 use i_slint_compiler::langtype::{Struct, StructName, Type};
 use i_slint_compiler::object_tree::{Component, PropertyVisibility};
@@ -21,20 +22,22 @@ fn main() {
     let mut config = CompilerConfiguration::new(OutputFormat::Interpreter);
     // Same style slint-build picks on Linux when SLINT_STYLE is unset.
     config.style = Some("fluent".into());
-    let (path, diag, loader) = spin_on::spin_on(i_slint_compiler::load_root_file(
-        &path,
-        &path,
-        source,
-        BuildDiagnostics::default(),
-        config,
-    ));
+    let (path, diag, loader, raw_loader) =
+        spin_on::spin_on(i_slint_compiler::load_root_file_with_raw_type_loader(
+            &path,
+            &path,
+            source,
+            BuildDiagnostics::default(),
+            config,
+        ));
     if diag.has_errors() {
         for line in diag.to_string_vec() {
             eprintln!("{line}");
         }
         std::process::exit(1);
     }
-    let doc = loader.get_document(&path).expect("compiled document");
+    let source_loader = raw_loader.as_ref().unwrap_or(&loader);
+    let doc = source_loader.get_document(&path).expect("compiled document");
 
     let mut types = BTreeMap::new();
     let mut windows = Map::new();
@@ -84,14 +87,46 @@ fn api(component: &Rc<Component>, types: &mut BTreeMap<String, Value>) -> Value 
                     PropertyVisibility::InOut => "in-out",
                     _ => continue,
                 };
-                properties.insert(
-                    name.to_string(),
-                    json!({ "dir": direction, "type": ty_json(ty, types) }),
-                );
+                let mut property = json!({ "dir": direction, "type": ty_json(ty, types) });
+                if let Some(value) = root
+                    .bindings
+                    .get(name)
+                    .and_then(|binding| literal_default(&binding.borrow().expression, ty))
+                {
+                    property["default"] = value;
+                }
+                properties.insert(name.to_string(), property);
             }
         }
     }
     json!({ "properties": properties, "callbacks": callbacks, "functions": functions })
+}
+
+// Preserve literal initial state, not reactive bindings owned by the QML view.
+fn literal_default(expression: &Expression, ty: &Type) -> Option<Value> {
+    match expression.ignore_debug_hooks() {
+        Expression::CodeBlock(values) if values.len() == 1 => literal_default(&values[0], ty),
+        Expression::StringLiteral(value) => Some(json!(value.as_str())),
+        Expression::BoolLiteral(value) => Some(json!(value)),
+        Expression::NumberLiteral(value, Unit::None) => Some(json!(value)),
+        Expression::Cast { from, .. } if !matches!(ty, Type::Color | Type::Brush) => {
+            literal_default(from, ty)
+        }
+        Expression::UnaryOp { sub, op: '-' } => Some(json!(-literal_default(sub, ty)?.as_f64()?)),
+        Expression::Array { element_ty, values } => values
+            .iter()
+            .map(|value| literal_default(value, element_ty))
+            .collect::<Option<Vec<_>>>()
+            .map(Value::Array),
+        Expression::EnumerationValue(value) => {
+            value
+                .enumeration
+                .values
+                .get(value.value)
+                .map(|name| json!(name.as_str()))
+        }
+        _ => None,
+    }
 }
 
 fn signature(

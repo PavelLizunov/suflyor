@@ -173,14 +173,15 @@ Item {
         Layout.minimumHeight: 0
         clip: true
         boundsBehavior: Flickable.StopAtBounds
-        model: root.p("lines", [])
+        // Model updates replace the wire array (marks, search and speaker names).
+        // Keep delegates/scroll/selection alive when only row data changes.
+        model: root.p("lines", []).length
         spacing: Commons.Style.spacing.xs
         Controls.ScrollBar.vertical: Controls.ScrollBar { policy: Controls.ScrollBar.AsNeeded }
         delegate: Archive.TranscriptRow {
-          required property var modelData
           required property int index
           view: root
-          line: modelData
+          line: root.p("lines", [])[index] || ({})
           lineIndex: index
         }
       }

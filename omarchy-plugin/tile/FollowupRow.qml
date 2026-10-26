@@ -46,7 +46,24 @@ RowLayout {
       preventStealing: true
       property real pressY: 0
       property bool swallow: false
+      property bool startPending: false
+      property bool stopOnStart: false
+      property bool lockOnStart: false
+      function release() {
+        if (swallow) swallow = false
+        else if (!root.locked) {
+          // The daemon may not have echoed voice-recording before mouse-up.
+          // Wait for the start callback so a rejected start never toggles ON
+          // from this release, and an accepted quick tap always toggles OFF.
+          if (startPending) stopOnStart = true
+          else if (root.recording) root.view.call("followup-voice-toggled")
+        }
+      }
       onPressed: function(mouse) {
+        if (startPending) {
+          swallow = true
+          return
+        }
         if (root.locked) {
           root.locked = false
           swallow = true
@@ -54,20 +71,28 @@ RowLayout {
         } else {
           pressY = mouse.y
           swallow = false
-          root.view.call("followup-voice-toggled")
+          stopOnStart = false
+          lockOnStart = false
+          startPending = true
+          root.view.call("followup-voice-toggled", [], function(value, error) {
+            voice.startPending = false
+            if (!error && root.recording) {
+              if (voice.lockOnStart) root.locked = true
+              else if (voice.stopOnStart && !root.locked) root.view.call("followup-voice-toggled")
+            }
+            voice.stopOnStart = false
+            voice.lockOnStart = false
+          })
         }
       }
       onPositionChanged: function(mouse) {
-        if (pressed && root.recording && !root.locked && pressY - mouse.y > Commons.Style.space(24)) root.locked = true
+        if (pressed && !root.locked && pressY - mouse.y > Commons.Style.space(24)) {
+          if (root.recording) root.locked = true
+          else if (startPending) lockOnStart = true
+        }
       }
-      onReleased: {
-        if (swallow) swallow = false
-        else if (!root.locked && root.recording) root.view.call("followup-voice-toggled")
-      }
-      onCanceled: {
-        if (!swallow && !root.locked && root.recording) root.view.call("followup-voice-toggled")
-        swallow = false
-      }
+      onReleased: release()
+      onCanceled: release()
     }
   }
   ActionButton {

@@ -22,11 +22,23 @@ PanelWindow {
   // The host parks a window far off screen while it prepares it.
   readonly property bool parked: typeof g.x === "number" && (g.x < -10000 || g.y < -10000)
   readonly property bool shown: win.visible && !parked && !(service && service.client.concealed)
+  readonly property bool placed: typeof g.x === "number" && typeof g.y === "number" && !parked
+  // suflyord places tiles in Hyprland's global layout coordinates: the tile goes on the
+  // screen that holds its centre, its margins are relative to that screen.
+  readonly property var placedScreen: placed ? screenAt(g.x + tileWidth / 2, g.y + tileHeight / 2) : null
   property var targetScreen: null
   visible: shown
   color: "transparent"
-  screen: targetScreen
+  screen: placedScreen || targetScreen
   onShownChanged: if (shown) targetScreen = service.focusedScreen()
+
+  function screenAt(x, y) {
+    for (var i = 0; i < Quickshell.screens.length; i++) {
+      var s = Quickshell.screens[i]
+      if (x >= s.x && x < s.x + s.width && y >= s.y && y < s.y + s.height) return s
+    }
+    return null
+  }
 
   Connections {
     target: Quickshell
@@ -42,8 +54,10 @@ PanelWindow {
   exclusionMode: ExclusionMode.Ignore
 
   anchors { top: true; left: true }
-  margins.left: typeof g.x === "number" ? g.x : Style.space(80) + fallbackOffset
-  margins.top: typeof g.y === "number" ? g.y : Style.space(80) + fallbackOffset
+  readonly property int originX: surface.screen ? surface.screen.x : 0
+  readonly property int originY: surface.screen ? surface.screen.y : 0
+  margins.left: placed ? g.x - originX : Style.space(80) + fallbackOffset
+  margins.top: placed ? g.y - originY : Style.space(80) + fallbackOffset
   implicitWidth: tileWidth
   implicitHeight: tileHeight
 
@@ -52,13 +66,10 @@ PanelWindow {
     win: surface.win
     service: surface.service
     onMoveBy: function (dx, dy) {
-      surface.service.client.reportGeometry(surface.win.winId, {
-        x: Math.round(surface.margins.left + dx),
-        y: Math.round(surface.margins.top + dy),
-        width: surface.tileWidth,
-        height: surface.tileHeight,
-      })
-      surface.win.geometry = Object.assign({}, surface.g, { x: Math.round(surface.margins.left + dx), y: Math.round(surface.margins.top + dy) })
+      var x = Math.round(surface.originX + surface.margins.left + dx)
+      var y = Math.round(surface.originY + surface.margins.top + dy)
+      surface.service.client.reportGeometry(surface.win.winId, { x: x, y: y, width: surface.tileWidth, height: surface.tileHeight })
+      surface.win.geometry = Object.assign({}, surface.g, { x: x, y: y })
     }
   }
 

@@ -6,6 +6,7 @@ import qs.Commons
 import qs.Commons as Commons
 import qs.Ui as Ui
 import "bar" as Bar
+import "icons" as Icons
 
 // The bar widget supplies anchorItem, hostWidget, service and the inherited bar.
 Ui.Panel {
@@ -23,6 +24,10 @@ Ui.Panel {
   readonly property bool ready: !!service && service.running && !!win
   readonly property bool bootstrap: p("bootstrap-mode", false)
   readonly property bool compact: p("compact-bar", false)
+  readonly property bool sessionActive: p("timer-active", false)
+  readonly property bool recording: p("mic-recording", false) || p("sys-recording", false)
+  readonly property bool micCapturing: p("mic-recording", false)
+    || (sessionActive && !p("session-paused", false) && !p("mic-muted", false))
   readonly property bool confirming: p("quit-armed", false) || p("restart-armed", false)
   readonly property bool stealth: p("stealth-active", false)
   readonly property bool suppress: p("suppress-tiles", false)
@@ -41,7 +46,21 @@ Ui.Panel {
   function p(name, fallback) { return root.win ? root.win.prop(name, fallback) : fallback }
   function tr(msgid, args) { return root.service ? root.service.tr(msgid, args || []) : msgid }
   function fire(name, args) {
-    if (root.ready) root.service.client.call(root.win.winId, name, args || [])
+    if (!root.ready) return
+    // Release the popout's keyboard/pointer ownership before another surface opens.
+    switch (name) {
+    case "open-settings-clicked":
+    case "archive-clicked":
+    case "help-clicked":
+    case "text-ask-clicked":
+    case "spawn-tile-clicked":
+    case "restore-tile-clicked":
+    case "summary-clicked":
+    case "capture-clicked":
+      root.close()
+      break
+    }
+    root.service.client.call(root.win.winId, name, args || [])
   }
   function switchPanel(direction) {
     return root.bar && typeof root.bar.switchPanelFrom === "function"
@@ -49,7 +68,13 @@ Ui.Panel {
   }
 
   function localizedStatus(status) {
-    // Rust also compares these English state words. Translate only at display.
+    // mic-active/sys-active describe armed sources, not a running session.
+    // refresh_status can send these words even at startup; normalize only
+    // those capture claims, leaving diagnostics and lock-transition text intact.
+    if (!root.recording && (status === "recording" || status === "mic only")) {
+      if (!root.sessionActive) status = "idle"
+      else if (root.p("session-paused", false)) status = "paused"
+    }
     switch (status) {
     case "idle": return tr("idle")
     case "recording": return tr("recording")
@@ -71,6 +96,7 @@ Ui.Panel {
   // Commons has no separate success/warning role: use accent for success/info,
   // urgent for danger and warning, muted for neutral. Words also convey state.
   readonly property color statusColor: p("stealth-fault", false) ? Commons.Color.urgent
+    : !sessionActive && !recording && (p("status-text", "idle") === "recording" || p("status-text", "idle") === "mic only") ? Commons.Color.muted
     : p("status-tone", "neutral") === "danger" || p("status-tone", "neutral") === "warning" ? Commons.Color.urgent
     : p("status-tone", "neutral") === "ok" || p("status-tone", "neutral") === "info" ? Commons.Color.accent : Commons.Color.muted
   readonly property int micPermission: p("mic-permission-state", 0)
@@ -144,12 +170,20 @@ Ui.Panel {
     forceArrow: root.stealth
   }
 
+  // Conceal immediately; the normal close animation can outlast a capture.
+  Binding {
+    target: panel
+    property: "visible"
+    when: !!root.service && root.service.client.concealed
+    value: false
+  }
+
   Ui.KeyboardPanel {
     id: panel
     anchorItem: root.anchorItem
     owner: root.hostWidget || root
     bar: root.bar
-    open: root.opened
+    open: root.opened && !(root.service && root.service.client.concealed)
     focusTarget: keyCatcher
     // Match the daemon's suflyor-* stealth layer-rule namespace.
     WlrLayershell.namespace: "suflyor-bar-panel"
@@ -184,12 +218,12 @@ Ui.Panel {
           Row {
             width: parent.width
             spacing: Style.spacing.controlGap
-            Text {
-              textFormat: Text.PlainText
-              text: root.p("ai-streaming", false) ? "\u{f09d1}" : "\u{f02ce}"
-              font.family: Style.font.family
-              font.pixelSize: Style.font.heading
-              color: Commons.Color.accent
+            Icons.SuflyorMark {
+              width: Style.space(18)
+              height: width
+              ink: root.p("ai-streaming", false) || root.sessionActive || root.recording
+                ? Commons.Color.accent : Commons.Color.popups.text
+              recording: root.recording
               anchors.verticalCenter: parent.verticalCenter
             }
             Readout {
@@ -251,7 +285,7 @@ Ui.Panel {
             }
             Readout {
               width: parent.width
-              visible: root.p("timer-active", false) && text !== ""
+              visible: !root.compact && root.sessionActive && text !== ""
               text: root.p("session-name", "")
               color: Commons.Color.accent
               font.bold: true
@@ -295,13 +329,13 @@ Ui.Panel {
                 onClicked: root.fire("sys-toggle-clicked")
               }
             }
-            // mic-active is distinct from unmuted: do not claim capture is live
-            // just because incoming transcripts are not being muted.
+            // The host's mic-active means unmuted, not that capture is running.
             Readout {
               width: parent.width
               visible: !root.compact
-              text: root.tr("Microphone") + " · " + (root.p("mic-active", false) ? root.tr("recording") : root.tr("idle"))
-              color: root.p("mic-active", false) ? Commons.Color.accent : Commons.Color.muted
+              text: root.tr("Microphone") + " · " + (root.micCapturing ? root.tr("recording")
+                : root.sessionActive && root.p("session-paused", false) ? root.tr("paused") : root.tr("idle"))
+              color: root.micCapturing ? Commons.Color.accent : Commons.Color.muted
               font.pixelSize: Style.font.caption
             }
             Bar.ButtonsRow {

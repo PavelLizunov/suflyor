@@ -21,6 +21,12 @@ Column {
   topPadding: 0
   spacing: Style.space(10)
 
+  function choose(propertyName, callbackName, index) {
+    if (!root.win || !root.service) return
+    root.service.client.set(root.win.winId, propertyName, index)
+    root.service.client.call(root.win.winId, callbackName, [index])
+  }
+
   C.SettingsCard {
     width: Math.max(0, root.width - root.padding * 2)
     title: root.service ? root.service.tr("Read aloud", []) : ""
@@ -48,7 +54,7 @@ Column {
           model: root.win ? root.win.prop("tts-voice-names", []) : []
           currentIndex: root.win ? root.win.prop("tts-voice-index", 0) : 0
           onSelected: function(index) {
-            if (root.win && root.service) root.service.client.call(root.win.winId, "tts-voice-changed", [index])
+            root.choose("tts-voice-index", "tts-voice-changed", index)
           }
         }
       }
@@ -101,7 +107,7 @@ Column {
           model: root.win ? root.win.prop("tts-voice-names", []) : []
           currentIndex: root.win ? root.win.prop("tts-voice-index", 0) : 0
           onSelected: function(index) {
-            if (root.win && root.service) root.service.client.call(root.win.winId, "tts-voice-changed", [index])
+            root.choose("tts-voice-index", "tts-voice-changed", index)
           }
         }
       }
@@ -141,7 +147,7 @@ Column {
         model: root.service ? [root.service.tr("0.75×", []), root.service.tr("1.0×", []), root.service.tr("1.3×", []), root.service.tr("1.5×", []), root.service.tr("2.0×", [])] : []
         currentIndex: root.win ? root.win.prop("tts-rate-index", 1) : 1
         onSelected: function(index) {
-          if (root.win && root.service) root.service.client.call(root.win.winId, "tts-rate-changed", [index])
+          root.choose("tts-rate-index", "tts-rate-changed", index)
         }
       }
     }

@@ -15,6 +15,22 @@ Item {
   function set(name, value) { if (win && service) service.client.set(win.winId, name, value) }
   function call(name, args) { if (win && service) service.client.call(win.winId, name, args || []) }
   function tr(text, args) { return service ? service.tr(text, args || []) : "" }
+  function openSettings(tab) {
+    if (!root.win || !root.service) return
+    var client = root.service.client
+    var bar = client.first("OverlayBarWindow")
+    if (!bar) return
+    // Wait for the host to create Settings before selecting its tab. Keep this
+    // view alive until the reply, then dismiss it so it cannot cover Settings.
+    client.call(bar.winId, "open-settings-clicked", [], function(value, error) {
+      if (error) return
+      var settings = client.first("SettingsWindow")
+      if (!settings) return
+      client.set(settings.winId, "active-tab", tab)
+      client.call(settings.winId, "tab-selected", [tab])
+      root.call("cancelled")
+    })
+  }
   Accessible.name: root.tr("Setup wizard")
   readonly property int step: p("step", 0)
   onStepChanged: if (cardViewport && cardViewport.contentItem) cardViewport.contentItem.contentY = 0
@@ -174,12 +190,18 @@ Item {
                     }
                   }
                 }
+                Small.Action {
+                  text: root.tr("AI setup")
+                  iconText: "\uf013"
+                  onClicked: root.openSettings(11)
+                }
               }
               Repeater {
-                model: root.checks
+                model: root.checks.length
                 delegate: ColumnLayout {
                   id: checkPanel
-                  required property var modelData
+                  required property int index
+                  readonly property var modelData: root.checks[index]
                   visible: root.step === modelData.step
                   Layout.fillWidth: true
                   spacing: Commons.Style.spacing.lg
@@ -204,6 +226,12 @@ Item {
                       iconText: "\uf019"
                       onClicked: root.call("install-local-clicked")
                     }
+                  }
+                  Small.Action {
+                    visible: checkPanel.modelData.step === 1 || checkPanel.modelData.step === 2
+                    text: root.tr("Open settings")
+                    iconText: "\uf013"
+                    onClicked: root.openSettings(checkPanel.modelData.step === 1 ? 11 : 12)
                   }
                   RowLayout {
                     Layout.fillWidth: true
@@ -283,10 +311,11 @@ Item {
                   font.bold: true
                 }
                 Repeater {
-                  model: root.checks
+                  model: root.checks.length
                   delegate: RowLayout {
                     id: summaryRow
-                    required property var modelData
+                    required property int index
+                    readonly property var modelData: root.checks[index]
                     Layout.fillWidth: true
                     spacing: Commons.Style.spacing.sm
                     Tile.Label {

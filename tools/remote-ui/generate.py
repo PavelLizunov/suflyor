@@ -125,10 +125,22 @@ def gen_window(name, api, out):
     cbs = api["callbacks"]
     fns = api["functions"]
     out.append(f"// ---- {name}")
-    out.append("#[derive(Default)]")
     out.append(f"struct {name}Props {{")
     for p, spec in props.items():
         out.append(f"    {snake(p)}: {rust_ty(spec['type'])},")
+    out.append("}")
+    out.append(f"impl Default for {name}Props {{")
+    out.append("    fn default() -> Self {")
+    out.append("        Self {")
+    for p, spec in props.items():
+        if "default" in spec:
+            value = json.dumps(spec["default"], ensure_ascii=False)
+            default = f'<{rust_ty(spec["type"])}>::from_json(&serde_json::json!({value})).unwrap_or_default()'
+        else:
+            default = "Default::default()"
+        out.append(f"            {snake(p)}: {default},")
+    out.append("        }")
+    out.append("    }")
     out.append("}")
     out.append("#[derive(Default)]")
     out.append(f"struct {name}Callbacks {{")
@@ -147,6 +159,7 @@ def gen_window(name, api, out):
     out.append(f'        let base = RemoteBase::new("{name}")?;')
     out.append(f"        let inner = Rc::new({name}Inner {{ base, props: Default::default(), callbacks: Default::default() }});")
     out.append("        register(inner.base.id(), Rc::downgrade(&inner) as std::rc::Weak<dyn RemoteObject>);")
+    out.append("        inner.base.send_snapshot(inner.snapshot());")
     out.append("        Ok(Self(inner))")
     out.append("    }")
     for p, spec in props.items():

@@ -7,6 +7,7 @@ import qs.Ui as Ui
 // Properties: text, iconText, compact (only beside a field), enabled; signal clicked().
 // Fills a card, or an equal share of SettingsButtonsRow; compact uses natural width.
 Ui.Button {
+  id: root
   property bool compact: false
   width: compact ? implicitWidth : parent ? parent.width : implicitWidth
   height: Math.max(Style.spacing.controlHeight, implicitHeight)
@@ -20,4 +21,5 @@ Ui.Button {
   opacity: enabled ? 1 : 0.5
   Accessible.role: Accessible.Button
   Accessible.name: text
+  Accessible.onPressAction: if (root.enabled) root.clicked()
 }

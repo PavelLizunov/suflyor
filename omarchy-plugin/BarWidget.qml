@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui as Ui
+import "icons" as Icons
 
 // Suflyor in the Omarchy bar: the session state of suflyord's OverlayBarWindow.
 // Left click opens the panel, right click starts or stops the session, middle click asks.
@@ -28,26 +29,49 @@ Ui.BarWidget {
   readonly property bool recording: running && (p("mic-recording", false) || p("sys-recording", false))
   readonly property string tone: running ? p("status-tone", "neutral") : "neutral"
 
-  // md-headset; md-microphone while a push-to-talk recording runs.
-  readonly property string glyph: recording ? "\u{f036c}" : "\u{f02ce}"
   readonly property color ink: !running ? Commons.Color.muted
     : tone === "danger" ? Commons.Color.urgent
     : sessionActive || recording ? Commons.Color.accent
     : Commons.Color.bar.text
 
+  function localizedStatus(status) {
+    // Source toggles can refresh the host status while no session is running.
+    if (!root.recording && (status === "recording" || status === "mic only")) {
+      if (!root.sessionActive) status = "idle"
+      else if (root.p("session-paused", false)) status = "paused"
+    }
+    switch (status) {
+    case "idle": return tr("idle")
+    case "recording": return tr("recording")
+    case "mic only": return tr("mic only")
+    case "mic muted": return tr("mic muted")
+    case "paused": return tr("paused")
+    case "wrapping up": return tr("wrapping up")
+    case "start failed": return tr("start failed")
+    case "sys ok": return tr("sys ok")
+    case "sys quiet": return tr("sys quiet")
+    case "sys silent": return tr("sys silent")
+    case "sys test failed": return tr("sys test failed")
+    case "AI unavailable": return tr("AI unavailable")
+    default: return status
+    }
+  }
+
   readonly property string tooltip: {
     if (!effectiveService) return "Suflyor"
     if (effectiveService.daemonFailed) return root.tr("Suflyor could not start. Reinstall the plugin, then restart the shell.")
     if (!running) return root.tr("Suflyor is starting…")
-    var lines = [p("session-name", "") || "Suflyor"]
+    var lines = [sessionActive && p("session-name", "") ? p("session-name", "") : "Suflyor"]
     if (sessionActive) lines.push(root.tr("Stop session") + " · " + p("timer-label", ""))
-    var status = p("status-text", "")
+    var status = p("stealth-fault", false) ? root.tr("[!] stealth unavailable") : localizedStatus(p("status-text", ""))
     if (status) lines.push(status)
     return lines.join("\n")
   }
 
   function fire(name) {
-    if (root.barWin) root.effectiveService.client.call(root.barWin.winId, name, [])
+    if (!root.running) return
+    if (name === "text-ask-clicked") root.close()
+    root.effectiveService.client.call(root.barWin.winId, name, [])
   }
 
   readonly property var panelItem: panelLoader.item
@@ -96,6 +120,8 @@ Ui.BarWidget {
     onLoaded: root.syncPanel()
   }
 
+  // Native capture concealment applies to the bar as well as the window layers.
+  visible: !(effectiveService && effectiveService.client.concealed)
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
@@ -125,7 +151,9 @@ Ui.BarWidget {
 
       Ui.BarIconButton {
         bar: root.bar
-        text: root.glyph
+        iconComponent: Component {
+          Icons.SuflyorMark { ink: root.ink; recording: root.recording }
+        }
         foreground: root.ink
         interactive: false
         pressable: false

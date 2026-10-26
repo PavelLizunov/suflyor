@@ -29,7 +29,10 @@ Column {
         model: root.service ? [root.service.tr("Русский", []), root.service.tr("English", [])] : []
         currentIndex: root.win ? root.win.prop("ui-language-index", 0) : 0
         onSelected: function(index) {
-          if (root.win && root.service) root.service.client.call(root.win.winId, "language-selected", [index])
+          if (!root.win || !root.service) return
+          // The host changes the locale, but does not echo ui-language-index.
+          root.service.client.set(root.win.winId, "ui-language-index", index)
+          root.service.client.call(root.win.winId, "language-selected", [index])
         }
       }
     }

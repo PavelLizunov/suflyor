@@ -375,6 +375,21 @@ mod tile_heading_tests {
     }
 }
 
+/// Actionable session failure without exposing the raw capture error.
+pub(super) fn session_start_failed(ru: bool, chain: &str) -> &'static str {
+    if chain.contains("Groq API key not set") {
+        if ru {
+            "Нет ключа Groq. Откройте Настройки > STT и добавьте ключ или выберите локальное распознавание."
+        } else {
+            "Groq key is missing. Open Settings > STT and add a key or choose local recognition."
+        }
+    } else if ru {
+        "Сессия не запустилась. Откройте Настройки > Диагностика."
+    } else {
+        "Session could not start. Open Settings > Diagnostics."
+    }
+}
+
 /// One plain line for a failed connection test. The full error chain can carry
 /// URLs, paths and library jargon, so it goes to the log, not the screen.
 pub(super) fn connection_failed(ru: bool, chain: &str) -> String {

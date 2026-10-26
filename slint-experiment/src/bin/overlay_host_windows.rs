@@ -1829,8 +1829,10 @@ fn main() -> Result<(), slint::PlatformError> {
                     if generation_c.load(Ordering::Acquire) != session_intent {
                         return;
                     }
+                    let ui_is_ru = cfg_c.read().ui_is_ru();
                     if let Err(e) = slint_session::start_session(events_c, cfg_c, rt_c) {
                         eprintln!("[overlay-host] start_session failed: {e:#}");
+                        let message = status_copy::session_start_failed(ui_is_ru, &format!("{e:#}"));
                         // Revert UI toggle since the pipeline didn't start.
                         let _ = slint::invoke_from_event_loop(move || {
                             #[cfg(target_os = "macos")]
@@ -1850,7 +1852,7 @@ fn main() -> Result<(), slint::PlatformError> {
                             drop(st);
                             if let Some(o) = weak_revert.upgrade() {
                                 o.set_timer_active(false);
-                                o.set_status_text(SharedString::from("start failed"));
+                                o.set_status_text(SharedString::from(message));
                                 o.set_status_tone(crate::ui::StatusTone::Danger);
                             }
                         });

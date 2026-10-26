@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls
 import qs.Commons
 import qs.Commons as Commons
+import "icons" as Icons
 
 // Suflyor Settings in the Omarchy style: grouped navigation on the left, the page of
 // `active-tab` on the right. Each page is settings/Tab<Name>.qml with `win` and `service`.
@@ -14,6 +15,39 @@ Item {
   property var service: null
   readonly property int activeTab: win ? win.prop("active-tab", 10) : 10
   readonly property bool macos: false
+  readonly property bool builtinBusy: win ? win.prop("local-ai-installing", false)
+    || win.prop("quality-downloading", false) || win.prop("model-switching", false)
+    || win.prop("vision12b-downloading", false) || win.prop("engine-updating", false) : false
+  readonly property bool strataBusy: win ? win.prop("strata-busy", false) : false
+  readonly property string installStatus: win ? win.prop("local-ai-status", "") : ""
+  readonly property string qualityStatus: win ? win.prop("quality-status", "") : ""
+  readonly property string visionStatus: win ? win.prop("vision12b-status", "") : ""
+  readonly property string engineStatus: win ? win.prop("engine-update-status", "") : ""
+  readonly property string strataStatus: win ? win.prop("strata-status", "") : ""
+  property var initializedWin: null
+
+  // TabAiProviders handles these while loaded; Slint's window-level handlers
+  // must also survive navigating away from a running download or model switch.
+  function relayBackgroundStatus(status) {
+    if (root.win && root.service && root.initializedWin === root.win && root.activeTab !== 11)
+      root.service.client.set(root.win.winId, "local-choice-status", status)
+  }
+  function refreshBackgroundWhenIdle() {
+    if (root.win && root.service && root.initializedWin === root.win && root.activeTab !== 11
+        && !root.builtinBusy && !root.strataBusy)
+      root.service.client.call(root.win.winId, "now-refresh-requested", [])
+  }
+  onInstallStatusChanged: root.relayBackgroundStatus(root.installStatus)
+  onQualityStatusChanged: root.relayBackgroundStatus(root.qualityStatus)
+  onVisionStatusChanged: root.relayBackgroundStatus(root.visionStatus)
+  onEngineStatusChanged: root.relayBackgroundStatus(root.engineStatus)
+  onStrataStatusChanged: root.relayBackgroundStatus(root.strataStatus)
+  onBuiltinBusyChanged: root.refreshBackgroundWhenIdle()
+  onStrataBusyChanged: root.refreshBackgroundWhenIdle()
+  onWinChanged: {
+    root.initializedWin = null
+    Qt.callLater(function() { root.initializedWin = root.win })
+  }
 
   function tr(msgid, args) { return root.service ? root.service.tr(msgid, args) : msgid }
 
@@ -44,7 +78,7 @@ Item {
   }
 
   function choose(tab) {
-    if (!root.win) return
+    if (!root.win || !root.service) return
     root.service.client.set(root.win.winId, "active-tab", tab)
     root.service.client.call(root.win.winId, "tab-selected", [tab])
   }
@@ -67,11 +101,19 @@ Item {
       width: Style.space(200)
       height: parent.height
 
-      Column {
+      Row {
         id: brand
         x: Style.space(14)
         y: Style.space(14)
+        spacing: Style.space(8)
+        Icons.SuflyorMark {
+          width: Style.space(18)
+          height: width
+          ink: Commons.Color.foreground
+          anchors.verticalCenter: parent.verticalCenter
+        }
         Text {
+          anchors.verticalCenter: parent.verticalCenter
           text: root.tr("Settings")
           color: Commons.Color.foreground
           font.family: Style.font.family
@@ -119,6 +161,8 @@ Item {
                 height: Style.space(30)
                 radius: Style.space(6)
                 color: active ? Qt.alpha(Commons.Color.accent, 0.16) : hover.hovered ? Qt.alpha(Commons.Color.foreground, 0.06) : "transparent"
+                border.width: activeFocus ? 1 : 0
+                border.color: Commons.Color.accent
 
                 Rectangle {
                   visible: item.active
@@ -149,10 +193,17 @@ Item {
                   }
                 }
 
+                activeFocusOnTab: true
+                Keys.onReturnPressed: root.choose(entry.modelData[1])
+                Keys.onEnterPressed: root.choose(entry.modelData[1])
+                Keys.onSpacePressed: root.choose(entry.modelData[1])
                 HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }
-                TapHandler { onTapped: root.choose(entry.modelData[1]) }
+                TapHandler { onTapped: { item.forceActiveFocus(); root.choose(entry.modelData[1]) } }
                 Accessible.role: Accessible.PageTab
                 Accessible.name: root.tr(entry.modelData[2])
+                Accessible.checkable: true
+                Accessible.checked: item.active
+                Accessible.onPressAction: root.choose(entry.modelData[1])
               }
             }
           }
@@ -169,17 +220,26 @@ Item {
         radius: Style.space(6)
         color: closeHover.hovered ? Qt.alpha(Commons.Color.urgent, 0.13) : "transparent"
         border.width: 1
-        border.color: closeHover.hovered ? Qt.alpha(Commons.Color.urgent, 0.55) : Qt.alpha(Commons.Color.foreground, 0.16)
+        border.color: activeFocus ? Commons.Color.accent
+          : closeHover.hovered ? Qt.alpha(Commons.Color.urgent, 0.55) : Qt.alpha(Commons.Color.foreground, 0.16)
         Row {
           anchors.centerIn: parent
           spacing: Style.space(7)
           Text { text: "\u{f0156}"; color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body }
           Text { text: root.tr("Close"); color: Commons.Color.muted; font.family: Style.font.family; font.pixelSize: Style.font.body }
         }
+        function dismiss() {
+          if (root.win && root.service) root.service.client.call(root.win.winId, "close-clicked", [])
+        }
+        activeFocusOnTab: true
+        Keys.onReturnPressed: closeButton.dismiss()
+        Keys.onEnterPressed: closeButton.dismiss()
+        Keys.onSpacePressed: closeButton.dismiss()
         HoverHandler { id: closeHover; cursorShape: Qt.PointingHandCursor }
-        TapHandler { onTapped: if (root.win) root.service.client.call(root.win.winId, "close-clicked", []) }
+        TapHandler { onTapped: closeButton.dismiss() }
         Accessible.role: Accessible.Button
         Accessible.name: root.tr("Close")
+        Accessible.onPressAction: closeButton.dismiss()
       }
     }
 
@@ -222,6 +282,9 @@ Item {
           onLoaded: {
             item.win = Qt.binding(function () { return root.win })
             item.service = Qt.binding(function () { return root.service })
+            // Slint resets content-scroll.viewport-y whenever active-tab changes.
+            const flickable = scroll.contentItem as Flickable
+            if (flickable) flickable.contentY = 0
           }
         }
       }

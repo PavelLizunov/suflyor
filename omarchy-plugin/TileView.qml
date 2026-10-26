@@ -14,7 +14,7 @@ Item {
 
   function p(name, fallback) { return root.win ? root.win.prop(name, fallback) : fallback }
   function set(name, value) { if (root.win && root.service) root.service.client.set(root.win.winId, name, value) }
-  function call(name, args) { if (root.win && root.service) root.service.client.call(root.win.winId, name, args || []) }
+  function call(name, args, done) { if (root.win && root.service) root.service.client.call(root.win.winId, name, args || [], done) }
   function submit() {
     if (root.p("followup-busy", false) || root.p("followup-text", "") === "") return
     root.call("followup-submitted", [root.p("followup-text", "")])
@@ -38,15 +38,29 @@ Item {
                      : Math.max(0.65, Math.min(0.8, Commons.Color.accent.hslLightness)), 1)
   }
 
-  // The wire mirror has no model identity: ignore mark-only in-place updates,
-  // otherwise starring a block would immediately clear its own mark/editor.
-  // Content replacements reproduce Slint's `changed blocks` stale-state guard.
-  readonly property string blockContent: JSON.stringify(p("blocks", []).map(function(block) {
-    return { kind: block.kind, text: block.text, display: block["display-text"], lang: block.lang }
-  }))
+  // Polling sends mark-only edits too; only those must keep the editor/anchor.
+  // An identical payload can still be an explicit model replacement (e.g. a
+  // repeated answer), and must run Slint's `changed blocks` stale-state guard.
+  readonly property var blocks: p("blocks", [])
+  property var previousBlocks: null
+  property string previousBlockContent: ""
+  property string previousBlockPayload: ""
   property bool initialized: false
-  onBlockContentChanged: {
-    if (!initialized) return
+  // set() advances the window revision. Defer writes until the blocks binding
+  // has settled, otherwise resetting an editor feeds back into that binding.
+  onBlocksChanged: Qt.callLater(root.resetBlockState)
+  function resetBlockState() {
+    var nextBlocks = root.blocks
+    if (nextBlocks === previousBlocks) return
+    previousBlocks = nextBlocks
+    var content = JSON.stringify(nextBlocks.map(function(block) {
+      return { kind: block.kind, text: block.text, display: block["display-text"], lang: block.lang }
+    }))
+    var payload = JSON.stringify(nextBlocks)
+    var markOnly = content === previousBlockContent && payload !== previousBlockPayload
+    previousBlockContent = content
+    previousBlockPayload = payload
+    if (!initialized || markOnly) return
     root.set("copied-block-index", -1)
     root.set("marked-count", 0)
     root.set("mark-anchor", -1)
@@ -146,28 +160,22 @@ Item {
         Layout.maximumHeight: Math.min(Commons.Style.space(180), root.height * 0.35)
         view: root
       }
-      Controls.ScrollView {
+      Flickable {
         id: selection
         visible: root.selecting && !root.capturing
         Layout.fillWidth: true
         Layout.fillHeight: true
         Layout.minimumHeight: 0
-        contentWidth: availableWidth
-        Controls.ScrollBar.horizontal.policy: Controls.ScrollBar.AlwaysOff
-        Tile.SelectableText {
-          id: selectionText
-          width: selection.availableWidth
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+        Controls.ScrollBar.vertical: Controls.ScrollBar {}
+        // TextArea's native Flickable integration keeps drag selection scrolling
+        // even while the pointer is held still beyond the viewport edge.
+        Controls.TextArea.flickable: Tile.SelectableText {
           service: root.service
           text: root.p("select-text", "")
           onCapture: function(anchor, cursor) { root.call("capture-selection", [-1, anchor, cursor]) }
-          // Keep keyboard/drag selection visible across the entire answer.
-          onCursorRectangleChanged: {
-            if (!activeFocus || !selection.contentItem) return
-            var viewport = selection.contentItem
-            if (cursorRectangle.y < viewport.contentY) viewport.contentY = cursorRectangle.y
-            else if (cursorRectangle.y + cursorRectangle.height > viewport.contentY + viewport.height)
-              viewport.contentY = Math.min(Math.max(0, height - viewport.height), cursorRectangle.y + cursorRectangle.height - viewport.height)
-          }
         }
       }
       Tile.MemoryPanel {

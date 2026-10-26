@@ -2,6 +2,7 @@
  "Click: open the Suflyor panel": "Клик: открыть панель Суфлёра",
  "Follows the Omarchy theme. Change it in the Omarchy menu: Style > Theme.": "Берётся из темы Omarchy. Сменить её можно в меню Omarchy: «Стиль» > «Тема».",
  "Middle click: write a question": "Средний клик: написать вопрос",
+ "Open settings": "Открыть настройки",
  "Right click: start or stop the session": "Правый клик: начать или остановить сессию",
  "Suflyor could not start. Reinstall the plugin, then restart the shell.": "Суфлёр не запустился. Переустановите плагин, затем перезапустите оболочку.",
  "Suflyor in the Omarchy bar": "Суфлёр в баре Omarchy",

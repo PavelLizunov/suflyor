@@ -19,6 +19,9 @@ RowLayout {
     Layout.fillWidth: true
     Layout.minimumWidth: Commons.Style.space(60)
     value: root.view.p("progress", 0)
+    // PanelSlider resets liveValue to value on release; seek's host callback
+    // updates playback but not this property until the next player poll.
+    onReleased: function(value) { root.view.set("progress", value) }
     trackColor: Commons.Style.normalBorderColor
     fillColor: Commons.Color.accent
     knobColor: Commons.Color.accent
@@ -33,12 +36,15 @@ RowLayout {
     Layout.preferredWidth: Commons.Style.space(90)
     showLabel: false
     options: ["1×", "1.25×", "1.5×", "1.75×", "2×", "2.25×", "2.5×", "2.75×", "3×"]
+    // Dropdown assigns value internally. Reattach the binding after selection
+    // so reopening another session also resets the displayed speed.
     value: options[root.view.p("speed-index", 0)] || options[0]
     onChanged: function(next) {
       var index = options.indexOf(next)
       if (index < 0) return
       root.view.set("speed-index", index)
       root.view.call("set-speed", [1 + index * 0.25])
+      value = Qt.binding(function() { return options[root.view.p("speed-index", 0)] || options[0] })
     }
   }
   Tile.Label { text: "\uf028"; color: Commons.Color.accent }

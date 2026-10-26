@@ -310,7 +310,6 @@ impl RemoteBase {
             id
         });
         *adapter.id.borrow_mut() = id.clone();
-        send(json!({ "t": "open", "win": id, "type": kind, "visible": false, "props": {} }));
         Ok(Self {
             id,
             kind,
@@ -333,6 +332,11 @@ impl RemoteBase {
 
     pub fn hide(&self) -> Result<(), slint::PlatformError> {
         self.host.hide()
+    }
+
+    /// Publish initial properties after the generated state has been constructed.
+    pub fn send_snapshot(&self, snapshot: Value) {
+        send(snapshot);
     }
 
     pub fn send_prop(&self, name: &str, value: Value) {

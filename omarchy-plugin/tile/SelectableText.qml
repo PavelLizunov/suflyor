@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls as Controls
 import qs.Commons as Commons
 
-TextEdit {
+Controls.TextArea {
   id: root
   required property var service
   property string sourceText: text
@@ -26,6 +26,8 @@ TextEdit {
   }
 
   height: implicitHeight
+  padding: 0
+  background: null
   readOnly: true
   textFormat: TextEdit.PlainText
   wrapMode: noWrap ? TextEdit.NoWrap : TextEdit.Wrap
