@@ -69,7 +69,10 @@ Item {
     root.set("capture-pending", false)
     root.set("select-mode", false)
   }
-  Component.onCompleted: initialized = true
+  Component.onCompleted: {
+    root.resetBlockState()
+    initialized = true
+  }
 
   implicitWidth: Commons.Style.space(460)
   implicitHeight: Commons.Style.space(360)
