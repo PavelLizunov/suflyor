@@ -572,7 +572,8 @@ fn run_setup(dir: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> Result<(
     }
     drop(tx);
 
-    let mut log = std::fs::File::create(dir.join("suflyor-setup.log")).ok();
+    // Security: enforce 0o600 permissions on POSIX so setup logs are owner-only.
+    let mut log = crate::paths::open_private_append(&dir.join("suflyor-setup.log")).ok();
     let mut tail: Vec<String> = Vec::new();
     let mut stopped_on: Option<String> = None;
     let status = loop {
@@ -856,7 +857,9 @@ fn launch_strata(root: &Path) -> Result<Child> {
     use std::process::{Command, Stdio};
 
     let (dir, config) = active_location(root);
-    let log = std::fs::File::create(dir.join("suflyor-server.log")).context("server log")?;
+    // Security: enforce 0o600 permissions on POSIX so server logs are owner-only.
+    let log =
+        crate::paths::open_private_append(&dir.join("suflyor-server.log")).context("server log")?;
     let log_err = log.try_clone().context("server log")?;
     // The same command line as Strata's own run-<model>.bat.
     let mut cmd = Command::new(strata_python(&dir));
