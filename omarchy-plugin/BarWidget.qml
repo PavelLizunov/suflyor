@@ -131,7 +131,7 @@ Ui.BarWidget {
     hasVisualContent: true
     labelVisible: false
     fixedWidth: root.vertical ? -1 : row.implicitWidth
-    fixedHeight: root.vertical ? (row.implicitHeight + Style.space(12)) : -1
+    fixedHeight: root.vertical ? Style.bar.iconSlot : -1
     tooltipText: root.tooltip
 
     Accessible.role: Accessible.Button
@@ -149,15 +149,18 @@ Ui.BarWidget {
       anchors.centerIn: parent
       spacing: Style.space(5)
 
-      Ui.BarIconButton {
-        bar: root.bar
-        iconComponent: Component {
-          Icons.SuflyorMark { ink: root.ink; assistantActive: root.p("ai-streaming", false) }
-        }
-        foreground: root.ink
-        interactive: false
-        pressable: false
+      Item {
+        width: root.vertical ? root.barSize : Style.bar.iconSlot
+        height: root.vertical ? Style.bar.iconSlot : root.barSize
         anchors.verticalCenter: parent.verticalCenter
+
+        // Preserve the brand canvas; BarIconButton normalizes it to the smaller glyph size.
+        Icons.SuflyorMark {
+          x: (parent.width - width) / 2
+          y: (parent.height - height) / 2
+          ink: root.ink
+          assistantActive: root.p("ai-streaming", false)
+        }
       }
 
       Text {
