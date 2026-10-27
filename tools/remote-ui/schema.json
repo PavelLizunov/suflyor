@@ -3238,6 +3238,18 @@
             "prim": "void"
           }
         },
+        "strata-engine-check": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "strata-engine-update": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
         "strata-find-folder-clicked": {
           "args": [],
           "ret": {
@@ -5155,6 +5167,13 @@
             "prim": "bool"
           }
         },
+        "strata-engine-version": {
+          "default": "",
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
         "strata-external": {
           "default": false,
           "dir": "in-out",
@@ -5195,6 +5214,27 @@
           "dir": "in-out",
           "type": {
             "prim": "string"
+          }
+        },
+        "strata-update-job": {
+          "default": 0.0,
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "strata-update-status": {
+          "default": "",
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "strata-update-supported": {
+          "default": false,
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
           }
         },
         "strata-vision-downloaded": {

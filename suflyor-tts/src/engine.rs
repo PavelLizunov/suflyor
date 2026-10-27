@@ -26,19 +26,32 @@ impl NeuralEngine {
             data_dir: data_dir.map(|d| d.to_string_lossy().to_string()),
             ..Default::default()
         };
+        let provider = crate::accelerator::preferred();
         let model_cfg = sherpa_onnx::OfflineTtsModelConfig {
             vits,
             num_threads: 1,
             debug: false,
-            provider: Some("cpu".to_string()),
+            provider: Some(provider.to_string()),
             ..Default::default()
         };
-        let cfg = sherpa_onnx::OfflineTtsConfig {
+        let mut cfg = sherpa_onnx::OfflineTtsConfig {
             model: model_cfg,
             ..Default::default()
         };
         let tts = sherpa_onnx::OfflineTts::create(&cfg)
+            .or_else(|| {
+                if provider == "cpu" {
+                    return None;
+                }
+                eprintln!("[suflyor-tts] CUDA initialization failed; retrying on CPU");
+                cfg.model.provider = Some("cpu".to_string());
+                sherpa_onnx::OfflineTts::create(&cfg)
+            })
             .ok_or_else(|| anyhow!("failed to create OfflineTts (model not loadable)"))?;
+        eprintln!(
+            "[suflyor-tts] execution provider requested: {}",
+            cfg.model.provider.as_deref().unwrap_or("cpu")
+        );
         let sample_rate = tts.sample_rate().max(0) as u32;
         Ok(NeuralEngine { tts, sample_rate })
     }

@@ -47,8 +47,8 @@ mod gigaam_shim {
             transcribe_rs::OrtAccelerator::CpuOnly
         };
         #[cfg(target_os = "linux")]
-        let pref = if use_gpu {
-            transcribe_rs::OrtAccelerator::Auto
+        let pref = if use_gpu && cfg!(feature = "cuda") {
+            transcribe_rs::OrtAccelerator::Cuda
         } else {
             transcribe_rs::OrtAccelerator::CpuOnly
         };
@@ -59,7 +59,36 @@ mod gigaam_shim {
     /// Load under the configured ORT accelerator, falling back to CPU if the
     /// platform provider (DirectML/Core ML) cannot build this model.
     pub(super) fn load(dir: &str) -> anyhow::Result<Model> {
-        match GigaAMModel::load(Path::new(dir), &Quantization::Int8) {
+        #[cfg(all(target_os = "linux", feature = "cuda"))]
+        {
+            static RUNTIME: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
+            RUNTIME
+                .get_or_init(|| {
+                    let library = std::env::current_exe()
+                        .map_err(|error| error.to_string())?
+                        .parent()
+                        .ok_or("speech runtime directory unavailable")?
+                        .join("speech-gpu/libonnxruntime.so");
+                    ort::init_from(library)
+                        .map_err(|error| error.to_string())?
+                        .with_telemetry(false)
+                        .commit();
+                    Ok(())
+                })
+                .as_ref()
+                .map_err(|error| anyhow::anyhow!("speech runtime: {error}"))?;
+        }
+        // CUDA kernels cover the FP32 graph; dynamic-int8 convolutions can
+        // otherwise leave the expensive layers on CPU despite a CUDA session.
+        let quantization = if cfg!(all(target_os = "linux", feature = "cuda"))
+            && transcribe_rs::get_ort_accelerator() == transcribe_rs::OrtAccelerator::Cuda
+            && Path::new(dir).join("model.onnx").is_file()
+        {
+            Quantization::FP32
+        } else {
+            Quantization::Int8
+        };
+        match GigaAMModel::load(Path::new(dir), &quantization) {
             Ok(m) => Ok(Model(m)),
             Err(e)
                 if transcribe_rs::get_ort_accelerator()
@@ -147,8 +176,8 @@ fn public_gigaam_load_error(error: anyhow::Error, public_message: &'static str) 
 ///
 /// Must be called once at startup, BEFORE any GigaAM model is loaded: the ORT
 /// session builder reads this global preference when it creates the session.
-/// `use_gpu` selects DirectML on Windows and Core ML on macOS; otherwise CPU.
-/// Both builds retain ONNX Runtime's CPU fallback.
+/// `use_gpu` selects DirectML on Windows, Core ML on macOS and CUDA in a
+/// CUDA-enabled Linux build. CPU remains the fallback.
 pub fn configure_gigaam_accelerator(use_gpu: bool) {
     gigaam_shim::configure_accelerator(use_gpu);
 }

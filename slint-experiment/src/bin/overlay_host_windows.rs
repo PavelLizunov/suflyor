@@ -255,6 +255,9 @@ use settings_controller::*;
 #[cfg(any(windows, target_os = "linux"))]
 #[path = "overlay_host/settings_strata_vision.rs"]
 mod settings_strata_vision;
+#[cfg(any(windows, target_os = "linux"))]
+#[path = "overlay_host/settings_strata_updates.rs"]
+mod settings_strata_updates;
 #[path = "overlay_host/settings_vision.rs"]
 mod settings_vision;
 use settings_vision::*;

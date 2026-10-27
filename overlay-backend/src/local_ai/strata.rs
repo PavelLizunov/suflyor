@@ -24,6 +24,10 @@ use anyhow::{bail, Context, Result};
 mod vision;
 pub use vision::*;
 
+#[path = "strata_updates.rs"]
+mod updates;
+pub use updates::*;
+
 use super::{
     curl_resumable, curl_success_body, detect_nvidia_memory_mib, ensure_disk_space, extract_zip,
     free_llama_port, is_loopback_v1_on_port, is_reachable, llama_reachable,
@@ -103,20 +107,39 @@ fn strata_engine_path(dir: &Path, cfg: &serde_json::Value) -> Option<PathBuf> {
     if exe != "component:strata-engine" {
         let path = PathBuf::from(exe);
         let cwd = PathBuf::from(cfg["cwd"].as_str().unwrap_or("."));
-        let cwd = if cwd.is_absolute() { cwd } else { dir.join(cwd) };
-        return Some(if path.is_absolute() { path } else { cwd.join(path) });
+        let cwd = if cwd.is_absolute() {
+            cwd
+        } else {
+            dir.join(cwd)
+        };
+        return Some(if path.is_absolute() {
+            path
+        } else {
+            cwd.join(path)
+        });
     }
-    let components = std::env::var_os("STRATA_COMPONENTS_DIR").map(PathBuf::from)
+    let components = std::env::var_os("STRATA_COMPONENTS_DIR")
+        .map(PathBuf::from)
         .or_else(|| dirs::data_local_dir().map(|path| path.join("strata/components")))?;
-    let state = parse_json_file(&std::fs::read_to_string(components.join(".updates/state.json")).ok()?);
+    let state =
+        parse_json_file(&std::fs::read_to_string(components.join(".updates/state.json")).ok()?);
     let active = std::path::Path::new(state["engine"]["active"].as_str()?);
-    if active.components().count() != 1 || !matches!(active.components().next(), Some(std::path::Component::Normal(_))) {
+    if active.components().count() != 1
+        || !matches!(
+            active.components().next(),
+            Some(std::path::Component::Normal(_))
+        )
+    {
         return None;
     }
     let package = components.join("engine").join(active);
-    let manifest = parse_json_file(&std::fs::read_to_string(package.join("engine-component.json")).ok()?);
+    let manifest =
+        parse_json_file(&std::fs::read_to_string(package.join("engine-component.json")).ok()?);
     let entry = std::path::Path::new(manifest["entrypoint"].as_str()?);
-    if !entry.components().all(|part| matches!(part, std::path::Component::Normal(_))) {
+    if !entry
+        .components()
+        .all(|part| matches!(part, std::path::Component::Normal(_)))
+    {
         return None;
     }
     Some(package.join(entry))
@@ -906,6 +929,48 @@ fn launch_strata(root: &Path) -> Result<Child> {
     use std::process::{Command, Stdio};
 
     let (dir, config) = active_location(root);
+    #[cfg(all(target_os = "linux", feature = "cuda"))]
+    let config = {
+        // The automatic expert cache otherwise consumes the VRAM needed by
+        // local ASR, diarization and TTS. Preserve the user's source config.
+        let mut json = parse_json_file(&std::fs::read_to_string(&config)?);
+        let args = json["args"].as_array_mut().context("Strata args missing")?;
+        const RESERVE: &str = "--vram-reserve-mib";
+        if let Some(index) = args.iter().position(|arg| arg.as_str() == Some(RESERVE)) {
+            let reserve = args
+                .get(index + 1)
+                .and_then(|value| value.as_str())
+                .and_then(|value| value.parse::<u64>().ok())
+                .unwrap_or(0)
+                .max(4096);
+            if index + 1 < args.len() {
+                args[index + 1] = serde_json::json!(reserve.to_string());
+            } else {
+                args.push(serde_json::json!(reserve.to_string()));
+            }
+        } else {
+            args.extend([serde_json::json!(RESERVE), serde_json::json!("4096")]);
+        }
+        // Prefer CUDA for the image helper when the installed package declares
+        // it. Strata itself retries the same helper without --gpu on failure.
+        if let Some(engine) = strata_engine_path(&dir, &json) {
+            if let Some(package) = engine.parent() {
+                let build = std::fs::read_to_string(package.join("BUILD.json"))
+                    .map(|text| parse_json_file(&text)).unwrap_or_default();
+                if build["vision"].as_str().is_some_and(|kind| kind.starts_with("cuda")) {
+                    let helper = package.join("strata-vision");
+                    if helper.is_file() && json["vision"].is_object() {
+                        json["vision"]["exe"] = serde_json::json!(helper);
+                        json["vision"]["cpu_exe"] = serde_json::json!(helper);
+                        json["vision"]["gpu"] = serde_json::json!(true);
+                    }
+                }
+            }
+        }
+        let runtime = dir.join("suflyor-speech-gpu.json");
+        std::fs::write(&runtime, serde_json::to_vec_pretty(&json)?)?;
+        runtime
+    };
     let log = std::fs::File::create(dir.join("suflyor-server.log")).context("server log")?;
     let log_err = log.try_clone().context("server log")?;
     // The same command line as Strata's own run-<model>.bat.

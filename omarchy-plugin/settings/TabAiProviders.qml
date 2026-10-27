@@ -543,6 +543,17 @@ Column {
             onClicked: root.call("found-models-search")
           }
         }
+        C.WrapBlock {
+          visible: root.p("strata-update-supported", false)
+          C.SettingsCaption { text: root.tr("Strata engine: {}", [root.p("strata-engine-version", "")]) }
+          C.SettingsCaption { text: root.tr("Updates only the Strata engine through its official updater. Model weights are kept. The running server restarts.") }
+          C.SettingsButtonsRow {
+            C.SettingsButton { text: root.tr("Check engine updates"); enabled: root.idle; onClicked: root.call("strata-engine-check") }
+            C.SettingsButton { text: root.tr("Update Strata engine"); enabled: root.idle; onClicked: root.call("strata-engine-update") }
+            C.SettingsButton { visible: root.p("strata-update-job", 0) !== 0; text: root.tr("Cancel"); onClicked: root.call("cancel-local-ai-clicked") }
+          }
+          C.StatusLine { text: root.p("strata-update-status", "") }
+        }
         C.SettingsCaption { visible: root.p("found-models-searching", false); text: root.tr("Looking for models on this PC…") }
         C.WrapBlock {
           visible: root.p("local-connect-open", false)

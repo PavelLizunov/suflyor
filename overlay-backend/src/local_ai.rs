@@ -106,6 +106,9 @@ pub(super) const GIGAAM_MODEL_URL: &str =
 pub(super) const GIGAAM_MODEL_SIZE: u64 = 224_893_347;
 pub(super) const GIGAAM_SHA256: &str =
     "2e3fcb7a7b66030336fd10c2fcfb033bd1dc7e1bf238fe5cfd83b1d0cfc9d28e";
+pub(super) const GIGAAM_CUDA_URL: &str = "https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/322c3b29492673eb7d0b434bfa9dfb8653e34d02/v3_e2e_ctc.onnx";
+pub(super) const GIGAAM_CUDA_SIZE: u64 = 885_950_079;
+pub(super) const GIGAAM_CUDA_SHA256: &str = "377701bd33568f4733feec2db5b2dc12544fd09a5a5dfa69ccf55d161f84027a";
 pub(super) const GIGAAM_VOCAB_URL: &str =
     "https://huggingface.co/istupakov/gigaam-v3-onnx/resolve/main/v3_e2e_ctc_vocab.txt";
 /// GigaAM-v3 vocab (2 KB, FIXED for this model) — BUNDLED via include_bytes so the
@@ -454,6 +457,7 @@ pub fn install(
     let llama_dir = opts.root.join("llama.cpp");
     let whisper_dir = opts.root.join("whisper.cpp");
     let gigaam_dir = opts.root.join("gigaam-v3");
+    let gigaam_cuda = cfg!(all(target_os = "linux", feature = "cuda")) && !opts.force_cpu;
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
     let hardware_profile = detected_hardware_model_profile(opts.force_cpu);
     let mut prefer_quality = hardware_profile.uses_primary_26b();
@@ -494,6 +498,9 @@ pub fn install(
         }
         if !opts.skip_gigaam && file_len(&gigaam_dir.join("model.int8.onnx")) < GIGAAM_MODEL_SIZE {
             need += GIGAAM_MODEL_SIZE;
+        }
+        if !opts.skip_gigaam && gigaam_cuda && file_len(&gigaam_dir.join("model.onnx")) < GIGAAM_CUDA_SIZE {
+            need += GIGAAM_CUDA_SIZE;
         }
         ensure_disk_space(&opts.root, need, on)?;
     }
@@ -670,6 +677,13 @@ pub fn install(
                 )?;
             }
             verify_sha256(&giga_dest, GIGAAM_SHA256, "GigaAM model")?;
+            if gigaam_cuda {
+                let fp32 = gigaam_dir.join("model.onnx");
+                if !reuse_if_available(&fp32, GIGAAM_CUDA_SIZE, GIGAAM_CUDA_SHA256, &[]) {
+                    curl_resumable(GIGAAM_CUDA_URL, &fp32, GIGAAM_CUDA_SIZE, "GigaAM CUDA", cancel, on)?;
+                }
+                verify_sha256(&fp32, GIGAAM_CUDA_SHA256, "GigaAM CUDA model")?;
+            }
             // vocab.txt — write the BUNDLED copy (no flaky HF download for this
             // 2 KB file). Fall back to the network only if the embedded write fails.
             let vocab_dest = gigaam_dir.join("vocab.txt");

@@ -189,7 +189,8 @@ Ui.Panel {
     // Match the daemon's suflyor-* stealth layer-rule namespace.
     WlrLayershell.namespace: "suflyor-bar-panel"
     contentWidth: fittedContentWidth(Style.space(440))
-    contentHeight: fittedContentHeight(Style.space(root.bootstrap ? 260 : root.compact ? 390 : 670), Style.space(720))
+    // Fit the actual content, including live status lines and theme spacing.
+    contentHeight: fittedContentHeight(Math.ceil(body.implicitHeight))
 
     FocusScope {
       id: keyCatcher

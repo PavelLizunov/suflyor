@@ -443,6 +443,12 @@ export component SettingsWindow inherits Window {
     callback strata-choose(bool);
     callback strata-find-folder-clicked();
     callback strata-folder-selected(string);
+    in-out property <bool> strata-update-supported: false;
+    in-out property <string> strata-engine-version: "";
+    in-out property <int> strata-update-job: 0; // 0 idle, 1 check, 2 update
+    in-out property <string> strata-update-status: "";
+    callback strata-engine-check();
+    callback strata-engine-update();
     in-out property <string> models-directory: "";
     in-out property <string> models-directory-status: "";
     callback models-directory-save(string);
@@ -3045,6 +3051,18 @@ export component SettingsWindow inherits Window {
                                         Text { text: @tr("Connect by address…"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { enabled: !root.builtin-busy && !root.strata-busy; mouse-cursor: pointer; clicked => { root.local-connect-auto = false; root.local-connect-open = !root.local-connect-open; } } }
                                         if !root.found-models-searching : Text { text: @tr("Search again"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { enabled: !root.builtin-busy && !root.strata-busy; mouse-cursor: pointer; clicked => { root.found-models-search(); } } }
                                     }
+                                    if root.strata-update-supported : WrapBlock {
+                                        Text { text: @tr("Strata engine: {}", root.strata-engine-version); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                        Text { text: @tr("Updates only the Strata engine through its official updater. Model weights are kept. The running server restarts."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                        HorizontalLayout {
+                                            alignment: start;
+                                            spacing: Metrics.space-sm;
+                                            Button { text: @tr("Check engine updates"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.strata-engine-check(); } }
+                                            Button { text: @tr("Update Strata engine"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.strata-engine-update(); } }
+                                            if root.strata-update-job != 0 : Button { text: @tr("Cancel"); clicked => { root.cancel-local-ai-clicked(); } }
+                                        }
+                                        if root.strata-update-status != "" : Text { text: root.strata-update-status; font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                    }
                                     if root.found-models-searching : Text { text: @tr("Looking for models on this PC…"); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                                     if root.local-connect-open : WrapBlock {
                                         SettingsLineEdit { placeholder-text: @tr("local URL — http://127.0.0.1:11434/v1 (Ollama)"); text <=> root.ai-local-base-url-input; }
@@ -3345,7 +3363,7 @@ export component SettingsWindow inherits Window {
                         if !Platform.is-macos : SettingsCard {
                             title: @tr("Add Vision to Strata");
                             Text {
-                                text: @tr("Optional 907 MB encoder for Qwen3.8-Flash-Next. Uses the CPU, not extra GPU memory. No second language model. Downloading does not change F8.");
+                                text: @tr("Optional 907 MB encoder for Qwen3.8-Flash-Next. CUDA builds prefer the GPU when supported, with CPU fallback. No second language model. Downloading does not change F8.");
                                 font-size: Metrics.font-caption;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;

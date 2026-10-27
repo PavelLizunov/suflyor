@@ -2194,6 +2194,9 @@ pub(crate) fn populate_token_status(
     if win.get_strata_vision_job() == 0 {
         win.set_strata_vision_status(blank());
     }
+    if win.get_strata_update_job() == 0 {
+        win.set_strata_update_status(blank());
+    }
     let local_job_active = win.get_local_ai_installing()
         || win.get_quality_downloading()
         || win.get_model_switching()

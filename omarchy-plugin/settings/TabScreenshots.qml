@@ -40,7 +40,7 @@ Column {
     C.SettingsCard {
       title: root.service ? root.service.tr("Add Vision to Strata", []) : ""
       C.SettingsCaption {
-        text: root.service ? root.service.tr("Optional 907 MB encoder for Qwen3.8-Flash-Next. Uses the CPU, not extra GPU memory. No second language model. Downloading does not change F8.", []) : ""
+        text: root.service ? root.service.tr("Optional 907 MB encoder for Qwen3.8-Flash-Next. CUDA builds prefer the GPU when supported, with CPU fallback. No second language model. Downloading does not change F8.", []) : ""
       }
       C.StatusLine {
         text: root.service ? root.service.tr(!root.installable

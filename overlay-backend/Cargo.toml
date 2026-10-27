@@ -12,6 +12,10 @@ description = "Shared backend for suflyor — audio, STT, AI, journal, KB, confi
 [lib]
 path = "src/lib.rs"
 
+[features]
+# Optional Linux NVIDIA build; regular platform builds retain their runtime.
+cuda = ["transcribe-rs/ort-cuda", "ort/load-dynamic"]
+
 [dependencies]
 # Serialization & config (shared by config, journal, kb, ai)
 serde = { version = "1", features = ["derive"] }

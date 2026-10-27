@@ -47,6 +47,12 @@ grep -qa 'remote-ui platform is not installed' "$build/overlay-host" || {
 }
 
 mkdir -p "$prefix"
+# Optional verified CUDA speech libraries remain outside the shell plugin tree.
+if [[ -d "$build/speech-gpu" ]]; then
+    cp -R "$build/speech-gpu" "$prefix/.speech-gpu.new"
+    rm -rf "$prefix/speech-gpu"
+    mv "$prefix/.speech-gpu.new" "$prefix/speech-gpu"
+fi
 install -m 0755 "$build/overlay-host" "$prefix/suflyord.new"
 mv -f "$prefix/suflyord.new" "$prefix/suflyord"
 for name in suflyor-tts suflyor-teratts; do

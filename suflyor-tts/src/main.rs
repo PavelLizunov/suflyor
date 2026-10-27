@@ -14,6 +14,7 @@
 //! host keeps controls visible until the render device has actually drained.
 //! EOF on stdin (parent exits) → this process exits.
 
+mod accelerator;
 mod diar;
 mod engine;
 #[cfg(windows)]

@@ -2450,6 +2450,8 @@ pub(crate) fn refresh_local_engine_state(
     win.set_strata_installed(overlay_backend::local_ai::own_strata_installed(&root));
     #[cfg(any(windows, target_os = "linux"))]
     super::settings_strata_vision::refresh(win, cfg);
+    #[cfg(any(windows, target_os = "linux"))]
+    super::settings_strata_updates::refresh(win);
     win.set_strata_active(overlay_backend::local_ai::is_managed_strata_endpoint(
         &cfg.ai_local_base_url,
     ));
@@ -2501,6 +2503,7 @@ pub(crate) fn wire_strata(
     state: &slint_replay::app_state::SharedState,
     overlay_weak: &slint::Weak<OverlayBarWindow>,
 ) {
+    super::settings_strata_updates::wire(win, cfg, state);
     {
         let cfg_c = cfg.clone();
         let state_c = state.clone();

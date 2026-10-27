@@ -3799,12 +3799,16 @@ struct SettingsWindowProps {
     strata_active: bool,
     strata_adopted: bool,
     strata_busy: bool,
+    strata_engine_version: slint::SharedString,
     strata_external: bool,
     strata_hardware_fits: bool,
     strata_hardware_note: slint::SharedString,
     strata_installed: bool,
     strata_running: bool,
     strata_status: slint::SharedString,
+    strata_update_job: i32,
+    strata_update_status: slint::SharedString,
+    strata_update_supported: bool,
     strata_vision_downloaded: bool,
     strata_vision_enabled: bool,
     strata_vision_installable: bool,
@@ -4207,6 +4211,8 @@ impl Default for SettingsWindowProps {
             strata_active: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             strata_adopted: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             strata_busy: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            strata_engine_version: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
             strata_external: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             strata_hardware_fits: <bool>::from_json(&serde_json::json!(true)).unwrap_or_default(),
             strata_hardware_note: <slint::SharedString>::from_json(&serde_json::json!(""))
@@ -4214,6 +4220,11 @@ impl Default for SettingsWindowProps {
             strata_installed: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             strata_running: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             strata_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            strata_update_job: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            strata_update_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            strata_update_supported: <bool>::from_json(&serde_json::json!(false))
                 .unwrap_or_default(),
             strata_vision_downloaded: <bool>::from_json(&serde_json::json!(false))
                 .unwrap_or_default(),
@@ -4424,6 +4435,8 @@ struct SettingsWindowCallbacks {
     retention_changed: Handler<dyn FnMut(i32, slint::SharedString) -> ()>,
     stealth_changed: Handler<dyn FnMut(bool) -> ()>,
     strata_choose: Handler<dyn FnMut(bool) -> ()>,
+    strata_engine_check: Handler<dyn FnMut() -> ()>,
+    strata_engine_update: Handler<dyn FnMut() -> ()>,
     strata_find_folder_clicked: Handler<dyn FnMut() -> ()>,
     strata_folder_selected: Handler<dyn FnMut(slint::SharedString) -> ()>,
     strata_install_clicked: Handler<dyn FnMut() -> ()>,
@@ -6099,6 +6112,15 @@ impl SettingsWindow {
     pub fn get_strata_busy(&self) -> bool {
         self.0.props.borrow().strata_busy.clone()
     }
+    pub fn set_strata_engine_version(&self, value: slint::SharedString) {
+        self.0
+            .base
+            .send_prop("strata-engine-version", value.to_json());
+        self.0.props.borrow_mut().strata_engine_version = value;
+    }
+    pub fn get_strata_engine_version(&self) -> slint::SharedString {
+        self.0.props.borrow().strata_engine_version.clone()
+    }
     pub fn set_strata_external(&self, value: bool) {
         self.0.base.send_prop("strata-external", value.to_json());
         self.0.props.borrow_mut().strata_external = value;
@@ -6144,6 +6166,31 @@ impl SettingsWindow {
     }
     pub fn get_strata_status(&self) -> slint::SharedString {
         self.0.props.borrow().strata_status.clone()
+    }
+    pub fn set_strata_update_job(&self, value: i32) {
+        self.0.base.send_prop("strata-update-job", value.to_json());
+        self.0.props.borrow_mut().strata_update_job = value;
+    }
+    pub fn get_strata_update_job(&self) -> i32 {
+        self.0.props.borrow().strata_update_job.clone()
+    }
+    pub fn set_strata_update_status(&self, value: slint::SharedString) {
+        self.0
+            .base
+            .send_prop("strata-update-status", value.to_json());
+        self.0.props.borrow_mut().strata_update_status = value;
+    }
+    pub fn get_strata_update_status(&self) -> slint::SharedString {
+        self.0.props.borrow().strata_update_status.clone()
+    }
+    pub fn set_strata_update_supported(&self, value: bool) {
+        self.0
+            .base
+            .send_prop("strata-update-supported", value.to_json());
+        self.0.props.borrow_mut().strata_update_supported = value;
+    }
+    pub fn get_strata_update_supported(&self) -> bool {
+        self.0.props.borrow().strata_update_supported.clone()
     }
     pub fn set_strata_vision_downloaded(&self, value: bool) {
         self.0
@@ -8337,6 +8384,30 @@ impl SettingsWindow {
             .send_invoke("strata-choose", vec![arg0.to_json()]);
         Default::default()
     }
+    pub fn on_strata_engine_check(&self, f: impl FnMut() -> () + 'static) {
+        let f: Rc<RefCell<dyn FnMut() -> ()>> = Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().strata_engine_check = Handler(Some(f));
+    }
+    pub fn invoke_strata_engine_check(&self) -> () {
+        let handler = self.0.callbacks.borrow().strata_engine_check.clone();
+        if handler.is_set() {
+            return handler.call(|f| f()).unwrap_or_default();
+        }
+        self.0.base.send_invoke("strata-engine-check", vec![]);
+        Default::default()
+    }
+    pub fn on_strata_engine_update(&self, f: impl FnMut() -> () + 'static) {
+        let f: Rc<RefCell<dyn FnMut() -> ()>> = Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().strata_engine_update = Handler(Some(f));
+    }
+    pub fn invoke_strata_engine_update(&self) -> () {
+        let handler = self.0.callbacks.borrow().strata_engine_update.clone();
+        if handler.is_set() {
+            return handler.call(|f| f()).unwrap_or_default();
+        }
+        self.0.base.send_invoke("strata-engine-update", vec![]);
+        Default::default()
+    }
     pub fn on_strata_find_folder_clicked(&self, f: impl FnMut() -> () + 'static) {
         let f: Rc<RefCell<dyn FnMut() -> ()>> = Rc::new(RefCell::new(f));
         self.0.callbacks.borrow_mut().strata_find_folder_clicked = Handler(Some(f));
@@ -9350,6 +9421,10 @@ impl RemoteObject for SettingsWindowInner {
         m.insert("strata-active".into(), p.strata_active.to_json());
         m.insert("strata-adopted".into(), p.strata_adopted.to_json());
         m.insert("strata-busy".into(), p.strata_busy.to_json());
+        m.insert(
+            "strata-engine-version".into(),
+            p.strata_engine_version.to_json(),
+        );
         m.insert("strata-external".into(), p.strata_external.to_json());
         m.insert(
             "strata-hardware-fits".into(),
@@ -9362,6 +9437,15 @@ impl RemoteObject for SettingsWindowInner {
         m.insert("strata-installed".into(), p.strata_installed.to_json());
         m.insert("strata-running".into(), p.strata_running.to_json());
         m.insert("strata-status".into(), p.strata_status.to_json());
+        m.insert("strata-update-job".into(), p.strata_update_job.to_json());
+        m.insert(
+            "strata-update-status".into(),
+            p.strata_update_status.to_json(),
+        );
+        m.insert(
+            "strata-update-supported".into(),
+            p.strata_update_supported.to_json(),
+        );
         m.insert(
             "strata-vision-downloaded".into(),
             p.strata_vision_downloaded.to_json(),
@@ -10126,6 +10210,10 @@ impl RemoteObject for SettingsWindowInner {
             "strata-active" => p.strata_active = <bool>::from_json(value).ok_or("bad value")?,
             "strata-adopted" => p.strata_adopted = <bool>::from_json(value).ok_or("bad value")?,
             "strata-busy" => p.strata_busy = <bool>::from_json(value).ok_or("bad value")?,
+            "strata-engine-version" => {
+                p.strata_engine_version =
+                    <slint::SharedString>::from_json(value).ok_or("bad value")?
+            }
             "strata-external" => p.strata_external = <bool>::from_json(value).ok_or("bad value")?,
             "strata-hardware-fits" => {
                 p.strata_hardware_fits = <bool>::from_json(value).ok_or("bad value")?
@@ -10140,6 +10228,16 @@ impl RemoteObject for SettingsWindowInner {
             "strata-running" => p.strata_running = <bool>::from_json(value).ok_or("bad value")?,
             "strata-status" => {
                 p.strata_status = <slint::SharedString>::from_json(value).ok_or("bad value")?
+            }
+            "strata-update-job" => {
+                p.strata_update_job = <i32>::from_json(value).ok_or("bad value")?
+            }
+            "strata-update-status" => {
+                p.strata_update_status =
+                    <slint::SharedString>::from_json(value).ok_or("bad value")?
+            }
+            "strata-update-supported" => {
+                p.strata_update_supported = <bool>::from_json(value).ok_or("bad value")?
             }
             "strata-vision-downloaded" => {
                 p.strata_vision_downloaded = <bool>::from_json(value).ok_or("bad value")?
@@ -11422,6 +11520,20 @@ impl RemoteObject for SettingsWindowInner {
                 let handler = self.callbacks.borrow().strata_choose.clone();
                 Ok(handler
                     .call(|f| f(a0))
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
+            "strata-engine-check" => {
+                let handler = self.callbacks.borrow().strata_engine_check.clone();
+                Ok(handler
+                    .call(|f| f())
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
+            "strata-engine-update" => {
+                let handler = self.callbacks.borrow().strata_engine_update.clone();
+                Ok(handler
+                    .call(|f| f())
                     .map(|v| v.to_json())
                     .unwrap_or(Value::Null))
             }

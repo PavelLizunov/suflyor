@@ -73,6 +73,17 @@ impl TeraEngine {
     /// surfaced verbatim on the stdout protocol.
     pub fn load(tts_root: &Path) -> Result<TeraEngine> {
         let started = Instant::now();
+        #[cfg(all(target_os = "linux", feature = "cuda"))]
+        {
+            let library = std::env::current_exe()?
+                .parent()
+                .ok_or_else(|| anyhow!("speech runtime directory unavailable"))?
+                .join("speech-gpu/libonnxruntime.so");
+            ort::init_from(library)
+                .map_err(|error| anyhow!("speech runtime: {error}"))?
+                .with_telemetry(false)
+                .commit();
+        }
         let manifest = Manifest::pinned()?;
         let release = manifest.release_dir(tts_root);
         manifest::check_installed(&manifest, &release)
@@ -346,11 +357,59 @@ fn slice_latent_frames(
     Ok(window)
 }
 
-fn load_session(path: &Path) -> Result<Session> {
+#[cfg(all(target_os = "linux", feature = "cuda"))]
+fn load_session_linux(path: &Path) -> Result<Session> {
+    match try_load_cuda_session(path) {
+        Ok(session) => {
+            eprintln!("[suflyor-teratts] CUDA execution provider registered");
+            Ok(session)
+        }
+        Err(_) => {
+            eprintln!("[suflyor-teratts] CUDA execution provider unavailable, falling back to CPU");
+            let session = Session::builder()
+                .map_err(|e| anyhow!("ort session builder: {e}"))?
+                .commit_from_file(path)
+                .map_err(|e| anyhow!("load {}: {e}", path.display()))?;
+            eprintln!("[suflyor-teratts] CPU execution provider selected");
+            Ok(session)
+        }
+    }
+}
+
+#[cfg(all(target_os = "linux", feature = "cuda"))]
+fn try_load_cuda_session(path: &Path) -> Result<Session> {
+    use ort::ep::cuda::ConvAlgorithmSearch;
+    use ort::ep::{ArenaExtendStrategy, CUDA};
+
+    let cuda_ep = CUDA::default()
+        .with_device_id(0)
+        .with_memory_limit(512 * 1024 * 1024)
+        .with_arena_extend_strategy(ArenaExtendStrategy::SameAsRequested)
+        .with_conv_algorithm_search(ConvAlgorithmSearch::Heuristic)
+        .with_conv_max_workspace(false)
+        .build()
+        .error_on_failure();
+
     Session::builder()
         .map_err(|e| anyhow!("ort session builder: {e}"))?
+        .with_execution_providers([cuda_ep])
+        .map_err(|e| anyhow!("ort session cuda ep: {e}"))?
         .commit_from_file(path)
         .map_err(|e| anyhow!("load {}: {e}", path.display()))
+}
+
+fn load_session(path: &Path) -> Result<Session> {
+    #[cfg(all(target_os = "linux", feature = "cuda"))]
+    {
+        load_session_linux(path)
+    }
+    #[cfg(not(all(target_os = "linux", feature = "cuda")))]
+    {
+        Session::builder()
+            .map_err(|e| anyhow!("ort session builder: {e}"))?
+            .commit_from_file(path)
+            .map_err(|e| anyhow!("load {}: {e}", path.display()))
+    }
 }
 
 /// Exact declared-output schema of the pinned graphs: each graph returns

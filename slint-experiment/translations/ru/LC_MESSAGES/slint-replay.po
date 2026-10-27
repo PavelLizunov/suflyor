@@ -2206,8 +2206,8 @@ msgstr "Использовать для ответов"
 msgid "Add Vision to Strata"
 msgstr "Добавить Vision в Strata"
 
-msgid "Optional 907 MB encoder for Qwen3.8-Flash-Next. Uses the CPU, not extra GPU memory. No second language model. Downloading does not change F8."
-msgstr "Необязательный энкодер на 907 МБ для Qwen3.8-Flash-Next. Работает на CPU, не занимает дополнительную видеопамять. Вторая языковая модель не нужна. Загрузка не меняет F8."
+msgid "Optional 907 MB encoder for Qwen3.8-Flash-Next. CUDA builds prefer the GPU when supported, with CPU fallback. No second language model. Downloading does not change F8."
+msgstr "Необязательный энкодер на 907 МБ для Qwen3.8-Flash-Next. Сборка с CUDA использует видеокарту, если движок это поддерживает, иначе — CPU. Вторая языковая модель не нужна. Загрузка не меняет F8."
 
 msgid "First install or select a compatible Strata folder in AI providers. The image helper must be present."
 msgstr "Сначала установите или выберите совместимую папку Strata в AI-провайдерах. Нужна утилита обработки изображений."
@@ -2226,3 +2226,15 @@ msgstr "Включить для F8"
 
 msgid "Stop session"
 msgstr "Остановить сессию"
+
+msgid "Strata engine: {}"
+msgstr "Движок Strata: {}"
+
+msgid "Check engine updates"
+msgstr "Проверить обновления движка"
+
+msgid "Update Strata engine"
+msgstr "Обновить движок Strata"
+
+msgid "Updates only the Strata engine through its official updater. Model weights are kept. The running server restarts."
+msgstr "Обновляет только движок Strata официальным способом. Веса модели сохраняются. Работающий сервер перезапускается."
