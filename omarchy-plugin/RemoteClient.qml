@@ -29,6 +29,7 @@ Item {
   property var sock: null
   property int nextCall: 1
   property var pending: ({})
+  property bool nativeDialogOpen: false
 
   signal invoked(var win, string name, var args)
 
@@ -53,8 +54,25 @@ Item {
     return true
   }
 
+  // Native pickers are ordinary windows below our layer-shell surfaces. Yield
+  // those surfaces until the host's synchronous picker callback returns.
+  function opensNativeDialog(name) {
+    return ["choose-custom-gguf-clicked", "strata-find-folder-clicked",
+      "export-profile-clicked", "import-profile-clicked",
+      "export-server-settings-clicked", "import-server-settings-clicked"].indexOf(name) >= 0
+  }
+
   // Fires a callback in suflyord. `done(value, error)` runs when the callback returns.
   function call(win, name, args, done) {
+    if (client.opensNativeDialog(name)) {
+      if (client.nativeDialogOpen) return
+      client.nativeDialogOpen = true
+      var completed = done
+      done = function(value, error) {
+        client.nativeDialogOpen = false
+        if (completed) completed(value, error)
+      }
+    }
     var message = { t: "call", win: win, name: name, args: args || [] }
     if (done) {
       message.id = client.nextCall++
@@ -139,6 +157,7 @@ Item {
     client.pending = ({})
     for (var id in calls) calls[id](null, "Suflyor stopped")
     client.ready = false
+    client.nativeDialogOpen = false
     var old = client.windowList
     client.windows = ({})
     client.windowList = []

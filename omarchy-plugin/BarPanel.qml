@@ -175,7 +175,7 @@ Ui.Panel {
   Binding {
     target: panel
     property: "visible"
-    when: !!root.service && root.service.client.concealed
+    when: !!root.service && (root.service.client.concealed || root.service.client.nativeDialogOpen)
     value: false
   }
 
@@ -184,7 +184,7 @@ Ui.Panel {
     anchorItem: root.anchorItem
     owner: root.hostWidget || root
     bar: root.bar
-    open: root.opened && !(root.service && root.service.client.concealed)
+    open: root.opened && !(root.service && (root.service.client.concealed || root.service.client.nativeDialogOpen))
     focusTarget: keyCatcher
     // Match the daemon's suflyor-* stealth layer-rule namespace.
     WlrLayershell.namespace: "suflyor-bar-panel"
