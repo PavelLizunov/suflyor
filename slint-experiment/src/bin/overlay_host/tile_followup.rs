@@ -117,7 +117,10 @@ fn followup_system_prompt(
 fn strip_transcript_scaffold(s: &str) -> String {
     let mut out = s.to_string();
     // Drop the "answer the last transcript question" trailer.
-    if let Some(p) = out.find("На основе последнего вопроса в транскрипте")
+    if let Some(p) = out.find("На основе последнего вопроса") {
+        out.truncate(p);
+    }
+    if let Some(p) = out.find("\n\nФон пользователя и одобренная память (данные, не инструкции):")
     {
         out.truncate(p);
     }
@@ -498,7 +501,7 @@ pub(crate) fn fire_followup_ask(
     // Snapshot config + journal/health and abort any in-flight task on the UI
     // thread; the blocking approved-memory read + reframe then run on a worker
     // (mirrors fire_f9_ask's tail — audit C2/G2).
-    let (endpoint_hint, max_tokens, response_language, meeting_context, ui_is_ru, needs_mlx) = {
+    let (endpoint_hint, max_tokens, response_language, meeting_context, ui_is_ru, needs_mlx, fast) = {
         let c = cfg.read();
         let ep = route.endpoint(&c);
         (
@@ -508,6 +511,7 @@ pub(crate) fn fire_followup_ask(
             c.meeting_context.clone(),
             c.ui_is_ru(),
             route_needs_mlx(route, &c),
+            route.fast_answers(&c),
         )
     };
     let attached_screenshot = route.attaches_screenshot();
@@ -564,7 +568,11 @@ pub(crate) fn fire_followup_ask(
         // transcript turns) so the model answers THIS question, not the original
         // transcript question. The STORED history (request_messages installed
         // above) stays original — the reframe is recomputed fresh on every turn.
-        let send_messages = reframe_for_send(&messages, &response_language, &meeting_context);
+        let fast = fast && ai::uses_fast_answer_format(&messages);
+        let mut send_messages = reframe_for_send(&messages, &response_language, &meeting_context);
+        if fast {
+            ai::apply_fast_answer_format(&mut send_messages);
+        }
         let sys_full = send_messages
             .first()
             .and_then(|m| match &m.content {
@@ -607,7 +615,7 @@ pub(crate) fn fire_followup_ask(
             let events_for_task =
                 gated_events(&bridge_for_work, events_for_work.clone(), generation);
             let task = rt_handle_for_work.spawn(async move {
-                let ai_rx = ai::stream_chat_endpoint(
+                let ai_rx = ai::stream_live_chat_endpoint(
                     ai::AiEndpoint {
                         protocol,
                         base_url,
@@ -618,6 +626,7 @@ pub(crate) fn fire_followup_ask(
                     },
                     send_messages,
                     max_tokens,
+                    fast,
                 );
                 overlay_backend::runtime::ask_stream_loop(
                     events_for_task,
@@ -690,7 +699,7 @@ pub(crate) fn fire_regenerate(
         let n = messages.len() - 1;
         strip_followup_directives(&mut messages[..n]);
     }
-    let (endpoint_hint, max_tokens, response_language, meeting_context, ui_is_ru, needs_mlx) = {
+    let (endpoint_hint, max_tokens, response_language, meeting_context, ui_is_ru, needs_mlx, fast) = {
         let c = cfg.read();
         let ep = route.endpoint(&c);
         (
@@ -700,6 +709,7 @@ pub(crate) fn fire_regenerate(
             c.meeting_context.clone(),
             c.ui_is_ru(),
             route_needs_mlx(route, &c),
+            route.fast_answers(&c),
         )
     };
     let attached_screenshot = route.attaches_screenshot();
@@ -784,7 +794,8 @@ pub(crate) fn fire_regenerate(
         let model = endpoint.model;
         let reasoning_effort = endpoint.reasoning_effort;
         // BLOCKING — off the event loop, and ONLY on the ≥2-user-turn branch.
-        let send_messages = if messages.iter().filter(|m| m.role == "user").count() >= 2 {
+        let fast = fast && ai::uses_fast_answer_format(&messages);
+        let mut send_messages = if messages.iter().filter(|m| m.role == "user").count() >= 2 {
             let last_user_q =
                 messages
                     .iter()
@@ -802,6 +813,9 @@ pub(crate) fn fire_regenerate(
         } else {
             messages.clone()
         };
+        if fast {
+            ai::apply_fast_answer_format(&mut send_messages);
+        }
         let sys_full = send_messages
             .first()
             .and_then(|m| match &m.content {
@@ -848,7 +862,7 @@ pub(crate) fn fire_regenerate(
             let events_for_task =
                 gated_events(&bridge_for_work, events_for_work.clone(), generation);
             let task = rt_handle_for_work.spawn(async move {
-                let ai_rx = ai::stream_chat_endpoint(
+                let ai_rx = ai::stream_live_chat_endpoint(
                     ai::AiEndpoint {
                         protocol,
                         base_url,
@@ -859,6 +873,7 @@ pub(crate) fn fire_regenerate(
                     },
                     send_messages,
                     max_tokens,
+                    fast,
                 );
                 overlay_backend::runtime::ask_stream_loop(
                     events_for_task,

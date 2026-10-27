@@ -10,10 +10,10 @@
 use super::{
     ai, apply_tile_hwnd_with_monitor, audio, classify_ai_error, fire_followup_ask, fire_regenerate,
     grab_hwnd, journal, live_route, markdown, present_tile_window, refresh_open_tiles,
-    resolve_route_endpoint, route_needs_mlx, show_mlx_runtime_error, stt, toggle_tile_maximize,
-    user_turn_markdown, warn_if_over_cost_cap, wire_copy, wire_escalate, wire_speak,
-    wire_tile_drag, wire_voice_followup, Arc, AskRoute, AtomicBool, ComponentHandle, Duration,
-    MarkdownBlock, ModelRc, Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink,
+    resolve_route_endpoint, route_needs_mlx, select_recent_labeled, show_mlx_runtime_error, stt,
+    toggle_tile_maximize, user_turn_markdown, warn_if_over_cost_cap, wire_copy, wire_escalate,
+    wire_speak, wire_tile_drag, wire_voice_followup, Arc, AskRoute, AtomicBool, ComponentHandle,
+    Duration, MarkdownBlock, ModelRc, Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink,
     RuntimeEvents, SharedSlintRuntime, SharedString, TileWindow, TileWindows, VecModel,
     AI_STREAM_MAX_TOKENS, CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
@@ -258,13 +258,14 @@ pub(crate) fn fire_ptt_ask(
     // slot. No supersede, no abort — rapid PTTs no longer clobber each other.
 
     // ===== 3. Snapshot config + rolling transcript (context) =====
-    let (meeting_context, response_language, endpoint_hint, needs_mlx) = {
+    let (meeting_context, response_language, endpoint_hint, needs_mlx, fast) = {
         let c = cfg.read();
         (
             c.meeting_context.clone(),
             c.response_language.clone(),
             c.ai_endpoint(false),
             route_needs_mlx(AskRoute::Text, &c),
+            AskRoute::Text.fast_answers(&c),
         )
     };
     let (stt_backend, stt_is_local, groq_key, stt_language, trigger_keywords) = {
@@ -279,10 +280,7 @@ pub(crate) fn fire_ptt_ask(
     };
     let transcript_lines: Vec<String> = {
         let s = slint_replay::runtime_state::lock(slint_rt);
-        s.transcript
-            .iter()
-            .map(|l| format!("[{:?}] {}", l.source, l.text))
-            .collect()
+        select_recent_labeled(&s.transcript, 8)
     };
     let (journal_for_loop, health_for_stream, scope) = {
         let mut s = slint_replay::runtime_state::lock(slint_rt);
@@ -392,12 +390,13 @@ pub(crate) fn fire_ptt_ask(
         // recognised spoken question selects the RELEVANT facts.
         let llm_context =
             overlay_backend::memory::context_for_meeting(&meeting_context, Some(&question));
-        let messages = ai::build_request(
+        let messages = ai::build_live_request(
             &llm_context,
             &response_language,
             &transcript_lines,
             None,
             Some(&question),
+            fast,
         );
         // Per-tile sink: streams this answer into THIS PTT tile and, on Done,
         // folds the turn into its conversation (for follow-ups). Carries the
@@ -461,7 +460,7 @@ pub(crate) fn fire_ptt_ask(
             overlay_backend::ai::microcents_to_usd(state.session_cost_microcents)
         });
         let t0 = std::time::Instant::now();
-        let ai_rx = ai::stream_chat_endpoint(
+        let ai_rx = ai::stream_live_chat_endpoint(
             ai::AiEndpoint {
                 protocol,
                 base_url,
@@ -472,6 +471,7 @@ pub(crate) fn fire_ptt_ask(
             },
             messages,
             AI_STREAM_MAX_TOKENS,
+            fast,
         );
         overlay_backend::runtime::ask_stream_loop(
             sink,

@@ -69,20 +69,19 @@ pub(crate) fn fire_f3_reask(
         let inputs = overlay_backend::runtime::ReaskInputs {
             last_question: s.last_question.clone(),
             last_answer: s.last_answer.clone(),
-            recent_transcript_iconized: s
-                .transcript
-                .iter()
-                .rev()
-                .take(10)
-                .rev()
-                .map(|l| {
-                    let icon = match l.source {
-                        overlay_backend::audio::AudioSource::System => "sys",
-                        overlay_backend::audio::AudioSource::Mic => "mic",
-                    };
-                    format!("{icon} {}", l.text)
-                })
-                .collect(),
+            recent_transcript_iconized: overlay_backend::runtime::select_conversation_lines(
+                &s.transcript,
+                10,
+            )
+            .into_iter()
+            .map(|l| {
+                let icon = match l.source {
+                    overlay_backend::audio::AudioSource::System => "sys",
+                    overlay_backend::audio::AudioSource::Mic => "mic",
+                };
+                format!("{icon} {}", l.text)
+            })
+            .collect(),
             journal: s.journal.clone(),
             health: s.health.clone(),
         };
@@ -588,6 +587,7 @@ pub(crate) fn fire_f9_ask(
         local_vision,
         ui_is_ru,
         needs_mlx,
+        fast,
     ) = {
         let c = cfg.read();
         // V0.8.0 (Поток D) — route picks the endpoint: normal F9 = Text (local
@@ -610,6 +610,7 @@ pub(crate) fn fire_f9_ask(
             local_vision,
             c.ui_is_ru(),
             needs_mlx,
+            route.fast_answers(&c),
         )
     };
     let is_local_hint = endpoint_hint.is_unmetered();
@@ -627,14 +628,16 @@ pub(crate) fn fire_f9_ask(
 
     let (transcript_lines, screenshot, last_line) = {
         let mut s = slint_replay::runtime_state::lock(slint_rt);
-        let lines: Vec<String> = s
-            .transcript
-            .iter()
-            .map(|l| format!("[{:?}] {}", l.source, l.text))
-            .collect();
+        let lines = select_recent_labeled(&s.transcript, 8);
         let shot = s.last_screenshot.take();
         // Taken under the same lock as the lines the request is built from.
-        let last_line = s.transcript.back().map(|l| l.text.clone());
+        let last_line = s
+            .transcript
+            .iter()
+            .rev()
+            .find(|line| line.source == overlay_backend::audio::AudioSource::System)
+            .or_else(|| s.transcript.back())
+            .map(|line| line.text.clone());
         (lines, shot, last_line)
     };
     // What F3 re-asks after this answer: the typed text, or the line the ask is about.
@@ -652,6 +655,7 @@ pub(crate) fn fire_f9_ask(
         screenshot
     };
     let attached_screenshot = screenshot.is_some();
+    let fast = fast && !attached_screenshot;
 
     let (journal_for_loop, health_for_stream) = {
         let s = slint_replay::runtime_state::lock(slint_rt);
@@ -702,13 +706,21 @@ pub(crate) fn fire_f9_ask(
         // text IS the question; no live-transcript / screenshot noise). A normal
         // F9 ask is built from the live transcript as before.
         let messages = match typed_question.as_deref() {
-            Some(q) => ai::build_request(&meeting_context, &response_language, &[], None, Some(q)),
-            None => ai::build_request(
+            Some(q) => ai::build_live_request(
+                &meeting_context,
+                &response_language,
+                &[],
+                None,
+                Some(q),
+                fast,
+            ),
+            None => ai::build_live_request(
                 &meeting_context,
                 &response_language,
                 &transcript_lines,
                 screenshot.as_deref(),
                 None,
+                fast,
             ),
         };
         let sys_full = messages
@@ -787,7 +799,7 @@ pub(crate) fn fire_f9_ask(
             // panics with "there is no reactor running" off a tokio thread; the
             // rt_handle.spawn future provides the runtime context.
             let task = rt_handle_for_work.spawn(async move {
-                let ai_rx = ai::stream_chat_endpoint(
+                let ai_rx = ai::stream_live_chat_endpoint(
                     ai::AiEndpoint {
                         protocol,
                         base_url,
@@ -798,6 +810,7 @@ pub(crate) fn fire_f9_ask(
                     },
                     messages,
                     AI_STREAM_MAX_TOKENS,
+                    fast,
                 );
                 overlay_backend::runtime::ask_stream_loop(
                     events_for_task,

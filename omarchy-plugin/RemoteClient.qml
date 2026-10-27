@@ -35,6 +35,7 @@ Item {
   }
 
   signal invoked(var win, string name, var args)
+  signal moveRequested(string winId, real dx, real dy)
 
   function byType(type) {
     var out = []

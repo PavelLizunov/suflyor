@@ -64,8 +64,8 @@ pub use terms::{
 };
 pub use trigger_detect::{
     build_auto_tile_prompts, build_fast_auto_tile_prompts, detect_trigger,
-    extract_question_candidate, looks_like_real_speech, strip_filler_prefix, Trigger,
-    FAST_USER_HEAD,
+    extract_question_candidate, looks_like_real_speech, select_conversation_lines,
+    strip_filler_prefix, Trigger, FAST_ANSWER_FORMAT, FAST_USER_HEAD,
 };
 
 /// Post-meeting debrief — run Sonnet over the user's MIC-side

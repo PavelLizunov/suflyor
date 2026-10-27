@@ -40,9 +40,8 @@ use std::time::{Duration, Instant};
 const SESSION_SYSTEM_COLLECTOR_MAX_SAMPLES: usize = audio::TARGET_SAMPLE_RATE as usize * 30;
 const AUTO_TILE_MAX_TOKENS: u32 = 4096;
 const AUTO_TILE_MAX_TOKENS_MLX: u32 = 384;
-/// Fast answers ask for up to 140 words and a terms line (about 270 tokens
-/// measured); this leaves room without letting a rambling answer run on.
-const AUTO_TILE_MAX_TOKENS_FAST: u32 = 640;
+/// Shared bound for short live answers and their terms line.
+const AUTO_TILE_MAX_TOKENS_FAST: u32 = ai::FAST_ANSWER_MAX_TOKENS;
 
 /// Whether auto tiles use the fast-answer prompt. The managed MLX server
 /// keeps its own compact prompt.
@@ -1308,11 +1307,8 @@ async fn maybe_spawn_auto_tile(
     // outlive transcript grounding, approved memory, coaching, or provider profile.
     let recent_transcript: Vec<String> = {
         let s = lock(&rt);
-        s.transcript
-            .iter()
-            .rev()
-            .take(5)
-            .rev()
+        backend_runtime::select_conversation_lines(&s.transcript, 8)
+            .into_iter()
             .map(|line| {
                 let source = match line.source {
                     AudioSource::System => "СОБЕСЕДНИК",

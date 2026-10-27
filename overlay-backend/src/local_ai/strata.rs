@@ -87,8 +87,39 @@ fn strata_python(dir: &Path) -> PathBuf {
     if cfg!(windows) {
         dir.join(".venv").join("Scripts").join("python.exe")
     } else {
-        dir.join(".venv").join("bin").join("python")
+        let bundled = dir.join("python").join("bin").join("python3");
+        if bundled.is_file() {
+            bundled
+        } else {
+            dir.join(".venv").join("bin").join("python")
+        }
     }
+}
+
+// A component reference is a released Strata install, not a literal filename.
+// This is a stat-only UI resolver; Strata verifies the package again at launch.
+fn strata_engine_path(dir: &Path, cfg: &serde_json::Value) -> Option<PathBuf> {
+    let exe = cfg["exe"].as_str()?;
+    if exe != "component:strata-engine" {
+        let path = PathBuf::from(exe);
+        let cwd = PathBuf::from(cfg["cwd"].as_str().unwrap_or("."));
+        let cwd = if cwd.is_absolute() { cwd } else { dir.join(cwd) };
+        return Some(if path.is_absolute() { path } else { cwd.join(path) });
+    }
+    let components = std::env::var_os("STRATA_COMPONENTS_DIR").map(PathBuf::from)
+        .or_else(|| dirs::data_local_dir().map(|path| path.join("strata/components")))?;
+    let state = parse_json_file(&std::fs::read_to_string(components.join(".updates/state.json")).ok()?);
+    let active = std::path::Path::new(state["engine"]["active"].as_str()?);
+    if active.components().count() != 1 || !matches!(active.components().next(), Some(std::path::Component::Normal(_))) {
+        return None;
+    }
+    let package = components.join("engine").join(active);
+    let manifest = parse_json_file(&std::fs::read_to_string(package.join("engine-component.json")).ok()?);
+    let entry = std::path::Path::new(manifest["entrypoint"].as_str()?);
+    if !entry.components().all(|part| matches!(part, std::path::Component::Normal(_))) {
+        return None;
+    }
+    Some(package.join(entry))
 }
 
 /// Setup names the run config after the family tag and the size; the original
@@ -192,7 +223,13 @@ fn parse_json_file(text: &str) -> serde_json::Value {
 /// The usable model configs of one Strata folder, newest first.
 #[must_use]
 pub fn strata_in_folder(dir: &Path) -> Vec<FoundStrata> {
-    let Ok(entries) = std::fs::read_dir(dir) else {
+    let terminal = dir.join("terminal/current");
+    let (runtime, configs) = if terminal.join("serve/server.py").is_file() {
+        (terminal.as_path(), dir.join("install"))
+    } else {
+        (dir, dir.to_path_buf())
+    };
+    let Ok(entries) = std::fs::read_dir(configs) else {
         return Vec::new();
     };
     let mut found: Vec<(std::time::SystemTime, FoundStrata)> = entries
@@ -206,7 +243,7 @@ pub fn strata_in_folder(dir: &Path) -> Vec<FoundStrata> {
             Some((
                 at,
                 FoundStrata {
-                    dir: dir.to_path_buf(),
+                    dir: runtime.to_path_buf(),
                     config,
                     model,
                 },
@@ -363,6 +400,9 @@ pub fn find_existing_strata(root: &Path) -> Vec<FoundStrata> {
         }
     }
     folders.extend(usual_strata_folders());
+    if let Some(data) = dirs::data_local_dir() {
+        folders.push(data.join("strata"));
+    }
     let own = strata_dir(root);
     let mut seen = Vec::new();
     let mut found = Vec::new();

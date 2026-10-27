@@ -115,6 +115,7 @@ Item {
         font.pixelSize: Commons.Style.font.heading
         font.bold: true
         color: Commons.Color.popups.text
+        WindowDrag { anchors.fill: parent; win: root.win; service: root.service }
       }
       C.SettingsButton {
         objectName: "settings-close"

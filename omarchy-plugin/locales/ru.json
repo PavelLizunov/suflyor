@@ -8,7 +8,7 @@
  "1) Start capture — press start on the bar. The mic records you; system audio records the other side.": "1) Начните захват — нажмите «старт» на панели. Микрофон записывает вас, системный звук — собеседника.",
  "2) Get help — hold ask to ask by voice, hold grab to send the other side's last words to AI, or press F9. Answers appear in tiles.": "2) Получите помощь: удерживайте «спросить», чтобы спросить голосом, или «захватить», чтобы отправить AI последние слова собеседника, либо нажмите F9. Ответы появляются в тайлах.",
  "3) Stop and review — click the timer with the stop icon ('Stop session'), then open the session archive (F7) for transcripts and summaries.": "3) Завершите сессию и просмотрите итоги — нажмите таймер со значком остановки («Остановить сессию»), затем откройте архив сессий (F7) со стенограммами и сводками.",
- "A one-line answer, then three to five points with context; terms under the answer open their definitions.": "Сначала ответ одной строкой, затем 3–5 пунктов с контекстом; термины под ответом открывают определения.",
+ "A one-line answer, then two or three relevant points; terms under the answer open their definitions.": "Сначала ответ одной строкой, затем 2–3 пункта по делу; термины под ответом открывают определения.",
  "A second server on this PC with a model that understands images (e.g. Qwen2-VL). Blank fields reuse the answers server.": "Второй сервер на этом ПК с моделью, которая понимает картинки (например, Qwen2-VL). Пустые поля берутся у сервера ответов.",
  "A summary already exists — recreate it?": "Сводка уже есть — пересоздать?",
  "AI": "AI",

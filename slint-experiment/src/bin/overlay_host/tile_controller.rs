@@ -336,7 +336,12 @@ impl RuntimeEvents for PttStreamSink {
                 }
                 let body = {
                     let st = self.state.lock().unwrap_or_else(|p| p.into_inner());
-                    format!("{}{}", st.prefix, st.accumulated)
+                    let answer = if ai::uses_fast_answer_format(&st.request_messages) {
+                        overlay_backend::runtime::hide_terms_line_while_streaming(&st.accumulated)
+                    } else {
+                        st.accumulated.clone()
+                    };
+                    format!("{}{answer}", st.prefix)
                 };
                 let weak = self.tile.clone();
                 let _ = slint::invoke_from_event_loop(move || {
@@ -355,7 +360,18 @@ impl RuntimeEvents for PttStreamSink {
                         st.request_messages.clone(),
                     )
                 };
-                let rendered = format!("{prefix}{answer}");
+                let (shown, terms) = if ai::uses_fast_answer_format(&messages) {
+                    overlay_backend::runtime::split_terms_line(&answer)
+                } else {
+                    (answer.clone(), Vec::new())
+                };
+                let question = messages
+                    .iter()
+                    .rev()
+                    .find(|message| message.role == "user")
+                    .map(|message| super::message_text(&message.content))
+                    .unwrap_or_default();
+                let rendered = format!("{prefix}{shown}");
                 if self.convo_id >= 0 {
                     let mut messages = messages;
                     messages.push(ai::ChatMessage {
@@ -381,9 +397,14 @@ impl RuntimeEvents for PttStreamSink {
                     rendered
                 };
                 let weak = self.tile.clone();
+                let cfg = self.bridge.cfg.clone();
+                let rt_handle = tokio::runtime::Handle::try_current().ok();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(t) = weak.upgrade() {
                         t.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(&final_body))));
+                        if let Some(rt_handle) = rt_handle {
+                            super::tile_terms::wire_terms(&t, &terms, question, &cfg, &rt_handle);
+                        }
                         t.set_source_label(SharedString::from(crate::tile_text::done_label(
                             &reason, ru,
                         )));
@@ -829,7 +850,17 @@ impl OverlayBarBridge {
                     };
                     (
                         stream.weak.clone(),
-                        format!("{}{}", stream.prefix, stream.accumulated),
+                        format!(
+                            "{}{}",
+                            stream.prefix,
+                            if ai::uses_fast_answer_format(&stream.request_messages) {
+                                overlay_backend::runtime::hide_terms_line_while_streaming(
+                                    &stream.accumulated,
+                                )
+                            } else {
+                                stream.accumulated.clone()
+                            }
+                        ),
                     )
                 };
                 let _ = slint::invoke_from_event_loop(move || {
@@ -859,6 +890,18 @@ impl OverlayBarBridge {
                     // fold an empty assistant turn into the conversation.
                     let ru = self.cfg.read().ui_is_ru();
                     let answer_empty = stream.accumulated.trim().is_empty();
+                    let (shown, terms) = if ai::uses_fast_answer_format(&stream.request_messages) {
+                        overlay_backend::runtime::split_terms_line(&stream.accumulated)
+                    } else {
+                        (stream.accumulated.clone(), Vec::new())
+                    };
+                    let question = stream
+                        .request_messages
+                        .iter()
+                        .rev()
+                        .find(|message| message.role == "user")
+                        .map(|message| super::message_text(&message.content))
+                        .unwrap_or_default();
                     // Final body — used for the conversation snapshot AND the
                     // terminal render below (which is never throttled).
                     let final_body = if answer_empty {
@@ -877,7 +920,7 @@ impl OverlayBarBridge {
                             format!("{}\n\n{note}", stream.prefix)
                         }
                     } else {
-                        format!("{}{}", stream.prefix, stream.accumulated)
+                        format!("{}{shown}", stream.prefix)
                     };
                     if stream.convo_id >= 0 && !answer_empty {
                         let mut messages = stream.request_messages;
@@ -895,6 +938,8 @@ impl OverlayBarBridge {
                         );
                     }
                     let weak = stream.weak;
+                    let cfg = self.cfg.clone();
+                    let rt_handle = tokio::runtime::Handle::try_current().ok();
                     let _ = slint::invoke_from_event_loop(move || {
                         if let Some(tile) = weak.upgrade() {
                             // Terminal render — NOT throttled, so the complete
@@ -903,6 +948,11 @@ impl OverlayBarBridge {
                             tile.set_blocks(ModelRc::new(VecModel::from(to_md_blocks(
                                 &final_body,
                             ))));
+                            if let Some(rt_handle) = rt_handle {
+                                super::tile_terms::wire_terms(
+                                    &tile, &terms, question, &cfg, &rt_handle,
+                                );
+                            }
                             tile.set_source_label(SharedString::from(
                                 crate::tile_text::done_label(&reason, ru),
                             ));

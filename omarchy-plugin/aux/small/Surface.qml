@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import qs.Ui as Ui
 import qs.Commons as Commons
 import "../../tile" as Tile
+import "../.." as Plugin
 
 // The layer owns positioning; views retain close and keyboard focus semantics.
 FocusScope {
@@ -71,6 +72,7 @@ FocusScope {
           text: root.title
           font.pixelSize: Commons.Style.font.title
           font.bold: true
+          Plugin.WindowDrag { anchors.fill: parent; win: root.view.win; service: root.view.service }
         }
         Tile.Label {
           visible: root.note !== ""

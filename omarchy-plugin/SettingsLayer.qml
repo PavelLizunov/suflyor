@@ -17,6 +17,13 @@ PanelWindow {
   readonly property bool parked: typeof g.x === "number" && (g.x < -10000 || g.y < -10000)
   readonly property bool shown: win.visible && !parked && !(service && (service.client.concealed || service.client.nativeDialogOpen))
   property var targetScreen: null
+  property real offsetX: 0
+  property real offsetY: 0
+  anchors { top: true; left: true }
+  readonly property real centeredX: screen ? (screen.width - implicitWidth) / 2 : 0
+  readonly property real centeredY: screen ? (screen.height - implicitHeight) / 2 : 0
+  margins.left: Math.round(centeredX + offsetX)
+  margins.top: Math.round(centeredY + offsetY)
   visible: shown
   color: "transparent"
   screen: targetScreen
@@ -26,6 +33,21 @@ PanelWindow {
   Connections {
     target: surface.win
     function onFocusRequested() { surface.targetScreen = surface.service.focusedScreen() }
+  }
+
+  Connections {
+    target: surface.service ? surface.service.client : null
+    function onMoveRequested(winId, dx, dy) {
+      if (winId !== surface.win.winId || !surface.screen) return
+      var x = Math.max(0, Math.min(surface.screen.width - surface.implicitWidth, surface.margins.left + dx))
+      var y = Math.max(0, Math.min(surface.screen.height - surface.implicitHeight, surface.margins.top + dy))
+      surface.offsetX = x - surface.centeredX
+      surface.offsetY = y - surface.centeredY
+      surface.service.client.reportGeometry(winId, {
+        x: Math.round(surface.screen.x + x), y: Math.round(surface.screen.y + y),
+        width: surface.implicitWidth, height: surface.implicitHeight
+      })
+    }
   }
 
   Connections {

@@ -43,7 +43,7 @@ fn target_at(dir: &Path, config: &Path) -> Option<Target> {
     let args = json["args"].as_array()?;
     let native = args.windows(2).find(|a| a[0] == "--native")?[1].as_str()?;
     let model = config_path(dir, &json, native);
-    let engine = config_path(dir, &json, json["exe"].as_str()?);
+    let engine = strata_engine_path(dir, &json)?;
     let helper = engine.parent()?.join(if cfg!(windows) {
         "strata-vision.exe"
     } else {

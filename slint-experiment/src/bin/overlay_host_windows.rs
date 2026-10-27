@@ -2300,9 +2300,10 @@ fn main() -> Result<(), slint::PlatformError> {
                                                // Seed [system, user(question), assistant(answer)] the same way
                                                // F9 builds history, so regenerate re-asks the same question and
                                                // a follow-up carries full context.
-                let (meeting_context, response_language) = {
+                let (meeting_context, response_language, fast) = {
                     let c = cfg_for_poll.read();
-                    (c.meeting_context.clone(), c.response_language.clone())
+                    (c.meeting_context.clone(), c.response_language.clone(),
+                     AskRoute::Text.fast_answers(&c))
                 };
                 let question = req.spec.question.clone();
                 // v0.12.2 — Summary tiles seed their dialog with the REAL recap
@@ -2407,12 +2408,13 @@ fn main() -> Result<(), slint::PlatformError> {
                             &meeting_context,
                             Some(question.as_str()),
                         );
-                        let mut messages = ai::build_request(
+                        let mut messages = ai::build_live_request(
                             &meeting_context,
                             &response_language,
                             &[],
                             None,
                             Some(&question),
+                            fast,
                         );
                         messages.push(ai::ChatMessage {
                             role: "assistant".into(),
@@ -2858,7 +2860,16 @@ fn main() -> Result<(), slint::PlatformError> {
                     // Phase E3 slice 3 — F6 manual spawn from last
                     // transcript line (bypasses auto-detector).
                     diag!("[overlay-host] F6 pressed — manual_spawn_tile");
-                    fire_f6_manual_spawn(&hp_events, &hp_cfg, &hp_rt, &hp_rt_handle);
+                    if AskRoute::Text.fast_answers(&hp_cfg.read())
+                        && !slint_replay::runtime_state::lock(&hp_rt).transcript.is_empty()
+                    {
+                        fire_f9_ask(
+                            &hp_bridge, &hp_events, &hp_cfg, &hp_rt, &hp_rt_handle,
+                            &hp_tiles, &hp_weak_overlay, AskRoute::Text, None,
+                        );
+                    } else {
+                        fire_f6_manual_spawn(&hp_events, &hp_cfg, &hp_rt, &hp_rt_handle);
+                    }
                 } else if event.id == f9_id {
                     // Phase E3 slice 2 — F9 live AI ask via overlay-backend's
                     // `ask_stream_loop`. Synchronously creates a placeholder
@@ -3556,7 +3567,18 @@ fn main() -> Result<(), slint::PlatformError> {
         let cfg_ref = cfg.clone();
         let rt = rt_handle.clone();
         let slint_rt_c = slint_rt.clone();
+        let bridge_c = bridge.clone();
+        let events_c = events.clone();
         overlay.on_spawn_tile_clicked(move || {
+            if AskRoute::Text.fast_answers(&cfg_ref.read())
+                && !slint_replay::runtime_state::lock(&slint_rt_c).transcript.is_empty()
+            {
+                fire_f9_ask(
+                    &bridge_c, &events_c, &cfg_ref, &slint_rt_c, &rt,
+                    &t, &weak, AskRoute::Text, None,
+                );
+                return;
+            }
             let Some(overlay) = weak.upgrade() else {
                 return;
             };

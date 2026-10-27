@@ -61,6 +61,11 @@ impl AskRoute {
             AskRoute::Cloud => c.ai_endpoint_cloud(),
         }
     }
+    /// Escalation and vision keep their own detailed-answer behavior.
+    pub(crate) fn fast_answers(self, c: &overlay_backend::config::Config) -> bool {
+        self == Self::Text && c.ai_fast_answers && c.ai_provider != "mlx"
+    }
+
     /// Max output tokens for this route (vision is capped tighter).
     pub(crate) fn max_tokens(self) -> u32 {
         match self {

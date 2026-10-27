@@ -906,6 +906,7 @@ pub(super) fn spawn_content_tile(
         })
         .collect();
     tile.set_blocks(ModelRc::new(VecModel::from(blocks)));
+    let speaker_id = tile_copy::wire_speak_text(&tile, body_md);
 
     let weak_tile = tile.as_weak();
     let vec_for_close = tiles.clone();
@@ -913,6 +914,7 @@ pub(super) fn spawn_content_tile(
     tile.on_close_clicked(move || {
         if let Some(t) = weak_tile.upgrade() {
             crate::abort_tile_stream(t.get_tile_id());
+            tile_copy::stop_if_speaking(speaker_id);
             let sequence = t.get_sequence();
             let _ = t.hide();
             slint_replay::win32::force_hide(t.window());

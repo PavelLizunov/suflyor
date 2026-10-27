@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.Commons as Commons
 import "../../tile" as Tile
+import "../.." as Plugin
 
 RowLayout {
   id: root
@@ -20,6 +21,7 @@ RowLayout {
     font.pixelSize: Commons.Style.font.subtitle
     wrapMode: Text.NoWrap
     elide: Text.ElideRight
+    Plugin.WindowDrag { anchors.fill: parent; win: root.view.win; service: root.view.service }
   }
   Tile.Label {
     visible: root.note !== ""

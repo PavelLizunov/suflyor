@@ -38,6 +38,27 @@ pub fn stream_chat_endpoint(
     stream_chat_endpoint_with(endpoint, messages, max_tokens, true, false)
 }
 
+/// Fast live answers use one streamed request, not an agent lookup loop.
+/// The normal path retains the user's tool and reasoning preferences.
+pub fn stream_live_chat_endpoint(
+    endpoint: AiEndpoint,
+    messages: Vec<ChatMessage>,
+    max_tokens: u32,
+    fast: bool,
+) -> mpsc::Receiver<AiEvent> {
+    stream_chat_endpoint_with(
+        endpoint,
+        messages,
+        if fast {
+            max_tokens.min(super::prompt::FAST_ANSWER_MAX_TOKENS)
+        } else {
+            max_tokens
+        },
+        !fast,
+        fast,
+    )
+}
+
 /// Same stream without the local model's tools: one request, answer only.
 /// Auto-tiles use it — they never ran tools and must start answering at once.
 /// `no_think` turns a local model's reasoning off for this request whatever

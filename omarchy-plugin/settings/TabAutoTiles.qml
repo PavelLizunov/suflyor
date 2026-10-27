@@ -38,7 +38,7 @@ Column {
       }
     }
     C.SettingsCaption {
-      text: root.service ? root.service.tr("A one-line answer, then three to five points with context; terms under the answer open their definitions.", []) : ""
+      text: root.service ? root.service.tr("A one-line answer, then two or three relevant points; terms under the answer open their definitions.", []) : ""
       font.pixelSize: Style.font.body
     }
     C.DarkCheck {
