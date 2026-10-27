@@ -3,7 +3,9 @@
 param(
     [switch]$Apply,
     [ValidateRange(1, 20)]
-    [int]$KeepPrerelease = 1
+    [int]$KeepPrerelease = 1,
+    # A product-specific prerelease must not clean another platform's releases or PRs.
+    [string]$ReleasePrefix = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,8 +75,31 @@ function Remove-RebuildableTargets([string]$WorktreePath) {
     }
 }
 
+function Remove-OldPrereleases([string]$Prefix = '') {
+    $releases = @((& gh.exe release list --repo $repo --limit 200 --json 'tagName,isPrerelease,isDraft,publishedAt' | ConvertFrom-Json) |
+        Where-Object { $_ -and $_.tagName })
+    Assert-LastExit 'GitHub release list'
+    $prereleases = @($releases | Where-Object {
+        $_.isPrerelease -and -not $_.isDraft -and
+        (-not $Prefix -or ([string]$_.tagName).StartsWith($Prefix, [StringComparison]::Ordinal))
+    } | Sort-Object { [DateTime]$_.publishedAt } -Descending)
+    for ($i = $KeepPrerelease; $i -lt $prereleases.Count; $i++) {
+        $tag = $prereleases[$i].tagName
+        Say 'DELETE old prerelease and tag' $tag
+        if ($Apply) {
+            & gh.exe release delete $tag --repo $repo --cleanup-tag --yes
+            Assert-LastExit "deleting release $tag"
+        }
+    }
+}
+
 & gh.exe auth status *> $null
 if ($LASTEXITCODE -ne 0) { throw 'gh is not authenticated' }
+if ($ReleasePrefix) {
+    Remove-OldPrereleases $ReleasePrefix
+    Write-Host "[release-cleanup:$mode] complete (release family: $ReleasePrefix)"
+    exit 0
+}
 & git.exe fetch origin --prune
 if ($LASTEXITCODE -ne 0) { throw 'git fetch failed' }
 
@@ -124,18 +149,7 @@ if ($Apply) {
 
 # Keep the newest published prerelease(s), regardless of whether an older
 # project version used -rc.N or -pre naming. Stable and draft releases stay.
-$releases = @((& gh.exe release list --repo $repo --limit 200 --json tagName,isPrerelease,isDraft,publishedAt | ConvertFrom-Json) |
-    Where-Object { $_ -and $_.tagName })
-$prereleases = @($releases | Where-Object { $_.isPrerelease -and -not $_.isDraft } |
-    Sort-Object { [DateTime]$_.publishedAt } -Descending)
-for ($i = $KeepPrerelease; $i -lt $prereleases.Count; $i++) {
-    $tag = $prereleases[$i].tagName
-    Say 'DELETE old prerelease and tag' $tag
-    if ($Apply) {
-        & gh.exe release delete $tag --repo $repo --cleanup-tag --yes
-        Assert-LastExit "deleting release $tag"
-    }
-}
+Remove-OldPrereleases
 
 $allPrs = @((& gh.exe pr list --repo $repo --state all --limit 500 --json number,state,mergedAt,headRefName,headRefOid | ConvertFrom-Json) |
     Where-Object { $_ -and $_.headRefOid })
