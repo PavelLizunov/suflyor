@@ -29,6 +29,10 @@ Item {
   property var sock: null
   property int nextCall: 1
   property var pending: ({})
+  readonly property bool nativeDialogOpen: {
+    var _ = client.globalsRev
+    return client.globals["Suflyor.native-dialog-open"] === true
+  }
 
   signal invoked(var win, string name, var args)
 
@@ -139,6 +143,8 @@ Item {
     client.pending = ({})
     for (var id in calls) calls[id](null, "Suflyor stopped")
     client.ready = false
+    client.globals = ({})
+    client.globalsRev++
     var old = client.windowList
     client.windows = ({})
     client.windowList = []

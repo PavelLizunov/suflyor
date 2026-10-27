@@ -22,6 +22,7 @@ QtObject {
   }
 
   function update(name, value) {
+    if (win.props[name] === value) return
     win.props[name] = value
     win.rev++
   }

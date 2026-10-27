@@ -79,7 +79,10 @@ pub fn rate_to_speed(rate: i32) -> f32 {
 
 /// `<config_dir>/suflyor/tts` — where voice models are installed.
 pub fn tts_root() -> Option<PathBuf> {
-    dirs::config_dir().map(|a| a.join("suflyor").join("tts"))
+    std::env::var_os("SUFLYOR_TTS_DIR")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .or_else(|| dirs::config_dir().map(|a| a.join("suflyor").join("tts")))
 }
 
 /// A selectable voice: `id` is the model dir name, `name` the display name.

@@ -7,7 +7,6 @@
   "license": "GPL-3.0-or-later",
   "description": "Live interview and meeting assistant: hears the call, answers in tiles hidden from screen share, in your Omarchy theme.",
   "kinds": ["service", "bar-widget"],
-  "keepLoaded": true,
   "entryPoints": {
     "service": "Service.qml",
     "barWidget": "BarWidget.qml"

@@ -3761,6 +3761,8 @@ struct SettingsWindowProps {
     mlx_vision_progress: f32,
     mlx_vision_total: slint::SharedString,
     model_switching: bool,
+    models_directory: slint::SharedString,
+    models_directory_status: slint::SharedString,
     now_detail: slint::SharedString,
     now_notice: slint::SharedString,
     now_state: i32,
@@ -4146,6 +4148,10 @@ impl Default for SettingsWindowProps {
             mlx_vision_total: <slint::SharedString>::from_json(&serde_json::json!("1668"))
                 .unwrap_or_default(),
             model_switching: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            models_directory: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            models_directory_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
             now_detail: <slint::SharedString>::from_json(&serde_json::json!(""))
                 .unwrap_or_default(),
             now_notice: <slint::SharedString>::from_json(&serde_json::json!(""))
@@ -4398,6 +4404,8 @@ struct SettingsWindowCallbacks {
     mlx_vision_enable: Handler<dyn FnMut() -> ()>,
     mlx_vision_model_changed: Handler<dyn FnMut(i32) -> ()>,
     model_profile_changed: Handler<dyn FnMut(i32) -> ()>,
+    models_directory_browse: Handler<dyn FnMut() -> ()>,
+    models_directory_save: Handler<dyn FnMut(slint::SharedString) -> ()>,
     now_refresh_requested: Handler<dyn FnMut() -> ()>,
     ocr_install_clicked: Handler<dyn FnMut() -> ()>,
     open_data_folder_clicked: Handler<dyn FnMut() -> ()>,
@@ -4417,6 +4425,7 @@ struct SettingsWindowCallbacks {
     stealth_changed: Handler<dyn FnMut(bool) -> ()>,
     strata_choose: Handler<dyn FnMut(bool) -> ()>,
     strata_find_folder_clicked: Handler<dyn FnMut() -> ()>,
+    strata_folder_selected: Handler<dyn FnMut(slint::SharedString) -> ()>,
     strata_install_clicked: Handler<dyn FnMut() -> ()>,
     strata_license_clicked: Handler<dyn FnMut() -> ()>,
     strata_vision_download: Handler<dyn FnMut() -> ()>,
@@ -5797,6 +5806,22 @@ impl SettingsWindow {
     }
     pub fn get_model_switching(&self) -> bool {
         self.0.props.borrow().model_switching.clone()
+    }
+    pub fn set_models_directory(&self, value: slint::SharedString) {
+        self.0.base.send_prop("models-directory", value.to_json());
+        self.0.props.borrow_mut().models_directory = value;
+    }
+    pub fn get_models_directory(&self) -> slint::SharedString {
+        self.0.props.borrow().models_directory.clone()
+    }
+    pub fn set_models_directory_status(&self, value: slint::SharedString) {
+        self.0
+            .base
+            .send_prop("models-directory-status", value.to_json());
+        self.0.props.borrow_mut().models_directory_status = value;
+    }
+    pub fn get_models_directory_status(&self) -> slint::SharedString {
+        self.0.props.borrow().models_directory_status.clone()
     }
     pub fn set_now_detail(&self, value: slint::SharedString) {
         self.0.base.send_prop("now-detail", value.to_json());
@@ -8050,6 +8075,32 @@ impl SettingsWindow {
             .send_invoke("model-profile-changed", vec![arg0.to_json()]);
         Default::default()
     }
+    pub fn on_models_directory_browse(&self, f: impl FnMut() -> () + 'static) {
+        let f: Rc<RefCell<dyn FnMut() -> ()>> = Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().models_directory_browse = Handler(Some(f));
+    }
+    pub fn invoke_models_directory_browse(&self) -> () {
+        let handler = self.0.callbacks.borrow().models_directory_browse.clone();
+        if handler.is_set() {
+            return handler.call(|f| f()).unwrap_or_default();
+        }
+        self.0.base.send_invoke("models-directory-browse", vec![]);
+        Default::default()
+    }
+    pub fn on_models_directory_save(&self, f: impl FnMut(slint::SharedString) -> () + 'static) {
+        let f: Rc<RefCell<dyn FnMut(slint::SharedString) -> ()>> = Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().models_directory_save = Handler(Some(f));
+    }
+    pub fn invoke_models_directory_save(&self, arg0: slint::SharedString) -> () {
+        let handler = self.0.callbacks.borrow().models_directory_save.clone();
+        if handler.is_set() {
+            return handler.call(|f| f(arg0)).unwrap_or_default();
+        }
+        self.0
+            .base
+            .send_invoke("models-directory-save", vec![arg0.to_json()]);
+        Default::default()
+    }
     pub fn on_now_refresh_requested(&self, f: impl FnMut() -> () + 'static) {
         let f: Rc<RefCell<dyn FnMut() -> ()>> = Rc::new(RefCell::new(f));
         self.0.callbacks.borrow_mut().now_refresh_requested = Handler(Some(f));
@@ -8298,6 +8349,20 @@ impl SettingsWindow {
         self.0
             .base
             .send_invoke("strata-find-folder-clicked", vec![]);
+        Default::default()
+    }
+    pub fn on_strata_folder_selected(&self, f: impl FnMut(slint::SharedString) -> () + 'static) {
+        let f: Rc<RefCell<dyn FnMut(slint::SharedString) -> ()>> = Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().strata_folder_selected = Handler(Some(f));
+    }
+    pub fn invoke_strata_folder_selected(&self, arg0: slint::SharedString) -> () {
+        let handler = self.0.callbacks.borrow().strata_folder_selected.clone();
+        if handler.is_set() {
+            return handler.call(|f| f(arg0)).unwrap_or_default();
+        }
+        self.0
+            .base
+            .send_invoke("strata-folder-selected", vec![arg0.to_json()]);
         Default::default()
     }
     pub fn on_strata_install_clicked(&self, f: impl FnMut() -> () + 'static) {
@@ -9208,6 +9273,11 @@ impl RemoteObject for SettingsWindowInner {
         );
         m.insert("mlx-vision-total".into(), p.mlx_vision_total.to_json());
         m.insert("model-switching".into(), p.model_switching.to_json());
+        m.insert("models-directory".into(), p.models_directory.to_json());
+        m.insert(
+            "models-directory-status".into(),
+            p.models_directory_status.to_json(),
+        );
         m.insert("now-detail".into(), p.now_detail.to_json());
         m.insert("now-notice".into(), p.now_notice.to_json());
         m.insert("now-state".into(), p.now_state.to_json());
@@ -9953,6 +10023,13 @@ impl RemoteObject for SettingsWindowInner {
                 p.mlx_vision_total = <slint::SharedString>::from_json(value).ok_or("bad value")?
             }
             "model-switching" => p.model_switching = <bool>::from_json(value).ok_or("bad value")?,
+            "models-directory" => {
+                p.models_directory = <slint::SharedString>::from_json(value).ok_or("bad value")?
+            }
+            "models-directory-status" => {
+                p.models_directory_status =
+                    <slint::SharedString>::from_json(value).ok_or("bad value")?
+            }
             "now-detail" => {
                 p.now_detail = <slint::SharedString>::from_json(value).ok_or("bad value")?
             }
@@ -11168,6 +11245,24 @@ impl RemoteObject for SettingsWindowInner {
                     .map(|v| v.to_json())
                     .unwrap_or(Value::Null))
             }
+            "models-directory-browse" => {
+                let handler = self.callbacks.borrow().models_directory_browse.clone();
+                Ok(handler
+                    .call(|f| f())
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
+            "models-directory-save" => {
+                let (a0,) = (
+                    <slint::SharedString>::from_json(args.get(0).unwrap_or(&Value::Null))
+                        .ok_or("bad argument 0")?,
+                );
+                let handler = self.callbacks.borrow().models_directory_save.clone();
+                Ok(handler
+                    .call(|f| f(a0))
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
             "now-refresh-requested" => {
                 let handler = self.callbacks.borrow().now_refresh_requested.clone();
                 Ok(handler
@@ -11334,6 +11429,17 @@ impl RemoteObject for SettingsWindowInner {
                 let handler = self.callbacks.borrow().strata_find_folder_clicked.clone();
                 Ok(handler
                     .call(|f| f())
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
+            "strata-folder-selected" => {
+                let (a0,) = (
+                    <slint::SharedString>::from_json(args.get(0).unwrap_or(&Value::Null))
+                        .ok_or("bad argument 0")?,
+                );
+                let handler = self.callbacks.borrow().strata_folder_selected.clone();
+                Ok(handler
+                    .call(|f| f(a0))
                     .map(|v| v.to_json())
                     .unwrap_or(Value::Null))
             }

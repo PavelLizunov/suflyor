@@ -1588,6 +1588,9 @@ fn sidecar_stderr(kind: EngineKind) -> Stdio {
 
 fn spawn_engine_sidecar(exe: &Path, kind: EngineKind) -> std::io::Result<Proc> {
     let mut cmd = Command::new(exe);
+    if let Some(root) = tts_root() {
+        cmd.env("SUFLYOR_TTS_DIR", root);
+    }
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(sidecar_stderr(kind));
@@ -1599,7 +1602,7 @@ fn spawn_engine_sidecar(exe: &Path, kind: EngineKind) -> std::io::Result<Proc> {
 
 /// `%APPDATA%\suflyor\tts`.
 fn tts_root() -> Option<PathBuf> {
-    crate::paths::data_root().map(|d| d.join("tts"))
+    crate::paths::speech_model_dir("tts")
 }
 
 /// Scan the installed voices for the chooser (a subdir with `*.onnx` +

@@ -723,6 +723,7 @@ pub(crate) fn open_settings(
     // (`on_stt_gigaam_gpu_changed` moved out of the AI-local block region above
     // into wire_stt_settings; the mic device/test callbacks stay in open_settings.)
     wire_stt_settings(&win, cfg);
+    super::settings_dialogs::wire_storage(&win);
 
     // ===== 💭 Memory (Phase 3b.3): curated personal memory review =====
     // Pending candidates (approve/reject) + approved items (delete) over the
@@ -744,44 +745,46 @@ pub(crate) fn open_settings(
         win.on_export_profile_clicked(move || {
             let ru = cfg_c.read().ui_is_ru();
             let snapshot = cfg_c.read().clone();
-            let picked = rfd::FileDialog::new()
+            let dialog = rfd::AsyncFileDialog::new()
                 .set_title(if ru {
                     "Экспорт настроек Суфлёра (содержит API-ключи)"
                 } else {
                     "Export suflyor settings (contains API keys)"
                 })
                 .set_file_name("suflyor-settings.json")
-                .add_filter("JSON", &["json"])
-                .save_file();
-            let Some(w) = weak.upgrade() else { return };
-            let msg = match picked {
-                None => if ru {
-                    "Экспорт отменён"
-                } else {
-                    "Export cancelled"
-                }
-                .to_string(),
-                Some(path) => match overlay_backend::config::export_to(&path, &snapshot) {
-                    Ok(()) => {
-                        if ru {
-                            format!("Настройки экспортированы в {}", path.display())
-                        } else {
-                            format!("Settings exported to {}", path.display())
-                        }
+                .add_filter("JSON", &["json"]);
+            let weak = weak.clone();
+            super::settings_dialogs::pick(dialog, super::settings_dialogs::Kind::Save, move |picked| {
+                let Some(w) = weak.upgrade() else { return };
+                let msg = match picked {
+                    None => if ru {
+                        "Экспорт отменён"
+                    } else {
+                        "Export cancelled"
                     }
-                    Err(e) => {
-                        // Generic + log: the chain can carry a path (audit Q8).
-                        eprintln!("[overlay-host] settings export failed: {e:#}");
-                        if ru {
-                            "Настройки не экспортированы: в эту папку не удалось записать файл. Выберите другую папку и нажмите «Экспорт настроек (с ключами)» ещё раз."
-                        } else {
-                            "Settings not exported: the file could not be written to that folder. Choose another folder, then press Export settings again."
+                    .to_string(),
+                    Some(path) => match overlay_backend::config::export_to(&path, &snapshot) {
+                        Ok(()) => {
+                            if ru {
+                                format!("Настройки экспортированы в {}", path.display())
+                            } else {
+                                format!("Settings exported to {}", path.display())
+                            }
                         }
-                        .to_string()
-                    }
-                },
-            };
-            w.set_profile_io_result(SharedString::from(msg));
+                        Err(e) => {
+                            // Generic + log: the chain can carry a path (audit Q8).
+                            eprintln!("[overlay-host] settings export failed: {e:#}");
+                            if ru {
+                                "Настройки не экспортированы: в эту папку не удалось записать файл. Выберите другую папку и нажмите «Экспорт настроек (с ключами)» ещё раз."
+                            } else {
+                                "Settings not exported: the file could not be written to that folder. Choose another folder, then press Export settings again."
+                            }
+                            .to_string()
+                        }
+                    },
+                };
+                w.set_profile_io_result(SharedString::from(msg));
+            });
         });
     }
 
@@ -795,44 +798,48 @@ pub(crate) fn open_settings(
         let overlay = overlay_weak.clone();
         win.on_import_profile_clicked(move || {
             let ru = cfg_c.read().ui_is_ru();
-            let picked = rfd::FileDialog::new()
+            let dialog = rfd::AsyncFileDialog::new()
                 .set_title(if ru { "Импорт настроек Суфлёра" } else { "Import suflyor settings" })
-                .add_filter("JSON", &["json"])
-                .pick_file();
-            let Some(w) = weak.upgrade() else { return };
-            let msg = match picked {
-                None => if ru {
-                    "Импорт отменён"
-                } else {
-                    "Import cancelled"
-                }
-                .to_string(),
-                Some(path) => {
-                    let local_deep_lock = cfg_c.read().deep_lock;
-                    match overlay_backend::config::import_from(&path, local_deep_lock) {
-                        Ok(imported) => {
-                            // Push the freshly-loaded values into the shared
-                            // config so the running session sees them, then
-                            // refresh the token-status display.
-                            *cfg_c.write() = imported;
-                            if let Some(o) = overlay.upgrade() {
-                                crate::refresh_lock_chip(&o, &cfg_c);
+                .add_filter("JSON", &["json"]);
+            let cfg_c = cfg_c.clone();
+            let weak = weak.clone();
+            let overlay = overlay.clone();
+            super::settings_dialogs::pick(dialog, super::settings_dialogs::Kind::File, move |picked| {
+                let Some(w) = weak.upgrade() else { return };
+                let msg = match picked {
+                    None => if ru {
+                        "Импорт отменён"
+                    } else {
+                        "Import cancelled"
+                    }
+                    .to_string(),
+                    Some(path) => {
+                        let local_deep_lock = cfg_c.read().deep_lock;
+                        match overlay_backend::config::import_from(&path, local_deep_lock) {
+                            Ok(imported) => {
+                                // Push the freshly-loaded values into the shared
+                                // config so the running session sees them, then
+                                // refresh the token-status display.
+                                *cfg_c.write() = imported;
+                                if let Some(o) = overlay.upgrade() {
+                                    crate::refresh_lock_chip(&o, &cfg_c);
+                                }
+                                msg_refresh_after_import(&w, &cfg_c)
                             }
-                            msg_refresh_after_import(&w, &cfg_c)
-                        }
-                        Err(e) => {
-                            eprintln!("[overlay-host] settings import failed: {e:#}");
-                            if ru {
-                                "Настройки не импортированы: файл не читается или это не экспорт настроек Суфлёра. Выберите экспортированный .json и нажмите «Импорт настроек» ещё раз."
-                            } else {
-                                "Settings not imported: the file cannot be read or is not a Suflyor settings export. Pick the exported .json file, then press Import settings again."
+                            Err(e) => {
+                                eprintln!("[overlay-host] settings import failed: {e:#}");
+                                if ru {
+                                    "Настройки не импортированы: файл не читается или это не экспорт настроек Суфлёра. Выберите экспортированный .json и нажмите «Импорт настроек» ещё раз."
+                                } else {
+                                    "Settings not imported: the file cannot be read or is not a Suflyor settings export. Pick the exported .json file, then press Import settings again."
+                                }
+                                .to_string()
                             }
-                            .to_string()
                         }
                     }
-                }
-            };
-            w.set_profile_io_result(SharedString::from(msg));
+                };
+                w.set_profile_io_result(SharedString::from(msg));
+            });
         });
     }
 
@@ -2050,6 +2057,7 @@ pub(crate) fn populate_token_status(
     cfg: &overlay_backend::config::SharedConfig,
 ) {
     settings_mlx::populate(win);
+    super::settings_dialogs::populate_storage(win);
     win.set_hermes_more_open(false);
     win.set_kb_entry_count(overlay_backend::kb::all().len() as i32);
     win.set_tts_test_status(SharedString::from(""));

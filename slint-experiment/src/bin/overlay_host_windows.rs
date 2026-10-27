@@ -240,6 +240,8 @@ use tile_terms::*;
 // `short_model_name`/`active_stack_label` stay in `main`. The moved Settings code
 // reaches the diagnostics REDACTED `build_diag_report`, `open_wizard`, the
 // `WindowRegistry`, and the mic guard through the existing crate-root globs.
+#[path = "overlay_host/settings_dialogs.rs"]
+mod settings_dialogs;
 #[path = "overlay_host/settings_controller.rs"]
 mod settings_controller;
 use settings_controller::*;

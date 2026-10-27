@@ -60,37 +60,39 @@ pub(crate) fn wire_import_export(
         win.on_export_server_settings_clicked(move || {
             let ru = cfg_c.read().ui_is_ru();
             let snapshot = cfg_c.read().clone();
-            let picked = rfd::FileDialog::new()
+            let dialog = rfd::AsyncFileDialog::new()
                 .set_title(if ru {
                     "Экспорт серверных настроек (только AI/STT — содержит API-ключи)"
                 } else {
                     "Export server settings (AI/STT only — contains API keys)"
                 })
                 .set_file_name("suflyor-server-settings.json")
-                .add_filter("JSON", &["json"])
-                .save_file();
-            let Some(w) = weak.upgrade() else { return };
-            let msg = match picked {
-                None => if ru { "Экспорт отменён" } else { "Export cancelled" }.to_string(),
-                Some(path) => {
-                    match overlay_backend::config::export_server_settings_to(&path, &snapshot) {
-                        Ok(()) => {
-                            if ru {
-                                format!("Настройки сервера экспортированы в {}", path.display())
-                            } else {
-                                format!("Server settings exported to {}", path.display())
+                .add_filter("JSON", &["json"]);
+            let weak = weak.clone();
+            super::settings_dialogs::pick(dialog, super::settings_dialogs::Kind::Save, move |picked| {
+                let Some(w) = weak.upgrade() else { return };
+                let msg = match picked {
+                    None => if ru { "Экспорт отменён" } else { "Export cancelled" }.to_string(),
+                    Some(path) => {
+                        match overlay_backend::config::export_server_settings_to(&path, &snapshot) {
+                            Ok(()) => {
+                                if ru {
+                                    format!("Настройки сервера экспортированы в {}", path.display())
+                                } else {
+                                    format!("Server settings exported to {}", path.display())
+                                }
+                            }
+                            Err(e) => {
+                                // Generic + log: the error chain can carry a path /
+                                // internals into this screen-shared field (audit Q8).
+                                eprintln!("[overlay-host] server export failed: {e:#}");
+                                if ru { "Серверные настройки не экспортированы: в эту папку не удалось записать файл. Выберите другую папку и нажмите «Экспортировать серверные настройки» ещё раз." } else { "Server settings not exported: the file could not be written to that folder. Choose another folder, then press Export server settings again." }.to_string()
                             }
                         }
-                        Err(e) => {
-                            // Generic + log: the error chain can carry a path /
-                            // internals into this screen-shared field (audit Q8).
-                            eprintln!("[overlay-host] server export failed: {e:#}");
-                            if ru { "Серверные настройки не экспортированы: в эту папку не удалось записать файл. Выберите другую папку и нажмите «Экспортировать серверные настройки» ещё раз." } else { "Server settings not exported: the file could not be written to that folder. Choose another folder, then press Export server settings again." }.to_string()
-                        }
                     }
-                }
-            };
-            w.set_profile_io_result(SharedString::from(msg));
+                };
+                w.set_profile_io_result(SharedString::from(msg));
+            });
         });
     }
 
@@ -106,43 +108,46 @@ pub(crate) fn wire_import_export(
         win.on_import_server_settings_clicked(move || {
             let snapshot = cfg_c.read().clone();
             let ru = snapshot.ui_is_ru();
-            let picked = rfd::FileDialog::new()
+            let dialog = rfd::AsyncFileDialog::new()
                 .set_title(if ru {
                     "Импорт серверных настроек (только AI/STT) из резервной копии"
                 } else {
                     "Import server settings (AI/STT only) from a backup"
                 })
-                .add_filter("JSON", &["json"])
-                .pick_file();
-            let Some(w) = weak.upgrade() else { return };
-            let Some(path) = picked else {
-                w.set_profile_io_result(SharedString::from(if ru { "Импорт отменён" } else { "Import cancelled" }));
-                return;
-            };
-            // Read + parse + build the redacted preview. The parse error stays
-            // value-free (parse_config_bytes inside). No save happens yet.
-            match overlay_backend::config::preview_server_settings_from(&path, &snapshot) {
-                Ok((preview, imported)) => {
-                    apply_server_preview(&w, &preview, ru);
-                    *pending.borrow_mut() = Some(imported);
-                    w.set_server_preview_ready(true);
-                    w.set_profile_io_result(SharedString::from(if ru {
-                        "Проверьте изменения ниже и нажмите «Применить серверные настройки»."
-                    } else {
-                        "Review the changes below, then click 'Apply server settings'."
-                    }));
+                .add_filter("JSON", &["json"]);
+            let weak = weak.clone();
+            let pending = pending.clone();
+            super::settings_dialogs::pick(dialog, super::settings_dialogs::Kind::File, move |picked| {
+                let Some(w) = weak.upgrade() else { return };
+                let Some(path) = picked else {
+                    w.set_profile_io_result(SharedString::from(if ru { "Импорт отменён" } else { "Import cancelled" }));
+                    return;
+                };
+                // Read + parse + build the redacted preview. The parse error stays
+                // value-free (parse_config_bytes inside). No save happens yet.
+                match overlay_backend::config::preview_server_settings_from(&path, &snapshot) {
+                    Ok((preview, imported)) => {
+                        apply_server_preview(&w, &preview, ru);
+                        *pending.borrow_mut() = Some(imported);
+                        w.set_server_preview_ready(true);
+                        w.set_profile_io_result(SharedString::from(if ru {
+                            "Проверьте изменения ниже и нажмите «Применить серверные настройки»."
+                        } else {
+                            "Review the changes below, then click 'Apply server settings'."
+                        }));
+                    }
+                    Err(e) => {
+                        *pending.borrow_mut() = None;
+                        w.set_server_preview_ready(false);
+                        eprintln!("[overlay-host] server import preview failed: {e:#}");
+                        w.set_profile_io_result(SharedString::from(if ru {
+                            "Серверные настройки не прочитаны: файл не читается или это не экспорт настроек Суфлёра. Выберите экспортированный .json и нажмите «Импортировать серверные настройки» ещё раз."
+                        } else {
+                            "Server settings not read: the file cannot be read or is not a Suflyor settings export. Pick the exported .json file, then press Import server settings again."
+                        }));
+                    }
                 }
-                Err(e) => {
-                    *pending.borrow_mut() = None;
-                    w.set_server_preview_ready(false);
-                    eprintln!("[overlay-host] server import preview failed: {e:#}");
-                    w.set_profile_io_result(SharedString::from(if ru {
-                        "Серверные настройки не прочитаны: файл не читается или это не экспорт настроек Суфлёра. Выберите экспортированный .json и нажмите «Импортировать серверные настройки» ещё раз."
-                    } else {
-                        "Server settings not read: the file cannot be read or is not a Suflyor settings export. Pick the exported .json file, then press Import server settings again."
-                    }));
-                }
-            }
+            });
         });
     }
 

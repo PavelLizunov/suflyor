@@ -3028,6 +3028,25 @@
             "prim": "void"
           }
         },
+        "models-directory-browse": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "models-directory-save": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
         "now-refresh-requested": {
           "args": [],
           "ret": {
@@ -3221,6 +3240,19 @@
         },
         "strata-find-folder-clicked": {
           "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "strata-folder-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
           "ret": {
             "prim": "void"
           }
@@ -4853,6 +4885,20 @@
           "dir": "in-out",
           "type": {
             "prim": "bool"
+          }
+        },
+        "models-directory": {
+          "default": "",
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "models-directory-status": {
+          "default": "",
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
           }
         },
         "now-detail": {

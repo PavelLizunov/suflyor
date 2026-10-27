@@ -24,7 +24,7 @@ PanelWindow {
 
   readonly property var g: win.geometry || ({})
   readonly property bool parked: typeof g.x === "number" && (g.x < -10000 || g.y < -10000)
-  readonly property bool shown: win.visible && !parked && !(service && service.client.concealed)
+  readonly property bool shown: win.visible && !parked && !(service && (service.client.concealed || service.client.nativeDialogOpen))
   property var targetScreen: null
   visible: shown
   color: "transparent"

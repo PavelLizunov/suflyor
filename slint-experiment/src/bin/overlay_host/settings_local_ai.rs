@@ -602,41 +602,45 @@ pub(crate) fn wire_local_ai(
                 ));
                 return;
             }
-            let Some(path) = rfd::FileDialog::new()
-                .add_filter("GGUF model", &["gguf"])
-                .pick_file()
-            else {
-                return;
-            };
-            if overlay_backend::local_ai::valid_custom_gguf_path(&path.to_string_lossy()).is_none()
-            {
-                w.set_quality_status(SharedString::from(if cfg_c.read().ui_is_ru() {
-                    "Выбранный файл не является корректной GGUF-моделью."
-                } else {
-                    "The chosen file is not a valid GGUF model."
-                }));
-                return;
-            }
-            if !w.get_managed_local_server() {
-                let choice = overlay_backend::local_ai::ManagedLlamaChoice::for_custom(
-                    path,
-                    overlay_backend::local_ai::LocalContextPreset::from_config(
-                        &cfg_c.read().ai_local_context,
-                    ),
-                );
-                *PENDING_BUILTIN_CHOICE
-                    .lock()
-                    .unwrap_or_else(|p| p.into_inner()) = Some(choice);
-                w.invoke_local_engine_activate(0);
-                return;
-            }
-            *pending.lock().unwrap_or_else(|p| p.into_inner()) = Some(path);
-            let weak_invoke = w.as_weak();
-            let _ = slint::invoke_from_event_loop(move || {
-                if let Some(w) = weak_invoke.upgrade() {
-                    w.invoke_model_profile_changed(-1);
-                }
-            });
+            let cfg_c = cfg_c.clone();
+            let pending = pending.clone();
+            let weak = w.as_weak();
+            super::settings_dialogs::pick(
+                rfd::AsyncFileDialog::new().add_filter("GGUF model", &["gguf"]),
+                super::settings_dialogs::Kind::File,
+                move |path| {
+                    let (Some(w), Some(path)) = (weak.upgrade(), path) else { return };
+                    if overlay_backend::local_ai::valid_custom_gguf_path(&path.to_string_lossy()).is_none()
+                    {
+                        w.set_quality_status(SharedString::from(if cfg_c.read().ui_is_ru() {
+                            "Выбранный файл не является корректной GGUF-моделью."
+                        } else {
+                            "The chosen file is not a valid GGUF model."
+                        }));
+                        return;
+                    }
+                    if !w.get_managed_local_server() {
+                        let choice = overlay_backend::local_ai::ManagedLlamaChoice::for_custom(
+                            path,
+                            overlay_backend::local_ai::LocalContextPreset::from_config(
+                                &cfg_c.read().ai_local_context,
+                            ),
+                        );
+                        *PENDING_BUILTIN_CHOICE
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner()) = Some(choice);
+                        w.invoke_local_engine_activate(0);
+                        return;
+                    }
+                    *pending.lock().unwrap_or_else(|p| p.into_inner()) = Some(path);
+                    let weak_invoke = w.as_weak();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(w) = weak_invoke.upgrade() {
+                            w.invoke_model_profile_changed(-1);
+                        }
+                    });
+                },
+            );
         });
     }
 
@@ -1941,6 +1945,44 @@ fn listed_servers() -> Vec<overlay_backend::local_ai::RunningServer> {
         .clone()
 }
 
+#[cfg(any(windows, target_os = "linux"))]
+fn select_strata_folder(
+    win: &SettingsWindow,
+    cfg: &overlay_backend::config::SharedConfig,
+    folder: &std::path::Path,
+) {
+    let weak = win.as_weak();
+    let cfg = cfg.clone();
+    let folder = folder.to_path_buf();
+    std::thread::spawn(move || {
+        let mut found = overlay_backend::local_ai::strata_in_folder(&folder);
+        if found.is_empty() {
+            if let Ok(entries) = std::fs::read_dir(&folder) {
+                for sub in entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
+                    found.extend(overlay_backend::local_ai::strata_in_folder(&sub));
+                }
+            }
+        }
+        let first = found.into_iter().next();
+        let _ = slint::invoke_from_event_loop(move || {
+            let Some(win) = weak.upgrade() else { return };
+            let Some(first) = first else {
+                win.set_strata_status(SharedString::from(if cfg.read().ui_is_ru() {
+                    "Готовая Strata не найдена. Здесь нужна Linux-установка с .venv, serve/server.py и strata-<модель>.json. Папку весов Strata-data выберите в разделе «Папка моделей» выше."
+                } else {
+                    "No ready Strata found. Choose a Linux install with .venv, serve/server.py and strata-<model>.json. For Strata-data weights, use Model storage above."
+                }));
+                return;
+            };
+            FOUND_STRATA_GEN.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            *FOUND_STRATA.lock().unwrap_or_else(|p| p.into_inner()) = Some(first);
+            show_found_models(&win, &cfg.read());
+            win.set_strata_status(SharedString::default());
+            win.invoke_strata_choose(false);
+        });
+    });
+}
+
 /// The "Already on this PC" rows: the found Strata, then running servers.
 /// Only folder names: Settings may be screen-shared.
 fn show_found_models(win: &SettingsWindow, cfg: &overlay_backend::config::Config) {
@@ -2658,33 +2700,26 @@ pub(crate) fn wire_strata(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_strata_find_folder_clicked(move || {
-            let Some(w) = weak.upgrade() else { return };
-            let Some(folder) = rfd::FileDialog::new().pick_folder() else {
-                return;
-            };
-            // The Strata folder itself, or the folder that holds it.
-            let mut found = overlay_backend::local_ai::strata_in_folder(&folder);
-            if found.is_empty() {
-                if let Ok(entries) = std::fs::read_dir(&folder) {
-                    for sub in entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
-                        found.extend(overlay_backend::local_ai::strata_in_folder(&sub));
+            let cfg_c = cfg_c.clone();
+            let weak = weak.clone();
+            super::settings_dialogs::pick(
+                rfd::AsyncFileDialog::new(),
+                super::settings_dialogs::Kind::Folder,
+                move |folder| {
+                    if let (Some(w), Some(folder)) = (weak.upgrade(), folder) {
+                        select_strata_folder(&w, &cfg_c, &folder);
                     }
-                }
+                },
+            );
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_strata_folder_selected(move |folder| {
+            if let Some(w) = weak.upgrade() {
+                select_strata_folder(&w, &cfg_c, std::path::Path::new(folder.as_str()));
             }
-            let ru = cfg_c.read().ui_is_ru();
-            let Some(first) = found.into_iter().next() else {
-                w.set_strata_status(SharedString::from(if ru {
-                    "В этой папке нет готовой Strata. Нужна папка, где Strata уже запускалась: в ней есть .venv и файл strata-<модель>.json."
-                } else {
-                    "No ready Strata in this folder. Pick the folder Strata already ran from: it holds .venv and a strata-<model>.json file."
-                }));
-                return;
-            };
-            FOUND_STRATA_GEN.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            *FOUND_STRATA.lock().unwrap_or_else(|p| p.into_inner()) = Some(first);
-            show_found_models(&w, &cfg_c.read());
-            w.set_strata_status(SharedString::default());
-            w.invoke_strata_choose(false);
         });
     }
 

@@ -36,11 +36,11 @@ Item {
         && !root.builtinBusy && !root.strataBusy)
       root.service.client.call(root.win.winId, "now-refresh-requested", [])
   }
-  onInstallStatusChanged: root.relayBackgroundStatus(root.installStatus)
-  onQualityStatusChanged: root.relayBackgroundStatus(root.qualityStatus)
-  onVisionStatusChanged: root.relayBackgroundStatus(root.visionStatus)
-  onEngineStatusChanged: root.relayBackgroundStatus(root.engineStatus)
-  onStrataStatusChanged: root.relayBackgroundStatus(root.strataStatus)
+  onInstallStatusChanged: Qt.callLater(root.relayBackgroundStatus, root.installStatus)
+  onQualityStatusChanged: Qt.callLater(root.relayBackgroundStatus, root.qualityStatus)
+  onVisionStatusChanged: Qt.callLater(root.relayBackgroundStatus, root.visionStatus)
+  onEngineStatusChanged: Qt.callLater(root.relayBackgroundStatus, root.engineStatus)
+  onStrataStatusChanged: Qt.callLater(root.relayBackgroundStatus, root.strataStatus)
   onBuiltinBusyChanged: root.refreshBackgroundWhenIdle()
   onStrataBusyChanged: root.refreshBackgroundWhenIdle()
   onWinChanged: {

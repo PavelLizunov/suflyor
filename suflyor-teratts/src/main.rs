@@ -55,6 +55,12 @@ use protocol::{Cmd, Event, RejectReason};
 /// `%APPDATA%\suflyor\tts` — shared TTS root (Piper voices live in their own
 /// subdirectories; Tera owns `teratts-v2-<revision>`).
 fn tts_root() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("SUFLYOR_TTS_DIR")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+    {
+        return Some(path);
+    }
     if let Some(a) = std::env::var_os("APPDATA") {
         return Some(PathBuf::from(a).join("suflyor").join("tts"));
     }

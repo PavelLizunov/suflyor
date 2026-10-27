@@ -547,6 +547,9 @@ fn run_setup(dir: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> Result<(
         command.arg("setup.sh");
         command
     };
+    if let Some(storage) = crate::paths::model_storage_root() {
+        cmd.arg("--data-dir").arg(storage.join("Strata-data"));
+    }
     cmd.args([
         "--yes",
         "--family",

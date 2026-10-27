@@ -33,7 +33,7 @@ Column {
   readonly property var foundModels: p("found-models", [])
   readonly property bool hasOnPc: (llamaInstalled && (legacyPresent || fallbackPresent || qualityPresent))
     || customActive || strataInstalled || foundModels.length > 0
-  readonly property bool hasDownload: !llamaInstalled || installing || !strataInstalled
+  readonly property bool hasDownload: !llamaInstalled || installing || (!strataInstalled && !p("strata-external", false))
     || !legacyPresent || !fallbackPresent || !qualityPresent
   readonly property bool codexBusy: p("codex-auth-busy", false) || p("codex-models-busy", false)
   readonly property string installStatus: p("local-ai-status", "")
@@ -41,6 +41,7 @@ Column {
   readonly property string visionStatus: p("vision12b-status", "")
   readonly property string engineStatus: p("engine-update-status", "")
   readonly property string strataStatus: p("strata-status", "")
+  property string strataFolder: ""
   property var initializedWin: null
   height: implicitHeight
   padding: Style.space(20)
@@ -66,11 +67,11 @@ Column {
     if (root.win && root.initializedWin === root.win && root.idle) root.call("now-refresh-requested")
   }
   // Slint's local derived properties and changed handlers are not wire properties.
-  onInstallStatusChanged: root.relayStatus(root.installStatus)
-  onQualityStatusChanged: root.relayStatus(root.qualityStatus)
-  onVisionStatusChanged: root.relayStatus(root.visionStatus)
-  onEngineStatusChanged: root.relayStatus(root.engineStatus)
-  onStrataStatusChanged: root.relayStatus(root.strataStatus)
+  onInstallStatusChanged: Qt.callLater(root.relayStatus, root.installStatus)
+  onQualityStatusChanged: Qt.callLater(root.relayStatus, root.qualityStatus)
+  onVisionStatusChanged: Qt.callLater(root.relayStatus, root.visionStatus)
+  onEngineStatusChanged: Qt.callLater(root.relayStatus, root.engineStatus)
+  onStrataStatusChanged: Qt.callLater(root.relayStatus, root.strataStatus)
   onBuiltinBusyChanged: root.refreshWhenIdle()
   onStrataBusyChanged: root.refreshWhenIdle()
   // Do not replay initial snapshot values as edits when the Loader assigns win.
@@ -164,6 +165,35 @@ Column {
         }
         onCancelClicked: root.call("cancel-local-ai-clicked")
       }
+    }
+  }
+
+  C.SettingsCard {
+    width: Math.max(0, root.width - root.padding * 2)
+    title: root.tr("Model storage")
+    C.SettingsCaption {
+      text: root.tr("Choose the Suflyor model folder on any mounted disk. AI, speech models and voices use it after restarting Suflyor. Existing files are not moved.")
+    }
+    C.SettingsLineEdit {
+      text: root.p("models-directory", "")
+      placeholderText: root.tr("Absolute model folder path; empty uses the default locations")
+      onTextEdited: root.set("models-directory", text)
+    }
+    C.SettingsButtonsRow {
+      C.SettingsButton {
+        text: root.tr("Save")
+        enabled: root.idle
+        onClicked: root.call("models-directory-save", [root.p("models-directory", "")])
+      }
+      C.SettingsButton {
+        text: root.tr("Choose folder…")
+        enabled: root.idle
+        onClicked: root.call("models-directory-browse")
+      }
+    }
+    C.StatusLine { text: root.tr(root.p("models-directory-status", "")) }
+    C.SettingsCaption {
+      text: root.tr("For existing Strata weights, select the parent of Strata-data here. The Strata folder below is for an installed Linux engine, not weights alone.")
     }
   }
 
@@ -444,7 +474,7 @@ Column {
               onActionClicked: root.call("choose-custom-gguf-clicked")
             }
             C.LocalModelRow {
-              visible: modelGroup.index === 0 ? root.strataInstalled : !root.strataInstalled
+              visible: modelGroup.index === 0 ? root.strataInstalled : !root.strataInstalled && !root.p("strata-external", false)
               service: root.service
               title: root.tr("Qwen3.8-Flash-Next IQ2_XS")
               detail: busy ? root.strataStatus : root.tr(root.strataInstalled ? "Strata engine · installed" : "Strata engine · ~72 GB download")
@@ -482,8 +512,18 @@ Column {
             }
           }
         }
-        // Full-width equal-share actions replace Slint's inline text links.
+        C.SettingsCaption { text: root.tr("Existing Strata Linux installation") }
+        C.SettingsLineEdit {
+          text: root.strataFolder
+          placeholderText: root.tr("Folder containing .venv, serve/server.py and strata-<model>.json")
+          onTextEdited: root.strataFolder = text
+        }
         C.SettingsButtonsRow {
+          C.SettingsButton {
+            text: root.tr("Use this Strata folder")
+            enabled: root.idle && root.strataFolder.trim() !== ""
+            onClicked: root.call("strata-folder-selected", [root.strataFolder])
+          }
           C.SettingsButton { text: root.tr("Strata folder…"); enabled: root.idle; onClicked: root.call("strata-find-folder-clicked") }
           C.SettingsButton { visible: root.llamaInstalled; text: root.tr(".gguf file…"); enabled: root.idle; onClicked: root.call("choose-custom-gguf-clicked") }
         }

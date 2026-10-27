@@ -442,6 +442,11 @@ export component SettingsWindow inherits Window {
     // Start Strata from Suflyor's own install (true) or the found one (false).
     callback strata-choose(bool);
     callback strata-find-folder-clicked();
+    callback strata-folder-selected(string);
+    in-out property <string> models-directory: "";
+    in-out property <string> models-directory-status: "";
+    callback models-directory-save(string);
+    callback models-directory-browse();
     in-out property <bool> strata-vision-installable: false;
     in-out property <bool> strata-vision-downloaded: false;
     in-out property <bool> strata-vision-enabled: false;

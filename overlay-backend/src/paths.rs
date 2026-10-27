@@ -13,6 +13,51 @@
 //! never loses data.
 
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+
+// Kept separate from portable settings: a model disk belongs to this machine.
+static MODEL_STORAGE_ROOT: OnceLock<Option<PathBuf>> = OnceLock::new();
+
+/// The optional model disk, fixed for the process lifetime. Changes take effect
+/// after restart so a running download or engine never switches roots midway.
+#[must_use]
+pub fn model_storage_root() -> Option<PathBuf> {
+    MODEL_STORAGE_ROOT.get_or_init(configured_model_storage_root).clone()
+}
+
+/// The saved choice, including a change awaiting restart.
+#[must_use]
+pub fn configured_model_storage_root() -> Option<PathBuf> {
+    let text = std::fs::read_to_string(data_root()?.join("models-dir")).ok()?;
+    let path = PathBuf::from(text.trim());
+    path.is_absolute().then_some(path)
+}
+
+/// Select an existing directory without moving, deleting or downloading models.
+/// An empty value restores the legacy locations after restart.
+pub fn save_model_storage_root(value: &str) -> std::io::Result<()> {
+    let value = value.trim();
+    let path = Path::new(value);
+    if !value.is_empty() && (!path.is_absolute() || !path.is_dir()) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "choose an existing absolute model directory",
+        ));
+    }
+    let data = data_root().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "configuration directory unavailable")
+    })?;
+    std::fs::create_dir_all(&data)?;
+    let temporary = data.join("models-dir.tmp");
+    write_private(&temporary, value.as_bytes())?;
+    std::fs::rename(temporary, data.join("models-dir"))
+}
+
+/// Speech assets follow the chosen disk; old installations keep their paths.
+#[must_use]
+pub fn speech_model_dir(name: &str) -> Option<PathBuf> {
+    model_storage_root().or_else(data_root).map(|root| root.join(name))
+}
 
 /// Legacy Tauri product name — the old `%APPDATA%\overlay-mvp\` data dir.
 const LEGACY_DIR: &str = "overlay-mvp";
