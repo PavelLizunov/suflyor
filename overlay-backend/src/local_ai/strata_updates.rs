@@ -70,11 +70,21 @@ pub fn update_strata_engine(
     result
 }
 
-fn stop_updater(child: Child) {
+fn stop_updater(mut child: Child) {
     #[cfg(unix)]
-    unsafe {
-        // The updater and its native test-start children own this process group.
-        libc::kill(-(child.id() as libc::pid_t), libc::SIGTERM);
+    {
+        // Python's KeyboardInterrupt runs the official updater's finally block,
+        // which stops its isolated test server before removing the staging tree.
+        unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGINT); }
+        let deadline = Instant::now() + Duration::from_secs(65);
+        while Instant::now() < deadline {
+            match child.try_wait() {
+                Ok(Some(_)) => return,
+                Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+                Err(_) => break,
+            }
+        }
+        unsafe { libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL); }
     }
     terminate_child_tree(child);
 }
