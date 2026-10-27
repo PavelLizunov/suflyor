@@ -325,6 +325,9 @@ export component SettingsWindow inherits Window {
     callback ocr-install-clicked();
     // Speaker-diarization models — «Определить говорящих» needs 2 downloadable models
     // (~32 MB); this button installs them (status is a Rust-set RU string).
+    in-out property <bool> diar-nemotron-supported: false;
+    in-out property <bool> diar-use-nemotron: false;
+    callback diar-engine-selected(bool);
     in-out property <bool> diar-models-installed: false;
     in-out property <bool> diar-installing: false;
     in-out property <string> diar-install-status: "";
@@ -2081,8 +2084,14 @@ export component SettingsWindow inherits Window {
                         }
                         SettingsCard {
                             title: @tr("Speaker detection");
+                        if root.diar-nemotron-supported : SettingsComboBox {
+                            model: [@tr("NVIDIA Nemotron 3"), @tr("Pyannote + WeSpeaker")];
+                            current-index: root.diar-use-nemotron ? 0 : 1;
+                            enabled: !root.diar-installing;
+                            selected => { root.diar-engine-selected(self.current-index == 0); }
+                        }
                         Text {
-                            text: @tr("Speaker detection separates who spoke in the call's system audio (the «Determine speakers» button in the transcript window). Needs two models (~32 MB).");
+                            text: @tr("Choose the speaker detection model. NVIDIA Nemotron 3 detects up to 8 voices automatically; Pyannote + WeSpeaker also accepts a speaker count.");
                             font-size: Metrics.font-label;
                             color: Theme.text-secondary;
                             wrap: word-wrap;

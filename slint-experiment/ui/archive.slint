@@ -146,6 +146,7 @@ export component ArchiveWindow inherits Window {
     callback resummary-cancelled();
     // ТЗ1 — 📄 opens the structured read-only transcript window for this session.
     callback transcript-requested(int);
+    callback play-recording-requested(int);
     callback close-requested();
     // v0.17.1 — frameless window drag by the header (mirrors the tile drag:
     // pointer-down records the anchor, moved-while-pressed moves the HWND).
@@ -350,7 +351,12 @@ export component ArchiveWindow inherits Window {
                                     horizontal-stretch: 0;
                                     HorizontalLayout {
                                         spacing: Metrics.space-sm;
-                                        // Open first, edit next, delete last and set apart.
+                                        // Playback and transcript are separate archive actions.
+                                        RowIcon {
+                                            icon: @image-url("../assets/icons/play.svg");
+                                            a11y: @tr("Play recording");
+                                            clicked => { root.play-recording-requested(i); }
+                                        }
                                         RowIcon {
                                             icon: @image-url("../assets/icons/bubble.svg");
                                             a11y: @tr("View transcript");

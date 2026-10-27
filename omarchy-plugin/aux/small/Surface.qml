@@ -66,6 +66,12 @@ FocusScope {
       RowLayout {
         Layout.fillWidth: true
         spacing: Commons.Style.spacing.sm
+        Plugin.DragGrip {
+          Layout.preferredWidth: implicitWidth
+          Layout.preferredHeight: implicitHeight
+          win: root.view.win
+          service: root.view.service
+        }
         Tile.Label {
           Layout.fillWidth: true
           Layout.minimumWidth: 0

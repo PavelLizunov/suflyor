@@ -633,6 +633,7 @@ struct ArchiveWindowCallbacks {
     delete_requested: Handler<dyn FnMut(i32) -> ()>,
     drag_moved: Handler<dyn FnMut() -> ()>,
     drag_start_requested: Handler<dyn FnMut() -> ()>,
+    play_recording_requested: Handler<dyn FnMut(i32) -> ()>,
     query_changed: Handler<dyn FnMut(slint::SharedString) -> ()>,
     regen_name_requested: Handler<dyn FnMut(i32) -> ()>,
     rename_cancelled: Handler<dyn FnMut() -> ()>,
@@ -857,6 +858,20 @@ impl ArchiveWindow {
             return handler.call(|f| f()).unwrap_or_default();
         }
         self.0.base.send_invoke("drag-start-requested", vec![]);
+        Default::default()
+    }
+    pub fn on_play_recording_requested(&self, f: impl FnMut(i32) -> () + 'static) {
+        let f: Rc<RefCell<dyn FnMut(i32) -> ()>> = Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().play_recording_requested = Handler(Some(f));
+    }
+    pub fn invoke_play_recording_requested(&self, arg0: i32) -> () {
+        let handler = self.0.callbacks.borrow().play_recording_requested.clone();
+        if handler.is_set() {
+            return handler.call(|f| f(arg0)).unwrap_or_default();
+        }
+        self.0
+            .base
+            .send_invoke("play-recording-requested", vec![arg0.to_json()]);
         Default::default()
     }
     pub fn on_query_changed(&self, f: impl FnMut(slint::SharedString) -> () + 'static) {
@@ -1155,6 +1170,15 @@ impl RemoteObject for ArchiveWindowInner {
                 let handler = self.callbacks.borrow().drag_start_requested.clone();
                 Ok(handler
                     .call(|f| f())
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
+            "play-recording-requested" => {
+                let (a0,) = (<i32>::from_json(args.get(0).unwrap_or(&Value::Null))
+                    .ok_or("bad argument 0")?,);
+                let handler = self.callbacks.borrow().play_recording_requested.clone();
+                Ok(handler
+                    .call(|f| f(a0))
                     .map(|v| v.to_json())
                     .unwrap_or(Value::Null))
             }
@@ -3683,6 +3707,8 @@ struct SettingsWindowProps {
     diar_install_status: slint::SharedString,
     diar_installing: bool,
     diar_models_installed: bool,
+    diar_nemotron_supported: bool,
+    diar_use_nemotron: bool,
     engine_build: slint::SharedString,
     engine_update_status: slint::SharedString,
     engine_updating: bool,
@@ -4031,6 +4057,9 @@ impl Default for SettingsWindowProps {
                 .unwrap_or_default(),
             diar_installing: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             diar_models_installed: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            diar_nemotron_supported: <bool>::from_json(&serde_json::json!(false))
+                .unwrap_or_default(),
+            diar_use_nemotron: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             engine_build: <slint::SharedString>::from_json(&serde_json::json!(""))
                 .unwrap_or_default(),
             engine_update_status: <slint::SharedString>::from_json(&serde_json::json!(""))
@@ -4366,6 +4395,7 @@ struct SettingsWindowCallbacks {
     diagnostics_check_all_clicked: Handler<dyn FnMut() -> ()>,
     diagnostics_collect_logs_clicked: Handler<dyn FnMut() -> ()>,
     diagnostics_copy_report_clicked: Handler<dyn FnMut() -> ()>,
+    diar_engine_selected: Handler<dyn FnMut(bool) -> ()>,
     diar_install_clicked: Handler<dyn FnMut() -> ()>,
     download_model_clicked: Handler<dyn FnMut(i32) -> ()>,
     download_vision12b_clicked: Handler<dyn FnMut() -> ()>,
@@ -5217,6 +5247,22 @@ impl SettingsWindow {
     }
     pub fn get_diar_models_installed(&self) -> bool {
         self.0.props.borrow().diar_models_installed.clone()
+    }
+    pub fn set_diar_nemotron_supported(&self, value: bool) {
+        self.0
+            .base
+            .send_prop("diar-nemotron-supported", value.to_json());
+        self.0.props.borrow_mut().diar_nemotron_supported = value;
+    }
+    pub fn get_diar_nemotron_supported(&self) -> bool {
+        self.0.props.borrow().diar_nemotron_supported.clone()
+    }
+    pub fn set_diar_use_nemotron(&self, value: bool) {
+        self.0.base.send_prop("diar-use-nemotron", value.to_json());
+        self.0.props.borrow_mut().diar_use_nemotron = value;
+    }
+    pub fn get_diar_use_nemotron(&self) -> bool {
+        self.0.props.borrow().diar_use_nemotron.clone()
     }
     pub fn set_engine_build(&self, value: slint::SharedString) {
         self.0.base.send_prop("engine-build", value.to_json());
@@ -7459,6 +7505,20 @@ impl SettingsWindow {
             .send_invoke("diagnostics-copy-report-clicked", vec![]);
         Default::default()
     }
+    pub fn on_diar_engine_selected(&self, f: impl FnMut(bool) -> () + 'static) {
+        let f: Rc<RefCell<dyn FnMut(bool) -> ()>> = Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().diar_engine_selected = Handler(Some(f));
+    }
+    pub fn invoke_diar_engine_selected(&self, arg0: bool) -> () {
+        let handler = self.0.callbacks.borrow().diar_engine_selected.clone();
+        if handler.is_set() {
+            return handler.call(|f| f(arg0)).unwrap_or_default();
+        }
+        self.0
+            .base
+            .send_invoke("diar-engine-selected", vec![arg0.to_json()]);
+        Default::default()
+    }
     pub fn on_diar_install_clicked(&self, f: impl FnMut() -> () + 'static) {
         let f: Rc<RefCell<dyn FnMut() -> ()>> = Rc::new(RefCell::new(f));
         self.0.callbacks.borrow_mut().diar_install_clicked = Handler(Some(f));
@@ -9182,6 +9242,11 @@ impl RemoteObject for SettingsWindowInner {
             "diar-models-installed".into(),
             p.diar_models_installed.to_json(),
         );
+        m.insert(
+            "diar-nemotron-supported".into(),
+            p.diar_nemotron_supported.to_json(),
+        );
+        m.insert("diar-use-nemotron".into(), p.diar_use_nemotron.to_json());
         m.insert("engine-build".into(), p.engine_build.to_json());
         m.insert(
             "engine-update-status".into(),
@@ -9877,6 +9942,12 @@ impl RemoteObject for SettingsWindowInner {
             "diar-installing" => p.diar_installing = <bool>::from_json(value).ok_or("bad value")?,
             "diar-models-installed" => {
                 p.diar_models_installed = <bool>::from_json(value).ok_or("bad value")?
+            }
+            "diar-nemotron-supported" => {
+                p.diar_nemotron_supported = <bool>::from_json(value).ok_or("bad value")?
+            }
+            "diar-use-nemotron" => {
+                p.diar_use_nemotron = <bool>::from_json(value).ok_or("bad value")?
             }
             "engine-build" => {
                 p.engine_build = <slint::SharedString>::from_json(value).ok_or("bad value")?
@@ -10913,6 +10984,15 @@ impl RemoteObject for SettingsWindowInner {
                     .clone();
                 Ok(handler
                     .call(|f| f())
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
+            "diar-engine-selected" => {
+                let (a0,) = (<bool>::from_json(args.get(0).unwrap_or(&Value::Null))
+                    .ok_or("bad argument 0")?,);
+                let handler = self.callbacks.borrow().diar_engine_selected.clone();
+                Ok(handler
+                    .call(|f| f(a0))
                     .map(|v| v.to_json())
                     .unwrap_or(Value::Null))
             }
@@ -13397,7 +13477,9 @@ struct TranscriptWindowProps {
     mark_anchor: i32,
     marked_count: i32,
     needs_diar_models: bool,
+    nemotron_available: bool,
     overflow_count: i32,
+    playback_status: slint::SharedString,
     playing: bool,
     progress: f32,
     search_count: i32,
@@ -13408,6 +13490,7 @@ struct TranscriptWindowProps {
     speed_index: i32,
     time_text: slint::SharedString,
     timeline_unreliable: bool,
+    use_nemotron: bool,
     volume: f32,
     with_timecodes: bool,
 }
@@ -13439,7 +13522,10 @@ impl Default for TranscriptWindowProps {
             mark_anchor: <i32>::from_json(&serde_json::json!(-1.0)).unwrap_or_default(),
             marked_count: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
             needs_diar_models: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            nemotron_available: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             overflow_count: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            playback_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
             playing: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             progress: <f32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
             search_count: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
@@ -13452,6 +13538,7 @@ impl Default for TranscriptWindowProps {
             speed_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
             time_text: <slint::SharedString>::from_json(&serde_json::json!("")).unwrap_or_default(),
             timeline_unreliable: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            use_nemotron: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             volume: <f32>::from_json(&serde_json::json!(1.0)).unwrap_or_default(),
             with_timecodes: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
         }
@@ -13460,6 +13547,7 @@ impl Default for TranscriptWindowProps {
 #[derive(Default)]
 struct TranscriptWindowCallbacks {
     cancel_capture: Handler<dyn FnMut() -> ()>,
+    cancel_diarization: Handler<dyn FnMut() -> ()>,
     capture_line_selection: Handler<dyn FnMut(i32, i32, i32) -> ()>,
     clear_marks: Handler<dyn FnMut() -> ()>,
     close_requested: Handler<dyn FnMut() -> ()>,
@@ -13476,6 +13564,7 @@ struct TranscriptWindowCallbacks {
     search_edited: Handler<dyn FnMut(slint::SharedString) -> ()>,
     search_jump: Handler<dyn FnMut(i32) -> ()>,
     seek_fraction: Handler<dyn FnMut(f32) -> ()>,
+    select_diar_engine: Handler<dyn FnMut(bool) -> ()>,
     set_speed: Handler<dyn FnMut(f32) -> ()>,
     set_volume: Handler<dyn FnMut(f32) -> ()>,
     toggle_all: Handler<dyn FnMut(bool) -> ()>,
@@ -13655,12 +13744,26 @@ impl TranscriptWindow {
     pub fn get_needs_diar_models(&self) -> bool {
         self.0.props.borrow().needs_diar_models.clone()
     }
+    pub fn set_nemotron_available(&self, value: bool) {
+        self.0.base.send_prop("nemotron-available", value.to_json());
+        self.0.props.borrow_mut().nemotron_available = value;
+    }
+    pub fn get_nemotron_available(&self) -> bool {
+        self.0.props.borrow().nemotron_available.clone()
+    }
     pub fn set_overflow_count(&self, value: i32) {
         self.0.base.send_prop("overflow-count", value.to_json());
         self.0.props.borrow_mut().overflow_count = value;
     }
     pub fn get_overflow_count(&self) -> i32 {
         self.0.props.borrow().overflow_count.clone()
+    }
+    pub fn set_playback_status(&self, value: slint::SharedString) {
+        self.0.base.send_prop("playback-status", value.to_json());
+        self.0.props.borrow_mut().playback_status = value;
+    }
+    pub fn get_playback_status(&self) -> slint::SharedString {
+        self.0.props.borrow().playback_status.clone()
     }
     pub fn set_playing(&self, value: bool) {
         self.0.base.send_prop("playing", value.to_json());
@@ -13734,6 +13837,13 @@ impl TranscriptWindow {
     pub fn get_timeline_unreliable(&self) -> bool {
         self.0.props.borrow().timeline_unreliable.clone()
     }
+    pub fn set_use_nemotron(&self, value: bool) {
+        self.0.base.send_prop("use-nemotron", value.to_json());
+        self.0.props.borrow_mut().use_nemotron = value;
+    }
+    pub fn get_use_nemotron(&self) -> bool {
+        self.0.props.borrow().use_nemotron.clone()
+    }
     pub fn set_volume(&self, value: f32) {
         self.0.base.send_prop("volume", value.to_json());
         self.0.props.borrow_mut().volume = value;
@@ -13758,6 +13868,18 @@ impl TranscriptWindow {
             return handler.call(|f| f()).unwrap_or_default();
         }
         self.0.base.send_invoke("cancel-capture", vec![]);
+        Default::default()
+    }
+    pub fn on_cancel_diarization(&self, f: impl FnMut() -> () + 'static) {
+        let f: Rc<RefCell<dyn FnMut() -> ()>> = Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().cancel_diarization = Handler(Some(f));
+    }
+    pub fn invoke_cancel_diarization(&self) -> () {
+        let handler = self.0.callbacks.borrow().cancel_diarization.clone();
+        if handler.is_set() {
+            return handler.call(|f| f()).unwrap_or_default();
+        }
+        self.0.base.send_invoke("cancel-diarization", vec![]);
         Default::default()
     }
     pub fn on_capture_line_selection(&self, f: impl FnMut(i32, i32, i32) -> () + 'static) {
@@ -13961,6 +14083,20 @@ impl TranscriptWindow {
             .send_invoke("seek-fraction", vec![arg0.to_json()]);
         Default::default()
     }
+    pub fn on_select_diar_engine(&self, f: impl FnMut(bool) -> () + 'static) {
+        let f: Rc<RefCell<dyn FnMut(bool) -> ()>> = Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().select_diar_engine = Handler(Some(f));
+    }
+    pub fn invoke_select_diar_engine(&self, arg0: bool) -> () {
+        let handler = self.0.callbacks.borrow().select_diar_engine.clone();
+        if handler.is_set() {
+            return handler.call(|f| f(arg0)).unwrap_or_default();
+        }
+        self.0
+            .base
+            .send_invoke("select-diar-engine", vec![arg0.to_json()]);
+        Default::default()
+    }
     pub fn on_set_speed(&self, f: impl FnMut(f32) -> () + 'static) {
         let f: Rc<RefCell<dyn FnMut(f32) -> ()>> = Rc::new(RefCell::new(f));
         self.0.callbacks.borrow_mut().set_speed = Handler(Some(f));
@@ -14093,7 +14229,9 @@ impl RemoteObject for TranscriptWindowInner {
         m.insert("mark-anchor".into(), p.mark_anchor.to_json());
         m.insert("marked-count".into(), p.marked_count.to_json());
         m.insert("needs-diar-models".into(), p.needs_diar_models.to_json());
+        m.insert("nemotron-available".into(), p.nemotron_available.to_json());
         m.insert("overflow-count".into(), p.overflow_count.to_json());
+        m.insert("playback-status".into(), p.playback_status.to_json());
         m.insert("playing".into(), p.playing.to_json());
         m.insert("progress".into(), p.progress.to_json());
         m.insert("search-count".into(), p.search_count.to_json());
@@ -14107,6 +14245,7 @@ impl RemoteObject for TranscriptWindowInner {
             "timeline-unreliable".into(),
             p.timeline_unreliable.to_json(),
         );
+        m.insert("use-nemotron".into(), p.use_nemotron.to_json());
         m.insert("volume".into(), p.volume.to_json());
         m.insert("with-timecodes".into(), p.with_timecodes.to_json());
         self.base.snapshot(Value::Object(m))
@@ -14149,7 +14288,13 @@ impl RemoteObject for TranscriptWindowInner {
             "needs-diar-models" => {
                 p.needs_diar_models = <bool>::from_json(value).ok_or("bad value")?
             }
+            "nemotron-available" => {
+                p.nemotron_available = <bool>::from_json(value).ok_or("bad value")?
+            }
             "overflow-count" => p.overflow_count = <i32>::from_json(value).ok_or("bad value")?,
+            "playback-status" => {
+                p.playback_status = <slint::SharedString>::from_json(value).ok_or("bad value")?
+            }
             "playing" => p.playing = <bool>::from_json(value).ok_or("bad value")?,
             "progress" => p.progress = <f32>::from_json(value).ok_or("bad value")?,
             "search-count" => p.search_count = <i32>::from_json(value).ok_or("bad value")?,
@@ -14168,6 +14313,7 @@ impl RemoteObject for TranscriptWindowInner {
             "timeline-unreliable" => {
                 p.timeline_unreliable = <bool>::from_json(value).ok_or("bad value")?
             }
+            "use-nemotron" => p.use_nemotron = <bool>::from_json(value).ok_or("bad value")?,
             "volume" => p.volume = <f32>::from_json(value).ok_or("bad value")?,
             "with-timecodes" => p.with_timecodes = <bool>::from_json(value).ok_or("bad value")?,
             _ => return Err(format!("not settable: {name}")),
@@ -14178,6 +14324,13 @@ impl RemoteObject for TranscriptWindowInner {
         match name {
             "cancel-capture" => {
                 let handler = self.callbacks.borrow().cancel_capture.clone();
+                Ok(handler
+                    .call(|f| f())
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
+            "cancel-diarization" => {
+                let handler = self.callbacks.borrow().cancel_diarization.clone();
                 Ok(handler
                     .call(|f| f())
                     .map(|v| v.to_json())
@@ -14314,6 +14467,15 @@ impl RemoteObject for TranscriptWindowInner {
                 let (a0,) = (<f32>::from_json(args.get(0).unwrap_or(&Value::Null))
                     .ok_or("bad argument 0")?,);
                 let handler = self.callbacks.borrow().seek_fraction.clone();
+                Ok(handler
+                    .call(|f| f(a0))
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
+            "select-diar-engine" => {
+                let (a0,) = (<bool>::from_json(args.get(0).unwrap_or(&Value::Null))
+                    .ok_or("bad argument 0")?,);
+                let handler = self.callbacks.borrow().select_diar_engine.clone();
                 Ok(handler
                     .call(|f| f(a0))
                     .map(|v| v.to_json())

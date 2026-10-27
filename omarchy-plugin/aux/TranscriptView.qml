@@ -198,6 +198,12 @@ Item {
         font.pixelSize: Commons.Style.font.caption
         horizontalAlignment: Text.AlignHCenter
       }
+      Tile.Label {
+        visible: root.p("playback-status", "") !== ""
+        Layout.fillWidth: true
+        text: root.p("playback-status", "")
+        color: Commons.Color.urgent
+      }
       Archive.TranscriptPlayer {
         visible: root.p("has-audio", false)
         Layout.fillWidth: true

@@ -508,6 +508,17 @@ pub(in super::super) fn open_archive(
         });
     }
 
+    {
+        let weak = win.as_weak();
+        let tslot = transcript_slot.clone();
+        win.on_play_recording_requested(move |index| {
+            if let Some(w) = weak.upgrade() {
+                w.invoke_transcript_requested(index);
+                if let Some(transcript) = tslot.borrow().as_ref() { transcript.invoke_toggle_play(); }
+            }
+        });
+    }
+
     // v0.14.0 — "↻ Summary": re-transcribe a session's saved recordings OFFLINE
     // (unconstrained by real-time → a better transcript than the live one) and
     // run the meeting summary over it. ONE job at a time; the header shows

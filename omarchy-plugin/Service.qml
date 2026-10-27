@@ -12,6 +12,13 @@ Item {
   id: root
 
   property var manifest: null
+  IpcHandler {
+    target: "io.github.pavellizunov.suflyor.status"
+    function status(): string {
+      return JSON.stringify({uiSource: String(Qt.resolvedUrl(".")), running: root.running,
+        windows: remoteClient.windowList.map(function(w) { return {id: w.winId, type: w.type, visible: w.visible, geometry: w.geometry} })})
+    }
+  }
   // This file sits at the plugin root, next to bin/ and locales/.
   readonly property string pluginDir: decodeURIComponent(String(Qt.resolvedUrl(".")).replace("file://", "")).replace(/\/$/, "")
   readonly property string binDir: root.pluginDir + "/bin/"

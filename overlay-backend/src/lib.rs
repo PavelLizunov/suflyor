@@ -36,6 +36,7 @@ pub mod credentials;
 pub mod deep_lock;
 pub mod diar_install;
 pub mod diarize;
+pub mod nemotron_diar;
 pub(crate) mod download;
 pub mod events;
 pub mod health;

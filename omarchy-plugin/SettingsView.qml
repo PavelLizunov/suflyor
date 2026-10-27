@@ -107,6 +107,12 @@ Item {
         Layout.preferredWidth: Commons.Style.space(28)
         Layout.preferredHeight: Commons.Style.space(28)
       }
+      DragGrip {
+        Layout.preferredWidth: implicitWidth
+        Layout.preferredHeight: implicitHeight
+        win: root.win
+        service: root.service
+      }
       Text {
         Layout.fillWidth: true
         text: "Suflyor · " + root.tr("Settings")

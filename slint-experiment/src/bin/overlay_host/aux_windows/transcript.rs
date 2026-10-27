@@ -356,6 +356,7 @@ fn wire_transcript_player(
     win.set_playing(false);
     win.set_progress(0.0);
     win.set_time_text(SharedString::default());
+    win.set_playback_status(SharedString::default());
     win.set_active_line(-1);
     // Reused window — reset the speed ComboBox (index 0 = 1×) + volume slider (1×) so
     // the UI matches the fresh player (reset() above dropped any prior session's
@@ -367,6 +368,11 @@ fn wire_transcript_player(
     }
 
     let id = session_id.to_string();
+    let playback_failure = if overlay_backend::config::load().ui_is_ru() {
+        "Не удалось запустить запись. Проверьте устройство вывода звука; подробности в журнале."
+    } else {
+        "Could not play the recording. Check the audio output device; details are in the log."
+    };
     {
         let weak = win.as_weak();
         let id = id.clone();
@@ -375,7 +381,10 @@ fn wire_transcript_player(
                 transcript_player::toggle();
                 if let Some(w) = weak.upgrade() {
                     w.set_playing(transcript_player::is_playing());
+                    w.set_playback_status(SharedString::default());
                 }
+            } else if let Some(w) = weak.upgrade() {
+                w.set_playback_status(SharedString::from(playback_failure));
             }
         });
     }
@@ -486,6 +495,8 @@ struct DiarJobHandles {
     /// The session the job runs for — a re-attached poll paints ONLY when the
     /// window still shows this session (it may have been repurposed mid-run).
     session_id: String,
+    engine: overlay_backend::diarize::DiarEngine,
+    cancel: Arc<AtomicBool>,
 }
 
 /// V-1 — the running model install's shared result slot. The worker
@@ -493,7 +504,7 @@ struct DiarJobHandles {
 /// the UI-thread poll ([`start_diar_install_poll`]) takes it. Cloned between
 /// the install callback, `DIAR_INSTALL_JOB`, and the poll, so a re-attached
 /// poll after a close+reopen consumes the SAME install.
-type DiarInstallSlot = Arc<Mutex<Option<Result<(), String>>>>;
+type DiarInstallSlot = Arc<Mutex<Option<Result<overlay_backend::diarize::DiarEngine, String>>>>;
 
 /// suflyor H3 — how a finished job failed, so the UI never paints a result that
 /// was NOT persisted. `Run` = the sidecar/parse failed (path-safe reason via
@@ -750,10 +761,9 @@ fn start_diar_install_poll(weak: slint::Weak<TranscriptWindow>, slot: DiarInstal
             };
             w.set_installing_diar_models(false);
             match result {
-                Ok(()) => {
-                    // Re-check the fs rather than assume — only enable detect if BOTH
-                    // models really landed (a partial install keeps the prompt up).
-                    let ready = overlay_backend::diarize::models_ready();
+                Ok(engine) => {
+                    w.set_use_nemotron(engine == overlay_backend::diarize::DiarEngine::Nemotron3);
+                    let ready = overlay_backend::diarize::engine_ready(engine);
                     w.set_can_diarize(ready);
                     w.set_needs_diar_models(!ready);
                     w.set_diar_status(SharedString::default());
@@ -918,7 +928,11 @@ fn wire_transcript_diarization(
     let session_diarizable = session_finished
         && has_sys_audio_ms
         && overlay_backend::session_audio::session_has_recordings(session_id);
-    let models_ready = overlay_backend::diarize::models_ready();
+    let engine = live_job.as_ref().map(|job| job.engine)
+        .unwrap_or_else(overlay_backend::diarize::selected_engine);
+    win.set_nemotron_available(overlay_backend::nemotron_diar::supported());
+    win.set_use_nemotron(engine == overlay_backend::diarize::DiarEngine::Nemotron3);
+    let models_ready = overlay_backend::diarize::engine_ready(engine);
     let can_diarize = session_diarizable && models_ready;
     let needs_diar_models = session_diarizable && !models_ready;
     // I-1: warn when the recording predates the wall-clock-padding fix — system.wav
@@ -993,6 +1007,35 @@ fn wire_transcript_diarization(
     // (same lifecycle as above; the worker commits on disk window-independently).
     if let Some(slot) = live_install {
         start_diar_install_poll(win.as_weak(), slot);
+    }
+
+    {
+        let weak = win.as_weak();
+        win.on_select_diar_engine(move |use_nemotron| {
+            let Some(w) = weak.upgrade() else { return };
+            if DIAR_BUSY.load(Ordering::Acquire) || DIAR_INSTALL_BUSY.load(Ordering::Acquire) { return; }
+            let engine = overlay_backend::diarize::DiarEngine::from_id(if use_nemotron { "nemotron3" } else { "pyannote" });
+            if let Err(error) = overlay_backend::diarize::save_engine(engine) {
+                log::warn!("diarization preference save failed: {error}");
+                return;
+            }
+            w.set_use_nemotron(engine == overlay_backend::diarize::DiarEngine::Nemotron3);
+            let ready = overlay_backend::diarize::engine_ready(engine);
+            w.set_can_diarize(session_diarizable && ready);
+            w.set_needs_diar_models(session_diarizable && !ready);
+            w.set_diar_status(SharedString::default());
+        });
+    }
+    {
+        win.on_cancel_diarization(move || {
+            DIAR_JOB.with(|job| {
+                if let Some(job) = job.borrow().as_ref() {
+                    if job.engine == overlay_backend::diarize::DiarEngine::Nemotron3 {
+                        job.cancel.store(true, Ordering::Release);
+                    }
+                }
+            });
+        });
     }
 
     // Toggle role ↔ voice.
@@ -1095,6 +1138,8 @@ fn wire_transcript_diarization(
                 w.set_confirm_rediar(false);
                 return;
             };
+            let engine = overlay_backend::diarize::DiarEngine::from_id(if w.get_use_nemotron() { "nemotron3" } else { "pyannote" });
+            if !overlay_backend::diarize::engine_ready(engine) { return; }
             let count = w.get_speaker_count().clamp(0, 8);
             w.set_diarizing(true);
             w.set_diar_status(SharedString::from("Определение говорящих…"));
@@ -1103,11 +1148,14 @@ fn wire_transcript_diarization(
                 slot: Arc::new(Mutex::new(None)),
                 progress: Arc::new(Mutex::new(None)),
                 session_id: sid.clone(),
+                engine,
+                cancel: Arc::new(AtomicBool::new(false)),
             };
             DIAR_JOB.with(|j| *j.borrow_mut() = Some(handles.clone()));
             {
                 let slot_w = handles.slot.clone();
                 let progress_w = handles.progress.clone();
+                let cancel = handles.cancel.clone();
                 let sid_w = sid.clone();
                 let utts_owned: Vec<Utterance> = utts_c.as_ref().clone();
                 rt.spawn_blocking(move || {
@@ -1115,16 +1163,19 @@ fn wire_transcript_diarization(
                     // a panic unwinding the sidecar run (RAII; the latch can't be
                     // leaked and wedge the feature until restart).
                     let guard = guard;
-                    let outcome = match overlay_backend::diarize::run_diarization(
+                    let outcome = match overlay_backend::diarize::run_diarization_with_engine(
                         &sid_w,
                         count,
+                        engine,
                         &utts_owned,
+                        &cancel,
                         &|overlay_backend::diarize::Progress::Step(message)| {
                             if let Ok(mut value) = progress_w.lock() {
                                 *value = Some(message);
                             }
                         },
                     ) {
+                        Ok(_) if cancel.load(Ordering::Acquire) => Err(DiarFailure::Run("Nemotron canceled".into())),
                         Ok(d) => {
                             // Persist HERE, off the window: a worker-owned catalog
                             // handle (the archive window does the same). The poll's
@@ -1188,6 +1239,7 @@ fn wire_transcript_diarization(
             w.set_installing_diar_models(true);
             w.set_diar_status(SharedString::default());
 
+            let engine = overlay_backend::diarize::DiarEngine::from_id(if w.get_use_nemotron() { "nemotron3" } else { "pyannote" });
             let slot: DiarInstallSlot = Arc::new(Mutex::new(None));
             DIAR_INSTALL_JOB.with(|j| *j.borrow_mut() = Some(slot.clone()));
             {
@@ -1200,8 +1252,8 @@ fn wire_transcript_diarization(
                     let cancel = AtomicBool::new(false);
                     // ponytail: no per-file progress marshalling — the button's
                     // "Downloading…" state is enough for a one-time ~30 MB fetch.
-                    let r = overlay_backend::diar_install::install_models(&cancel, &|_| {})
-                        .map_err(|e| format!("{e:#}"));
+                    let r = overlay_backend::diarize::install_engine(engine, &cancel, &|_| {})
+                        .map(|()| engine).map_err(|e| format!("{e:#}"));
                     if let Ok(mut g) = slot_w.lock() {
                         *g = Some(r);
                         // Keep result publication + latch release ordered for

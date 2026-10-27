@@ -83,6 +83,11 @@ Rectangle {
       Layout.fillWidth: true
       spacing: Commons.Style.spacing.sm
       Item { Layout.fillWidth: true }
+      Action {
+        iconText: "\uf04b"
+        text: root.view.service ? root.view.service.tr("Play recording", []) : ""
+        onClicked: root.view.call("play-recording-requested", [root.rowIndex])
+      }
       IconAction {
         iconText: "\uf075"
         label: root.view.service ? root.view.service.tr("View transcript", []) : ""

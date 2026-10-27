@@ -65,6 +65,45 @@ pub fn models_ready() -> bool {
     crate::diar_install::models_installed()
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DiarEngine { Legacy, Nemotron3 }
+
+impl DiarEngine {
+    pub fn from_id(id: &str) -> Self {
+        if id == "nemotron3" && crate::nemotron_diar::supported() { Self::Nemotron3 } else { Self::Legacy }
+    }
+    pub fn id(self) -> &'static str {
+        match self { Self::Legacy => "pyannote", Self::Nemotron3 => "nemotron3" }
+    }
+}
+
+pub fn selected_engine() -> DiarEngine {
+    let saved = crate::paths::data_root()
+        .and_then(|root| std::fs::read_to_string(root.join("diar-engine")).ok());
+    DiarEngine::from_id(saved.as_deref().unwrap_or(if crate::nemotron_diar::supported() { "nemotron3" } else { "pyannote" }).trim())
+}
+
+pub fn save_engine(engine: DiarEngine) -> Result<()> {
+    let root = crate::paths::data_root().context("configuration directory unavailable")?;
+    std::fs::create_dir_all(&root)?;
+    crate::paths::write_private(&root.join("diar-engine"), engine.id().as_bytes())?;
+    Ok(())
+}
+
+pub fn engine_ready(engine: DiarEngine) -> bool {
+    match engine {
+        DiarEngine::Legacy => models_ready(),
+        DiarEngine::Nemotron3 => crate::nemotron_diar::installed(),
+    }
+}
+
+pub fn install_engine(engine: DiarEngine, cancel: &std::sync::atomic::AtomicBool, on: &dyn Fn(crate::diar_install::DiarProgress)) -> Result<()> {
+    match engine {
+        DiarEngine::Legacy => crate::diar_install::install_models(cancel, on),
+        DiarEngine::Nemotron3 => crate::nemotron_diar::install(cancel, on),
+    }
+}
+
 /// Whether `system.wav`'s length covers the SYSTEM-line span, so speaker segments
 /// align to the right lines. `recording_ms` is the WAV length (see
 /// `session_audio::system_recording_ms`); the span is the max `audio_ms` over SYSTEM
@@ -96,6 +135,8 @@ pub fn timeline_reliable(recording_ms: Option<i64>, utts: &[Utterance]) -> bool 
 pub fn friendly_error(raw: &str) -> String {
     if raw.contains("слишком длинная") {
         "Запись длиннее 3 часов — определение говорящих недоступно.".to_string()
+    } else if raw.contains("Nemotron canceled") {
+        "Определение говорящих остановлено.".to_string()
     } else if raw.contains("no speakers detected") {
         "Речь не распознана — говорящие не найдены.".to_string()
     } else {
@@ -117,6 +158,28 @@ pub fn run_diarization(
     utts: &[Utterance],
     on_progress: &impl Fn(Progress),
 ) -> Result<Diarization> {
+    run_diarization_with_engine(session_id, num_speakers, DiarEngine::Legacy, utts, &std::sync::atomic::AtomicBool::new(false), on_progress)
+}
+
+pub fn run_diarization_with_engine(
+    session_id: &str,
+    num_speakers: i32,
+    engine: DiarEngine,
+    utts: &[Utterance],
+    cancel: &std::sync::atomic::AtomicBool,
+    on_progress: &impl Fn(Progress),
+) -> Result<Diarization> {
+    if engine == DiarEngine::Nemotron3 {
+        let wav = crate::recorder::recordings_dir()?.join(session_id).join("system.wav");
+        guard_wav_len(&wav)?;
+        let duration = crate::session_audio::system_recording_ms(session_id).context("recording duration unavailable")?;
+        on_progress(Progress::Step("NVIDIA Nemotron 3: определение говорящих на GPU…".into()));
+        let (segments, count, model_id) = crate::nemotron_diar::diarize(&wav, duration, cancel)?;
+        return Ok(Diarization {
+            session_id: session_id.into(), created_at_ms: crate::journal::now_unix_ms() as i64,
+            num_speakers: count, model_id, segments, speaker_names: Default::default(),
+        });
+    }
     let started = Instant::now();
     let seg = crate::diar_install::seg_model_path()
         .filter(|p| p.is_file())

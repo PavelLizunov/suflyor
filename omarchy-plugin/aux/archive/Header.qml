@@ -13,6 +13,12 @@ RowLayout {
   property string icon: ""
   spacing: Commons.Style.spacing.lg
   Tile.Label { text: root.icon; color: Commons.Color.accent }
+  Plugin.DragGrip {
+    Layout.preferredWidth: implicitWidth
+    Layout.preferredHeight: implicitHeight
+    win: root.view.win
+    service: root.view.service
+  }
   Tile.Label {
     Layout.fillWidth: true
     Layout.minimumWidth: 0

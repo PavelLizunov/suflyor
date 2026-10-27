@@ -2227,6 +2227,27 @@ msgstr "Включить для F8"
 msgid "Stop session"
 msgstr "Остановить сессию"
 
+msgid "NVIDIA Nemotron 3"
+msgstr "NVIDIA Nemotron 3"
+
+msgid "Pyannote + WeSpeaker"
+msgstr "Pyannote + WeSpeaker"
+
+msgid "Up to 8 speakers automatically. GPU preferred, CPU fallback."
+msgstr "До 8 говорящих автоматически. Приоритет видеокарте, CPU — запасной вариант."
+
+msgid "Nemotron requires a one-time model download (~102 MB)."
+msgstr "Для Nemotron нужно один раз скачать модель, около 102 МБ."
+
+msgid "Choose the speaker detection model. NVIDIA Nemotron 3 detects up to 8 voices automatically; Pyannote + WeSpeaker also accepts a speaker count."
+msgstr "Выберите модель определения говорящих. NVIDIA Nemotron 3 автоматически различает до 8 голосов. Для Pyannote + WeSpeaker можно также указать их число."
+
+msgid "Play recording"
+msgstr "Воспроизвести запись"
+
+msgid "Pause recording"
+msgstr "Приостановить запись"
+
 msgid "Strata engine: {}"
 msgstr "Движок Strata: {}"
 

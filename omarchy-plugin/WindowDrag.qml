@@ -11,7 +11,10 @@ MouseArea {
   acceptedButtons: Qt.LeftButton
   cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
   preventStealing: true
-  onPressed: function(mouse) { lastGlobal = mapToGlobal(mouse.x, mouse.y) }
+  onPressed: function(mouse) {
+    lastGlobal = mapToGlobal(mouse.x, mouse.y)
+    mouse.accepted = true
+  }
   onPositionChanged: function(mouse) {
     if (!pressed || !root.win || !root.service) return
     var now = mapToGlobal(mouse.x, mouse.y)

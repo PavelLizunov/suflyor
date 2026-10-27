@@ -350,6 +350,18 @@ pub(crate) fn wire_vision_settings(
         });
     }
 
+    {
+        let weak = win.as_weak();
+        win.on_diar_engine_selected(move |use_nemotron| {
+            let Some(w) = weak.upgrade() else { return };
+            if w.get_diar_installing() { return; }
+            let engine = overlay_backend::diarize::DiarEngine::from_id(if use_nemotron { "nemotron3" } else { "pyannote" });
+            if let Err(error) = overlay_backend::diarize::save_engine(engine) { log::warn!("diarization preference: {error}"); return; }
+            w.set_diar_use_nemotron(engine == overlay_backend::diarize::DiarEngine::Nemotron3);
+            w.set_diar_models_installed(overlay_backend::diarize::engine_ready(engine));
+            w.set_diar_install_status(SharedString::default());
+        });
+    }
     // ===== Speaker-diarization models — download-on-demand install button =====
     // Two SHA-pinned models (~32 MB) on a worker thread, mirroring the OCR/voice
     // installers. Once installed, «Определить говорящих» in the transcript window is
@@ -364,6 +376,7 @@ pub(crate) fn wire_vision_settings(
             if w.get_diar_installing() {
                 return;
             }
+            let engine = overlay_backend::diarize::DiarEngine::from_id(if w.get_diar_use_nemotron() { "nemotron3" } else { "pyannote" });
             w.set_diar_installing(true);
             w.set_diar_install_status(slint::SharedString::from("Подготовка…"));
             let weak_done = w.as_weak();
@@ -387,7 +400,7 @@ pub(crate) fn wire_vision_settings(
                     });
                 };
                 let cancel = std::sync::atomic::AtomicBool::new(false);
-                let result = overlay_backend::diar_install::install_models(&cancel, &on);
+                let result = overlay_backend::diarize::install_engine(engine, &cancel, &on);
                 if let Err(e) = &result {
                     diag!("[overlay-host] diarization models install failed: {e:#}");
                 }
@@ -401,7 +414,7 @@ pub(crate) fn wire_vision_settings(
                             "Не удалось установить — проверьте интернет и повторите.",
                         ));
                     } else {
-                        w.set_diar_models_installed(true);
+                        w.set_diar_models_installed(overlay_backend::diarize::engine_ready(engine));
                         // Clear the status so the localized @tr("Speaker models are
                         // installed.") confirmation renders (not the RU progress literal).
                         w.set_diar_install_status(slint::SharedString::default());

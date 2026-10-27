@@ -53,6 +53,12 @@ if [[ -d "$build/speech-gpu" ]]; then
     rm -rf "$prefix/speech-gpu"
     mv "$prefix/.speech-gpu.new" "$prefix/speech-gpu"
 fi
+if [[ -d "$build/nemotron" ]]; then
+    rm -rf "$prefix/.nemotron.new"
+    cp -R "$build/nemotron" "$prefix/.nemotron.new"
+    rm -rf "$prefix/nemotron"
+    mv "$prefix/.nemotron.new" "$prefix/nemotron"
+fi
 install -m 0755 "$build/overlay-host" "$prefix/suflyord.new"
 mv -f "$prefix/suflyord.new" "$prefix/suflyord"
 for name in suflyor-tts suflyor-teratts; do
@@ -67,7 +73,23 @@ done
 staging="$plugins/.$id.new"
 rm -rf "$staging"
 mkdir -p "$plugins"
+# A fresh source URL avoids Qt retaining old nested types in the shared shell.
+# The full source tree is versioned together, while the stable root owns assets.
+ui_revision="$(find "$root/omarchy-plugin" -type f -name '*.qml' -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -c1-16)"
+ui_name="ui-$ui_revision"
 cp -R "$root/omarchy-plugin" "$staging"
+mkdir -p "$staging/$ui_name"
+cp -R "$root/omarchy-plugin/." "$staging/$ui_name/"
+rm -f "$staging/$ui_name/AGENTS.md"
+python3 - "$staging/manifest.json" "$ui_name" <<'PY'
+import json, sys
+from pathlib import Path
+p = Path(sys.argv[1])
+m = json.loads(p.read_text())
+m["entryPoints"] = {key: f"{sys.argv[2]}/{value}" for key, value in m["entryPoints"].items()}
+p.write_text(json.dumps(m, indent=2) + "\n")
+PY
+# Service resolves bin and locale files relative to its versioned source.
 rm -f "$staging/AGENTS.md"
 mkdir -p "$staging/bin"
 cat > "$staging/bin/suflyord" <<EOF
@@ -75,6 +97,7 @@ cat > "$staging/bin/suflyord" <<EOF
 exec "$prefix/suflyord" "\$@"
 EOF
 chmod 0755 "$staging/bin/suflyord"
+cp -R "$staging/bin" "$staging/$ui_name/bin"
 if find "$staging" -type l | grep -q .; then
     printf 'Refusing to install: the plugin tree contains a symlink.\n' >&2
     rm -rf "$staging"

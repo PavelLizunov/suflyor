@@ -694,6 +694,19 @@
             "prim": "void"
           }
         },
+        "play-recording-requested": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
         "query-changed": {
           "args": [
             {
@@ -2547,6 +2560,19 @@
             "prim": "void"
           }
         },
+        "diar-engine-selected": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
         "diar-install-clicked": {
           "args": [],
           "ret": {
@@ -4337,6 +4363,20 @@
           }
         },
         "diar-models-installed": {
+          "default": false,
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "diar-nemotron-supported": {
+          "default": false,
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "diar-use-nemotron": {
           "default": false,
           "dir": "in-out",
           "type": {
@@ -6287,6 +6327,12 @@
             "prim": "void"
           }
         },
+        "cancel-diarization": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
         "capture-line-selection": {
           "args": [
             {
@@ -6436,6 +6482,19 @@
               "name": "",
               "type": {
                 "prim": "float"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "select-diar-engine": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "bool"
               }
             }
           ],
@@ -6711,11 +6770,25 @@
             "prim": "bool"
           }
         },
+        "nemotron-available": {
+          "default": false,
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
         "overflow-count": {
           "default": 0.0,
           "dir": "in-out",
           "type": {
             "prim": "int"
+          }
+        },
+        "playback-status": {
+          "default": "",
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
           }
         },
         "playing": {
@@ -6784,6 +6857,13 @@
           }
         },
         "timeline-unreliable": {
+          "default": false,
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "use-nemotron": {
           "default": false,
           "dir": "in-out",
           "type": {

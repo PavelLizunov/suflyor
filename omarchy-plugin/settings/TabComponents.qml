@@ -159,8 +159,15 @@ Column {
   C.SettingsCard {
     width: Math.max(0, root.width - root.padding * 2)
     title: root.tr("Speaker detection")
+    C.SettingsComboBox {
+      visible: root.p("diar-nemotron-supported", false)
+      model: [root.tr("NVIDIA Nemotron 3"), root.tr("Pyannote + WeSpeaker")]
+      currentIndex: root.p("diar-use-nemotron", false) ? 0 : 1
+      enabled: !root.p("diar-installing", false)
+      onSelected: function(index) { root.call("diar-engine-selected", [index === 0]) }
+    }
     C.SettingsCaption {
-      text: root.tr("Speaker detection separates who spoke in the call's system audio (the «Determine speakers» button in the transcript window). Needs two models (~32 MB).")
+      text: root.tr("Choose the speaker detection model. NVIDIA Nemotron 3 detects up to 8 voices automatically; Pyannote + WeSpeaker also accepts a speaker count.")
       font.pixelSize: Style.font.bodySmall
     }
     C.SettingsButton {

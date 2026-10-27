@@ -16,6 +16,32 @@ ColumnLayout {
   readonly property string speakerKeys: JSON.stringify(view.p("speakers", []).map(function(speaker) { return speaker.id }))
   spacing: Commons.Style.spacing.sm
   RowLayout {
+    visible: root.view.p("nemotron-available", false)
+    Layout.fillWidth: true
+    spacing: Commons.Style.spacing.sm
+    Ui.Dropdown {
+      Layout.fillWidth: true
+      options: [root.view.service.tr("NVIDIA Nemotron 3", []), root.view.service.tr("Pyannote + WeSpeaker", [])]
+      value: options[root.view.p("use-nemotron", false) ? 0 : 1]
+      enabled: !root.busy && !root.view.p("installing-diar-models", false)
+      onChanged: function(next) {
+        root.view.call("select-diar-engine", [options.indexOf(next) === 0])
+        value = Qt.binding(function() { return options[root.view.p("use-nemotron", false) ? 0 : 1] })
+      }
+    }
+    Action {
+      visible: root.busy && root.view.p("use-nemotron", false)
+      text: root.view.service.tr("Cancel", [])
+      onClicked: root.view.call("cancel-diarization")
+    }
+  }
+  Tile.Label {
+    visible: root.view.p("use-nemotron", false)
+    Layout.fillWidth: true
+    text: root.view.service ? root.view.service.tr("Up to 8 speakers automatically. GPU preferred, CPU fallback.", []) : ""
+    color: Commons.Color.muted
+  }
+  RowLayout {
     visible: root.hasResult
     Layout.fillWidth: true
     spacing: Commons.Style.spacing.sm
@@ -44,7 +70,7 @@ ColumnLayout {
     spacing: Commons.Style.spacing.sm
     Tile.Label {
       Layout.fillWidth: true
-      text: root.view.service ? root.view.service.tr("Speaker detection needs a one-time model download (~30 MB).", []) : ""
+      text: root.view.service ? root.view.service.tr(root.view.p("use-nemotron", false) ? "Nemotron requires a one-time model download (~102 MB)." : "Speaker detection needs a one-time model download (~30 MB).", []) : ""
       color: Commons.Color.muted
     }
     Action {
@@ -60,16 +86,19 @@ ColumnLayout {
     Layout.fillWidth: true
     spacing: Commons.Style.spacing.sm
     Tile.Label {
+      visible: !root.view.p("use-nemotron", false)
       text: root.view.service ? root.view.service.tr("Speakers (besides you):", []) : ""
       color: Commons.Color.muted
     }
     // Count is an editable field: its stepper buttons intentionally stay compact.
     Tile.ActionButton {
+      visible: !root.view.p("use-nemotron", false)
       iconText: "\uf068"
       label: root.view.service ? root.view.service.tr("Speakers (besides you):", []) : ""
       onClicked: if (root.view.p("speaker-count", 2) > 0) root.view.set("speaker-count", root.view.p("speaker-count", 2) - 1)
     }
     Tile.Label {
+      visible: !root.view.p("use-nemotron", false)
       Layout.preferredWidth: Commons.Style.space(48)
       text: root.view.p("speaker-count", 2) === 0
         ? (root.view.service ? root.view.service.tr("Auto", []) : "") : String(root.view.p("speaker-count", 2))
@@ -77,6 +106,7 @@ ColumnLayout {
       horizontalAlignment: Text.AlignHCenter
     }
     Tile.ActionButton {
+      visible: !root.view.p("use-nemotron", false)
       iconText: "\uf067"
       label: root.view.service ? root.view.service.tr("Speakers (besides you):", []) : ""
       onClicked: if (root.view.p("speaker-count", 2) < 8) root.view.set("speaker-count", root.view.p("speaker-count", 2) + 1)

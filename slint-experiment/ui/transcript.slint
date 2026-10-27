@@ -135,6 +135,11 @@ export component TranscriptWindow inherits Window {
     in-out property <bool> can-diarize: false;
     // A diarization job is running (disabled button + status).
     in-out property <bool> diarizing: false;
+    in-out property <bool> use-nemotron: false;
+    in-out property <bool> nemotron-available: false;
+    callback select-diar-engine(bool);
+    callback cancel-diarization();
+    in-out property <string> playback-status: "";
     // V-1 (fable review): session IS diarizable but the models aren't installed → show
     // an install prompt (otherwise the whole toolbar is hidden and the feature is
     // undiscoverable + uninstallable).
@@ -384,12 +389,23 @@ export component TranscriptWindow inherits Window {
                             }
                         }
                     }
+                    if root.nemotron-available : HorizontalLayout {
+                        spacing: Metrics.space-sm;
+                        ComboBox {
+                            model: [@tr("NVIDIA Nemotron 3"), @tr("Pyannote + WeSpeaker")];
+                            current-index: root.use-nemotron ? 0 : 1;
+                            enabled: !root.diarizing && !root.installing-diar-models;
+                            selected => { root.select-diar-engine(self.current-index == 0); }
+                        }
+                        if root.use-nemotron : Text { text: @tr("Up to 8 speakers automatically. GPU preferred, CPU fallback."); wrap: word-wrap; color: Theme.text-muted; font-size: Metrics.font-caption; }
+                        if root.use-nemotron && root.diarizing : Button { text: @tr("Cancel"); clicked => { root.cancel-diarization(); } }
+                    }
                     // V-1 (fable review) — models missing: offer the one-time download. The
                     // detect controls (below) stay hidden until can-diarize flips true.
                     if root.needs-diar-models && !root.can-diarize : VerticalLayout {
                         spacing: Metrics.space-xs;
                         Text {
-                            text: @tr("Speaker detection needs a one-time model download (~30 MB).");
+                            text: root.use-nemotron ? @tr("Nemotron requires a one-time model download (~102 MB).") : @tr("Speaker detection needs a one-time model download (~30 MB).");
                             font-size: Metrics.font-caption;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -801,6 +817,7 @@ export component TranscriptWindow inherits Window {
                     wrap: word-wrap;
                 }
 
+                if root.playback-status != "" : Text { text: root.playback-status; color: Theme.warning; font-size: Metrics.font-caption; wrap: word-wrap; }
                 // ── Mini-player (ТЗ2b): play/pause · seek-bar · time ──
                 if root.has-audio : HorizontalLayout {
                     spacing: Metrics.space-sm;

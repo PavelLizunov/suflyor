@@ -2180,7 +2180,10 @@ pub(crate) fn populate_token_status(
     win.set_ocr_install_phase(0);
     // Speaker-diarization models — same reset-on-reopen discipline (the window is
     // reused; a stale install status must not survive).
-    win.set_diar_models_installed(overlay_backend::diar_install::models_installed());
+    win.set_diar_nemotron_supported(overlay_backend::nemotron_diar::supported());
+    let engine = overlay_backend::diarize::selected_engine();
+    win.set_diar_use_nemotron(engine == overlay_backend::diarize::DiarEngine::Nemotron3);
+    win.set_diar_models_installed(overlay_backend::diarize::engine_ready(engine));
     win.set_diar_installing(false);
     win.set_diar_install_status(slint::SharedString::default());
     // UI-audit 2026-06-13 (CRITICAL): the Settings window is REUSED, not

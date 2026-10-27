@@ -11,7 +11,9 @@ RowLayout {
   spacing: Commons.Style.spacing.sm
   Tile.ActionButton {
     iconText: root.view.p("playing", false) ? "\uf04c" : "\uf04b"
-    label: root.view.service ? root.view.service.tr("Pause / resume reading aloud", []) : ""
+    text: root.view.service ? root.view.service.tr(root.view.p("playing", false) ? "Pause recording" : "Play recording", []) : ""
+    label: text
+    implicitWidth: Commons.Style.space(150)
     selected: true
     onClicked: root.view.call("toggle-play")
   }
