@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.pavellizunov.suflyor",
   "name": "Suflyor",
-  "version": "0.1.0-dev",
+  "version": "0.1.0-dev.2",
   "author": "PavelLizunov",
   "license": "GPL-3.0-or-later",
   "description": "Live interview and meeting assistant: hears the call, answers in tiles hidden from screen share, in your Omarchy theme.",
