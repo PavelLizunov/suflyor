@@ -1206,10 +1206,19 @@ fn engine_update_throttle() {
     assert!(should_check_engine_update(root));
 }
 
+fn native_engine_fixture_names() -> (&'static str, &'static str) {
+    if cfg!(target_os = "linux") {
+        ("llama-server", "libggml.so.0")
+    } else {
+        ("llama-server.exe", "ggml.dll")
+    }
+}
+
 /// The binary swap backs up every overwritten live file and copies new ones
 /// in, and `.gguf` models (absent from staging) are never touched.
 #[test]
 fn swap_backs_up_and_overwrites_keeping_models() {
+    let (server, library) = native_engine_fixture_names();
     let tmp = tempfile::tempdir().unwrap();
     let live = tmp.path().join("llama.cpp");
     let staging = tmp.path().join("staging");
@@ -1217,29 +1226,23 @@ fn swap_backs_up_and_overwrites_keeping_models() {
     std::fs::create_dir_all(&live).unwrap();
     std::fs::create_dir_all(&staging).unwrap();
     // Live: old engine + a precious model.
-    std::fs::write(live.join("llama-server.exe"), b"OLD-EXE").unwrap();
-    std::fs::write(live.join("ggml.dll"), b"OLD-DLL").unwrap();
+    std::fs::write(live.join(server), b"OLD-EXE").unwrap();
+    std::fs::write(live.join(library), b"OLD-DLL").unwrap();
     std::fs::write(live.join("gemma.gguf"), b"MODEL").unwrap();
     // Staging: new engine binaries only (no model).
-    std::fs::write(staging.join("llama-server.exe"), b"NEW-EXE").unwrap();
-    std::fs::write(staging.join("ggml.dll"), b"NEW-DLL").unwrap();
+    std::fs::write(staging.join(server), b"NEW-EXE").unwrap();
+    std::fs::write(staging.join(library), b"NEW-DLL").unwrap();
 
     swap_engine_binaries(&staging, &live, &backup).unwrap();
 
     // New binaries are in place.
-    assert_eq!(
-        std::fs::read(live.join("llama-server.exe")).unwrap(),
-        b"NEW-EXE"
-    );
-    assert_eq!(std::fs::read(live.join("ggml.dll")).unwrap(), b"NEW-DLL");
+    assert_eq!(std::fs::read(live.join(server)).unwrap(), b"NEW-EXE");
+    assert_eq!(std::fs::read(live.join(library)).unwrap(), b"NEW-DLL");
     // The model is untouched.
     assert_eq!(std::fs::read(live.join("gemma.gguf")).unwrap(), b"MODEL");
     // The old binaries are backed up; the model was not (never overwritten).
-    assert_eq!(
-        std::fs::read(backup.join("llama-server.exe")).unwrap(),
-        b"OLD-EXE"
-    );
-    assert_eq!(std::fs::read(backup.join("ggml.dll")).unwrap(), b"OLD-DLL");
+    assert_eq!(std::fs::read(backup.join(server)).unwrap(), b"OLD-EXE");
+    assert_eq!(std::fs::read(backup.join(library)).unwrap(), b"OLD-DLL");
     assert!(!backup.join("gemma.gguf").exists());
 }
 
@@ -1380,6 +1383,17 @@ fn pick_cpu_when_non_nvidia_but_no_vulkan_asset() {
     assert!(pick.version.is_none());
     assert!(pick.cudart_url.is_none());
     assert!(pick.build_url.ends_with("llama-b9410-bin-win-cpu-x64.zip"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn linux_installers_reject_windows_assets() {
+    let assets = vec![
+        asset("llama-b9410-bin-win-cpu-x64.zip"),
+        asset("whisper-bin-x64.zip"),
+    ];
+    assert!(pick_llama(&assets, GpuKind::None).is_err());
+    assert!(pick_whisper(&assets, true).is_err());
 }
 
 #[test]
@@ -1685,38 +1699,35 @@ fn apply_primary_routes_vision_only_when_the_installer_verified_it() {
 // read only direct children → copied 0 files yet returned Ok → phantom "updated").
 #[test]
 fn swap_installs_nested_engine_layout() {
+    let (server, library) = native_engine_fixture_names();
     let staging = tempfile::tempdir().unwrap();
     let live = tempfile::tempdir().unwrap();
     let backup_root = tempfile::tempdir().unwrap();
     let nested = staging.path().join("llama-build-x64");
     std::fs::create_dir_all(&nested).unwrap();
-    std::fs::write(nested.join("llama-server.exe"), b"EXE").unwrap();
-    std::fs::write(nested.join("ggml.dll"), b"DLL").unwrap();
+    std::fs::write(nested.join(server), b"EXE").unwrap();
+    std::fs::write(nested.join(library), b"DLL").unwrap();
     swap_engine_binaries(staging.path(), live.path(), &backup_root.path().join("bk")).unwrap();
-    assert!(
-        live.path().join("llama-server.exe").is_file(),
-        "nested exe installed"
-    );
-    assert!(
-        live.path().join("ggml.dll").is_file(),
-        "nested dll installed"
-    );
+    assert!(live.path().join(server).is_file(), "nested exe installed");
+    assert!(live.path().join(library).is_file(), "nested dll installed");
 }
 
 #[test]
 fn swap_installs_flat_engine_layout() {
+    let (server, library) = native_engine_fixture_names();
     let staging = tempfile::tempdir().unwrap();
     let live = tempfile::tempdir().unwrap();
     let backup_root = tempfile::tempdir().unwrap();
-    std::fs::write(staging.path().join("llama-server.exe"), b"EXE").unwrap();
-    std::fs::write(staging.path().join("cudart.dll"), b"DLL").unwrap();
+    std::fs::write(staging.path().join(server), b"EXE").unwrap();
+    std::fs::write(staging.path().join(library), b"DLL").unwrap();
     swap_engine_binaries(staging.path(), live.path(), &backup_root.path().join("bk")).unwrap();
-    assert!(live.path().join("llama-server.exe").is_file());
-    assert!(live.path().join("cudart.dll").is_file());
+    assert!(live.path().join(server).is_file());
+    assert!(live.path().join(library).is_file());
 }
 
 #[test]
 fn swap_fails_without_llama_server_so_no_phantom_update() {
+    let (server, _) = native_engine_fixture_names();
     // No llama-server.exe staged → Err, so update_llama_engine never stamps
     // .llama-build on a copied-nothing "success" (P1-2).
     let staging = tempfile::tempdir().unwrap();
@@ -1726,19 +1737,20 @@ fn swap_fails_without_llama_server_so_no_phantom_update() {
     std::fs::write(staging.path().join("only.dll"), b"DLL").unwrap();
     let r = swap_engine_binaries(staging.path(), live.path(), &backup_root.path().join("bk"));
     assert!(r.is_err(), "must fail when no llama-server.exe is staged");
-    assert!(!live.path().join("llama-server.exe").is_file());
+    assert!(!live.path().join(server).is_file());
 }
 
 #[test]
 fn swap_rejects_ambiguous_duplicate_engine_file() {
+    let (server, library) = native_engine_fixture_names();
     let staging = tempfile::tempdir().unwrap();
     let live = tempfile::tempdir().unwrap();
     let backup_root = tempfile::tempdir().unwrap();
-    std::fs::write(staging.path().join("llama-server.exe"), b"EXE").unwrap();
+    std::fs::write(staging.path().join(server), b"EXE").unwrap();
     let sub = staging.path().join("dup");
     std::fs::create_dir_all(&sub).unwrap();
-    std::fs::write(sub.join("ggml.dll"), b"A").unwrap();
-    std::fs::write(staging.path().join("ggml.dll"), b"B").unwrap();
+    std::fs::write(sub.join(library), b"A").unwrap();
+    std::fs::write(staging.path().join(library), b"B").unwrap();
     let r = swap_engine_binaries(staging.path(), live.path(), &backup_root.path().join("bk"));
     assert!(
         r.is_err(),
@@ -2171,7 +2183,7 @@ fn whisper_cuda_build_names_old_and_new_parse() {
         asset("whisper-bin-win-cuda-12.4.0-x64.zip"),
         asset("whisper-bin-win-cuda-13.4-arm64.zip"),
     ];
-    if !cfg!(target_os = "macos") {
+    if cfg!(windows) {
         assert!(pick_whisper(&assets, false)
             .unwrap()
             .0
@@ -2180,5 +2192,15 @@ fn whisper_cuda_build_names_old_and_new_parse() {
             .unwrap()
             .0
             .ends_with("whisper-bin-x64.zip"));
+    }
+    if cfg!(target_os = "linux") {
+        let native = vec![asset("whisper-bin-ubuntu-x64.tar.gz")];
+        for cpu_only in [false, true] {
+            assert!(pick_whisper(&assets, cpu_only).is_err());
+            assert!(pick_whisper(&native, cpu_only)
+                .unwrap()
+                .0
+                .ends_with("whisper-bin-ubuntu-x64.tar.gz"));
+        }
     }
 }

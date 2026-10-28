@@ -64,8 +64,8 @@ pub use terms::{
 };
 pub use trigger_detect::{
     build_auto_tile_prompts, build_fast_auto_tile_prompts, detect_trigger,
-    extract_question_candidate, looks_like_real_speech, strip_filler_prefix, Trigger,
-    FAST_USER_HEAD,
+    extract_question_candidate, looks_like_real_speech, select_conversation_lines,
+    strip_filler_prefix, Trigger, FAST_ANSWER_FORMAT, FAST_USER_HEAD,
 };
 
 /// Post-meeting debrief — run Sonnet over the user's MIC-side
@@ -139,7 +139,8 @@ pub async fn run_post_meeting_debrief(
             content: ai::MessageContent::Text(mic_text),
         },
     ];
-    let answer = match ai::complete_endpoint(&endpoint, messages, 1024).await {
+    let request = ai::complete_endpoint(&endpoint, messages, 1024);
+    let answer = match ai::with_priority(ai::AiPriority::Background, request).await {
         Ok(text) => text,
         Err(e) => {
             log::warn!("post-meeting debrief AI call failed: {e:#}");
@@ -435,7 +436,7 @@ pub async fn retry_meeting_summary(
 }
 
 struct ManagedPrepSession {
-    _ai: tokio::sync::SemaphorePermit<'static>,
+    _ai: ai::AiPermit,
     _lifecycle: tokio::sync::OwnedSemaphorePermit,
     root: std::path::PathBuf,
     model: crate::local_ai::ManagedModel,
@@ -589,19 +590,16 @@ async fn summary_complete(
     if exclusive {
         ai::complete_exclusive(base_url, bearer, model, messages, max_tokens).await
     } else {
-        ai::complete_endpoint(
-            &ai::AiEndpoint {
-                protocol,
-                base_url: base_url.to_string(),
-                bearer: bearer.to_string(),
-                model: model.to_string(),
-                reasoning_effort: None,
-                is_local: false,
-            },
-            messages,
-            max_tokens,
-        )
-        .await
+        let endpoint = ai::AiEndpoint {
+            protocol,
+            base_url: base_url.to_string(),
+            bearer: bearer.to_string(),
+            model: model.to_string(),
+            reasoning_effort: None,
+            is_local: false,
+        };
+        let request = ai::complete_endpoint(&endpoint, messages, max_tokens);
+        ai::with_priority(ai::AiPriority::Background, request).await
     }
 }
 
@@ -1120,10 +1118,10 @@ fn spawn_summary_error_tile(
 ) {
     let msg = if ui_is_ru {
         "Не получилось составить summary — AI недоступен. \
-         Проверьте Настройки → AI и попробуйте ещё раз."
+         Проверьте Настройки → AI-провайдеры и попробуйте ещё раз."
     } else {
         "Couldn't build the summary — the AI endpoint is unavailable. \
-         Check Settings → AI and try again."
+         Check Settings → AI providers and try again."
     };
     if let Err(e2) = events.spawn_tile_full(
         TileSpec {
@@ -1369,9 +1367,9 @@ pub async fn reask_last(
                         answer: if crate::deep_lock::is_blocked_error(&format!("{e:#}")) {
                             crate::deep_lock::blocked_notice(ui_is_ru)
                         } else if ui_is_ru {
-                            "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI)."
+                            "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI-провайдеры)."
                         } else {
-                            "Couldn't get a response from AI. Check that the selected provider is running (Settings → AI)."
+                            "Couldn't get a response from AI. Check that the selected provider is running (Settings → AI providers)."
                         }
                         .into(),
                         source: "reask".into(),
@@ -1688,9 +1686,9 @@ pub async fn manual_spawn_tile(
                         answer: if crate::deep_lock::is_blocked_error(&format!("{e:#}")) {
                             crate::deep_lock::blocked_notice(ui_is_ru)
                         } else if ui_is_ru {
-                            "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI)."
+                            "Не удалось получить ответ от AI. Проверьте, что выбранный провайдер запущен (Настройки → AI-провайдеры)."
                         } else {
-                            "Couldn't get a response from AI. Check that the selected provider is running (Settings → AI)."
+                            "Couldn't get a response from AI. Check that the selected provider is running (Settings → AI providers)."
                         }
                         .into(),
                         source: "manual_spawn".into(),

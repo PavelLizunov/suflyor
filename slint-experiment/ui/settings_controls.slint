@@ -155,52 +155,6 @@ export component WrapBlock inherits Rectangle {
     }
 }
 
-// One model in a choice list. The action column has a fixed width, so the
-// buttons of every row line up; the active row keeps its (disabled) button.
-export component ModelChoiceRow inherits Rectangle {
-    in property <string> title;
-    in property <string> detail;
-    in property <string> action;
-    in property <bool> active: false;
-    in property <bool> action-enabled: true;
-    callback action-clicked();
-    horizontal-stretch: 1;
-    min-height: row.preferred-height;
-    preferred-height: row.preferred-height;
-    border-radius: Metrics.radius-field;
-    background: root.active ? Theme.accent.with-alpha(0.12) : transparent;
-    row := HorizontalLayout {
-        padding: Metrics.space-xs;
-        padding-left: Metrics.space-sm;
-        spacing: Metrics.space-sm;
-        VerticalLayout {
-            horizontal-stretch: 1;
-            alignment: center;
-            Text {
-                text: root.title;
-                font-size: Metrics.font-body;
-                font-weight: root.active ? 700 : 400;
-                color: Theme.text-primary;
-                wrap: word-wrap;
-            }
-            Text {
-                text: root.detail;
-                font-size: Metrics.font-caption;
-                color: Theme.text-muted;
-                wrap: word-wrap;
-            }
-        }
-        Button {
-            width: 132px;
-            height: 30px;
-            y: (parent.height - self.height) / 2;
-            text: root.action;
-            enabled: root.action-enabled;
-            clicked => { root.action-clicked(); }
-        }
-    }
-}
-
 // A single grid for installed models, downloads and discovered servers.
 export component LocalModelRow inherits Rectangle {
     in property <string> title;
@@ -305,7 +259,7 @@ export component SettingsDangerButton inherits Rectangle {
         width: parent.width;
         height: parent.height;
         text: root.text;
-        font-size: Metrics.font-body;
+        // No font-size: the window default, as the std Button uses.
         color: Theme.danger;
         horizontal-alignment: center;
         vertical-alignment: center;

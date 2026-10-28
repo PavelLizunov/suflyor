@@ -45,12 +45,14 @@ fn macos_settings_hide_windows_only_setup_and_managed_local_actions() {
     let settings = read("src/bin/overlay_host/settings_controller.rs");
     let ui = read("ui/settings_panel.slint");
 
-    assert!(host.contains("#[cfg(windows)]\n    if first_run {"));
-    assert!(host.contains("#[cfg(windows)]\n#[path = \"overlay_host/wizard.rs\"]"));
-    assert!(settings.contains("#[cfg(windows)]\n    {\n        // The wizard slot"));
-    assert!(
-        settings.contains("#[cfg(windows)]\n    wire_local_ai(&win, cfg, state, overlay_weak);")
-    );
+    assert!(host.contains("#[cfg(any(windows, target_os = \"linux\"))]\n    if first_run {"));
+    assert!(host.contains(
+        "#[cfg(any(windows, target_os = \"linux\"))]\n#[path = \"overlay_host/wizard.rs\"]"
+    ));
+    assert!(settings.contains(
+        "#[cfg(any(windows, target_os = \"linux\"))]\n    {\n        // The wizard slot"
+    ));
+    assert!(settings.contains("#[cfg(any(windows, target_os = \"linux\"))]\n    wire_local_ai(&win, cfg, state, overlay_weak);"));
     assert!(ui.contains(
         "if !Platform.is-macos : SettingsRow {\n                                label: @tr(\"Setup\")"
     ));
@@ -388,7 +390,7 @@ fn macos_gigaam_is_coreml_backed_and_primary_on_fresh_config() {
     let config = read("../overlay-backend/src/config.rs");
 
     assert!(cargo.contains("features = [\"onnx\", \"ort-coreml\"]"));
-    assert!(stt.contains("#[cfg(any(windows, target_os = \"macos\"))]"));
+    assert!(stt.contains("#[cfg(any(windows, target_os = \"macos\", target_os = \"linux\"))]"));
     assert!(stt.contains("transcribe_rs::OrtAccelerator::CoreMl"));
     assert!(config.contains("if cfg!(target_os = \"macos\") {\n        \"gigaam\".into()"));
     assert!(config.contains("gigaam_default_dir(&crate::local_ai::default_root())"));

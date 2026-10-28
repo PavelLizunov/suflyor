@@ -27,17 +27,34 @@
 //! NOTE: `diag!` is reached by textual macro scope (the parent defines it before
 //! the `mod settings_local_ai;` declaration); only the crate-root items are
 //! imported explicitly below (`active_stack_label` stays in `overlay_host.rs`).
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 use super::{
     active_stack_label, refresh_local_model_resource_warning, ComponentHandle, ModelRc,
     OverlayBarWindow, VecModel,
 };
 use super::{SettingsWindow, SharedString};
 
+#[cfg(any(test, windows, target_os = "linux"))]
+fn model_downloaded_label(
+    model: overlay_backend::local_ai::ManagedModel,
+    ru: bool,
+) -> &'static str {
+    use overlay_backend::local_ai::ManagedModel;
+    match (model, ru) {
+        (ManagedModel::Legacy4B, true) => "Быстрая модель (4B) загружена. Нажмите «Использовать» в её строке, чтобы включить.",
+        (ManagedModel::Legacy4B, false) => "The fast model (4B) is downloaded. Click 'Use' in its row to activate it.",
+        (ManagedModel::Fallback12B, true) => "Сбалансированная модель (12B QAT) загружена. Нажмите «Использовать» в её строке, чтобы включить.",
+        (ManagedModel::Fallback12B, false) => "The balanced model (12B QAT) is downloaded. Click 'Use' in its row to activate it.",
+        (ManagedModel::Primary26B, true) => "Основная модель 26B-A4B загружена. Нажмите «Использовать» в её строке, чтобы включить.",
+        (ManagedModel::Primary26B, false) => "The primary model 26B-A4B is downloaded. Click 'Use' in its row to activate it.",
+    }
+}
+
 pub(crate) fn refresh_local_context_controls(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::Config,
 ) {
+    super::settings_model_speed::refresh(win, cfg);
     let root = overlay_backend::local_ai::default_root();
     let requested = overlay_backend::local_ai::ManagedModel::from_config(
         &cfg.ai_local_model,
@@ -64,7 +81,7 @@ pub(crate) fn refresh_local_context_controls(
     win.set_fallback_model_present(overlay_backend::local_ai::fallback_model_present(&root));
     win.set_ai_local_context_index(preset.index());
     refresh_local_context_preview(win, cfg, model, profile, preset, custom_active);
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     refresh_now_answering(win, cfg);
 }
 
@@ -110,7 +127,7 @@ fn refresh_local_context_preview(
 /// active-stack readout on success); the Cancel closure captures `state` (to
 /// flip the cancel flag). Those are threaded through as extra params, matching
 /// the names `open_settings` used.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(crate) fn wire_local_ai(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
@@ -173,7 +190,7 @@ pub(crate) fn wire_local_ai(
             w.set_local_ai_installing(true);
             w.set_local_ai_progress(0.0);
             w.set_local_ai_gpu(SharedString::from(""));
-            w.set_local_ai_status(SharedString::from("Подготовка…"));
+            w.set_local_ai_status(preparing_copy(cfg_c.read().ui_is_ru()));
             let cfg_t = cfg_c.clone();
             let state_t = state_c.clone();
             let overlay_t = overlay_c.clone();
@@ -354,7 +371,11 @@ pub(crate) fn wire_local_ai(
                                 w.set_local_ai_installing(false);
                                 w.set_local_ai_progress(1.0);
                                 w.set_local_ai_status(SharedString::from(
-                                    "Готово. Локальный AI настроен и запущен.",
+                                    if cfg_done.read().ui_is_ru() {
+                                        "Готово. Локальный AI настроен и запущен."
+                                    } else {
+                                        "Done. The local AI is set up and running."
+                                    },
                                 ));
                                 w.set_ai_provider_index(1);
                                 w.set_ai_local_base_url_input(SharedString::from(
@@ -466,15 +487,17 @@ pub(crate) fn wire_local_ai(
                                 .local_ai_servers
                                 .extend(restored_servers);
                         }
-                        let cancelled = e
+                        if !e
                             .to_string()
-                            .contains(overlay_backend::local_ai::CANCEL_SENTINEL);
-                        let msg = if cancelled {
-                            "Отменено.".to_string()
-                        } else {
+                            .contains(overlay_backend::local_ai::CANCEL_SENTINEL)
+                        {
                             eprintln!("[overlay-host] local-ai install failed: {e:#}");
-                            "Ошибка установки локального AI. Подробности в журнале.".to_string()
-                        };
+                        }
+                        let msg = local_ai_stop_copy(
+                            &e,
+                            cfg_t.read().ui_is_ru(),
+                            ("Установить", "Install"),
+                        );
                         let weak_err = weak_t.clone();
                         let overlay_err = overlay_t.clone();
                         let _ = slint::invoke_from_event_loop(move || {
@@ -538,6 +561,7 @@ pub(crate) fn wire_local_ai(
     // thread + the curl poll loop watch. Shared with the 12B download (same
     // flag), so one Cancel button serves both long downloads.
     {
+        let cfg_c = cfg.clone();
         let state_c = state.clone();
         let weak = win.as_weak();
         win.on_cancel_local_ai_clicked(move || {
@@ -547,8 +571,13 @@ pub(crate) fn wire_local_ai(
                     .store(true, std::sync::atomic::Ordering::Relaxed);
             }
             if let Some(w) = weak.upgrade() {
-                w.set_local_ai_status(SharedString::from("Отмена…"));
-                w.set_quality_status(SharedString::from("Отмена…"));
+                let cancelling = SharedString::from(if cfg_c.read().ui_is_ru() {
+                    "Отмена…"
+                } else {
+                    "Cancelling…"
+                });
+                w.set_local_ai_status(cancelling.clone());
+                w.set_quality_status(cancelling);
             }
         });
     }
@@ -574,39 +603,48 @@ pub(crate) fn wire_local_ai(
                 ));
                 return;
             }
-            let Some(path) = rfd::FileDialog::new()
-                .add_filter("GGUF model", &["gguf"])
-                .pick_file()
-            else {
-                return;
-            };
-            if overlay_backend::local_ai::valid_custom_gguf_path(&path.to_string_lossy()).is_none()
-            {
-                w.set_quality_status(SharedString::from(
-                    "Выбранный файл не является корректной GGUF-моделью.",
-                ));
-                return;
-            }
-            if !w.get_managed_local_server() {
-                let choice = overlay_backend::local_ai::ManagedLlamaChoice::for_custom(
-                    path,
-                    overlay_backend::local_ai::LocalContextPreset::from_config(
-                        &cfg_c.read().ai_local_context,
-                    ),
-                );
-                *PENDING_BUILTIN_CHOICE
-                    .lock()
-                    .unwrap_or_else(|p| p.into_inner()) = Some(choice);
-                w.invoke_local_engine_activate(0);
-                return;
-            }
-            *pending.lock().unwrap_or_else(|p| p.into_inner()) = Some(path);
-            let weak_invoke = w.as_weak();
-            let _ = slint::invoke_from_event_loop(move || {
-                if let Some(w) = weak_invoke.upgrade() {
-                    w.invoke_model_profile_changed(-1);
-                }
-            });
+            let cfg_c = cfg_c.clone();
+            let pending = pending.clone();
+            let weak = w.as_weak();
+            super::settings_dialogs::pick(
+                rfd::AsyncFileDialog::new().add_filter("GGUF model", &["gguf"]),
+                super::settings_dialogs::Kind::File,
+                move |path| {
+                    let (Some(w), Some(path)) = (weak.upgrade(), path) else {
+                        return;
+                    };
+                    if overlay_backend::local_ai::valid_custom_gguf_path(&path.to_string_lossy())
+                        .is_none()
+                    {
+                        w.set_quality_status(SharedString::from(if cfg_c.read().ui_is_ru() {
+                            "Выбранный файл не является корректной GGUF-моделью."
+                        } else {
+                            "The chosen file is not a valid GGUF model."
+                        }));
+                        return;
+                    }
+                    if !w.get_managed_local_server() {
+                        let choice = overlay_backend::local_ai::ManagedLlamaChoice::for_custom(
+                            path,
+                            overlay_backend::local_ai::LocalContextPreset::from_config(
+                                &cfg_c.read().ai_local_context,
+                            ),
+                        );
+                        *PENDING_BUILTIN_CHOICE
+                            .lock()
+                            .unwrap_or_else(|p| p.into_inner()) = Some(choice);
+                        w.invoke_local_engine_activate(0);
+                        return;
+                    }
+                    *pending.lock().unwrap_or_else(|p| p.into_inner()) = Some(path);
+                    let weak_invoke = w.as_weak();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(w) = weak_invoke.upgrade() {
+                            w.invoke_model_profile_changed(-1);
+                        }
+                    });
+                },
+            );
         });
     }
 
@@ -663,9 +701,11 @@ pub(crate) fn wire_local_ai(
             if custom_path.is_none()
                 && !overlay_backend::local_ai::managed_model_present(&root, want_model)
             {
-                w.set_quality_status(SharedString::from(
-                    "Файл выбранной модели не установлен.",
-                ));
+                w.set_quality_status(SharedString::from(if cfg_c.read().ui_is_ru() {
+                    "Файл выбранной модели не установлен."
+                } else {
+                    "The chosen model file is not installed."
+                }));
                 return;
             }
             // UI-audit 2026-06-13 (IMPORTANT): do NOT flip ai_local_quality /
@@ -687,19 +727,33 @@ pub(crate) fn wire_local_ai(
                 path.file_name()
                     .map(|name| name.to_string_lossy().into_owned())
             });
+            let ru = cfg_c.read().ui_is_ru();
             w.set_quality_status(SharedString::from(
                 if let Some(name) = custom_name.as_deref() {
-                    format!("Переключаю на пользовательскую модель {name}…")
+                    if ru {
+                        format!("Переключаю на пользовательскую модель {name}…")
+                    } else {
+                        format!("Switching to your model {name}…")
+                    }
                 } else {
-                    match want_model {
-                        overlay_backend::local_ai::ManagedModel::Legacy4B => {
+                    match (want_model, ru) {
+                        (overlay_backend::local_ai::ManagedModel::Legacy4B, true) => {
                             "Переключаю на быструю модель (4B)…".to_string()
                         }
-                        overlay_backend::local_ai::ManagedModel::Fallback12B => {
+                        (overlay_backend::local_ai::ManagedModel::Legacy4B, false) => {
+                            "Switching to the fast model (4B)…".to_string()
+                        }
+                        (overlay_backend::local_ai::ManagedModel::Fallback12B, true) => {
                             "Переключаю на сбалансированную модель (12B QAT)…".to_string()
                         }
-                        overlay_backend::local_ai::ManagedModel::Primary26B => {
+                        (overlay_backend::local_ai::ManagedModel::Fallback12B, false) => {
+                            "Switching to the balanced model (12B QAT)…".to_string()
+                        }
+                        (overlay_backend::local_ai::ManagedModel::Primary26B, true) => {
                             "Переключаю на максимальную модель (26B-A4B)…".to_string()
+                        }
+                        (overlay_backend::local_ai::ManagedModel::Primary26B, false) => {
+                            "Switching to the best model (26B-A4B)…".to_string()
                         }
                     }
                 },
@@ -812,14 +866,19 @@ pub(crate) fn wire_local_ai(
                         {
                             w.set_quality_model_present(quality_present);
                         }
+                        let ru = cfg_done.read().ui_is_ru();
                         let status = if outcome
                             == overlay_backend::local_ai::ModelSwitch::Switched
                             && custom_name.is_some()
                         {
-                            format!(
-                                "Готово: пользовательская модель {}.",
-                                custom_name.as_deref().unwrap_or_default()
-                            )
+                            let name = custom_name.as_deref().unwrap_or_default();
+                            if ru {
+                                format!("Готово: пользовательская модель {name}.")
+                            } else {
+                                format!("Done: your model {name}.")
+                            }
+                        } else if !ru {
+                            switch_outcome_en(outcome, want_model).to_string()
                         } else {
                             match outcome {
                                 overlay_backend::local_ai::ModelSwitch::Switched => {
@@ -954,9 +1013,11 @@ pub(crate) fn wire_local_ai(
                 overlay_backend::local_ai::LocalContextPreset::K96 => max_k >= 96,
             };
             if !allowed {
-                w.set_quality_status(SharedString::from(
-                    "Этот контекст выше безопасного лимита текущего профиля.",
-                ));
+                w.set_quality_status(SharedString::from(if cfg_c.read().ui_is_ru() {
+                    "Этот контекст выше безопасного лимита текущего профиля."
+                } else {
+                    "This context is above the safe limit for the current profile."
+                }));
                 return;
             }
             let previous_context = {
@@ -978,16 +1039,20 @@ pub(crate) fn wire_local_ai(
                 match overlay_backend::config::save(&c) {
                     Ok(()) => {
                         refresh_local_context_controls(&w, &c);
-                        w.set_quality_status(SharedString::from(
-                            "Контекст сохранён; новые запросы используют выбранный режим.",
-                        ));
+                        w.set_quality_status(SharedString::from(if c.ui_is_ru() {
+                            "Контекст сохранён; новые запросы используют выбранный режим."
+                        } else {
+                            "Context saved; new requests use the chosen mode."
+                        }));
                     }
                     Err(e) => {
                         c.ai_local_context = saved_context;
                         eprintln!("[overlay-host] local context save failed: {e:#}");
-                        w.set_quality_status(SharedString::from(
-                            "Не удалось сохранить настройку контекста.",
-                        ));
+                        w.set_quality_status(SharedString::from(if c.ui_is_ru() {
+                            "Не удалось сохранить настройку контекста."
+                        } else {
+                            "Could not save the context setting."
+                        }));
                     }
                 }
                 return;
@@ -1014,9 +1079,11 @@ pub(crate) fn wire_local_ai(
                 return;
             };
             w.set_model_switching(true);
-            w.set_quality_status(SharedString::from(
-                "Применяю контекст и перезапускаю локальный AI…",
-            ));
+            w.set_quality_status(SharedString::from(if cfg_c.read().ui_is_ru() {
+                "Применяю контекст и перезапускаю локальный AI…"
+            } else {
+                "Applying the context and restarting the local AI…"
+            }));
             let cfg_t = cfg_c.clone();
             let state_t = state_c.clone();
             let overlay_t = overlay_c.clone();
@@ -1107,6 +1174,7 @@ pub(crate) fn wire_local_ai(
                         w.set_ai_local_quality(c.ai_local_quality);
                         refresh_local_context_controls(&w, &c);
                         w.set_quality_status(SharedString::from(match outcome {
+                            _ if !c.ui_is_ru() => context_outcome_en(outcome),
                             overlay_backend::local_ai::ModelSwitch::Switched => {
                                 "Готово: контекст применён."
                             }
@@ -1147,6 +1215,7 @@ pub(crate) fn wire_local_ai(
     // auto-switch, so a background download can't swap the model mid-call). The
     // generic full-stack installer (`install-local-ai-clicked`) stays separate.
     {
+        let cfg_c = cfg.clone();
         let state_c = state.clone();
         let weak = win.as_weak();
         win.on_download_model_clicked(move |index| {
@@ -1166,7 +1235,8 @@ pub(crate) fn wire_local_ai(
             w.set_local_download_profile(index);
             w.set_quality_downloading(true);
             w.set_quality_progress(0.0);
-            w.set_quality_status(SharedString::from("Подготовка…"));
+            let ru = cfg_c.read().ui_is_ru();
+            w.set_quality_status(preparing_copy(ru));
             let cancel = {
                 let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
                 s.local_ai_cancel.clone()
@@ -1230,31 +1300,21 @@ pub(crate) fn wire_local_ai(
                                     w.set_quality_model_present(true);
                                 }
                             }
-                            let done = match model {
-                                overlay_backend::local_ai::ManagedModel::Legacy4B => {
-                                    "Быстрая модель (4B) загружена. Нажмите её профиль, чтобы включить."
-                                }
-                                overlay_backend::local_ai::ManagedModel::Fallback12B => {
-                                    "Сбалансированная модель (12B QAT) загружена. Нажмите её профиль, чтобы включить."
-                                }
-                                overlay_backend::local_ai::ManagedModel::Primary26B => {
-                                    "Основная модель 26B-A4B загружена. Нажмите её профиль, чтобы включить."
-                                }
-                            };
+                            let done = model_downloaded_label(model, ru);
                             w.set_quality_status(SharedString::from(done));
                         }
                         Err(e) => {
-                            let cancelled = e
+                            if !e
                                 .to_string()
-                                .contains(overlay_backend::local_ai::CANCEL_SENTINEL);
-                            if cancelled {
-                                w.set_quality_status(SharedString::from("Отменено."));
-                            } else {
+                                .contains(overlay_backend::local_ai::CANCEL_SENTINEL)
+                            {
                                 eprintln!("[overlay-host] {model_label} download failed: {e:#}");
-                                w.set_quality_status(SharedString::from(
-                                    "Ошибка загрузки модели. Подробности в журнале.",
-                                ));
                             }
+                            w.set_quality_status(SharedString::from(local_ai_stop_copy(
+                                &e,
+                                ru,
+                                ("Скачать", "Download model"),
+                            )));
                         }
                     }
                 });
@@ -1282,7 +1342,7 @@ pub(crate) fn wire_local_ai(
             };
             w.set_vision12b_downloading(true);
             w.set_quality_progress(0.0);
-            w.set_vision12b_status(SharedString::from("Подготовка…"));
+            w.set_vision12b_status(preparing_copy(cfg_c.read().ui_is_ru()));
             let cancel = {
                 let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
                 s.local_ai_cancel.clone()
@@ -1398,25 +1458,35 @@ pub(crate) fn wire_local_ai(
                                     super::settings_vision::vision_provider_index_from_id("same"),
                                 );
                             }
-                            w.set_vision12b_status(SharedString::from(if restarted {
-                                "Зрение 26B включено — F8 теперь работает на 26B."
-                            } else if cfg_t.read().ai_provider != "local" {
-                                "Проектор 26B загружен. Выберите локальную модель, чтобы использовать зрение."
-                            } else {
-                                "Проектор 26B загружен. Перезапустите приложение, чтобы включить зрение."
+                            let ru = cfg_t.read().ui_is_ru();
+                            let local = cfg_t.read().ai_provider == "local";
+                            w.set_vision12b_status(SharedString::from(match (restarted, local, ru) {
+                                (true, _, true) => "Зрение 26B включено — F8 теперь работает на 26B.",
+                                (true, _, false) => "26B vision is on — F8 now uses 26B.",
+                                (false, false, true) => "Проектор 26B загружен. Выберите локальную модель, чтобы использовать зрение.",
+                                (false, false, false) => "The 26B projector is downloaded. Choose the local model to use vision.",
+                                (false, true, true) => "Проектор 26B загружен. Перезапустите приложение, чтобы включить зрение.",
+                                (false, true, false) => "The 26B projector is downloaded. Restart the app to turn on vision.",
                             }));
                         }
                         Err(e) => {
                             let cancelled = e
                                 .to_string()
                                 .contains(overlay_backend::local_ai::CANCEL_SENTINEL);
+                            let ru = cfg_t.read().ui_is_ru();
                             if cancelled {
-                                w.set_vision12b_status(SharedString::from("Отменено."));
+                                w.set_vision12b_status(SharedString::from(if ru {
+                                    "Отменено."
+                                } else {
+                                    "Cancelled."
+                                }));
                             } else {
                                 eprintln!("[overlay-host] 26B vision projector download failed: {e:#}");
-                                w.set_vision12b_status(SharedString::from(
-                                    "Не удалось загрузить проектор зрения. Попробуйте ещё раз.",
-                                ));
+                                w.set_vision12b_status(SharedString::from(if ru {
+                                    "Не удалось загрузить проектор зрения. Попробуйте ещё раз."
+                                } else {
+                                    "Could not download the vision projector. Try again."
+                                }));
                             }
                         }
                     }
@@ -1459,7 +1529,11 @@ pub(crate) fn wire_local_ai(
                 return; // another local-AI op is already running
             };
             w.set_engine_updating(true);
-            w.set_engine_update_status(SharedString::from("Проверяю обновление движка…"));
+            w.set_engine_update_status(SharedString::from(if cfg_c.read().ui_is_ru() {
+                "Проверяю обновление движка…"
+            } else {
+                "Checking for an engine update…"
+            }));
             let cancel = {
                 let s = state_c.lock().unwrap_or_else(|p| p.into_inner());
                 s.local_ai_cancel.clone()
@@ -1607,21 +1681,32 @@ pub(crate) fn wire_local_ai(
                         );
                         refresh_local_model_resource_warning(&w, root.clone(), base_url, model);
                     }
-                    let msg = match res {
-                        Ok(overlay_backend::local_ai::EngineUpdate::UpToDate { .. }) => {
+                    let ru = cfg_done.read().ui_is_ru();
+                    let msg = match (res, ru) {
+                        (Ok(overlay_backend::local_ai::EngineUpdate::UpToDate { .. }), true) => {
                             "Движок уже последней версии.".to_string()
                         }
-                        Ok(overlay_backend::local_ai::EngineUpdate::Updated { to, .. }) => {
+                        (Ok(overlay_backend::local_ai::EngineUpdate::UpToDate { .. }), false) => {
+                            "The engine is already the latest version.".to_string()
+                        }
+                        (Ok(overlay_backend::local_ai::EngineUpdate::Updated { to, .. }), true) => {
                             format!("Движок обновлён до b{to}.")
                         }
-                        Ok(overlay_backend::local_ai::EngineUpdate::Skipped { .. }) => {
+                        (
+                            Ok(overlay_backend::local_ai::EngineUpdate::Updated { to, .. }),
+                            false,
+                        ) => {
+                            format!("The engine is updated to b{to}.")
+                        }
+                        (Ok(overlay_backend::local_ai::EngineUpdate::Skipped { .. }), true) => {
                             "Обновление пропущено — оставлен текущий движок.".to_string()
                         }
-                        Err(e) => {
-                            // Full chain (incl. os errors) → stderr only; the UI
-                            // shows a generic message (no path/URL leak).
+                        (Ok(overlay_backend::local_ai::EngineUpdate::Skipped { .. }), false) => {
+                            "Update skipped — the current engine stays.".to_string()
+                        }
+                        (Err(e), ru) => {
                             eprintln!("[overlay-host] engine update failed: {e:#}");
-                            "Не удалось обновить движок. Подробности в журнале.".to_string()
+                            local_ai_stop_copy(&e, ru, ("Обновить движок", "Update engine"))
                         }
                     };
                     w.set_engine_update_status(SharedString::from(msg));
@@ -1636,9 +1721,171 @@ pub(crate) fn wire_local_ai(
     }
 }
 
+/// "Preparing…" for the local-AI status lines.
+#[cfg(any(windows, target_os = "linux"))]
+fn preparing_copy(ru: bool) -> SharedString {
+    SharedString::from(if ru {
+        "Подготовка…"
+    } else {
+        "Preparing…"
+    })
+}
+
+/// Status after a local-AI install, download or update stops: what happened and
+/// which button to press next, in the UI language. Never echoes the raw chain
+/// (it can carry a home path or URL in a screen-shared window); the full chain
+/// goes to the log separately.
+#[cfg(any(windows, target_os = "linux"))]
+fn local_ai_stop_copy(e: &anyhow::Error, ru: bool, (button_ru, button_en): (&str, &str)) -> String {
+    let chain = format!("{e:#}").to_ascii_lowercase();
+    if chain.contains(overlay_backend::local_ai::CANCEL_SENTINEL) {
+        return if ru {
+            "Отменено."
+        } else {
+            "Cancelled."
+        }
+        .to_string();
+    }
+    if let Some(d) = e.downcast_ref::<overlay_backend::local_ai::DiskSpaceError>() {
+        return if ru {
+            format!(
+                "Не хватает места на диске: нужно около {} ГБ, свободно {} ГБ. Освободите место и нажмите «{button_ru}» снова.",
+                d.need_gib, d.free_gib
+            )
+        } else {
+            format!(
+                "Not enough disk space: about {} GB needed, {} GB free. Free up space, then press {button_en} again.",
+                d.need_gib, d.free_gib
+            )
+        };
+    }
+    let has = |words: &[&str]| words.iter().any(|w| chain.contains(w));
+    if has(&["curl not found", "curl.exe not found"]) {
+        return match (ru, cfg!(windows)) {
+            (true, true) => format!(
+                "curl.exe отсутствует в PATH (входит в Windows 10 и новее). Добавьте его в PATH и нажмите «{button_ru}» снова."
+            ),
+            (false, true) => format!(
+                "curl.exe is missing from PATH (included with Windows 10 and later). Add it to PATH, then press {button_en} again."
+            ),
+            (true, false) => format!(
+                "curl не установлен. Установите curl и нажмите «{button_ru}» снова."
+            ),
+            (false, false) => format!(
+                "curl is not installed. Install curl, then press {button_en} again."
+            ),
+        };
+    }
+    let (cause_ru, cause_en) = if has(&["sha-256", "sha256", "digest", "integrity"]) {
+        (
+            "Скачанный файл не прошёл проверку целостности",
+            "The downloaded file failed its integrity check",
+        )
+    } else if has(&["archive", "extract"]) {
+        (
+            "Не удалось распаковать скачанный архив",
+            "The downloaded archive could not be unpacked",
+        )
+    } else if has(&[
+        "build asset",
+        "build for this pc",
+        "unsupported linux architecture",
+    ]) {
+        (
+            "Для этого компьютера нет подходящей сборки движка",
+            "There is no engine build for this computer",
+        )
+    } else if has(&[
+        "did not become ready",
+        "did not start",
+        ":8080",
+        "port busy",
+    ]) {
+        (
+            "Локальный сервер не запустился",
+            "The local server did not start",
+        )
+    } else if has(&[
+        "curl",
+        "http",
+        "github",
+        "attempts",
+        "download",
+        "timed out",
+        "resolve",
+    ]) {
+        (
+            "Загрузка прервалась — нет связи с сервером загрузки",
+            "The download stopped — the download server is unreachable",
+        )
+    } else if ru {
+        return format!(
+            "Не получилось. Нажмите «{button_ru}», чтобы повторить; подробности — «Диагностика» → «Собрать логи»."
+        );
+    } else {
+        return format!(
+            "That failed. Press {button_en} to try again; details: Diagnostics → Collect logs."
+        );
+    };
+    if ru {
+        format!("{cause_ru}. Нажмите «{button_ru}», чтобы повторить.")
+    } else {
+        format!("{cause_en}. Press {button_en} to try again.")
+    }
+}
+
+/// English model-switch outcome; the Russian copy stays at the call site.
+#[cfg(any(windows, target_os = "linux"))]
+fn switch_outcome_en(
+    outcome: overlay_backend::local_ai::ModelSwitch,
+    model: overlay_backend::local_ai::ManagedModel,
+) -> &'static str {
+    use overlay_backend::local_ai::{ManagedModel, ModelSwitch};
+    match outcome {
+        ModelSwitch::Switched => match model {
+            ManagedModel::Legacy4B => "Done: the fast model (4B).",
+            ManagedModel::Fallback12B => "Done: the balanced model (12B QAT).",
+            ManagedModel::Primary26B => "Done: the best model (26B-A4B).",
+        },
+        ModelSwitch::RolledBack => "The new model failed its check; the previous model is back.",
+        ModelSwitch::PortBusy => {
+            "Port :8080 is used by another program — the switch did not happen."
+        }
+        ModelSwitch::TargetUnavailable => {
+            "The main model file is missing or failed its integrity check. Download it again."
+        }
+        ModelSwitch::HardwareUnsupported => {
+            "26B-A4B is available only on a confirmed VRAM/RAM setup."
+        }
+        ModelSwitch::FallbackStarted => {
+            "The main model did not start; the RAM-safe fallback (12B QAT) is on."
+        }
+        ModelSwitch::FailedToStart => "The model did not start — check the local AI install.",
+    }
+}
+
+/// English context-change outcome; the Russian copy stays at the call site.
+#[cfg(any(windows, target_os = "linux"))]
+fn context_outcome_en(outcome: overlay_backend::local_ai::ModelSwitch) -> &'static str {
+    use overlay_backend::local_ai::ModelSwitch;
+    match outcome {
+        ModelSwitch::Switched => "Done: the context is applied.",
+        ModelSwitch::RolledBack => "The new context did not start; the previous mode is back.",
+        ModelSwitch::FallbackStarted => "26B did not start; the safe 12B fallback is on.",
+        ModelSwitch::PortBusy => {
+            "Port :8080 is used by another program — the context did not change."
+        }
+        ModelSwitch::TargetUnavailable => {
+            "The main model file is missing — the context did not change."
+        }
+        ModelSwitch::HardwareUnsupported => "The 26B profile is not supported on this computer.",
+        ModelSwitch::FailedToStart => "Could not restart the local AI.",
+    }
+}
+
 /// Suflyor's own Strata steps in the UI language; Strata's setup output
 /// (its own English lines) passes through unchanged.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 fn strata_step_text(step: &str, ru: bool) -> String {
     if !ru {
         return step.to_string();
@@ -1659,7 +1906,7 @@ fn strata_step_text(step: &str, ru: bool) -> String {
 }
 
 /// Status text for one Strata install/start progress event.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 fn strata_progress_line(p: &overlay_backend::local_ai::Progress, ru: bool) -> String {
     match p {
         overlay_backend::local_ai::Progress::Step(s) => {
@@ -1678,7 +1925,7 @@ fn strata_progress_line(p: &overlay_backend::local_ai::Progress, ru: bool) -> St
 }
 
 // The engine switch commits a requested built-in choice only once it answers.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 static PENDING_BUILTIN_CHOICE: std::sync::Mutex<
     Option<overlay_backend::local_ai::ManagedLlamaChoice>,
 > = std::sync::Mutex::new(None);
@@ -1692,7 +1939,7 @@ static FOUND_SERVERS: std::sync::Mutex<Vec<overlay_backend::local_ai::RunningSer
     std::sync::Mutex::new(Vec::new());
 /// Bumped by a folder pick: a discovery that started earlier does not
 /// replace the picked Strata when it finishes.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 static FOUND_STRATA_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 fn listed_servers() -> Vec<overlay_backend::local_ai::RunningServer> {
@@ -1700,6 +1947,44 @@ fn listed_servers() -> Vec<overlay_backend::local_ai::RunningServer> {
         .lock()
         .unwrap_or_else(|p| p.into_inner())
         .clone()
+}
+
+#[cfg(any(windows, target_os = "linux"))]
+fn select_strata_folder(
+    win: &SettingsWindow,
+    cfg: &overlay_backend::config::SharedConfig,
+    folder: &std::path::Path,
+) {
+    let weak = win.as_weak();
+    let cfg = cfg.clone();
+    let folder = folder.to_path_buf();
+    std::thread::spawn(move || {
+        let mut found = overlay_backend::local_ai::strata_in_folder(&folder);
+        if found.is_empty() {
+            if let Ok(entries) = std::fs::read_dir(&folder) {
+                for sub in entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
+                    found.extend(overlay_backend::local_ai::strata_in_folder(&sub));
+                }
+            }
+        }
+        let first = found.into_iter().next();
+        let _ = slint::invoke_from_event_loop(move || {
+            let Some(win) = weak.upgrade() else { return };
+            let Some(first) = first else {
+                win.set_strata_status(SharedString::from(if cfg.read().ui_is_ru() {
+                    "Готовая Strata не найдена. Здесь нужна Linux-установка с .venv, serve/server.py и strata-<модель>.json. Папку весов Strata-data выберите в разделе «Папка моделей» выше."
+                } else {
+                    "No ready Strata found. Choose a Linux install with .venv, serve/server.py and strata-<model>.json. For Strata-data weights, use Model storage above."
+                }));
+                return;
+            };
+            FOUND_STRATA_GEN.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            *FOUND_STRATA.lock().unwrap_or_else(|p| p.into_inner()) = Some(first);
+            show_found_models(&win, &cfg.read());
+            win.set_strata_status(SharedString::default());
+            win.invoke_strata_choose(false);
+        });
+    });
 }
 
 /// The "Already on this PC" rows: the found Strata, then running servers.
@@ -1767,13 +2052,13 @@ fn show_found_models(win: &SettingsWindow, cfg: &overlay_backend::config::Config
 }
 
 /// A folder scan in flight: "Search again" does not start a second one.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 static STRATA_SCANNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Look for running model servers and, unless one is chosen, a Strata
 /// folder, off the UI thread. Each result lands on the UI thread on its own:
 /// a slow disk does not hold back the servers.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(crate) fn search_found_models(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
@@ -1852,6 +2137,21 @@ pub(crate) fn search_found_models(
 #[allow(clippy::items_after_test_module)]
 mod now_answering_tests {
     #[test]
+    fn downloaded_model_names_identity_and_use_button_in_both_languages() {
+        use overlay_backend::local_ai::ManagedModel;
+        for (model, identity) in [
+            (ManagedModel::Legacy4B, "4B"),
+            (ManagedModel::Fallback12B, "12B QAT"),
+            (ManagedModel::Primary26B, "26B-A4B"),
+        ] {
+            let en = super::model_downloaded_label(model, false);
+            let ru = super::model_downloaded_label(model, true);
+            assert!(en.contains(identity) && en.contains("Click 'Use'"));
+            assert!(ru.contains(identity) && ru.contains("Нажмите «Использовать»"));
+        }
+    }
+
+    #[test]
     fn caption_keeps_only_the_endpoint_authority() {
         for (url, expected) in [
             (
@@ -1868,16 +2168,91 @@ mod now_answering_tests {
     }
 }
 
-#[cfg(windows)]
+#[cfg(all(test, any(windows, target_os = "linux")))]
+#[allow(clippy::items_after_test_module)]
+mod stop_copy_tests {
+    use super::local_ai_stop_copy;
+    use overlay_backend::local_ai::{DiskSpaceError, CANCEL_SENTINEL};
+
+    const INSTALL: (&str, &str) = ("Установить", "Install");
+
+    #[test]
+    fn disk_space_names_both_sizes_and_the_button() {
+        let e = anyhow::Error::from(DiskSpaceError {
+            need_gib: 9,
+            free_gib: 7,
+            root: "/home/someone/suflyor-local-ai".into(),
+        });
+        let en = local_ai_stop_copy(&e, false, INSTALL);
+        assert_eq!(
+            en,
+            "Not enough disk space: about 9 GB needed, 7 GB free. Free up space, then press Install again."
+        );
+        let ru = local_ai_stop_copy(&e.context("install"), true, INSTALL);
+        assert!(ru.contains("нужно около 9 ГБ, свободно 7 ГБ") && ru.contains("«Установить»"));
+        assert!(!ru.contains("/home") && !en.contains("/home"));
+    }
+
+    #[test]
+    fn known_causes_are_named_without_the_raw_chain() {
+        let e = anyhow::anyhow!("curl exit 6 (after 3 attempts)")
+            .context("create install root /home/someone/suflyor-local-ai");
+        let en = local_ai_stop_copy(&e, false, INSTALL);
+        assert_eq!(
+            en,
+            "The download stopped — the download server is unreachable. Press Install to try again."
+        );
+        assert!(!local_ai_stop_copy(&e, true, INSTALL).contains("/home"));
+        let e = anyhow::anyhow!("release asset host is not supported");
+        assert!(!local_ai_stop_copy(&e, false, INSTALL).contains("server did not start"));
+    }
+
+    #[test]
+    fn missing_curl_names_the_tool_and_setup_step_before_retrying() {
+        for message in ["curl not found", "curl.exe not found"] {
+            let e =
+                anyhow::anyhow!(message).context("download engine /home/someone/suflyor-local-ai");
+            let en = local_ai_stop_copy(&e, false, INSTALL);
+            let ru = local_ai_stop_copy(&e, true, INSTALL);
+            if cfg!(windows) {
+                assert_eq!(en, "curl.exe is missing from PATH (included with Windows 10 and later). Add it to PATH, then press Install again.");
+                assert_eq!(ru, "curl.exe отсутствует в PATH (входит в Windows 10 и новее). Добавьте его в PATH и нажмите «Установить» снова.");
+            } else {
+                assert_eq!(
+                    en,
+                    "curl is not installed. Install curl, then press Install again."
+                );
+                assert_eq!(
+                    ru,
+                    "curl не установлен. Установите curl и нажмите «Установить» снова."
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cancel_and_unknown_failures_say_what_to_press() {
+        let cancelled = anyhow::anyhow!("{CANCEL_SENTINEL}");
+        assert_eq!(local_ai_stop_copy(&cancelled, false, INSTALL), "Cancelled.");
+        assert_eq!(local_ai_stop_copy(&cancelled, true, INSTALL), "Отменено.");
+        let other = anyhow::anyhow!("something odd");
+        assert_eq!(
+            local_ai_stop_copy(&other, false, INSTALL),
+            "That failed. Press Install to try again; details: Diagnostics → Collect logs."
+        );
+    }
+}
+
+#[cfg(any(windows, target_os = "linux"))]
 static NOW_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(crate) fn begin_now_check(win: &SettingsWindow) -> u64 {
     win.set_now_state(0);
     NOW_GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(crate) fn now_check_is_current(generation: u64) -> bool {
     NOW_GENERATION.load(std::sync::atomic::Ordering::SeqCst) == generation
 }
@@ -1910,7 +2285,7 @@ pub(crate) fn now_endpoint_authority(base: &str) -> String {
 }
 
 /// Seed the saved choice immediately, then check its models endpoint off-thread.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(crate) fn refresh_now_answering(win: &SettingsWindow, cfg: &overlay_backend::config::Config) {
     // Asset-only refreshes (including builtin-busy changes) must not probe or
     // imply readiness of a server that downloading deliberately did not start.
@@ -2074,11 +2449,14 @@ pub(crate) fn refresh_local_engine_state(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::Config,
 ) {
+    super::settings_model_speed::refresh(win, cfg);
     let root = overlay_backend::local_ai::default_root();
     win.set_llama_installed(overlay_backend::local_ai::llama_engine_installed(&root));
     win.set_strata_installed(overlay_backend::local_ai::own_strata_installed(&root));
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     super::settings_strata_vision::refresh(win, cfg);
+    #[cfg(any(windows, target_os = "linux"))]
+    super::settings_strata_updates::refresh(win);
     win.set_strata_active(overlay_backend::local_ai::is_managed_strata_endpoint(
         &cfg.ai_local_base_url,
     ));
@@ -2088,7 +2466,7 @@ pub(crate) fn refresh_local_engine_state(
         *FOUND_STRATA.lock().unwrap_or_else(|p| p.into_inner()) = Some(found);
     }
     show_found_models(win, cfg);
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     {
         win.set_ai_local_test_result(SharedString::default());
         refresh_now_answering(win, cfg);
@@ -2123,13 +2501,14 @@ pub(crate) fn refresh_local_engine_controls(
 /// Wire the Strata engine and the engine switch (built-in llama.cpp or Strata).
 /// Both engines need the whole GPU, so a switch stops one before it starts
 /// the other, under the same busy flag and lifecycle lock as a model switch.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 pub(crate) fn wire_strata(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::SharedConfig,
     state: &slint_replay::app_state::SharedState,
     overlay_weak: &slint::Weak<OverlayBarWindow>,
 ) {
+    super::settings_strata_updates::wire(win, cfg, state);
     {
         let cfg_c = cfg.clone();
         let state_c = state.clone();
@@ -2329,37 +2708,35 @@ pub(crate) fn wire_strata(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_strata_find_folder_clicked(move || {
-            let Some(w) = weak.upgrade() else { return };
-            let Some(folder) = rfd::FileDialog::new().pick_folder() else {
-                return;
-            };
-            // The Strata folder itself, or the folder that holds it.
-            let mut found = overlay_backend::local_ai::strata_in_folder(&folder);
-            if found.is_empty() {
-                if let Ok(entries) = std::fs::read_dir(&folder) {
-                    for sub in entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
-                        found.extend(overlay_backend::local_ai::strata_in_folder(&sub));
+            let cfg_c = cfg_c.clone();
+            let weak = weak.clone();
+            super::settings_dialogs::pick(
+                rfd::AsyncFileDialog::new(),
+                super::settings_dialogs::Kind::Folder,
+                move |folder| {
+                    if let (Some(w), Some(folder)) = (weak.upgrade(), folder) {
+                        select_strata_folder(&w, &cfg_c, &folder);
                     }
-                }
+                },
+            );
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        win.on_strata_folder_selected(move |folder| {
+            if let Some(w) = weak.upgrade() {
+                select_strata_folder(&w, &cfg_c, std::path::Path::new(folder.as_str()));
             }
-            let ru = cfg_c.read().ui_is_ru();
-            let Some(first) = found.into_iter().next() else {
-                w.set_strata_status(SharedString::from(if ru {
-                    "В этой папке нет готовой Strata. Нужна папка, где Strata уже запускалась: в ней есть .venv и файл strata-<модель>.json."
-                } else {
-                    "No ready Strata in this folder. Pick the folder Strata already ran from: it holds .venv and a strata-<model>.json file."
-                }));
-                return;
-            };
-            FOUND_STRATA_GEN.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            *FOUND_STRATA.lock().unwrap_or_else(|p| p.into_inner()) = Some(first);
-            show_found_models(&w, &cfg_c.read());
-            w.set_strata_status(SharedString::default());
-            w.invoke_strata_choose(false);
         });
     }
 
     win.on_strata_license_clicked(|| {
+        #[cfg(target_os = "linux")]
+        let _ = slint_replay::native::desktop::open(std::ffi::OsStr::new(
+            overlay_backend::local_ai::STRATA_MODEL_LICENSE_URL,
+        ));
+        #[cfg(not(target_os = "linux"))]
         let _ = std::process::Command::new("explorer")
             .arg(overlay_backend::local_ai::STRATA_MODEL_LICENSE_URL)
             .spawn();

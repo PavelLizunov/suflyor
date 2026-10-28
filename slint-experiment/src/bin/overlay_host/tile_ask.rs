@@ -41,12 +41,11 @@
 //! glob).
 use super::{
     ai, apply_tile_hwnd_with_monitor, cost_cap_reason, fire_followup_ask, fire_regenerate,
-    gated_events, grab_hwnd, install_streaming_tile, journal, live_route,
-    present_tile_window, refresh_open_tiles, resolve_route_endpoint, route_needs_mlx,
-    select_recent_labeled, show_mlx_runtime_error, spawn_mlx_runtime_error, toggle_tile_maximize,
-    to_md_blocks, user_turn_markdown, wire_copy, wire_escalate, wire_speak, wire_tile_drag,
-    wire_voice_followup, Arc, AskRoute,
-    ComponentHandle, ModelRc, MonitorHint, Ordering, OverlayBarBridge,
+    gated_events, grab_hwnd, install_streaming_tile, journal, live_route, present_tile_window,
+    refresh_open_tiles, resolve_route_endpoint, route_needs_mlx, select_recent_labeled,
+    show_mlx_runtime_error, spawn_mlx_runtime_error, to_md_blocks, toggle_tile_maximize,
+    user_turn_markdown, wire_copy, wire_escalate, wire_speak, wire_tile_drag, wire_voice_followup,
+    Arc, AskRoute, ComponentHandle, ModelRc, MonitorHint, Ordering, OverlayBarBridge,
     OverlayBarWindow, RuntimeEvents, SharedSlintRuntime, SharedString, StreamingTile, TileKind,
     TileSpec, TileWindow, TileWindows, VecModel, AI_STREAM_MAX_TOKENS, CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
@@ -65,28 +64,28 @@ pub(crate) fn fire_f3_reask(
     slint_rt: &SharedSlintRuntime,
     rt_handle: &tokio::runtime::Handle,
 ) {
-    let inputs = {
-        let s = slint_replay::runtime_state::lock(slint_rt);
-        overlay_backend::runtime::ReaskInputs {
+    let (inputs, scope, session_gen) = {
+        let mut s = slint_replay::runtime_state::lock(slint_rt);
+        let inputs = overlay_backend::runtime::ReaskInputs {
             last_question: s.last_question.clone(),
             last_answer: s.last_answer.clone(),
-            recent_transcript_iconized: s
-                .transcript
-                .iter()
-                .rev()
-                .take(10)
-                .rev()
-                .map(|l| {
-                    let icon = match l.source {
-                        overlay_backend::audio::AudioSource::System => "sys",
-                        overlay_backend::audio::AudioSource::Mic => "mic",
-                    };
-                    format!("{icon} {}", l.text)
-                })
-                .collect(),
+            recent_transcript_iconized: overlay_backend::runtime::select_conversation_lines(
+                &s.transcript,
+                10,
+            )
+            .into_iter()
+            .map(|l| {
+                let icon = match l.source {
+                    overlay_backend::audio::AudioSource::System => "sys",
+                    overlay_backend::audio::AudioSource::Mic => "mic",
+                };
+                format!("{icon} {}", l.text)
+            })
+            .collect(),
             journal: s.journal.clone(),
             health: s.health.clone(),
-        }
+        };
+        (inputs, s.session_request_scope(), s.session_gen)
     };
     // The key must visibly react: with nothing to re-ask, say so in a notice
     // tile instead of doing nothing.
@@ -120,7 +119,7 @@ pub(crate) fn fire_f3_reask(
     let events_c = events.clone();
     let cfg_c = cfg.clone();
     let rt_c = slint_rt.clone();
-    rt_handle.spawn(async move {
+    let request = async move {
         let needs_mlx = {
             let config = cfg_c.read();
             route_needs_mlx(AskRoute::Text, &config)
@@ -142,6 +141,9 @@ pub(crate) fn fire_f3_reask(
         if let Some(out) = outcome {
             let total = {
                 let mut s = slint_replay::runtime_state::lock(&rt_c);
+                if s.session_gen != session_gen {
+                    return;
+                }
                 s.session_cost_microcents = s
                     .session_cost_microcents
                     .saturating_add(out.cost_microcents_delta);
@@ -151,7 +153,10 @@ pub(crate) fn fire_f3_reask(
             };
             events_c.emit("cost:update", serde_json::json!({ "session_usd": total }));
         }
-    });
+    };
+    rt_handle.spawn(slint_replay::runtime_state::until_session_changes(
+        scope, request,
+    ));
 }
 
 /// Phase E3 slice 3 — F6 manual spawn handler.
@@ -165,24 +170,25 @@ pub(crate) fn fire_f6_manual_spawn(
     slint_rt: &SharedSlintRuntime,
     rt_handle: &tokio::runtime::Handle,
 ) {
-    let inputs = {
-        let s = slint_replay::runtime_state::lock(slint_rt);
+    let (inputs, scope, session_gen) = {
+        let mut s = slint_replay::runtime_state::lock(slint_rt);
         let recent = select_recent_labeled(&s.transcript, 8);
         let last_line = s.transcript.back().cloned();
         let cap_usd = cfg.read().max_session_cost_usd;
         let cost_cap = cost_cap_reason(cap_usd, s.session_cost_microcents);
-        overlay_backend::runtime::ManualSpawnInputs {
+        let inputs = overlay_backend::runtime::ManualSpawnInputs {
             recent_transcript_labeled: recent,
             last_line,
             cost_cap_reason: cost_cap,
             journal: s.journal.clone(),
             health: s.health.clone(),
-        }
+        };
+        (inputs, s.session_request_scope(), s.session_gen)
     };
     let events_c = events.clone();
     let cfg_c = cfg.clone();
     let rt_c = slint_rt.clone();
-    rt_handle.spawn(async move {
+    let request = async move {
         let needs_mlx = {
             let config = cfg_c.read();
             route_needs_mlx(AskRoute::Text, &config)
@@ -205,6 +211,9 @@ pub(crate) fn fire_f6_manual_spawn(
         if let Some(out) = outcome {
             let total = {
                 let mut s = slint_replay::runtime_state::lock(&rt_c);
+                if s.session_gen != session_gen {
+                    return;
+                }
                 s.session_cost_microcents = s
                     .session_cost_microcents
                     .saturating_add(out.cost_microcents_delta);
@@ -214,7 +223,10 @@ pub(crate) fn fire_f6_manual_spawn(
             };
             events_c.emit("cost:update", serde_json::json!({ "session_usd": total }));
         }
-    });
+    };
+    rt_handle.spawn(slint_replay::runtime_state::until_session_changes(
+        scope, request,
+    ));
 }
 
 fn nothing_to_reask_copy(is_ru: bool) -> (&'static str, &'static str) {
@@ -253,6 +265,10 @@ struct RememberAnswer {
 }
 
 impl RuntimeEvents for RememberAnswer {
+    fn tile_request_open(&self, label: &str) -> bool {
+        self.inner.tile_request_open(label)
+    }
+
     fn emit(&self, channel: &str, payload: serde_json::Value) {
         if channel == "ai:event" {
             match payload.get("type").and_then(serde_json::Value::as_str) {
@@ -297,12 +313,12 @@ fn missing_cloud_auth_copy(is_ru: bool) -> (&'static str, &'static str) {
     if is_ru {
         (
             "Облачный запрос (Shift+F9)",
-            "Облачный AI не настроен. Добавьте токен доступа в Настройки → AI и повторите Shift+F9.",
+            "Облачный AI не настроен. Добавьте токен доступа в Настройки → AI-провайдеры и повторите Shift+F9.",
         )
     } else {
         (
             "Cloud ask (Shift+F9)",
-            "Cloud AI is not configured. Add its access token in Settings → AI, then press Shift+F9 again.",
+            "Cloud AI is not configured. Add its access token in Settings → AI providers, then press Shift+F9 again.",
         )
     }
 }
@@ -409,13 +425,19 @@ pub(crate) fn fire_f9_ask(
     // user sees THIS answer came from the cloud model (egress is visible).
     // V0.8.3 — a typed "✏ Написать" ask gets its own green badge.
     if is_text {
-        tile.set_trigger_label(SharedString::from(crate::tile_text::text_ask_badge(tile_is_ru)));
+        tile.set_trigger_label(SharedString::from(crate::tile_text::text_ask_badge(
+            tile_is_ru,
+        )));
         tile.set_trigger_tone(crate::ui::TileTone::Green);
     } else if route == AskRoute::Cloud {
-        tile.set_trigger_label(SharedString::from(crate::tile_text::cloud_ask_badge(tile_is_ru)));
+        tile.set_trigger_label(SharedString::from(crate::tile_text::cloud_ask_badge(
+            tile_is_ru,
+        )));
         tile.set_trigger_tone(crate::ui::TileTone::Sky);
     } else {
-        tile.set_trigger_label(SharedString::from(crate::tile_text::f9_ask_badge(tile_is_ru)));
+        tile.set_trigger_label(SharedString::from(crate::tile_text::f9_ask_badge(
+            tile_is_ru,
+        )));
         tile.set_trigger_tone(crate::ui::TileTone::Violet);
     }
     // Phase E6 v45 — this tile carries a conversation, so it shows the
@@ -440,19 +462,18 @@ pub(crate) fn fire_f9_ask(
     tile.on_close_clicked(move || {
         eprintln!("[overlay-host] tile (F9) close_clicked fired");
         if let Some(t) = weak_close.upgrade() {
+            bridge_for_close.cancel_tile_request(&t);
             // Closing the tile that's being read aloud must silence it.
             super::stop_if_speaking(t.get_convo_id());
             // FIX #8 — prune this tile's conversation (no-op if none).
             bridge_for_close.drop_conversation(t.get_convo_id());
-            let close_hwnd = grab_hwnd(t.window()).ok();
+            let sequence = t.get_sequence();
             let _ = t.hide();
             slint_replay::win32::force_hide(t.window());
-            if let Some(target) = close_hwnd {
-                vec_for_close
-                    .borrow_mut()
-                    .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
-                refresh_open_tiles(&weak_overlay_close, &vec_for_close);
-            }
+            vec_for_close
+                .borrow_mut()
+                .retain(|item| item.get_sequence() != sequence);
+            refresh_open_tiles(&weak_overlay_close, &vec_for_close);
         }
     });
     let weak_pin = tile.as_weak();
@@ -537,6 +558,7 @@ pub(crate) fn fire_f9_ask(
     );
     present_tile_window(&tile);
     apply_tile_hwnd_with_monitor(&tile);
+    let tile_id = tile.get_tile_id();
     let weak_for_stream = tile.as_weak();
     let weak_for_mlx_error = weak_for_stream.clone();
     tiles.borrow_mut().push(tile);
@@ -565,6 +587,7 @@ pub(crate) fn fire_f9_ask(
         local_vision,
         ui_is_ru,
         needs_mlx,
+        fast,
     ) = {
         let c = cfg.read();
         // V0.8.0 (Поток D) — route picks the endpoint: normal F9 = Text (local
@@ -587,6 +610,7 @@ pub(crate) fn fire_f9_ask(
             local_vision,
             c.ui_is_ru(),
             needs_mlx,
+            route.fast_answers(&c),
         )
     };
     let is_local_hint = endpoint_hint.is_unmetered();
@@ -604,14 +628,16 @@ pub(crate) fn fire_f9_ask(
 
     let (transcript_lines, screenshot, last_line) = {
         let mut s = slint_replay::runtime_state::lock(slint_rt);
-        let lines: Vec<String> = s
-            .transcript
-            .iter()
-            .map(|l| format!("[{:?}] {}", l.source, l.text))
-            .collect();
+        let lines = select_recent_labeled(&s.transcript, 8);
         let shot = s.last_screenshot.take();
         // Taken under the same lock as the lines the request is built from.
-        let last_line = s.transcript.back().map(|l| l.text.clone());
+        let last_line = s
+            .transcript
+            .iter()
+            .rev()
+            .find(|line| line.source == overlay_backend::audio::AudioSource::System)
+            .or_else(|| s.transcript.back())
+            .map(|line| line.text.clone());
         (lines, shot, last_line)
     };
     // What F3 re-asks after this answer: the typed text, or the line the ask is about.
@@ -629,6 +655,7 @@ pub(crate) fn fire_f9_ask(
         screenshot
     };
     let attached_screenshot = screenshot.is_some();
+    let fast = fast && !attached_screenshot;
 
     let (journal_for_loop, health_for_stream) = {
         let s = slint_replay::runtime_state::lock(slint_rt);
@@ -679,13 +706,21 @@ pub(crate) fn fire_f9_ask(
         // text IS the question; no live-transcript / screenshot noise). A normal
         // F9 ask is built from the live transcript as before.
         let messages = match typed_question.as_deref() {
-            Some(q) => ai::build_request(&meeting_context, &response_language, &[], None, Some(q)),
-            None => ai::build_request(
+            Some(q) => ai::build_live_request(
+                &meeting_context,
+                &response_language,
+                &[],
+                None,
+                Some(q),
+                fast,
+            ),
+            None => ai::build_live_request(
                 &meeting_context,
                 &response_language,
                 &transcript_lines,
                 screenshot.as_deref(),
                 None,
+                fast,
             ),
         };
         let sys_full = messages
@@ -713,7 +748,9 @@ pub(crate) fn fire_f9_ask(
             // A newer ask may have superseded this one while the worker ran; the
             // generation check skips the fill/stream so the latest ask wins (the
             // same invariant gated_events enforces on the stream's emits).
-            if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation {
+            if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation
+                || !super::tile_request_open(tile_id)
+            {
                 return;
             }
             // Phase E6 v45 — record the sent messages in the streaming slot so
@@ -762,7 +799,7 @@ pub(crate) fn fire_f9_ask(
             // panics with "there is no reactor running" off a tokio thread; the
             // rt_handle.spawn future provides the runtime context.
             let task = rt_handle_for_work.spawn(async move {
-                let ai_rx = ai::stream_chat_endpoint(
+                let ai_rx = ai::stream_live_chat_endpoint(
                     ai::AiEndpoint {
                         protocol,
                         base_url,
@@ -773,6 +810,7 @@ pub(crate) fn fire_f9_ask(
                     },
                     messages,
                     AI_STREAM_MAX_TOKENS,
+                    fast,
                 );
                 overlay_backend::runtime::ask_stream_loop(
                     events_for_task,
@@ -789,6 +827,7 @@ pub(crate) fn fire_f9_ask(
                 )
                 .await;
             });
+            super::register_tile_stream(tile_id, task.abort_handle());
             slint_replay::runtime_state::lock(&slint_rt_for_work).ai_task = Some(task);
         });
     });
@@ -799,7 +838,12 @@ mod tests {
     use super::{missing_cloud_auth_copy, nothing_to_reask_copy, RememberAnswer, RuntimeEvents};
     use std::sync::Arc;
 
-    fn remember(question: &str) -> (RememberAnswer, slint_replay::runtime_state::SharedSlintRuntime) {
+    fn remember(
+        question: &str,
+    ) -> (
+        RememberAnswer,
+        slint_replay::runtime_state::SharedSlintRuntime,
+    ) {
         let rt = slint_replay::runtime_state::shared_runtime();
         let sink = RememberAnswer {
             inner: Arc::new(overlay_backend::events::Noop),
@@ -819,11 +863,23 @@ mod tests {
     #[test]
     fn a_finished_ask_becomes_the_last_question_and_answer() {
         let (sink, rt) = remember("What is an index?");
-        sink.emit("ai:event", serde_json::json!({ "type": "start", "id": "1" }));
-        sink.emit("ai:event", serde_json::json!({ "type": "delta", "text": " An index " }));
-        sink.emit("ai:event", serde_json::json!({ "type": "delta", "text": "speeds up reads.\n" }));
+        sink.emit(
+            "ai:event",
+            serde_json::json!({ "type": "start", "id": "1" }),
+        );
+        sink.emit(
+            "ai:event",
+            serde_json::json!({ "type": "delta", "text": " An index " }),
+        );
+        sink.emit(
+            "ai:event",
+            serde_json::json!({ "type": "delta", "text": "speeds up reads.\n" }),
+        );
         assert!(slint_replay::runtime_state::lock(&rt).last_answer.is_none());
-        sink.emit("ai:event", serde_json::json!({ "type": "done", "reason": "stop" }));
+        sink.emit(
+            "ai:event",
+            serde_json::json!({ "type": "done", "reason": "stop" }),
+        );
         let s = slint_replay::runtime_state::lock(&rt);
         assert_eq!(s.last_question.as_deref(), Some("What is an index?"));
         assert_eq!(s.last_answer.as_deref(), Some("An index speeds up reads."));
@@ -832,11 +888,22 @@ mod tests {
     #[test]
     fn a_failed_or_empty_ask_is_not_remembered() {
         let (sink, rt) = remember("q");
-        sink.emit("ai:event", serde_json::json!({ "type": "delta", "text": "partial" }));
-        sink.emit("ai:event", serde_json::json!({ "type": "error", "message": "x" }));
-        assert!(slint_replay::runtime_state::lock(&rt).last_question.is_none());
+        sink.emit(
+            "ai:event",
+            serde_json::json!({ "type": "delta", "text": "partial" }),
+        );
+        sink.emit(
+            "ai:event",
+            serde_json::json!({ "type": "error", "message": "x" }),
+        );
+        assert!(slint_replay::runtime_state::lock(&rt)
+            .last_question
+            .is_none());
         let (sink, rt) = remember("q");
-        sink.emit("ai:event", serde_json::json!({ "type": "done", "reason": "stop" }));
+        sink.emit(
+            "ai:event",
+            serde_json::json!({ "type": "done", "reason": "stop" }),
+        );
         assert!(slint_replay::runtime_state::lock(&rt).last_answer.is_none());
     }
 
@@ -844,10 +911,16 @@ mod tests {
     fn cloud_auth_notice_has_both_ui_languages() {
         assert_eq!(missing_cloud_auth_copy(false).0, "Cloud ask (Shift+F9)");
         assert!(missing_cloud_auth_copy(false).1.starts_with("Cloud AI"));
+        assert!(missing_cloud_auth_copy(false)
+            .1
+            .contains("Settings → AI providers"));
         assert_eq!(
             missing_cloud_auth_copy(true).0,
             "Облачный запрос (Shift+F9)"
         );
         assert!(missing_cloud_auth_copy(true).1.starts_with("Облачный AI"));
+        assert!(missing_cloud_auth_copy(true)
+            .1
+            .contains("Настройки → AI-провайдеры"));
     }
 }

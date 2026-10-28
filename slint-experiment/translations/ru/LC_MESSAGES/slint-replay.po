@@ -35,17 +35,8 @@ msgstr "захватить"
 msgid "App RAM"
 msgstr "RAM приложения"
 
-msgid "MLX unified"
-msgstr "MLX: единая память"
-
-msgid "⏸ {}"
-msgstr "⏸ {}"
-
 msgid "start"
 msgstr "старт"
-
-msgid "🧠 {}"
-msgstr "🧠 {}"
 
 msgid "+ tile ({})"
 msgstr "+ тайл ({})"
@@ -95,9 +86,6 @@ msgstr "Поиск по базе знаний или заготовкам…"
 
 msgid "recent:"
 msgstr "недавние:"
-
-msgid "Esc to close · Enter to spawn tile"
-msgstr "Esc — закрыть · Enter — открыть тайл"
 
 msgid "Start typing to search the embedded knowledge base…"
 msgstr "Начните печатать для поиска по встроенной базе знаний…"
@@ -172,9 +160,6 @@ msgstr "Сформировать"
 msgid "Settings"
 msgstr "Настройки"
 
-msgid "X  Close"
-msgstr "X  Закрыть"
-
 # --- Sidebar group headers (Phase E6 v39 grouped nav) ---
 
 msgid "SESSION"
@@ -182,47 +167,6 @@ msgstr "СЕССИЯ"
 
 msgid "APP"
 msgstr "ПРИЛОЖЕНИЕ"
-
-# --- Sidebar tab labels (emoji prefixes preserved) ---
-
-msgid "🎯 Stealth"
-msgstr "🎯 Скрытность"
-
-msgid "🎯 Coaching"
-msgstr "🎯 Коучинг"
-
-msgid "⌨ Hotkeys"
-msgstr "⌨ Хоткеи"
-
-msgid "🌐 Interface"
-msgstr "🌐 Интерфейс"
-
-msgid "⬆ Updates"
-msgstr "⬆ Обновления"
-
-msgid "📊 Stats"
-msgstr "📊 Статистика"
-
-msgid "🎤 Audio"
-msgstr "🎤 Аудио"
-
-msgid "🪟 Auto-tiles"
-msgstr "🪟 Авто-тайлы"
-
-msgid "✂ Snippets"
-msgstr "✂ Заготовки"
-
-msgid "📚 Knowledge base"
-msgstr "📚 База знаний"
-
-msgid "👤 Profile + context"
-msgstr "👤 Профиль + контекст"
-
-msgid "🧠 AI bridge"
-msgstr "🧠 AI мост"
-
-msgid "🗣 STT"
-msgstr "🗣 STT"
 
 # --- Header tab names (returned by tab-name-for()) ---
 
@@ -241,17 +185,11 @@ msgstr "Интерфейс"
 msgid "Updates"
 msgstr "Обновления"
 
-msgid "Stats"
-msgstr "Статистика"
-
 msgid "Audio"
 msgstr "Аудио"
 
 msgid "Auto-tiles"
 msgstr "Авто-тайлы"
-
-msgid "Snippets"
-msgstr "Заготовки"
 
 msgid "Knowledge base"
 msgstr "База знаний"
@@ -259,34 +197,14 @@ msgstr "База знаний"
 msgid "Profile + context"
 msgstr "Профиль + контекст"
 
-msgid "AI bridge"
-msgstr "AI мост"
-
 msgid "STT"
 msgstr "STT"
-
-# --- Tab 0: Stealth ---
-
-msgid "Stealth mode hides the overlay window from screen capture (Print Screen, Teams/Meet, OBS). Uses WDA_EXCLUDEFROMCAPTURE on Windows 10/11."
-msgstr "Режим скрытности скрывает окна Суфлёра от захвата экрана (Print Screen, Teams/Meet, OBS). Использует WDA_EXCLUDEFROMCAPTURE на Windows 10/11."
-
-msgid "Always on top (HWND_TOPMOST)"
-msgstr "Поверх всех окон (HWND_TOPMOST)"
 
 msgid "Stealth (hide from screen capture)"
 msgstr "Скрытность (прятать от захвата экрана)"
 
-msgid "[ok] active - verify with a screen-share preview"
-msgstr "активна — проверьте через предпросмотр захвата экрана"
-
 msgid "[!] stealth unavailable"
 msgstr "скрытность недоступна"
-
-msgid "[--] off"
-msgstr "выключена"
-
-msgid "Tile opacity ({}%)"
-msgstr "Прозрачность тайлов ({}%)"
 
 msgid "Lower values let you see the meeting through tiles. 100% = opaque, 50% = half-transparent."
 msgstr "Меньшие значения позволяют видеть встречу сквозь тайлы. 100% — непрозрачно, 50% — наполовину прозрачно."
@@ -299,22 +217,25 @@ msgstr "Разбор после встречи: AI оценивает темп, 
 msgid "Enable post-meeting debrief"
 msgstr "Включить разбор после встречи"
 
-msgid "Min session seconds:"
-msgstr "Минимум секунд в сессии:"
-
 # --- Tab 2: Hotkeys ---
 
 msgid "Global hotkeys (work anywhere, even when the app isn't focused):"
 msgstr "Глобальные хоткеи (работают везде, даже когда приложение не в фокусе):"
+
+msgid "Hold to record a microphone question; release to send it to AI"
+msgstr "Удерживайте для записи вопроса с микрофона; отпустите, чтобы отправить его ИИ"
+
+msgid "Hold to record system audio; release to send it to AI"
+msgstr "Удерживайте для записи системного звука; отпустите, чтобы отправить его ИИ"
+
+msgid "Super is the Windows key. Hold the shortcut to record, then release it to ask. If another application uses a shortcut, Suflyor leaves it unchanged; see Diagnostics."
+msgstr "Super — клавиша Windows. Удерживайте сочетание для записи и отпустите, чтобы задать вопрос. Если сочетание занято другим приложением, Суфлёр его не меняет; подробности — в «Диагностике»."
 
 msgid "Ask AI now (streams the answer into a tile)"
 msgstr "Спросить AI сейчас (ответ стримится в тайл)"
 
 msgid "Ask AI escalated to the smart cloud model (one-shot; tile shows a cloud badge)"
 msgstr "Спросить AI с эскалацией к умной облачной модели (разово; на тайле облачный значок)"
-
-msgid "Screenshot → AI vision (drag a region; Esc cancels)"
-msgstr "Скриншот → Vision-AI (выделите область; Esc — отмена)"
 
 msgid "Re-ask the last question with fresh context"
 msgstr "Переспросить последний вопрос с обновлённым контекстом"
@@ -324,14 +245,6 @@ msgstr "Палитра базы знаний (открыть / закрыть)"
 
 msgid "Manual tile from the last transcript line"
 msgstr "Тайл вручную по последней реплике стенограммы"
-
-msgid "Collapse / expand all tiles"
-msgstr "Свернуть / развернуть все тайлы"
-
-# === #131 diagnostics / readiness panel ===
-
-msgid "🩺 Diagnostics"
-msgstr "🩺 Диагностика"
 
 msgid "Diagnostics"
 msgstr "Диагностика"
@@ -381,9 +294,6 @@ msgstr "«Проверить всё» пингует AI + STT, пишет мик
 msgid "No signal"
 msgstr "Нет сигнала"
 
-msgid "Vision (F8)"
-msgstr "Зрение (F8)"
-
 msgid "Global hotkeys"
 msgstr "Глобальные хоткеи"
 
@@ -393,20 +303,8 @@ msgstr "конфликт: {}"
 msgid "hotkey system unavailable"
 msgstr "система хоткеев недоступна"
 
-msgid "Describe — tap to Translate"
-msgstr "Описание — нажмите для Перевода"
-
-msgid "Translate — tap to Describe"
-msgstr "Перевод — нажмите для Описания"
-
 msgid "Phonetics in F8 translate mode (IPA, e.g. schedule [ˈʃedjuːl])"
 msgstr "Фонетика в режиме перевода F8 (МФА, напр. schedule [ˈʃedjuːl])"
-
-msgid "F8 → Test Practice: answer + short explanation (for practice & self-check)"
-msgstr "F8 → Тренировка: ответ + краткий разбор (для тренировки и самопроверки)"
-
-msgid "Test Practice (self-check)"
-msgstr "Тренировка (самопроверка)"
 
 msgid "registering…"
 msgstr "регистрация…"
@@ -419,38 +317,6 @@ msgstr "скопировано"
 
 msgid "Collect logs"
 msgstr "Собрать логи"
-
-msgid "log saved"
-msgstr "лог сохранён"
-
-msgid "Toggle hotkey-hint popover"
-msgstr "Показать/скрыть подсказку по хоткеям"
-
-msgid "Cycle context profile"
-msgstr "Переключить профиль контекста"
-
-msgid "Ask the AI now"
-msgstr "Спросить AI сейчас"
-
-msgid "Open KB palette"
-msgstr "Открыть палитру базы знаний"
-
-msgid "Bulk collapse/expand all tiles"
-msgstr "Свернуть/развернуть все тайлы"
-
-msgid "Push-to-talk (hold)"
-msgstr "Push-to-talk (удерживать)"
-
-msgid "Reload last tile"
-msgstr "Перезагрузить последний тайл"
-
-# --- Tab 3: Interface ---
-
-msgid "Interface language. Wires gettext for all UI strings (Phase 6)."
-msgstr "Язык интерфейса. Подключает gettext ко всем строкам интерфейса (Phase 6)."
-
-msgid "Language:"
-msgstr "Язык:"
 
 # --- Tab 4: Updates ---
 
@@ -465,15 +331,6 @@ msgstr "Проверка…"
 
 msgid "Update now"
 msgstr "Обновить сейчас"
-
-msgid "Version: {} (suflyor / Slint)"
-msgstr "Версия: {} (suflyor / Slint)"
-
-msgid "Backup / transfer settings"
-msgstr "Резервная копия / перенос настроек"
-
-msgid "Exports the WHOLE config to a .json file you choose — INCLUDING the Claude bearer + Groq API key. Keep the file private. Import overwrites current settings (restart to apply)."
-msgstr "Экспортирует ВЕСЬ конфиг в выбранный вами .json-файл — ВКЛЮЧАЯ bearer-токен Claude и ключ API Groq. Храните файл в секрете. Импорт перезаписывает текущие настройки (перезапустите для применения)."
 
 msgid "Export settings (incl. keys)…"
 msgstr "Экспорт настроек (с ключами)…"
@@ -493,20 +350,39 @@ msgid "Import server settings…"
 msgstr "Импортировать серверные настройки…"
 
 msgid "Review changes before applying (keys shown as set/— only, never the value):"
-msgstr "Проверьте изменения перед применением (ключи показаны только как set/—, без значения):"
+msgstr "Проверьте изменения перед применением (ключи показаны только как задан/—, без значения):"
 
 msgid "Apply server settings"
 msgstr "Применить серверные настройки"
-
-# --- Tab 5: Stats ---
-
-msgid "Session stats aggregated across all journals."
-msgstr "Статистика сессий, агрегированная по всем журналам."
 
 # --- Tab 6: Audio ---
 
 msgid "Windows default"
 msgstr "По умолчанию Windows"
+
+msgid "System default"
+msgstr "Системное по умолчанию"
+
+msgid "Check GitHub for a newer release. Open its release page to update the native Linux package. Your configuration and models are retained."
+msgstr "Проверьте новую версию на GitHub. Для обновления пакета Linux откройте страницу релиза. Настройки и модели сохраняются."
+
+msgid "Open release page"
+msgstr "Открыть страницу релиза"
+
+msgid "Pick the microphone. The list comes from PipeWire."
+msgstr "Выберите микрофон из списка устройств PipeWire."
+
+msgid "Saved device is unavailable. Choose another device or system default."
+msgstr "Сохранённое устройство недоступно. Выберите другое или системное по умолчанию."
+
+msgid "Capture the selected PipeWire output monitor or input. This does not change system or read-aloud playback."
+msgstr "Захват выбранного выхода или входа PipeWire. Системный вывод звука и озвучка не меняются."
+
+msgid "Hyprland masks Suflyor windows and its bar mark with black rectangles in supported captures. It does not reveal the desktop behind them. Suflyor hides its own surfaces for its own screenshots. Other capture methods may ignore the rule."
+msgstr "В поддерживаемых режимах захвата Hyprland закрывает окна и значок Суфлёра чёрными прямоугольниками, а не показывает рабочий стол под ними. Для собственных снимков Суфлёр временно убирает свои окна. Другие способы захвата могут игнорировать правило."
+
+msgid "Hyprland capture rule applied; check your capture application"
+msgstr "Правило захвата Hyprland применено. Проверьте результат в своём приложении захвата."
 
 msgid "Loading audio devices..."
 msgstr "Загрузка аудиоустройств..."
@@ -516,9 +392,6 @@ msgstr "Обновить устройства"
 
 msgid "Could not load audio devices. Your saved choices are unchanged. Try Refresh devices."
 msgstr "Не удалось загрузить аудиоустройства. Сохранённый выбор не изменён. Нажмите «Обновить устройства»."
-
-msgid "Device changes apply to the next capture. Stop and start an active session to use the new choice."
-msgstr "Выбор применяется при следующем запуске захвата. Если сессия идёт, остановите и запустите её заново."
 
 msgid "Saved for the next capture."
 msgstr "Сохранено для следующего запуска захвата."
@@ -547,18 +420,11 @@ msgstr "Устройство системного звука"
 msgid "No system audio devices found."
 msgstr "Устройства системного звука не найдены."
 
-msgid "Microphone device selection. List is live from WASAPI capture endpoints."
-msgstr "Выбор устройства микрофона. Список берётся напрямую из точек захвата WASAPI."
-
 msgid "Test microphone (3s record)"
 msgstr "Проверить микрофон (запись 3 сек)"
 
-# --- v0.13.0: session-audio recording ---
-msgid "Record session audio (mic + system)"
-msgstr "Записывать аудио созвона (микрофон + система)"
-
-msgid "Saved locally as separate mic + system WAVs per session — nothing is uploaded. ~230 MB/hour. Used by the archive's re-Summary."
-msgstr "Сохраняется локально — отдельные WAV для микрофона и системы по каждой сессии, никуда не отправляется. ~230 МБ/час. Используется для «Сводки» из архива."
+msgid "Saved locally as separate mic + system WAVs per session — nothing is uploaded. ~230 MB/hour. Used when you click 'Generate' or the regenerate icon in the session archive."
+msgstr "Сохраняется локально — отдельные WAV для микрофона и системы по каждой сессии, никуда не отправляется. ~230 МБ/час. Используется при нажатии «Сформировать» или значка пересоздания в архиве сессий."
 
 msgid "Open recordings folder"
 msgstr "Открыть папку записей"
@@ -579,62 +445,19 @@ msgstr "за последние N дней"
 msgid "Unlimited recordings can take tens of GB per month with daily calls."
 msgstr "Без лимита записи при ежедневных созвонах занимают десятки ГБ в месяц."
 
-msgid "Session journals — the transcripts + AI answers behind the archive (F7). When the disk cap is exceeded, the oldest journals are deleted even if the count limit is not reached:"
-msgstr "Журналы сессий — стенограммы и ответы AI, на которых работает архив (F7). При превышении потолка по МБ старейшие журналы удаляются, даже если лимит по количеству не достигнут:"
-
-msgid "Journals to keep (0 = unlimited):"
-msgstr "Хранить журналов (0 = без лимита):"
-
-msgid "Journal disk cap, MB (0 = unlimited):"
-msgstr "Потолок журналов на диске, МБ (0 = без лимита):"
-
 msgid "Retention changes apply at the next session start."
 msgstr "Изменения хранения применяются при следующем старте сессии."
-
-# --- v0.14.0: re-Summary from the archive ---
-msgid "Summary"
-msgstr "Сводка"
 
 msgid "Session name"
 msgstr "Имя сессии"
 
-msgid "Re-Summary uploads this session's saved audio to the cloud STT."
-msgstr "Ре-Summary отправит сохранённое аудио этой сессии в облачный STT."
-
-# --- Tab 7: Auto-tiles ---
-
-msgid "Auto-tile triggers — when transcript contains these keywords, spawn an answer tile automatically."
-msgstr "Триггеры авто-тайлов — когда в стенограмме встречаются эти ключевые слова, автоматически открывается тайл с ответом."
-
 msgid "Enable auto-tile detector"
 msgstr "Включить детектор авто-тайлов"
-
-msgid "Add keyword..."
-msgstr "Добавить ключевое слово..."
-
-# --- Tab 8: Snippets ---
-
-msgid "Custom snippets — invoke via /key in F4 palette to spawn a tile with the snippet body."
-msgstr "Свои заготовки — вызываются через /ключ в палитре F4, открывают тайл с текстом заготовки."
-
-msgid "+ Add snippet"
-msgstr "+ Добавить заготовку"
-
-# --- Tab 9: Knowledge base ---
-
-msgid "Embedded knowledge base (glossary / commands / patterns), compiled into the binary."
-msgstr "Встроенная база знаний (глоссарий / команды / паттерны), вшита в бинарник."
-
-msgid "Press F4 anywhere to search the knowledge base and spawn a tile from any entry."
-msgstr "Нажмите F4 в любом месте, чтобы искать по базе знаний и открыть тайл из любой записи."
 
 # --- Tab 10: Profile + context ---
 
 msgid "Persistent context sent with every AI request — your role, focus areas, vocabulary. Saved to config; applied to new AI calls immediately."
 msgstr "Постоянный контекст, отправляемый с каждым запросом к AI — ваша роль, области фокуса, словарь. Сохраняется в конфиг и сразу применяется к новым запросам."
-
-msgid "e.g. I'm a Senior SRE interviewing for a platform role. Answer concisely, prefer Kubernetes/AWS examples, Russian output."
-msgstr "напр.: Я Senior SRE на собеседовании на платформенную роль. Отвечай кратко, предпочитай примеры с Kubernetes/AWS, вывод на русском."
 
 msgid "Save context"
 msgstr "Сохранить контекст"
@@ -646,18 +469,10 @@ msgid "Stop recording"
 msgstr "Остановить запись"
 
 msgid "Structure via AI"
-msgstr "Структурировать (AI)"
+msgstr "Упорядочить (AI)"
 
 msgid "Structuring…"
 msgstr "Обработка…"
-
-msgid "🔴 Stop recording"
-msgstr "🔴 Остановить запись"
-
-# --- Tab 11: AI bridge ---
-
-msgid "Claude AI bridge — bearer token + base URL + model."
-msgstr "Мост Claude AI — bearer-токен, базовый URL и модель."
 
 msgid "Bearer token:"
 msgstr "Bearer-токен:"
@@ -677,9 +492,6 @@ msgstr "http://your.bridge.host:PORT/v1"
 msgid "AI model (Claude full ID):"
 msgstr "Модель AI (полный ID Claude):"
 
-msgid "claude-haiku-4-5 / claude-sonnet-4-6 / claude-opus-4-7"
-msgstr "claude-haiku-4-5 / claude-sonnet-4-6 / claude-opus-4-7"
-
 msgid "Test AI bridge connection"
 msgstr "Проверить подключение к AI мосту"
 
@@ -692,96 +504,12 @@ msgstr "Кэширование промпта (эксперимент — нуж
 msgid "Marks the system prompt as cacheable for faster repeat asks. If your bridge rejects it (AI stops answering), turn this back off."
 msgstr "Помечает системный промпт кэшируемым для ускорения повторных запросов. Если мост его не принимает (AI перестаёт отвечать) — выключите обратно."
 
-# E9 Phase 1 — local AI provider switch.
-msgid "Provider — run a LOCAL model instead of the cloud bridge (fallback if Claude is down, or full replacement)."
-msgstr "Провайдер — запускать ЛОКАЛЬНУЮ модель вместо облачного моста (запасной вариант, если Claude недоступен, или полная замена)."
-
-msgid "Cloud (bridge)"
-msgstr "Облако (мост)"
-
-msgid "Local (Ollama / llama.cpp)"
-msgstr "Локально (Ollama / llama.cpp)"
-
-msgid "local URL — http://127.0.0.1:8080/v1 (llama.cpp)"
-msgstr "локальный URL — http://127.0.0.1:8080/v1 (llama.cpp) или :11434 (Ollama)"
-
-# V4 — vision (screenshot) settings section.
-msgid "Vision (screenshots · F8)"
-msgstr "Vision (скриншоты · F8)"
-
-msgid "Where F8 screenshots are analysed. SEPARATE from the text model above — a local text model can keep answering while images go to a vision-capable model."
-msgstr "Где анализируются скриншоты F8. ОТДЕЛЬНО от текстовой модели выше — локальная текстовая модель продолжает отвечать, пока картинки идут в модель с поддержкой зрения."
-
 msgid "Off"
 msgstr "Выкл"
-
-msgid "Same as text model above"
-msgstr "Как у текстовой модели выше"
-
-msgid "Cloud (Sonnet via bridge)"
-msgstr "Облако (Sonnet через мост)"
-
-msgid "Local (2nd vision server)"
-msgstr "Локально (2-й vision-сервер)"
-
-msgid "Screenshots are sent to the cloud. Leave a field blank to reuse the text bridge's value."
-msgstr "Скриншоты отправляются в облако. Оставьте поле пустым, чтобы использовать значение текстового моста."
-
-msgid "vision base URL (blank = text bridge)"
-msgstr "base URL для vision (пусто = текстовый мост)"
-
-msgid "vision bearer (blank = text bridge)"
-msgstr "bearer для vision (пусто = текстовый мост)"
-
-msgid "vision model (blank = claude-sonnet-4-6)"
-msgstr "модель vision (пусто = claude-sonnet-4-6)"
-
-msgid "A 2nd local OpenAI-compatible server running a vision model (e.g. Qwen2-VL). Blank = reuse the text-local server."
-msgstr "2-й локальный OpenAI-совместимый сервер с vision-моделью (напр. Qwen2-VL). Пусто = использовать текстовый локальный сервер."
-
-msgid "vision local URL — http://127.0.0.1:8082/v1"
-msgstr "локальный URL для vision — http://127.0.0.1:8082/v1"
-
-msgid "vision local model id"
-msgstr "id локальной vision-модели"
-
-msgid "vision local bearer (optional)"
-msgstr "bearer локального vision (необязательно)"
-
-msgid "Test vision connection"
-msgstr "Проверить подключение vision"
 
 # === capture_overlay.slint (F8 region select) ===
 msgid "Drag to select a region · Esc / right-click to cancel"
 msgstr "Выделите область мышью · Esc / правый клик — отмена"
-
-# === i18n drift fixes (audit #144) — settings strings added post-sync ===
-msgid "🛡 Stealth"
-msgstr "🛡 Скрытность"
-
-msgid "Interface language — switches all UI text on the fly."
-msgstr "Язык интерфейса — переключает все надписи на лету."
-
-msgid "Colour scheme — recolours the whole app instantly."
-msgstr "Цветовая схема — мгновенно перекрашивает всё приложение."
-
-msgid "Scheme:"
-msgstr "Схема:"
-
-msgid "Trigger keywords (space-separated). A sentence ending in '?' also triggers."
-msgstr "Триггер-слова (через пробел). Предложение с «?» на конце тоже срабатывает."
-
-msgid "Save keywords"
-msgstr "Сохранить слова"
-
-msgid "Where do live answers come from? Pick a type, then configure it."
-msgstr "Откуда брать живые ответы? Выберите тип и настройте его."
-
-msgid "Cloud (Claude bridge)"
-msgstr "Облако (мост Claude)"
-
-msgid "Local (llama.cpp)"
-msgstr "Локально (llama.cpp / Ollama)"
 
 msgid "Cloud bridge"
 msgstr "Облачный мост"
@@ -789,125 +517,23 @@ msgstr "Облачный мост"
 msgid "No models found — check the bridge URL/token, then press refresh."
 msgstr "Модели не найдены — проверьте URL/токен моста и нажмите «обновить»."
 
-msgid "Local model"
-msgstr "Локальная модель"
-
 msgid "No models found — start the local server, then press refresh."
 msgstr "Модели не найдены — запустите локальный сервер и нажмите «обновить»."
 
 msgid "local server bearer token (optional)"
 msgstr "bearer-токен локального сервера (необязательно)"
 
-msgid "Installs the local stack on this PC (~6 GB total): llama.cpp + Gemma-4-E4B (~5 GB; needs ~6 GB VRAM on GPU), whisper.cpp + Whisper-turbo (~0.9 GB), GigaAM-v3 (~0.2 GB). With NVIDIA it picks the CUDA build, otherwise CPU. Models you already have are reused, not re-downloaded."
-msgstr "Устанавливает локальный стек на этот ПК (~6 ГБ всего): llama.cpp + Gemma-4-E4B (~5 ГБ; нужно ~6 ГБ VRAM на GPU), whisper.cpp + Whisper-turbo (~0.9 ГБ), GigaAM-v3 (~0.2 ГБ). С NVIDIA выбирается сборка CUDA, иначе CPU. Уже скачанные модели переиспользуются, не качаются заново."
-
-msgid "Local model: speed vs quality. Switching restarts the local server (~5s)."
-msgstr "Локальная модель: скорость или качество. Переключение перезапускает локальный сервер (~5с)."
-
-msgid "Faster (4B)"
-msgstr "Быстрее (4B)"
-
-msgid "● Faster (4B)"
-msgstr "● Быстрее (4B)"
-
-msgid "Smarter (12B)"
-msgstr "Умнее (12B)"
-
-msgid "● Smarter (12B)"
-msgstr "● Умнее (12B)"
-
-msgid "Download smart model (6 GB)"
-msgstr "Скачать умную модель (6 ГБ)"
-
-msgid "Downloading…"
-msgstr "Загрузка…"
-
-msgid "Bundled model profile. The 26B primary is selected only for the confirmed VRAM/RAM matrix; 12B QAT remains the RAM-safe fallback."
-msgstr "Профиль встроенной модели. Основная 26B выбирается только по подтверждённой матрице VRAM/RAM; 12B QAT остаётся безопасным для RAM резервом."
-
 msgid "Context window"
 msgstr "Окно контекста"
-
-msgid "[on] Auto"
-msgstr "[выбрано] Авто"
-
-msgid "8K"
-msgstr "8K"
-
-msgid "[on] 8K"
-msgstr "[выбрано] 8K"
-
-msgid "16K"
-msgstr "16K"
-
-msgid "[on] 16K"
-msgstr "[выбрано] 16K"
-
-msgid "32K"
-msgstr "32K"
-
-msgid "[on] 32K"
-msgstr "[выбрано] 32K"
-
-msgid "64K"
-msgstr "64K"
-
-msgid "[on] 64K"
-msgstr "[выбрано] 64K"
-
-msgid "96K"
-msgstr "96K"
-
-msgid "[on] 96K"
-msgstr "[выбрано] 96K"
-
-msgid "Auto uses a compact {}K context."
-msgstr "Авто использует компактный контекст {}K."
-
-msgid "The selected context is fixed for live answers and long summaries."
-msgstr "Выбранный контекст фиксирован для живых ответов и длинных итогов."
-
-msgid "Fallback (12B QAT)"
-msgstr "Резерв (12B QAT)"
-
-msgid "[on] Fallback (12B QAT)"
-msgstr "[выбрано] Резерв (12B QAT)"
-
-msgid "Primary (26B-A4B)"
-msgstr "Основная (26B-A4B)"
-
-msgid "[on] Primary (26B-A4B)"
-msgstr "[выбрано] Основная (26B-A4B)"
-
-msgid "Download primary model (9.8 GiB)"
-msgstr "Скачать основную модель (9,8 ГиБ)"
-
-msgid "Download only 26B (9.8 GiB)"
-msgstr "Скачать только 26B (9,8 ГиБ)"
-
-msgid "Bundled 12B/26B controls manage only Suflyor's own llama.cpp endpoint."
-msgstr "Управление встроенными 12B/26B работает только с собственным endpoint llama.cpp Suflyor."
-
-msgid "Choose the local model explicitly. Estimated total VRAM at Auto (model + context + runtime): 4B ~6 GiB, 12B ~9.5 GiB, 26B ~12 GiB."
-msgstr "Выберите локальную модель явно. Оценка общей VRAM в Auto (модель + контекст + служебная память): 4B ~6 ГиБ, 12B ~9,5 ГиБ, 26B ~12 ГиБ."
 
 msgid "Fast (4B)"
 msgstr "Быстрая (4B)"
 
-msgid "[on] Fast (4B)"
-msgstr "[x] Быстрая (4B)"
-
 msgid "Balanced (12B QAT)"
 msgstr "Сбалансированная (12B QAT)"
 
-msgid "[on] Balanced (12B QAT)"
-msgstr "[x] Сбалансированная (12B QAT)"
-
 msgid "Maximum (26B-A4B)"
 msgstr "Максимальная (26B-A4B)"
-
-msgid "[on] Maximum (26B-A4B)"
-msgstr "[x] Максимальная (26B-A4B)"
 
 msgid "Active"
 msgstr "активна"
@@ -918,38 +544,8 @@ msgstr "установлена"
 msgid "Not installed"
 msgstr "не установлена"
 
-msgid "Requires supported hardware"
-msgstr "нужно совместимое железо"
-
-msgid "Download"
-msgstr "скачать"
-
-msgid "Hardware not in the confirmed matrix. The model may exceed VRAM, spill into system RAM, run very slowly, or fail. You accept this risk."
-msgstr "Железо не входит в подтверждённую матрицу. Модель может превысить VRAM, использовать системную RAM, работать очень медленно или не запуститься. Вы принимаете этот риск."
-
-msgid "Your GGUF model"
-msgstr "Ваша GGUF-модель"
-
-msgid "Active: {}"
-msgstr "Активна: {}"
-
-msgid "No user model selected"
-msgstr "Пользовательская модель не выбрана"
-
 msgid "Choose GGUF…"
 msgstr "Выбрать GGUF…"
-
-msgid "Use recommended 12B"
-msgstr "Использовать рекомендуемую 12B"
-
-msgid "Choose a trusted local GGUF file. User models run text-only; memory requirements are unknown."
-msgstr "Выберите доверенный локальный GGUF-файл. Пользовательские модели работают только с текстом; требования к памяти неизвестны."
-
-msgid "Local Vision requires the installed 12B model and its projector. Use the separate Vision section below for cloud or another server."
-msgstr "Для локального Vision нужны установленная модель 12B и её проектор. Для облака или другого сервера используйте отдельный раздел Vision ниже."
-
-msgid "Bundled 4B/12B/26B controls manage only Suflyor's own llama.cpp endpoint."
-msgstr "Управление встроенными 4B/12B/26B работает только с собственным endpoint llama.cpp Suflyor."
 
 msgid "Selected: Auto ({}K)"
 msgstr "Выбрано: Auto ({}K)"
@@ -963,44 +559,11 @@ msgstr "Применение…"
 msgid "Apply context"
 msgstr "Применить контекст"
 
-msgid "Installs the local stack with Gemma 4 12B QAT as the fallback. On confirmed 8/32, 12/24-32 or 16/32 GB VRAM/RAM profiles it also installs the pinned Gemma 4 26B-A4B primary. Existing verified models are reused."
-msgstr "Устанавливает локальный стек с Gemma 4 12B QAT как резервом. Для подтверждённых профилей VRAM/RAM 8/32, 12/24–32 или 16/32 ГБ также устанавливается закреплённая основная Gemma 4 26B-A4B. Существующие проверенные модели используются повторно."
-
-msgid "Installs or completes the local stack: llama.cpp, the 12B fallback, speech components, and 26B on supported hardware. Complete verified files are reused; partial downloads resume. The optional 4B profile is kept when already present."
-msgstr "Устанавливает или дополняет локальный стек: llama.cpp, резервную 12B, речевые компоненты и 26B на поддерживаемом оборудовании. Готовые проверенные файлы используются повторно, а частичные загрузки продолжаются. Необязательная 4B сохраняется, если уже установлена."
-
-msgid "Engine (llama.cpp)"
-msgstr "Движок (llama.cpp)"
-
-msgid "The app checks it weekly and verifies a new build before replacing the current one."
-msgstr "Приложение проверяет его раз в неделю и проверяет новую сборку перед заменой текущей."
-
-msgid "The 12B model is noticeably smarter but ~2× slower and needs ~10 GB of video memory (VRAM). On a weaker GPU keep 4B."
-msgstr "Модель 12B заметно умнее, но примерно вдвое медленнее и требует ~10 ГБ видеопамяти (VRAM). На слабой видеокарте оставьте 4B."
-
-msgid "12B vision projector installed — used when the 12B is the active model."
-msgstr "Проектор зрения 12B установлен — задействуется, когда активна модель 12B."
-
-msgid "Enable vision on 12B — download projector (175 MB)"
-msgstr "Включить зрение на 12B — скачать проектор (175 МБ)"
-
-msgid "12B vision needs a newer engine — use Update engine below."
-msgstr "Для зрения 12B нужен более новый движок — нажмите «Обновить движок» ниже."
-
-msgid "Engine (llama.cpp). The app keeps it up to date automatically (checked weekly) so the local model stays fast and 12B vision works. A new build is verified to run before it replaces the current one."
-msgstr "Движок (llama.cpp). Приложение само поддерживает его актуальным (проверка раз в неделю), чтобы локальная модель работала быстро и зрение 12B функционировало. Новая сборка проверяется на запуск перед заменой текущей."
-
 msgid "Update engine"
 msgstr "Обновить движок"
 
 msgid "Updating…"
 msgstr "Обновление…"
-
-msgid "Installed: {}"
-msgstr "Установлено: {}"
-
-msgid "Install local AI"
-msgstr "Установить локальный AI"
 
 msgid "Install / complete local AI"
 msgstr "Установить / докачать локальный AI"
@@ -1014,14 +577,17 @@ msgstr "Отмена"
 msgid "Use GPU (DirectML) — faster on long audio, ~1s warm-up on first use"
 msgstr "GPU (DirectML) — быстрее на длинном аудио, ~1с прогрев при первом запуске"
 
+msgid "GigaAM uses the native ONNX Runtime CPU backend on Linux."
+msgstr "На Linux GigaAM использует нативный процессорный движок ONNX Runtime."
+
 msgid "Use Apple Core ML — faster on Apple Silicon"
 msgstr "Использовать Apple Core ML — быстрее на Apple Silicon"
 
 msgid "Profile:"
 msgstr "Профиль:"
 
-msgid "none yet — name one and Add"
-msgstr "пока нет — введите имя и «Добавить»"
+msgid "None yet — enter a name and click 'Add profile'."
+msgstr "Профилей пока нет — введите имя и нажмите «Добавить профиль»."
 
 msgid "profile name"
 msgstr "имя профиля"
@@ -1037,9 +603,6 @@ msgstr "Удалить"
 
 msgid "Edit"
 msgstr "Редактировать"
-
-msgid "Add to memory:"
-msgstr "Добавить в память:"
 
 msgid "To memory ({})"
 msgstr "В память ({})"
@@ -1065,9 +628,6 @@ msgstr "Обычный вид"
 msgid "You"
 msgstr "Вы"
 
-msgid "local model — e.g. qwen2.5:7b-instruct"
-msgstr "локальная модель — напр. qwen2.5:7b-instruct"
-
 msgid "Local model supports images (vision)"
 msgstr "Локальная модель поддерживает изображения (vision)"
 
@@ -1077,34 +637,17 @@ msgstr "Рассуждения локальной модели (медленне
 msgid "Test local connection"
 msgstr "Проверить локальное подключение"
 
-msgid "Tip: Save writes to suflyor/config.json in application configuration folder. Restart binary to re-load."
-msgstr "Подсказка: «Сохранить» пишет в suflyor/config.json в папке настроек приложения. Перезапустите бинарник для перезагрузки."
-
-# --- Tab 12: STT ---
-
-msgid "Groq STT (Whisper) — API key + model. Required for speech-to-text on audio capture."
-msgstr "Groq STT (Whisper) — ключ API и модель. Нужны для распознавания речи при захвате аудио."
-
-msgid "Groq API key:"
-msgstr "Ключ API Groq:"
-
 msgid "paste new Groq key then Save"
 msgstr "вставьте новый ключ Groq и нажмите «Сохранить»"
 
 msgid "Get Groq API Key (console.groq.com)"
 msgstr "Получить API ключ Groq (console.groq.com)"
 
-msgid "Test STT (Groq) connection"
-msgstr "Проверить подключение STT (Groq)"
-
 msgid "Test STT connection"
 msgstr "Проверить подключение STT"
 
 msgid "Speech-to-text engine. Local options run on this PC (no cloud, no Groq key needed)."
 msgstr "Движок распознавания речи. Локальные варианты работают на этом ПК (без облака и ключа Groq)."
-
-msgid "Speech-to-text engine. Configure Groq cloud or your own OpenAI-compatible whisper-server."
-msgstr "Движок распознавания речи. Настройте облако Groq или свой OpenAI-совместимый whisper-server."
 
 msgid "Cloud (Groq Whisper)"
 msgstr "Облако (Groq Whisper)"
@@ -1163,17 +706,8 @@ msgstr "Быстрая — рекомендуется (whisper-large-v3-turbo)"
 msgid "More accurate — slower (whisper-large-v3)"
 msgstr "Точнее — медленнее (whisper-large-v3)"
 
-msgid "Groq STT (Whisper) — API key + model. Used only when the engine above is Cloud."
-msgstr "Groq STT (Whisper) — ключ и модель. Используется, только если движок выше — Облако."
-
-msgid "waiting for transcript... (mic/sys → STT)"
-msgstr "ожидаю стенограмму... (mic/sys → STT)"
-
 msgid "AI streaming"
 msgstr "AI стримит"
-
-msgid "✏ Write a question for the assistant"
-msgstr "✏ Напишите вопрос ассистенту"
 
 # V0.8.3 — text-ask window header label (the ✏ chip above opens it).
 msgid "Write a question for the assistant"
@@ -1191,44 +725,14 @@ msgstr "Мастер настройки"
 msgid "Run setup wizard"
 msgstr "Запустить мастер настройки"
 
-msgid "Re-run the guided first-time setup."
-msgstr "Повторно пройти мастер первичной настройки."
-
 msgid "Step {} of 7"
 msgstr "Шаг {} из 7"
-
-msgid "Choose how suflyor runs"
-msgstr "Выберите режим работы suflyor"
-
-msgid "Cloud — Groq STT + Claude bridge (fast start, needs keys + internet)"
-msgstr "Облако — Groq STT + мост Claude (быстрый старт, нужны ключи и интернет)"
-
-msgid "Fully local — local AI + local STT (nothing leaves the machine, needs models)"
-msgstr "Полностью локально — локальный AI + локальный STT (ничего не уходит наружу, нужны модели)"
-
-msgid "Mixed — e.g. local STT + cloud AI (configure manually)"
-msgstr "Смешанно — например локальный STT + облачный AI (настроить вручную)"
-
-msgid "Now: cloud recognition + cloud answers."
-msgstr "Сейчас: облачное распознавание + облачные ответы."
-
-msgid "Now: local recognition + local answers. Audio stays on this machine."
-msgstr "Сейчас: локальное распознавание + локальные ответы. Аудио не покидает этот компьютер."
-
-msgid "Now: mixed. Tune providers in Settings."
-msgstr "Сейчас: смешанно. Настройте провайдеров в Settings."
 
 msgid "AI"
 msgstr "AI"
 
-msgid "Configure the AI provider in Settings; here we just confirm it answers."
-msgstr "Настройте AI-провайдера в Settings; здесь только проверяем, что он отвечает."
-
 msgid "Test AI"
 msgstr "Проверить AI"
-
-msgid "Configure STT in Settings; here we confirm it connects."
-msgstr "Настройте STT в Settings; здесь проверяем подключение."
 
 msgid "Test STT"
 msgstr "Проверить STT"
@@ -1239,20 +743,8 @@ msgstr "Запишет 3 секунды. Говорите во время тес
 msgid "Record test"
 msgstr "Записать тест"
 
-msgid "Needed to hear the other side. Plays a short test tone and checks loopback."
-msgstr "Нужно, чтобы слышать собеседника. Проигрывает короткий тон и проверяет loopback."
-
 msgid "Check system audio"
 msgstr "Проверить системный звук"
-
-msgid "Overlay & stealth"
-msgstr "Окна Суфлёра и скрытность"
-
-msgid "Hide overlay from screen capture"
-msgstr "Скрывать окна Суфлёра от захвата экрана"
-
-msgid "Press Print Screen or open a screen-share preview — the overlay should vanish from the capture but stay on your screen. We can't verify stealth automatically."
-msgstr "Нажмите Print Screen или откройте предпросмотр screen-share — окна Суфлёра должны исчезнуть из захвата, но остаться на вашем экране. Автоматически проверить скрытность нельзя."
 
 msgid "Done"
 msgstr "Готово"
@@ -1281,20 +773,14 @@ msgstr "Далее"
 msgid "Help"
 msgstr "Справка"
 
-msgid "Help — icons, hotkeys & gestures"
-msgstr "Справка — иконки, хоткеи и жесты"
-
 msgid "How it works"
 msgstr "Как это работает"
 
 msgid "1) Start capture — press start on the bar. The mic records you; system audio records the other side."
 msgstr "1) Начните захват — нажмите «старт» на панели. Микрофон записывает вас, системный звук — собеседника."
 
-msgid "2) Get help — hold ask or grab for a voice question, or press F9. Answers appear in tiles."
-msgstr "2) Получайте помощь — удерживайте «спросить» или «захватить» для голосового вопроса, либо нажмите F9. Ответы появляются в тайлах."
-
-msgid "3) Stop and review — press stop to end the session; open the session archive (F7) for transcripts and summaries."
-msgstr "3) Остановите и посмотрите — нажмите стоп для завершения сессии, затем откройте архив сессий (F7) для стенограмм и сводок."
+msgid "3) Stop and review — click the timer with the stop icon ('Stop session'), then open the session archive (F7) for transcripts and summaries."
+msgstr "3) Завершите сессию и просмотрите итоги — нажмите таймер со значком остановки («Остановить сессию»), затем откройте архив сессий (F7) со стенограммами и сводками."
 
 msgid "Bar icons"
 msgstr "Значки панели"
@@ -1305,50 +791,11 @@ msgstr "Перетащить = двигать бар; показывает со�
 msgid "Drag to move the window"
 msgstr "Перетащите, чтобы переместить окно"
 
-msgid "Toggle continuous mic capture (your voice)"
-msgstr "Постоянный захват микрофона (ваш голос)"
-
-msgid "Toggle continuous system-audio capture (the other side)"
-msgstr "Постоянный захват системного звука (собеседник)"
-
-msgid "Hold to record your voice → AI answer (swipe up to lock)"
-msgstr "Удержание = запись голоса → ответ AI (смахните вверх, чтобы закрепить)"
-
-msgid "Hold to capture system audio → AI answer (swipe up to lock)"
-msgstr "Удержание = запись системного звука → ответ AI (смахните вверх, чтобы закрепить)"
-
-msgid "Start / stop the live session (transcript + auto-tips)"
-msgstr "Старт/стоп живой сессии (распознавание + авто-подсказки)"
-
-msgid "Session cost (cloud only; local is free)"
-msgstr "Стоимость сессии (только облако; локально бесплатно)"
-
-msgid "Stealth: hide the overlay from screen capture / share"
-msgstr "Скрытность: скрыть окна Суфлёра от захвата/шеринга экрана"
-
-msgid "Aggressive auto-tiles (answer more often)"
-msgstr "Агрессивные авто-тайлы (отвечать чаще)"
-
 msgid "Write a question as text"
 msgstr "Написать вопрос текстом"
 
-msgid "New tile from the last line / a manual question"
-msgstr "Новый тайл из последней строки / ручной вопрос"
-
-msgid "Screenshot a region → AI vision answer"
-msgstr "Скриншот области → ответ vision-AI"
-
 msgid "This help (also F1)"
 msgstr "Эта справка (также F1)"
-
-msgid "Restart the overlay (two-step; settings survive)"
-msgstr "Перезапуск Суфлёра (в 2 шага; настройки сохраняются)"
-
-msgid "Quit (two-step)"
-msgstr "Выход (в 2 шага)"
-
-msgid "This help"
-msgstr "Эта справка"
 
 msgid "Record gestures"
 msgstr "Жесты записи"
@@ -1402,9 +849,6 @@ msgstr "Вернуть размер тайла"
 msgid "Maximize tile"
 msgstr "Развернуть тайл"
 
-msgid "search transcript + AI answers…"
-msgstr "поиск по стенограмме и ответам AI…"
-
 msgid "The session archive is unavailable."
 msgstr "Архив сессий недоступен."
 
@@ -1417,15 +861,8 @@ msgstr "Нет совпадений для «{}»."
 msgid "Esc to close · Enter / click to open a session"
 msgstr "Esc — закрыть · Enter / клик — открыть сессию"
 
-# Phase 3b.3 — 💭 Memory tab (settings_panel.slint). "Delete" reuses the existing msgid.
-msgid "💭 Memory"
-msgstr "💭 Память"
-
 msgid "Memory"
 msgstr "Память"
-
-msgid "Personal memory: approve useful fragments from your sessions. Only APPROVED items are mixed into new AI requests. Stored locally; nothing leaves your machine."
-msgstr "Персональная память: одобряйте полезные фрагменты из своих сессий. В новые запросы к AI подмешиваются ТОЛЬКО одобренные. Хранится локально; ничего не уходит с вашего компьютера."
 
 # --- v0.16.0: personal knowledge base (manual facts + Summary reference) ---
 msgid "Your fact: project, term, names…"
@@ -1443,8 +880,8 @@ msgstr "Извлечь из последних сессий"
 msgid "Suggestions ({})"
 msgstr "Предложения ({})"
 
-msgid "No suggestions yet — click Extract after a session."
-msgstr "Пока нет предложений — нажмите «Извлечь» после сессии."
+msgid "No suggestions yet — click 'Extract from recent sessions' after a session."
+msgstr "Пока нет предложений — после сессии нажмите «Извлечь из последних сессий»."
 
 msgid "Approve"
 msgstr "Принять"
@@ -1467,9 +904,6 @@ msgstr "Озвучивание выделенного текста (Shift+Alt+1)
 msgid "Voice:"
 msgstr "Голос:"
 
-msgid "No voices installed yet."
-msgstr "Голоса ещё не установлены."
-
 msgid "Speed:"
 msgstr "Скорость:"
 
@@ -1485,23 +919,8 @@ msgstr "Устанавливаю…"
 msgid "Install voices"
 msgstr "Установить голоса"
 
-msgid "Text recognition (OCR) — Shift+Alt+2 reads on-screen text aloud / copies it via a local engine. Without it, OCR falls back to the slower vision model."
-msgstr "Распознавание текста (OCR) — Shift+Alt+2 озвучивает текст с экрана / копирует его локальным движком. Без него OCR откатывается на более медленную модель зрения."
-
-msgid "Install text recognition (OCR)"
-msgstr "Установить распознавание текста (OCR)"
-
-msgid "Text recognition (OCR) - Apple Vision is built into macOS; no download is required."
-msgstr "Распознавание текста (OCR) - Apple Vision встроен в macOS; скачивание не требуется."
-
-msgid "Text recognition is installed."
-msgstr "Распознавание текста установлено."
-
 msgid "Listening mode — don't show tiles"
 msgstr "Режим прослушивания — не показывать тайлы"
-
-msgid "Mutes auto-detected AI tiles so you can record and just listen. Manual asks (F6/F9), the knowledge base, and summaries still appear."
-msgstr "Глушит авто-тайлы (ответы на распознанные вопросы), чтобы можно было записывать и просто слушать. Ручные запросы (F6/F9), база знаний и сводки по-прежнему показываются."
 
 msgid "Components"
 msgstr "Компоненты"
@@ -1511,9 +930,6 @@ msgstr "установлено"
 
 msgid "not installed"
 msgstr "не установлено"
-
-msgid "What's installed for offline AI — one place to see what's ready. Each piece is downloaded on demand from its own tab (shown below each item)."
-msgstr "Что установлено для офлайн-AI — в одном месте видно, что готово. Каждый компонент скачивается по необходимости в своей вкладке (показана под каждым пунктом)."
 
 msgid "Install"
 msgstr "Установить"
@@ -1553,9 +969,6 @@ msgstr "Озвучка"
 msgid "Stop reading aloud"
 msgstr "Остановить озвучку"
 
-msgid "Recording"
-msgstr "Запись"
-
 msgid "Storage"
 msgstr "Хранение"
 
@@ -1567,26 +980,14 @@ msgstr "Личная память"
 msgid "Mode"
 msgstr "Режим"
 
-msgid "Overlay"
-msgstr "Окна Суфлёра"
-
 msgid "Cloud"
 msgstr "Облако"
-
-msgid "Groq STT + Claude bridge — fast start, needs keys + internet."
-msgstr "Groq STT + мост Claude — быстрый старт, нужны ключи + интернет."
 
 msgid "Fully local"
 msgstr "Полностью локально"
 
-msgid "Local AI + local STT — nothing leaves the machine, needs models."
-msgstr "Локальный AI + локальный STT — ничего не покидает ПК, нужны модели."
-
 msgid "Mixed"
 msgstr "Смешанный"
-
-msgid "e.g. local STT + cloud AI — configure manually."
-msgstr "напр. локальный STT + облачный AI — настроить вручную."
 
 # === Hotkeys tab — full list (added F1/F7/Shift+F8/Ctrl+F8/Shift+Alt+1..3) ===
 
@@ -1630,24 +1031,6 @@ msgstr "Клавиша"
 msgid "Action"
 msgstr "Действие"
 
-msgid "Session archive: browse and search past calls (also F7)"
-msgstr "Архив сессий: просмотр и поиск прошлых созвонов (также F7)"
-
-msgid "Call summary: digest (participants, topics, decisions, tasks)"
-msgstr "Сводка созвона: конспект (участники, темы, решения, задачи)"
-
-msgid "Ask AI escalated to the smart cloud model (one-shot)"
-msgstr "Спросить AI с эскалацией к умной облачной модели (разово)"
-
-msgid "Session archive (browse and search)"
-msgstr "Архив сессий (просмотр и поиск)"
-
-msgid "Screenshot → translate text (AI vision)"
-msgstr "Скриншот → перевод текста (Vision-AI)"
-
-msgid "Read the selected text aloud (TTS)"
-msgstr "Озвучить выделенный текст (TTS)"
-
 msgid "Pause / resume reading aloud"
 msgstr "Пауза / продолжение озвучки"
 
@@ -1663,14 +1046,8 @@ msgstr "Скорость чтения"
 msgid "Local model and vision"
 msgstr "Локальная модель и зрение"
 
-msgid "Local AI model: Faster (4B) or Smarter (12B) — choose in Settings → AI. If the local AI drops, the overlay restarts the server itself. Recognition language (Auto/Russian/English) is in the same place, under Settings → Speech. Vision (F8) runs on the 4B model."
-msgstr "Локальная AI-модель: Быстрее (4B) или Умнее (12B) — выбор в Настройки -> AI. Если локальный AI отвалится, Суфлёр перезапустит сервер сам. Язык распознавания (Авто/Русский/English) — там же, в Настройки -> Речь. Зрение (F8) работает на модели 4B."
-
 msgid "Read-aloud · recognition · compact mode"
 msgstr "Озвучка · распознавание · компактный режим"
-
-msgid "Shift+Alt+1 — read the selected text aloud; Shift+Alt+2 — OCR text from a screen region and read it; Shift+Alt+3 — pause/resume. Voices (TTS) and the recognition engine (OCR) install with a button in Settings → AI (TTS and Vision). Compact \"reader\" mode: the collapse chip on the bar turns it into a tiny read-aloud-only pill. \"Listening mode\" (Settings → Auto-tiles) mutes auto-tiles so you can just record and listen."
-msgstr "Shift+Alt+1 — озвучить выделенный текст; Shift+Alt+2 — распознать текст с области экрана (OCR) и озвучить; Shift+Alt+3 — пауза/продолжение. Голоса (TTS) и движок распознавания (OCR) ставятся кнопкой в Настройки -> AI (TTS и Vision). Компактный режим «читалки»: чип свернуть на баре превращает бар в маленькую пилюлю только для озвучки. «Режим прослушивания» (Настройки -> Авто-тайлы) глушит авто-тайлы, чтобы просто записывать и слушать."
 
 msgid "Preparing…"
 msgstr "Подготовка…"
@@ -1714,9 +1091,6 @@ msgstr "Распознавание текста уже установлено"
 msgid "Text recognition installed"
 msgstr "Распознавание текста установлено"
 
-msgid "Couldn't install text recognition — check the connection and retry."
-msgstr "Не удалось установить распознавание — проверьте интернет и повторите."
-
 msgid "Couldn't install — check the connection and retry."
 msgstr "Не удалось установить — проверьте интернет и повторите."
 
@@ -1745,12 +1119,6 @@ msgstr "Очистить одобренную память"
 
 msgid "Tap again — clear approved memory"
 msgstr "Ещё раз — очистить одобренную память"
-
-msgid "waiting for AI"
-msgstr "ждёт AI"
-
-msgid "cleaned by AI"
-msgstr "подчищено AI"
 
 msgid "cleaned"
 msgstr "почищено"
@@ -1812,30 +1180,11 @@ msgstr "Hermes"
 msgid "Hermes — bridge (agent reads suflyor)"
 msgstr "Hermes — мост (агент читает suflyor)"
 
-msgid "Let a LOCAL Hermes agent read your calls, memory and profiles over a loopback API. Off by default; localhost-only; needs the token below."
-msgstr "Разрешите ЛОКАЛЬНОМУ Hermes-агенту читать ваши созвоны, память и профили по loopback-API. Выключено по умолчанию; только localhost; нужен токен ниже."
-
 msgid "Bridge for Hermes"
 msgstr "Мост для Hermes"
 
-msgid "Status:"
-msgstr "Статус:"
-
-msgid "Token (the install button below writes it into Hermes automatically):"
-msgstr "Токен (кнопка установки ниже сама пропишет его в Hermes):"
-
-# ТЗ 2026-07-10 — установка плагина ТОЛЬКО из приложения (без zip/скриптов)
-msgid "One click installs the agent plugin into the Hermes on THIS machine (files + token + enable). Then restart Hermes."
-msgstr "Один клик ставит плагин в Hermes на ЭТОЙ машине (файлы + токен + включение). После — перезапустите Hermes."
-
-msgid "Install plugin into Hermes"
-msgstr "Установить плагин в Hermes"
-
 msgid "Hermes — API (suflyor asks the agent)"
 msgstr "Hermes — API (suflyor спрашивает агента)"
-
-msgid "Point at the local Hermes API server to prepare a call profile with the agent (it can research). Slow, agentic — never used for live answers."
-msgstr "Укажите локальный Hermes API-сервер, чтобы агент подготовил профиль созвона (он умеет ресёрчить). Медленно, агентно — НЕ используется для живых ответов."
 
 msgid "Hermes API URL:"
 msgstr "Hermes API URL:"
@@ -1846,47 +1195,22 @@ msgstr "Ключ Hermes API (API_SERVER_KEY):"
 msgid "paste API_SERVER_KEY then Save"
 msgstr "вставьте API_SERVER_KEY и Сохраните"
 
-msgid "Test"
-msgstr "Проверить"
-
-msgid "Prepare a call profile — describe the call, the agent researches it into an active profile:"
-msgstr "Подготовить профиль созвона — опишите созвон, агент соберёт из этого активный профиль:"
-
 msgid "Prepare a call profile"
 msgstr "Подготовить профиль созвона"
 
 msgid "e.g. Interview at Acme, Senior SRE role"
 msgstr "напр. Собес в Acme, роль Senior SRE"
 
-msgid "Prepare profile (Hermes)"
-msgstr "Подготовить профиль (Hermes)"
-
 # ТЗ 2026-07-09 — Hermes bridge bind host (Tailscale / remote Hermes)
 msgid "Bind host — leave 127.0.0.1 for a Hermes on THIS machine; for a REMOTE Hermes over Tailscale set this machine's Tailscale IP (100.x) or 0.0.0.0:"
 msgstr "Хост привязки — оставьте 127.0.0.1, если Hermes на ЭТОЙ машине; для УДАЛЁННОГО Hermes через Tailscale впишите Tailscale-IP этой машины (100.x) или 0.0.0.0:"
 
-msgid "[!] Bridge is reachable off this machine — keep it on a trusted network (Tailscale) only; the token is required."
-msgstr "Мост доступен с других машин — держите его только в доверенной сети (Tailscale); токен обязателен."
-
 msgid "Port:"
 msgstr "Порт:"
-
-# 2026-07-10 — авто-настройка ключа Hermes API (тестер не знает, где взять ключ)
-msgid "Don't know the key? For a Hermes on THIS machine the button below enables its API server, creates the key and fills it in here. Then restart Hermes."
-msgstr "Не знаете, где взять ключ? Для Hermes на ЭТОЙ машине кнопка ниже сама включит его API-сервер, создаст ключ и впишет его сюда. После — перезапустите Hermes."
-
-msgid "Get the key from local Hermes"
-msgstr "Взять ключ из локального Hermes"
 
 # 2026-07-10 — сценарий использования Hermes-вкладки («после добавления не ясен»)
 msgid "What you get after setup"
 msgstr "Что даёт после настройки"
-
-msgid "1) Ask your Hermes agent about your calls in ITS chat, in plain words: \"what was my last call about?\", \"search my calls for the salary talk\", \"suggest to suflyor memory that Timur is the team lead\", \"prepare a call profile for an interview at Acme and set it active\"."
-msgstr "1) Спрашивайте своего Hermes-агента о созвонах в ЕГО чате, обычными словами: «что было на последнем созвоне?», «найди в созвонах, где обсуждали зарплату», «предложи в память suflyor, что Тимур — тимлид», «подготовь профиль для собеса в Acme и сделай активным»."
-
-msgid "2) Right here below: type a brief into «Prepare a call profile» — the agent researches it and activates the profile, and live answers on the call will use it."
-msgstr "2) Прямо здесь ниже: впишите вводную в «Подготовить профиль созвона» — агент ресёрчит её, включает профиль, и живые ответы на созвоне будут его использовать."
 
 msgid "Auto"
 msgstr "Авто"
@@ -1932,20 +1256,8 @@ msgstr "suflyor (Slint)"
 msgid "tile"
 msgstr "Тайл"
 
-msgid "suflyor — capture"
-msgstr "suflyor — захват"
-
 msgid "suflyor — Replay"
 msgstr "suflyor — Повтор"
-
-msgid "F4 — KB palette"
-msgstr "F4 — палитра базы знаний"
-
-msgid "suflyor recover session (Slint)"
-msgstr "Восстановление сессии suflyor (Slint)"
-
-msgid "suflyor text ask (Slint)"
-msgstr "Текстовый вопрос suflyor (Slint)"
 
 msgid "Retry"
 msgstr "Повторить"
@@ -1956,9 +1268,6 @@ msgstr "Локальный AI выгружен"
 # Tight 1280px bar state while tile actions are visible.
 msgid "AI off"
 msgstr "AI выкл."
-
-msgid "Current"
-msgstr "Текущий"
 
 msgid "Unlocked"
 msgstr "Разблокировано"
@@ -1971,13 +1280,6 @@ msgstr "Выгрузить локальный AI"
 
 msgid "Lock mode"
 msgstr "Режим блокировки"
-
-# RC13 — direct AI providers.
-msgid "Custom OpenAI-compatible bridge"
-msgstr "Настраиваемый OpenAI-совместимый мост"
-
-msgid "Local OpenAI-compatible"
-msgstr "Локальный OpenAI-совместимый"
 
 msgid "OpenAI API (Responses)"
 msgstr "OpenAI API (Responses)"
@@ -2028,9 +1330,6 @@ msgstr "Кэширование промпта"
 msgid "AI providers"
 msgstr "AI-провайдеры"
 
-msgid "Codex safe models (ChatGPT, experimental)"
-msgstr "Безопасные модели Codex (ChatGPT, экспериментально)"
-
 msgid "Codex safe models (ChatGPT subscription)"
 msgstr "Безопасные модели Codex (подписка ChatGPT)"
 
@@ -2079,9 +1378,6 @@ msgstr "OpenCode или Qwen настраиваются как пользова�
 msgid "Engine:"
 msgstr "Движок:"
 
-msgid "EXPERIMENTAL: TeraTTSv2 neural engine (44.1 kHz, RU+EN). Downloads ~370 MB of ONNX graphs on demand. Read-aloud falls back to Piper while Tera is not installed or unavailable; speaker separation always uses Piper."
-msgstr "ЭКСПЕРИМЕНТАЛЬНО: нейродвижок TeraTTSv2 (44,1 кГц, RU+EN). По запросу скачивает ~370 МБ ONNX-графов. Пока Tera не установлена или недоступна, озвучка автоматически работает через Piper; определение говорящих всегда использует Piper."
-
 msgid "Install model"
 msgstr "Установить модель"
 
@@ -2100,38 +1396,20 @@ msgstr "Не удалось установить модель — проверь
 msgid "Reasoning effort:"
 msgstr "Уровень рассуждений:"
 
-msgid "Vision uses the OpenAI API connection and model configured in AI providers above. Text and vision selections remain independent."
-msgstr "Для зрения используются подключение и модель OpenAI API, настроенные выше в разделе AI-провайдеров. Модели текста и зрения выбираются независимо."
-
-msgid "Vision uses the Anthropic API connection and model configured in AI providers above. Text and vision selections remain independent."
-msgstr "Для зрения используются подключение и модель Anthropic API, настроенные выше в разделе AI-провайдеров. Модели текста и зрения выбираются независимо."
-
 msgid "Choose a separate Codex model for screenshots. Only account models that advertise image input are shown."
 msgstr "Выберите отдельную модель Codex для скриншотов. Показаны только модели аккаунта с заявленной поддержкой изображений."
 
 msgid "No image-capable Codex account models are available. Sign in or refresh."
 msgstr "Нет доступных моделей Codex аккаунта с поддержкой изображений. Войдите или обновите список."
 
-msgid "Same as text model above (unavailable)"
-msgstr "Как у текстовой модели выше (недоступно)"
-
-msgid "Same as text model is unavailable because the selected text model does not declare image input. Choose another Vision provider or model."
-msgstr "Режим «как у текстовой модели» недоступен: выбранная текстовая модель не заявляет поддержку изображений. Выберите другого провайдера или модель для зрения."
+msgid "The 'Same as the answer model' option is unavailable because the selected answer model does not declare image input. Choose another screenshot provider or model."
+msgstr "Вариант «Та же, что отвечает» недоступен: выбранная модель для ответов не заявляет поддержку изображений. Выберите другого провайдера или модель для скриншотов."
 
 msgid "Preparing voice..."
 msgstr "Подготовка голоса..."
 
 msgid "Reading aloud"
 msgstr "Озвучивание"
-
-msgid "Resume"
-msgstr "Продолжить"
-
-msgid "Pause"
-msgstr "Пауза"
-
-msgid "suflyor"
-msgstr "suflyor"
 
 msgid "Suflyor for macOS"
 msgstr "Suflyor для macOS"
@@ -2219,20 +1497,11 @@ msgstr "Выбор микрофона. Список формируется из 
 msgid "Stored in a user-only local credentials file and excluded from configuration exports."
 msgstr "Хранится в локальном файле учётных данных, доступном только пользователю, и не включается в экспорт конфигурации."
 
-msgid "Recognition language — Auto detects per phrase with Whisper or Groq."
-msgstr "Язык распознавания — автоопределение для каждой фразы через Whisper или Groq."
-
 msgid "Personal memory is stored locally. Approved items are added to new AI requests and may be sent to your configured AI provider."
 msgstr "Личная память хранится локально. Одобренные элементы добавляются в новые AI-запросы и могут отправляться настроенному AI-провайдеру."
 
 msgid "Read selected text (Shift+Option+1) or a screen region (Shift+Option+2) aloud. Pause or resume with Shift+Option+3."
 msgstr "Озвучивайте выделенный текст (Shift+Option+1) или область экрана (Shift+Option+2). Пауза и продолжение — Shift+Option+3."
-
-msgid "Choose the text and Vision providers separately in Settings → AI providers. Gemma 4B is text-only and cannot analyse screenshots. Speech recognition is configured in Settings → STT."
-msgstr "Выбирайте провайдеры текста и Vision отдельно в разделе «Настройки → AI-провайдеры». Gemma 4B работает только с текстом и не анализирует снимки экрана. Распознавание речи настраивается в разделе «Настройки → STT»."
-
-msgid "Choose the text and Vision providers separately in Settings → AI. Gemma 4B is text-only and cannot analyse screenshots. Speech recognition is configured in Settings → STT."
-msgstr "Выбирайте провайдеры текста и Vision отдельно в разделе «Настройки → AI». Gemma 4B работает только с текстом и не анализирует снимки экрана. Распознавание речи настраивается в разделе «Настройки → STT»."
 
 msgid "Shift+Option+1 — read the selected text aloud; Shift+Option+2 — recognize a screen region with Apple Vision and read it; Shift+Option+3 — pause/resume. Voices are configured in Settings → TTS; Apple Vision is built into macOS. Compact reader mode uses the collapse chip on the bar. Listening mode in Settings → Auto-tiles mutes automatic tiles."
 msgstr "Shift+Option+1 — озвучить выделенный текст; Shift+Option+2 — распознать область экрана через Apple Vision и озвучить её; Shift+Option+3 — пауза или продолжение. Голоса настраиваются в разделе «Настройки → TTS»; Apple Vision встроен в macOS. Компактный режим чтения включается кнопкой сворачивания на панели. Режим прослушивания в разделе «Настройки → Авто-тайлы» отключает автоматические тайлы."
@@ -2242,9 +1511,6 @@ msgstr "Сохранённый провайдер Codex недоступен в 
 
 msgid "The saved Codex Vision provider is unavailable on macOS. Choose another Vision provider."
 msgstr "Сохранённый провайдер Codex Vision недоступен в macOS. Выберите другой провайдер Vision."
-
-msgid "The saved GigaAM engine is unavailable on macOS. Choose Cloud or External Whisper."
-msgstr "Сохранённый движок GigaAM недоступен в macOS. Выберите облачный режим или внешний Whisper."
 
 msgid "Control+F8"
 msgstr "Control+F8"
@@ -2274,9 +1540,6 @@ msgstr "LFM2.5-8B-A1B MLX 4-bit"
 
 msgid "Download size: 4.52 GiB."
 msgstr "Размер загрузки: 4,52 ГиБ."
-
-msgid "[!] LFM Open License v1.0 has commercial-use conditions. Review the license before commercial use. Russian response quality is not guaranteed."
-msgstr "В LFM Open License v1.0 есть условия коммерческого использования. Перед коммерческим применением изучите лицензию. Качество ответов на русском языке не гарантируется."
 
 msgid "Downloading and verifying…"
 msgstr "Загрузка и проверка…"
@@ -2326,8 +1589,8 @@ msgstr "Gemma 4 26B-A4B VLM 2.6-бит (Текст + Vision)"
 msgid "Download size: 9.48 GiB (VLM: Text + Vision)."
 msgstr "Размер загрузки: 9,48 ГиБ (VLM: Текст + Vision)."
 
-msgid "Apache-2.0. Gemma 4 26B-A4B VLM (4B active) with MSQ 2.6-bit mixed-precision quantization. Supports vision/screenshot tasks under 'Same as text model'."
-msgstr "Apache-2.0. Gemma 4 26B-A4B VLM (4B активных параметров) с квантованием MSQ 2.6-бит. Поддерживает скриншоты в режиме «Как у текстовой модели»."
+msgid "Apache-2.0. Gemma 4 26B-A4B VLM (4B active) with MSQ 2.6-bit mixed-precision quantization. Supports vision/screenshot tasks under 'Same as the answer model'."
+msgstr "Apache-2.0. Gemma 4 26B-A4B VLM (4B активных параметров) с квантованием MSQ 2.6-бит. Поддерживает скриншоты в режиме «Та же, что отвечает»."
 
 msgid "Gemma 4 26B-A4B VLM 2.6-bit (Vision)"
 msgstr "Gemma 4 26B-A4B VLM 2.6-бит (Vision)"
@@ -2428,42 +1691,8 @@ msgstr "Удалить сессию"
 msgid "View transcript"
 msgstr "Открыть стенограмму"
 
-# Local engine choice and Strata (ADR-003, P4)
-msgid "Built-in engine (llama.cpp)"
-msgstr "Встроенный движок (llama.cpp)"
-
-msgid "Strata (Qwen3.8-Flash-Next)"
-msgstr "Strata (Qwen3.8-Flash-Next)"
-
-msgid "Other server (URL)"
-msgstr "Другой сервер (URL)"
-
-msgid "The built-in engine is not installed yet. The installer downloads llama.cpp, the recommended 12B model and the speech components; partial downloads resume."
-msgstr "Встроенный движок ещё не установлен. Установщик скачает llama.cpp, рекомендуемую модель 12B и компоненты речи; прерванные загрузки продолжаются."
-
-msgid "The built-in engine is installed but not in use."
-msgstr "Встроенный движок установлен, но сейчас не используется."
-
-msgid "Use the built-in engine"
-msgstr "Использовать встроенный движок"
-
-msgid "Gemma 4 E4B · 4.6 GiB · ~6 GiB VRAM"
-msgstr "Gemma 4 E4B · 4,6 ГиБ · ~6 ГиБ VRAM"
-
 msgid "Use"
 msgstr "Использовать"
-
-msgid "Gemma 4 12B · 6.3 GiB · ~9.5 GiB VRAM · recommended"
-msgstr "Gemma 4 12B · 6,3 ГиБ · ~9,5 ГиБ VRAM · рекомендуется"
-
-msgid "Gemma 4 26B-A4B · 9.8 GiB · ~12 GiB VRAM"
-msgstr "Gemma 4 26B-A4B · 9,8 ГиБ · ~12 ГиБ VRAM"
-
-msgid "A trusted local .gguf file; runs text-only"
-msgstr "Свой проверенный файл .gguf; работает только с текстом"
-
-msgid "Strata runs the large Qwen3.8-Flash-Next model on the graphics card and system RAM. It needs 48 GB of RAM, an NVIDIA RTX 20-series or newer card with 12 GB and about 80 GB of free disk. While the model loads (1-3 minutes) the PC can be slow."
-msgstr "Strata запускает большую модель Qwen3.8-Flash-Next на видеокарте и в оперативной памяти. Нужно от 48 ГБ RAM, видеокарта NVIDIA RTX 20-й серии или новее с 12 ГБ и около 80 ГБ свободного места. Пока модель загружается (1–3 минуты), ПК может подтормаживать."
 
 msgid "Strata engine · installed"
 msgstr "Движок Strata · установлен"
@@ -2483,12 +1712,6 @@ msgstr "Любой OpenAI-совместимый сервер, например 
 msgid "local URL — http://127.0.0.1:11434/v1 (Ollama)"
 msgstr "локальный URL — http://127.0.0.1:11434/v1 (Ollama)"
 
-msgid "Hide extra settings"
-msgstr "Скрыть дополнительные настройки"
-
-msgid "More settings…"
-msgstr "Дополнительные настройки…"
-
 msgid "Engine llama.cpp {}. The app checks it weekly and verifies a new build before replacing the current one."
 msgstr "Движок llama.cpp {}. Приложение раз в неделю ищет обновления и испытывает новую сборку, прежде чем заменить текущую."
 
@@ -2501,17 +1724,8 @@ msgstr "Движок llama.cpp. Приложение раз в неделю ищ
 msgid "Download model"
 msgstr "Скачать"
 
-msgid "Strata is the selected engine but is not answering. Press Start."
-msgstr "Strata выбрана движком, но не отвечает. Нажмите «Запустить»."
-
 msgid "Start"
 msgstr "Запустить"
-
-msgid "Find my Strata folder…"
-msgstr "Указать папку своей Strata…"
-
-msgid "Model tools: search the knowledge base"
-msgstr "Инструменты модели: поиск по базе знаний"
 
 msgid "Also search the web (DuckDuckGo)"
 msgstr "И поиск в интернете (DuckDuckGo)"
@@ -2521,9 +1735,6 @@ msgstr "Модель сама решает, когда искать; кажды�
 
 msgid "Looking for models on this PC…"
 msgstr "Ищу модели на этом ПК…"
-
-msgid "Already on this PC"
-msgstr "Уже есть на этом ПК"
 
 msgid "Search again"
 msgstr "Искать снова"
@@ -2587,9 +1798,6 @@ msgstr "Выберите модель"
 msgid "Connect by address…"
 msgstr "Подключить по адресу…"
 
-msgid "Fine tuning"
-msgstr "Тонкая настройка"
-
 msgid "Gemma 4 12B · 6.3 GB"
 msgstr "Gemma 4 12B · 6,3 ГБ"
 
@@ -2618,8 +1826,8 @@ msgid "Strata folder…"
 msgstr "Папка Strata…"
 
 
-msgid "The model looks things up when it needs to. Web queries go to DuckDuckGo."
-msgstr "Модель ищет информацию, когда это нужно. Веб-запросы отправляются в DuckDuckGo."
+msgid "Fast answers can search the web and read public pages when enabled: at most two lookups with a 15-second lookup budget. The model decides when to look up; web queries go to DuckDuckGo. A server without tool support answers without web lookup."
+msgstr "Быстрые ответы тоже могут искать в интернете и читать публичные страницы, если поиск включён: до двух обращений с общим бюджетом поиска 15 секунд. Модель решает, когда искать; запросы отправляются в DuckDuckGo. Сервер без поддержки инструментов отвечает без веб-поиска."
 
 msgid "What the model can do"
 msgstr "Возможности модели"
@@ -2664,20 +1872,11 @@ msgstr "Экспериментальный нейроголос TeraTTS v2 (RU �
 msgid "Version: {}"
 msgstr "Версия: {}"
 
-msgid "The file includes your API keys. Keep it private. Import replaces the current settings."
-msgstr "Файл содержит ваши API-ключи. Храните его в тайне. Импорт заменяет текущие настройки."
-
 msgid "Pick the microphone. The list comes from Windows."
 msgstr "Выберите микрофон. Список устройств предоставлен Windows."
 
-msgid "The knowledge base ships with the app: glossary, commands and patterns."
-msgstr "База знаний входит в приложение: глоссарий, команды и шаблоны."
-
 msgid "Screenshot → AI explains it"
 msgstr "Скриншот → AI объясняет содержимое"
-
-msgid "Session journals store transcripts and AI answers for the archive (F7). When the disk limit is exceeded, the oldest journals are deleted even if the count limit is not reached:"
-msgstr "Журналы сессий хранят стенограммы и ответы AI для архива (F7). При превышении лимита места старейшие журналы удаляются, даже если лимит количества не достигнут:"
 
 msgid "Edited by AI"
 msgstr "Отредактировано AI"
@@ -2708,7 +1907,7 @@ msgid "Changes apply at the next capture start; restart an active session."
 msgstr "Изменения — со следующего захвата; текущую сессию перезапустите."
 
 msgid "Get key from local Hermes"
-msgstr "Взять ключ из локального Hermes"
+msgstr "Ключ из локального Hermes"
 
 msgid "Import replaces the current settings."
 msgstr "Импорт заменяет текущие настройки."
@@ -2755,14 +1954,8 @@ msgstr "Внимание:"
 msgid "e.g. SRE interview; brief answers, AWS examples."
 msgstr "Например: SRE; кратко, примеры AWS."
 
-msgid "how, why, what is, explain"
-msgstr "как, почему, что такое, объясни"
-
 msgid "not checked"
 msgstr "не проверен"
-
-msgid "{} entries: glossary, commands and patterns. They ship with the app."
-msgstr "{} записей: глоссарий, команды и шаблоны. Входят в приложение."
 
 msgid "Entries: {}. Glossary, commands and patterns ship with the app."
 msgstr "Записей: {}. Глоссарий, команды и шаблоны входят в приложение."
@@ -2809,14 +2002,8 @@ msgstr "«Сформировать» отправляет сохранённое
 msgid "Suflyor — screenshot"
 msgstr "Суфлёр — скриншот"
 
-msgid "Translation · click to switch to description"
-msgstr "Перевод · нажмите, чтобы переключить на описание"
-
 msgid "Practice: answer and a short review"
 msgstr "Тренировка: ответ и краткий разбор"
-
-msgid "Description · click to switch to translation"
-msgstr "Описание · нажмите, чтобы переключить на перевод"
 
 msgid "Drag to move the bar; its colour shows the state"
 msgstr "Перетащите, чтобы сдвинуть панель; цвет показывает состояние"
@@ -2899,17 +2086,11 @@ msgstr "Выберите, как будет работать Суфлёр"
 msgid "Speech recognition and AI in the cloud: a quick start, needs keys and internet."
 msgstr "Распознавание речи и AI в облаке: быстрый старт, нужны ключи и интернет."
 
-msgid "AI and speech recognition on this PC: nothing leaves it, models need downloading."
-msgstr "AI и распознавание речи на этом ПК: ничего не уходит наружу, модели нужно скачать."
-
 msgid "For example, speech on this PC and AI in the cloud; set up in Settings."
 msgstr "Например, речь на этом ПК, а AI в облаке; настраивается в Настройках."
 
 msgid "The AI is chosen in Settings → AI providers. Here we only check that it answers."
 msgstr "AI выбирается в Настройках → AI-провайдеры. Здесь только проверяем, что он отвечает."
-
-msgid "Install or finish the built-in AI"
-msgstr "Установить или докачать встроенный AI"
 
 msgid "Speech recognition is set up in Settings → STT. Here we only check the connection."
 msgstr "Распознавание речи настраивается в Настройках → STT. Здесь только проверяем подключение."
@@ -2919,9 +2100,6 @@ msgstr "Нужен, чтобы записывать собеседника. Пр
 
 msgid "Hide Suflyor windows from screen capture"
 msgstr "Прятать окна Суфлёра от захвата экрана"
-
-msgid "Press Print Screen or open a screen-share preview: Suflyor windows should disappear from the capture and stay on your screen. This cannot be checked automatically."
-msgstr "Нажмите Print Screen или откройте предпросмотр демонстрации экрана: окна Суфлёра должны пропасть из снимка и остаться на вашем экране. Автоматически это не проверить."
 
 msgid "glossary"
 msgstr "глоссарий"
@@ -2953,9 +2131,6 @@ msgstr "Когда включено: нажмите Print Screen или откр
 msgid "2) Get help — hold ask to ask by voice, hold grab to send the other side's last words to AI, or press F9. Answers appear in tiles."
 msgstr "2) Получите помощь: удерживайте «спросить», чтобы спросить голосом, или «захватить», чтобы отправить AI последние слова собеседника, либо нажмите F9. Ответы появляются в тайлах."
 
-msgid "Up/Down — select · Enter — open · Esc — close"
-msgstr "↑↓ — выбрать · Enter — открыть · Esc — закрыть"
-
 msgid "F8 options"
 msgstr "Параметры F8"
 
@@ -2983,8 +2158,8 @@ msgstr "Почти готово: проверьте отмеченное"
 msgid "Fast answers for calls and interviews"
 msgstr "Быстрые ответы для созвонов и собеседований"
 
-msgid "A one-line answer, then three to five points with context; terms under the answer open their definitions."
-msgstr "Сначала ответ одной строкой, затем 3–5 пунктов с контекстом; термины под ответом открывают определения."
+msgid "A one-line answer, then two or three relevant points; terms under the answer open their definitions."
+msgstr "Сначала ответ одной строкой, затем 2–3 пункта по делу; термины под ответом открывают определения."
 
 msgid "#{}"
 msgstr "№{}"
@@ -3028,8 +2203,8 @@ msgstr "Средний"
 msgid "High"
 msgstr "Высокий"
 
-msgid "Sent with every request. «Off» makes thinking models such as Gemini answer without reasoning first; a server that does not know the setting may reject requests — choose «Model default» then."
-msgstr "Передаётся с каждым запросом. «Выключено» заставляет думающие модели вроде Gemini отвечать без предварительных рассуждений; сервер, который не знает этой настройки, может отклонять запросы — тогда выберите «По умолчанию модели»."
+msgid "Sent with every request. «Off — answer at once» makes thinking models such as Gemini answer without reasoning first; a server that does not know the setting may reject requests — choose «Model default» then."
+msgstr "Передаётся с каждым запросом. «Выключено — отвечать сразу» заставляет думающие модели вроде Gemini отвечать без предварительных рассуждений; сервер, который не знает этой настройки, может отклонять запросы — тогда выберите «По умолчанию модели»."
 
 msgid "Models on this PC"
 msgstr "Модели на этом ПК"
@@ -3040,14 +2215,11 @@ msgstr "Скачайте модели заранее. Ответы остану�
 msgid "Use for answers"
 msgstr "Использовать для ответов"
 
-msgid "Downloaded. Choose «Model on this PC» → «Use for answers» to answer with it."
-msgstr "Загружено. Выберите «Модель на этом ПК» → «Использовать для ответов», чтобы отвечать с её помощью."
-
 msgid "Add Vision to Strata"
 msgstr "Добавить Vision в Strata"
 
-msgid "Optional 907 MB encoder for Qwen3.8-Flash-Next. Uses the CPU, not extra GPU memory. No second language model. Downloading does not change F8."
-msgstr "Необязательный энкодер на 907 МБ для Qwen3.8-Flash-Next. Работает на CPU, не занимает дополнительную видеопамять. Вторая языковая модель не нужна. Загрузка не меняет F8."
+msgid "Optional 907 MB encoder for Qwen3.8-Flash-Next. CUDA builds prefer the GPU when supported, with CPU fallback. No second language model. Downloading does not change F8."
+msgstr "Необязательный энкодер на 907 МБ для Qwen3.8-Flash-Next. Сборка с CUDA использует видеокарту, если движок это поддерживает, иначе — CPU. Вторая языковая модель не нужна. Загрузка не меняет F8."
 
 msgid "First install or select a compatible Strata folder in AI providers. The image helper must be present."
 msgstr "Сначала установите или выберите совместимую папку Strata в AI-провайдерах. Нужна утилита обработки изображений."
@@ -3063,3 +2235,87 @@ msgstr "Не скачано"
 
 msgid "Enable for F8"
 msgstr "Включить для F8"
+
+msgid "Stop session"
+msgstr "Остановить сессию"
+
+msgid "NVIDIA Nemotron 3"
+msgstr "NVIDIA Nemotron 3"
+
+msgid "Pyannote + WeSpeaker"
+msgstr "Pyannote + WeSpeaker"
+
+msgid "Up to 8 speakers automatically. GPU preferred, CPU fallback."
+msgstr "До 8 говорящих автоматически. Приоритет видеокарте, CPU — запасной вариант."
+
+msgid "Nemotron requires a one-time model download (~102 MB)."
+msgstr "Для Nemotron нужно один раз скачать модель, около 102 МБ."
+
+msgid "Choose the speaker detection model. NVIDIA Nemotron 3 detects up to 8 voices automatically; Pyannote + WeSpeaker also accepts a speaker count."
+msgstr "Выберите модель определения говорящих. NVIDIA Nemotron 3 автоматически различает до 8 голосов. Для Pyannote + WeSpeaker можно также указать их число."
+
+msgid "Play recording"
+msgstr "Воспроизвести запись"
+
+msgid "Pause recording"
+msgstr "Приостановить запись"
+
+msgid "Model storage"
+msgstr "Папка моделей"
+
+msgid "Choose the Suflyor model folder on any mounted disk. AI, speech models and voices use it after restarting Suflyor. Existing files are not moved."
+msgstr "Выберите папку моделей Суфлёра на любом подключённом диске. Модели ИИ, распознавания речи и голоса будут браться оттуда после перезапуска Суфлёра. Существующие файлы не переносятся."
+
+msgid "Absolute model folder path; empty uses the default locations"
+msgstr "Полный путь к папке моделей; пустое поле — стандартные папки"
+
+msgid "Choose folder…"
+msgstr "Выбрать папку…"
+
+msgid "Could not save the model folder. Choose an existing writable folder."
+msgstr "Не удалось сохранить папку моделей. Выберите существующую папку с правом записи."
+
+msgid "Restart Suflyor to use the selected model folder. Existing files are not moved."
+msgstr "Перезапустите Суфлёр, чтобы использовать выбранную папку моделей. Существующие файлы не переносятся."
+
+msgid "For existing Strata weights, select the parent of Strata-data here. The Strata folder below is for an installed engine, not weights alone."
+msgstr "Для уже скачанных весов Strata укажите здесь папку, содержащую Strata-data. Ниже выбирается установленный движок Strata, а не только веса."
+
+msgid "Absolute Strata folder path"
+msgstr "Полный путь к папке Strata"
+
+msgid "Use folder"
+msgstr "Использовать папку"
+
+msgid "Model speed"
+msgstr "Скорость модели"
+
+msgid "Measure model speed"
+msgstr "Измерить скорость модели"
+
+msgid "Short input"
+msgstr "Короткий запрос"
+
+msgid "Medium input"
+msgstr "Средний запрос"
+
+msgid "Long input"
+msgstr "Длинный запрос"
+
+msgid "Prefill reads the input; decode generates the answer. A synthetic sample uses the selected model and server timings. No server is started or reconfigured. Up to 128 output tokens; allow up to 3 minutes."
+msgstr "Prefill — обработка запроса, decode — генерация ответа. Замер отправляет выбранной модели искусственный запрос и использует данные времени от сервера. Сервер не запускается и не перенастраивается. До 128 токенов ответа; замер может занять до 3 минут."
+
+msgid "Last measurement, not a guarantee: input length, cache, GPU load and engine settings change the speed. Missing server timings are shown as unavailable. First-token and total time may include waiting and model loading."
+msgstr "Последний замер — ориентир, а не гарантия: скорость зависит от длины запроса, кэша, нагрузки на видеокарту и настроек движка. Если сервер не передал метрику, показывается «нет данных». Время до первого токена и общее время могут включать ожидание и загрузку модели."
+
+msgid "Installed Strata engine: {}"
+msgstr "Установленный движок Strata: {}"
+
+msgid "Check engine updates"
+msgstr "Проверить обновления движка"
+
+msgid "Update Strata engine"
+msgstr "Обновить движок Strata"
+
+msgid "Strata release and engine versions differ. Checks use the latest official feed; updates replace only the engine. Model weights are kept. A running server restarts."
+msgstr "У релиза Strata и движка разные номера версий. Проверка использует последний официальный канал; обновляется только движок. Веса модели сохраняются. Работающий сервер перезапускается."

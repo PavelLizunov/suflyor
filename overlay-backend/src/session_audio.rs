@@ -30,6 +30,49 @@ pub fn mix_pcm(a: &[i16], b: &[i16]) -> Vec<i16> {
     out
 }
 
+/// A fixed playback gain per source, measured over active 100 ms windows.
+/// Silence must not make a less talkative speaker seem quieter; a bounded gain
+/// also avoids turning a nearly silent microphone into amplified background noise.
+fn playback_gain(pcm: &[i16], sample_rate: u32) -> f64 {
+    let window = (sample_rate as usize / 10).max(1);
+    if pcm.len() < window {
+        return 1.0;
+    }
+    let energy: Vec<f64> = pcm
+        .chunks(window)
+        .map(|chunk| chunk.iter().map(|&s| f64::from(s).powi(2)).sum::<f64>() / chunk.len() as f64)
+        .collect();
+    let peak = energy.iter().copied().fold(0.0_f64, f64::max);
+    let gate = (peak * 0.01).max(100.0_f64.powi(2));
+    let (sum, count) = energy
+        .iter()
+        .filter(|&&e| e >= gate)
+        .fold((0.0, 0usize), |(sum, count), &e| (sum + e, count + 1));
+    if count == 0 {
+        return 1.0;
+    }
+    // About -20 dBFS active speech, with at most +18 dB of amplification.
+    (3276.8 / (sum / count as f64).sqrt()).clamp(0.25, 8.0)
+}
+
+/// Balance the saved channels only in the playback buffer, then leave peak
+/// headroom for overlapping voices. Neither WAV nor the STT/diarization input changes.
+fn mix_playback_pcm(mic: &[i16], sys: &[i16], sample_rate: u32) -> Vec<i16> {
+    let mic_gain = playback_gain(mic, sample_rate);
+    let sys_gain = playback_gain(sys, sample_rate);
+    let sample = |i: usize| {
+        f64::from(mic.get(i).copied().unwrap_or(0)) * mic_gain
+            + f64::from(sys.get(i).copied().unwrap_or(0)) * sys_gain
+    };
+    let length = mic.len().max(sys.len());
+    let peak = (0..length).map(|i| sample(i).abs()).fold(0.0_f64, f64::max);
+    let headroom = (30_000.0 / peak.max(1.0)).min(1.0);
+    log::info!("archive playback balance: mic_gain={mic_gain:.2}, system_gain={sys_gain:.2}, headroom={headroom:.2}");
+    (0..length)
+        .map(|i| (sample(i) * headroom).round() as i16)
+        .collect()
+}
+
 /// Silence the union of one source's app-TTS intervals overlapping this PCM
 /// window. Duration is kept, so transcript timecodes do not move.
 pub fn silence_tts_spans(
@@ -106,7 +149,10 @@ pub fn load_mixed_from_dir(session_dir: &Path) -> Result<(Vec<i16>, u32)> {
             log::warn!("session audio: ignored malformed TTS mask: {error:#}");
         }
     }
-    Ok((mix_pcm(&mic_pcm, &sys_pcm), sample_rate))
+    Ok((
+        mix_playback_pcm(&mic_pcm, &sys_pcm, sample_rate),
+        sample_rate,
+    ))
 }
 
 /// True if the session has at least one saved recording channel — a CHEAP fs

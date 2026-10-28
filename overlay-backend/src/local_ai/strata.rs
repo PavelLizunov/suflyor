@@ -24,6 +24,10 @@ use anyhow::{bail, Context, Result};
 mod vision;
 pub use vision::*;
 
+#[path = "strata_updates.rs"]
+mod updates;
+pub use updates::*;
+
 use super::{
     curl_resumable, curl_success_body, detect_nvidia_memory_mib, ensure_disk_space, extract_zip,
     free_llama_port, is_loopback_v1_on_port, is_reachable, llama_reachable,
@@ -31,13 +35,14 @@ use super::{
     wait_for_nvidia_vram_release, Progress, GIB,
 };
 
-/// The pinned Strata source release (GitHub tag `v0.1.44.1`, 2026-10-14).
-pub const STRATA_VERSION: &str = "0.1.44.1";
+/// New installs include the official component updater (Strata release 0.2.7).
+pub const STRATA_VERSION: &str = "0.2.7";
+const STRATA_SOURCE_REV: &str = "5e8a4cca7d690ac60ca37eb09e7d0e010099ad6d";
 const STRATA_SOURCE_URL: &str =
-    "https://github.com/Niko1221/Strata/archive/refs/tags/v0.1.44.1.zip";
-const STRATA_SOURCE_SIZE: u64 = 22_629_639;
+    "https://codeload.github.com/Niko1221/Strata/zip/5e8a4cca7d690ac60ca37eb09e7d0e010099ad6d";
+const STRATA_SOURCE_SIZE: u64 = 34_717_597;
 const STRATA_SOURCE_SHA256: &str =
-    "22be94124b4d37dc2ff76e742c49498a3e5f31873ed916a636b2a31707d09b31";
+    "9d96a10585d581f21f545dc7f2aa9f64cd8d8ef195c0c72b7eb93b676eedc404";
 
 /// Strata's own default is :8080, the managed llama.cpp port (ADR-003, decision 3).
 pub const STRATA_PORT: &str = "8090";
@@ -47,10 +52,9 @@ const STRATA_HEALTH_URL: &str = "http://127.0.0.1:8090/health";
 /// The original model in the size Strata recommends for 48-64 GB of RAM.
 /// Fine-tunes (Swift and others) carry their own licences and stay out until
 /// those are checked (ADR-003, decision 5).
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 const STRATA_FAMILY: &str = "qwen";
 const STRATA_SIZE: &str = "IQ2_XS";
-pub const STRATA_MODEL_LABEL: &str = "Qwen3.8-Flash-Next IQ2_XS";
 pub const STRATA_MODEL_LICENSE_URL: &str = "https://huggingface.co/Qwen/Qwen3.8-Flash-Next";
 
 /// ~66 GB of model files, ~6 GB MTP draft layer, the engine and the venv.
@@ -81,15 +85,89 @@ pub fn abort_strata_start() {
 
 #[must_use]
 pub fn strata_dir(root: &Path) -> PathBuf {
-    root.join("strata").join(format!("Strata-{STRATA_VERSION}"))
+    let base = root.join("strata");
+    let current = base.join(format!("Strata-{STRATA_VERSION}"));
+    let legacy = base.join("Strata-0.1.44.1");
+    // Keep a completed older install usable instead of moving its weights.
+    if !current.join("START-HERE.bat").is_file()
+        && strata_python(&legacy).is_file()
+        && strata_config(&legacy).is_file()
+    {
+        legacy
+    } else {
+        current
+    }
 }
 
 fn strata_python(dir: &Path) -> PathBuf {
     if cfg!(windows) {
-        dir.join(".venv").join("Scripts").join("python.exe")
+        let bundled = dir.join("python").join("python.exe");
+        if bundled.is_file() {
+            bundled
+        } else {
+            dir.join(".venv").join("Scripts").join("python.exe")
+        }
     } else {
-        dir.join(".venv").join("bin").join("python")
+        let bundled = dir.join("python").join("bin").join("python3");
+        if bundled.is_file() {
+            bundled
+        } else {
+            dir.join(".venv").join("bin").join("python")
+        }
     }
+}
+
+// A component reference is a released Strata install, not a literal filename.
+// This is a stat-only UI resolver; Strata verifies the package again at launch.
+fn strata_engine_path(dir: &Path, cfg: &serde_json::Value) -> Option<PathBuf> {
+    let exe = cfg["exe"].as_str()?;
+    if exe != "component:strata-engine" {
+        let path = PathBuf::from(exe);
+        let cwd = PathBuf::from(cfg["cwd"].as_str().unwrap_or("."));
+        let cwd = if cwd.is_absolute() {
+            cwd
+        } else {
+            dir.join(cwd)
+        };
+        return Some(if path.is_absolute() {
+            path
+        } else {
+            cwd.join(path)
+        });
+    }
+    let components = std::env::var_os("STRATA_COMPONENTS_DIR")
+        .map(PathBuf::from)
+        .or_else(|| {
+            dirs::data_local_dir().map(|path| {
+                path.join(if cfg!(windows) {
+                    "Strata/components"
+                } else {
+                    "strata/components"
+                })
+            })
+        })?;
+    let state =
+        parse_json_file(&std::fs::read_to_string(components.join(".updates/state.json")).ok()?);
+    let active = std::path::Path::new(state["engine"]["active"].as_str()?);
+    if active.components().count() != 1
+        || !matches!(
+            active.components().next(),
+            Some(std::path::Component::Normal(_))
+        )
+    {
+        return None;
+    }
+    let package = components.join("engine").join(active);
+    let manifest =
+        parse_json_file(&std::fs::read_to_string(package.join("engine-component.json")).ok()?);
+    let entry = std::path::Path::new(manifest["entrypoint"].as_str()?);
+    if !entry
+        .components()
+        .all(|part| matches!(part, std::path::Component::Normal(_)))
+    {
+        return None;
+    }
+    Some(package.join(entry))
 }
 
 /// Setup names the run config after the family tag and the size; the original
@@ -193,7 +271,19 @@ fn parse_json_file(text: &str) -> serde_json::Value {
 /// The usable model configs of one Strata folder, newest first.
 #[must_use]
 pub fn strata_in_folder(dir: &Path) -> Vec<FoundStrata> {
-    let Ok(entries) = std::fs::read_dir(dir) else {
+    let current = dir.join("terminal/current");
+    // Windows installers use a launcher pointer when the drive cannot hold a junction.
+    let terminal = std::fs::read_to_string(current.join("current.txt"))
+        .ok()
+        .map(|text| PathBuf::from(text.trim()))
+        .filter(|path| path.is_absolute())
+        .unwrap_or(current);
+    let (runtime, configs) = if terminal.join("serve/server.py").is_file() {
+        (terminal.as_path(), dir.join("install"))
+    } else {
+        (dir, dir.to_path_buf())
+    };
+    let Ok(entries) = std::fs::read_dir(configs) else {
         return Vec::new();
     };
     let mut found: Vec<(std::time::SystemTime, FoundStrata)> = entries
@@ -207,7 +297,7 @@ pub fn strata_in_folder(dir: &Path) -> Vec<FoundStrata> {
             Some((
                 at,
                 FoundStrata {
-                    dir: dir.to_path_buf(),
+                    dir: runtime.to_path_buf(),
                     config,
                     model,
                 },
@@ -364,6 +454,9 @@ pub fn find_existing_strata(root: &Path) -> Vec<FoundStrata> {
         }
     }
     folders.extend(usual_strata_folders());
+    if let Some(data) = dirs::data_local_dir() {
+        folders.push(data.join(if cfg!(windows) { "Strata" } else { "strata" }));
+    }
     let own = strata_dir(root);
     let mut seen = Vec::new();
     let mut found = Vec::new();
@@ -516,6 +609,10 @@ pub fn install_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -
             bail!("the Strata download failed its integrity check");
         }
         extract_zip(&zip, &base)?;
+        let unpacked = base.join(format!("Strata-{STRATA_SOURCE_REV}"));
+        if unpacked.is_dir() {
+            std::fs::rename(unpacked, &dir)?;
+        }
         let _ = std::fs::remove_file(&zip);
         if !dir.join("START-HERE.bat").is_file() {
             bail!("the Strata archive did not contain START-HERE.bat");
@@ -528,7 +625,7 @@ pub fn install_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -
     Ok(())
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 fn run_setup(dir: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> Result<()> {
     use std::io::Write;
     use std::process::{Command, Stdio};
@@ -536,11 +633,22 @@ fn run_setup(dir: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> Result<(
 
     use super::CANCEL_SENTINEL;
 
-    let mut cmd = Command::new("cmd.exe");
+    #[cfg(windows)]
+    let mut cmd = {
+        let mut command = Command::new("cmd.exe");
+        command.args(["/d", "/c", "START-HERE.bat"]);
+        command
+    };
+    #[cfg(target_os = "linux")]
+    let mut cmd = {
+        let mut command = Command::new("/bin/sh");
+        command.arg("setup.sh");
+        command
+    };
+    if let Some(storage) = crate::paths::model_storage_root() {
+        cmd.arg("--data-dir").arg(storage.join("Strata-data"));
+    }
     cmd.args([
-        "/d",
-        "/c",
-        "START-HERE.bat",
         "--yes",
         "--family",
         STRATA_FAMILY,
@@ -632,7 +740,7 @@ fn run_setup(dir: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -> Result<(
     Ok(())
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux")))]
 fn run_setup(_dir: &Path, _cancel: &AtomicBool, _on: &dyn Fn(Progress)) -> Result<()> {
     bail!("the Strata engine is installed from the Windows app only")
 }
@@ -856,6 +964,56 @@ fn launch_strata(root: &Path) -> Result<Child> {
     use std::process::{Command, Stdio};
 
     let (dir, config) = active_location(root);
+    #[cfg(any(windows, all(target_os = "linux", feature = "cuda")))]
+    let config = {
+        // The automatic expert cache otherwise consumes the VRAM needed by
+        // local ASR, diarization and TTS. Preserve the user's source config.
+        let mut json = parse_json_file(&std::fs::read_to_string(&config)?);
+        let args = json["args"].as_array_mut().context("Strata args missing")?;
+        const RESERVE: &str = "--vram-reserve-mib";
+        if let Some(index) = args.iter().position(|arg| arg.as_str() == Some(RESERVE)) {
+            let reserve = args
+                .get(index + 1)
+                .and_then(|value| value.as_str())
+                .and_then(|value| value.parse::<u64>().ok())
+                .unwrap_or(0)
+                .max(4096);
+            if index + 1 < args.len() {
+                args[index + 1] = serde_json::json!(reserve.to_string());
+            } else {
+                args.push(serde_json::json!(reserve.to_string()));
+            }
+        } else {
+            args.extend([serde_json::json!(RESERVE), serde_json::json!("4096")]);
+        }
+        // Prefer CUDA for the image helper when the installed package declares
+        // it. Strata itself retries the same helper without --gpu on failure.
+        if let Some(engine) = strata_engine_path(&dir, &json) {
+            if let Some(package) = engine.parent() {
+                let build = std::fs::read_to_string(package.join("BUILD.json"))
+                    .map(|text| parse_json_file(&text))
+                    .unwrap_or_default();
+                if build["vision"]
+                    .as_str()
+                    .is_some_and(|kind| kind.starts_with("cuda"))
+                {
+                    let helper = package.join(if cfg!(windows) {
+                        "strata-vision.exe"
+                    } else {
+                        "strata-vision"
+                    });
+                    if helper.is_file() && json["vision"].is_object() {
+                        json["vision"]["exe"] = serde_json::json!(helper);
+                        json["vision"]["cpu_exe"] = serde_json::json!(helper);
+                        json["vision"]["gpu"] = serde_json::json!(true);
+                    }
+                }
+            }
+        }
+        let runtime = dir.join("suflyor-speech-gpu.json");
+        std::fs::write(&runtime, serde_json::to_vec_pretty(&json)?)?;
+        runtime
+    };
     let log = std::fs::File::create(dir.join("suflyor-server.log")).context("server log")?;
     let log_err = log.try_clone().context("server log")?;
     // The same command line as Strata's own run-<model>.bat.

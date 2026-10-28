@@ -21,8 +21,8 @@ Native platform adapters isolate OS-specific FFI, window manipulation, single-in
   - `src/native/macos/status.rs` & `status.m`: Native AppKit menu bar status item (`NSStatusItem`, `NSMenu`), toggle overlay visibility, and quit callback through the event loop.
   - `src/native/macos/window.rs` & `window.m`: AppKit window level configuration (`NSPopUpMenuWindowLevel`), space collection behavior (`CanJoinAllSpaces`), transparency, window activation (`activateIgnoringOtherApps:YES`), and drag delegation (`performWindowDragWithEvent`).
 - **Platform Seams & Selection:**
-  - `src/native/mod.rs`: Conditional module paths using `#[cfg(windows)]` and `#[cfg(target_os = "macos")]`.
-  - `src/win32.rs`: Exposes `windows_impl` on Windows, and `posix_stubs` on non-Windows (delegating to macOS native calls when `target_os = "macos"` or returning safe stubs for unsupported platforms).
+  - `src/native/mod.rs`: Conditional module paths for Windows, macOS and Linux.
+  - `src/win32.rs`: Exposes `windows_impl` on Windows and `posix_stubs` on non-Windows. The latter delegates to macOS or Linux native adapters where implemented and returns stubs for unsupported operations.
 
 ---
 
@@ -39,7 +39,7 @@ Native platform adapters isolate OS-specific FFI, window manipulation, single-in
 | **Single-Instance Mutex** | Win32 named mutex `Global\suflyor-overlay-singleton`. | File lock `suflyor-overlay-singleton.lock` via `try_lock()`. |
 | **Clipboard & Copy** | `clipboard-win` crate + synthetic `SendInput` Ctrl+C (with hardware scan codes). | `NSPasteboard` FFI + synthetic `CGEventPost` Command+C (`AXIsProcessTrusted`). |
 | **Status Bar / Tray** | Windows Notification Area Tray (`Shell_NotifyIconW`). | AppKit `NSStatusItem` status item + menu delegate. |
-| **Linux Support** | **Explicitly unsupported**. `posix_stubs` provides fallback defaults; do not invent Linux support. | N/A |
+| **Experimental Linux port** | Shared Slint host on Wayland. Clipboard uses `linux/clipboard.rs`; the Unix file lock is reused. `linux/screen.rs` captures via `grim`/`slurp` and resolves monitors via `hyprctl`. `overlay-backend/src/audio_linux.rs` captures microphone and system audio through PipeWire's PulseAudio transport (`pactl`/`parec`). `hotkeys.rs` installs Hyprland bindings, including PTT press/release, through `linux/desktop.rs`. | Window placement, shortcuts and exclusion are Hyprland-specific. Required native tools must be installed. This is not a feature-parity or released-Linux claim. |
 
 ---
 
@@ -73,13 +73,13 @@ Native platform adapters isolate OS-specific FFI, window manipulation, single-in
 
 ## 5. Key Invariants
 
-1. **No Linux Support:** Linux is not a supported target. Non-Windows and non-macOS platforms fall into default `posix_stubs` in `src/win32.rs`. Do not add Linux-specific native code.
+1. **Experimental Linux Semantics:** Follow `docs/goal-omarchy-port.md`. Hyprland supplies native window identities, geometry and placement. Unavailable identities and geometry return errors, not fabricated HWNDs or monitor sizes. `linux/window.rs` sets and reads back `no_screen_share`; `scripts/suflyor-hyprland.lua` protects the first mapped frame. `grim` draws excluded windows black, not as transparent holes. This is not a portable Wayland exclusion guarantee. Windows installers must not be selected or launched on Linux.
 2. **Effective Stealth Verification (I1):** Windows stealth (`set_stealth`) requires readback confirmation via `GetWindowDisplayAffinity`. `presentable_stealth` returns `true` only when the exclusion is confirmed by OS readback.
 3. **Taskbar Baseline Standard (I2):** `skip_taskbar_exstyle` forces `WS_EX_TOOLWINDOW` on and `WS_EX_APPWINDOW` off in both directions, preventing winit re-shows from corrupting taskbar state.
 4. **GDI Capture Window Hiding:** Windows GDI `BitBlt` ignores `WDA_EXCLUDEFROMCAPTURE`. Before capturing screen rectangles, all application overlay windows must be hidden via `hide_own_windows()` and flushed with `DwmFlush()`, then restored with `show_windows()`.
 5. **Main Thread Maintained for AppKit:** macOS AppKit status item creation and window configuration must run on the main event loop thread.
 6. **Off-Thread Processing for Heavy Operations:** ScreenCaptureKit screenshots and Apple Vision OCR requests execute off the UI thread via `tokio::task::spawn_blocking`.
-7. **Single-Instance Mutex Ownership:** Singleton mutex/lock acquisition is isolated strictly to the platform lifecycle adapters (`src/native/windows/lifecycle.rs` and `src/native/macos/lifecycle.rs`).
+7. **Single-Instance Mutex Ownership:** Singleton mutex/lock acquisition is isolated strictly to the platform lifecycle adapters (`src/native/windows/lifecycle.rs` and `src/native/macos/lifecycle.rs`; Linux reuses the latter).
 
 ---
 

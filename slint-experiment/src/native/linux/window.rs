@@ -1,0 +1,464 @@
+//! Real compositor window identities and geometry, never synthetic HWNDs.
+
+use super::desktop::{dispatch, query};
+use slint::winit_030::winit::window::WindowId;
+use slint::winit_030::WinitWindowAccessor;
+use std::collections::HashMap;
+use std::future::Future;
+use std::pin::pin;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, Weak};
+use std::task::{Context, Poll, Wake, Waker};
+
+struct NoopWake;
+impl Wake for NoopWake {
+    fn wake(self: Arc<Self>) {}
+}
+
+struct Identity {
+    native: Weak<slint::winit_030::winit::window::Window>,
+    original: String,
+    title: String,
+    address: Option<isize>,
+}
+static WINDOWS: std::sync::LazyLock<Mutex<HashMap<WindowId, Identity>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+type Error = Box<dyn std::error::Error>;
+static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+static DRAG: Mutex<Option<(isize, i32, i32, i32, i32)>> = Mutex::new(None);
+static HIDDEN_ALPHA: std::sync::LazyLock<Mutex<HashMap<isize, Vec<(String, serde_json::Value)>>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn clients() -> Result<Vec<serde_json::Value>, Error> {
+    let value = query("clients")?;
+    Ok(value
+        .as_array()
+        .ok_or("invalid Hyprland window response")?
+        .iter()
+        .filter(|v| v["pid"].as_u64() == Some(u64::from(std::process::id())))
+        .cloned()
+        .collect())
+}
+fn client(id: isize) -> Result<serde_json::Value, Error> {
+    clients()?
+        .into_iter()
+        .find(|v| address(v) == Some(id))
+        .ok_or_else(|| "native Wayland window unavailable".into())
+}
+fn address(v: &serde_json::Value) -> Option<isize> {
+    isize::from_str_radix(v["address"].as_str()?.strip_prefix("0x")?, 16).ok()
+}
+fn selector(id: isize) -> Result<String, Error> {
+    client(id)?;
+    Ok(format!("address:0x{id:x}"))
+}
+
+fn single_title_candidate(candidates: &[isize], unresolved_peer: bool) -> Option<isize> {
+    match candidates {
+        [id] if !unresolved_peer => Some(*id),
+        _ => None,
+    }
+}
+
+pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
+    let all = clients()?;
+    // Poll only the already-created native window; never retain a strong owner
+    // across hide, which must destroy the Wayland surface.
+    let native = {
+        let waker = Waker::from(Arc::new(NoopWake));
+        let mut context = Context::from_waker(&waker);
+        let mut future = pin!(window.winit_window());
+        match future.as_mut().poll(&mut context) {
+            Poll::Ready(Ok(native)) => native,
+            _ => return Err("Wayland window is not realized".into()),
+        }
+    };
+    let result = window
+        .with_winit_window(|w| -> Result<isize, Error> {
+            let mut ids = WINDOWS.lock().map_err(|_| "native identity lock failed")?;
+            // Compositor addresses can be reused immediately after remapping.
+            ids.retain(|_, v| {
+                v.native.strong_count() > 0
+                    && v.address
+                        .is_none_or(|id| all.iter().any(|c| address(c) == Some(id)))
+            });
+            if ids.len() > 128 {
+                ids.retain(|_, v| v.address.is_some());
+            }
+            if let Some(address) = ids.get(&w.id()).and_then(|v| v.address) {
+                return Ok(address);
+            }
+            let title = ids
+                .get(&w.id())
+                .map_or_else(|| w.title(), |v| v.original.clone());
+            let claimed: Vec<isize> = ids.values().filter_map(|v| v.address).collect();
+            let candidates: Vec<isize> = all
+                .iter()
+                .filter(|c| {
+                    c["title"].as_str() == Some(&title)
+                        || c["initialTitle"].as_str() == Some(&title)
+                })
+                .filter_map(address)
+                .filter(|id| !claimed.contains(id))
+                .collect();
+            let unresolved_peer = ids
+                .iter()
+                .any(|(key, v)| *key != w.id() && v.original == title && v.address.is_none());
+            if let Some(address) = single_title_candidate(&candidates, unresolved_peer) {
+                ids.insert(
+                    w.id(),
+                    Identity {
+                        native: Arc::downgrade(&native),
+                        original: title.clone(),
+                        title: title.clone(),
+                        address: Some(address),
+                    },
+                );
+                if w.title() != title {
+                    w.set_title(&title);
+                }
+                return Ok(address);
+            }
+            let id = ids.entry(w.id()).or_insert_with(|| Identity {
+                native: Arc::downgrade(&native),
+                original: w.title(),
+                title: format!(
+                    "{} [suflyor-{}-{}]",
+                    w.title(),
+                    std::process::id(),
+                    SEQUENCE.fetch_add(1, Ordering::Relaxed)
+                ),
+                address: None,
+            });
+            if let Some(address) = id.address {
+                return Ok(address);
+            }
+            if let Some(found) = all
+                .iter()
+                .find(|c| c["title"].as_str() == Some(&id.title))
+                .and_then(address)
+            {
+                id.address = Some(found);
+                w.set_title(&id.original);
+                return Ok(found);
+            }
+            if candidates.len() > 1 || unresolved_peer {
+                w.set_title(&id.title);
+                w.request_redraw();
+            }
+            // The caller's normal realization retry gives Wayland its next roundtrip.
+            Err("compositor has not mapped this window yet".into())
+        })
+        .ok_or("Wayland window is not realized")?;
+    if let Err(error) = &result {
+        log::debug!(
+            "native identity unresolved: {error}; owned clients={}",
+            all.len()
+        );
+    }
+    result
+}
+
+pub fn rect(id: isize) -> Result<(i32, i32, i32, i32), Error> {
+    let c = client(id)?;
+    let n = |key: &str, i: usize| -> Result<i32, Error> {
+        c[key][i]
+            .as_i64()
+            .and_then(|n| i32::try_from(n).ok())
+            .ok_or_else(|| "invalid native window geometry".into())
+    };
+    Ok((n("at", 0)?, n("at", 1)?, n("size", 0)?, n("size", 1)?))
+}
+pub fn move_to(id: isize, x: i32, y: i32) -> Result<(), Error> {
+    let s = selector(id)?;
+    dispatch("movewindowpixel", &format!("exact {x} {y},{s}"))
+}
+pub fn resize_move(id: isize, x: i32, y: i32, w: i32, h: i32) -> Result<(), Error> {
+    let s = selector(id)?;
+    if !client(id)?["floating"].as_bool().unwrap_or(false) {
+        dispatch("setfloating", &s)?;
+    }
+    dispatch(
+        "resizewindowpixel",
+        &format!("exact {} {},{s}", w.max(1), h.max(1)),
+    )?;
+    move_to(id, x, y)
+}
+/// Move, pin and set capture exclusion in one compositor request, so a new
+/// window reaches its place in one round trip instead of one per property.
+pub fn arrange(id: isize, x: i32, y: i32, excluded: bool) -> Result<(), Error> {
+    let c = client(id)?;
+    let toggle_pin = !c["pinned"].as_bool().unwrap_or(false);
+    let script = arrange_script(id, x, y, toggle_pin, excluded)?;
+    if super::desktop::hypr(&["eval", &script])?
+        .to_ascii_lowercase()
+        .contains("error")
+    {
+        return Err("compositor placement was rejected".into());
+    }
+    Ok(())
+}
+fn arrange_script(
+    id: isize,
+    x: i32,
+    y: i32,
+    toggle_pin: bool,
+    excluded: bool,
+) -> Result<String, Error> {
+    let w = serde_json::to_string(&format!("address:0x{id:x}"))?;
+    let mut script = format!("hl.dispatch(hl.dsp.window.move({{window={w},x={x},y={y}}}));");
+    if toggle_pin {
+        script += &format!("hl.dispatch(hl.dsp.window.pin({{window={w}}}));");
+    }
+    script += &format!(
+        "hl.dispatch(hl.dsp.window.set_prop({{window={w},prop=\"no_screen_share\",value=\"{}\"}}));",
+        u8::from(excluded)
+    );
+    Ok(script)
+}
+pub fn focus(id: isize) -> Result<(), Error> {
+    dispatch("focuswindow", &selector(id)?)
+}
+pub fn foreground(id: isize) -> bool {
+    query("activewindow").ok().and_then(|v| address(&v)) == Some(id)
+}
+pub fn pin(id: isize, on: bool) -> Result<(), Error> {
+    let c = client(id)?;
+    if c["pinned"].as_bool().unwrap_or(false) != on {
+        dispatch("pin", &selector(id)?)?;
+    }
+    Ok(())
+}
+pub fn set_exclusion(id: isize, on: bool) -> Result<(), Error> {
+    let selector = selector(id)?;
+    super::desktop::set_property(&selector, "no_screen_share", if on { "1" } else { "0" })?;
+    if super::desktop::property(&selector, "no_screen_share")?.as_bool() != Some(on) {
+        return Err("capture exclusion readback failed".into());
+    }
+    Ok(())
+}
+pub fn exclusion(id: isize) -> Result<bool, Error> {
+    super::desktop::property(&selector(id)?, "no_screen_share")?
+        .as_bool()
+        .ok_or_else(|| "capture exclusion unavailable".into())
+}
+pub use super::displays::{cursor, monitors};
+pub fn hide_own() -> Vec<(isize, bool)> {
+    let mut hidden = Vec::new();
+    for c in clients().unwrap_or_default() {
+        if let Some(id) = address(&c) {
+            if c["hidden"].as_bool() == Some(true) {
+                continue;
+            }
+            if HIDDEN_ALPHA
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .contains_key(&id)
+            {
+                hidden.push((id, true));
+                continue;
+            }
+            let selector = format!("address:0x{id:x}");
+            let saved: Vec<_> = [
+                "opacity",
+                "opacity_inactive",
+                "opacity_fullscreen",
+                "no_screen_share",
+                "no_anim",
+            ]
+            .iter()
+            .filter_map(|name| {
+                super::desktop::property(&selector, name)
+                    .ok()
+                    .map(|v| (name.to_string(), v))
+            })
+            .collect();
+            if saved.len() == 5 {
+                let _ = super::desktop::set_property(&selector, "no_anim", "1");
+                let mut transparent = true;
+                for name in ["opacity", "opacity_inactive", "opacity_fullscreen"] {
+                    transparent &= super::desktop::set_property(&selector, name, "0").is_ok();
+                }
+                HIDDEN_ALPHA
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .insert(id, saved);
+                if transparent {
+                    // Exclusion paints black even at zero opacity. Suspend it
+                    // only after the surface itself has become transparent.
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    let _ = super::desktop::set_property(&selector, "no_screen_share", "0");
+                }
+                hidden.push((id, true));
+            }
+        }
+    }
+    hidden
+}
+pub fn show_own(hidden: &[(isize, bool)]) {
+    for (id, _) in hidden {
+        let Ok(s) = selector(*id) else {
+            continue;
+        };
+        let saved = HIDDEN_ALPHA
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(id)
+            .cloned();
+        if let Some(mut saved) = saved {
+            if restore_properties(&mut saved, |name, value| {
+                super::desktop::set_property(&s, name, value)
+            }) {
+                HIDDEN_ALPHA
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .remove(id);
+            } else {
+                log::warn!(
+                    "capture protection restore failed twice; window kept transparent for retry"
+                );
+            }
+        }
+    }
+}
+fn restore_properties(
+    saved: &mut [(String, serde_json::Value)],
+    mut set: impl FnMut(&str, &str) -> Result<(), Error>,
+) -> bool {
+    // Restore capture protection before any content becomes visible.
+    saved.sort_by_key(|(name, _)| {
+        if name == "no_screen_share" {
+            0
+        } else if name == "no_anim" {
+            2
+        } else {
+            1
+        }
+    });
+    for (name, value) in saved {
+        let value = if let Some(flag) = value.as_bool() {
+            Some(if flag {
+                "1".to_string()
+            } else {
+                "0".to_string()
+            })
+        } else {
+            value.as_f64().map(|alpha| alpha.to_string())
+        };
+        if let Some(value) = value {
+            if set(name, &value).is_err()
+                && name.as_str() == "no_screen_share"
+                && value == "1"
+                && set(name, &value).is_err()
+            {
+                return false;
+            }
+        }
+    }
+    true
+}
+pub fn drag_begin(id: isize) {
+    if let (Ok((cx, cy)), Ok((x, y, _, _))) = (cursor(), rect(id)) {
+        *DRAG
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some((id, cx, cy, x, y));
+    }
+}
+pub fn drag_update(id: isize) {
+    let saved = *DRAG
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let (Some((active, cx, cy, x, y)), Ok((nx, ny))) = (saved, cursor()) {
+        if id == active {
+            let _ = move_to(id, x + nx - cx, y + ny - cy);
+        }
+    }
+}
+pub fn drag_end() {
+    *DRAG
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+    use super::{arrange_script, restore_properties, single_title_candidate};
+
+    #[test]
+    fn single_candidate_waits_for_unresolved_same_title_peer() {
+        assert_eq!(single_title_candidate(&[42], true), None);
+        assert_eq!(single_title_candidate(&[42], false), Some(42));
+        assert_eq!(single_title_candidate(&[], false), None);
+        assert_eq!(single_title_candidate(&[42, 43], false), None);
+    }
+
+    #[test]
+    fn failed_protection_restore_never_restores_opacity() {
+        let mut saved = vec![
+            ("opacity".into(), serde_json::json!(0.8)),
+            ("no_screen_share".into(), serde_json::json!(1)),
+        ];
+        let mut calls = Vec::new();
+        assert!(!restore_properties(&mut saved, |name, value| {
+            calls.push((name.to_string(), value.to_string()));
+            Err("compositor unavailable".into())
+        }));
+        assert_eq!(calls, vec![("no_screen_share".into(), "1".into()); 2]);
+        assert_eq!(saved.len(), 2);
+    }
+
+    #[test]
+    fn protection_retry_succeeds_before_opacity_and_animation() {
+        let mut saved = vec![
+            ("no_anim".into(), serde_json::json!(false)),
+            ("opacity".into(), serde_json::json!(0.8)),
+            ("no_screen_share".into(), serde_json::json!(true)),
+        ];
+        let mut calls = Vec::new();
+        assert!(restore_properties(&mut saved, |name, _| {
+            calls.push(name.to_string());
+            if calls.len() == 1 {
+                Err("compositor unavailable".into())
+            } else {
+                Ok(())
+            }
+        }));
+        assert_eq!(
+            calls,
+            ["no_screen_share", "no_screen_share", "opacity", "no_anim"]
+        );
+    }
+
+    #[test]
+    fn stealth_off_does_not_retry_or_block_opacity() {
+        let mut saved = vec![
+            ("opacity".into(), serde_json::json!(0.8)),
+            ("no_screen_share".into(), serde_json::json!(false)),
+        ];
+        let mut calls = Vec::new();
+        assert!(restore_properties(&mut saved, |name, _| {
+            calls.push(name.to_string());
+            Err("compositor unavailable".into())
+        }));
+        assert_eq!(calls, ["no_screen_share", "opacity"]);
+    }
+
+    #[test]
+    fn arranging_sends_move_pin_and_exclusion_in_one_script() {
+        let w = "window=\"address:0x2a\"";
+        assert_eq!(
+            arrange_script(42, -792, 80, true, false).unwrap(),
+            format!(
+                "hl.dispatch(hl.dsp.window.move({{{w},x=-792,y=80}}));\
+                 hl.dispatch(hl.dsp.window.pin({{{w}}}));\
+                 hl.dispatch(hl.dsp.window.set_prop({{{w},prop=\"no_screen_share\",value=\"0\"}}));"
+            )
+        );
+        // An already pinned window keeps its pin: the dispatcher toggles.
+        let pinned = arrange_script(42, 1, 2, false, true).unwrap();
+        assert!(!pinned.contains("pin("));
+        assert!(pinned.ends_with("value=\"1\"}));"));
+    }
+}

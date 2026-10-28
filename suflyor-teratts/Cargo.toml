@@ -17,6 +17,10 @@ publish = false
 name = "suflyor-teratts"
 path = "src/main.rs"
 
+[features]
+# The default build remains self-contained and CPU-compatible.
+cuda = ["ort/cuda", "ort/load-dynamic"]
+
 [dependencies]
 ort = "=2.0.0-rc.13"
 anyhow = "1"

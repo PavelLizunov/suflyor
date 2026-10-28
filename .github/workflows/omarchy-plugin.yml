@@ -1,0 +1,61 @@
+# Fast loop for the Omarchy plugin build (docs/OMARCHY-PLUGIN-DESIGN.md):
+# the host compiled against the remote windows, and their runtime tests.
+# The full product gate stays in ci.yml.
+name: Omarchy plugin
+on:
+  push:
+    branches: [claude/omarchy-plugin]
+  workflow_dispatch:
+concurrency:
+  group: omarchy-plugin-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  remote-ui:
+    runs-on: ubuntu-24.04
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config \
+            libasound2-dev libfontconfig1-dev libfreetype-dev libxkbcommon-dev \
+            libwayland-dev libudev-dev libdbus-1-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: slint-experiment
+          key: remote-ui
+      - name: Generated files are fresh
+        run: |
+          python3 tools/remote-ui/generate.py --check
+          python3 tools/remote-ui/po2json.py --check
+      - name: Remote window runtime tests
+        run: >-
+          cargo test --no-default-features --features remote-ui
+          --manifest-path slint-experiment/Cargo.toml --lib -- remote_ui native::window
+      - name: Build suflyord (host against remote windows)
+        run: >-
+          cargo build --no-default-features --features remote-ui
+          --manifest-path slint-experiment/Cargo.toml --bin overlay-host
+          --message-format short
+      - name: Smoke suflyord without a shell
+        run: |
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/xdg" HOME="$RUNNER_TEMP/home"
+          mkdir -p -m 700 "$XDG_RUNTIME_DIR"; mkdir -p "$HOME" "$RUNNER_TEMP/smoke"
+          slint-experiment/target/debug/overlay-host > "$RUNNER_TEMP/smoke/suflyord.log" 2>&1 &
+          daemon=$!
+          rc=0
+          python3 tools/remote-ui/smoke.py "$XDG_RUNTIME_DIR/suflyor/shell.sock" "$RUNNER_TEMP/smoke/messages.jsonl" || rc=$?
+          kill "$daemon" 2>/dev/null || true
+          tail -60 "$RUNNER_TEMP/smoke/suflyord.log"
+          exit $rc
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: suflyord-smoke
+          path: ${{ runner.temp }}/smoke

@@ -129,20 +129,21 @@ fn diarize(
     if !emb.is_file() {
         bail!("embedding model not found: {}", emb.display());
     }
-    let cfg = OfflineSpeakerDiarizationConfig {
+    let provider = crate::accelerator::preferred();
+    let mut cfg = OfflineSpeakerDiarizationConfig {
         segmentation: OfflineSpeakerSegmentationModelConfig {
             pyannote: OfflineSpeakerSegmentationPyannoteModelConfig {
                 model: Some(seg.to_string_lossy().into_owned()),
             },
             num_threads: 4,
             debug: false,
-            provider: Some("cpu".to_string()),
+            provider: Some(provider.to_string()),
         },
         embedding: SpeakerEmbeddingExtractorConfig {
             model: Some(emb.to_string_lossy().into_owned()),
             num_threads: 4,
             debug: false,
-            provider: Some("cpu".to_string()),
+            provider: Some(provider.to_string()),
         },
         clustering: FastClusteringConfig {
             num_clusters: if num_speakers > 0 { num_speakers } else { -1 },
@@ -152,7 +153,20 @@ fn diarize(
         min_duration_off: 0.5,
     };
     let sd = OfflineSpeakerDiarization::create(&cfg)
+        .or_else(|| {
+            if provider == "cpu" {
+                return None;
+            }
+            eprintln!("[suflyor-diar] CUDA initialization failed; retrying on CPU");
+            cfg.segmentation.provider = Some("cpu".to_string());
+            cfg.embedding.provider = Some("cpu".to_string());
+            OfflineSpeakerDiarization::create(&cfg)
+        })
         .ok_or_else(|| anyhow!("failed to create diarizer (models not loadable)"))?;
+    eprintln!(
+        "[suflyor-diar] execution provider requested: {}",
+        cfg.segmentation.provider.as_deref().unwrap_or("cpu")
+    );
 
     let wav_str = wav
         .to_str()

@@ -43,7 +43,7 @@ fn target_at(dir: &Path, config: &Path) -> Option<Target> {
     let args = json["args"].as_array()?;
     let native = args.windows(2).find(|a| a[0] == "--native")?[1].as_str()?;
     let model = config_path(dir, &json, native);
-    let engine = config_path(dir, &json, json["exe"].as_str()?);
+    let engine = strata_engine_path(dir, &json)?;
     let helper = engine.parent()?.join(if cfg!(windows) {
         "strata-vision.exe"
     } else {
@@ -143,9 +143,7 @@ fn with_cpu_encoder(t: &Target) -> serde_json::Value {
 }
 
 fn replace_config(path: &Path, bytes: &[u8]) -> Result<()> {
-    let tmp = path.with_extension("suflyor-vision.tmp");
-    std::fs::write(&tmp, bytes).context("write Strata Vision configuration")?;
-    std::fs::rename(&tmp, path).context("replace Strata Vision configuration")
+    crate::paths::replace_private(path, bytes).context("replace Strata Vision configuration")
 }
 
 fn verify_image(cancel: &AtomicBool) -> Result<()> {

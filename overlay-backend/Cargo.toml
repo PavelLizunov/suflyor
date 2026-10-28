@@ -12,7 +12,12 @@ description = "Shared backend for suflyor — audio, STT, AI, journal, KB, confi
 [lib]
 path = "src/lib.rs"
 
+[features]
+# Optional Linux NVIDIA build; regular platform builds retain their runtime.
+cuda = ["transcribe-rs/ort-cuda", "ort/load-dynamic"]
+
 [dependencies]
+tempfile = "3"
 # Serialization & config (shared by config, journal, kb, ai)
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -125,6 +130,14 @@ windows-core = "0.62"
 # no longer compiles against it. These are the versions of
 # slint-experiment/Cargo.lock, which the product is built from.
 transcribe-rs = { version = "=0.3.12", default-features = false, features = ["onnx", "ort-coreml"] }
+ort = { version = "=2.0.0-rc.12", default-features = false }
+
+# Owned updater cancellation uses POSIX signals on both Linux and macOS.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+transcribe-rs = { version = "=0.3.12", default-features = false, features = ["onnx"] }
 ort = { version = "=2.0.0-rc.12", default-features = false }
 
 # macOS-only BUILD dependency — compiles the tiny Objective-C AVAudioEngine

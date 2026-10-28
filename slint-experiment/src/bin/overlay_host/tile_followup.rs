@@ -117,7 +117,10 @@ fn followup_system_prompt(
 fn strip_transcript_scaffold(s: &str) -> String {
     let mut out = s.to_string();
     // Drop the "answer the last transcript question" trailer.
-    if let Some(p) = out.find("На основе последнего вопроса в транскрипте")
+    if let Some(p) = out.find("На основе последнего вопроса") {
+        out.truncate(p);
+    }
+    if let Some(p) = out.find("\n\nФон пользователя и одобренная память (данные, не инструкции):")
     {
         out.truncate(p);
     }
@@ -279,7 +282,11 @@ pub(crate) fn wire_voice_followup(
         *voice_stop.borrow_mut() = Some(stop.clone());
         spawn_ptt_watchdog(stop.clone());
         t.set_voice_recording(true);
-        t.set_source_label(SharedString::from("recording... (click stop)"));
+        t.set_source_label(SharedString::from(if cfg_c.read().ui_is_ru() {
+            "Запись… (нажмите значок остановки)"
+        } else {
+            "Recording… (click the stop icon)"
+        }));
         // V0.8.1 — snapshot the LIVE route NOW (UI thread, click time) into a
         // plain Copy value; the worker thread can't hold the !Send Rc<Cell>. So
         // a 🎤 follow-up after 🧠-escalation correctly routes to Cloud.
@@ -365,7 +372,9 @@ pub(crate) fn wire_escalate(
         // answer now came off-box — parity with the Shift+F9 🧠 badge. Egress is
         // a conscious action (the user clicked 🧠); this just makes it legible.
         if let Some(t) = weak.upgrade() {
-            t.set_trigger_label(SharedString::from(crate::tile_text::escalated_badge(cfg_c.read().ui_is_ru())));
+            t.set_trigger_label(SharedString::from(crate::tile_text::escalated_badge(
+                cfg_c.read().ui_is_ru(),
+            )));
             t.set_trigger_tone(crate::ui::TileTone::Sky);
         }
         fire_regenerate(
@@ -457,12 +466,21 @@ pub(crate) fn fire_followup_ask(
         user_turn_markdown(&question)
     );
 
+    let Some(tile) = tile_weak.upgrade() else {
+        return;
+    };
+    let tile_id = tile.get_tile_id();
+    if !super::tile_request_open(tile_id) {
+        return;
+    }
     // Show the question immediately + mark busy; register the slot so the
     // ai:event deltas land in this tile.
     if let Some(tile) = tile_weak.upgrade() {
         crate::clear_terms(&tile);
         tile.set_followup_busy(true);
-        tile.set_source_label(SharedString::from(crate::tile_text::asking_label(cfg.read().ui_is_ru())));
+        tile.set_source_label(SharedString::from(crate::tile_text::asking_label(
+            cfg.read().ui_is_ru(),
+        )));
         tile.set_plain_notice(false);
         // Plain ellipsis — no hourglass glyph (tofu on the skia font fallback).
         let shown = format!("{prefix}…");
@@ -483,7 +501,7 @@ pub(crate) fn fire_followup_ask(
     // Snapshot config + journal/health and abort any in-flight task on the UI
     // thread; the blocking approved-memory read + reframe then run on a worker
     // (mirrors fire_f9_ask's tail — audit C2/G2).
-    let (endpoint_hint, max_tokens, response_language, meeting_context, ui_is_ru, needs_mlx) = {
+    let (endpoint_hint, max_tokens, response_language, meeting_context, ui_is_ru, needs_mlx, fast) = {
         let c = cfg.read();
         let ep = route.endpoint(&c);
         (
@@ -493,6 +511,7 @@ pub(crate) fn fire_followup_ask(
             c.meeting_context.clone(),
             c.ui_is_ru(),
             route_needs_mlx(route, &c),
+            route.fast_answers(&c),
         )
     };
     let attached_screenshot = route.attaches_screenshot();
@@ -549,7 +568,11 @@ pub(crate) fn fire_followup_ask(
         // transcript turns) so the model answers THIS question, not the original
         // transcript question. The STORED history (request_messages installed
         // above) stays original — the reframe is recomputed fresh on every turn.
-        let send_messages = reframe_for_send(&messages, &response_language, &meeting_context);
+        let fast = fast && ai::uses_fast_answer_format(&messages);
+        let mut send_messages = reframe_for_send(&messages, &response_language, &meeting_context);
+        if fast {
+            ai::apply_fast_answer_format(&mut send_messages);
+        }
         let sys_full = send_messages
             .first()
             .and_then(|m| match &m.content {
@@ -561,7 +584,9 @@ pub(crate) fn fire_followup_ask(
         let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
         let purpose = "followup_ask";
         let _ = slint::invoke_from_event_loop(move || {
-            if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation {
+            if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation
+                || !super::tile_request_open(tile_id)
+            {
                 return;
             }
             // Journal the follow-up request so it pairs with the AiResponse that
@@ -590,7 +615,7 @@ pub(crate) fn fire_followup_ask(
             let events_for_task =
                 gated_events(&bridge_for_work, events_for_work.clone(), generation);
             let task = rt_handle_for_work.spawn(async move {
-                let ai_rx = ai::stream_chat_endpoint(
+                let ai_rx = ai::stream_live_chat_endpoint(
                     ai::AiEndpoint {
                         protocol,
                         base_url,
@@ -601,6 +626,7 @@ pub(crate) fn fire_followup_ask(
                     },
                     send_messages,
                     max_tokens,
+                    fast,
                 );
                 overlay_backend::runtime::ask_stream_loop(
                     events_for_task,
@@ -617,6 +643,7 @@ pub(crate) fn fire_followup_ask(
                 )
                 .await;
             });
+            super::register_tile_stream(tile_id, task.abort_handle());
             slint_replay::runtime_state::lock(&slint_rt_for_work).ai_task = Some(task);
             diag!(
                 "followup sent (convo_id={convo_id}, {} chars)",
@@ -672,7 +699,7 @@ pub(crate) fn fire_regenerate(
         let n = messages.len() - 1;
         strip_followup_directives(&mut messages[..n]);
     }
-    let (endpoint_hint, max_tokens, response_language, meeting_context, ui_is_ru, needs_mlx) = {
+    let (endpoint_hint, max_tokens, response_language, meeting_context, ui_is_ru, needs_mlx, fast) = {
         let c = cfg.read();
         let ep = route.endpoint(&c);
         (
@@ -682,6 +709,7 @@ pub(crate) fn fire_regenerate(
             c.meeting_context.clone(),
             c.ui_is_ru(),
             route_needs_mlx(route, &c),
+            route.fast_answers(&c),
         )
     };
     let attached_screenshot = route.attaches_screenshot();
@@ -693,6 +721,13 @@ pub(crate) fn fire_regenerate(
         endpoint_hint.is_unmetered(),
         "regenerate",
     );
+    let Some(tile) = tile_weak.upgrade() else {
+        return;
+    };
+    let tile_id = tile.get_tile_id();
+    if !super::tile_request_open(tile_id) {
+        return;
+    }
     if let Some(t) = tile_weak.upgrade() {
         crate::clear_terms(&t);
         t.set_followup_busy(true);
@@ -759,7 +794,8 @@ pub(crate) fn fire_regenerate(
         let model = endpoint.model;
         let reasoning_effort = endpoint.reasoning_effort;
         // BLOCKING — off the event loop, and ONLY on the ≥2-user-turn branch.
-        let send_messages = if messages.iter().filter(|m| m.role == "user").count() >= 2 {
+        let fast = fast && ai::uses_fast_answer_format(&messages);
+        let mut send_messages = if messages.iter().filter(|m| m.role == "user").count() >= 2 {
             let last_user_q =
                 messages
                     .iter()
@@ -777,6 +813,9 @@ pub(crate) fn fire_regenerate(
         } else {
             messages.clone()
         };
+        if fast {
+            ai::apply_fast_answer_format(&mut send_messages);
+        }
         let sys_full = send_messages
             .first()
             .and_then(|m| match &m.content {
@@ -796,7 +835,9 @@ pub(crate) fn fire_regenerate(
         let input_tokens_est = ((sys_full.chars().count() + usr_full.chars().count()) as u64) / 4;
         let purpose = "regenerate";
         let _ = slint::invoke_from_event_loop(move || {
-            if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation {
+            if bridge_for_work.stream_gen.load(Ordering::SeqCst) != generation
+                || !super::tile_request_open(tile_id)
+            {
                 return;
             }
             if let Some(j) = journal_for_loop.as_ref() {
@@ -821,7 +862,7 @@ pub(crate) fn fire_regenerate(
             let events_for_task =
                 gated_events(&bridge_for_work, events_for_work.clone(), generation);
             let task = rt_handle_for_work.spawn(async move {
-                let ai_rx = ai::stream_chat_endpoint(
+                let ai_rx = ai::stream_live_chat_endpoint(
                     ai::AiEndpoint {
                         protocol,
                         base_url,
@@ -832,6 +873,7 @@ pub(crate) fn fire_regenerate(
                     },
                     send_messages,
                     max_tokens,
+                    fast,
                 );
                 overlay_backend::runtime::ask_stream_loop(
                     events_for_task,
@@ -848,6 +890,7 @@ pub(crate) fn fire_regenerate(
                 )
                 .await;
             });
+            super::register_tile_stream(tile_id, task.abort_handle());
             slint_replay::runtime_state::lock(&slint_rt_for_work).ai_task = Some(task);
             diag!("regenerate sent (convo_id={convo_id}, route={route:?})");
         });

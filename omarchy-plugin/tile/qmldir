@@ -1,0 +1,10 @@
+ActionButton 1.0 ActionButton.qml
+FollowupRow 1.0 FollowupRow.qml
+Header 1.0 Header.qml
+Label 1.0 Label.qml
+MarkdownBlocks 1.0 MarkdownBlocks.qml
+MemoryPanel 1.0 MemoryPanel.qml
+Player 1.0 Player.qml
+SelectableText 1.0 SelectableText.qml
+TermPanel 1.0 TermPanel.qml
+TermRows 1.0 TermRows.qml

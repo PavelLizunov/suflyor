@@ -11,13 +11,39 @@ pub mod clipboard;
 #[path = "macos/clipboard.rs"]
 pub mod clipboard;
 
+#[cfg(target_os = "linux")]
+#[path = "linux/clipboard.rs"]
+pub mod clipboard;
+
+#[cfg(target_os = "linux")]
+#[path = "linux/desktop.rs"]
+pub mod desktop;
+#[cfg(target_os = "linux")]
+#[path = "linux/displays.rs"]
+mod displays;
+#[cfg(target_os = "linux")]
+#[path = "linux/screen.rs"]
+pub mod screen;
+#[cfg(all(target_os = "linux", not(feature = "remote-ui")))]
+#[path = "linux/window.rs"]
+pub mod window;
+// The Omarchy plugin build: windows are shell layers, placed through suflyord's
+// remote windows instead of Hyprland clients.
+#[cfg(all(target_os = "linux", feature = "remote-ui"))]
+#[path = "remote/window.rs"]
+pub mod window;
+
 #[cfg(windows)]
 #[path = "windows/lifecycle.rs"]
 pub mod lifecycle;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 #[path = "macos/lifecycle.rs"]
 pub mod lifecycle;
+
+#[cfg(target_os = "linux")]
+#[path = "linux/status.rs"]
+pub mod status;
 
 #[cfg(target_os = "macos")]
 #[path = "macos/status.rs"]
@@ -35,7 +61,8 @@ pub mod screen;
 #[path = "macos/screen.rs"]
 pub mod screen;
 
-#[cfg(test)]
+// The remote-ui build compiles only ui/remote_host.slint, so these real-window tests do not apply.
+#[cfg(all(test, not(feature = "remote-ui")))]
 mod tests {
     #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 

@@ -23,8 +23,10 @@ pub fn select_local_provider(cfg: &mut crate::config::Config, root: &Path) -> bo
 /// Default install root: `%USERPROFILE%\suflyor-local-ai`.
 #[must_use]
 pub fn default_root() -> PathBuf {
-    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-    home.join("suflyor-local-ai")
+    crate::paths::model_storage_root().unwrap_or_else(|| {
+        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        home.join("suflyor-local-ai")
+    })
 }
 
 /// Persist a successfully started managed or user-selected model.

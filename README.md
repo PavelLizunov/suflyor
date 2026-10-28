@@ -71,6 +71,19 @@ the [macOS installation and permissions guide](docs/macos-install.md) before
 the first launch. The package is ad-hoc signed and not notarized, so Gatekeeper
 asks for confirmation.
 
+### Omarchy (Linux x86_64)
+
+Use `suflyor-0.39.0-omarchy-linux-x86_64.tar.zst` from the 0.39.0 release.
+Extract it and run `./install.sh`; on a first installation, run
+`omarchy bar put io.github.pavellizunov.suflyor`. No Rust toolchain is required.
+The current Omarchy shell, an AVX2 CPU and native audio/capture tools are needed.
+Existing settings, models, recordings and bar placement are retained.
+
+The main panel offers quick tile timeouts and tenths-of-a-second countdowns.
+See [plugin behavior and capture limitations](omarchy-plugin/README.md) and
+[0.39.0 release notes](docs/release-notes-v0.39.0.md). Linux remains an
+experimental product target, not a claim of Windows-equivalent capture privacy.
+
 ### Local AI (optional)
 
 **Settings, AI providers** separates downloading models from using them.

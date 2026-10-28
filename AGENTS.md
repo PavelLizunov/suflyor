@@ -1,8 +1,9 @@
 # Suflyor — DSH agent instructions
 
 Suflyor is a native meeting/interview assistant built with Rust and Slint. The
-production code supports Windows and an active macOS port; Linux is not a
-product target. This repository has five standalone crates and no root Cargo
+production code supports Windows and an active macOS port. The experimental
+Omarchy/Wayland port follows `docs/goal-omarchy-port.md`; Linux is not yet a
+released product target. This repository has five standalone crates and no root Cargo
 workspace.
 
 This file is the repository-wide contract for agents working through DeepSeek
@@ -27,6 +28,8 @@ remain higher priority. Within repository instructions, more specific
     physical macOS QA.
   - `linux-worker` / `debian-xfce`: Git/Python-only support tasks. It currently
     has no Rust toolchain; do not provision one as part of an unrelated task.
+  - `omarchy-test` / `omarchy-worker`: experimental Linux/Hyprland builds and
+    Wayland UI checks using its existing Rust toolchain.
 - Remote builds use an immutable candidate commit: commit on the task branch,
   make the worker fetch and check out that exact SHA in its own clean checkout,
   then record the SHA, command, exit code, and artifact/evidence path. Never

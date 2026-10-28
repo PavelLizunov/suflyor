@@ -61,6 +61,11 @@ impl AskRoute {
             AskRoute::Cloud => c.ai_endpoint_cloud(),
         }
     }
+    /// Escalation and vision keep their own detailed-answer behavior.
+    pub(crate) fn fast_answers(self, c: &overlay_backend::config::Config) -> bool {
+        self == Self::Text && c.ai_fast_answers && c.ai_provider != "mlx"
+    }
+
     /// Max output tokens for this route (vision is capped tighter).
     pub(crate) fn max_tokens(self) -> u32 {
         match self {
@@ -114,19 +119,32 @@ mod tests {
         assert!(!AskRoute::Text.has_required_auth(&config));
         assert!(!AskRoute::Cloud.has_required_auth(&config));
         config.codex_model = "gpt-safe".into();
-        assert_eq!(AskRoute::Text.has_required_auth(&config), cfg!(windows));
-        assert_eq!(AskRoute::Cloud.has_required_auth(&config), cfg!(windows));
+        assert_eq!(
+            AskRoute::Text.has_required_auth(&config),
+            cfg!(any(windows, target_os = "linux"))
+        );
+        assert_eq!(
+            AskRoute::Cloud.has_required_auth(&config),
+            cfg!(any(windows, target_os = "linux"))
+        );
         for route in [AskRoute::Text, AskRoute::Cloud] {
             let endpoint = route.endpoint(&config);
             assert_eq!(
                 endpoint.protocol,
-                if cfg!(windows) {
+                if cfg!(any(windows, target_os = "linux")) {
                     overlay_backend::ai::AiProtocol::CodexSubscription
                 } else {
                     overlay_backend::ai::AiProtocol::OpenAiCompatible
                 }
             );
-            assert_eq!(endpoint.model, if cfg!(windows) { "gpt-safe" } else { "" });
+            assert_eq!(
+                endpoint.model,
+                if cfg!(any(windows, target_os = "linux")) {
+                    "gpt-safe"
+                } else {
+                    ""
+                }
+            );
             assert!(endpoint.base_url.is_empty());
             assert!(endpoint.bearer.is_empty());
         }

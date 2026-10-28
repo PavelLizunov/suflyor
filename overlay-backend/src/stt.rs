@@ -18,12 +18,12 @@ const GROQ_STT_URL: &str = "https://api.groq.com/openai/v1/audio/transcriptions"
 /// Models-list endpoint — used by `test_connection` to validate the
 /// Groq API key without uploading audio.
 const GROQ_MODELS_URL: &str = "https://api.groq.com/openai/v1/models";
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 const GIGAAM_UNSUPPORTED: &str = "local GigaAM STT is not supported on this platform";
 
 /// Private cfg-selected shim isolating the Windows/macOS `transcribe-rs` GigaAM
 /// dependency. Other targets keep the same shape but fail explicitly.
-#[cfg(any(windows, target_os = "macos"))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
 mod gigaam_shim {
     use std::path::Path;
     use transcribe_rs::onnx::gigaam::GigaAMModel;
@@ -46,6 +46,12 @@ mod gigaam_shim {
         } else {
             transcribe_rs::OrtAccelerator::CpuOnly
         };
+        #[cfg(target_os = "linux")]
+        let pref = if use_gpu && cfg!(feature = "cuda") {
+            transcribe_rs::OrtAccelerator::Cuda
+        } else {
+            transcribe_rs::OrtAccelerator::CpuOnly
+        };
         transcribe_rs::set_ort_accelerator(pref);
         log::info!("GigaAM ONNX Runtime accelerator = {pref}");
     }
@@ -53,7 +59,36 @@ mod gigaam_shim {
     /// Load under the configured ORT accelerator, falling back to CPU if the
     /// platform provider (DirectML/Core ML) cannot build this model.
     pub(super) fn load(dir: &str) -> anyhow::Result<Model> {
-        match GigaAMModel::load(Path::new(dir), &Quantization::Int8) {
+        #[cfg(all(target_os = "linux", feature = "cuda"))]
+        {
+            static RUNTIME: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
+            RUNTIME
+                .get_or_init(|| {
+                    let library = std::env::current_exe()
+                        .map_err(|error| error.to_string())?
+                        .parent()
+                        .ok_or("speech runtime directory unavailable")?
+                        .join("speech-gpu/libonnxruntime.so");
+                    ort::init_from(library)
+                        .map_err(|error| error.to_string())?
+                        .with_telemetry(false)
+                        .commit();
+                    Ok(())
+                })
+                .as_ref()
+                .map_err(|error| anyhow::anyhow!("speech runtime: {error}"))?;
+        }
+        // CUDA kernels cover the FP32 graph; dynamic-int8 convolutions can
+        // otherwise leave the expensive layers on CPU despite a CUDA session.
+        let quantization = if cfg!(all(target_os = "linux", feature = "cuda"))
+            && transcribe_rs::get_ort_accelerator() == transcribe_rs::OrtAccelerator::Cuda
+            && Path::new(dir).join("model.onnx").is_file()
+        {
+            Quantization::FP32
+        } else {
+            Quantization::Int8
+        };
+        match GigaAMModel::load(Path::new(dir), &quantization) {
             Ok(m) => Ok(Model(m)),
             Err(e)
                 if transcribe_rs::get_ort_accelerator()
@@ -80,7 +115,7 @@ mod gigaam_shim {
     }
 }
 
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 mod gigaam_shim {
     /// Placeholder handle that keeps the shared STT code shape. Never
     /// constructed on this platform — `load` always fails.
@@ -117,7 +152,7 @@ pub const GIGAAM_LOAD_FAILED: &str = "GigaAM: model failed to load (see log)";
 /// [`GIGAAM_NOT_DOWNLOADED`] before the runtime starts, and a complete managed
 /// model gets its bundled `vocab.txt` back when that file was lost.
 fn load_gigaam(dir: &str) -> Result<gigaam_shim::Model> {
-    if cfg!(any(windows, target_os = "macos")) {
+    if cfg!(any(windows, target_os = "macos", target_os = "linux")) {
         let path = std::path::Path::new(dir);
         let model_file = std::fs::metadata(path.join("model.int8.onnx"));
         if dir.trim().is_empty() || !model_file.is_ok_and(|m| m.len() > 0) {
@@ -141,8 +176,8 @@ fn public_gigaam_load_error(error: anyhow::Error, public_message: &'static str) 
 ///
 /// Must be called once at startup, BEFORE any GigaAM model is loaded: the ORT
 /// session builder reads this global preference when it creates the session.
-/// `use_gpu` selects DirectML on Windows and Core ML on macOS; otherwise CPU.
-/// Both builds retain ONNX Runtime's CPU fallback.
+/// `use_gpu` selects DirectML on Windows, Core ML on macOS and CUDA in a
+/// CUDA-enabled Linux build. CPU remains the fallback.
 pub fn configure_gigaam_accelerator(use_gpu: bool) {
     gigaam_shim::configure_accelerator(use_gpu);
 }
@@ -334,7 +369,7 @@ pub fn spawn(
 ) -> mpsc::Receiver<TranscriptEvent> {
     let (tx, rx) = mpsc::channel::<TranscriptEvent>(64);
 
-    #[cfg(not(any(windows, target_os = "macos")))]
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     if matches!(&backend, SttBackendCfg::Gigaam { .. }) {
         log::error!("local GigaAM STT is not supported on this platform");
         drop(tx);
@@ -1668,7 +1703,7 @@ mod tests {
 
     // ── Unsupported-platform GigaAM seam ──
 
-    #[cfg(not(any(windows, target_os = "macos")))]
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     #[test]
     fn gigaam_shim_load_unsupported_off_windows() {
         let err = gigaam_shim::load("nonexistent-model-dir")
@@ -1680,13 +1715,13 @@ mod tests {
         );
     }
 
-    #[cfg(not(any(windows, target_os = "macos")))]
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     #[test]
     fn validate_gigaam_dir_unsupported_off_windows() {
         assert!(validate_gigaam_dir("nonexistent-model-dir").is_err());
     }
 
-    #[cfg(not(any(windows, target_os = "macos")))]
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     #[test]
     fn configure_gigaam_accelerator_honest_noop_off_windows() {
         // Must not panic — the session-start path calls it unconditionally.

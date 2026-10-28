@@ -56,6 +56,14 @@ export component PaletteWindow inherits Window {
     callback drag-start-requested();
     callback drag-moved();
 
+    // The localized kind of a knowledge entry; Rust reuses it for the chip of the opened tile.
+    public pure function source-label(source: string) -> string {
+        source == "glossary" ? @tr("glossary")
+            : source == "commands" ? @tr("commands")
+            : source == "patterns" ? @tr("patterns")
+            : source
+    }
+
     // Phase E6 v37 — direct initial keyboard focus to the search box so
     // the palette is ready to type the instant it opens AND so Escape
     // has a focused element to bubble up from to the FocusScope below.
@@ -216,10 +224,7 @@ export component PaletteWindow inherits Window {
                                     }
                                     // The kind sits in one right-hand column on every row.
                                     Text {
-                                        text: result.source == "glossary" ? @tr("glossary")
-                                            : result.source == "commands" ? @tr("commands")
-                                            : result.source == "patterns" ? @tr("patterns")
-                                            : result.source;
+                                        text: root.source-label(result.source);
                                         font-size: Metrics.font-caption;
                                         color: Theme.text-muted;
                                         vertical-alignment: center;

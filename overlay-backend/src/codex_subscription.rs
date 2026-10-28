@@ -40,7 +40,9 @@ const APP_SERVER_ARGS: &[&str] = &[
     "--strict-config",
     "-c",
     "cli_auth_credentials_store=\"keyring\"",
+    #[cfg(windows)]
     "-c",
+    #[cfg(windows)]
     "windows.sandbox=\"elevated\"",
     "-c",
     "default_permissions=\"suflyor-text-only\"",
@@ -469,23 +471,6 @@ fn safe_display_label(value: &str) -> Option<String> {
         && value.is_ascii()
         && !value.chars().any(char::is_control))
     .then(|| value.to_string())
-}
-
-/// Read current subscription-account state without exposing email or tokens.
-#[must_use]
-pub fn account_state() -> AccountState {
-    match account_state_inner() {
-        Ok(state) => state,
-        Err(RpcFailure::NotInstalled) => AccountState::NotInstalled,
-        Err(_) => AccountState::Error,
-    }
-}
-
-fn account_state_inner() -> Result<AccountState, RpcFailure> {
-    let mut server = AppServer::start()?;
-    server.initialize()?;
-    let result = server.request(2, "account/read", json!({"refreshToken":false}))?;
-    parse_account_state(&result)
 }
 
 /// Reserve a device-login attempt before its worker thread starts. Starting a
@@ -1419,6 +1404,22 @@ fn spawn_app_server(
             command.env(name, value);
         }
     }
+    #[cfg(unix)]
+    for name in [
+        "HOME",
+        "PATH",
+        "LANG",
+        "LC_ALL",
+        "TMPDIR",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_RUNTIME_DIR",
+        "DBUS_SESSION_BUS_ADDRESS",
+    ] {
+        if let Some(value) = std::env::var_os(name) {
+            command.env(name, value);
+        }
+    }
     command.env("CODEX_HOME", codex_home);
     #[cfg(windows)]
     {
@@ -1454,6 +1455,7 @@ fn codex_executable_candidates() -> Vec<PathBuf> {
     let mut candidates = Vec::new();
     // Prefer the real Codex Desktop bundle over WindowsApps execution aliases,
     // which can exist on PATH but reject CreateProcess with access denied.
+    #[cfg(windows)]
     if let Some(local) = dirs::data_local_dir() {
         let bundled = local.join("OpenAI").join("Codex").join("bin");
         if let Ok(entries) = fs::read_dir(bundled) {
@@ -1465,7 +1467,8 @@ fn codex_executable_candidates() -> Vec<PathBuf> {
         }
     }
     if let Some(path) = std::env::var_os("PATH") {
-        candidates.extend(std::env::split_paths(&path).map(|dir| dir.join("codex.exe")));
+        let executable = format!("codex{}", std::env::consts::EXE_SUFFIX);
+        candidates.extend(std::env::split_paths(&path).map(|dir| dir.join(&executable)));
     }
     let mut seen = std::collections::HashSet::new();
     candidates.retain(|path| path.is_file() && seen.insert(path.clone()));
@@ -1626,7 +1629,10 @@ mod tests {
     #[test]
     fn experimental_security_contract_is_explicit_and_model_pinned_twice() {
         assert!(APP_SERVER_ARGS.contains(&"--strict-config"));
-        assert!(APP_SERVER_ARGS.contains(&"windows.sandbox=\"elevated\""));
+        assert_eq!(
+            APP_SERVER_ARGS.contains(&"windows.sandbox=\"elevated\""),
+            cfg!(windows)
+        );
         assert!(APP_SERVER_ARGS.contains(&"default_permissions=\"suflyor-text-only\""));
         assert!(
             APP_SERVER_ARGS.contains(&"permissions.suflyor-text-only.filesystem.:root=\"deny\"")

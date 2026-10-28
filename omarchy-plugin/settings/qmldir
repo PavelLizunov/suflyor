@@ -1,0 +1,17 @@
+TabAiProviders 1.0 TabAiProviders.qml
+TabAudio 1.0 TabAudio.qml
+TabAutoTiles 1.0 TabAutoTiles.qml
+TabCoaching 1.0 TabCoaching.qml
+TabComponents 1.0 TabComponents.qml
+TabDiagnostics 1.0 TabDiagnostics.qml
+TabHermes 1.0 TabHermes.qml
+TabHotkeys 1.0 TabHotkeys.qml
+TabInterface 1.0 TabInterface.qml
+TabKnowledge 1.0 TabKnowledge.qml
+TabMemory 1.0 TabMemory.qml
+TabProfile 1.0 TabProfile.qml
+TabScreenshots 1.0 TabScreenshots.qml
+TabStealth 1.0 TabStealth.qml
+TabStt 1.0 TabStt.qml
+TabTts 1.0 TabTts.qml
+TabUpdates 1.0 TabUpdates.qml

@@ -75,24 +75,53 @@ fn sync_env(path: &std::path::Path, old: &str, new: &str) -> std::io::Result<()>
     Ok(())
 }
 
-/// Install the plugin into the local Hermes: files + `.env` + `config.yaml`.
-/// Returns an RU status line for the Settings label (no secrets).
-pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
-    let home = hermes_home().ok_or_else(|| "не найден домашний каталог Hermes".to_string())?;
-    if !home.is_dir() {
-        return Err(format!(
-            "Hermes не найден на этой машине (нет {})",
-            home.display()
-        ));
+/// Why a Hermes file step stopped. The Settings tab words it in the UI language.
+#[derive(Debug)]
+pub enum HermesError {
+    /// No Hermes on this machine: the home directory that was looked for, if one is known.
+    NotFound(Option<PathBuf>),
+    /// Reading or writing this Hermes file or directory failed.
+    Io(PathBuf, std::io::Error),
+    /// `config.yaml` has a shape the line edit does not touch.
+    UnsupportedConfig,
+}
+
+/// What [`install_plugin`] left in Hermes.
+#[derive(Debug, PartialEq, Eq)]
+pub enum PluginInstalled {
+    /// Files written and `suflyor` added to `plugins.enabled`.
+    Enabled,
+    /// Files rewritten; the plugin was already enabled.
+    Updated,
+    /// Files written, but `config.yaml` must be enabled by hand.
+    FilesOnly,
+}
+
+/// The existing Hermes home, or why there is none.
+fn existing_home() -> Result<PathBuf, HermesError> {
+    let home = hermes_home().ok_or(HermesError::NotFound(None))?;
+    if home.is_dir() {
+        Ok(home)
+    } else {
+        Err(HermesError::NotFound(Some(home)))
     }
+}
+
+fn io_at(path: &std::path::Path) -> impl FnOnce(std::io::Error) -> HermesError + '_ {
+    move |e| HermesError::Io(path.to_path_buf(), e)
+}
+
+/// Install the plugin into the local Hermes: files + `.env` + `config.yaml`.
+pub fn install_plugin(bridge_url: &str, token: &str) -> Result<PluginInstalled, HermesError> {
+    let home = existing_home()?;
 
     // 1. Plugin files (overwrite = upgrade path).
     let pdir = home.join("plugins").join("suflyor");
-    std::fs::create_dir_all(&pdir).map_err(|e| format!("не создать {}: {e}", pdir.display()))?;
-    std::fs::write(pdir.join("plugin.yaml"), PLUGIN_YAML)
-        .map_err(|e| format!("запись plugin.yaml: {e}"))?;
-    std::fs::write(pdir.join("__init__.py"), PLUGIN_INIT)
-        .map_err(|e| format!("запись __init__.py: {e}"))?;
+    std::fs::create_dir_all(&pdir).map_err(io_at(&pdir))?;
+    let yaml_path = pdir.join("plugin.yaml");
+    std::fs::write(&yaml_path, PLUGIN_YAML).map_err(io_at(&yaml_path))?;
+    let init_path = pdir.join("__init__.py");
+    std::fs::write(&init_path, PLUGIN_INIT).map_err(io_at(&init_path))?;
 
     // 2. .env merge (create if absent). Default to empty ONLY when the file
     // does not exist — any other read error (permissions, non-UTF-8) must
@@ -101,64 +130,48 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<String, String> {
     let env_old = match std::fs::read_to_string(&env_path) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(format!("чтение .env: {e}")),
+        Err(e) => return Err(HermesError::Io(env_path, e)),
     };
     let env_new = merge_env_text(&env_old, bridge_url, token);
-    sync_env(&env_path, &env_old, &env_new).map_err(|e| format!("запись .env: {e}"))?;
+    sync_env(&env_path, &env_old, &env_new).map_err(io_at(&env_path))?;
 
     // 3. config.yaml enable.
     let cfg_path = home.join("config.yaml");
     let cfg_old = if cfg_path.is_file() {
-        Some(std::fs::read_to_string(&cfg_path).map_err(|e| format!("чтение config.yaml: {e}"))?)
+        Some(std::fs::read_to_string(&cfg_path).map_err(io_at(&cfg_path))?)
     } else {
         None
     };
     let outcome = enable_in_config_text(cfg_old.as_deref().unwrap_or(""));
     match outcome {
         EnableEdit::Updated(new_text) => {
-            std::fs::write(&cfg_path, new_text).map_err(|e| format!("запись config.yaml: {e}"))?;
-            Ok("готово: плагин установлен и включён — перезапустите Hermes".to_string())
+            std::fs::write(&cfg_path, new_text).map_err(io_at(&cfg_path))?;
+            Ok(PluginInstalled::Enabled)
         }
-        EnableEdit::AlreadyEnabled => {
-            Ok("готово: плагин обновлён (уже включён) — перезапустите Hermes".to_string())
-        }
-        EnableEdit::Unsupported => Ok(
-            "файлы установлены, но config.yaml нестандартный — выполните вручную: \
-             hermes plugins enable suflyor"
-                .to_string(),
-        ),
+        EnableEdit::AlreadyEnabled => Ok(PluginInstalled::Updated),
+        EnableEdit::Unsupported => Ok(PluginInstalled::FilesOnly),
     }
 }
 
 /// Ensure the local Hermes API server is enabled with a key, creating both
-/// when missing (the «Настроить локальный Hermes» button — the tester should
+/// when missing (the «Ключ из локального Hermes» button — the tester should
 /// never have to hand-edit YAML to learn what an API_SERVER_KEY is).
 /// Returns `(key, changed)`; `changed` says config.yaml was rewritten (⇒ the
 /// user must restart Hermes).
-pub fn ensure_api_server() -> Result<(String, bool), String> {
-    let home = hermes_home().ok_or_else(|| "не найден домашний каталог Hermes".to_string())?;
-    if !home.is_dir() {
-        return Err(format!(
-            "Hermes не найден на этой машине (нет {})",
-            home.display()
-        ));
-    }
-    let cfg_path = home.join("config.yaml");
+pub fn ensure_api_server() -> Result<(String, bool), HermesError> {
+    let cfg_path = existing_home()?.join("config.yaml");
     let old = match std::fs::read_to_string(&cfg_path) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(format!("чтение config.yaml: {e}")),
+        Err(e) => return Err(HermesError::Io(cfg_path, e)),
     };
     match ensure_api_server_text(&old, crate::bridge::generate_token) {
         ApiEdit::Ready(key) => Ok((key, false)),
         ApiEdit::Updated(text, key) => {
-            std::fs::write(&cfg_path, text).map_err(|e| format!("запись config.yaml: {e}"))?;
+            std::fs::write(&cfg_path, text).map_err(io_at(&cfg_path))?;
             Ok((key, true))
         }
-        ApiEdit::Unsupported => Err(
-            "config.yaml нестандартный — пропишите platforms.api_server.extra.key вручную"
-                .to_string(),
-        ),
+        ApiEdit::Unsupported => Err(HermesError::UnsupportedConfig),
     }
 }
 

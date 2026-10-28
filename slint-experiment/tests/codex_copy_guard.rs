@@ -155,7 +155,7 @@ fn same_as_text_vision_is_visible_but_catalog_gated() {
     let ui = fs::read_to_string(root.join("ui/settings_panel.slint")).expect("read UI");
     assert!(ui.contains("in-out property <bool> vision-same-available: false"));
     assert!(ui.contains("Same as the answer model (unavailable)"));
-    assert!(ui.contains("selected text model does not declare image input"));
+    assert!(ui.contains("selected answer model does not declare image input"));
 
     let ai = fs::read_to_string(root.join("src/bin/overlay_host/settings_ai.rs"))
         .expect("read settings_ai.rs");

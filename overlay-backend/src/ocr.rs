@@ -66,6 +66,10 @@ pub fn tesseract_root() -> Option<PathBuf> {
             return Some(cand);
         }
     }
+    #[cfg(target_os = "linux")]
+    if Path::new("/usr/bin/tesseract").is_file() {
+        return Some(PathBuf::from("/usr/bin"));
+    }
     None
 }
 
@@ -87,6 +91,45 @@ pub fn is_available() -> bool {
     tesseract_exe().is_some()
 }
 
+/// An OCR failure the user can fix. The host words it in the UI language;
+/// every other failure stays a generic tile with the detail in the log.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OcrFailure {
+    /// Tesseract runs, but these language packages are not installed.
+    MissingLanguageData(String),
+    TimedOut,
+}
+
+impl std::fmt::Display for OcrFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingLanguageData(packages) => {
+                write!(f, "OCR language data is missing: {packages}")
+            }
+            Self::TimedOut => f.write_str("tesseract timed out after 60 s"),
+        }
+    }
+}
+
+impl std::error::Error for OcrFailure {}
+
+#[cfg(target_os = "linux")]
+fn linux_tessdata(root: &Path) -> PathBuf {
+    if root == Path::new("/usr/bin") {
+        PathBuf::from("/usr/share/tessdata")
+    } else {
+        root.join("tessdata")
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn missing_language_packages(lang: &str, has_data: impl Fn(&str) -> bool) -> Vec<String> {
+    lang.split('+')
+        .filter(|language| !has_data(language))
+        .map(|language| format!("tesseract-data-{language}"))
+        .collect()
+}
+
 /// OCR a top-down BGRA frame (as produced by the screen-capture crop) and
 /// return the recognised UTF-8 text.
 ///
@@ -96,6 +139,9 @@ pub fn is_available() -> bool {
 pub fn run_ocr(bgra: &[u8], width: u32, height: u32, lang: &str) -> Result<String> {
     let root = tesseract_root().ok_or_else(|| anyhow!("OCR engine not installed"))?;
     let exe = root.join(EXE_NAME);
+    #[cfg(target_os = "linux")]
+    let tessdata = linux_tessdata(&root);
+    #[cfg(not(target_os = "linux"))]
     let tessdata = root.join("tessdata");
 
     // Guard the buffer so the BMP encoder can never read out of bounds on a
@@ -113,6 +159,15 @@ pub fn run_ocr(bgra: &[u8], width: u32, height: u32, lang: &str) -> Result<Strin
     } else {
         lang
     };
+    #[cfg(target_os = "linux")]
+    {
+        let missing = missing_language_packages(lang, |language| {
+            tessdata.join(format!("{language}.traineddata")).is_file()
+        });
+        if !missing.is_empty() {
+            return Err(OcrFailure::MissingLanguageData(missing.join(", ")).into());
+        }
+    }
     let bmp = bgra_to_bmp(bgra, width, height);
 
     let mut child = spawn_tesseract(&exe, &tessdata, lang).context("spawn tesseract")?;
@@ -132,6 +187,13 @@ pub fn run_ocr(bgra: &[u8], width: u32, height: u32, lang: &str) -> Result<Strin
     let out = child.wait_with_output().context("tesseract wait")?;
     let _ = writer.join();
 
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if matches!(out.status.code(), Some(124) | Some(137)) || out.status.signal() == Some(9) {
+            return Err(OcrFailure::TimedOut.into());
+        }
+    }
     if !out.status.success() {
         bail!("tesseract exited with status {}", out.status);
     }
@@ -143,6 +205,14 @@ pub fn run_ocr(bgra: &[u8], width: u32, height: u32, lang: &str) -> Result<Strin
 /// `--oem 1` = LSTM engine (matches the `tessdata_fast` models), `--psm 6` =
 /// assume a single uniform block of text (a selected region).
 fn spawn_tesseract(exe: &Path, tessdata: &Path, lang: &str) -> std::io::Result<Child> {
+    #[cfg(target_os = "linux")]
+    let mut cmd = {
+        // timeout owns the process group, so a stalled engine cannot hold the pipes open.
+        let mut cmd = Command::new("timeout");
+        cmd.args(["--kill-after=1s", "60s"]).arg(exe);
+        cmd
+    };
+    #[cfg(not(target_os = "linux"))]
     let mut cmd = Command::new(exe);
     cmd.args(["stdin", "stdout", "-l", lang, "--oem", "1", "--psm", "6"])
         .env("TESSDATA_PREFIX", tessdata)
@@ -261,6 +331,29 @@ mod tests {
         // Zero dims and a too-short buffer must error BEFORE any spawn.
         assert!(run_ocr(&[], 0, 0, "rus").is_err());
         assert!(run_ocr(&[0, 0, 0, 0], 4, 4, "rus").is_err()); // needs 64 bytes
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn missing_language_data_names_only_the_required_packages() {
+        assert_eq!(
+            linux_tessdata(Path::new("/usr/bin")),
+            Path::new("/usr/share/tessdata")
+        );
+        assert_eq!(
+            linux_tessdata(Path::new("/opt/ocr")),
+            Path::new("/opt/ocr/tessdata")
+        );
+        assert_eq!(
+            missing_language_packages(DEFAULT_OCR_LANG, |_| false),
+            ["tesseract-data-rus", "tesseract-data-eng"]
+        );
+        assert_eq!(
+            missing_language_packages(DEFAULT_OCR_LANG, |language| language == "eng"),
+            ["tesseract-data-rus"]
+        );
+        assert!(missing_language_packages(DEFAULT_OCR_LANG, |_| true).is_empty());
+        assert!(missing_language_packages("eng", |language| language == "eng").is_empty());
     }
 
     #[test]

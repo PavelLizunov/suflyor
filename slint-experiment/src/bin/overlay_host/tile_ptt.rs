@@ -10,12 +10,12 @@
 use super::{
     ai, apply_tile_hwnd_with_monitor, audio, classify_ai_error, fire_followup_ask, fire_regenerate,
     grab_hwnd, journal, live_route, markdown, present_tile_window, refresh_open_tiles,
-    resolve_route_endpoint, route_needs_mlx, show_mlx_runtime_error, stt, toggle_tile_maximize,
-    user_turn_markdown, warn_if_over_cost_cap, wire_copy, wire_escalate, wire_speak, wire_tile_drag,
-    wire_voice_followup, Arc, AskRoute, AtomicBool, ComponentHandle, Duration, MarkdownBlock,
-    ModelRc, Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink, RuntimeEvents,
-    SharedSlintRuntime, SharedString, TileWindow, TileWindows, VecModel, AI_STREAM_MAX_TOKENS,
-    CONVO_SEQ, TILE_DISPLAY_SEQ,
+    resolve_route_endpoint, route_needs_mlx, select_recent_labeled, show_mlx_runtime_error, stt,
+    toggle_tile_maximize, user_turn_markdown, warn_if_over_cost_cap, wire_copy, wire_escalate,
+    wire_speak, wire_tile_drag, wire_voice_followup, Arc, AskRoute, AtomicBool, ComponentHandle,
+    Duration, MarkdownBlock, ModelRc, Ordering, OverlayBarBridge, OverlayBarWindow, PttStreamSink,
+    RuntimeEvents, SharedSlintRuntime, SharedString, TileWindow, TileWindows, VecModel,
+    AI_STREAM_MAX_TOKENS, CONVO_SEQ, TILE_DISPLAY_SEQ,
 };
 /// Phase E6 v42 — hard cap on a push-to-record hold (30 s). Backstop for a
 /// lost pointer-up (alt-tab / focus loss mid-hold): without it the record
@@ -157,19 +157,18 @@ pub(crate) fn fire_ptt_ask(
     let bridge_for_close = bridge.clone();
     tile.on_close_clicked(move || {
         if let Some(t) = weak_close.upgrade() {
+            bridge_for_close.cancel_tile_request(&t);
             // Closing the tile that's being read aloud must silence it.
             super::stop_if_speaking(t.get_convo_id());
             // FIX #8 — prune this tile's conversation (no-op if none).
             bridge_for_close.drop_conversation(t.get_convo_id());
-            let close_hwnd = grab_hwnd(t.window()).ok();
+            let sequence = t.get_sequence();
             let _ = t.hide();
             slint_replay::win32::force_hide(t.window());
-            if let Some(target) = close_hwnd {
-                vec_for_close
-                    .borrow_mut()
-                    .retain(|item| grab_hwnd(item.window()).ok() != Some(target));
-                refresh_open_tiles(&weak_overlay_close, &vec_for_close);
-            }
+            vec_for_close
+                .borrow_mut()
+                .retain(|item| item.get_sequence() != sequence);
+            refresh_open_tiles(&weak_overlay_close, &vec_for_close);
         }
     });
     let weak_pin = tile.as_weak();
@@ -248,6 +247,7 @@ pub(crate) fn fire_ptt_ask(
     apply_tile_hwnd_with_monitor(&tile);
     let weak_for_stream = tile.as_weak();
     let weak_for_title = tile.as_weak();
+    let tile_id = tile.get_tile_id();
     tiles.borrow_mut().push(tile);
     refresh_open_tiles(weak_overlay, tiles);
 
@@ -258,13 +258,14 @@ pub(crate) fn fire_ptt_ask(
     // slot. No supersede, no abort — rapid PTTs no longer clobber each other.
 
     // ===== 3. Snapshot config + rolling transcript (context) =====
-    let (meeting_context, response_language, endpoint_hint, needs_mlx) = {
+    let (meeting_context, response_language, endpoint_hint, needs_mlx, fast) = {
         let c = cfg.read();
         (
             c.meeting_context.clone(),
             c.response_language.clone(),
             c.ai_endpoint(false),
             route_needs_mlx(AskRoute::Text, &c),
+            AskRoute::Text.fast_answers(&c),
         )
     };
     let (stt_backend, stt_is_local, groq_key, stt_language, trigger_keywords) = {
@@ -279,14 +280,15 @@ pub(crate) fn fire_ptt_ask(
     };
     let transcript_lines: Vec<String> = {
         let s = slint_replay::runtime_state::lock(slint_rt);
-        s.transcript
-            .iter()
-            .map(|l| format!("[{:?}] {}", l.source, l.text))
-            .collect()
+        select_recent_labeled(&s.transcript, 8)
     };
-    let (journal_for_loop, health_for_stream) = {
-        let s = slint_replay::runtime_state::lock(slint_rt);
-        (s.journal.clone(), s.health.clone())
+    let (journal_for_loop, health_for_stream, scope) = {
+        let mut s = slint_replay::runtime_state::lock(slint_rt);
+        (
+            s.journal.clone(),
+            s.health.clone(),
+            s.session_request_scope(),
+        )
     };
 
     // ===== 5. Spawn transcribe → ask (detached: never stored in ai_task, so a
@@ -295,7 +297,8 @@ pub(crate) fn fire_ptt_ask(
     let events_inner = events.clone();
     let cfg_for_task = cfg.clone();
     let slint_rt_for_task = slint_rt.clone();
-    rt_handle.spawn(async move {
+    let weak_cancelled = weak_for_title.clone();
+    let request = async move {
         let whisper_prompt = stt::build_whisper_prompt(&trigger_keywords, &meeting_context);
         let result = if !stt_is_local && groq_key.is_empty() {
             Err(anyhow::anyhow!("Groq API key not set (Settings → STT)"))
@@ -374,7 +377,9 @@ pub(crate) fn fire_ptt_ask(
                     t.set_tile_title(SharedString::from(
                         slint_replay::app_state::tile_title_line(&q),
                     ));
-                    t.set_source_label(SharedString::from(crate::tile_text::asking_label(ui_is_ru)));
+                    t.set_source_label(SharedString::from(crate::tile_text::asking_label(
+                        ui_is_ru,
+                    )));
                     t.set_plain_notice(false);
                 }
             });
@@ -385,12 +390,13 @@ pub(crate) fn fire_ptt_ask(
         // recognised spoken question selects the RELEVANT facts.
         let llm_context =
             overlay_backend::memory::context_for_meeting(&meeting_context, Some(&question));
-        let messages = ai::build_request(
+        let messages = ai::build_live_request(
             &llm_context,
             &response_language,
             &transcript_lines,
             None,
             Some(&question),
+            fast,
         );
         // Per-tile sink: streams this answer into THIS PTT tile and, on Done,
         // folds the turn into its conversation (for follow-ups). Carries the
@@ -454,7 +460,7 @@ pub(crate) fn fire_ptt_ask(
             overlay_backend::ai::microcents_to_usd(state.session_cost_microcents)
         });
         let t0 = std::time::Instant::now();
-        let ai_rx = ai::stream_chat_endpoint(
+        let ai_rx = ai::stream_live_chat_endpoint(
             ai::AiEndpoint {
                 protocol,
                 base_url,
@@ -465,6 +471,7 @@ pub(crate) fn fire_ptt_ask(
             },
             messages,
             AI_STREAM_MAX_TOKENS,
+            fast,
         );
         overlay_backend::runtime::ask_stream_loop(
             sink,
@@ -480,7 +487,25 @@ pub(crate) fn fire_ptt_ask(
             cost_apply,
         )
         .await;
+    };
+    let task = rt_handle.spawn(async move {
+        if slint_replay::runtime_state::until_session_changes(scope, request)
+            .await
+            .is_none()
+        {
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(tile) = weak_cancelled.upgrade() {
+                    tile.set_source_label(SharedString::from(if ui_is_ru {
+                        "ai · прервано (сессия изменена)"
+                    } else {
+                        "ai · interrupted (session changed)"
+                    }));
+                    tile.set_followup_busy(false);
+                }
+            });
+        }
     });
+    super::register_tile_stream(tile_id, task.abort_handle());
 }
 
 #[cfg(test)]

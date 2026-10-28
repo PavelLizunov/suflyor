@@ -49,7 +49,7 @@ session driver (overlay-backend/src/runtime.rs + slint-experiment/src/slint_sess
 detect_trigger (question / keyword) → KB-search injection → prompt build
         │
         ▼
-AI (overlay-backend/src/ai.rs) — endpoint chosen by config.ai_endpoint():
+AI (overlay-backend/src/ai/mod.rs) — endpoint chosen by config.ai_endpoint():
   · "local"       → local llama.cpp server (OpenAI-compatible) or native `suflyor-mlx` sidecar (macOS)
   · else          → cloud bridge (Claude OpenAI-compat)
   · complete_with_usage / stream_chat; 3 retries on 5xx/429, fail-fast 4xx
@@ -93,7 +93,7 @@ by a Slint `Timer`):
 | F3 | Re-ask last question | `runtime::reask_last` |
 | F4 | KB palette toggle | `open_palette` (focus-independent toggle) |
 | F6 | Manual tile from last transcript line | `runtime::manual_spawn_tile` (resolves local/cloud endpoint) |
-| F7 | Collapse-all tiles | stub |
+| F7 | Session archive toggle | `open_archive` / hide existing archive |
 | F9 | Live AI ask (streaming) | `fire_f9_ask` → `ask_stream_loop` |
 
 ## Key invariants

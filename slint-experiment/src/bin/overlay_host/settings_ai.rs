@@ -808,10 +808,7 @@ pub(crate) fn wire_ai_settings(
                     current.vision_provider == "mlx",
                 )
             };
-            if leaving_mlx
-                && !vision_uses_mlx
-                && !overlay_backend::mlx_runtime::stop_if_idle()
-            {
+            if leaving_mlx && !vision_uses_mlx && !overlay_backend::mlx_runtime::stop_if_idle() {
                 if let Some(window) = weak.upgrade() {
                     window.set_ai_provider_index(4);
                 }
@@ -1188,6 +1185,9 @@ pub(crate) fn wire_ai_settings(
         if !overlay_backend::codex_subscription::allowed_signin_url(url.as_str()) {
             return;
         }
+        #[cfg(target_os = "linux")]
+        let _ = slint_replay::native::desktop::open(std::ffi::OsStr::new(url.as_str()));
+        #[cfg(not(target_os = "linux"))]
         if let Err(error) = std::process::Command::new("explorer.exe")
             .arg(url.as_str())
             .spawn()

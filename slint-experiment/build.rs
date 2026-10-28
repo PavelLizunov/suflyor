@@ -29,7 +29,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_bundled_translations("translations")
         .with_default_translation_context(slint_build::DefaultTranslationContext::None)
         .with_debug_info(dev_debug_info);
-    slint_build::compile_with_config("ui/index.slint", config)?;
+    // The Omarchy plugin build mirrors the windows to the shell instead of
+    // drawing them; see src/remote_ui/mod.rs.
+    let root = if std::env::var_os("CARGO_FEATURE_REMOTE_UI").is_some() {
+        "ui/remote_host.slint"
+    } else {
+        "ui/index.slint"
+    };
+    slint_build::compile_with_config(root, config)?;
+    // slint-build tracks the .slint sources but not the bundled .po files, so a
+    // translation-only edit would otherwise keep the stale strings in a cached build.
+    println!("cargo:rerun-if-changed=translations");
 
     #[cfg(target_os = "macos")]
     {

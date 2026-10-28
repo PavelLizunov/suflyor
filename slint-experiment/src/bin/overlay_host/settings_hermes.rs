@@ -15,6 +15,7 @@
 
 use super::{ComponentHandle, SettingsWindow, SharedString};
 use overlay_backend::bridge::{self, BridgeHandle};
+use overlay_backend::hermes_install::{HermesError, PluginInstalled};
 use std::cell::RefCell;
 
 thread_local! {
@@ -56,6 +57,74 @@ fn bridge_port_error_label(ru: bool) -> &'static str {
         "порт: нужно число 1–65535"
     } else {
         "port: enter a number 1–65535"
+    }
+}
+
+/// Button labels as `settings_panel.slint` and `ru.po` show them, for "press … again".
+const INSTALL_PLUGIN_BUTTON: (&str, &str) =
+    ("Install plugin in Hermes", "Установить плагин в Hermes");
+const API_SETUP_BUTTON: (&str, &str) = ("Get key from local Hermes", "Ключ из локального Hermes");
+
+/// Status after "Install plugin in Hermes"; without the bridge it also asks to turn it on.
+fn plugin_installed_label(done: &PluginInstalled, bridge_on: bool, ru: bool) -> String {
+    let status = match (done, ru) {
+        (PluginInstalled::Enabled, true) => {
+            "Готово: плагин установлен и включён — перезапустите Hermes"
+        }
+        (PluginInstalled::Enabled, false) => "Plugin installed and enabled — restart Hermes",
+        (PluginInstalled::Updated, true) => {
+            "Готово: плагин обновлён (уже включён) — перезапустите Hermes"
+        }
+        (PluginInstalled::Updated, false) => "Plugin updated (already enabled) — restart Hermes",
+        (PluginInstalled::FilesOnly, true) => {
+            "Файлы плагина установлены. Выполните hermes plugins enable suflyor или добавьте suflyor в plugins.enabled в файле config.yaml Hermes, затем перезапустите Hermes."
+        }
+        (PluginInstalled::FilesOnly, false) => {
+            "Plugin files installed. Run hermes plugins enable suflyor or add suflyor to plugins.enabled in Hermes config.yaml, then restart Hermes."
+        }
+    };
+    match (bridge_on, ru) {
+        (true, _) => status.to_string(),
+        (false, true) => format!("{status} · включите «Мост для Hermes» выше"),
+        (false, false) => format!("{status} · enable the Hermes bridge above"),
+    }
+}
+
+/// A Hermes file error: the cause, then the button (`(en, ru)` label) to press again.
+fn hermes_error_label(error: &HermesError, button: (&str, &str), ru: bool) -> String {
+    let (en_b, ru_b) = button;
+    // Settings can be screen-shared: show the home folder masked, as Diagnostics does.
+    let shown =
+        |p: &std::path::Path| super::diagnostics::redact_user_home(&p.display().to_string());
+    match (error, ru) {
+        (HermesError::NotFound(Some(home)), true) => format!(
+            "Hermes не найден: нет папки {}. Установите Hermes и нажмите «{ru_b}» ещё раз.",
+            shown(home)
+        ),
+        (HermesError::NotFound(Some(home)), false) => format!(
+            "Hermes not found: there is no {} folder. Install Hermes, then press {en_b} again.",
+            shown(home)
+        ),
+        (HermesError::NotFound(None), true) => format!(
+            "Hermes не найден: не задан домашний каталог. Укажите HERMES_HOME и нажмите «{ru_b}» ещё раз."
+        ),
+        (HermesError::NotFound(None), false) => format!(
+            "Hermes not found: no home folder is set. Set HERMES_HOME, then press {en_b} again."
+        ),
+        (HermesError::Io(path, e), true) => format!(
+            "Нет доступа к {}: {e}. Проверьте права на файл и нажмите «{ru_b}» ещё раз.",
+            shown(path)
+        ),
+        (HermesError::Io(path, e), false) => format!(
+            "Cannot access {}: {e}. Check the file permissions, then press {en_b} again.",
+            shown(path)
+        ),
+        (HermesError::UnsupportedConfig, true) => format!(
+            "config.yaml в Hermes нестандартный: впишите platforms.api_server.extra.key вручную и нажмите «{ru_b}» ещё раз."
+        ),
+        (HermesError::UnsupportedConfig, false) => format!(
+            "Hermes config.yaml has an unusual layout: add platforms.api_server.extra.key by hand, then press {en_b} again."
+        ),
     }
 }
 
@@ -221,29 +290,8 @@ pub(crate) fn wire_hermes_settings(
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
                 let msg = match overlay_backend::hermes_install::install_plugin(&url, &token) {
-                    Ok(s) => {
-                        let status = if ru {
-                            s
-                        } else if s.starts_with("файлы установлены") {
-                            "Plugin files installed. Enable suflyor manually in Hermes config.yaml, then restart Hermes.".to_string()
-                        } else {
-                            "Plugin installed and enabled — restart Hermes".to_string()
-                        };
-                        if bridge_on {
-                            status
-                        } else if ru {
-                            format!("{status} · включите «Мост для Hermes» выше")
-                        } else {
-                            format!("{status} · enable the Hermes bridge above")
-                        }
-                    }
-                    Err(e) => {
-                        if ru {
-                            format!("Ошибка: {e}")
-                        } else {
-                            format!("Error: {e}")
-                        }
-                    }
+                    Ok(done) => plugin_installed_label(&done, bridge_on, ru),
+                    Err(e) => hermes_error_label(&e, INSTALL_PLUGIN_BUTTON, ru),
                 };
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(w) = weak_res.upgrade() {
@@ -291,7 +339,7 @@ pub(crate) fn wire_hermes_settings(
         });
     }
 
-    // -- «Взять ключ из локального Hermes» (тестер не обязан знать, что такое
+    // -- «Ключ из локального Hermes» (тестер не обязан знать, что такое
     // API_SERVER_KEY): включает platforms.api_server в конфиге ЛОКАЛЬНОГО
     // Hermes, создаёт/читает ключ и вписывает его в suflyor. --
     {
@@ -335,11 +383,8 @@ pub(crate) fn wire_hermes_settings(
                             }));
                         }
                         Err(e) => {
-                            w.set_hermes_api_setup_status(SharedString::from(if ru {
-                                format!("Ошибка: {e}")
-                            } else {
-                                format!("Error: {e}")
-                            }));
+                            let text = hermes_error_label(&e, API_SETUP_BUTTON, ru);
+                            w.set_hermes_api_setup_status(SharedString::from(text));
                         }
                     }
                 });
@@ -541,8 +586,54 @@ fn profile_name_from_seed(seed: &str) -> String {
 mod tests {
     use super::{
         bridge_error_label, bridge_port_error_label, bridge_status_label, current_bridge_status,
-        profile_name_from_seed,
+        hermes_error_label, plugin_installed_label, profile_name_from_seed, HermesError,
+        PluginInstalled, API_SETUP_BUTTON, INSTALL_PLUGIN_BUTTON,
     };
+
+    #[test]
+    fn hermes_errors_name_the_cause_and_the_button() {
+        let missing = HermesError::NotFound(Some(std::path::PathBuf::from("/home/u/.hermes")));
+        assert_eq!(
+            hermes_error_label(&missing, INSTALL_PLUGIN_BUTTON, false),
+            "Hermes not found: there is no /home/u/.hermes folder. Install Hermes, then press Install plugin in Hermes again."
+        );
+        assert_eq!(
+            hermes_error_label(&missing, INSTALL_PLUGIN_BUTTON, true),
+            "Hermes не найден: нет папки /home/u/.hermes. Установите Hermes и нажмите «Установить плагин в Hermes» ещё раз."
+        );
+        let odd = HermesError::UnsupportedConfig;
+        assert!(hermes_error_label(&odd, API_SETUP_BUTTON, true)
+            .ends_with("нажмите «Ключ из локального Hermes» ещё раз."));
+        assert!(hermes_error_label(&odd, API_SETUP_BUTTON, false)
+            .ends_with("press Get key from local Hermes again."));
+    }
+
+    #[test]
+    fn plugin_status_follows_ui_language() {
+        assert_eq!(
+            plugin_installed_label(&PluginInstalled::Updated, true, false),
+            "Plugin updated (already enabled) — restart Hermes"
+        );
+        assert_eq!(
+            plugin_installed_label(&PluginInstalled::Enabled, false, true),
+            "Готово: плагин установлен и включён — перезапустите Hermes · включите «Мост для Hermes» выше"
+        );
+    }
+
+    #[test]
+    fn files_only_plugin_status_gives_the_same_enable_steps_in_both_languages() {
+        for ru in [false, true] {
+            let text = plugin_installed_label(&PluginInstalled::FilesOnly, true, ru);
+            assert!(text.contains("hermes plugins enable suflyor"));
+            assert!(text.contains("suflyor") && text.contains("plugins.enabled"));
+            assert!(text.contains("config.yaml"));
+            assert!(text.ends_with(if ru {
+                "перезапустите Hermes."
+            } else {
+                "restart Hermes."
+            }));
+        }
+    }
 
     #[test]
     fn bridge_status_follows_ui_language() {

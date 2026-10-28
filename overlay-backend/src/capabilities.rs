@@ -58,6 +58,21 @@ pub fn platform_capability(feature: PlatformFeature) -> CapabilityState {
         | PlatformFeature::ScreenCapture => CapabilityState::Available,
     }
 
+    #[cfg(target_os = "linux")]
+    match feature {
+        PlatformFeature::Microphone
+        | PlatformFeature::SystemAudio
+        | PlatformFeature::ScreenCapture
+        | PlatformFeature::ExternalStealth => CapabilityState::Available,
+        _ => CapabilityState::Unsupported(CapabilityReason::NotSupportedOnPlatform),
+    }
+
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+    {
+        let _ = feature;
+        CapabilityState::Unsupported(CapabilityReason::NotSupportedOnPlatform)
+    }
+
     #[cfg(windows)]
     match feature {
         PlatformFeature::Microphone
@@ -141,10 +156,26 @@ mod tests {
 
     #[test]
     fn platform_capability_reports_correct_states() {
+        #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
         assert_eq!(
             platform_capability(PlatformFeature::Microphone),
             CapabilityState::Available
         );
+        #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+        for feature in [
+            PlatformFeature::Microphone,
+            PlatformFeature::SystemAudio,
+            PlatformFeature::ScreenCapture,
+            PlatformFeature::ExternalStealth,
+            PlatformFeature::GigaamGpu,
+            PlatformFeature::HermesInstaller,
+            PlatformFeature::SelfReplacingUpdater,
+        ] {
+            assert_eq!(
+                platform_capability(feature),
+                CapabilityState::Unsupported(CapabilityReason::NotSupportedOnPlatform)
+            );
+        }
         #[cfg(target_os = "macos")]
         assert_eq!(
             platform_capability(PlatformFeature::ExternalStealth),

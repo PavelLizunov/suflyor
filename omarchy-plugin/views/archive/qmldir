@@ -1,0 +1,9 @@
+Action 1.0 Action.qml
+Confirmation 1.0 Confirmation.qml
+Diarization 1.0 Diarization.qml
+Header 1.0 Header.qml
+IconAction 1.0 IconAction.qml
+SessionRow 1.0 SessionRow.qml
+TranscriptMemory 1.0 TranscriptMemory.qml
+TranscriptPlayer 1.0 TranscriptPlayer.qml
+TranscriptRow 1.0 TranscriptRow.qml

@@ -46,7 +46,11 @@ pub(crate) fn refill_wizard_summary(w: &WizardWindow, cfg: &overlay_backend::con
         if !live.is_empty() {
             live
         } else if configured {
-            SharedString::from(if ru { "настроено" } else { "configured" })
+            SharedString::from(if ru {
+                "настроено"
+            } else {
+                "configured"
+            })
         } else {
             SharedString::from("—")
         }
@@ -169,7 +173,15 @@ pub(crate) fn wire_wizard_steps(
                 {
                     Ok(rt) => {
                         match rt.block_on(overlay_backend::ai::test_connection_endpoint(endpoint)) {
-                            Ok(_) => (0, if ui_is_ru { "Подключение работает" } else { "Connection works" }.to_string()),
+                            Ok(_) => (
+                                0,
+                                if ui_is_ru {
+                                    "Подключение работает"
+                                } else {
+                                    "Connection works"
+                                }
+                                .to_string(),
+                            ),
                             Err(e) => {
                                 let chain = format!("{e:#}");
                                 let msg = overlay_backend::deep_lock::blocked_test_result(
@@ -212,8 +224,19 @@ pub(crate) fn wire_wizard_steps(
                 {
                     Ok(rt) => {
                         match rt.block_on(overlay_backend::stt::test_connection_backend(&backend)) {
-                            Ok(_) => (0, if ui_is_ru { "Подключение работает" } else { "Connection works" }.to_string()),
-                            Err(e) => (4, super::status_copy::connection_failed(ui_is_ru, &format!("{e:#}"))),
+                            Ok(_) => (
+                                0,
+                                if ui_is_ru {
+                                    "Подключение работает"
+                                } else {
+                                    "Connection works"
+                                }
+                                .to_string(),
+                            ),
+                            Err(e) => (
+                                4,
+                                super::status_copy::connection_failed(ui_is_ru, &format!("{e:#}")),
+                            ),
                         }
                     }
                     Err(e) => (4, super::status_copy::check_not_started(ui_is_ru, &e)),
@@ -238,7 +261,11 @@ pub(crate) fn wire_wizard_steps(
             let Some(w) = weak.upgrade() else { return };
             w.set_mic_level(-1);
             let ui_is_ru = cfg_c.read().ui_is_ru();
-            w.set_mic_detail(SharedString::from(if ui_is_ru { "Запись 3 секунды…" } else { "Recording 3 seconds…" }));
+            w.set_mic_detail(SharedString::from(if ui_is_ru {
+                "Запись 3 секунды…"
+            } else {
+                "Recording 3 seconds…"
+            }));
             let dev = cfg_c.read().mic_device.clone();
             let wr = w.as_weak();
             std::thread::spawn(move || {
@@ -246,24 +273,57 @@ pub(crate) fn wire_wizard_steps(
                 let (lvl, msg): (i32, String) = if mic_guard.is_none() {
                     (
                         4,
-                        if ui_is_ru { "Микрофон занят — завершите голосовой ввод и повторите" } else { "Microphone busy — finish voice input and retry" }.to_string(),
+                        if ui_is_ru {
+                            "Микрофон занят — завершите голосовой ввод и повторите"
+                        } else {
+                            "Microphone busy — finish voice input and retry"
+                        }
+                        .to_string(),
                     )
                 } else {
                     let r = overlay_backend::audio::record_mic_blocking(3000, dev);
                     drop(mic_guard); // release before processing (RAII: also on panic)
                     match r {
-                        Ok(s) if s.is_empty() => (4, if ui_is_ru { "Звук не записан" } else { "No audio captured" }.to_string()),
+                        Ok(s) if s.is_empty() => (
+                            4,
+                            if ui_is_ru {
+                                "Звук не записан"
+                            } else {
+                                "No audio captured"
+                            }
+                            .to_string(),
+                        ),
                         Ok(s) => {
                             let d = overlay_backend::audio::rms_dbfs(&s);
                             if d >= -45.0 {
-                                (0, if ui_is_ru { format!("Голос слышен ({d:.0} dBFS)") } else { format!("Heard you ({d:.0} dBFS)") })
+                                (
+                                    0,
+                                    if ui_is_ru {
+                                        format!("Голос слышен ({d:.0} dBFS)")
+                                    } else {
+                                        format!("Heard you ({d:.0} dBFS)")
+                                    },
+                                )
                             } else {
-                                (0, if ui_is_ru { format!("Запись работает · тихо ({d:.0} dBFS)") } else { format!("Capture works · quiet ({d:.0} dBFS)") })
+                                (
+                                    0,
+                                    if ui_is_ru {
+                                        format!("Запись работает · тихо ({d:.0} dBFS)")
+                                    } else {
+                                        format!("Capture works · quiet ({d:.0} dBFS)")
+                                    },
+                                )
                             }
                         }
                         Err(e) => {
                             log::warn!("wizard: mic check failed: {e}");
-                            (4, if ui_is_ru { "Не удалось открыть микрофон" } else { "Could not open the microphone" }.to_string())
+                            (
+                                4,
+                                super::diagnostics::mic_open_failed(
+                                    ui_is_ru,
+                                    ("Record test", "Записать тест"),
+                                ),
+                            )
                         }
                     }
                 };

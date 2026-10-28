@@ -1,6 +1,6 @@
 use super::control::{
     apply_local_no_think, apply_managed_gemma_sampler, apply_prompt_cache, apply_reasoning_effort,
-    http_client, resolve_managed_mlx_endpoint, transport_failure_kind, AI_SEMAPHORE, PROMPT_CACHE,
+    http_client, resolve_managed_mlx_endpoint, transport_failure_kind, PROMPT_CACHE,
 };
 use super::provider;
 use super::tps::{begin_request, record_stream_tps};
@@ -38,8 +38,29 @@ pub fn stream_chat_endpoint(
     stream_chat_endpoint_with(endpoint, messages, max_tokens, true, false)
 }
 
+/// Fast live answers skip tools unless the user enabled web lookup.
+/// Web-enabled fast answers keep the short format and use the bounded agent path.
+pub fn stream_live_chat_endpoint(
+    endpoint: AiEndpoint,
+    messages: Vec<ChatMessage>,
+    max_tokens: u32,
+    fast: bool,
+) -> mpsc::Receiver<AiEvent> {
+    stream_chat_endpoint_with(
+        endpoint,
+        messages,
+        if fast {
+            max_tokens.min(super::prompt::FAST_ANSWER_MAX_TOKENS)
+        } else {
+            max_tokens
+        },
+        !fast || super::tools::web_enabled(),
+        fast,
+    )
+}
+
 /// Same stream without the local model's tools: one request, answer only.
-/// Auto-tiles use it — they never ran tools and must start answering at once.
+/// Auto-tiles use it while web lookup is off; definitions always stay on this path.
 /// `no_think` turns a local model's reasoning off for this request whatever
 /// the reasoning setting says (fast answers on a call).
 pub fn stream_chat_endpoint_plain(
@@ -61,8 +82,9 @@ fn stream_chat_endpoint_with(
     let request_started_at = std::time::Instant::now();
     let request_id = begin_request();
     let (tx, rx) = mpsc::channel::<AiEvent>(64);
+    let priority = super::queue::current_priority();
 
-    tokio::spawn(async move {
+    tokio::spawn(super::queue::with_priority(priority, async move {
         let (endpoint, _mlx_lease) = match resolve_managed_mlx_endpoint(endpoint).await {
             Ok(resolved) => resolved,
             Err(error) => {
@@ -132,30 +154,43 @@ fn stream_chat_endpoint_with(
         let _permit = tokio::select! {
             biased;
             () = tx.closed() => return,
-            permit = AI_SEMAPHORE.acquire() => permit.ok(),
+            permit = super::queue::acquire() => match permit {
+                Ok(permit) => permit,
+                Err(_) => {
+                    let _ = tx
+                        .send(AiEvent::Done {
+                            reason: super::queue::SUPERSEDED_REASON.into(),
+                        })
+                        .await;
+                    return;
+                }
+            },
         };
         if tx.is_closed() {
             return;
         }
-        if let Err(e) = stream_inner(
-            endpoint,
-            messages,
-            max_tokens,
-            allow_tools,
-            no_think,
-            tx.clone(),
-            request_id,
-            request_started_at,
-        )
-        .await
-        {
+        let result = tokio::select! {
+            biased;
+            () = tx.closed() => return,
+            result = stream_inner(
+                endpoint,
+                messages,
+                max_tokens,
+                allow_tools,
+                no_think,
+                tx.clone(),
+                request_id,
+                request_started_at,
+            ) => result,
+        };
+        if let Err(e) = result {
             let _ = tx
                 .send(AiEvent::Error {
                     message: format!("{e:#}"),
                 })
                 .await;
         }
-    });
+    }));
 
     rx
 }
@@ -198,6 +233,7 @@ pub(crate) async fn stream_inner(
             endpoint,
             messages,
             max_tokens,
+            no_think,
             tx,
             request_id,
             request_started_at,

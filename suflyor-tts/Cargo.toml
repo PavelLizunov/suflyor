@@ -17,8 +17,13 @@ publish = false
 name = "suflyor-tts"
 path = "src/main.rs"
 
+[features]
+default = ["sherpa-onnx/static"]
+# CUDA needs the shared GPU runtime; never link it into overlay-host.
+cuda = ["sherpa-onnx/shared"]
+
 [dependencies]
-sherpa-onnx = "1.13.5"        # static (default) — safe here: no ort in this crate
+sherpa-onnx = { version = "=1.13.5", default-features = false }
 anyhow = "1"
 base64 = "0.23"
 dirs = "7"
@@ -29,7 +34,7 @@ suflyor-wsola = { path = "../suflyor-wsola" }
 [target.'cfg(windows)'.dependencies]
 wasapi = "0.26"
 
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 cpal = "0.15"
 
 [lints.clippy]

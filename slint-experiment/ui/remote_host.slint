@@ -1,0 +1,4 @@
+// The Omarchy plugin build (`--features remote-ui`) compiles only this file.
+// Each remote window owns one instance so Slint's window lifecycle (show,
+// hide, is_visible, keepalive) works while the shell draws the real UI.
+export component RemoteHost inherits Window {}

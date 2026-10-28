@@ -85,7 +85,7 @@ component TableRow inherits Rectangle {
             width: 124px;
             height: parent.height;
             Rectangle {
-                width: root.key-row ? 86px : (root.glyph != "" ? 104px : 28px);
+                width: root.key-row ? (Platform.is-linux ? 116px : 86px) : (root.glyph != "" ? 104px : 28px);
                 height: 26px;
                 border-radius: 7px;
                 border-width: 1px;
@@ -208,7 +208,7 @@ export component HelpWindow inherits Window {
                     }
                     Rectangle { height: Metrics.space-md / 2; }
                     Text {
-                        text: @tr("3) Stop and review — press stop to end the session; open the session archive (F7) for transcripts and summaries.");
+                        text: @tr("3) Stop and review — click the timer with the stop icon ('Stop session'), then open the session archive (F7) for transcripts and summaries.");
                         font-size: Metrics.font-label;
                         color: Theme.text-secondary;
                         wrap: word-wrap;
@@ -261,6 +261,23 @@ export component HelpWindow inherits Window {
                     }
                     Rectangle { height: 8px; }
                     TableHeader { left: @tr("Key"); right: @tr("Action"); }
+                    if Platform.is-linux : VerticalLayout {
+                        spacing: 0px;
+                        Text {
+                            text: @tr("Super is the Windows key. Hold the shortcut to record, then release it to ask. If another application uses a shortcut, Suflyor leaves it unchanged; see Diagnostics.");
+                            font-size: Metrics.font-label;
+                            color: Theme.text-muted;
+                            wrap: word-wrap;
+                        }
+                        for row in [
+                            ["Super+F9", @tr("Hold to record a microphone question; release to send it to AI")],
+                            ["Super+Shift+F9", @tr("Hold to record system audio; release to send it to AI")],
+                        ] : TableRow {
+                            key-row: true;
+                            glyph: row[0];
+                            desc: row[1];
+                        }
+                    }
                     for row in [
                         ["F9", @tr("Ask AI now (streams the answer into a tile)")],
                         ["Shift+F9", @tr("Ask AI escalated to the smart cloud model (one-shot; tile shows a cloud badge)")],

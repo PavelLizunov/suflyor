@@ -36,11 +36,6 @@ impl AiProtocol {
     pub const fn supports_prompt_cache_control(self) -> bool {
         matches!(self, Self::OpenAiCompatible | Self::AnthropicMessages)
     }
-
-    #[must_use]
-    pub const fn supports_live_answers(self) -> bool {
-        true
-    }
 }
 
 /// Fully resolved target for one request. The credential is held only in

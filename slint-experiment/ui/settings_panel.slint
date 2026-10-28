@@ -325,6 +325,9 @@ export component SettingsWindow inherits Window {
     callback ocr-install-clicked();
     // Speaker-diarization models — «Определить говорящих» needs 2 downloadable models
     // (~32 MB); this button installs them (status is a Rust-set RU string).
+    in-out property <bool> diar-nemotron-supported: false;
+    in-out property <bool> diar-use-nemotron: false;
+    callback diar-engine-selected(bool);
     in-out property <bool> diar-models-installed: false;
     in-out property <bool> diar-installing: false;
     in-out property <string> diar-install-status: "";
@@ -380,6 +383,12 @@ export component SettingsWindow inherits Window {
     in-out property <bool> engine-updating: false;
     in-out property <string> engine-update-status: "";
     in-out property <string> ai-local-test-result: "";
+    in-out property <bool> model-speed-running: false;
+    in-out property <int> model-speed-size: 1;
+    in-out property <string> model-speed-status: "";
+    in-out property <string> model-speed-result: "";
+    callback measure-model-speed();
+    callback cancel-model-speed();
     in-out property <string> ai-local-bearer-input: "";
     // E10.4 — in-app local-AI installer: downloads llama.cpp/whisper.cpp + models,
     // launches the servers, then auto-configures. Progress + GPU/CPU shown live.
@@ -442,6 +451,18 @@ export component SettingsWindow inherits Window {
     // Start Strata from Suflyor's own install (true) or the found one (false).
     callback strata-choose(bool);
     callback strata-find-folder-clicked();
+    in-out property <string> strata-directory-input: "";
+    callback strata-folder-selected(string);
+    in-out property <bool> strata-update-supported: false;
+    in-out property <string> strata-engine-version: "";
+    in-out property <int> strata-update-job: 0; // 0 idle, 1 check, 2 update
+    in-out property <string> strata-update-status: "";
+    callback strata-engine-check();
+    callback strata-engine-update();
+    in-out property <string> models-directory: "";
+    in-out property <string> models-directory-status: "";
+    callback models-directory-save(string);
+    callback models-directory-browse();
     in-out property <bool> strata-vision-installable: false;
     in-out property <bool> strata-vision-downloaded: false;
     in-out property <bool> strata-vision-enabled: false;
@@ -453,7 +474,7 @@ export component SettingsWindow inherits Window {
     // One status line, one progress bar and one Cancel for every built-in
     // engine job (install, download, switch, projector, engine update). The
     // line shows the newest message of whichever job wrote last.
-    property <bool> builtin-busy: root.local-ai-installing || root.quality-downloading || root.model-switching || root.vision12b-downloading || root.engine-updating;
+    property <bool> builtin-busy: root.local-ai-installing || root.quality-downloading || root.model-switching || root.vision12b-downloading || root.engine-updating || root.model-speed-running;
     property <string> builtin-status: "";
     changed quality-status => { root.builtin-status = root.quality-status; }
     changed local-ai-status => { root.builtin-status = root.local-ai-status; }
@@ -478,8 +499,8 @@ export component SettingsWindow inherits Window {
     in-out property <string> mic-test-result: "";
     callback mic-device-selected(string);
     callback mic-test-clicked();
-    // Windows only. Names stay raw; default is mapped by index, not its label.
-    out property <string> audio-default-label: @tr("Windows default");
+    // Names stay raw; default is mapped by index, not its translated label.
+    out property <string> audio-default-label: Platform.is-linux ? @tr("System default") : @tr("Windows default");
     in-out property <[string]> system-devices;
     in-out property <int> system-device-index: 0;
     in-out property <bool> audio-devices-loading: false;
@@ -684,6 +705,9 @@ export component SettingsWindow inherits Window {
     callback open-groq-keys-clicked();
     in-out property <bool> auto-tiles-enabled: true;
     callback auto-tiles-enabled-changed(bool);
+    // Omarchy-only setting; persisted by the shared controller.
+    in-out property <int> tile-idle-seconds: 30;
+    callback tile-idle-seconds-changed(int);
     in-out property <bool> fast-answers: true;
     callback fast-answers-changed(bool);
     // "Listening mode" — mute auto-detected AI tiles (TileKind::Ai) so the user
@@ -1008,6 +1032,7 @@ export component SettingsWindow inherits Window {
                             Text {
                                 text: Platform.is-macos
                                     ? @tr("macOS has no public API that can hide the overlay from other screen-sharing apps. Suflyor only excludes its own windows from its own screenshots.")
+                                    : Platform.is-linux ? @tr("Hyprland masks Suflyor windows and its bar mark with black rectangles in supported captures. It does not reveal the desktop behind them. Suflyor hides its own surfaces for its own screenshots. Other capture methods may ignore the rule.")
                                     : @tr("Hides the overlay from screen capture and sharing (Print Screen, Teams, Meet, OBS).");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-muted;
@@ -1017,7 +1042,7 @@ export component SettingsWindow inherits Window {
                             // Only while the toggle is on: off needs no second line.
                             if !Platform.is-macos && root.stealth-toggle : Text {
                                 text: root.stealth-effective
-                                    ? @tr("On, hidden from capture")
+                                    ? (Platform.is-linux ? @tr("Hyprland capture rule applied; check your capture application") : @tr("On, hidden from capture"))
                                     : @tr("Capture hiding unavailable");
                                 font-size: Metrics.font-label;
                                 color: root.stealth-effective ? Theme.text-secondary : Theme.warning;
@@ -1068,6 +1093,36 @@ export component SettingsWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             Rectangle { background: Theme.border; height: 1px; }
+                            if Platform.is-linux : VerticalLayout {
+                                spacing: 10px;
+                                Text {
+                                    text: @tr("Super is the Windows key. Hold the shortcut to record, then release it to ask. If another application uses a shortcut, Suflyor leaves it unchanged; see Diagnostics.");
+                                    font-size: Metrics.font-label;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                }
+                                for entry in [
+                                    ["Super+F9", @tr("Hold to record a microphone question; release to send it to AI")],
+                                    ["Super+Shift+F9", @tr("Hold to record system audio; release to send it to AI")],
+                                ] : HorizontalLayout {
+                                    padding: Metrics.space-xs;
+                                    spacing: Metrics.space-md;
+                                    min-height: hold-description.preferred-height + 2 * Metrics.space-xs;
+                                    Text {
+                                        text: entry[0];
+                                        width: 116px;
+                                        font-size: Metrics.font-label;
+                                        font-weight: 700;
+                                        color: Theme.text-primary;
+                                    }
+                                    hold-description := Text {
+                                        text: entry[1];
+                                        font-size: Metrics.font-label;
+                                        color: Theme.text-secondary;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                            }
                             for entry in [
                                 ["F9",  @tr("Ask AI now (streams the answer into a tile)")],
                                 ["Shift+F9", @tr("Ask AI escalated to the smart cloud model (one-shot; tile shows a cloud badge)")],
@@ -1498,7 +1553,9 @@ export component SettingsWindow inherits Window {
                         if !Platform.is-macos : SettingsCard {
                         title: @tr("Updates");
                         Text {
-                            text: @tr("Check GitHub for a newer release. If one is found you can download + install it in one click (the app restarts).");
+                            text: Platform.is-linux
+                                ? @tr("Check GitHub for a newer release. Open its release page to update the native Linux package. Your configuration and models are retained.")
+                                : @tr("Check GitHub for a newer release. If one is found you can download + install it in one click (the app restarts).");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -1516,7 +1573,7 @@ export component SettingsWindow inherits Window {
                             }
                             // Shown only when a newer release was found.
                             if root.update-available : Button {
-                                text: @tr("Update now");
+                                text: Platform.is-linux ? @tr("Open release page") : @tr("Update now");
                                 enabled: !root.update-checking;
                                 clicked => {
                                     root.install-update-clicked();
@@ -1578,7 +1635,7 @@ export component SettingsWindow inherits Window {
                         // servers, keeps local profiles/devices/UI/snippets.
                         // Import shows a redacted preview before applying.
                         Text {
-                            text: Platform.is-macos
+                            text: Platform.is-macos || Platform.is-linux
                                 ? @tr("Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in this user's local credentials file. Local UI, profiles, devices and snippets stay unchanged.")
                                 : @tr("Server transfer copies AI/STT providers, URLs, models and legacy bridge keys. Protected OpenAI and Anthropic API keys stay in Windows Credential Manager on this PC. Local UI, profiles, devices and snippets stay unchanged.");
                             font-size: Metrics.font-caption;
@@ -1678,6 +1735,7 @@ export component SettingsWindow inherits Window {
                         Text {
                             text: Platform.is-macos
                                 ? @tr("Microphone device selection. The list comes from the audio devices available to macOS.")
+                                : Platform.is-linux ? @tr("Pick the microphone. The list comes from PipeWire.")
                                 : @tr("Pick the microphone. The list comes from Windows.");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
@@ -1731,7 +1789,8 @@ export component SettingsWindow inherits Window {
                             }
                         }
                         if !Platform.is-macos && !root.audio-devices-loading && !root.audio-devices-failed && root.mic-device-missing : Text {
-                            text: @tr("Saved device is unavailable. Choose another device or Windows default.");
+                            text: Platform.is-linux ? @tr("Saved device is unavailable. Choose another device or system default.")
+                                : @tr("Saved device is unavailable. Choose another device or Windows default.");
                             font-size: Metrics.font-label;
                             color: Theme.warning;
                             wrap: word-wrap;
@@ -1759,7 +1818,9 @@ export component SettingsWindow inherits Window {
                         if !Platform.is-macos : SettingsCard {
                             title: @tr("System audio - headphones / speakers");
                             Text {
-                                text: @tr("Capture sound played through this device. Capture inputs also include headset mixes such as A50 Stream Out. This does not change Windows or read-aloud playback.");
+                                text: Platform.is-linux
+                                    ? @tr("Capture the selected PipeWire output monitor or input. This does not change system or read-aloud playback.")
+                                    : @tr("Capture sound played through this device. Capture inputs also include headset mixes such as A50 Stream Out. This does not change Windows or read-aloud playback.");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
@@ -1772,7 +1833,8 @@ export component SettingsWindow inherits Window {
                                 selected(val) => { root.system-device-selected(root.system-device-index); }
                             }
                             if !root.audio-devices-loading && !root.audio-devices-failed && root.system-device-missing : Text {
-                                text: @tr("Saved device is unavailable. Choose another device or Windows default.");
+                                text: Platform.is-linux ? @tr("Saved device is unavailable. Choose another device or system default.")
+                                    : @tr("Saved device is unavailable. Choose another device or Windows default.");
                                 font-size: Metrics.font-label;
                                 color: Theme.warning;
                                 wrap: word-wrap;
@@ -1795,7 +1857,7 @@ export component SettingsWindow inherits Window {
                             }
                         }
                         Text {
-                            text: @tr("Saved locally as separate mic + system WAVs per session — nothing is uploaded. ~230 MB/hour. Used by the archive's re-Summary.");
+                            text: @tr("Saved locally as separate mic + system WAVs per session — nothing is uploaded. ~230 MB/hour. Used when you click 'Generate' or the regenerate icon in the session archive.");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                             wrap: word-wrap;
@@ -2062,8 +2124,14 @@ export component SettingsWindow inherits Window {
                         }
                         SettingsCard {
                             title: @tr("Speaker detection");
+                        if root.diar-nemotron-supported : SettingsComboBox {
+                            model: [@tr("NVIDIA Nemotron 3"), @tr("Pyannote + WeSpeaker")];
+                            current-index: root.diar-use-nemotron ? 0 : 1;
+                            enabled: !root.diar-installing;
+                            selected => { root.diar-engine-selected(self.current-index == 0); }
+                        }
                         Text {
-                            text: @tr("Speaker detection separates who spoke in the call's system audio (the «Determine speakers» button in the transcript window). Needs two models (~32 MB).");
+                            text: @tr("Choose the speaker detection model. NVIDIA Nemotron 3 detects up to 8 voices automatically; Pyannote + WeSpeaker also accepts a speaker count.");
                             font-size: Metrics.font-label;
                             color: Theme.text-secondary;
                             wrap: word-wrap;
@@ -2113,7 +2181,7 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: @tr("A one-line answer, then three to five points with context; terms under the answer open their definitions.");
+                                text: @tr("A one-line answer, then two or three relevant points; terms under the answer open their definitions.");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-muted;
                                 overflow: elide;
@@ -2204,10 +2272,13 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             if root.profile-names.length == 0 : Text {
-                                text: @tr("none yet — name one and Add");
+                                text: @tr("None yet — enter a name and click 'Add profile'.");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-muted;
                                 vertical-alignment: center;
+                                // The Russian hint is wider than the card at 720px.
+                                wrap: word-wrap;
+                                horizontal-stretch: 1;
                             }
                             SettingsLineEdit {
                                 placeholder-text: @tr("profile name");
@@ -2304,6 +2375,19 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 11 : VerticalLayout {
                         spacing: 10px;
                         SettingsCard {
+                            title: @tr("Model storage");
+                            Text { text: @tr("Choose the Suflyor model folder on any mounted disk. AI, speech models and voices use it after restarting Suflyor. Existing files are not moved."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                            SettingsLineEdit { text <=> root.models-directory; placeholder-text: @tr("Absolute model folder path; empty uses the default locations"); }
+                            HorizontalLayout {
+                                alignment: start;
+                                spacing: Metrics.space-sm;
+                                Button { text: @tr("Save"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.models-directory-save(root.models-directory); } }
+                                Button { text: @tr("Choose folder…"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.models-directory-browse(); } }
+                            }
+                            if root.models-directory-status != "" : Text { text: root.models-directory-status == "Could not save the model folder. Choose an existing writable folder." ? @tr("Could not save the model folder. Choose an existing writable folder.") : @tr("Restart Suflyor to use the selected model folder. Existing files are not moved."); font-size: Metrics.font-caption; color: Theme.text-secondary; wrap: word-wrap; }
+                            Text { text: @tr("For existing Strata weights, select the parent of Strata-data here. The Strata folder below is for an installed engine, not weights alone."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                        }
+                        SettingsCard {
                         Text {
                             text: @tr("Where answers come from");
                             font-size: Metrics.font-label;
@@ -2365,7 +2449,7 @@ export component SettingsWindow inherits Window {
                             }
                             Text {
                                 text: root.mlx-text-model-index == 1
-                                    ? @tr("Apache-2.0. Gemma 4 26B-A4B VLM (4B active) with MSQ 2.6-bit mixed-precision quantization. Supports vision/screenshot tasks under 'Same as text model'.")
+                                    ? @tr("Apache-2.0. Gemma 4 26B-A4B VLM (4B active) with MSQ 2.6-bit mixed-precision quantization. Supports vision/screenshot tasks under 'Same as the answer model'.")
                                     : @tr("LFM Open License v1.0 has commercial-use conditions. Review the license before commercial use. Russian response quality is not guaranteed.");
                                 font-size: Metrics.font-caption;
                                 color: root.mlx-text-model-index == 1 ? Theme.text-secondary : Theme.warning;
@@ -2524,7 +2608,7 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: @tr("Sent with every request. «Off» makes thinking models such as Gemini answer without reasoning first; a server that does not know the setting may reject requests — choose «Model default» then.");
+                                text: @tr("Sent with every request. «Off — answer at once» makes thinking models such as Gemini answer without reasoning first; a server that does not know the setting may reject requests — choose «Model default» then.");
                                 font-size: Metrics.font-caption;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
@@ -2566,7 +2650,7 @@ export component SettingsWindow inherits Window {
                                 SettingsLineEdit { placeholder-text: @tr("paste OpenAI API key"); text <=> root.openai-key-input; input-type: password; horizontal-stretch: 1; }
                                 Button { text: @tr("Save"); clicked => { root.openai-key-save(root.openai-key-input); root.openai-key-input = ""; } }
                             }
-                            Text { text: Platform.is-macos
+                            Text { text: Platform.is-macos || Platform.is-linux
                                 ? @tr("Stored in a user-only local credentials file and excluded from configuration exports.")
                                 : @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                             HorizontalLayout {
@@ -2600,7 +2684,7 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: @tr("Sent with every request. «Off» makes thinking models such as Gemini answer without reasoning first; a server that does not know the setting may reject requests — choose «Model default» then.");
+                                text: @tr("Sent with every request. «Off — answer at once» makes thinking models such as Gemini answer without reasoning first; a server that does not know the setting may reject requests — choose «Model default» then.");
                                 font-size: Metrics.font-caption;
                                 color: Theme.text-muted;
                                 wrap: word-wrap;
@@ -2623,7 +2707,7 @@ export component SettingsWindow inherits Window {
                                 SettingsLineEdit { placeholder-text: @tr("paste Anthropic API key"); text <=> root.anthropic-key-input; input-type: password; horizontal-stretch: 1; }
                                 Button { text: @tr("Save"); clicked => { root.anthropic-key-save(root.anthropic-key-input); root.anthropic-key-input = ""; } }
                             }
-                            Text { text: Platform.is-macos
+                            Text { text: Platform.is-macos || Platform.is-linux
                                 ? @tr("Stored in a user-only local credentials file and excluded from configuration exports.")
                                 : @tr("Stored in Windows Credential Manager and excluded from configuration exports."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                             HorizontalLayout {
@@ -2893,7 +2977,7 @@ export component SettingsWindow inherits Window {
                                         VerticalLayout {
                                         alignment: center;
                                         now-pill := Rectangle {
-                                            property <int> state: root.strata-busy || root.builtin-busy ? 2 : root.now-state;
+                                            property <int> state: root.strata-busy || (root.builtin-busy && !root.model-speed-running) ? 2 : root.now-state;
                                             property <color> tone: self.state == 1 ? Theme.success : self.state == 2 ? Theme.warning : self.state == 3 ? Theme.danger : Theme.text-muted;
                                             min-width: pill.preferred-width;
                                             min-height: pill.preferred-height;
@@ -2912,11 +2996,29 @@ export component SettingsWindow inherits Window {
                                         }
                                         VerticalLayout {
                                             alignment: center;
-                                            Button { height: 30px; text: @tr("Check"); clicked => { root.ai-local-test-clicked(); } }
+                                            Button { height: 30px; text: @tr("Check"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.ai-local-test-clicked(); } }
                                         }
                                     }
                                     if root.ai-local-test-result != "" : Text { text: root.ai-local-test-result; font-size: Metrics.font-label; color: Theme.text-secondary; wrap: word-wrap; }
                                     if root.now-notice != "" : Text { text: root.now-notice; font-size: Metrics.font-caption; color: Theme.warning; wrap: word-wrap; }
+                                }
+                                SettingsCard {
+                                    title: @tr("Model speed");
+                                    Text { text: @tr("Prefill reads the input; decode generates the answer. A synthetic sample uses the selected model and server timings. No server is started or reconfigured. Up to 128 output tokens; allow up to 3 minutes."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                    SettingsComboBox {
+                                        model: [@tr("Short input"), @tr("Medium input"), @tr("Long input")];
+                                        current-index <=> root.model-speed-size;
+                                        enabled: !root.model-speed-running;
+                                    }
+                                    HorizontalLayout {
+                                        alignment: start;
+                                        spacing: Metrics.space-sm;
+                                        Button { text: @tr("Measure model speed"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.measure-model-speed(); } }
+                                        if root.model-speed-running : Button { text: @tr("Cancel"); clicked => { root.cancel-model-speed(); } }
+                                    }
+                                    if root.model-speed-status != "" : Text { text: root.model-speed-status; font-size: Metrics.font-caption; color: Theme.text-secondary; wrap: word-wrap; }
+                                    if root.model-speed-result != "" : Text { text: root.model-speed-result; font-size: Metrics.font-label; color: Theme.text-primary; wrap: word-wrap; }
+                                    Text { text: @tr("Last measurement, not a guarantee: input length, cache, GPU load and engine settings change the speed. Missing server timings are shown as unavailable. First-token and total time may include waiting and model loading."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                                 }
                                 SettingsCard {
                                     title: @tr("Choose a model");
@@ -3029,6 +3131,23 @@ export component SettingsWindow inherits Window {
                                         Text { text: @tr("Connect by address…"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { enabled: !root.builtin-busy && !root.strata-busy; mouse-cursor: pointer; clicked => { root.local-connect-auto = false; root.local-connect-open = !root.local-connect-open; } } }
                                         if !root.found-models-searching : Text { text: @tr("Search again"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { enabled: !root.builtin-busy && !root.strata-busy; mouse-cursor: pointer; clicked => { root.found-models-search(); } } }
                                     }
+                                    HorizontalLayout {
+                                        spacing: Metrics.space-sm;
+                                        SettingsLineEdit { horizontal-stretch: 1; text <=> root.strata-directory-input; placeholder-text: @tr("Absolute Strata folder path"); }
+                                        Button { text: @tr("Use folder"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.strata-folder-selected(root.strata-directory-input); } }
+                                    }
+                                    if root.strata-update-supported : WrapBlock {
+                                        Text { text: @tr("Installed Strata engine: {}", root.strata-engine-version); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                        Text { text: @tr("Strata release and engine versions differ. Checks use the latest official feed; updates replace only the engine. Model weights are kept. A running server restarts."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                        HorizontalLayout {
+                                            alignment: start;
+                                            spacing: Metrics.space-sm;
+                                            Button { text: @tr("Check engine updates"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.strata-engine-check(); } }
+                                            Button { text: @tr("Update Strata engine"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.strata-engine-update(); } }
+                                            if root.strata-update-job != 0 : Button { text: @tr("Cancel"); clicked => { root.cancel-local-ai-clicked(); } }
+                                        }
+                                        if root.strata-update-status != "" : Text { text: root.strata-update-status; font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                    }
                                     if root.found-models-searching : Text { text: @tr("Looking for models on this PC…"); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                                     if root.local-connect-open : WrapBlock {
                                         SettingsLineEdit { placeholder-text: @tr("local URL — http://127.0.0.1:11434/v1 (Ollama)"); text <=> root.ai-local-base-url-input; }
@@ -3068,7 +3187,7 @@ export component SettingsWindow inherits Window {
                                         padding-left: Metrics.space-sm;
                                         DarkCheck { text: @tr("Also search the web (DuckDuckGo)"); checked <=> root.ai-web-search; enabled: root.ai-agent-tools; toggled(v) => { root.ai-web-search-changed(v); } }
                                     }
-                                    Text { text: @tr("The model looks things up when it needs to. Web queries go to DuckDuckGo."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                    Text { text: @tr("Fast answers can search the web and read public pages when enabled: at most two lookups with a 15-second lookup budget. The model decides when to look up; web queries go to DuckDuckGo. A server without tool support answers without web lookup."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                                     if root.ai-local-vision-available : DarkCheck { text: @tr("Local model supports images (vision)"); checked <=> root.ai-local-vision; toggled(v) => { root.ai-local-vision-changed(v); } }
                                     if root.llama-installed && root.managed-local-server && !root.ai-local-vision-available : WrapBlock {
                                         Text {
@@ -3329,7 +3448,7 @@ export component SettingsWindow inherits Window {
                         if !Platform.is-macos : SettingsCard {
                             title: @tr("Add Vision to Strata");
                             Text {
-                                text: @tr("Optional 907 MB encoder for Qwen3.8-Flash-Next. Uses the CPU, not extra GPU memory. No second language model. Downloading does not change F8.");
+                                text: @tr("Optional 907 MB encoder for Qwen3.8-Flash-Next. CUDA builds prefer the GPU when supported, with CPU fallback. No second language model. Downloading does not change F8.");
                                 font-size: Metrics.font-caption;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
@@ -3499,7 +3618,7 @@ export component SettingsWindow inherits Window {
                         }
                         // Only while that option is the selected one.
                         if !root.vision-same-available && root.vision-provider-index == 1 : Text {
-                            text: @tr("Same as text model is unavailable because the selected text model does not declare image input. Choose another Vision provider or model.");
+                            text: @tr("The 'Same as the answer model' option is unavailable because the selected answer model does not declare image input. Choose another screenshot provider or model.");
                             font-size: Metrics.font-caption;
                             color: Theme.warning;
                             wrap: word-wrap;
@@ -4050,7 +4169,13 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                         }
-                        if root.stt-provider-index == 1 : DarkCheck {
+                        if root.stt-provider-index == 1 && Platform.is-linux : Text {
+                            text: @tr("GigaAM uses the native ONNX Runtime CPU backend on Linux.");
+                            font-size: Metrics.font-caption;
+                            color: Theme.text-secondary;
+                            wrap: word-wrap;
+                        }
+                        if root.stt-provider-index == 1 && !Platform.is-linux : DarkCheck {
                             text: Platform.is-macos
                                 ? @tr("Use Apple Core ML — faster on Apple Silicon")
                                 : @tr("Use GPU (DirectML) — faster on long audio, ~1s warm-up on first use");
@@ -4196,19 +4321,17 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-muted;
                             wrap: word-wrap;
                         }
-                        HorizontalLayout {
-                            spacing: Metrics.space-sm;
-                            Button {
-                                text: @tr("Extract from recent sessions");
-                                clicked => { root.memory-extract(); }
-                            }
-                            if root.memory-status != "" : Text {
-                                text: root.memory-status;
-                                horizontal-stretch: 0;
-                                font-size: Metrics.font-label;
-                                color: Theme.accent;
-                                vertical-alignment: center;
-                            }
+                        Button {
+                            text: @tr("Extract from recent sessions");
+                            clicked => { root.memory-extract(); }
+                        }
+                        // Own line under the button, so the button keeps the card width and a
+                        // long status (a failed save) wraps instead of widening the card.
+                        if root.memory-status != "" : Text {
+                            text: root.memory-status;
+                            font-size: Metrics.font-label;
+                            color: Theme.accent;
+                            wrap: word-wrap;
                         }
 
                         Text {
@@ -4218,7 +4341,7 @@ export component SettingsWindow inherits Window {
                             color: Theme.text-primary;
                         }
                         if root.memory-candidates.length == 0 : Text {
-                            text: @tr("No suggestions yet — click Extract after a session.");
+                            text: @tr("No suggestions yet — click 'Extract from recent sessions' after a session.");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                             wrap: word-wrap;

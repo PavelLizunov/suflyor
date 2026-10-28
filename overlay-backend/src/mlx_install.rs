@@ -277,13 +277,6 @@ pub fn installed_snapshot(id: &str) -> Option<PathBuf> {
     check_snapshot_fast(model, &path).then_some(path)
 }
 
-#[must_use]
-pub fn installed_snapshot_verified(id: &str) -> Option<PathBuf> {
-    let model = catalog_model(id)?;
-    let path = snapshot_path_in(&crate::paths::data_root()?, model);
-    check_snapshot_verified(model, &path).then_some(path)
-}
-
 pub fn install(id: &str, cancel: &AtomicBool, progress: &dyn Fn(u64, u64)) -> Result<PathBuf> {
     #[cfg(not(target_os = "macos"))]
     {

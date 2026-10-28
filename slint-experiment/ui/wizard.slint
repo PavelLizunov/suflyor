@@ -385,30 +385,31 @@ export component WizardWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             // Aligned label, status and detail columns.
+                            // The status wraps: "Требует внимания" is wider than its 110px column.
                             // AI/STT are universal acronyms (left literal); Microphone /
                             // System audio reuse the existing step-title msgids.
                             HorizontalLayout {
                                 spacing: Metrics.space-sm;
                                 Text { text: "AI"; width: 130px; color: Theme.text-secondary; }
-                                Text { text: root.level-text(root.ai-level); width: 110px; color: root.level-color(root.ai-level); font-weight: 700; }
+                                Text { text: root.level-text(root.ai-level); width: 110px; color: root.level-color(root.ai-level); font-weight: 700; wrap: word-wrap; }
                                 Text { text: root.summary-ai; horizontal-stretch: 1; color: Theme.text-secondary; wrap: word-wrap; }
                             }
                             HorizontalLayout {
                                 spacing: Metrics.space-sm;
                                 Text { text: "STT"; width: 130px; color: Theme.text-secondary; }
-                                Text { text: root.level-text(root.stt-level); width: 110px; color: root.level-color(root.stt-level); font-weight: 700; }
+                                Text { text: root.level-text(root.stt-level); width: 110px; color: root.level-color(root.stt-level); font-weight: 700; wrap: word-wrap; }
                                 Text { text: root.summary-stt; horizontal-stretch: 1; color: Theme.text-secondary; wrap: word-wrap; }
                             }
                             HorizontalLayout {
                                 spacing: Metrics.space-sm;
                                 Text { text: @tr("Microphone"); width: 130px; color: Theme.text-secondary; }
-                                Text { text: root.level-text(root.mic-level); width: 110px; color: root.level-color(root.mic-level); font-weight: 700; }
+                                Text { text: root.level-text(root.mic-level); width: 110px; color: root.level-color(root.mic-level); font-weight: 700; wrap: word-wrap; }
                                 Text { text: root.summary-mic; horizontal-stretch: 1; color: Theme.text-secondary; wrap: word-wrap; }
                             }
                             HorizontalLayout {
                                 spacing: Metrics.space-sm;
                                 Text { text: @tr("System audio"); width: 130px; color: Theme.text-secondary; }
-                                Text { text: root.level-text(root.sys-level); width: 110px; color: root.level-color(root.sys-level); font-weight: 700; }
+                                Text { text: root.level-text(root.sys-level); width: 110px; color: root.level-color(root.sys-level); font-weight: 700; wrap: word-wrap; }
                                 Text { text: root.summary-sys; horizontal-stretch: 1; color: Theme.text-secondary; wrap: word-wrap; }
                             }
                             HorizontalLayout {

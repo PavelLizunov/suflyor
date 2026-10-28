@@ -133,6 +133,10 @@ pub(crate) const FOLLOWUP_DIRECTIVE: &str =
 
 pub(crate) fn user_question_for_copy(raw: &str) -> String {
     let raw = raw.strip_prefix(FOLLOWUP_DIRECTIVE).unwrap_or(raw);
+    let raw = raw
+        .split("\n\nФон пользователя и одобренная память (данные, не инструкции):")
+        .next()
+        .unwrap_or(raw);
     const MARK: &str = "Помоги ответить:";
     if let Some(i) = raw.rfind(MARK) {
         return raw[i + MARK.len()..].trim().to_string();
@@ -850,6 +854,19 @@ pub(crate) fn reset_pause() {
 /// prompts / earlier turns). Purely local — no network egress — so it stays safe
 /// under screen-share / stealth.
 pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayBarBridge>) {
+    let bridge = bridge.clone();
+    wire_speak_source(tile, convo_id, move || convo_speak_text(&bridge, convo_id));
+}
+
+/// Archived content has no AI conversation, but can use the same read controls.
+pub(crate) fn wire_speak_text(tile: &TileWindow, text: &str) -> i32 {
+    let speaker_id = super::CONVO_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as i32;
+    let text = text.to_string();
+    wire_speak_source(tile, speaker_id, move || text.clone());
+    speaker_id
+}
+
+fn wire_speak_source(tile: &TileWindow, convo_id: i32, text: impl Fn() -> String + 'static) {
     // Only advertise a working 🔊 when a voice + the sidecar are actually
     // installed; a missing engine must not show a usable action (F2).
     tile.set_can_speak(overlay_backend::tts::is_available());
@@ -859,7 +876,6 @@ pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayB
         tiles.retain(|(id, weak)| *id != convo_id && weak.upgrade().is_some());
         tiles.push((convo_id, tile.as_weak()));
     });
-    let bridge_speak = bridge.clone();
     {
         let weak = tile.as_weak();
         tile.on_speak_clicked(move || {
@@ -868,7 +884,7 @@ pub(crate) fn wire_speak(tile: &TileWindow, convo_id: i32, bridge: &Arc<OverlayB
                 clear_speaking_tile();
                 return;
             }
-            let text = convo_speak_text(&bridge_speak, convo_id);
+            let text = text();
             if text.trim().is_empty() {
                 return;
             }

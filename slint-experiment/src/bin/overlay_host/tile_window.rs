@@ -35,8 +35,8 @@ use super::{
     apply_scheme_tile, drag_begin, drag_update, enum_monitors, get_window_rect, global_scheme,
     global_stealth, global_tile_monitor, global_tile_opacity, grab_hwnd, make_transparent_tile,
     move_window_pos_only, pick_monitor, set_always_on_top, set_platform_window_position,
-    set_skip_taskbar, set_stealth, work_area_for_window, ComponentHandle, Duration, TileWindow,
-    Timer, HWND_GRAB_DELAY_MS, TILE_DEFAULT_H, TILE_DEFAULT_W,
+    set_skip_taskbar, set_stealth, work_area_for_window, ComponentHandle, TileWindow,
+    TILE_DEFAULT_H, TILE_DEFAULT_W,
 };
 
 /// Atomic counter for tile-slot index — increments per spawn so
@@ -74,12 +74,10 @@ thread_local! {
     /// + close path runs on the Slint main thread), so a plain thread_local +
     /// RefCell is race-free.
     ///
-    /// SCOPE: only the non-streaming "+ tile" path registers here (its discarded
-    /// JoinHandle was the worst leak — the user's spam repro). Streaming tiles
-    /// (F9 / auto / PTT / followup) instead stop via the receiver-drop check in
-    /// `ai::stream_inner`; hard-aborting those on close is a separate follow-up.
+    /// An empty entry owns prompt preparation before its task is registered.
+    /// Removing it on close also prevents a late callback from starting work.
     static TILE_STREAMS: std::cell::RefCell<
-        std::collections::HashMap<i32, tokio::task::AbortHandle>,
+        std::collections::HashMap<i32, Option<tokio::task::AbortHandle>>,
     > = std::cell::RefCell::new(std::collections::HashMap::new());
 }
 
@@ -91,8 +89,13 @@ pub(crate) fn register_tile_stream(tile_id: i32, handle: tokio::task::AbortHandl
         return;
     }
     TILE_STREAMS.with(|m| {
-        if let Some(old) = m.borrow_mut().insert(tile_id, handle) {
-            old.abort();
+        let mut streams = m.borrow_mut();
+        if let Some(slot) = streams.get_mut(&tile_id) {
+            if let Some(old) = slot.replace(handle) {
+                old.abort();
+            }
+        } else {
+            handle.abort();
         }
     });
 }
@@ -104,7 +107,7 @@ pub(crate) fn abort_tile_stream(tile_id: i32) {
         return;
     }
     TILE_STREAMS.with(|m| {
-        if let Some(h) = m.borrow_mut().remove(&tile_id) {
+        if let Some(Some(h)) = m.borrow_mut().remove(&tile_id) {
             h.abort();
         }
     });
@@ -116,8 +119,20 @@ pub(crate) fn abort_tile_stream(tile_id: i32) {
 pub(crate) fn abort_all_tile_streams() {
     TILE_STREAMS.with(|m| {
         for (_, h) in m.borrow_mut().drain() {
-            h.abort();
+            if let Some(h) = h {
+                h.abort();
+            }
         }
+    });
+}
+
+pub(crate) fn tile_request_open(tile_id: i32) -> bool {
+    TILE_STREAMS.with(|m| m.borrow().contains_key(&tile_id))
+}
+
+pub(crate) fn open_tile_request(tile_id: i32) {
+    TILE_STREAMS.with(|m| {
+        m.borrow_mut().entry(tile_id).or_insert(None);
     });
 }
 
@@ -168,7 +183,7 @@ pub(crate) fn toggle_tile_maximize(hwnd: slint_replay::win32::HWND, tile: &TileW
     // rects use physical pixels; AppKit/CoreGraphics geometry uses points.
     #[cfg(windows)]
     let scale = tile.window().scale_factor();
-    #[cfg(target_os = "macos")]
+    #[cfg(not(windows))]
     let scale = 1.0_f32;
     let pw = (w * scale) as i32;
     let ph = (h * scale) as i32;
@@ -210,6 +225,10 @@ pub(crate) fn toggle_tile_maximize(hwnd: slint_replay::win32::HWND, tile: &TileW
 /// TouchArea stuck "pressed" → tile became undraggable/unclickable.
 /// User: "вызванный тайл завис, двигается но ничего не прожимается".
 pub(crate) fn wire_tile_drag(tile: &TileWindow) {
+    if tile.get_tile_id() < 0 {
+        tile.set_tile_id(next_tile_id());
+    }
+    open_tile_request(tile.get_tile_id());
     // Seed this tile's Theme global from the process-global scheme. Called on
     // every tile-creation path, so newly-spawned tiles inherit the live choice
     // without threading the value through 5 call sites.
@@ -282,15 +301,13 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
     // effect on the first painted frame.
     tile.set_body_opacity(global_tile_opacity());
 
-    let weak = tile.as_weak();
-    Timer::single_shot(Duration::from_millis(HWND_GRAB_DELAY_MS), move || {
-        let Some(t) = weak.upgrade() else { return };
-        // A close/drop before this delayed native setup must stay hidden.
+    let attempt = std::rc::Rc::new(move |t: &TileWindow| {
+        // A close/drop before delayed native setup must stay hidden.
         if !t.window().is_visible() {
-            return;
+            return true;
         }
         let Ok(hwnd) = grab_hwnd(t.window()) else {
-            return;
+            return false;
         };
 
         // Phase E6 fix v4 — use make_transparent_tile (no WS_EX_
@@ -310,16 +327,20 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
         // / browser windows and the user can interact with them.
         // Without this, clicks land on whatever non-topmost window
         // is at the pixel under the tile.
-        let _ = set_always_on_top(hwnd, true);
+        // Linux applies the pin and capture exclusion together with the move
+        // in `place_tile`, in one compositor request.
+        if !cfg!(target_os = "linux") {
+            let _ = set_always_on_top(hwnd, true);
 
-        // #111 — inherit stealth: a tile spawned while stealth is on must
-        // also be excluded from screen capture (the toggle only covered tiles
-        // that already existed). No-op when stealth is off. I1: a failed
-        // exclusion is logged, never silently swallowed — the tile stays
-        // capturable and the user must be able to diagnose it.
-        if global_stealth() {
-            if let Err(e) = set_stealth(hwnd, true) {
-                diag!("[overlay-host] tile stealth apply failed (tile stays capturable): {e}");
+            // #111 — inherit stealth: a tile spawned while stealth is on must
+            // also be excluded from screen capture (the toggle only covered tiles
+            // that already existed). No-op when stealth is off. I1: a failed
+            // exclusion is logged, never silently swallowed — the tile stays
+            // capturable and the user must be able to diagnose it.
+            if global_stealth() {
+                if let Err(e) = set_stealth(hwnd, global_stealth()) {
+                    diag!("[overlay-host] tile stealth apply failed (tile stays capturable): {e}");
+                }
             }
         }
 
@@ -415,17 +436,41 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
             // Move-only — preserve Slint's natural size so HiDPI
             // rendering stays correct (text fills the dark fill area
             // instead of overflowing).
-            let _ = move_window_pos_only(hwnd, x_clamped, y_clamped);
-            set_platform_window_position(t.window(), x_clamped, y_clamped);
+            place_tile(t, hwnd, x_clamped, y_clamped);
         } else {
             // No monitor from pick_monitor (degenerate — no primary display).
             // A stealth-parked tile would otherwise stay off the virtual desktop
             // (permanently invisible), so bring it back to a safe on-screen spot.
-            let _ = move_window_pos_only(hwnd, 100, 100);
-            set_platform_window_position(t.window(), 100, 100);
+            place_tile(t, hwnd, 100, 100);
             eprintln!("[overlay-host] tile placement: no monitor from pick_monitor — fallback to (100, 100)");
         }
+        true
     });
+    let fallback = std::rc::Rc::new(|t: &TileWindow| {
+        if t.window().is_visible() {
+            diag!("[overlay-host] tile native setup failed after realization retries");
+        }
+    });
+    super::realize_with_retries(tile, attempt, fallback);
+}
+
+/// Put a realized tile at (x, y). On Linux the move, pin and capture exclusion
+/// go in one compositor request: each separate `hyprctl` round trip kept a new
+/// tile centred for seconds on a busy compositor. I1 still holds there — a
+/// failed exclusion is logged, never silently swallowed.
+fn place_tile(t: &TileWindow, hwnd: slint_replay::win32::HWND, x: i32, y: i32) {
+    #[cfg(target_os = "linux")]
+    {
+        let stealth = global_stealth();
+        if let Err(e) = slint_replay::native::window::arrange(hwnd.0, x, y, stealth) {
+            diag!("[overlay-host] tile placement failed: {e}");
+        } else if slint_replay::native::window::exclusion(hwnd.0).ok() != Some(stealth) {
+            diag!("[overlay-host] tile stealth apply failed (tile stays capturable): readback mismatch");
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = move_window_pos_only(hwnd, x, y);
+    set_platform_window_position(t.window(), x, y);
 }
 
 // Tests live at the END of the module (clippy::items_after_test_module, denied
@@ -433,7 +478,37 @@ pub(crate) fn apply_tile_hwnd_with_monitor(tile: &TileWindow) {
 // by production items.
 #[cfg(test)]
 mod cascade_tests {
-    use super::cascade_cycle;
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+    use super::*;
+
+    #[tokio::test]
+    async fn closed_tiles_abort_active_queued_and_late_registered_tasks_independently() {
+        let first = next_tile_id();
+        let second = next_tile_id();
+        open_tile_request(first);
+        open_tile_request(second);
+        let pending = || tokio::spawn(std::future::pending::<()>());
+        let a = pending();
+        let b = pending();
+        register_tile_stream(first, a.abort_handle());
+        register_tile_stream(second, b.abort_handle());
+        abort_tile_stream(first);
+        assert!(a.await.unwrap_err().is_cancelled());
+        assert!(
+            !b.is_finished(),
+            "closing one tile must preserve another question"
+        );
+        assert!(!tile_request_open(first));
+        let late = pending();
+        register_tile_stream(first, late.abort_handle());
+        assert!(
+            late.await.unwrap_err().is_cancelled(),
+            "closed prompt callback cannot restart work"
+        );
+        abort_all_tile_streams();
+        assert!(b.await.unwrap_err().is_cancelled());
+        assert!(!tile_request_open(second));
+    }
 
     #[test]
     fn cascade_clamp_pins_in_band() {
