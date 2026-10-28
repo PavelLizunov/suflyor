@@ -53,12 +53,17 @@ fn transient_string_props(slint_src: &str) -> Vec<String> {
 /// from the fn signature to the next top-level `fn`/`pub fn`/`pub(crate) fn`
 /// (column-0, i.e. a sibling item) or to EOF. Good enough for a substring scan.
 fn populate_body(rs_src: &str) -> &str {
+    function_body(rs_src, "populate_token_status")
+}
+
+fn function_body<'a>(rs_src: &'a str, name: &str) -> &'a str {
+    let signature = format!("fn {name}(");
     let start = rs_src
-        .find("fn populate_token_status")
-        .expect("populate_token_status not found in settings_controller.rs");
+        .find(&signature)
+        .expect("population function not found");
     let after = &rs_src[start..];
     // The first byte after the signature; search for the next top-level item.
-    let body = &after["fn populate_token_status".len()..];
+    let body = &after[signature.len()..];
     let mut end = body.len();
     for marker in ["\nfn ", "\npub fn ", "\npub(crate) fn "] {
         if let Some(i) = body.find(marker) {
@@ -75,7 +80,25 @@ fn every_transient_status_prop_is_reset_on_reopen() {
         .expect("read ui/settings_panel.slint");
     let rs = fs::read_to_string(root.join("src/bin/overlay_host/settings_controller.rs"))
         .expect("read settings_controller.rs");
-    let body = populate_body(&rs);
+    let mut body = populate_body(&rs).to_owned();
+    // Follow the exact helpers called on reopen, not unrelated action setters.
+    for (call, module, function) in [
+        (
+            "super::settings_model_speed::refresh(win, &c);",
+            "settings_model_speed",
+            "refresh",
+        ),
+        (
+            "super::settings_dialogs::populate_storage(win);",
+            "settings_dialogs",
+            "populate_storage",
+        ),
+    ] {
+        assert!(body.contains(call), "missing reopen delegation: {call}");
+        let helper = fs::read_to_string(root.join(format!("src/bin/overlay_host/{module}.rs")))
+            .expect("read delegated population helper");
+        body.push_str(function_body(&helper, function));
+    }
 
     let mut missing: Vec<String> = Vec::new();
     for prop in transient_string_props(&slint) {
