@@ -132,8 +132,11 @@ windows-core = "0.62"
 transcribe-rs = { version = "=0.3.12", default-features = false, features = ["onnx", "ort-coreml"] }
 ort = { version = "=2.0.0-rc.12", default-features = false }
 
-[target.'cfg(target_os = "linux")'.dependencies]
+# Owned updater cancellation uses POSIX signals on both Linux and macOS.
+[target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
 transcribe-rs = { version = "=0.3.12", default-features = false, features = ["onnx"] }
 ort = { version = "=2.0.0-rc.12", default-features = false }
 
