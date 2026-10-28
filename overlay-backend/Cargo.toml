@@ -57,7 +57,7 @@ sha2 = "0.11"
 # hash (`sha1("blob <size>\0" ++ content)`), the only immutable digest the Hub
 # API exposes for regular files (teratts_install.rs).
 sha1 = "0.11"
-rusqlite = { version = "0.40.0", features = ["bundled"] }
+rusqlite = { version = "0.41.0", features = ["bundled"] }
 
 # WAV encode/decode (recorder.rs — session audio recording, v0.13.0). Was a
 # dev-dep (STT test round-trip); promoted to a real dep now that recorder.rs
