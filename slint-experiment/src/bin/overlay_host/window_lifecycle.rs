@@ -72,6 +72,8 @@ static STEALTH_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool
 
 /// Store the current global stealth state.
 pub(crate) fn set_global_stealth(on: bool) {
+    #[cfg(all(target_os = "linux", feature = "remote-ui"))]
+    slint_replay::remote_ui::send_global("Suflyor", "stealth-requested", on.into());
     STEALTH_ON.store(
         on && stealth_supported(),
         std::sync::atomic::Ordering::Relaxed,

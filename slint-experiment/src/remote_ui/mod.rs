@@ -735,6 +735,18 @@ pub fn dispatch(message: &Value) {
                 log::warn!("remote-ui: call {win}.{name}: {e}");
             }
         }
+        "drag" => {
+            let adapter = REGISTRY.with(|r| r.borrow().adapters.get(win).and_then(Weak::upgrade));
+            if let Some(adapter) = adapter {
+                let id = adapter.num.get();
+                match message["action"].as_str() {
+                    Some("begin") => crate::native::window::drag_begin(id),
+                    Some("move") => crate::native::window::drag_update(id),
+                    Some("end") => crate::native::window::drag_end(),
+                    _ => {}
+                }
+            }
+        }
         "geometry" => {
             let adapter = REGISTRY.with(|r| r.borrow().adapters.get(win).and_then(Weak::upgrade));
             if let Some(adapter) = adapter {

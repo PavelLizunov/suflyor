@@ -20,9 +20,9 @@ Item {
   // id -> RemoteWindow. Reassigned on open/close so `windowList` bindings update.
   property var windows: ({})
   property var windowList: []
-  // "Theme.is-light" -> value, from `global` messages.
   // suflyord takes every Suflyor surface off screen around a screen capture.
   property bool concealed: false
+  // "Theme.is-light" -> value, from `global` messages.
   property var globals: ({})
   property int globalsRev: 0
 
@@ -129,6 +129,10 @@ Item {
     case "conceal":
       client.concealed = !!message.value
       break
+    case "move":
+      if (w && Array.isArray(message.value) && message.value.length === 2)
+        client.moveRequested(w.winId, message.value[0], message.value[1])
+      break
     case "focus":
       if (w) w.focusRequested()
       break
@@ -144,6 +148,7 @@ Item {
     client.pending = ({})
     for (var id in calls) calls[id](null, "Suflyor stopped")
     client.ready = false
+    client.concealed = false
     client.globals = ({})
     client.globalsRev++
     var old = client.windowList

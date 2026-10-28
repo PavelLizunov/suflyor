@@ -11,30 +11,26 @@ pub use super::displays::{cursor, monitors};
 
 static DRAG: Mutex<Option<(isize, i32, i32, i32, i32)>> = Mutex::new(None);
 
-/// Last stealth state Hyprland accepted; `None` until a rule request succeeded,
-/// so `exclusion` never claims protection the compositor did not confirm.
-static EXCLUDED: Mutex<Option<bool>> = Mutex::new(None);
-
-/// One named layer rule hides every Suflyor surface (`suflyor-*` namespaces)
-/// from screen sharing; stealth enables or disables it. If a config reload drops
-/// the eval-made rule, the next placement or stealth toggle creates it again.
+// RE2 FullMatch needs the entire namespace, not a bare prefix. Input-only
+// dismissal layers must not match: Hyprland blacks out the whole layer bounds.
 fn layer_rule_script(on: bool) -> String {
     format!(
-        "suflyor_stealth = suflyor_stealth or hl.layer_rule({{name = \"suflyor-stealth\", \
-         match = {{namespace = \"^suflyor-\"}}, no_screen_share = true}}); \
-         suflyor_stealth:set_enabled({on})"
+        "suflyor_stealth = hl.layer_rule({{name = \"suflyor-stealth\", \
+         match = {{namespace = \"^suflyor-(bar-widget|bar-panel|tile|settings|[a-z]+view)$\"}}, \
+         no_screen_share = true}}); suflyor_stealth:set_enabled({on}); \
+         assert(suflyor_stealth:is_enabled() == {on}, \"Suflyor capture rule unavailable\")"
     )
 }
 
 fn apply_layer_rule(on: bool) -> Result<(), Error> {
-    let out = super::desktop::hypr(&["eval", &layer_rule_script(on)])?;
-    if out.to_ascii_lowercase().contains("error") {
-        return Err(format!("Hyprland rejected the stealth layer rule: {}", out.trim()).into());
-    }
-    *EXCLUDED
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(on);
-    Ok(())
+    remote_ui::send_global("Suflyor", "stealth-requested", on.into());
+    let result = super::desktop::hypr(&["eval", &layer_rule_script(on)]).and_then(|out| {
+        if out.trim() == "ok" { Ok(()) } else {
+            Err(format!("Hyprland rejected the stealth layer rule: {}", out.trim()).into())
+        }
+    });
+    remote_ui::send_global("Suflyor", "stealth-rule-applied", result.is_ok().into());
+    result
 }
 
 pub fn view_id(window: &slint::Window) -> Result<isize, Error> {
@@ -80,10 +76,11 @@ pub fn set_exclusion(_id: isize, on: bool) -> Result<(), Error> {
     apply_layer_rule(on)
 }
 pub fn exclusion(_id: isize) -> Result<bool, Error> {
-    EXCLUDED
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .ok_or_else(|| "the stealth layer rule has not been applied".into())
+    match super::desktop::hypr(&["repl", "suflyor_stealth and suflyor_stealth:is_enabled()"])?.trim() {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => Err("the stealth layer rule is unavailable".into()),
+    }
 }
 /// Takes every Suflyor layer off screen before a capture; the short wait lets
 /// the shell commit the change before grim reads the frame.
@@ -110,7 +107,8 @@ pub fn drag_update(id: isize) {
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     if let (Some((active, cx, cy, x, y)), Ok((nx, ny))) = (saved, cursor()) {
         if id == active {
-            let _ = move_to(id, x + nx - cx, y + ny - cy);
+            remote_ui::native_request(id, "move", serde_json::json!([nx - cx, ny - cy]));
+            *DRAG.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some((id, nx, ny, x, y));
         }
     }
 }
@@ -127,10 +125,10 @@ mod tests {
     #[test]
     fn stealth_rule_is_one_named_rule_toggled_in_place() {
         let on = layer_rule_script(true);
-        assert!(on.starts_with("suflyor_stealth = suflyor_stealth or hl.layer_rule("));
-        assert!(on.contains("namespace = \"^suflyor-\""));
+        assert!(on.starts_with("suflyor_stealth = hl.layer_rule("));
+        assert!(on.contains("namespace = \"^suflyor-(bar-widget|bar-panel|tile|settings|[a-z]+view)$\""));
         assert!(on.contains("no_screen_share = true"));
-        assert!(on.ends_with("suflyor_stealth:set_enabled(true)"));
-        assert!(layer_rule_script(false).ends_with("set_enabled(false)"));
+        assert!(on.contains("suflyor_stealth:set_enabled(true)"));
+        assert!(layer_rule_script(false).contains("set_enabled(false)"));
     }
 }

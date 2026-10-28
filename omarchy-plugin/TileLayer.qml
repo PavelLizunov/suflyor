@@ -21,7 +21,7 @@ PanelWindow {
 
   // The host parks a window far off screen while it prepares it.
   readonly property bool parked: typeof g.x === "number" && (g.x < -10000 || g.y < -10000)
-  readonly property bool shown: win.visible && !parked && !(service && (service.client.concealed || service.client.nativeDialogOpen))
+  readonly property bool shown: win.visible && !parked && !!service && service.captureReady && !(service.client.concealed || service.client.nativeDialogOpen)
   readonly property bool placed: typeof g.x === "number" && typeof g.y === "number" && !parked
   // suflyord places tiles in Hyprland's global layout coordinates: the tile goes on the
   // screen that holds its centre, its margins are relative to that screen.

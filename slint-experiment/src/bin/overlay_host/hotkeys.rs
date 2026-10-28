@@ -148,6 +148,8 @@ pub(crate) fn next_event() -> Option<global_hotkey::GlobalHotKeyEvent> {
             "config-reloaded" => {
                 *HOTKEY_DIAG.write().unwrap_or_else(|p| p.into_inner()) =
                     Some(wayland_hotkey_diag());
+                #[cfg(feature = "remote-ui")]
+                ACTIONS.with(|slot| slot.borrow_mut().push(command));
                 continue;
             }
             "f1" => (Code::F1, None),

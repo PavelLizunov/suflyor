@@ -3,8 +3,8 @@ import Quickshell
 import Quickshell.Wayland
 import qs.Commons
 
-// The layer stays fixed; the masked card moves inside it. This keeps pointer
-// coordinates stable on Wayland without intercepting clicks outside the card.
+// A capture-excluded layer must fit its card, not a full-screen input mask.
+// WindowDrag asks the host for compositor-space pointer deltas.
 PanelWindow {
   id: surface
   required property var modelData
@@ -19,16 +19,21 @@ PanelWindow {
   readonly property string viewName: win.type.replace(/Window$/, "") + "View"
   readonly property var g: win.geometry || ({})
   readonly property bool parked: typeof g.x === "number" && (g.x < -10000 || g.y < -10000)
-  readonly property bool shown: win.visible && !parked && !(service && (service.client.concealed || service.client.nativeDialogOpen))
+  readonly property bool shown: win.visible && !parked && !!service && service.captureReady && !(service.client.concealed || service.client.nativeDialogOpen)
   property var targetScreen: null
   property real offsetX: 0
   property real offsetY: 0
   readonly property int cardWidth: Math.min(Style.space(size[0]), screen ? Math.max(1, screen.width - Style.gapsOut * 2) : Style.space(size[0]))
   readonly property int cardHeight: Math.min(Style.space(size[1]), screen ? Math.max(1, screen.height - Style.space(60)) : Style.space(size[1]))
-  readonly property real centeredX: (width - cardWidth) / 2
-  readonly property real centeredY: (height - cardHeight) / 2
-  anchors { top: true; bottom: true; left: true; right: true }
-  mask: Region { item: card }
+  readonly property real centeredX: screen ? (screen.width - cardWidth) / 2 : 0
+  readonly property real centeredY: screen ? (screen.height - cardHeight) / 2 : 0
+  readonly property real cardX: Math.max(0, Math.min(screen ? screen.width - cardWidth : 0, centeredX + offsetX))
+  readonly property real cardY: Math.max(0, Math.min(screen ? screen.height - cardHeight : 0, centeredY + offsetY))
+  anchors { top: true; left: true }
+  margins.left: Math.round(cardX)
+  margins.top: Math.round(cardY)
+  implicitWidth: cardWidth
+  implicitHeight: cardHeight
   visible: shown
   color: "transparent"
   screen: targetScreen
@@ -45,8 +50,8 @@ PanelWindow {
     target: surface.service ? surface.service.client : null
     function onMoveRequested(winId, dx, dy) {
       if (winId !== surface.win.winId || !surface.screen) return
-      var x = Math.max(0, Math.min(surface.width - surface.cardWidth, card.x + dx))
-      var y = Math.max(0, Math.min(surface.height - surface.cardHeight, card.y + dy))
+      var x = Math.max(0, Math.min(surface.screen.width - surface.cardWidth, surface.cardX + dx))
+      var y = Math.max(0, Math.min(surface.screen.height - surface.cardHeight, surface.cardY + dy))
       surface.offsetX = x - surface.centeredX
       surface.offsetY = y - surface.centeredY
       surface.service.client.reportGeometry(winId, {
@@ -63,8 +68,8 @@ PanelWindow {
   }
   Item {
     id: card
-    x: Math.round(surface.centeredX + surface.offsetX)
-    y: Math.round(surface.centeredY + surface.offsetY)
+    x: 0
+    y: 0
     width: surface.cardWidth
     height: surface.cardHeight
     Loader {

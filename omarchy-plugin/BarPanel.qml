@@ -171,23 +171,15 @@ Ui.Panel {
     forceArrow: root.stealth
   }
 
-  // Conceal immediately; the normal close animation can outlast a capture.
-  Binding {
-    target: panel
-    property: "visible"
-    when: !!root.service && (root.service.client.concealed || root.service.client.nativeDialogOpen)
-    value: false
-  }
-
-  Ui.KeyboardPanel {
+  CapturePanel {
     id: panel
     anchorItem: root.anchorItem
     owner: root.hostWidget || root
     bar: root.bar
-    open: root.opened && !(root.service && (root.service.client.concealed || root.service.client.nativeDialogOpen))
+    open: root.opened
+    captureReady: !!root.service && root.service.captureReady
+    concealed: !!root.service && (root.service.client.concealed || root.service.client.nativeDialogOpen)
     focusTarget: keyCatcher
-    // Match the daemon's suflyor-* stealth layer-rule namespace.
-    WlrLayershell.namespace: "suflyor-bar-panel"
     contentWidth: fittedContentWidth(Style.space(440))
     // Fit the actual content, including live status lines and theme spacing.
     contentHeight: fittedContentHeight(Math.ceil(body.implicitHeight))

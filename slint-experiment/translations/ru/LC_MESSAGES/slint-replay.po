@@ -369,8 +369,11 @@ msgstr "Сохранённое устройство недоступно. Выб
 msgid "Capture the selected PipeWire output monitor or input. This does not change system or read-aloud playback."
 msgstr "Захват выбранного выхода или входа PipeWire. Системный вывод звука и озвучка не меняются."
 
-msgid "Uses Hyprland capture exclusion. Availability depends on the compositor and the sharing application."
-msgstr "Используется исключение из захвата Hyprland. Доступность зависит от композитора и приложения для демонстрации экрана."
+msgid "Hyprland masks Suflyor windows and its bar mark with black rectangles in supported captures. It does not reveal the desktop behind them. Suflyor hides its own surfaces for its own screenshots. Other capture methods may ignore the rule."
+msgstr "В поддерживаемых режимах захвата Hyprland закрывает окна и значок Суфлёра чёрными прямоугольниками, а не показывает рабочий стол под ними. Для собственных снимков Суфлёр временно убирает свои окна. Другие способы захвата могут игнорировать правило."
+
+msgid "Hyprland capture rule applied; check your capture application"
+msgstr "Правило захвата Hyprland применено. Проверьте результат в своём приложении захвата."
 
 msgid "Loading audio devices..."
 msgstr "Загрузка аудиоустройств..."

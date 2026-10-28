@@ -5246,11 +5246,19 @@ fn main() -> Result<(), slint::PlatformError> {
     #[cfg(target_os = "linux")]
     let _command_timer = {
         let weak = overlay.as_weak();
+        #[cfg(feature = "remote-ui")]
+        let (stealth_state, stealth_registry) = (state.clone(), registry.clone());
         let timer = Timer::default();
         timer.start(TimerMode::Repeated, Duration::from_millis(30), move || {
             if let Some(bar) = weak.upgrade() {
                 for action in hotkeys::take_actions() {
                     match action.as_str() {
+                        #[cfg(feature = "remote-ui")]
+                        "config-reloaded" => {
+                            let on = global_stealth();
+                            apply_bar_stealth(&bar, &stealth_state, on);
+                            stealth_registry.apply_stealth(on);
+                        }
                         "ptt-mic-down" => bar.invoke_ptt_mic_pressed(),
                         "ptt-mic-up" => bar.invoke_ptt_mic_released(),
                         "ptt-sys-down" => bar.invoke_ptt_sys_pressed(),

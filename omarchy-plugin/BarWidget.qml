@@ -1,4 +1,7 @@
+pragma ComponentBehavior: Bound
 import QtQuick
+import Quickshell
+import Quickshell.Wayland
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui as Ui
@@ -23,6 +26,14 @@ Ui.BarWidget {
   readonly property var barWin: effectiveService ? effectiveService.client.first("OverlayBarWindow") : null
   function p(name, fallback) { return root.barWin ? root.barWin.prop(name, fallback) : fallback }
   function tr(msgid, args) { return root.effectiveService ? root.effectiveService.tr(msgid, args) : msgid }
+
+  readonly property bool stealthRequested: !effectiveService || !effectiveService.running || effectiveService.stealthRequested
+  readonly property var hostWindow: root.QsWindow.window
+  readonly property point markPosition: {
+    markWatcher.transform
+    return root.hostWindow ? root.mapToItem(root.hostWindow.contentItem, 0, 0) : Qt.point(0, 0)
+  }
+  TransformWatcher { id: markWatcher; a: root.hostWindow ? root.hostWindow.contentItem : null; b: root }
 
   readonly property bool running: !!effectiveService && effectiveService.running && !!barWin
   readonly property bool sessionActive: running && p("timer-active", false)
@@ -111,6 +122,7 @@ Ui.BarWidget {
   onBarChanged: syncPanel()
   onSettingsChanged: syncPanel()
   onEffectiveServiceChanged: syncPanel()
+  onStealthRequestedChanged: if (stealthRequested) button.hideOwnTooltip()
 
   Loader {
     id: panelLoader
@@ -130,9 +142,9 @@ Ui.BarWidget {
     bar: root.bar
     hasVisualContent: true
     labelVisible: false
-    fixedWidth: root.vertical ? -1 : row.implicitWidth
+    fixedWidth: root.vertical ? -1 : inlineMark.implicitWidth
     fixedHeight: root.vertical ? Style.bar.iconSlot : -1
-    tooltipText: root.tooltip
+    tooltipText: root.stealthRequested ? "" : root.tooltip
 
     Accessible.role: Accessible.Button
     Accessible.name: root.tooltip
@@ -144,9 +156,32 @@ Ui.BarWidget {
       else root.toggle()
     }
 
-    Row {
-      id: row
-      anchors.centerIn: parent
+    Mark { id: inlineMark; anchors.centerIn: parent; opacity: root.stealthRequested ? 0 : 1 }
+  }
+
+  // Only the Suflyor pixels leave the shared omarchy-bar surface. Input stays
+  // on the original button, so the native layout and drag slot are unchanged.
+  PanelWindow {
+    readonly property var host: root.hostWindow
+    visible: root.visible && root.stealthRequested && !!root.effectiveService
+      && root.effectiveService.captureReady && !!host && host.backingWindowVisible
+      && !(host.margins && (host.margins.top < 0 || host.margins.bottom < 0 || host.margins.left < 0 || host.margins.right < 0))
+    screen: host ? host.screen : null
+    anchors { top: true; left: true }
+    margins.left: Math.round(root.markPosition.x)
+    margins.top: Math.round(root.markPosition.y)
+    implicitWidth: Math.max(1, button.width)
+    implicitHeight: Math.max(1, button.height)
+    color: "transparent"
+    mask: Region {}
+    exclusionMode: ExclusionMode.Ignore
+    WlrLayershell.namespace: "suflyor-bar-widget"
+    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    Mark { anchors.centerIn: parent }
+  }
+
+  component Mark: Row {
       spacing: Style.space(5)
 
       Item {
@@ -174,5 +209,4 @@ Ui.BarWidget {
         anchors.verticalCenter: parent.verticalCenter
       }
     }
-  }
 }

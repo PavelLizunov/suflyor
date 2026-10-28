@@ -16,6 +16,7 @@ Item {
     target: "io.github.pavellizunov.suflyor.status"
     function status(): string {
       return JSON.stringify({uiSource: String(Qt.resolvedUrl(".")), running: root.running,
+        stealthRequested: root.stealthRequested, stealthRuleApplied: root.stealthRuleApplied,
         windows: remoteClient.windowList.map(function(w) { return {id: w.winId, type: w.type, visible: w.visible, geometry: w.geometry} })})
     }
   }
@@ -36,6 +37,19 @@ Item {
 
   readonly property alias client: remoteClient
   readonly property bool running: remoteClient.connected && remoteClient.ready
+  readonly property bool captureReady: {
+    var revision = remoteClient.globalsRev
+    // Wait for the first rule attempt; on failure keep the warning and controls usable.
+    return running && (!stealthRequested || typeof remoteClient.globals["Suflyor.stealth-rule-applied"] === "boolean")
+  }
+  readonly property bool stealthRequested: {
+    var revision = remoteClient.globalsRev
+    return remoteClient.globals["Suflyor.stealth-requested"] === true
+  }
+  readonly property bool stealthRuleApplied: {
+    var revision = remoteClient.globalsRev
+    return remoteClient.globals["Suflyor.stealth-rule-applied"] === true
+  }
   // Three starts without a connection: the binary is missing or broken.
   property bool daemonFailed: false
   property int startAttempts: 0

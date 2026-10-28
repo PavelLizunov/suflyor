@@ -1029,7 +1029,7 @@ export component SettingsWindow inherits Window {
                             Text {
                                 text: Platform.is-macos
                                     ? @tr("macOS has no public API that can hide the overlay from other screen-sharing apps. Suflyor only excludes its own windows from its own screenshots.")
-                                    : Platform.is-linux ? @tr("Uses Hyprland capture exclusion. Availability depends on the compositor and the sharing application.")
+                                    : Platform.is-linux ? @tr("Hyprland masks Suflyor windows and its bar mark with black rectangles in supported captures. It does not reveal the desktop behind them. Suflyor hides its own surfaces for its own screenshots. Other capture methods may ignore the rule.")
                                     : @tr("Hides the overlay from screen capture and sharing (Print Screen, Teams, Meet, OBS).");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-muted;
@@ -1039,7 +1039,7 @@ export component SettingsWindow inherits Window {
                             // Only while the toggle is on: off needs no second line.
                             if !Platform.is-macos && root.stealth-toggle : Text {
                                 text: root.stealth-effective
-                                    ? @tr("On, hidden from capture")
+                                    ? (Platform.is-linux ? @tr("Hyprland capture rule applied; check your capture application") : @tr("On, hidden from capture"))
                                     : @tr("Capture hiding unavailable");
                                 font-size: Metrics.font-label;
                                 color: root.stealth-effective ? Theme.text-secondary : Theme.warning;

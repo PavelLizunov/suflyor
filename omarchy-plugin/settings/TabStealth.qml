@@ -51,13 +51,13 @@ Column {
     C.SettingsCaption {
       text: root.service ? root.service.tr(root.macos
         ? "macOS has no public API that can hide the overlay from other screen-sharing apps. Suflyor only excludes its own windows from its own screenshots."
-        : root.linux ? "Uses Hyprland capture exclusion. Availability depends on the compositor and the sharing application."
+        : root.linux ? "Hyprland masks Suflyor windows and its bar mark with black rectangles in supported captures. It does not reveal the desktop behind them. Suflyor hides its own surfaces for its own screenshots. Other capture methods may ignore the rule."
         : "Hides the overlay from screen capture and sharing (Print Screen, Teams, Meet, OBS).", []) : ""
       font.pixelSize: Style.font.body
     }
     C.StatusLine {
       visible: !root.macos && root.stealth
-      text: root.service ? root.service.tr(root.effective ? "On, hidden from capture" : "Capture hiding unavailable", []) : ""
+      text: root.service ? root.service.tr(root.effective ? (root.linux ? "Hyprland capture rule applied; check your capture application" : "On, hidden from capture") : "Capture hiding unavailable", []) : ""
       tone: root.effective ? "neutral" : "warning"
       font.pixelSize: Style.font.body
     }

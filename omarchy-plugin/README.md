@@ -23,6 +23,20 @@ removes its bar entry, so a later enable uses the manifest's default position.
 The plugin service is deliberately not `keepLoaded`: Omarchy's plugin reload
 must replace its QML, not retain old code.
 
+## Capture hiding
+
+Stealth applies a named Hyprland rule to Suflyor card-sized surfaces and a
+separate visual-only bar mark. Other Omarchy widgets stay outside the rule.
+Hyprland uses full namespace matches; the rule is recreated after its configuration
+reloads, and rule application is not reported as a successful capture test.
+
+Hyprland 0.56 masks protected surface bounds with **black rectangles**, including
+transparent pixels. It does not reveal the desktop underneath. Settings, archive
+and the bar popup therefore use bounded surfaces, with input-only dismissal
+layers outside the rule. Suflyor temporarily conceals its surfaces for its own
+screenshots. Other screenshot or sharing paths may ignore compositor exclusion;
+check the actual application before relying on it.
+
 ## Model speed
 
 Settings > AI providers > Model speed measures the already loaded local model.

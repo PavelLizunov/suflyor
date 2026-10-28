@@ -1,24 +1,21 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 
-// A layer-shell surface cannot use the window manager's normal window drag.
-// Keep the title's pointer grab and let its owning layer update its margins.
+// Compositor cursor deltas stay stable when a bounded layer moves; Qt cannot
+// report its changing global layer-shell origin through mapToGlobal.
 MouseArea {
   id: root
   property var win: null
   property var service: null
-  property point lastGlobal
   acceptedButtons: Qt.LeftButton
   cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
   preventStealing: true
-  onPressed: function(mouse) {
-    lastGlobal = mapToGlobal(mouse.x, mouse.y)
-    mouse.accepted = true
+  function drag(action) {
+    if (root.win && root.service)
+      root.service.client.send({ t: "drag", win: root.win.winId, action: action })
   }
-  onPositionChanged: function(mouse) {
-    if (!pressed || !root.win || !root.service) return
-    var now = mapToGlobal(mouse.x, mouse.y)
-    root.service.client.moveRequested(root.win.winId, now.x - lastGlobal.x, now.y - lastGlobal.y)
-    lastGlobal = now
-  }
+  onPressed: function(mouse) { drag("begin"); mouse.accepted = true }
+  onPositionChanged: if (pressed) drag("move")
+  onReleased: drag("end")
+  onCanceled: drag("end")
 }
