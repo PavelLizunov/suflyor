@@ -107,7 +107,7 @@ raw-window-handle = "0.6"
 
 # Phase 0.5 markdown spike: CommonMark + GFM parser. Already a transitive
 # dep of slint-build, so no new third-party risk.
-pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+pulldown-cmark = { version = "0.13.5", default-features = false, features = ["html"] }
 
 # Phase D2 — global F4 hotkey. global-hotkey is maintained by the
 # tauri-apps org (Tauri itself uses it). Provides a thread-safe

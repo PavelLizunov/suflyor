@@ -514,7 +514,9 @@ pub(in super::super) fn open_archive(
         win.on_play_recording_requested(move |index| {
             if let Some(w) = weak.upgrade() {
                 w.invoke_transcript_requested(index);
-                if let Some(transcript) = tslot.borrow().as_ref() { transcript.invoke_toggle_play(); }
+                if let Some(transcript) = tslot.borrow().as_ref() {
+                    transcript.invoke_toggle_play();
+                }
             }
         });
     }

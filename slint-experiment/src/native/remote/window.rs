@@ -25,7 +25,9 @@ fn layer_rule_script(on: bool) -> String {
 fn apply_layer_rule(on: bool) -> Result<(), Error> {
     remote_ui::send_global("Suflyor", "stealth-requested", on.into());
     let result = super::desktop::hypr(&["eval", &layer_rule_script(on)]).and_then(|out| {
-        if out.trim() == "ok" { Ok(()) } else {
+        if out.trim() == "ok" {
+            Ok(())
+        } else {
             Err(format!("Hyprland rejected the stealth layer rule: {}", out.trim()).into())
         }
     });
@@ -76,7 +78,9 @@ pub fn set_exclusion(_id: isize, on: bool) -> Result<(), Error> {
     apply_layer_rule(on)
 }
 pub fn exclusion(_id: isize) -> Result<bool, Error> {
-    match super::desktop::hypr(&["repl", "suflyor_stealth and suflyor_stealth:is_enabled()"])?.trim() {
+    match super::desktop::hypr(&["repl", "suflyor_stealth and suflyor_stealth:is_enabled()"])?
+        .trim()
+    {
         "true" => Ok(true),
         "false" => Ok(false),
         _ => Err("the stealth layer rule is unavailable".into()),
@@ -108,7 +112,9 @@ pub fn drag_update(id: isize) {
     if let (Some((active, cx, cy, x, y)), Ok((nx, ny))) = (saved, cursor()) {
         if id == active {
             remote_ui::native_request(id, "move", serde_json::json!([nx - cx, ny - cy]));
-            *DRAG.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some((id, nx, ny, x, y));
+            *DRAG
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some((id, nx, ny, x, y));
         }
     }
 }
@@ -126,7 +132,8 @@ mod tests {
     fn stealth_rule_is_one_named_rule_toggled_in_place() {
         let on = layer_rule_script(true);
         assert!(on.starts_with("suflyor_stealth = hl.layer_rule("));
-        assert!(on.contains("namespace = \"^suflyor-(bar-widget|bar-panel|tile|settings|[a-z]+view)$\""));
+        assert!(on
+            .contains("namespace = \"^suflyor-(bar-widget|bar-panel|tile|settings|[a-z]+view)$\""));
         assert!(on.contains("no_screen_share = true"));
         assert!(on.contains("suflyor_stealth:set_enabled(true)"));
         assert!(layer_rule_script(false).contains("set_enabled(false)"));

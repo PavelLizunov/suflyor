@@ -610,8 +610,11 @@ pub(crate) fn wire_local_ai(
                 rfd::AsyncFileDialog::new().add_filter("GGUF model", &["gguf"]),
                 super::settings_dialogs::Kind::File,
                 move |path| {
-                    let (Some(w), Some(path)) = (weak.upgrade(), path) else { return };
-                    if overlay_backend::local_ai::valid_custom_gguf_path(&path.to_string_lossy()).is_none()
+                    let (Some(w), Some(path)) = (weak.upgrade(), path) else {
+                        return;
+                    };
+                    if overlay_backend::local_ai::valid_custom_gguf_path(&path.to_string_lossy())
+                        .is_none()
                     {
                         w.set_quality_status(SharedString::from(if cfg_c.read().ui_is_ru() {
                             "Выбранный файл не является корректной GGUF-моделью."

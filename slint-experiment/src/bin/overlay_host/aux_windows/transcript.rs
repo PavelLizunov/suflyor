@@ -928,7 +928,9 @@ fn wire_transcript_diarization(
     let session_diarizable = session_finished
         && has_sys_audio_ms
         && overlay_backend::session_audio::session_has_recordings(session_id);
-    let engine = live_job.as_ref().map(|job| job.engine)
+    let engine = live_job
+        .as_ref()
+        .map(|job| job.engine)
         .unwrap_or_else(overlay_backend::diarize::selected_engine);
     win.set_nemotron_available(overlay_backend::nemotron_diar::supported());
     win.set_use_nemotron(engine == overlay_backend::diarize::DiarEngine::Nemotron3);
@@ -1013,8 +1015,14 @@ fn wire_transcript_diarization(
         let weak = win.as_weak();
         win.on_select_diar_engine(move |use_nemotron| {
             let Some(w) = weak.upgrade() else { return };
-            if DIAR_BUSY.load(Ordering::Acquire) || DIAR_INSTALL_BUSY.load(Ordering::Acquire) { return; }
-            let engine = overlay_backend::diarize::DiarEngine::from_id(if use_nemotron { "nemotron3" } else { "pyannote" });
+            if DIAR_BUSY.load(Ordering::Acquire) || DIAR_INSTALL_BUSY.load(Ordering::Acquire) {
+                return;
+            }
+            let engine = overlay_backend::diarize::DiarEngine::from_id(if use_nemotron {
+                "nemotron3"
+            } else {
+                "pyannote"
+            });
             if let Err(error) = overlay_backend::diarize::save_engine(engine) {
                 log::warn!("diarization preference save failed: {error}");
                 return;
@@ -1138,8 +1146,14 @@ fn wire_transcript_diarization(
                 w.set_confirm_rediar(false);
                 return;
             };
-            let engine = overlay_backend::diarize::DiarEngine::from_id(if w.get_use_nemotron() { "nemotron3" } else { "pyannote" });
-            if !overlay_backend::diarize::engine_ready(engine) { return; }
+            let engine = overlay_backend::diarize::DiarEngine::from_id(if w.get_use_nemotron() {
+                "nemotron3"
+            } else {
+                "pyannote"
+            });
+            if !overlay_backend::diarize::engine_ready(engine) {
+                return;
+            }
             let count = w.get_speaker_count().clamp(0, 8);
             w.set_diarizing(true);
             w.set_diar_status(SharedString::from("Определение говорящих…"));
@@ -1175,7 +1189,9 @@ fn wire_transcript_diarization(
                             }
                         },
                     ) {
-                        Ok(_) if cancel.load(Ordering::Acquire) => Err(DiarFailure::Run("Nemotron canceled".into())),
+                        Ok(_) if cancel.load(Ordering::Acquire) => {
+                            Err(DiarFailure::Run("Nemotron canceled".into()))
+                        }
                         Ok(d) => {
                             // Persist HERE, off the window: a worker-owned catalog
                             // handle (the archive window does the same). The poll's
@@ -1239,7 +1255,11 @@ fn wire_transcript_diarization(
             w.set_installing_diar_models(true);
             w.set_diar_status(SharedString::default());
 
-            let engine = overlay_backend::diarize::DiarEngine::from_id(if w.get_use_nemotron() { "nemotron3" } else { "pyannote" });
+            let engine = overlay_backend::diarize::DiarEngine::from_id(if w.get_use_nemotron() {
+                "nemotron3"
+            } else {
+                "pyannote"
+            });
             let slot: DiarInstallSlot = Arc::new(Mutex::new(None));
             DIAR_INSTALL_JOB.with(|j| *j.borrow_mut() = Some(slot.clone()));
             {
@@ -1253,7 +1273,8 @@ fn wire_transcript_diarization(
                     // ponytail: no per-file progress marshalling — the button's
                     // "Downloading…" state is enough for a one-time ~30 MB fetch.
                     let r = overlay_backend::diarize::install_engine(engine, &cancel, &|_| {})
-                        .map(|()| engine).map_err(|e| format!("{e:#}"));
+                        .map(|()| engine)
+                        .map_err(|e| format!("{e:#}"));
                     if let Ok(mut g) = slot_w.lock() {
                         *g = Some(r);
                         // Keep result publication + latch release ordered for

@@ -161,7 +161,12 @@ pub(crate) async fn stream_agent(
     if no_think {
         // Fast answers used no local lookup loop; the explicit web opt-in adds only web tools.
         if let Some(defs) = defs.as_array_mut() {
-            defs.retain(|tool| matches!(tool["function"]["name"].as_str(), Some(tools::WEB_SEARCH | tools::OPEN_URL)));
+            defs.retain(|tool| {
+                matches!(
+                    tool["function"]["name"].as_str(),
+                    Some(tools::WEB_SEARCH | tools::OPEN_URL)
+                )
+            });
         }
     }
     let tools_until = Instant::now() + TOOL_BUDGET;

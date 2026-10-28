@@ -40,9 +40,7 @@ fn playback_gain(pcm: &[i16], sample_rate: u32) -> f64 {
     }
     let energy: Vec<f64> = pcm
         .chunks(window)
-        .map(|chunk| {
-            chunk.iter().map(|&s| f64::from(s).powi(2)).sum::<f64>() / chunk.len() as f64
-        })
+        .map(|chunk| chunk.iter().map(|&s| f64::from(s).powi(2)).sum::<f64>() / chunk.len() as f64)
         .collect();
     let peak = energy.iter().copied().fold(0.0_f64, f64::max);
     let gate = (peak * 0.01).max(100.0_f64.powi(2));
@@ -151,7 +149,10 @@ pub fn load_mixed_from_dir(session_dir: &Path) -> Result<(Vec<i16>, u32)> {
             log::warn!("session audio: ignored malformed TTS mask: {error:#}");
         }
     }
-    Ok((mix_playback_pcm(&mic_pcm, &sys_pcm, sample_rate), sample_rate))
+    Ok((
+        mix_playback_pcm(&mic_pcm, &sys_pcm, sample_rate),
+        sample_rate,
+    ))
 }
 
 /// True if the session has at least one saved recording channel — a CHEAP fs

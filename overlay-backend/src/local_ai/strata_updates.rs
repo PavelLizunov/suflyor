@@ -7,9 +7,8 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Context, Result};
 
 use super::{
-    active_location, parse_json_file, spawn_owned, start_strata, stop_strata,
-    strata_engine_path, strata_python, strata_reachable, strata_running,
-    terminate_child_tree, Progress, StrataStart,
+    active_location, parse_json_file, spawn_owned, start_strata, stop_strata, strata_engine_path,
+    strata_python, strata_reachable, strata_running, terminate_child_tree, Progress, StrataStart,
 };
 
 #[must_use]
@@ -76,7 +75,9 @@ fn stop_updater(mut child: Child) {
     {
         // Python's KeyboardInterrupt runs the official updater's finally block,
         // which stops its isolated test server before removing the staging tree.
-        unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGINT); }
+        unsafe {
+            libc::kill(child.id() as libc::pid_t, libc::SIGINT);
+        }
         let deadline = Instant::now() + Duration::from_secs(65);
         while Instant::now() < deadline {
             match child.try_wait() {
@@ -85,7 +86,9 @@ fn stop_updater(mut child: Child) {
                 Err(_) => break,
             }
         }
-        unsafe { libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL); }
+        unsafe {
+            libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL);
+        }
     }
     terminate_child_tree(child);
 }
@@ -97,24 +100,31 @@ fn run_updater(
     cancel: &AtomicBool,
     on: &dyn Fn(Progress),
 ) -> Result<StrataUpdate> {
-    on(Progress::Step(if check_only {
-        "Checking Strata engine updates"
-    } else {
-        "Updating Strata engine"
-    }.into()));
+    on(Progress::Step(
+        if check_only {
+            "Checking Strata engine updates"
+        } else {
+            "Updating Strata engine"
+        }
+        .into(),
+    ));
     let output = dir.join(format!("suflyor-update-{}.json", std::process::id()));
     let mut cmd = Command::new(strata_python(dir));
     cmd.arg(dir.join("strata.py"))
         // A remembered release-specific feed would pin checks to that old release.
         // Suflyor's official update action always follows the latest signed feed.
         .args([
-            "update", "--no-control", "--feed",
+            "update",
+            "--no-control",
+            "--feed",
             "https://github.com/Niko1221/Strata/releases/latest/download/strata-feed.json",
             "--model-config",
         ])
         .arg(config)
         .args(["--output", "json"]);
-    if check_only { cmd.arg("--check"); }
+    if check_only {
+        cmd.arg("--check");
+    }
     cmd.current_dir(dir)
         .env("PYTHONUNBUFFERED", "1")
         .env("PYTHONIOENCODING", "utf-8")
@@ -161,7 +171,8 @@ fn parse_report(success: bool, report: &serde_json::Value, check: bool) -> Resul
     let engine = if check {
         &report["engine"]
     } else {
-        report["results"].as_array()
+        report["results"]
+            .as_array()
             .and_then(|rows| rows.iter().find(|row| row["component"] == "engine"))
             .context("Strata updater returned no engine result")?
     };
@@ -170,14 +181,24 @@ fn parse_report(success: bool, report: &serde_json::Value, check: bool) -> Resul
         bail!("Strata update has no compatible engine: {status}");
     }
     let version = if check {
-        engine.pointer(if status == "current" { "/installed/version" } else { "/offered/version" })
+        engine.pointer(if status == "current" {
+            "/installed/version"
+        } else {
+            "/offered/version"
+        })
     } else {
-        engine.pointer("/installed_after/version").or_else(|| engine.pointer("/installed_before/version"))
-    }.and_then(serde_json::Value::as_str).context("Strata engine version missing")?;
+        engine
+            .pointer("/installed_after/version")
+            .or_else(|| engine.pointer("/installed_before/version"))
+    }
+    .and_then(serde_json::Value::as_str)
+    .context("Strata engine version missing")?;
     Ok(StrataUpdate {
         version: version.into(),
-        release_version: report.pointer("/app/offered")
-            .and_then(serde_json::Value::as_str).map(str::to_owned),
+        release_version: report
+            .pointer("/app/offered")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
         update_available: matches!(status, "available" | "install"),
     })
 }

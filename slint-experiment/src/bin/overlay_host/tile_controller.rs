@@ -715,7 +715,10 @@ impl OverlayBarBridge {
             return;
         }
         let text = if let Some(name) = payload.get("tool").and_then(|v| v.as_str()) {
-            let detail = payload.get("detail").and_then(|v| v.as_str()).unwrap_or_default();
+            let detail = payload
+                .get("detail")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
             tool_status_body("", &text, name, detail, self.cfg.read().ui_is_ru())
         } else {
             text

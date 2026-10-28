@@ -240,10 +240,10 @@ use tile_terms::*;
 // `short_model_name`/`active_stack_label` stay in `main`. The moved Settings code
 // reaches the diagnostics REDACTED `build_diag_report`, `open_wizard`, the
 // `WindowRegistry`, and the mic guard through the existing crate-root globs.
-#[path = "overlay_host/settings_dialogs.rs"]
-mod settings_dialogs;
 #[path = "overlay_host/settings_controller.rs"]
 mod settings_controller;
+#[path = "overlay_host/settings_dialogs.rs"]
+mod settings_dialogs;
 use settings_controller::*;
 
 // The Vision (screenshot) Settings-tab callbacks (provider switch + cloud/local
@@ -252,14 +252,14 @@ use settings_controller::*;
 // re-exports `wire_vision_settings`, which `open_settings` calls in place of the
 // old inline V4 block; the moved code reaches `SettingsWindow` / the `diag!`
 // macro / the `overlay_backend` helpers through the crate-root globs.
-#[cfg(any(windows, target_os = "linux"))]
-#[path = "overlay_host/settings_strata_vision.rs"]
-mod settings_strata_vision;
+#[path = "overlay_host/settings_model_speed.rs"]
+mod settings_model_speed;
 #[cfg(any(windows, target_os = "linux"))]
 #[path = "overlay_host/settings_strata_updates.rs"]
 mod settings_strata_updates;
-#[path = "overlay_host/settings_model_speed.rs"]
-mod settings_model_speed;
+#[cfg(any(windows, target_os = "linux"))]
+#[path = "overlay_host/settings_strata_vision.rs"]
+mod settings_strata_vision;
 #[path = "overlay_host/settings_vision.rs"]
 mod settings_vision;
 use settings_vision::*;
@@ -1840,7 +1840,8 @@ fn main() -> Result<(), slint::PlatformError> {
                     let ui_is_ru = cfg_c.read().ui_is_ru();
                     if let Err(e) = slint_session::start_session(events_c, cfg_c, rt_c) {
                         eprintln!("[overlay-host] start_session failed: {e:#}");
-                        let message = status_copy::session_start_failed(ui_is_ru, &format!("{e:#}"));
+                        let message =
+                            status_copy::session_start_failed(ui_is_ru, &format!("{e:#}"));
                         // Revert UI toggle since the pipeline didn't start.
                         let _ = slint::invoke_from_event_loop(move || {
                             #[cfg(target_os = "macos")]
@@ -2308,8 +2309,11 @@ fn main() -> Result<(), slint::PlatformError> {
                                                // a follow-up carries full context.
                 let (meeting_context, response_language, fast) = {
                     let c = cfg_for_poll.read();
-                    (c.meeting_context.clone(), c.response_language.clone(),
-                     AskRoute::Text.fast_answers(&c))
+                    (
+                        c.meeting_context.clone(),
+                        c.response_language.clone(),
+                        AskRoute::Text.fast_answers(&c),
+                    )
                 };
                 let question = req.spec.question.clone();
                 // v0.12.2 — Summary tiles seed their dialog with the REAL recap

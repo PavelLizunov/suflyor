@@ -90,15 +90,23 @@ pub fn strata_dir(root: &Path) -> PathBuf {
     let legacy = base.join("Strata-0.1.44.1");
     // Keep a completed older install usable instead of moving its weights.
     if !current.join("START-HERE.bat").is_file()
-        && strata_python(&legacy).is_file() && strata_config(&legacy).is_file() {
+        && strata_python(&legacy).is_file()
+        && strata_config(&legacy).is_file()
+    {
         legacy
-    } else { current }
+    } else {
+        current
+    }
 }
 
 fn strata_python(dir: &Path) -> PathBuf {
     if cfg!(windows) {
         let bundled = dir.join("python").join("python.exe");
-        if bundled.is_file() { bundled } else { dir.join(".venv").join("Scripts").join("python.exe") }
+        if bundled.is_file() {
+            bundled
+        } else {
+            dir.join(".venv").join("Scripts").join("python.exe")
+        }
     } else {
         let bundled = dir.join("python").join("bin").join("python3");
         if bundled.is_file() {
@@ -129,7 +137,15 @@ fn strata_engine_path(dir: &Path, cfg: &serde_json::Value) -> Option<PathBuf> {
     }
     let components = std::env::var_os("STRATA_COMPONENTS_DIR")
         .map(PathBuf::from)
-        .or_else(|| dirs::data_local_dir().map(|path| path.join(if cfg!(windows) { "Strata/components" } else { "strata/components" })))?;
+        .or_else(|| {
+            dirs::data_local_dir().map(|path| {
+                path.join(if cfg!(windows) {
+                    "Strata/components"
+                } else {
+                    "strata/components"
+                })
+            })
+        })?;
     let state =
         parse_json_file(&std::fs::read_to_string(components.join(".updates/state.json")).ok()?);
     let active = std::path::Path::new(state["engine"]["active"].as_str()?);
@@ -257,8 +273,10 @@ fn parse_json_file(text: &str) -> serde_json::Value {
 pub fn strata_in_folder(dir: &Path) -> Vec<FoundStrata> {
     let current = dir.join("terminal/current");
     // Windows installers use a launcher pointer when the drive cannot hold a junction.
-    let terminal = std::fs::read_to_string(current.join("current.txt")).ok()
-        .map(|text| PathBuf::from(text.trim())).filter(|path| path.is_absolute())
+    let terminal = std::fs::read_to_string(current.join("current.txt"))
+        .ok()
+        .map(|text| PathBuf::from(text.trim()))
+        .filter(|path| path.is_absolute())
         .unwrap_or(current);
     let (runtime, configs) = if terminal.join("serve/server.py").is_file() {
         (terminal.as_path(), dir.join("install"))
@@ -592,7 +610,9 @@ pub fn install_strata(root: &Path, cancel: &AtomicBool, on: &dyn Fn(Progress)) -
         }
         extract_zip(&zip, &base)?;
         let unpacked = base.join(format!("Strata-{STRATA_SOURCE_REV}"));
-        if unpacked.is_dir() { std::fs::rename(unpacked, &dir)?; }
+        if unpacked.is_dir() {
+            std::fs::rename(unpacked, &dir)?;
+        }
         let _ = std::fs::remove_file(&zip);
         if !dir.join("START-HERE.bat").is_file() {
             bail!("the Strata archive did not contain START-HERE.bat");
@@ -971,9 +991,17 @@ fn launch_strata(root: &Path) -> Result<Child> {
         if let Some(engine) = strata_engine_path(&dir, &json) {
             if let Some(package) = engine.parent() {
                 let build = std::fs::read_to_string(package.join("BUILD.json"))
-                    .map(|text| parse_json_file(&text)).unwrap_or_default();
-                if build["vision"].as_str().is_some_and(|kind| kind.starts_with("cuda")) {
-                    let helper = package.join(if cfg!(windows) { "strata-vision.exe" } else { "strata-vision" });
+                    .map(|text| parse_json_file(&text))
+                    .unwrap_or_default();
+                if build["vision"]
+                    .as_str()
+                    .is_some_and(|kind| kind.starts_with("cuda"))
+                {
+                    let helper = package.join(if cfg!(windows) {
+                        "strata-vision.exe"
+                    } else {
+                        "strata-vision"
+                    });
                     if helper.is_file() && json["vision"].is_object() {
                         json["vision"]["exe"] = serde_json::json!(helper);
                         json["vision"]["cpu_exe"] = serde_json::json!(helper);

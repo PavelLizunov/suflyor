@@ -354,9 +354,18 @@ pub(crate) fn wire_vision_settings(
         let weak = win.as_weak();
         win.on_diar_engine_selected(move |use_nemotron| {
             let Some(w) = weak.upgrade() else { return };
-            if w.get_diar_installing() { return; }
-            let engine = overlay_backend::diarize::DiarEngine::from_id(if use_nemotron { "nemotron3" } else { "pyannote" });
-            if let Err(error) = overlay_backend::diarize::save_engine(engine) { log::warn!("diarization preference: {error}"); return; }
+            if w.get_diar_installing() {
+                return;
+            }
+            let engine = overlay_backend::diarize::DiarEngine::from_id(if use_nemotron {
+                "nemotron3"
+            } else {
+                "pyannote"
+            });
+            if let Err(error) = overlay_backend::diarize::save_engine(engine) {
+                log::warn!("diarization preference: {error}");
+                return;
+            }
             w.set_diar_use_nemotron(engine == overlay_backend::diarize::DiarEngine::Nemotron3);
             w.set_diar_models_installed(overlay_backend::diarize::engine_ready(engine));
             w.set_diar_install_status(SharedString::default());
@@ -376,7 +385,12 @@ pub(crate) fn wire_vision_settings(
             if w.get_diar_installing() {
                 return;
             }
-            let engine = overlay_backend::diarize::DiarEngine::from_id(if w.get_diar_use_nemotron() { "nemotron3" } else { "pyannote" });
+            let engine =
+                overlay_backend::diarize::DiarEngine::from_id(if w.get_diar_use_nemotron() {
+                    "nemotron3"
+                } else {
+                    "pyannote"
+                });
             w.set_diar_installing(true);
             w.set_diar_install_status(slint::SharedString::from("Подготовка…"));
             let weak_done = w.as_weak();
@@ -427,7 +441,9 @@ pub(crate) fn wire_vision_settings(
 
 #[cfg(test)]
 mod tests {
-    use super::{same_choice_available, same_choice_direct_provider, vision_provider_index_from_id};
+    use super::{
+        same_choice_available, same_choice_direct_provider, vision_provider_index_from_id,
+    };
 
     #[test]
     fn same_choice_reuses_the_direct_api_profile() {

@@ -22,7 +22,9 @@ static MODEL_STORAGE_ROOT: OnceLock<Option<PathBuf>> = OnceLock::new();
 /// after restart so a running download or engine never switches roots midway.
 #[must_use]
 pub fn model_storage_root() -> Option<PathBuf> {
-    MODEL_STORAGE_ROOT.get_or_init(configured_model_storage_root).clone()
+    MODEL_STORAGE_ROOT
+        .get_or_init(configured_model_storage_root)
+        .clone()
 }
 
 /// The saved choice, including a change awaiting restart.
@@ -45,7 +47,10 @@ pub fn save_model_storage_root(value: &str) -> std::io::Result<()> {
         ));
     }
     let data = data_root().ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::NotFound, "configuration directory unavailable")
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "configuration directory unavailable",
+        )
     })?;
     std::fs::create_dir_all(&data)?;
     replace_private(&data.join("models-dir"), value.as_bytes())
@@ -54,7 +59,9 @@ pub fn save_model_storage_root(value: &str) -> std::io::Result<()> {
 /// Speech assets follow the chosen disk; old installations keep their paths.
 #[must_use]
 pub fn speech_model_dir(name: &str) -> Option<PathBuf> {
-    model_storage_root().or_else(data_root).map(|root| root.join(name))
+    model_storage_root()
+        .or_else(data_root)
+        .map(|root| root.join(name))
 }
 
 /// Legacy Tauri product name — the old `%APPDATA%\overlay-mvp\` data dir.
@@ -108,9 +115,9 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 /// Atomically replace a small machine-local file, including an existing Windows target.
 pub fn replace_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
-    let parent = path.parent().ok_or_else(|| std::io::Error::new(
-        std::io::ErrorKind::InvalidInput, "file parent unavailable",
-    ))?;
+    let parent = path.parent().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "file parent unavailable")
+    })?;
     let mut file = tempfile::NamedTempFile::new_in(parent)?;
     file.write_all(bytes)?;
     file.persist(path).map_err(|error| error.error)?;

@@ -37,7 +37,9 @@ fn main() {
         std::process::exit(1);
     }
     let source_loader = raw_loader.as_ref().unwrap_or(&loader);
-    let doc = source_loader.get_document(&path).expect("compiled document");
+    let doc = source_loader
+        .get_document(&path)
+        .expect("compiled document");
 
     let mut types = BTreeMap::new();
     let mut windows = Map::new();
@@ -118,13 +120,11 @@ fn literal_default(expression: &Expression, ty: &Type) -> Option<Value> {
             .map(|value| literal_default(value, element_ty))
             .collect::<Option<Vec<_>>>()
             .map(Value::Array),
-        Expression::EnumerationValue(value) => {
-            value
-                .enumeration
-                .values
-                .get(value.value)
-                .map(|name| json!(name.as_str()))
-        }
+        Expression::EnumerationValue(value) => value
+            .enumeration
+            .values
+            .get(value.value)
+            .map(|name| json!(name.as_str())),
         _ => None,
     }
 }

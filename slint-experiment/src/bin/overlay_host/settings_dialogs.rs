@@ -53,7 +53,9 @@ pub(crate) fn populate_storage(win: &SettingsWindow) {
     let saved = overlay_backend::paths::configured_model_storage_root();
     let active = overlay_backend::paths::model_storage_root();
     win.set_models_directory(SharedString::from(
-        saved.as_ref().map_or_else(String::new, |path| path.to_string_lossy().into_owned()),
+        saved
+            .as_ref()
+            .map_or_else(String::new, |path| path.to_string_lossy().into_owned()),
     ));
     win.set_models_directory_status(SharedString::from(if saved != active {
         "Restart Suflyor to use the selected model folder. Existing files are not moved."
@@ -85,7 +87,9 @@ pub(crate) fn wire_storage(win: &SettingsWindow) {
             dialog = dialog.set_directory(path);
         }
         pick(dialog, Kind::Folder, move |path| {
-            let (Some(win), Some(path)) = (weak.upgrade(), path) else { return };
+            let (Some(win), Some(path)) = (weak.upgrade(), path) else {
+                return;
+            };
             let value = path.to_string_lossy();
             win.set_models_directory(SharedString::from(value.as_ref()));
             save_storage(&win, &value);

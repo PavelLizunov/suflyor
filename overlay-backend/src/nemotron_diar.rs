@@ -44,14 +44,19 @@ fn try_acquire_install() -> Result<InstallGuard> {
 /// Native runtime packages are available on Windows and Linux x86_64.
 #[must_use]
 pub fn supported() -> bool {
-    cfg!(all(any(windows, target_os = "linux"), target_arch = "x86_64"))
+    cfg!(all(
+        any(windows, target_os = "linux"),
+        target_arch = "x86_64"
+    ))
 }
 
 /// Expected path to the downloaded Nemotron GGUF model.
 #[must_use]
 pub fn model_path() -> Option<PathBuf> {
-    crate::paths::speech_model_dir("diar")
-        .map(|d| d.join("nemotron-v3").join("Nemotron-3-Diarization.q8_0.gguf"))
+    crate::paths::speech_model_dir("diar").map(|d| {
+        d.join("nemotron-v3")
+            .join("Nemotron-3-Diarization.q8_0.gguf")
+    })
 }
 
 /// Path to the staged official nemo-speech executable sibling to current_exe.
@@ -59,11 +64,17 @@ pub fn model_path() -> Option<PathBuf> {
 pub fn runtime_path() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let parent = exe.parent()?;
-    let runtime = parent.join("nemotron").join("bin").join(if cfg!(windows) { "nemo-speech.exe" } else { "nemo-speech" });
+    let runtime = parent.join("nemotron").join("bin").join(if cfg!(windows) {
+        "nemo-speech.exe"
+    } else {
+        "nemo-speech"
+    });
     // Keep the earlier Windows Nemotron RC layout usable as well.
     if cfg!(windows) && !runtime.is_file() {
         Some(parent.join("nemo-speech.exe"))
-    } else { Some(runtime) }
+    } else {
+        Some(runtime)
+    }
 }
 
 /// True only when the exact model file exists with size 107012128 and runtime executable exists.
@@ -117,11 +128,12 @@ pub fn install(cancel: &AtomicBool, on: &dyn Fn(crate::diar_install::DiarProgres
 
     let dest = model_path().context("Nemotron model path unavailable")?;
     let dest_dir = dest.parent().context("model directory unavailable")?;
-    std::fs::create_dir_all(dest_dir)
-        .with_context(|| format!("create {}", dest_dir.display()))?;
+    std::fs::create_dir_all(dest_dir).with_context(|| format!("create {}", dest_dir.display()))?;
 
     if dest.is_file() && verify_model_file(&dest).is_ok() {
-        on(crate::diar_install::DiarProgress::AlreadyInstalled(MODEL_LABEL.to_string()));
+        on(crate::diar_install::DiarProgress::AlreadyInstalled(
+            MODEL_LABEL.to_string(),
+        ));
         on(crate::diar_install::DiarProgress::AllInstalled);
         return Ok(());
     }
@@ -133,9 +145,13 @@ pub fn install(cancel: &AtomicBool, on: &dyn Fn(crate::diar_install::DiarProgres
     let tmp = dest_dir.join("Nemotron-3-Diarization.q8_0.gguf.download");
     let _ = std::fs::remove_file(&tmp);
 
-    on(crate::diar_install::DiarProgress::Downloading(MODEL_LABEL.to_string()));
+    on(crate::diar_install::DiarProgress::Downloading(
+        MODEL_LABEL.to_string(),
+    ));
     if let Err(err) = crate::download::curl_download(MODEL_URL, &tmp) {
-        on(crate::diar_install::DiarProgress::ModelFailed(MODEL_LABEL.to_string()));
+        on(crate::diar_install::DiarProgress::ModelFailed(
+            MODEL_LABEL.to_string(),
+        ));
         return Err(err).context("download Nemotron model");
     }
 
@@ -144,18 +160,24 @@ pub fn install(cancel: &AtomicBool, on: &dyn Fn(crate::diar_install::DiarProgres
         bail!("отменено");
     }
 
-    on(crate::diar_install::DiarProgress::Verifying(MODEL_LABEL.to_string()));
+    on(crate::diar_install::DiarProgress::Verifying(
+        MODEL_LABEL.to_string(),
+    ));
     let meta = match std::fs::metadata(&tmp) {
         Ok(m) => m,
         Err(e) => {
             let _ = std::fs::remove_file(&tmp);
-            on(crate::diar_install::DiarProgress::ModelFailed(MODEL_LABEL.to_string()));
+            on(crate::diar_install::DiarProgress::ModelFailed(
+                MODEL_LABEL.to_string(),
+            ));
             return Err(e).context("read metadata of downloaded model");
         }
     };
     if meta.len() != MODEL_SIZE {
         let _ = std::fs::remove_file(&tmp);
-        on(crate::diar_install::DiarProgress::ModelFailed(MODEL_LABEL.to_string()));
+        on(crate::diar_install::DiarProgress::ModelFailed(
+            MODEL_LABEL.to_string(),
+        ));
         bail!(
             "размер модели Nemotron не совпал: ожидался {MODEL_SIZE}, получен {}",
             meta.len()
@@ -163,12 +185,16 @@ pub fn install(cancel: &AtomicBool, on: &dyn Fn(crate::diar_install::DiarProgres
     }
 
     if let Err(err) = crate::download::verify_sha256(&tmp, MODEL_SHA256, MODEL_LABEL) {
-        on(crate::diar_install::DiarProgress::ModelFailed(MODEL_LABEL.to_string()));
+        on(crate::diar_install::DiarProgress::ModelFailed(
+            MODEL_LABEL.to_string(),
+        ));
         return Err(err);
     }
 
     #[cfg(windows)]
-    if dest.exists() { std::fs::remove_file(&dest)?; }
+    if dest.exists() {
+        std::fs::remove_file(&dest)?;
+    }
     std::fs::rename(&tmp, &dest)
         .inspect_err(|_| {
             let _ = std::fs::remove_file(&tmp);
@@ -266,9 +292,14 @@ fn run_pass(
         .arg(rttm)
         .arg("--model")
         .arg(model)
-        .env("GGML_BACKEND_DL_PATH", if cfg!(windows) {
-            exe.parent().unwrap_or(Path::new(".")).to_path_buf()
-        } else { exe.parent().unwrap_or(Path::new(".")).join("../lib") })
+        .env(
+            "GGML_BACKEND_DL_PATH",
+            if cfg!(windows) {
+                exe.parent().unwrap_or(Path::new(".")).to_path_buf()
+            } else {
+                exe.parent().unwrap_or(Path::new(".")).join("../lib")
+            },
+        )
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::from(err_file));
@@ -374,7 +405,9 @@ fn parse_rttm(reader: impl BufRead, duration_ms: i64) -> Result<(Vec<DiarSegment
     let mut raw: Vec<(i64, i64, String)> = Vec::new();
     for line in reader.lines() {
         let line = line.context("read RTTM")?;
-        if line.trim().is_empty() { continue; }
+        if line.trim().is_empty() {
+            continue;
+        }
         let fields: Vec<&str> = line.split_whitespace().collect();
         if fields.len() != 10 || fields[0] != "SPEAKER" || fields[1] != "suflyor" {
             bail!("invalid RTTM record");

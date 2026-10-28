@@ -4,24 +4,54 @@ use overlay_backend::{ai::benchmark, config, deep_lock};
 use std::sync::atomic::Ordering;
 
 pub(crate) fn refresh(win: &SettingsWindow, cfg: &config::Config) {
-    if win.get_model_speed_running() { return; }
+    if win.get_model_speed_running() {
+        return;
+    }
     win.set_model_speed_status("".into());
-    let text = benchmark::load_last_sample(cfg).map(|saved| {
-        describe(&saved.sample, &saved.context_preset, saved.engine_version.as_deref(), cfg.ui_is_ru())
-    }).unwrap_or_default();
+    let text = benchmark::load_last_sample(cfg)
+        .map(|saved| {
+            describe(
+                &saved.sample,
+                &saved.context_preset,
+                saved.engine_version.as_deref(),
+                cfg.ui_is_ru(),
+            )
+        })
+        .unwrap_or_default();
     win.set_model_speed_result(text.into());
 }
 
-fn describe(sample: &benchmark::ModelSpeedSample, context: &str, engine: Option<&str>, ru: bool) -> String {
-    let unavailable = if ru { "нет данных" } else { "unavailable" };
-    let rate = |v: Option<f64>| v.filter(|v| v.is_finite() && *v > 0.0)
-        .map(|v| format!("{v:.1}")).unwrap_or_else(|| unavailable.into());
-    let count = |v: Option<u64>| v.map(|n| n.to_string()).unwrap_or_else(|| unavailable.into());
-    let first = sample.first_token_ms.map(|ms| format!("{:.2}", ms / 1000.0))
+fn describe(
+    sample: &benchmark::ModelSpeedSample,
+    context: &str,
+    engine: Option<&str>,
+    ru: bool,
+) -> String {
+    let unavailable = if ru {
+        "нет данных"
+    } else {
+        "unavailable"
+    };
+    let rate = |v: Option<f64>| {
+        v.filter(|v| v.is_finite() && *v > 0.0)
+            .map(|v| format!("{v:.1}"))
+            .unwrap_or_else(|| unavailable.into())
+    };
+    let count = |v: Option<u64>| {
+        v.map(|n| n.to_string())
+            .unwrap_or_else(|| unavailable.into())
+    };
+    let first = sample
+        .first_token_ms
+        .map(|ms| format!("{:.2}", ms / 1000.0))
         .unwrap_or_else(|| unavailable.into());
     let stamp = overlay_backend::journal::format_msk_label(sample.measured_at_ms as i64, ru);
     let name = &sample.model;
-    let engine = engine.unwrap_or(if ru { "версия движка неизвестна" } else { "engine version unknown" });
+    let engine = engine.unwrap_or(if ru {
+        "версия движка неизвестна"
+    } else {
+        "engine version unknown"
+    });
     if ru {
         format!("{name} · {engine} · профиль контекста: {context}\nПоследний замер: {stamp}\nPrefill: {} ток/с · Decode: {} ток/с\nПервый токен: {first} с · всего: {:.2} с\nВход: {} · из кэша: {} · выход: {} токенов",
             rate(sample.prefill_tps), rate(sample.decode_tps), sample.total_ms / 1000.0,
@@ -43,7 +73,11 @@ pub(crate) fn wire(
         let weak = win.as_weak();
         win.on_cancel_model_speed(move || {
             if weak.upgrade().is_some_and(|w| w.get_model_speed_running()) {
-                state.lock().unwrap_or_else(|p| p.into_inner()).local_ai_cancel.store(true, Ordering::Release);
+                state
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .local_ai_cancel
+                    .store(true, Ordering::Release);
             }
         });
     }
