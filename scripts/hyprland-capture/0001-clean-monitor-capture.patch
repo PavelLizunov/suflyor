@@ -1,0 +1,325 @@
+--- a/src/desktop/state/Fadeout.cpp
++++ b/src/desktop/state/Fadeout.cpp
+@@ -14,3 +14,7 @@
+ SFadeoutRenderEffects IFadeout::effects() const {
+     return m_effects;
+ }
++
++bool IFadeout::noScreenShare() const {
++    return m_noScreenShare;
++}
+--- a/src/desktop/state/Fadeout.hpp
++++ b/src/desktop/state/Fadeout.hpp
+@@ -58,6 +58,7 @@
+         virtual float                 alpha() const     = 0;
+         virtual bool                  done() const      = 0;
+         virtual SFadeoutRenderEffects effects() const;
++        bool                          noScreenShare() const;
+ 
+       protected:
+         IFadeout() = default;
+@@ -65,5 +66,6 @@
+         SP<Render::IFramebuffer> m_framebuffer;
+         PHLWORKSPACEREF          m_workspace;
+         SFadeoutRenderEffects    m_effects;
++        bool                     m_noScreenShare = false; // source view had the no_screen_share rule
+     };
+ }
+--- a/src/desktop/state/LayerFadeout.cpp
++++ b/src/desktop/state/LayerFadeout.cpp
+@@ -54,6 +54,8 @@
+     fadeout->m_framebuffer = snapshot;
+     fadeout->m_geometry    = layer->m_geometry;
+     fadeout->m_zIndex      = layerZIndex(layer);
++
++    fadeout->m_noScreenShare = layer->m_ruleApplicator->noScreenShare().valueOrDefault();
+ 
+     static auto PDIMAROUND = CConfigValue<Config::FLOAT>("decoration:dim_around");
+     if (*PDIMAROUND && layer->m_ruleApplicator->dimAround().valueOrDefault())
+--- a/src/desktop/state/PopupFadeout.cpp
++++ b/src/desktop/state/PopupFadeout.cpp
+@@ -1,6 +1,7 @@
+ #include "PopupFadeout.hpp"
+ #include "../view/LayerSurface.hpp"
+ #include "../view/Popup.hpp"
++#include "../view/Window.hpp"
+ #include "../../config/ConfigValue.hpp"
+ #include "../../config/shared/animation/AnimationTree.hpp"
+ #include "../../animation/AnimationManager.hpp"
+@@ -43,6 +44,11 @@
+     auto fadeout           = SP<CPopupFadeout>(new CPopupFadeout());
+     fadeout->m_monitor     = MONITOR;
+     fadeout->m_framebuffer = snapshot;
++
++    if (const auto WINDOW = popup->windowOwner(); WINDOW)
++        fadeout->m_noScreenShare = WINDOW->m_ruleApplicator->noScreenShare().valueOrDefault();
++    else if (const auto LAYER = popup->layerOwner(); LAYER)
++        fadeout->m_noScreenShare = LAYER->m_ruleApplicator->noScreenShare().valueOrDefault();
+ 
+     static CConfigValue PBLURIGNOREA = CConfigValue<Config::FLOAT>("decoration:blur:popups_ignorealpha");
+     if (shouldBlurPopup()) {
+--- a/src/desktop/state/WindowFadeout.cpp
++++ b/src/desktop/state/WindowFadeout.cpp
+@@ -70,6 +70,7 @@
+     fadeout->m_roundingPower = window->roundingPower();
+     fadeout->m_blur          = shouldBlurWindow(window);
+     fadeout->m_blurXray      = window->m_ruleApplicator->xray().valueOr(false);
++    fadeout->m_noScreenShare = window->m_ruleApplicator->noScreenShare().valueOrDefault();
+ 
+     static auto PDIMAROUND = CConfigValue<Config::FLOAT>("decoration:dim_around");
+     if (*PDIMAROUND && window->m_ruleApplicator->dimAround().valueOrDefault())
+--- a/src/desktop/view/Popup.cpp
++++ b/src/desktop/view/Popup.cpp
+@@ -392,6 +392,10 @@
+     return m_layerOwner.lock();
+ }
+ 
++PHLWINDOW CPopup::windowOwner() const {
++    return m_windowOwner.lock();
++}
++
+ Vector2D CPopup::coordsRelativeToParent() const {
+     Vector2D offset;
+ 
+--- a/src/desktop/view/Popup.hpp
++++ b/src/desktop/view/Popup.hpp
+@@ -49,6 +49,7 @@
+ 
+         SP<Desktop::View::CWLSurface>                       getT1Owner() const;
+         PHLLS                                               layerOwner() const;
++        PHLWINDOW                                           windowOwner() const;
+         Vector2D                                            coordsRelativeToParent() const;
+         Vector2D                                            coordsGlobal() const;
+         PHLMONITOR                                          getMonitor() const;
+--- a/src/managers/screenshare/ScreenshareFrame.cpp
++++ b/src/managers/screenshare/ScreenshareFrame.cpp
+@@ -11,11 +11,13 @@
+ #include "../../state/MonitorState.hpp"
+ #include "../../desktop/view/Window.hpp"
+ #include "../../desktop/state/FocusState.hpp"
++#include "../../desktop/state/FadingOutState.hpp"
+ #include "../../render/pass/ClearPassElement.hpp"
+ #include "../../render/pass/RectPassElement.hpp"
+ #include "helpers/cm/ColorManagement.hpp"
+ #include "../../managers/fullscreen/FullscreenController.hpp"
+ #include <hyprutils/math/Region.hpp>
++#include <hyprutils/utils/ScopeGuard.hpp>
+ #include <hyprgraphics/egl/Egl.hpp>
+ 
+ using namespace Hyprgraphics::Egl;
+@@ -179,7 +181,17 @@
+ 
+     const auto PMONITOR = m_session->monitor();
+ 
+-    auto       TEXTURE = g_pHyprRenderer->m_renderData.pMonitor->resources()->getMirrorTexture();
++    // The local mirror already contains protected views. Re-render only the capture scene,
++    // including fadeouts even after the original window or layer has gone away (Hyprland PR #16061).
++    const bool HAS_PROTECTED_VIEWS = std::ranges::any_of(Desktop::layerState()->layers(), [&](const auto& layer) {
++        return layer->m_monitor == PMONITOR && layer->visible() && layer->m_ruleApplicator->noScreenShare().valueOrDefault();
++    }) || std::ranges::any_of(Desktop::windowState()->windows(), [&](const auto& window) {
++        return !window->isHidden() && window->m_ruleApplicator->noScreenShare().valueOrDefault() && g_pHyprRenderer->shouldRenderWindow(window, PMONITOR);
++    }) || std::ranges::any_of(Desktop::fadingOutState()->fadeouts(), [&](const auto& fadeout) {
++        return fadeout && fadeout->monitor() == PMONITOR && !fadeout->done() && fadeout->noScreenShare();
++    });
++
++    auto TEXTURE = !PMONITOR->isMirror() && HAS_PROTECTED_VIEWS ? renderMonitorScene(PMONITOR) : PMONITOR->resources()->getMirrorTexture();
+     if (!TEXTURE) {
+         LOGM(Log::ERR, "Invalid source texture");
+         return;
+@@ -217,7 +229,69 @@
+         {0, 0, PMONITOR->m_pixelSize.x, PMONITOR->m_pixelSize.y});
+     g_pHyprRenderer->m_renderData.renderModif.enabled = OLD;
+ 
+-    // render black boxes for noscreenshare
++    // Mirrored outputs retain upstream redaction; they cannot render an independent workspace scene.
++    if (PMONITOR->isMirror())
++        redactMonitor(PMONITOR);
++
++    if (m_overlayCursor) {
++        CRegion  fakeDamage = {0, 0, INT16_MAX, INT16_MAX};
++        Vector2D cursorPos  = g_pInputManager->getMouseCoordsInternal() - PMONITOR->m_position - m_session->m_captureBox.pos() / PMONITOR->m_scale;
++        Pointer::mgr()->renderSoftwareCursorsFor(PMONITOR, Time::steadyNow(), fakeDamage, cursorPos, true);
++    }
++}
++
++SP<Render::ITexture> CScreenshareFrame::renderMonitorScene(PHLMONITOR PMONITOR) {
++    auto& renderer = *g_pHyprRenderer;
++    const auto OLD_DATA = renderer.m_renderData;
++    const bool OLD_SKIP = renderer.m_skipNoScreenShare;
++    const bool OLD_FEEDBACK = renderer.m_bBlockSurfaceFeedback;
++    const bool OLD_BLUR_QUEUED = PMONITOR->m_blurFBShouldRender;
++    Hyprutils::Utils::CScopeGuard restore([&] {
++        renderer.m_skipNoScreenShare = OLD_SKIP;
++        renderer.m_bBlockSurfaceFeedback = OLD_FEEDBACK;
++        PMONITOR->m_blurFBShouldRender = OLD_BLUR_QUEUED;
++        renderer.m_renderData = OLD_DATA;
++        renderer.bindFB(OLD_DATA.currentFB);
++        renderer.setViewport(0, 0, m_bufferSize.x, m_bufferSize.y);
++    });
++
++    // Render at native output size before applying the existing export transform and region crop.
++    // Keep this framebuffer private: display/mirror and optimized blur caches must stay untouched.
++    if (!m_session->m_captureFB) {
++        m_session->m_captureFB = renderer.createFB("capture scene without no_screen_share");
++        m_session->m_captureFB->addStencil(renderer.createStencilTexture(PMONITOR->m_pixelSize.x, PMONITOR->m_pixelSize.y));
++    }
++    const auto FB = m_session->m_captureFB;
++    if (!FB->alloc(PMONITOR->m_pixelSize.x, PMONITOR->m_pixelSize.y, OLD_DATA.currentFB->m_drmFormat))
++        return nullptr;
++    FB->setImageDescription(OLD_DATA.currentFB->imageDescription());
++
++    renderer.bindFB(FB);
++    renderer.m_renderData.mainFB = FB;
++    renderer.m_renderData.fbSize = PMONITOR->m_pixelSize;
++    renderer.m_renderData.damage = CRegion{0, 0, PMONITOR->m_transformedSize.x, PMONITOR->m_transformedSize.y};
++    renderer.m_renderData.finalDamage = renderer.m_renderData.damage;
++    renderer.m_renderData.renderModif = {};
++    renderer.m_renderData.clipBox = {};
++    renderer.m_renderData.transformDamage = true;
++    renderer.m_renderData.noSimplify = true;
++    renderer.setProjectionType(Render::RPT_MONITOR);
++    renderer.setViewport(0, 0, PMONITOR->m_pixelSize.x, PMONITOR->m_pixelSize.y);
++    renderer.m_skipNoScreenShare = true;
++    renderer.m_bBlockSurfaceFeedback = true;
++
++    renderer.draw(CClearPassElement::SClearData{{0, 0, 0, 0}}, renderer.m_renderData.damage);
++    const auto NOW = Time::steadyNow();
++    const CBox RENDERBOX = {{}, PMONITOR->m_pixelSize};
++    renderer.renderWorkspace(PMONITOR, PMONITOR->m_activeWorkspace, NOW, RENDERBOX);
++    renderer.renderLockscreen(PMONITOR, NOW, RENDERBOX);
++    renderer.renderIME(PMONITOR, NOW, RENDERBOX);
++    renderer.m_renderPass.render(renderer.m_renderData.damage);
++    renderer.m_renderPass.clear();
++    return FB->getTexture();
++}
++
++void CScreenshareFrame::redactMonitor(PHLMONITOR PMONITOR) {
+     auto hidePopups = [&](Vector2D popupBaseOffset) {
+         return [&, popupBaseOffset](WP<Desktop::View::CPopup> popup, void*) {
+             if (!popup->wlSurface() || !popup->wlSurface()->resource() || !popup->visible())
+@@ -306,11 +380,6 @@
+         w->m_popupHead->breadthfirst(hidePopups(popupBaseOffset), nullptr);
+     }
+ 
+-    if (m_overlayCursor) {
+-        CRegion  fakeDamage = {0, 0, INT16_MAX, INT16_MAX};
+-        Vector2D cursorPos  = g_pInputManager->getMouseCoordsInternal() - PMONITOR->m_position - m_session->m_captureBox.pos() / PMONITOR->m_scale;
+-        Pointer::mgr()->renderSoftwareCursorsFor(PMONITOR, Time::steadyNow(), fakeDamage, cursorPos, true);
+-    }
+ }
+ 
+ void CScreenshareFrame::renderWindow() {
+--- a/src/managers/screenshare/ScreenshareManager.hpp
++++ b/src/managers/screenshare/ScreenshareManager.hpp
+@@ -88,6 +88,8 @@
+             CHyprSignalListener windowSizeChanged;
+             CHyprSignalListener windowMonitorChanged;
+         } m_listeners;
++
++        SP<Render::IFramebuffer> m_captureFB; // capture-only scene, never attached to the local output
+ 
+         void screenshareEvents(bool started);
+         void calculateConstraints();
+@@ -185,7 +187,8 @@
+ 
+         void render();
+         void renderMonitor();
+-        void renderMonitorRegion();
++        void redactMonitor(PHLMONITOR monitor);
++        SP<Render::ITexture> renderMonitorScene(PHLMONITOR monitor);
+         void renderWindow();
+ 
+         void storeTempFB();
+--- a/src/render/OpenGL.cpp
++++ b/src/render/OpenGL.cpp
+@@ -1052,7 +1052,8 @@
+     CRegion damage{g_pHyprRenderer->m_renderData.damage};
+     damage.intersect(box);
+ 
+-    auto blurredBG = data.xray ? g_pHyprRenderer->m_renderData.pMonitor->resources()->m_blurFB->getTexture() : g_pHyprRenderer->blurMainFramebuffer(data.blurA, &damage);
++    auto blurredBG = data.xray && !g_pHyprRenderer->m_skipNoScreenShare ? g_pHyprRenderer->m_renderData.pMonitor->resources()->m_blurFB->getTexture() :
++                                                                                     g_pHyprRenderer->blurMainFramebuffer(data.blurA, &damage);
+ 
+     CBox MONITORBOX = {0, 0, g_pHyprRenderer->m_renderData.pMonitor->m_transformedSize.x, g_pHyprRenderer->m_renderData.pMonitor->m_transformedSize.y};
+     g_pHyprRenderer->pushMonitorTransformEnabled(true);
+--- a/src/render/Renderer.cpp
++++ b/src/render/Renderer.cpp
+@@ -86,6 +86,8 @@
+     return 0;
+ }
+ 
++bool IHyprRenderer::m_skipNoScreenShare = false;
++
+ IHyprRenderer::IHyprRenderer() {
+     m_globalTimer.reset();
+     pushMonitorTransformEnabled(false);
+@@ -554,6 +556,9 @@
+         return;
+ 
+     if (!pWindow->m_isMapped)
++        return;
++
++    if (m_skipNoScreenShare && pWindow->m_ruleApplicator->noScreenShare().valueOrDefault())
+         return;
+ 
+     TRACY_GPU_ZONE("RenderWindow");
+@@ -883,7 +888,7 @@
+     static auto PBLURNEWOPTIMIZE = CConfigValue<Config::INTEGER>("decoration:blur:new_optimizations");
+     static auto PBLUR            = CConfigValue<Config::INTEGER>("decoration:blur:enabled");
+ 
+-    if (!pMonitor)
++    if (!pMonitor || m_skipNoScreenShare)
+         return false;
+     return m_renderData.pMonitor->m_blurFBDirty && *PBLURNEWOPTIMIZE && *PBLUR && m_renderData.pMonitor->m_blurFBShouldRender;
+ }
+@@ -937,6 +942,9 @@
+         return;
+ 
+     if (!pLayer->visible())
++        return;
++
++    if (m_skipNoScreenShare && pLayer->m_ruleApplicator->noScreenShare().valueOrDefault())
+         return;
+ 
+     // skip rendering based on abovelock rule and make sure to not render abovelock layers twice
+@@ -1522,6 +1530,10 @@
+ }
+ 
+ bool IHyprRenderer::shouldUseNewBlurOptimizations(PHLLS pLayer, PHLWINDOW pWindow) {
++    // The display blur cache can contain protected surfaces. Blur the clean capture framebuffer instead.
++    if (m_skipNoScreenShare)
++        return false;
++
+     static auto PBLURNEWOPTIMIZE = CConfigValue<Config::INTEGER>("decoration:blur:new_optimizations");
+     static auto PBLURXRAY        = CConfigValue<Config::INTEGER>("decoration:blur:xray");
+ 
+@@ -3237,6 +3249,9 @@
+         if (fadeout->workspace() && fadeout->workspace() != workspace)
+             continue;
+ 
++        if (m_skipNoScreenShare && fadeout->noScreenShare())
++            continue;
++
+         fadeouts.emplace_back(fadeout);
+     }
+ 
+@@ -3286,6 +3301,9 @@
+ }
+ 
+ NColorManagement::PImageDescription IHyprRenderer::workBufferImageDescription() {
++    if (m_skipNoScreenShare && m_renderData.currentFB)
++        return m_renderData.currentFB->imageDescription();
++
+     if (!m_renderData.pMonitor)
+         return LINEAR_IMAGE_DESCRIPTION;
+ 
+--- a/src/render/Renderer.hpp
++++ b/src/render/Renderer.hpp
+@@ -108,6 +108,7 @@
+         NColorManagement::PImageDescription workBufferImageDescription();
+         bool                                m_bBlockSurfaceFeedback = false;
+         bool                                m_bRenderingSnapshot    = false;
++        static bool                         m_skipNoScreenShare; // capture-only state; do not shift existing renderer member offsets
+         PHLMONITORREF                       m_mostHzMonitor;
+         bool                                m_directScanoutBlocked = false;
+ 

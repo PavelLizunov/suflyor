@@ -30,12 +30,19 @@ separate visual-only bar mark. Other Omarchy widgets stay outside the rule.
 Hyprland uses full namespace matches; the rule is recreated after its configuration
 reloads, and rule application is not reported as a successful capture test.
 
-Hyprland 0.56 masks protected surface bounds with **black rectangles**, including
-transparent pixels. It does not reveal the desktop underneath. Settings, archive
-and the bar popup therefore use bounded surfaces, with input-only dismissal
-layers outside the rule. Suflyor temporarily conceals its surfaces for its own
-screenshots. Other screenshot or sharing paths may ignore compositor exclusion;
-check the actual application before relying on it.
+Stock Hyprland 0.56 masks protected surface bounds with **black rectangles**,
+including transparent pixels. Settings, archive and the bar popup therefore use
+bounded surfaces, with input-only dismissal layers outside the rule.
+
+An optional [Hyprland 0.56.2 clean-capture build](../scripts/hyprland-capture/README.md)
+adapts upstream PR #16061 to render monitor/region capture without protected
+windows, layers or fadeouts, leaving the local output unchanged. It installs
+separately and is selected for the next uwsm login; installing it does not change
+the running compositor. Mirrored outputs still use upstream black masking.
+Neither rule application nor a successful compositor build proves actual capture
+behavior. Other capture paths may ignore exclusion. Suflyor also temporarily
+conceals its surfaces for its own screenshots; check the intended capture
+application before relying on either route.
 
 ## Model speed
 
