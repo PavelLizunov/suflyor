@@ -48,14 +48,14 @@ fn provider_cards_contain_wrapped_content_in_both_languages() {
             "Test OpenAI connection",
             "Models on this PC",
             "What the model can do",
-            "The model looks things up when it needs to. Web queries go to DuckDuckGo.",
+            "Fast answers can search the web and read public pages when enabled: at most two lookups with a 15-second lookup budget. The model decides when to look up; web queries go to DuckDuckGo. A server without tool support answers without web lookup.",
         ),
         (
             "ru",
             "Проверить подключение OpenAI",
             "Модели на этом ПК",
             "Возможности модели",
-            "Модель ищет информацию, когда это нужно. Веб-запросы отправляются в DuckDuckGo.",
+            "Быстрые ответы тоже могут искать в интернете и читать публичные страницы, если поиск включён: до двух обращений с общим бюджетом поиска 15 секунд. Модель решает, когда искать; запросы отправляются в DuckDuckGo. Сервер без поддержки инструментов отвечает без веб-поиска.",
         ),
     ] {
         if !language.is_empty() {
