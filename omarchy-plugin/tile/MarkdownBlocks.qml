@@ -111,6 +111,8 @@ Column {
               Layout.fillWidth: true
               Layout.minimumWidth: 0
               service: root.view.service
+              onInteracted: root.view.interact()
+              onMenuOpenChanged: root.view.openMenus += menuOpen ? 1 : -1
               text: block.modelData["display-text"]
               sourceText: block.modelData.text
               noWrap: block.code || block.kind === 7

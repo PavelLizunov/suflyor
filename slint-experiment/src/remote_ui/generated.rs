@@ -1921,6 +1921,7 @@ struct OverlayBarWindowProps {
     suppress_tiles: bool,
     sys_active: bool,
     sys_recording: bool,
+    tile_idle_seconds: i32,
     tiles_spawned: i32,
     timer_active: bool,
     timer_label: slint::SharedString,
@@ -1972,6 +1973,7 @@ impl Default for OverlayBarWindowProps {
             suppress_tiles: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             sys_active: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             sys_recording: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            tile_idle_seconds: <i32>::from_json(&serde_json::json!(30.0)).unwrap_or_default(),
             tiles_spawned: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
             timer_active: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             timer_label: <slint::SharedString>::from_json(&serde_json::json!("00:00"))
@@ -2288,6 +2290,13 @@ impl OverlayBarWindow {
     }
     pub fn get_sys_recording(&self) -> bool {
         self.0.props.borrow().sys_recording.clone()
+    }
+    pub fn set_tile_idle_seconds(&self, value: i32) {
+        self.0.base.send_prop("tile-idle-seconds", value.to_json());
+        self.0.props.borrow_mut().tile_idle_seconds = value;
+    }
+    pub fn get_tile_idle_seconds(&self) -> i32 {
+        self.0.props.borrow().tile_idle_seconds.clone()
     }
     pub fn set_tiles_spawned(&self, value: i32) {
         self.0.base.send_prop("tiles-spawned", value.to_json());
@@ -2750,6 +2759,7 @@ impl RemoteObject for OverlayBarWindowInner {
         m.insert("suppress-tiles".into(), p.suppress_tiles.to_json());
         m.insert("sys-active".into(), p.sys_active.to_json());
         m.insert("sys-recording".into(), p.sys_recording.to_json());
+        m.insert("tile-idle-seconds".into(), p.tile_idle_seconds.to_json());
         m.insert("tiles-spawned".into(), p.tiles_spawned.to_json());
         m.insert("timer-active".into(), p.timer_active.to_json());
         m.insert("timer-label".into(), p.timer_label.to_json());
@@ -2818,6 +2828,9 @@ impl RemoteObject for OverlayBarWindowInner {
             "suppress-tiles" => p.suppress_tiles = <bool>::from_json(value).ok_or("bad value")?,
             "sys-active" => p.sys_active = <bool>::from_json(value).ok_or("bad value")?,
             "sys-recording" => p.sys_recording = <bool>::from_json(value).ok_or("bad value")?,
+            "tile-idle-seconds" => {
+                p.tile_idle_seconds = <i32>::from_json(value).ok_or("bad value")?
+            }
             "tiles-spawned" => p.tiles_spawned = <i32>::from_json(value).ok_or("bad value")?,
             "timer-active" => p.timer_active = <bool>::from_json(value).ok_or("bad value")?,
             "timer-label" => {
@@ -3873,6 +3886,7 @@ struct SettingsWindowProps {
     tera_installing: bool,
     tera_model_status: slint::SharedString,
     tile_body_opacity: f32,
+    tile_idle_seconds: i32,
     tile_monitor_index: i32,
     tile_monitors: slint::ModelRc<slint::SharedString>,
     trigger_keywords_input: slint::SharedString,
@@ -4314,6 +4328,7 @@ impl Default for SettingsWindowProps {
             tera_installing: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             tera_model_status: Default::default(),
             tile_body_opacity: <f32>::from_json(&serde_json::json!(1.0)).unwrap_or_default(),
+            tile_idle_seconds: <i32>::from_json(&serde_json::json!(30.0)).unwrap_or_default(),
             tile_monitor_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
             tile_monitors: <slint::ModelRc<slint::SharedString>>::from_json(&serde_json::json!([]))
                 .unwrap_or_default(),
@@ -4505,6 +4520,7 @@ struct SettingsWindowCallbacks {
     tera_install_cancel_clicked: Handler<dyn FnMut() -> ()>,
     tera_install_clicked: Handler<dyn FnMut() -> ()>,
     tile_body_opacity_changed: Handler<dyn FnMut(f32) -> ()>,
+    tile_idle_seconds_changed: Handler<dyn FnMut(i32) -> ()>,
     tile_monitor_changed: Handler<dyn FnMut(i32) -> ()>,
     trigger_keywords_save: Handler<dyn FnMut(slint::SharedString) -> ()>,
     tts_engine_changed: Handler<dyn FnMut(i32) -> ()>,
@@ -6562,6 +6578,13 @@ impl SettingsWindow {
     }
     pub fn get_tile_body_opacity(&self) -> f32 {
         self.0.props.borrow().tile_body_opacity.clone()
+    }
+    pub fn set_tile_idle_seconds(&self, value: i32) {
+        self.0.base.send_prop("tile-idle-seconds", value.to_json());
+        self.0.props.borrow_mut().tile_idle_seconds = value;
+    }
+    pub fn get_tile_idle_seconds(&self) -> i32 {
+        self.0.props.borrow().tile_idle_seconds.clone()
     }
     pub fn set_tile_monitor_index(&self, value: i32) {
         self.0.base.send_prop("tile-monitor-index", value.to_json());
@@ -8857,6 +8880,20 @@ impl SettingsWindow {
             .send_invoke("tile-body-opacity-changed", vec![arg0.to_json()]);
         Default::default()
     }
+    pub fn on_tile_idle_seconds_changed(&self, f: impl FnMut(i32) -> () + 'static) {
+        let f: Rc<RefCell<dyn FnMut(i32) -> ()>> = Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().tile_idle_seconds_changed = Handler(Some(f));
+    }
+    pub fn invoke_tile_idle_seconds_changed(&self, arg0: i32) -> () {
+        let handler = self.0.callbacks.borrow().tile_idle_seconds_changed.clone();
+        if handler.is_set() {
+            return handler.call(|f| f(arg0)).unwrap_or_default();
+        }
+        self.0
+            .base
+            .send_invoke("tile-idle-seconds-changed", vec![arg0.to_json()]);
+        Default::default()
+    }
     pub fn on_tile_monitor_changed(&self, f: impl FnMut(i32) -> () + 'static) {
         let f: Rc<RefCell<dyn FnMut(i32) -> ()>> = Rc::new(RefCell::new(f));
         self.0.callbacks.borrow_mut().tile_monitor_changed = Handler(Some(f));
@@ -9693,6 +9730,7 @@ impl RemoteObject for SettingsWindowInner {
         m.insert("tera-installing".into(), p.tera_installing.to_json());
         m.insert("tera-model-status".into(), p.tera_model_status.to_json());
         m.insert("tile-body-opacity".into(), p.tile_body_opacity.to_json());
+        m.insert("tile-idle-seconds".into(), p.tile_idle_seconds.to_json());
         m.insert("tile-monitor-index".into(), p.tile_monitor_index.to_json());
         m.insert("tile-monitors".into(), p.tile_monitors.to_json());
         m.insert(
@@ -10515,6 +10553,9 @@ impl RemoteObject for SettingsWindowInner {
             }
             "tile-body-opacity" => {
                 p.tile_body_opacity = <f32>::from_json(value).ok_or("bad value")?
+            }
+            "tile-idle-seconds" => {
+                p.tile_idle_seconds = <i32>::from_json(value).ok_or("bad value")?
             }
             "tile-monitor-index" => {
                 p.tile_monitor_index = <i32>::from_json(value).ok_or("bad value")?
@@ -11928,6 +11969,15 @@ impl RemoteObject for SettingsWindowInner {
                 let (a0,) = (<f32>::from_json(args.get(0).unwrap_or(&Value::Null))
                     .ok_or("bad argument 0")?,);
                 let handler = self.callbacks.borrow().tile_body_opacity_changed.clone();
+                Ok(handler
+                    .call(|f| f(a0))
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
+            "tile-idle-seconds-changed" => {
+                let (a0,) = (<i32>::from_json(args.get(0).unwrap_or(&Value::Null))
+                    .ok_or("bad argument 0")?,);
+                let handler = self.callbacks.borrow().tile_idle_seconds_changed.clone();
                 Ok(handler
                     .call(|f| f(a0))
                     .map(|v| v.to_json())

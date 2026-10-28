@@ -1148,6 +1148,34 @@ pub(crate) fn open_settings(
     }
     {
         let cfg_c = cfg.clone();
+        let weak_settings = win.as_weak();
+        let weak_bar = overlay_weak.clone();
+        win.on_tile_idle_seconds_changed(move |seconds| {
+            let seconds = if seconds <= 0 {
+                0
+            } else {
+                seconds.clamp(10, 600) as u32
+            };
+            let saved = {
+                let mut c = cfg_c.write();
+                let previous = c.omarchy_tile_idle_seconds;
+                c.omarchy_tile_idle_seconds = seconds;
+                if let Err(error) = config::save(&c) {
+                    c.omarchy_tile_idle_seconds = previous;
+                    eprintln!("[overlay-host] tile inactivity setting save failed: {error:#}");
+                }
+                c.omarchy_tile_idle_seconds.min(600) as i32
+            };
+            if let Some(w) = weak_settings.upgrade() {
+                w.set_tile_idle_seconds(saved);
+            }
+            if let Some(bar) = weak_bar.upgrade() {
+                bar.set_tile_idle_seconds(saved);
+            }
+        });
+    }
+    {
+        let cfg_c = cfg.clone();
         win.on_fast_answers_changed(move |on| {
             let mut c = cfg_c.write();
             c.ai_fast_answers = on;
@@ -2130,6 +2158,7 @@ pub(crate) fn populate_token_status(
     // Phase E6 v20 — load tile opacity from config so the slider
     // reflects the saved value on Settings re-open.
     win.set_tile_body_opacity(c.tile_body_opacity);
+    win.set_tile_idle_seconds(c.omarchy_tile_idle_seconds.min(600) as i32);
     // I1 — Stealth-tab EFFECTIVE-state line, reseeded on every open (reused-
     // window rule): a stale failure / active state from a previous session
     // must not survive the reopen. The Slint `@tr` ternary renders the line

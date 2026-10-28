@@ -788,6 +788,7 @@ fn main() -> Result<(), slint::PlatformError> {
         slint::set_xdg_app_id("suflyor")?;
     }
     let overlay = OverlayBarWindow::new()?;
+    overlay.set_tile_idle_seconds(cfg.read().omarchy_tile_idle_seconds.min(600) as i32);
     // Seed the process-global colour scheme from config, then apply to the bar's
     // Theme global so the very first paint uses the user's choice (default
     // 0=Glacier). Every later-created window (tiles, palette, settings) reads

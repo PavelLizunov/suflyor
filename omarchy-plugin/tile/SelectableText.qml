@@ -9,6 +9,11 @@ Controls.TextArea {
   property bool noWrap: false
   readonly property bool sourceMatches: text === sourceText
   signal capture(int anchor, int cursor)
+  signal interacted()
+  property bool menuOpen: false
+  onSelectionStartChanged: interacted()
+  onSelectionEndChanged: interacted()
+  Component.onDestruction: if (menuOpen) menuOpen = false
 
   // Qt positions are UTF-16 code units; suflyord slices UTF-8 byte offsets.
   function byteOffset(position) {
@@ -43,6 +48,7 @@ Controls.TextArea {
   clip: true
 
   Keys.onPressed: function(event) {
+    root.interacted()
     if ((event.modifiers & Qt.ControlModifier) && !(event.modifiers & Qt.ShiftModifier)) {
       if (event.text.toLowerCase() === "\u0441") { root.copy(); event.accepted = true }
       if (event.text.toLowerCase() === "\u0444") { root.selectAll(); event.accepted = true }
@@ -57,6 +63,8 @@ Controls.TextArea {
   }
   Controls.Menu {
     id: menu
+    onOpened: { root.menuOpen = true; root.interacted() }
+    onClosed: { root.menuOpen = false; root.interacted() }
     font.family: Commons.Style.font.family
     font.pixelSize: Commons.Style.font.body
     palette.text: Commons.Color.menu.text

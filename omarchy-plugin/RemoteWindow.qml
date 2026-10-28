@@ -14,6 +14,7 @@ QtObject {
 
   // suflyord asked for keyboard focus (follow-up input, palette search).
   signal focusRequested()
+  signal interacted()
 
   function prop(name, fallback) {
     var _ = win.rev

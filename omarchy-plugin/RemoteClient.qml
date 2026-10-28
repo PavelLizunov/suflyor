@@ -60,6 +60,8 @@ Item {
 
   // Fires a callback in suflyord. `done(value, error)` runs when the callback returns.
   function call(win, name, args, done) {
+    var w = client.windows[win]
+    if (w && w.type === "TileWindow") w.interacted()
     var message = { t: "call", win: win, name: name, args: args || [] }
     if (done) {
       message.id = client.nextCall++
@@ -74,11 +76,16 @@ Item {
   // Writes a two-way property; the local mirror updates at once.
   function set(win, name, value) {
     var w = client.windows[win]
-    if (w) w.update(name, value)
+    if (w) {
+      if (w.type === "TileWindow" && w.prop(name, null) !== value) w.interacted()
+      w.update(name, value)
+    }
     client.send({ t: "set", win: win, name: name, value: value })
   }
 
   function reportGeometry(win, geometry) {
+    var w = client.windows[win]
+    if (w && w.type === "TileWindow") w.interacted()
     client.send({ t: "geometry", win: win, geometry: geometry })
   }
 

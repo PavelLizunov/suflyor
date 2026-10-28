@@ -527,6 +527,10 @@ pub struct Config {
     /// adopted — see cycle 26 chat thread for risk-analysis rationale.
     #[serde(default = "default_tile_body_opacity")]
     pub tile_body_opacity: f32,
+
+    /// Omarchy tile inactivity timeout in seconds; zero disables automatic closing.
+    #[serde(default = "default_omarchy_tile_idle_seconds")]
+    pub omarchy_tile_idle_seconds: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -739,6 +743,7 @@ impl Config {
             deep_lock: false,
             compact_bar: false,
             tile_body_opacity: default_tile_body_opacity(),
+            omarchy_tile_idle_seconds: default_omarchy_tile_idle_seconds(),
         }
     }
 }
@@ -1257,6 +1262,10 @@ fn default_stt_whisper_url() -> String {
 
 fn default_stt_whisper_model() -> String {
     "whisper-large-v3-turbo".into()
+}
+
+fn default_omarchy_tile_idle_seconds() -> u32 {
+    30
 }
 
 fn default_tile_body_opacity() -> f32 {

@@ -30,7 +30,64 @@ PanelWindow {
   visible: shown
   color: "transparent"
   screen: placedScreen || targetScreen
-  onShownChanged: if (shown) targetScreen = service.focusedScreen()
+  onShownChanged: {
+    if (shown) targetScreen = service.focusedScreen()
+    restartIdle()
+  }
+
+  readonly property var barWin: service ? service.client.first("OverlayBarWindow") : null
+  readonly property int idleSeconds: barWin ? Math.max(0, Math.min(600, barWin.prop("tile-idle-seconds", 30))) : 30
+  readonly property bool idleAllowed: shown && idleSeconds > 0 && !tileView.idleHeld
+    && !win.prop("followup-busy", false) && !win.prop("term-busy", false)
+    && !win.prop("voice-recording", false) && !win.prop("speak-active", false)
+    && !win.prop("speak-loading", false) && !win.prop("pinned", false)
+    && win.prop("followup-text", "") === "" && !win.prop("capture-pending", false)
+    && win.prop("marked-count", 0) === 0
+  onIdleAllowedChanged: restartIdle()
+  onIdleSecondsChanged: restartIdle()
+
+  property bool idleInitialized: false
+  property bool closing: false
+  property double idleDeadline: 0
+  property int idleRemaining: 0
+
+  function restartIdle() {
+    if (!idleInitialized || closing) return
+    idleRemaining = idleSeconds
+    idleDeadline = Date.now() + idleSeconds * 1000
+    if (idleAllowed) {
+      idleClose.restart()
+      countdown.restart()
+    } else {
+      idleClose.stop()
+      countdown.stop()
+    }
+  }
+
+  // The one-shot Qt timer owns expiry; countdown ticks only update visible text.
+  Timer {
+    id: idleClose
+    interval: Math.max(1, surface.idleSeconds) * 1000
+    repeat: false
+    onTriggered: {
+      countdown.stop()
+      surface.idleRemaining = 0
+      if (surface.idleAllowed) {
+        surface.closing = true
+        surface.service.client.call(surface.win.winId, "close-clicked", [])
+      }
+    }
+  }
+  Timer {
+    id: countdown
+    interval: 1000
+    repeat: true
+    onTriggered: surface.idleRemaining = Math.max(0, Math.min(surface.idleSeconds, Math.ceil((surface.idleDeadline - Date.now()) / 1000)))
+  }
+  Connections {
+    target: surface.win
+    function onInteracted() { surface.restartIdle() }
+  }
 
   function screenAt(x, y) {
     for (var i = 0; i < Quickshell.screens.length; i++) {
@@ -62,9 +119,13 @@ PanelWindow {
   implicitHeight: tileHeight
 
   TileView {
+    id: tileView
     anchors.fill: parent
     win: surface.win
     service: surface.service
+    autoCloseEnabled: surface.idleSeconds > 0
+    autoClosePaused: !surface.idleAllowed
+    idleSecondsRemaining: surface.idleRemaining
     onMoveBy: function (dx, dy) {
       var x = Math.round(surface.originX + surface.margins.left + dx)
       var y = Math.round(surface.originY + surface.margins.top + dy)
@@ -73,5 +134,9 @@ PanelWindow {
     }
   }
 
-  Component.onCompleted: targetScreen = service.focusedScreen()
+  Component.onCompleted: {
+    targetScreen = service.focusedScreen()
+    idleInitialized = true
+    restartIdle()
+  }
 }

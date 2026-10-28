@@ -386,14 +386,23 @@ Ui.Panel {
                 foreground: root.p("stealth-fault", false) ? Commons.Color.urgent : Commons.Color.popups.text
                 onClicked: root.fire("stealth-toggle-clicked")
               }
-              Switch {
-                objectName: "bar-auto-tiles"
-                iconName: "tiles"
-                label: root.tr("Auto-tiles")
-                accessibleLabel: root.tr("Aggressive auto-tile")
-                checked: root.p("aggressive-active", false)
-                onClicked: root.fire("aggressive-toggle-clicked")
-              }
+            }
+            Switch {
+              objectName: "bar-auto-tiles"
+              iconName: "flame"
+              label: root.tr("Frequent answers")
+              accessibleLabel: root.tr("Aggressive auto-tile")
+              checked: root.p("aggressive-active", false)
+              foreground: checked ? Commons.Color.accent : Commons.Color.popups.text
+              onClicked: root.fire("aggressive-toggle-clicked")
+            }
+            Readout {
+              width: parent.width
+              text: root.p("aggressive-active", false)
+                ? root.tr("On: react to speech more often.")
+                : root.tr("Off: react to questions and trigger words.")
+              color: Commons.Color.muted
+              font.pixelSize: Style.font.caption
             }
             Action {
               id: lockButton

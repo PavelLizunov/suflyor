@@ -1811,6 +1811,13 @@
             "prim": "bool"
           }
         },
+        "tile-idle-seconds": {
+          "default": 30.0,
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
         "tiles-spawned": {
           "default": 0.0,
           "dir": "in-out",
@@ -3510,6 +3517,19 @@
               "name": "",
               "type": {
                 "prim": "float"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "tile-idle-seconds-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
               }
             }
           ],
@@ -5552,6 +5572,13 @@
           "dir": "in-out",
           "type": {
             "prim": "float"
+          }
+        },
+        "tile-idle-seconds": {
+          "default": 30.0,
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
           }
         },
         "tile-monitor-index": {

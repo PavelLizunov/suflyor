@@ -38,7 +38,13 @@ RowLayout {
       cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
       preventStealing: true
       property point lastGlobal
-      onPressed: function(mouse) { lastGlobal = mapToGlobal(mouse.x, mouse.y) }
+      onPressed: function(mouse) {
+        root.view.dragging = true
+        root.view.interact()
+        lastGlobal = mapToGlobal(mouse.x, mouse.y)
+      }
+      onReleased: { root.view.dragging = false; root.view.interact() }
+      onCanceled: { root.view.dragging = false; root.view.interact() }
       onPositionChanged: function(mouse) {
         if (!pressed) return
         var now = mapToGlobal(mouse.x, mouse.y)
@@ -87,6 +93,8 @@ RowLayout {
       onClicked: actions.open()
       Controls.Menu {
         id: actions
+        onOpened: { root.view.openMenus++; root.view.interact() }
+        onClosed: { root.view.openMenus--; root.view.interact() }
         x: Math.min(0, more.width - width)
         y: more.height + Commons.Style.spacing.sm
         font.family: Commons.Style.font.family

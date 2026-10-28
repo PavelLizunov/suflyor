@@ -3,7 +3,7 @@ import QtQuick
 import qs.Commons
 import "controls" as C
 
-// SettingsWindow tab 7: all three preferences are independent.
+// SettingsWindow tab 7: detector preferences and Omarchy tile inactivity.
 Column {
   id: root
   property var win: null
@@ -53,6 +53,27 @@ Column {
     C.SettingsCaption {
       text: root.service ? root.service.tr("Only auto-tiles are muted; manual asks still work.", []) : ""
       font.pixelSize: Style.font.body
+    }
+    C.SettingsRow {
+      label: root.service ? root.service.tr("Close inactive tiles after (seconds; 0 = never)", []) : ""
+      C.SettingsSlider {
+        minimum: 0
+        maximum: 600
+        step: 10
+        value: root.win ? root.win.prop("tile-idle-seconds", 30) : 30
+        onChanged: function(value) {
+          if (root.win && root.service) root.service.client.set(root.win.winId, "tile-idle-seconds", Math.round(value / 10) * 10)
+        }
+        onReleased: function(value) {
+          if (root.win && root.service) root.service.client.call(root.win.winId, "tile-idle-seconds-changed", [Math.round(value / 10) * 10])
+        }
+      }
+      C.SettingsCaption {
+        text: String(root.win ? root.win.prop("tile-idle-seconds", 30) : 30)
+      }
+      C.SettingsCaption {
+        text: root.service ? root.service.tr("Omarchy only. Interaction restarts the timer. Answers, recording, playback and unsent edits keep the tile open.", []) : ""
+      }
     }
     C.SettingsCaption {
       text: root.service ? root.service.tr("Separate words with spaces; questions also trigger.", []) : ""

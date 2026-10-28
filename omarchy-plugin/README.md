@@ -44,6 +44,25 @@ behavior. Other capture paths may ignore exclusion. Suflyor also temporarily
 conceals its surfaces for its own screenshots; check the intended capture
 application before relying on either route.
 
+## Answer frequency and inactive tiles
+
+The flame switch **Frequent answers** uses the same `auto_tile_every_line`
+setting and `aggressive-toggle-clicked` callback as Windows. It is visible in
+both full and compact panels. On means more frequent speech-triggered answers;
+off retains questions and trigger words, not a blanket disable of auto-tiles.
+The detector enable and listening/deep-lock controls remain independent.
+
+Settings > Auto-tiles exposes the Omarchy-only inactivity timeout: 30 seconds by
+default, 10–600 seconds or 0 to disable. `omarchy_tile_idle_seconds` is persisted
+by the existing host configuration. Clicks, scrolling, selection, pointer movement,
+dragging and edits restart the deadline. Generation, term lookup, voice recording,
+read-aloud, open menus, held gestures and unsent question/memory edits suspend it;
+when that activity ends the full interval starts again. Each tile shows the
+remaining seconds in its footer, or an explicit paused state. The final five
+seconds use the theme urgency color. Hidden/concealed tiles do not expire. Expiry invokes the existing close callback, including its request
+cancellation, conversation cleanup and live-tile removal; it does not merely hide
+a QML card. Windows/macOS native tile lifetimes are unchanged.
+
 ## Hold-to-ask shortcuts
 
 Hold **Super+F9** to record a microphone question, or **Super+Shift+F9** to

@@ -705,6 +705,9 @@ export component SettingsWindow inherits Window {
     callback open-groq-keys-clicked();
     in-out property <bool> auto-tiles-enabled: true;
     callback auto-tiles-enabled-changed(bool);
+    // Omarchy-only setting; persisted by the shared controller.
+    in-out property <int> tile-idle-seconds: 30;
+    callback tile-idle-seconds-changed(int);
     in-out property <bool> fast-answers: true;
     callback fast-answers-changed(bool);
     // "Listening mode" — mute auto-detected AI tiles (TileKind::Ai) so the user

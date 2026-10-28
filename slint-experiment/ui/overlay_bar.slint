@@ -577,6 +577,8 @@ export component OverlayBarWindow inherits Window {
     // Question/Keyword triggers). Backend already supports it via
     // cfg.auto_tile_every_line; this just surfaces the switch.
     in-out property <bool> aggressive-active: false;
+    // The Omarchy shell owns its event-driven inactivity timer.
+    in-out property <int> tile-idle-seconds: 30;
     // E10.2 — stealth on/off, so the 🎯 chip lights up + reflects restored state.
     in-out property <bool> stealth-active: false;
     changed stealth-active => {
