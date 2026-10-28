@@ -54,6 +54,7 @@ pub(crate) fn refresh_local_context_controls(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::Config,
 ) {
+    super::settings_model_speed::refresh(win, cfg);
     let root = overlay_backend::local_ai::default_root();
     let requested = overlay_backend::local_ai::ManagedModel::from_config(
         &cfg.ai_local_model,
@@ -2445,6 +2446,7 @@ pub(crate) fn refresh_local_engine_state(
     win: &SettingsWindow,
     cfg: &overlay_backend::config::Config,
 ) {
+    super::settings_model_speed::refresh(win, cfg);
     let root = overlay_backend::local_ai::default_root();
     win.set_llama_installed(overlay_backend::local_ai::llama_engine_installed(&root));
     win.set_strata_installed(overlay_backend::local_ai::own_strata_installed(&root));

@@ -23,7 +23,7 @@ Column {
   readonly property bool modelSwitching: p("model-switching", false)
   readonly property bool visionDownloading: p("vision12b-downloading", false)
   readonly property bool engineUpdating: p("engine-updating", false)
-  readonly property bool builtinBusy: installing || qualityDownloading || modelSwitching || visionDownloading || engineUpdating
+  readonly property bool builtinBusy: installing || qualityDownloading || modelSwitching || visionDownloading || engineUpdating || p("model-speed-running", false)
   readonly property bool strataBusy: p("strata-busy", false)
   readonly property bool idle: !builtinBusy && !strataBusy
   readonly property bool strataInstalled: p("strata-installed", false)
@@ -429,7 +429,7 @@ Column {
         C.SettingsCaption { text: root.p("now-detail", "") }
         Rectangle {
           id: nowPill
-          readonly property int nowState: root.strataBusy || root.builtinBusy ? 2 : root.p("now-state", 4)
+          readonly property int nowState: root.strataBusy || (root.builtinBusy && !root.p("model-speed-running", false)) ? 2 : root.p("now-state", 4)
           readonly property color tone: nowState === 1 ? Commons.Color.accent : nowState === 2 || nowState === 3 ? Commons.Color.urgent : Commons.Color.muted
           width: parent.width
           height: pillText.implicitHeight + Style.space(8)
@@ -444,9 +444,27 @@ Column {
             color: nowPill.tone
           }
         }
-        C.SettingsButton { text: root.tr("Check"); onClicked: root.call("ai-local-test-clicked") }
+        C.SettingsButton { text: root.tr("Check"); enabled: root.idle; onClicked: root.call("ai-local-test-clicked") }
         C.StatusLine { text: root.p("ai-local-test-result", "") }
         C.StatusLine { text: root.p("now-notice", ""); tone: "warning" }
+      }
+
+      C.SettingsCard {
+        title: root.tr("Model speed")
+        C.SettingsCaption { text: root.tr("Prefill reads the input; decode generates the answer. A synthetic sample uses the selected model and server timings. No server is started or reconfigured. Up to 128 output tokens; allow up to 3 minutes.") }
+        C.SettingsComboBox {
+          model: [root.tr("Short input"), root.tr("Medium input"), root.tr("Long input")]
+          currentIndex: root.p("model-speed-size", 1)
+          enabled: !root.p("model-speed-running", false)
+          onSelected: function(index) { root.set("model-speed-size", index) }
+        }
+        C.SettingsButtonsRow {
+          C.SettingsButton { text: root.tr("Measure model speed"); enabled: root.idle; onClicked: root.call("measure-model-speed") }
+          C.SettingsButton { visible: root.p("model-speed-running", false); text: root.tr("Cancel"); onClicked: root.call("cancel-model-speed") }
+        }
+        C.StatusLine { text: root.p("model-speed-status", "") }
+        C.SettingsCaption { text: root.p("model-speed-result", ""); color: Commons.Color.foreground }
+        C.SettingsCaption { text: root.tr("Last measurement, not a guarantee: input length, cache, GPU load and engine settings change the speed. Missing server timings are shown as unavailable. First-token and total time may include waiting and model loading.") }
       }
 
       C.SettingsCard {

@@ -18,7 +18,8 @@ Item {
   readonly property int scrollGutter: Commons.Style.space(14)
   readonly property bool builtinBusy: win ? win.prop("local-ai-installing", false)
     || win.prop("quality-downloading", false) || win.prop("model-switching", false)
-    || win.prop("vision12b-downloading", false) || win.prop("engine-updating", false) : false
+    || win.prop("vision12b-downloading", false) || win.prop("engine-updating", false)
+    || win.prop("model-speed-running", false) : false
   readonly property bool strataBusy: win ? win.prop("strata-busy", false) : false
   readonly property string installStatus: win ? win.prop("local-ai-status", "") : ""
   readonly property string qualityStatus: win ? win.prop("quality-status", "") : ""

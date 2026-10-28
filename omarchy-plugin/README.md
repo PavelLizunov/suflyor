@@ -23,6 +23,24 @@ removes its bar entry, so a later enable uses the manifest's default position.
 The plugin service is deliberately not `keepLoaded`: Omarchy's plugin reload
 must replace its QML, not retain old code.
 
+## Model speed
+
+Settings > AI providers > Model speed measures the already loaded local model.
+Choose a short, medium or long synthetic input, then Measure model speed. It makes
+one streamed request with at most 128 output tokens and a three-minute limit,
+without tools, reasoning, conversation data, engine startup or configuration changes. End
+a live session first; a deep-locked managed model remains locked.
+
+Prefill and decode use this request's engine timings; unsupported metrics remain
+unavailable instead of being inferred from total HTTP time. The result includes
+actual input/output/cache token counts, first-token latency, engine version when
+known and the saved context preset. The last sample is kept locally in
+`model-speed.json` for that endpoint, model, context and engine version. It is an
+observed sample, not a cold-load benchmark or a guarantee under other GPU loads.
+First-token and total time may include server queuing or model loading.
+Hiding Settings keeps the measurement running; Cancel stops it. Closing Settings
+also leaves engine updating and model downloading running in their own workers.
+
 ## Model disk
 
 Settings > AI providers > Model storage accepts an existing absolute directory

@@ -2353,6 +2353,12 @@
             "prim": "void"
           }
         },
+        "cancel-model-speed": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
         "cancel-server-settings-clicked": {
           "args": [],
           "ret": {
@@ -2840,6 +2846,12 @@
               }
             }
           ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "measure-model-speed": {
+          "args": [],
           "ret": {
             "prim": "void"
           }
@@ -4927,6 +4939,34 @@
         },
         "mlx-vision-total": {
           "default": "1668",
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "model-speed-result": {
+          "default": "",
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
+        "model-speed-running": {
+          "default": false,
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "model-speed-size": {
+          "default": 1.0,
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "model-speed-status": {
+          "default": "",
           "dir": "in-out",
           "type": {
             "prim": "string"

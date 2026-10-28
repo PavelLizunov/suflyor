@@ -3786,6 +3786,10 @@ struct SettingsWindowProps {
     mlx_vision_model_index: i32,
     mlx_vision_progress: f32,
     mlx_vision_total: slint::SharedString,
+    model_speed_result: slint::SharedString,
+    model_speed_running: bool,
+    model_speed_size: i32,
+    model_speed_status: slint::SharedString,
     model_switching: bool,
     models_directory: slint::SharedString,
     models_directory_status: slint::SharedString,
@@ -4180,6 +4184,12 @@ impl Default for SettingsWindowProps {
             mlx_vision_progress: <f32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
             mlx_vision_total: <slint::SharedString>::from_json(&serde_json::json!("1668"))
                 .unwrap_or_default(),
+            model_speed_result: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
+            model_speed_running: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            model_speed_size: <i32>::from_json(&serde_json::json!(1.0)).unwrap_or_default(),
+            model_speed_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
             model_switching: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             models_directory: <slint::SharedString>::from_json(&serde_json::json!(""))
                 .unwrap_or_default(),
@@ -4371,6 +4381,7 @@ struct SettingsWindowCallbacks {
     backup_status_requested: Handler<dyn FnMut() -> ()>,
     builtin_model_use: Handler<dyn FnMut(i32) -> ()>,
     cancel_local_ai_clicked: Handler<dyn FnMut() -> ()>,
+    cancel_model_speed: Handler<dyn FnMut() -> ()>,
     cancel_server_settings_clicked: Handler<dyn FnMut() -> ()>,
     check_updates_clicked: Handler<dyn FnMut() -> ()>,
     choose_custom_gguf_clicked: Handler<dyn FnMut() -> ()>,
@@ -4425,6 +4436,7 @@ struct SettingsWindowCallbacks {
     kb_open_clicked: Handler<dyn FnMut() -> ()>,
     language_selected: Handler<dyn FnMut(i32) -> ()>,
     local_engine_activate: Handler<dyn FnMut(i32) -> ()>,
+    measure_model_speed: Handler<dyn FnMut() -> ()>,
     meeting_context_save: Handler<dyn FnMut(slint::SharedString) -> ()>,
     memory_add_fact: Handler<dyn FnMut(slint::SharedString) -> ()>,
     memory_approve: Handler<dyn FnMut(i32) -> ()>,
@@ -5859,6 +5871,36 @@ impl SettingsWindow {
     pub fn get_mlx_vision_total(&self) -> slint::SharedString {
         self.0.props.borrow().mlx_vision_total.clone()
     }
+    pub fn set_model_speed_result(&self, value: slint::SharedString) {
+        self.0.base.send_prop("model-speed-result", value.to_json());
+        self.0.props.borrow_mut().model_speed_result = value;
+    }
+    pub fn get_model_speed_result(&self) -> slint::SharedString {
+        self.0.props.borrow().model_speed_result.clone()
+    }
+    pub fn set_model_speed_running(&self, value: bool) {
+        self.0
+            .base
+            .send_prop("model-speed-running", value.to_json());
+        self.0.props.borrow_mut().model_speed_running = value;
+    }
+    pub fn get_model_speed_running(&self) -> bool {
+        self.0.props.borrow().model_speed_running.clone()
+    }
+    pub fn set_model_speed_size(&self, value: i32) {
+        self.0.base.send_prop("model-speed-size", value.to_json());
+        self.0.props.borrow_mut().model_speed_size = value;
+    }
+    pub fn get_model_speed_size(&self) -> i32 {
+        self.0.props.borrow().model_speed_size.clone()
+    }
+    pub fn set_model_speed_status(&self, value: slint::SharedString) {
+        self.0.base.send_prop("model-speed-status", value.to_json());
+        self.0.props.borrow_mut().model_speed_status = value;
+    }
+    pub fn get_model_speed_status(&self) -> slint::SharedString {
+        self.0.props.borrow().model_speed_status.clone()
+    }
     pub fn set_model_switching(&self, value: bool) {
         self.0.base.send_prop("model-switching", value.to_json());
         self.0.props.borrow_mut().model_switching = value;
@@ -7153,6 +7195,18 @@ impl SettingsWindow {
         self.0.base.send_invoke("cancel-local-ai-clicked", vec![]);
         Default::default()
     }
+    pub fn on_cancel_model_speed(&self, f: impl FnMut() -> () + 'static) {
+        let f: Rc<RefCell<dyn FnMut() -> ()>> = Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().cancel_model_speed = Handler(Some(f));
+    }
+    pub fn invoke_cancel_model_speed(&self) -> () {
+        let handler = self.0.callbacks.borrow().cancel_model_speed.clone();
+        if handler.is_set() {
+            return handler.call(|f| f()).unwrap_or_default();
+        }
+        self.0.base.send_invoke("cancel-model-speed", vec![]);
+        Default::default()
+    }
     pub fn on_cancel_server_settings_clicked(&self, f: impl FnMut() -> () + 'static) {
         let f: Rc<RefCell<dyn FnMut() -> ()>> = Rc::new(RefCell::new(f));
         self.0.callbacks.borrow_mut().cancel_server_settings_clicked = Handler(Some(f));
@@ -7916,6 +7970,18 @@ impl SettingsWindow {
         self.0
             .base
             .send_invoke("local-engine-activate", vec![arg0.to_json()]);
+        Default::default()
+    }
+    pub fn on_measure_model_speed(&self, f: impl FnMut() -> () + 'static) {
+        let f: Rc<RefCell<dyn FnMut() -> ()>> = Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().measure_model_speed = Handler(Some(f));
+    }
+    pub fn invoke_measure_model_speed(&self) -> () {
+        let handler = self.0.callbacks.borrow().measure_model_speed.clone();
+        if handler.is_set() {
+            return handler.call(|f| f()).unwrap_or_default();
+        }
+        self.0.base.send_invoke("measure-model-speed", vec![]);
         Default::default()
     }
     pub fn on_meeting_context_save(&self, f: impl FnMut(slint::SharedString) -> () + 'static) {
@@ -9408,6 +9474,13 @@ impl RemoteObject for SettingsWindowInner {
             p.mlx_vision_progress.to_json(),
         );
         m.insert("mlx-vision-total".into(), p.mlx_vision_total.to_json());
+        m.insert("model-speed-result".into(), p.model_speed_result.to_json());
+        m.insert(
+            "model-speed-running".into(),
+            p.model_speed_running.to_json(),
+        );
+        m.insert("model-speed-size".into(), p.model_speed_size.to_json());
+        m.insert("model-speed-status".into(), p.model_speed_status.to_json());
         m.insert("model-switching".into(), p.model_switching.to_json());
         m.insert("models-directory".into(), p.models_directory.to_json());
         m.insert(
@@ -10177,6 +10250,18 @@ impl RemoteObject for SettingsWindowInner {
             "mlx-vision-total" => {
                 p.mlx_vision_total = <slint::SharedString>::from_json(value).ok_or("bad value")?
             }
+            "model-speed-result" => {
+                p.model_speed_result = <slint::SharedString>::from_json(value).ok_or("bad value")?
+            }
+            "model-speed-running" => {
+                p.model_speed_running = <bool>::from_json(value).ok_or("bad value")?
+            }
+            "model-speed-size" => {
+                p.model_speed_size = <i32>::from_json(value).ok_or("bad value")?
+            }
+            "model-speed-status" => {
+                p.model_speed_status = <slint::SharedString>::from_json(value).ok_or("bad value")?
+            }
             "model-switching" => p.model_switching = <bool>::from_json(value).ok_or("bad value")?,
             "models-directory" => {
                 p.models_directory = <slint::SharedString>::from_json(value).ok_or("bad value")?
@@ -10781,6 +10866,13 @@ impl RemoteObject for SettingsWindowInner {
                     .map(|v| v.to_json())
                     .unwrap_or(Value::Null))
             }
+            "cancel-model-speed" => {
+                let handler = self.callbacks.borrow().cancel_model_speed.clone();
+                Ok(handler
+                    .call(|f| f())
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
             "cancel-server-settings-clicked" => {
                 let handler = self
                     .callbacks
@@ -11246,6 +11338,13 @@ impl RemoteObject for SettingsWindowInner {
                 let handler = self.callbacks.borrow().local_engine_activate.clone();
                 Ok(handler
                     .call(|f| f(a0))
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
+            "measure-model-speed" => {
+                let handler = self.callbacks.borrow().measure_model_speed.clone();
+                Ok(handler
+                    .call(|f| f())
                     .map(|v| v.to_json())
                     .unwrap_or(Value::Null))
             }

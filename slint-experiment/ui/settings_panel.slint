@@ -383,6 +383,12 @@ export component SettingsWindow inherits Window {
     in-out property <bool> engine-updating: false;
     in-out property <string> engine-update-status: "";
     in-out property <string> ai-local-test-result: "";
+    in-out property <bool> model-speed-running: false;
+    in-out property <int> model-speed-size: 1;
+    in-out property <string> model-speed-status: "";
+    in-out property <string> model-speed-result: "";
+    callback measure-model-speed();
+    callback cancel-model-speed();
     in-out property <string> ai-local-bearer-input: "";
     // E10.4 — in-app local-AI installer: downloads llama.cpp/whisper.cpp + models,
     // launches the servers, then auto-configures. Progress + GPU/CPU shown live.
@@ -467,7 +473,7 @@ export component SettingsWindow inherits Window {
     // One status line, one progress bar and one Cancel for every built-in
     // engine job (install, download, switch, projector, engine update). The
     // line shows the newest message of whichever job wrote last.
-    property <bool> builtin-busy: root.local-ai-installing || root.quality-downloading || root.model-switching || root.vision12b-downloading || root.engine-updating;
+    property <bool> builtin-busy: root.local-ai-installing || root.quality-downloading || root.model-switching || root.vision12b-downloading || root.engine-updating || root.model-speed-running;
     property <string> builtin-status: "";
     changed quality-status => { root.builtin-status = root.quality-status; }
     changed local-ai-status => { root.builtin-status = root.local-ai-status; }
@@ -2924,7 +2930,7 @@ export component SettingsWindow inherits Window {
                                         VerticalLayout {
                                         alignment: center;
                                         now-pill := Rectangle {
-                                            property <int> state: root.strata-busy || root.builtin-busy ? 2 : root.now-state;
+                                            property <int> state: root.strata-busy || (root.builtin-busy && !root.model-speed-running) ? 2 : root.now-state;
                                             property <color> tone: self.state == 1 ? Theme.success : self.state == 2 ? Theme.warning : self.state == 3 ? Theme.danger : Theme.text-muted;
                                             min-width: pill.preferred-width;
                                             min-height: pill.preferred-height;
@@ -2943,11 +2949,29 @@ export component SettingsWindow inherits Window {
                                         }
                                         VerticalLayout {
                                             alignment: center;
-                                            Button { height: 30px; text: @tr("Check"); clicked => { root.ai-local-test-clicked(); } }
+                                            Button { height: 30px; text: @tr("Check"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.ai-local-test-clicked(); } }
                                         }
                                     }
                                     if root.ai-local-test-result != "" : Text { text: root.ai-local-test-result; font-size: Metrics.font-label; color: Theme.text-secondary; wrap: word-wrap; }
                                     if root.now-notice != "" : Text { text: root.now-notice; font-size: Metrics.font-caption; color: Theme.warning; wrap: word-wrap; }
+                                }
+                                SettingsCard {
+                                    title: @tr("Model speed");
+                                    Text { text: @tr("Prefill reads the input; decode generates the answer. A synthetic sample uses the selected model and server timings. No server is started or reconfigured. Up to 128 output tokens; allow up to 3 minutes."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                    SettingsComboBox {
+                                        model: [@tr("Short input"), @tr("Medium input"), @tr("Long input")];
+                                        current-index <=> root.model-speed-size;
+                                        enabled: !root.model-speed-running;
+                                    }
+                                    HorizontalLayout {
+                                        alignment: start;
+                                        spacing: Metrics.space-sm;
+                                        Button { text: @tr("Measure model speed"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.measure-model-speed(); } }
+                                        if root.model-speed-running : Button { text: @tr("Cancel"); clicked => { root.cancel-model-speed(); } }
+                                    }
+                                    if root.model-speed-status != "" : Text { text: root.model-speed-status; font-size: Metrics.font-caption; color: Theme.text-secondary; wrap: word-wrap; }
+                                    if root.model-speed-result != "" : Text { text: root.model-speed-result; font-size: Metrics.font-label; color: Theme.text-primary; wrap: word-wrap; }
+                                    Text { text: @tr("Last measurement, not a guarantee: input length, cache, GPU load and engine settings change the speed. Missing server timings are shown as unavailable. First-token and total time may include waiting and model loading."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                                 }
                                 SettingsCard {
                                     title: @tr("Choose a model");

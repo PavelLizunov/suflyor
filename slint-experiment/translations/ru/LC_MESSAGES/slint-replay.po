@@ -2248,6 +2248,27 @@ msgstr "Воспроизвести запись"
 msgid "Pause recording"
 msgstr "Приостановить запись"
 
+msgid "Model speed"
+msgstr "Скорость модели"
+
+msgid "Measure model speed"
+msgstr "Измерить скорость модели"
+
+msgid "Short input"
+msgstr "Короткий запрос"
+
+msgid "Medium input"
+msgstr "Средний запрос"
+
+msgid "Long input"
+msgstr "Длинный запрос"
+
+msgid "Prefill reads the input; decode generates the answer. A synthetic sample uses the selected model and server timings. No server is started or reconfigured. Up to 128 output tokens; allow up to 3 minutes."
+msgstr "Prefill — обработка запроса, decode — генерация ответа. Замер отправляет выбранной модели искусственный запрос и использует данные времени от сервера. Сервер не запускается и не перенастраивается. До 128 токенов ответа; замер может занять до 3 минут."
+
+msgid "Last measurement, not a guarantee: input length, cache, GPU load and engine settings change the speed. Missing server timings are shown as unavailable. First-token and total time may include waiting and model loading."
+msgstr "Последний замер — ориентир, а не гарантия: скорость зависит от длины запроса, кэша, нагрузки на видеокарту и настроек движка. Если сервер не передал метрику, показывается «нет данных». Время до первого токена и общее время могут включать ожидание и загрузку модели."
+
 msgid "Installed Strata engine: {}"
 msgstr "Установленный движок Strata: {}"
 

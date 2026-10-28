@@ -524,6 +524,7 @@ pub(crate) fn open_settings(
     // (`ModelTarget` + `fetch_models` moved with it). The install/updater
     // closures below stay in open_settings (separate later wave).
     wire_ai_settings(&win, cfg, overlay_weak);
+    super::settings_model_speed::wire(&win, cfg, state);
     settings_mlx::wire(&win, cfg);
     crate::settings_hermes::wire_hermes_settings(&win, cfg);
 
@@ -2200,7 +2201,9 @@ pub(crate) fn populate_token_status(
     if win.get_strata_update_job() == 0 {
         win.set_strata_update_status(blank());
     }
-    let local_job_active = win.get_local_ai_installing()
+    super::settings_model_speed::refresh(win, &c);
+    let local_job_active = win.get_model_speed_running()
+        || win.get_local_ai_installing()
         || win.get_quality_downloading()
         || win.get_model_switching()
         || win.get_vision12b_downloading()

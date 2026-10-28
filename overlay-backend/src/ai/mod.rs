@@ -2,6 +2,7 @@
 //! OpenAI Responses and Anthropic Messages APIs. Emits AiEvent chunks downstream.
 
 pub(crate) mod agent;
+pub mod benchmark;
 pub mod completion;
 pub(crate) mod control;
 pub mod inspect;
