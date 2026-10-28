@@ -335,9 +335,6 @@ fn labelled_secret(rest: &str, mid_word: bool) -> Option<(&'static str, usize)> 
     if let Some(len) = labelled_secret_len(rest, "vision_local_bearer") {
         return Some(("vision_local_bearer: <redacted>", len));
     }
-    if let Some(len) = labelled_secret_len(rest, "token") {
-        return Some(("token: <redacted>", len));
-    }
     let len = labelled_secret_len(rest, "password")?;
     Some(("password: <redacted>", len))
 }
@@ -353,6 +350,12 @@ fn labelled_secret_len(rest: &str, label: &str) -> Option<usize> {
     }
     let after = rest.get(label.len()..)?;
     let unquoted = after.strip_prefix(['"', '\'']).unwrap_or(after);
+    if label != "bearer" {
+        let prefix = unquoted.trim_start_matches([' ', '\t']);
+        if !prefix.starts_with(':') && !prefix.starts_with('=') {
+            return None;
+        }
+    }
     let separated = unquoted.trim_start_matches([' ', '\t', ':', '=']);
     let value = separated.strip_prefix(['"', '\'']).unwrap_or(separated);
     if value.len() == after.len() {
@@ -1342,7 +1345,6 @@ mod tests {
             ("ai_local_bearer: secret_value_123", "ai_local_bearer: <redacted>"),
             ("vision_bearer: secret_value_123", "vision_bearer: <redacted>"),
             ("vision_local_bearer: secret_value_123", "vision_local_bearer: <redacted>"),
-            ("token: secret_value_123", "token: <redacted>"),
         ] {
             let redacted = redact_secrets(sample);
             assert!(
