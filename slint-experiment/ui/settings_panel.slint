@@ -1090,6 +1090,36 @@ export component SettingsWindow inherits Window {
                                 wrap: word-wrap;
                             }
                             Rectangle { background: Theme.border; height: 1px; }
+                            if Platform.is-linux : VerticalLayout {
+                                spacing: 10px;
+                                Text {
+                                    text: @tr("Super is the Windows key. Hold the shortcut to record, then release it to ask. If another application uses a shortcut, Suflyor leaves it unchanged; see Diagnostics.");
+                                    font-size: Metrics.font-label;
+                                    color: Theme.text-muted;
+                                    wrap: word-wrap;
+                                }
+                                for entry in [
+                                    ["Super+F9", @tr("Hold to record a microphone question; release to send it to AI")],
+                                    ["Super+Shift+F9", @tr("Hold to record system audio; release to send it to AI")],
+                                ] : HorizontalLayout {
+                                    padding: Metrics.space-xs;
+                                    spacing: Metrics.space-md;
+                                    min-height: hold-description.preferred-height + 2 * Metrics.space-xs;
+                                    Text {
+                                        text: entry[0];
+                                        width: 116px;
+                                        font-size: Metrics.font-label;
+                                        font-weight: 700;
+                                        color: Theme.text-primary;
+                                    }
+                                    hold-description := Text {
+                                        text: entry[1];
+                                        font-size: Metrics.font-label;
+                                        color: Theme.text-secondary;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                            }
                             for entry in [
                                 ["F9",  @tr("Ask AI now (streams the answer into a tile)")],
                                 ["Shift+F9", @tr("Ask AI escalated to the smart cloud model (one-shot; tile shows a cloud badge)")],

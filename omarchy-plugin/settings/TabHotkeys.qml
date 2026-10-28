@@ -15,6 +15,8 @@ Column {
     return (service.client.globals || {})["Platform.is-macos"] === true
   }
   readonly property var entries: [
+    ["Super+F9", "Hold to record a microphone question; release to send it to AI"],
+    ["Super+Shift+F9", "Hold to record system audio; release to send it to AI"],
     ["F9", "Ask AI now (streams the answer into a tile)"],
     ["Shift+F9", "Ask AI escalated to the smart cloud model (one-shot; tile shows a cloud badge)"],
     ["F3", "Re-ask the last question with fresh context"],
@@ -52,6 +54,9 @@ Column {
       text: root.service ? root.service.tr("Global hotkeys (work anywhere, even when the app isn't focused):", []) : ""
       font.pixelSize: Style.font.body
     }
+    C.SettingsCaption {
+      text: root.service ? root.service.tr("Super is the Windows key. Hold the shortcut to record, then release it to ask. If another application uses a shortcut, Suflyor leaves it unchanged; see Diagnostics.", []) : ""
+    }
     C.SettingsSeparator {}
     Repeater {
       model: root.entries
@@ -65,7 +70,7 @@ Column {
           id: chordText
           x: Style.space(4)
           y: Style.space(4)
-          width: Style.space(root.macos ? 112 : 100)
+          width: Style.space(root.macos ? 112 : 140)
           text: root.chord(entry.modelData[0])
           color: Commons.Color.foreground
           font.pixelSize: Style.font.body

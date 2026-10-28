@@ -222,6 +222,15 @@ msgstr "Включить разбор после встречи"
 msgid "Global hotkeys (work anywhere, even when the app isn't focused):"
 msgstr "Глобальные хоткеи (работают везде, даже когда приложение не в фокусе):"
 
+msgid "Hold to record a microphone question; release to send it to AI"
+msgstr "Удерживайте для записи вопроса с микрофона; отпустите, чтобы отправить его ИИ"
+
+msgid "Hold to record system audio; release to send it to AI"
+msgstr "Удерживайте для записи системного звука; отпустите, чтобы отправить его ИИ"
+
+msgid "Super is the Windows key. Hold the shortcut to record, then release it to ask. If another application uses a shortcut, Suflyor leaves it unchanged; see Diagnostics."
+msgstr "Super — клавиша Windows. Удерживайте сочетание для записи и отпустите, чтобы задать вопрос. Если сочетание занято другим приложением, Суфлёр его не меняет; подробности — в «Диагностике»."
+
 msgid "Ask AI now (streams the answer into a tile)"
 msgstr "Спросить AI сейчас (ответ стримится в тайл)"
 

@@ -44,6 +44,20 @@ behavior. Other capture paths may ignore exclusion. Suflyor also temporarily
 conceals its surfaces for its own screenshots; check the intended capture
 application before relying on either route.
 
+## Hold-to-ask shortcuts
+
+Hold **Super+F9** to record a microphone question, or **Super+Shift+F9** to
+record system audio. Release the shortcut to transcribe and ask using the current
+providers. These use the existing bar push-to-talk callbacks and 30-second
+lost-release watchdog; they do not start a session or a model. Super is the
+Windows key. The shortcuts are listed in Settings > Hotkeys and Help (F1).
+
+Hyprland bindings owned by another application are left alone. In particular,
+Omarchy's bare F9 dictation may keep that key, making Suflyor's bare F9 ask
+unavailable; Settings > Diagnostics reports conflicts. The two Super chords are
+separate from bare F9 and require both press and release bindings. Registration
+is not evidence of a completed recording/transcription/answer.
+
 ## Model speed
 
 Settings > AI providers > Model speed measures the already loaded local model.

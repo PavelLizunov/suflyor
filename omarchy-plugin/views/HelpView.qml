@@ -45,6 +45,8 @@ Item {
     { glyph: "\uf00d", description: root.tr("Quit (two clicks)") }
   ]
   readonly property var hotkeys: [
+    { key: "Super+F9", description: root.tr("Hold to record a microphone question; release to send it to AI") },
+    { key: "Super+Shift+F9", description: root.tr("Hold to record system audio; release to send it to AI") },
     { key: "F9", description: root.tr("Ask AI now (streams the answer into a tile)") },
     { key: "Shift+F9", description: root.tr("Ask AI escalated to the smart cloud model (one-shot; tile shows a cloud badge)") },
     { key: "F3", description: root.tr("Re-ask the last question with fresh context") },
@@ -78,14 +80,14 @@ Item {
         Tile.Label { Layout.fillWidth: true; text: root.tr("Suflyor in the Omarchy bar"); font.bold: true; color: Commons.Color.accent; }
         Repeater {
           model: [
-            { glyph: "\u{f02ce}", description: root.tr("Click: open the Suflyor panel") },
-            { glyph: "\u{f02ce}", description: root.tr("Right click: start or stop the session") },
-            { glyph: "\u{f02ce}", description: root.tr("Middle click: write a question") },
+            { description: root.tr("Click: open the Suflyor panel") },
+            { description: root.tr("Right click: start or stop the session") },
+            { description: root.tr("Middle click: write a question") },
           ]
           delegate: Small.ReferenceRow {
             required property var modelData
             Layout.fillWidth: true
-            glyph: modelData.glyph
+            brandMark: true
             description: modelData.description
           }
         }
@@ -108,6 +110,7 @@ Item {
         }
         Item { implicitHeight: Commons.Style.spacing.lg }
         Tile.Label { Layout.fillWidth: true; text: root.tr("Hotkeys"); color: Commons.Color.accent; font.bold: true }
+        Tile.Label { Layout.fillWidth: true; text: root.tr("Super is the Windows key. Hold the shortcut to record, then release it to ask. If another application uses a shortcut, Suflyor leaves it unchanged; see Diagnostics.") }
         Small.ReferenceRow { Layout.fillWidth: true; header: true; glyph: root.tr("Key"); description: root.tr("Action") }
         Repeater {
           model: root.hotkeys
