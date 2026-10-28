@@ -9,15 +9,19 @@ Build the headless host, then install with the repository's existing installer:
 cargo build --locked --no-default-features --features remote-ui \
   --manifest-path slint-experiment/Cargo.toml --bin overlay-host
 scripts/install-omarchy-plugin.sh
-omarchy-shell shell rescanPlugins
-omarchy plugin enable io.github.pavellizunov.suflyor
+# First install only; leaves an existing widget where the user placed it.
+omarchy bar put io.github.pavellizunov.suflyor
 ```
 
 The two speech sidecars are separate builds. Set `SUFLYOR_BUILD_DIR` to a folder
 containing `overlay-host`, `suflyor-tts` and `suflyor-teratts` when installing all
-three. Stop the running Suflyor daemon before replacing it; a new shell connection
-alone does not replace a running binary. The plugin service is deliberately not
-`keepLoaded`: Omarchy's plugin reload must replace its QML, not retain old code.
+three. The installer replaces the artifacts, asks the running daemon to quit and
+reloads plugin code through the existing shell. The service starts the new binary.
+The widget remains in Omarchy's saved bar section and index, with its settings.
+For updates, run the installer without disabling/re-enabling the plugin: disabling
+removes its bar entry, so a later enable uses the manifest's default position.
+The plugin service is deliberately not `keepLoaded`: Omarchy's plugin reload
+must replace its QML, not retain old code.
 
 ## Model disk
 

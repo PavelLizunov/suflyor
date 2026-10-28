@@ -545,8 +545,8 @@ Column {
         }
         C.WrapBlock {
           visible: root.p("strata-update-supported", false)
-          C.SettingsCaption { text: root.tr("Strata engine: {}", [root.p("strata-engine-version", "")]) }
-          C.SettingsCaption { text: root.tr("Updates only the Strata engine through its official updater. Model weights are kept. The running server restarts.") }
+          C.SettingsCaption { text: root.tr("Installed Strata engine: {}", [root.p("strata-engine-version", "")]) }
+          C.SettingsCaption { text: root.tr("Strata release and engine versions differ. Checks use the latest official feed; updates replace only the engine. Model weights are kept. A running server restarts.") }
           C.SettingsButtonsRow {
             C.SettingsButton { text: root.tr("Check engine updates"); enabled: root.idle; onClicked: root.call("strata-engine-check") }
             C.SettingsButton { text: root.tr("Update Strata engine"); enabled: root.idle; onClicked: root.call("strata-engine-update") }

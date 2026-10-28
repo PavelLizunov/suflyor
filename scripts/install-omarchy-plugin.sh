@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install Suflyor as the Omarchy plugin io.github.pavellizunov.suflyor from a
 # prebuilt `--features remote-ui` overlay-host (docs/OMARCHY-PLUGIN-DESIGN.md).
-# User data, configuration and models are never removed.
+# User data, configuration, models and the Omarchy bar placement are retained.
 #
 #   scripts/install-omarchy-plugin.sh [install|uninstall]
 #
@@ -106,5 +106,14 @@ fi
 rm -rf "$plugin_dir"
 mv "$staging" "$plugin_dir"
 
-printf 'Installed %s in %s and suflyord in %s.\n' "$id" "$plugin_dir" "$prefix"
-printf 'Enable it in Omarchy (Setup > Plugins) or with: omarchy plugin enable %s\n' "$id"
+# Restart only after replacing the artifacts. Disabling the plugin would delete
+# its bar entry (including its section, index and settings); the native reload
+# keeps that entry and lets the existing service start the newly installed host.
+if "$prefix/suflyord" --command quit 2>/dev/null; then
+    printf 'Requested restart of the existing Suflyor daemon.\n'
+fi
+if ! omarchy-shell shell rescanPlugins >/dev/null 2>&1; then
+    printf 'Shell reload unavailable; the new plugin loads on the next shell start.\n' >&2
+fi
+printf 'Installed %s in %s and suflyord in %s; existing bar placement retained.\n' "$id" "$plugin_dir" "$prefix"
+printf 'For a first install, enable it with: omarchy bar put %s\n' "$id"

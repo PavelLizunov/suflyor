@@ -64,12 +64,22 @@ pub(crate) fn wire(
                 };
                 if let Err(error) = &result { eprintln!("[overlay-host] Strata updater: {error:#}"); }
                 let message = match result {
-                    Ok(report) if check && report.update_available => if ru {
-                        format!("Доступен движок Strata {}. Нажмите «Обновить движок Strata».", report.version)
-                    } else { format!("Strata engine {} is available. Click Update Strata engine.", report.version) },
+                    Ok(report) if check => {
+                        let release = report.release_version.map(|version| if ru {
+                            format!("Релиз Strata {version}. ")
+                        } else { format!("Strata release {version}. ") }).unwrap_or_default();
+                        let engine = if report.update_available {
+                            if ru {
+                                format!("Доступен движок {}. Нажмите «Обновить движок Strata».", report.version)
+                            } else { format!("Engine {} is available. Click Update Strata engine.", report.version) }
+                        } else if ru {
+                            format!("В последнем официальном канале нет более нового совместимого движка. Установлен {}.", report.version)
+                        } else { format!("The latest official feed has no newer compatible engine. Installed: {}.", report.version) };
+                        format!("{release}{engine}")
+                    },
                     Ok(report) => if ru {
-                        format!("Установлен актуальный движок Strata {}. Веса модели не изменены.", report.version)
-                    } else { format!("Strata engine {} is up to date. Model weights are unchanged.", report.version) },
+                        format!("Установлен движок Strata {}. Веса модели не изменены.", report.version)
+                    } else { format!("Strata engine {} is installed. Model weights are unchanged.", report.version) },
                     Err(_) if cancel.load(Ordering::Relaxed) => if ru {
                         "Отменено. Веса модели сохранены.".into()
                     } else { "Cancelled. Model weights are kept.".into() },

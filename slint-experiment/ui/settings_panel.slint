@@ -3061,8 +3061,8 @@ export component SettingsWindow inherits Window {
                                         if !root.found-models-searching : Text { text: @tr("Search again"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { enabled: !root.builtin-busy && !root.strata-busy; mouse-cursor: pointer; clicked => { root.found-models-search(); } } }
                                     }
                                     if root.strata-update-supported : WrapBlock {
-                                        Text { text: @tr("Strata engine: {}", root.strata-engine-version); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
-                                        Text { text: @tr("Updates only the Strata engine through its official updater. Model weights are kept. The running server restarts."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                        Text { text: @tr("Installed Strata engine: {}", root.strata-engine-version); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                        Text { text: @tr("Strata release and engine versions differ. Checks use the latest official feed; updates replace only the engine. Model weights are kept. A running server restarts."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                                         HorizontalLayout {
                                             alignment: start;
                                             spacing: Metrics.space-sm;

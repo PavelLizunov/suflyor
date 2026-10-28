@@ -31,6 +31,7 @@ pub fn strata_engine_version(root: &Path) -> Option<String> {
 
 pub struct StrataUpdate {
     pub version: String,
+    pub release_version: Option<String>,
     pub update_available: bool,
 }
 
@@ -104,7 +105,13 @@ fn run_updater(
     let output = dir.join(format!("suflyor-update-{}.json", std::process::id()));
     let mut cmd = Command::new(strata_python(dir));
     cmd.arg(dir.join("strata.py"))
-        .args(["update", "--no-control", "--model-config"])
+        // A remembered release-specific feed would pin checks to that old release.
+        // Suflyor's official update action always follows the latest signed feed.
+        .args([
+            "update", "--no-control", "--feed",
+            "https://github.com/Niko1221/Strata/releases/latest/download/strata-feed.json",
+            "--model-config",
+        ])
         .arg(config)
         .args(["--output", "json"]);
     if check_only { cmd.arg("--check"); }
@@ -169,6 +176,8 @@ fn parse_report(success: bool, report: &serde_json::Value, check: bool) -> Resul
     }.and_then(serde_json::Value::as_str).context("Strata engine version missing")?;
     Ok(StrataUpdate {
         version: version.into(),
+        release_version: report.pointer("/app/offered")
+            .and_then(serde_json::Value::as_str).map(str::to_owned),
         update_available: matches!(status, "available" | "install"),
     })
 }
