@@ -35,7 +35,7 @@ impl Store {
     /// pending, then migrate to [`migrations::LATEST_VERSION`].
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).context("create catalog dir")?;
+            crate::paths::ensure_private_dir(parent).context("create catalog dir")?;
         }
         let preexisting = path.exists();
         let mut conn = Connection::open(path).context("open catalog")?;

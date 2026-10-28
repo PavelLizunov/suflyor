@@ -1112,7 +1112,7 @@ pub(crate) fn open_settings(
                 Ok(dir) => {
                     // Create it first so the folder opens even before the first
                     // recording exists. Explorer launch is fire-and-forget.
-                    let _ = std::fs::create_dir_all(&dir);
+                    let _ = overlay_backend::paths::ensure_private_dir(&dir);
                     #[cfg(target_os = "macos")]
                     let _ = std::process::Command::new("open").arg(&dir).spawn();
                     #[cfg(windows)]
@@ -1131,7 +1131,7 @@ pub(crate) fn open_settings(
         // normal window (not stealth-excluded) — fine for config-time use.
         win.on_open_data_folder_clicked(move || match overlay_backend::paths::data_root() {
             Some(dir) => {
-                let _ = std::fs::create_dir_all(&dir);
+                let _ = overlay_backend::paths::ensure_private_dir(&dir);
                 #[cfg(target_os = "macos")]
                 let _ = std::process::Command::new("open").arg(&dir).spawn();
                 #[cfg(windows)]

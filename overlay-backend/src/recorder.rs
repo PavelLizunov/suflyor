@@ -164,7 +164,7 @@ impl SessionRecorder {
 
     /// Open a recorder writing into an explicit directory (test seam).
     pub fn start_in(dir: PathBuf) -> Result<Self> {
-        std::fs::create_dir_all(&dir)
+        crate::paths::ensure_private_dir(&dir)
             .with_context(|| format!("create recordings dir {}", dir.display()))?;
         let (tx, rx) = sync_channel::<RecMsg>(WRITER_QUEUE);
         let dropped = Arc::new(AtomicU64::new(0));
