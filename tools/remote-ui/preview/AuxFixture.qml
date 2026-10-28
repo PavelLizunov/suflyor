@@ -2,7 +2,7 @@ import QtQuick
 import qs.Commons as Commons
 import "../../../omarchy-plugin"
 
-// Offscreen preview of a secondary window (aux/<Type>View.qml) with sample state.
+// Offscreen preview of a secondary window (views/<Type>View.qml) with sample state.
 // `scene` names the window type without "Window", e.g. "Archive".
 Item {
   id: root
@@ -63,7 +63,7 @@ Item {
 
   Loader {
     anchors.fill: parent
-    source: Qt.resolvedUrl("../../../omarchy-plugin/aux/" + root.scene + "View.qml")
+    source: Qt.resolvedUrl("../../../omarchy-plugin/views/" + root.scene + "View.qml")
     onLoaded: { item.win = win; item.service = service }
   }
 }

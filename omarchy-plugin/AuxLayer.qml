@@ -69,7 +69,7 @@ PanelWindow {
     height: surface.cardHeight
     Loader {
       anchors.fill: parent
-      source: Qt.resolvedUrl("aux/" + surface.viewName + ".qml")
+      source: Qt.resolvedUrl("views/" + surface.viewName + ".qml")
       onLoaded: {
         item.win = Qt.binding(function () { return surface.win })
         item.service = Qt.binding(function () { return surface.service })
