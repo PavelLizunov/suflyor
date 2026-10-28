@@ -143,9 +143,7 @@ fn with_cpu_encoder(t: &Target) -> serde_json::Value {
 }
 
 fn replace_config(path: &Path, bytes: &[u8]) -> Result<()> {
-    let tmp = path.with_extension("suflyor-vision.tmp");
-    std::fs::write(&tmp, bytes).context("write Strata Vision configuration")?;
-    std::fs::rename(&tmp, path).context("replace Strata Vision configuration")
+    crate::paths::replace_private(path, bytes).context("replace Strata Vision configuration")
 }
 
 fn verify_image(cancel: &AtomicBool) -> Result<()> {

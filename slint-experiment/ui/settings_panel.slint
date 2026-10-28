@@ -451,6 +451,7 @@ export component SettingsWindow inherits Window {
     // Start Strata from Suflyor's own install (true) or the found one (false).
     callback strata-choose(bool);
     callback strata-find-folder-clicked();
+    in-out property <string> strata-directory-input: "";
     callback strata-folder-selected(string);
     in-out property <bool> strata-update-supported: false;
     in-out property <string> strata-engine-version: "";
@@ -2341,6 +2342,19 @@ export component SettingsWindow inherits Window {
                     if root.active-tab == 11 : VerticalLayout {
                         spacing: 10px;
                         SettingsCard {
+                            title: @tr("Model storage");
+                            Text { text: @tr("Choose the Suflyor model folder on any mounted disk. AI, speech models and voices use it after restarting Suflyor. Existing files are not moved."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                            SettingsLineEdit { text <=> root.models-directory; placeholder-text: @tr("Absolute model folder path; empty uses the default locations"); }
+                            HorizontalLayout {
+                                alignment: start;
+                                spacing: Metrics.space-sm;
+                                Button { text: @tr("Save"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.models-directory-save(root.models-directory); } }
+                                Button { text: @tr("Choose folder…"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.models-directory-browse(); } }
+                            }
+                            if root.models-directory-status != "" : Text { text: root.models-directory-status == "Could not save the model folder. Choose an existing writable folder." ? @tr("Could not save the model folder. Choose an existing writable folder.") : @tr("Restart Suflyor to use the selected model folder. Existing files are not moved."); font-size: Metrics.font-caption; color: Theme.text-secondary; wrap: word-wrap; }
+                            Text { text: @tr("For existing Strata weights, select the parent of Strata-data here. The Strata folder below is for an installed engine, not weights alone."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                        }
+                        SettingsCard {
                         Text {
                             text: @tr("Where answers come from");
                             font-size: Metrics.font-label;
@@ -3083,6 +3097,11 @@ export component SettingsWindow inherits Window {
                                         if root.llama-installed : Text { text: @tr(".gguf file…"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { enabled: !root.builtin-busy && !root.strata-busy; mouse-cursor: pointer; clicked => { root.choose-custom-gguf-clicked(); } } }
                                         Text { text: @tr("Connect by address…"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { enabled: !root.builtin-busy && !root.strata-busy; mouse-cursor: pointer; clicked => { root.local-connect-auto = false; root.local-connect-open = !root.local-connect-open; } } }
                                         if !root.found-models-searching : Text { text: @tr("Search again"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { enabled: !root.builtin-busy && !root.strata-busy; mouse-cursor: pointer; clicked => { root.found-models-search(); } } }
+                                    }
+                                    HorizontalLayout {
+                                        spacing: Metrics.space-sm;
+                                        SettingsLineEdit { horizontal-stretch: 1; text <=> root.strata-directory-input; placeholder-text: @tr("Absolute Strata folder path"); }
+                                        Button { text: @tr("Use folder"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.strata-folder-selected(root.strata-directory-input); } }
                                     }
                                     if root.strata-update-supported : WrapBlock {
                                         Text { text: @tr("Installed Strata engine: {}", root.strata-engine-version); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }

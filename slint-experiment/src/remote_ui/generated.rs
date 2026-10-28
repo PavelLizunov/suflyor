@@ -3829,6 +3829,7 @@ struct SettingsWindowProps {
     strata_active: bool,
     strata_adopted: bool,
     strata_busy: bool,
+    strata_directory_input: slint::SharedString,
     strata_engine_version: slint::SharedString,
     strata_external: bool,
     strata_hardware_fits: bool,
@@ -4250,6 +4251,8 @@ impl Default for SettingsWindowProps {
             strata_active: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             strata_adopted: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
             strata_busy: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            strata_directory_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
             strata_engine_version: <slint::SharedString>::from_json(&serde_json::json!(""))
                 .unwrap_or_default(),
             strata_external: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
@@ -6199,6 +6202,15 @@ impl SettingsWindow {
     }
     pub fn get_strata_busy(&self) -> bool {
         self.0.props.borrow().strata_busy.clone()
+    }
+    pub fn set_strata_directory_input(&self, value: slint::SharedString) {
+        self.0
+            .base
+            .send_prop("strata-directory-input", value.to_json());
+        self.0.props.borrow_mut().strata_directory_input = value;
+    }
+    pub fn get_strata_directory_input(&self) -> slint::SharedString {
+        self.0.props.borrow().strata_directory_input.clone()
     }
     pub fn set_strata_engine_version(&self, value: slint::SharedString) {
         self.0
@@ -9560,6 +9572,10 @@ impl RemoteObject for SettingsWindowInner {
         m.insert("strata-adopted".into(), p.strata_adopted.to_json());
         m.insert("strata-busy".into(), p.strata_busy.to_json());
         m.insert(
+            "strata-directory-input".into(),
+            p.strata_directory_input.to_json(),
+        );
+        m.insert(
             "strata-engine-version".into(),
             p.strata_engine_version.to_json(),
         );
@@ -10366,6 +10382,10 @@ impl RemoteObject for SettingsWindowInner {
             "strata-active" => p.strata_active = <bool>::from_json(value).ok_or("bad value")?,
             "strata-adopted" => p.strata_adopted = <bool>::from_json(value).ok_or("bad value")?,
             "strata-busy" => p.strata_busy = <bool>::from_json(value).ok_or("bad value")?,
+            "strata-directory-input" => {
+                p.strata_directory_input =
+                    <slint::SharedString>::from_json(value).ok_or("bad value")?
+            }
             "strata-engine-version" => {
                 p.strata_engine_version =
                     <slint::SharedString>::from_json(value).ok_or("bad value")?

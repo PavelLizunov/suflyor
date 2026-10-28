@@ -1,4 +1,4 @@
-//! Linux x86_64 NeMo-Speech.cpp V3 diarization runner.
+//! Windows and Linux x86_64 NeMo-Speech.cpp V3 diarization runner.
 //! Spawns the native CLI out-of-process without linking runtime code into the host.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -41,10 +41,10 @@ fn try_acquire_install() -> Result<InstallGuard> {
     Ok(InstallGuard)
 }
 
-/// True on Linux x86_64 target architecture.
+/// Native runtime packages are available on Windows and Linux x86_64.
 #[must_use]
 pub fn supported() -> bool {
-    cfg!(all(target_os = "linux", target_arch = "x86_64"))
+    cfg!(all(any(windows, target_os = "linux"), target_arch = "x86_64"))
 }
 
 /// Expected path to the downloaded Nemotron GGUF model.
@@ -59,7 +59,11 @@ pub fn model_path() -> Option<PathBuf> {
 pub fn runtime_path() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let parent = exe.parent()?;
-    Some(parent.join("nemotron").join("bin").join("nemo-speech"))
+    let runtime = parent.join("nemotron").join("bin").join(if cfg!(windows) { "nemo-speech.exe" } else { "nemo-speech" });
+    // Keep the earlier Windows Nemotron RC layout usable as well.
+    if cfg!(windows) && !runtime.is_file() {
+        Some(parent.join("nemo-speech.exe"))
+    } else { Some(runtime) }
 }
 
 /// True only when the exact model file exists with size 107012128 and runtime executable exists.
@@ -262,7 +266,9 @@ fn run_pass(
         .arg(rttm)
         .arg("--model")
         .arg(model)
-        .env("GGML_BACKEND_DL_PATH", exe.parent().unwrap_or(Path::new(".")).join("../lib"))
+        .env("GGML_BACKEND_DL_PATH", if cfg!(windows) {
+            exe.parent().unwrap_or(Path::new(".")).to_path_buf()
+        } else { exe.parent().unwrap_or(Path::new(".")).join("../lib") })
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::from(err_file));
@@ -276,6 +282,8 @@ fn run_pass(
     crate::download::no_window(&mut cmd);
 
     let child = cmd.spawn().context("spawn Nemotron runtime")?;
+    #[cfg(windows)]
+    crate::local_ai::assign_to_lifetime_job(&child);
     let mut guard = ChildGuard::new(child);
     let started = Instant::now();
 

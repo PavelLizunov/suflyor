@@ -173,7 +173,7 @@ pub fn run_diarization_with_engine(
         let wav = crate::recorder::recordings_dir()?.join(session_id).join("system.wav");
         guard_wav_len(&wav)?;
         let duration = crate::session_audio::system_recording_ms(session_id).context("recording duration unavailable")?;
-        on_progress(Progress::Step("NVIDIA Nemotron 3: определение говорящих на GPU…".into()));
+        on_progress(Progress::Step("NVIDIA Nemotron 3: определение говорящих (GPU, затем CPU при ошибке)…".into()));
         let (segments, count, model_id) = crate::nemotron_diar::diarize(&wav, duration, cancel)?;
         return Ok(Diarization {
             session_id: session_id.into(), created_at_ms: crate::journal::now_unix_ms() as i64,

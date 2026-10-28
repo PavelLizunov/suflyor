@@ -2248,6 +2248,33 @@ msgstr "Воспроизвести запись"
 msgid "Pause recording"
 msgstr "Приостановить запись"
 
+msgid "Model storage"
+msgstr "Папка моделей"
+
+msgid "Choose the Suflyor model folder on any mounted disk. AI, speech models and voices use it after restarting Suflyor. Existing files are not moved."
+msgstr "Выберите папку моделей Суфлёра на любом подключённом диске. Модели ИИ, распознавания речи и голоса будут браться оттуда после перезапуска Суфлёра. Существующие файлы не переносятся."
+
+msgid "Absolute model folder path; empty uses the default locations"
+msgstr "Полный путь к папке моделей; пустое поле — стандартные папки"
+
+msgid "Choose folder…"
+msgstr "Выбрать папку…"
+
+msgid "Could not save the model folder. Choose an existing writable folder."
+msgstr "Не удалось сохранить папку моделей. Выберите существующую папку с правом записи."
+
+msgid "Restart Suflyor to use the selected model folder. Existing files are not moved."
+msgstr "Перезапустите Суфлёр, чтобы использовать выбранную папку моделей. Существующие файлы не переносятся."
+
+msgid "For existing Strata weights, select the parent of Strata-data here. The Strata folder below is for an installed engine, not weights alone."
+msgstr "Для уже скачанных весов Strata укажите здесь папку, содержащую Strata-data. Ниже выбирается установленный движок Strata, а не только веса."
+
+msgid "Absolute Strata folder path"
+msgstr "Полный путь к папке Strata"
+
+msgid "Use folder"
+msgstr "Использовать папку"
+
 msgid "Model speed"
 msgstr "Скорость модели"
 

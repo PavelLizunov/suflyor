@@ -193,7 +193,7 @@ Column {
     }
     C.StatusLine { text: root.tr(root.p("models-directory-status", "")) }
     C.SettingsCaption {
-      text: root.tr("For existing Strata weights, select the parent of Strata-data here. The Strata folder below is for an installed Linux engine, not weights alone.")
+      text: root.tr("For existing Strata weights, select the parent of Strata-data here. The Strata folder below is for an installed engine, not weights alone.")
     }
   }
 

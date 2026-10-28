@@ -5,11 +5,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$targetNames = @('overlay-host', 'suflyor-tts', 'suflyor-teratts')
+$targetNames = @('overlay-host', 'suflyor-tts', 'suflyor-teratts', 'nemo-speech')
 $targets = @{}
 foreach ($name in $targetNames) {
     $targets[[IO.Path]::GetFullPath((Join-Path $InstallDir "$name.exe"))] = $true
 }
+$targets[[IO.Path]::GetFullPath((Join-Path $InstallDir "nemotron\bin\nemo-speech.exe"))] = $true
 
 function Get-InstalledSuflyorProcess {
     $matches = @()

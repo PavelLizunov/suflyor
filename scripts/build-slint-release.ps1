@@ -22,7 +22,7 @@ $env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"
 
 Write-Host "[build-slint-release] cargo build --release --bin overlay-host" -ForegroundColor Cyan
 Set-Location $crate
-& cargo build --release --bin overlay-host
+& cargo build --locked --release --bin overlay-host
 if ($LASTEXITCODE -ne 0) {
     Write-Host "build failed: exit $LASTEXITCODE" -ForegroundColor Red
     exit $LASTEXITCODE
@@ -39,7 +39,7 @@ if (-not (Test-Path $exe)) {
 # lands beside overlay-host.exe (CARGO_TARGET_DIR reuses the cached sherpa lib).
 Write-Host "[build-slint-release] cargo build --release suflyor-tts (read-aloud sidecar)" -ForegroundColor Cyan
 $env:CARGO_TARGET_DIR = Join-Path $crate "target"
-& cargo build --release --manifest-path (Join-Path $projectRoot "suflyor-tts\Cargo.toml")
+& cargo build --locked --release --manifest-path (Join-Path $projectRoot "suflyor-tts\Cargo.toml")
 $sidecarExit = $LASTEXITCODE
 Remove-Item Env:\CARGO_TARGET_DIR -ErrorAction SilentlyContinue
 if ($sidecarExit -ne 0) {
@@ -58,7 +58,7 @@ Write-Host "  sidecar: $sidecar" -ForegroundColor Green
 # prebuilt is already cached by the host build.
 Write-Host "[build-slint-release] cargo build --release suflyor-teratts (Tera sidecar)" -ForegroundColor Cyan
 $env:CARGO_TARGET_DIR = Join-Path $crate "target"
-& cargo build --release --manifest-path (Join-Path $projectRoot "suflyor-teratts\Cargo.toml")
+& cargo build --locked --release --manifest-path (Join-Path $projectRoot "suflyor-teratts\Cargo.toml")
 $teraExit = $LASTEXITCODE
 Remove-Item Env:\CARGO_TARGET_DIR -ErrorAction SilentlyContinue
 if ($teraExit -ne 0) {
@@ -101,6 +101,9 @@ Remove-Item -LiteralPath $dmlDst -Force -ErrorAction SilentlyContinue
 Copy-Item -LiteralPath $dmlSource -Destination $dmlDst
 $dmlInfo = Get-Item -LiteralPath $dmlDst
 Write-Host "  DirectML.dll: $([math]::Round($dmlInfo.Length / 1MB, 2)) MB ($($dmlInfo.VersionInfo.FileVersion))" -ForegroundColor Green
+# Keep native diarization and its GPU/CPU DLLs outside the ONNX-bearing processes.
+& (Join-Path $PSScriptRoot "setup-windows-nemotron.ps1") -Destination (Join-Path $crate "target\release\nemotron")
+
 $info = Get-Item $exe
 $sizeMb = [math]::Round($info.Length / 1MB, 2)
 Write-Host ""

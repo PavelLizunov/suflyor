@@ -5247,6 +5247,13 @@
             "prim": "bool"
           }
         },
+        "strata-directory-input": {
+          "default": "",
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
         "strata-engine-version": {
           "default": "",
           "dir": "in-out",

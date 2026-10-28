@@ -71,6 +71,10 @@ Section "Main" SEC_MAIN
   ; startup. Older Windows 10 builds ship a system DirectML.dll without that
   ; export, so bundle the exact redistributable selected by ort at build time.
   File "..\slint-experiment\target\release\DirectML.dll"
+  ; Isolated Nemotron V3 runtime; model weights stay in selected model storage.
+  SetOutPath "$INSTDIR\nemotron"
+  File /r "..\slint-experiment\target\release\nemotron\*.*"
+  SetOutPath "$INSTDIR"
   ; App icon — used by the Start-menu + Desktop shortcuts and the
   ; Add/Remove Programs entry (the .exe also embeds it via build.rs).
   File "..\slint-experiment\assets\icon.ico"
@@ -112,6 +116,7 @@ Section "Uninstall"
   RMDir "$INSTDIR\translations\ru\LC_MESSAGES"
   RMDir "$INSTDIR\translations\ru"
   RMDir "$INSTDIR\translations"
+  RMDir /r "$INSTDIR\nemotron"
   RMDir "$INSTDIR"
   Delete "$SMPROGRAMS\suflyor-slint\suflyor (Slint).lnk"
   RMDir "$SMPROGRAMS\suflyor-slint"

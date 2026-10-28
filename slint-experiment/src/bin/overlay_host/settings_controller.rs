@@ -2263,6 +2263,7 @@ pub(crate) fn populate_token_status(
     win.set_ai_prompt_cache(c.ai_prompt_cache);
     win.set_ai_provider_index(ai_provider_index(&c.ai_provider, cfg!(target_os = "macos")));
     win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));
+    win.set_strata_directory_input(SharedString::from(c.ai_strata_dir.clone()));
     let managed_local_server =
         overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url);
     win.set_managed_local_server(managed_local_server);

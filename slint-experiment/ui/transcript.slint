@@ -445,13 +445,13 @@ export component TranscriptWindow inherits Window {
                         // Speaker-count stepper — the PRIMARY control («сколько собеседников»).
                         // V-2: the count is OTHER voices (diarization runs on system.wav; your
                         // mic is a separate channel), so «besides you».
-                        Text {
+                        if !root.use-nemotron : Text {
                             text: @tr("Speakers (besides you):");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                             vertical-alignment: center;
                         }
-                        Rectangle {
+                        if !root.use-nemotron : Rectangle {
                             width: 26px;
                             height: 28px;
                             border-radius: 6px;
@@ -466,7 +466,7 @@ export component TranscriptWindow inherits Window {
                                 vertical-alignment: center;
                             }
                         }
-                        Text {
+                        if !root.use-nemotron : Text {
                             text: root.speaker-count == 0 ? @tr("Auto") : "\{root.speaker-count}";
                             width: 22px;
                             font-size: Metrics.font-body;
@@ -475,7 +475,7 @@ export component TranscriptWindow inherits Window {
                             horizontal-alignment: center;
                             vertical-alignment: center;
                         }
-                        Rectangle {
+                        if !root.use-nemotron : Rectangle {
                             width: 26px;
                             height: 28px;
                             border-radius: 6px;
@@ -822,6 +822,8 @@ export component TranscriptWindow inherits Window {
                 if root.has-audio : HorizontalLayout {
                     spacing: Metrics.space-sm;
                     Rectangle {
+                        accessible-role: button;
+                        accessible-label: root.playing ? @tr("Pause recording") : @tr("Play recording");
                         width: 40px;
                         height: 28px;
                         horizontal-stretch: 0;

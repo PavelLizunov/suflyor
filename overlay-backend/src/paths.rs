@@ -48,9 +48,7 @@ pub fn save_model_storage_root(value: &str) -> std::io::Result<()> {
         std::io::Error::new(std::io::ErrorKind::NotFound, "configuration directory unavailable")
     })?;
     std::fs::create_dir_all(&data)?;
-    let temporary = data.join("models-dir.tmp");
-    write_private(&temporary, value.as_bytes())?;
-    std::fs::rename(temporary, data.join("models-dir"))
+    replace_private(&data.join("models-dir"), value.as_bytes())
 }
 
 /// Speech assets follow the chosen disk; old installations keep their paths.
@@ -104,6 +102,18 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     }
     #[cfg(not(unix))]
     std::fs::write(path, bytes)?;
+    Ok(())
+}
+
+/// Atomically replace a small machine-local file, including an existing Windows target.
+pub fn replace_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let parent = path.parent().ok_or_else(|| std::io::Error::new(
+        std::io::ErrorKind::InvalidInput, "file parent unavailable",
+    ))?;
+    let mut file = tempfile::NamedTempFile::new_in(parent)?;
+    file.write_all(bytes)?;
+    file.persist(path).map_err(|error| error.error)?;
     Ok(())
 }
 
