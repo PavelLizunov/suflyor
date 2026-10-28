@@ -310,9 +310,30 @@ fn labelled_secret(rest: &str, mid_word: bool) -> Option<(&'static str, usize)> 
     if let Some(len) = labelled_secret_len(rest, "apikey") {
         return Some(("apikey: <redacted>", len));
     }
-    // Config field names start mid-word for the labels above (`groq_api_key`).
+    // Config field names start mid-word for the labels above (`groq_api_key`, `hermes_api_key`, etc.).
     if let Some(len) = labelled_secret_len(rest, "groq_api_key") {
         return Some(("groq_api_key: <redacted>", len));
+    }
+    if let Some(len) = labelled_secret_len(rest, "hermes_api_key") {
+        return Some(("hermes_api_key: <redacted>", len));
+    }
+    if let Some(len) = labelled_secret_len(rest, "hermes_bridge_token") {
+        return Some(("hermes_bridge_token: <redacted>", len));
+    }
+    if let Some(len) = labelled_secret_len(rest, "stt_whisper_bearer") {
+        return Some(("stt_whisper_bearer: <redacted>", len));
+    }
+    if let Some(len) = labelled_secret_len(rest, "ai_local_bearer") {
+        return Some(("ai_local_bearer: <redacted>", len));
+    }
+    if let Some(len) = labelled_secret_len(rest, "ai_bearer") {
+        return Some(("ai_bearer: <redacted>", len));
+    }
+    if let Some(len) = labelled_secret_len(rest, "vision_bearer") {
+        return Some(("vision_bearer: <redacted>", len));
+    }
+    if let Some(len) = labelled_secret_len(rest, "vision_local_bearer") {
+        return Some(("vision_local_bearer: <redacted>", len));
     }
     let len = labelled_secret_len(rest, "password")?;
     Some(("password: <redacted>", len))
@@ -329,6 +350,12 @@ fn labelled_secret_len(rest: &str, label: &str) -> Option<usize> {
     }
     let after = rest.get(label.len()..)?;
     let unquoted = after.strip_prefix(['"', '\'']).unwrap_or(after);
+    if label != "bearer" {
+        let prefix = unquoted.trim_start_matches([' ', '\t']);
+        if !prefix.starts_with(':') && !prefix.starts_with('=') {
+            return None;
+        }
+    }
     let separated = unquoted.trim_start_matches([' ', '\t', ':', '=']);
     let value = separated.strip_prefix(['"', '\'']).unwrap_or(separated);
     if value.len() == after.len() {
@@ -1306,6 +1333,26 @@ mod tests {
         }
         // The prefix needs a word boundary, so identifiers stay readable.
         assert_eq!(redact_secrets("graph_hf_cache"), "graph_hf_cache");
+    }
+
+    #[test]
+    fn redact_secrets_masks_hermes_and_bearer_config_labels() {
+        for (sample, mask) in [
+            ("hermes_api_key: secret_value_123", "hermes_api_key: <redacted>"),
+            ("hermes_bridge_token: secret_value_123", "hermes_bridge_token: <redacted>"),
+            ("stt_whisper_bearer: secret_value_123", "stt_whisper_bearer: <redacted>"),
+            ("ai_bearer: secret_value_123", "ai_bearer: <redacted>"),
+            ("ai_local_bearer: secret_value_123", "ai_local_bearer: <redacted>"),
+            ("vision_bearer: secret_value_123", "vision_bearer: <redacted>"),
+            ("vision_local_bearer: secret_value_123", "vision_local_bearer: <redacted>"),
+        ] {
+            let redacted = redact_secrets(sample);
+            assert!(
+                !redacted.contains("secret_value_123"),
+                "leaked from {sample:?}: {redacted}"
+            );
+            assert!(redacted.contains(mask), "missing mask in {sample:?}: {redacted}");
+        }
     }
 
     #[test]

@@ -1,3 +1,8 @@
+## 2026-10-18 - Prefixed Credential Field Labels Bypassing Redaction
+**Vulnerability:** `labelled_secret` in `diagnostics.rs` only matched generic labels like `api_key` or `bearer` at word boundaries, but config field names with prefixes (such as `hermes_api_key`, `hermes_bridge_token`, `stt_whisper_bearer`, `ai_local_bearer`, `vision_bearer`) start before the generic suffix. When stepping forward character-by-character, `ends_in_word` evaluated to true on the trailing `_` of the prefix, setting `mid_word = true` and bypassing redaction, leaking plaintext secrets into exported logs and diagnostic reports.
+**Learning:** Generic credential label matchers that enforce non-mid-word boundaries skip prefixed config field names if the loop advances past the prefix before matching the suffix.
+**Prevention:** Explicitly register all prefixed config credential field labels (`hermes_api_key`, `hermes_bridge_token`, `stt_whisper_bearer`, etc.) in `labelled_secret` so matching occurs at the start of the full field identifier before `mid_word` is set.
+
 ## 2026-09-08 - Plaintext URL / Credential Leak in reqwest Error Log Formatting
 **Vulnerability:** Logging raw `reqwest::Error` instances via `{e:#}` in STT error handlers printed the full request URL into `overlay-host.log`. For HTTP endpoints with embedded credentials (`http://user:secret@host/v1`) or private LAN hostnames, transport failures leaked secrets into the shareable log file.
 **Learning:** `reqwest::Error`'s `Display` / `Debug` representation (`{e:#}`) embeds the target URL. Formatting `reqwest::Error` directly in log calls bypasses URL/credential redaction rules.
