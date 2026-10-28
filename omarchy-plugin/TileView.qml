@@ -15,7 +15,7 @@ Item {
   property bool dragging: false
   property bool autoCloseEnabled: false
   property bool autoClosePaused: false
-  property int idleSecondsRemaining: 0
+  property real idleSecondsRemaining: 0
   readonly property bool idleHeld: interactionPoint.active || dragging || openMenus > 0
     || answerScrollBar.pressed || selectionScrollBar.pressed
   function interact() { if (root.win) root.win.interacted() }
@@ -231,10 +231,11 @@ Item {
       }
       Tile.Label {
         objectName: "tile-close-countdown"
+        font.features: ({ "tnum": 1 })
         visible: root.autoCloseEnabled
         Layout.fillWidth: true
         text: root.autoClosePaused ? root.service.tr("Auto-close paused", [])
-          : root.service.tr("Closes in {} s", [root.idleSecondsRemaining])
+          : root.service.tr("Closes in {} s", [root.idleSecondsRemaining.toLocaleString(Qt.locale(root.service.locale), "f", 1)])
         color: !root.autoClosePaused && root.idleSecondsRemaining <= 5 ? Commons.Color.urgent : Commons.Color.muted
         font.pixelSize: Commons.Style.font.caption
         horizontalAlignment: Text.AlignRight

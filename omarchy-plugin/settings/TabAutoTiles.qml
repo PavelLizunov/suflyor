@@ -59,13 +59,13 @@ Column {
       C.SettingsSlider {
         minimum: 0
         maximum: 600
-        step: 10
+        step: 1
         value: root.win ? root.win.prop("tile-idle-seconds", 30) : 30
         onChanged: function(value) {
-          if (root.win && root.service) root.service.client.set(root.win.winId, "tile-idle-seconds", Math.round(value / 10) * 10)
+          if (root.win && root.service) root.service.client.set(root.win.winId, "tile-idle-seconds", Math.round(value))
         }
         onReleased: function(value) {
-          if (root.win && root.service) root.service.client.call(root.win.winId, "tile-idle-seconds-changed", [Math.round(value / 10) * 10])
+          if (root.win && root.service) root.service.client.call(root.win.winId, "tile-idle-seconds-changed", [Math.round(value)])
         }
       }
       C.SettingsCaption {

@@ -579,6 +579,7 @@ export component OverlayBarWindow inherits Window {
     in-out property <bool> aggressive-active: false;
     // The Omarchy shell owns its event-driven inactivity timer.
     in-out property <int> tile-idle-seconds: 30;
+    callback tile-idle-seconds-changed(int);
     // E10.2 — stealth on/off, so the 🎯 chip lights up + reflects restored state.
     in-out property <bool> stealth-active: false;
     changed stealth-active => {

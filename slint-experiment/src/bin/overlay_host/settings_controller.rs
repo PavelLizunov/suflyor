@@ -86,6 +86,21 @@ pub(crate) fn ai_provider_index(provider: &str, is_macos: bool) -> i32 {
     }
 }
 
+pub(crate) fn save_tile_idle_seconds(
+    cfg: &overlay_backend::config::SharedConfig,
+    seconds: i32,
+) -> i32 {
+    let seconds = seconds.clamp(0, 600) as u32;
+    let mut c = cfg.write();
+    let previous = c.omarchy_tile_idle_seconds;
+    c.omarchy_tile_idle_seconds = seconds;
+    if let Err(error) = config::save(&c) {
+        c.omarchy_tile_idle_seconds = previous;
+        eprintln!("[overlay-host] tile inactivity setting save failed: {error:#}");
+    }
+    c.omarchy_tile_idle_seconds.min(600) as i32
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn open_settings(
     state: &slint_replay::app_state::SharedState,
@@ -1151,21 +1166,7 @@ pub(crate) fn open_settings(
         let weak_settings = win.as_weak();
         let weak_bar = overlay_weak.clone();
         win.on_tile_idle_seconds_changed(move |seconds| {
-            let seconds = if seconds <= 0 {
-                0
-            } else {
-                seconds.clamp(10, 600) as u32
-            };
-            let saved = {
-                let mut c = cfg_c.write();
-                let previous = c.omarchy_tile_idle_seconds;
-                c.omarchy_tile_idle_seconds = seconds;
-                if let Err(error) = config::save(&c) {
-                    c.omarchy_tile_idle_seconds = previous;
-                    eprintln!("[overlay-host] tile inactivity setting save failed: {error:#}");
-                }
-                c.omarchy_tile_idle_seconds.min(600) as i32
-            };
+            let saved = save_tile_idle_seconds(&cfg_c, seconds);
             if let Some(w) = weak_settings.upgrade() {
                 w.set_tile_idle_seconds(saved);
             }

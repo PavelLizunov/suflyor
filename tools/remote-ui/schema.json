@@ -1558,6 +1558,19 @@
             "prim": "void"
           }
         },
+        "tile-idle-seconds-changed": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
         "timer-toggle-clicked": {
           "args": [],
           "ret": {

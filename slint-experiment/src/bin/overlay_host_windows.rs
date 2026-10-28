@@ -4003,6 +4003,22 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // The main panel and Settings edit the same persisted inactivity timeout.
+    {
+        let cfg_idle = cfg.clone();
+        let weak_bar = overlay.as_weak();
+        let settings_idle = settings.clone();
+        overlay.on_tile_idle_seconds_changed(move |seconds| {
+            let saved = save_tile_idle_seconds(&cfg_idle, seconds);
+            if let Some(bar) = weak_bar.upgrade() {
+                bar.set_tile_idle_seconds(saved);
+            }
+            if let Some(win) = settings_idle.borrow().as_ref() {
+                win.set_tile_idle_seconds(saved);
+            }
+        });
+    }
+
     // ===== Aggressive auto-tile toggle =====
     // Phase E6 v10 — surface backend's cfg.auto_tile_every_line as a
     // bar-level switch. Reads current value into chip state at startup,

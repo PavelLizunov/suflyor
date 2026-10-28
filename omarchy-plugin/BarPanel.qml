@@ -404,6 +404,29 @@ Ui.Panel {
               color: Commons.Color.muted
               font.pixelSize: Style.font.caption
             }
+            Readout {
+              width: parent.width
+              text: root.p("tile-idle-seconds", 30) > 0
+                ? root.tr("Close inactive tiles after {} s", [root.p("tile-idle-seconds", 30)])
+                : root.tr("Tile auto-close is off")
+              font.pixelSize: Style.font.caption
+              color: Commons.Color.muted
+            }
+            Bar.ButtonsRow {
+              objectName: "bar-tile-idle-presets"
+              Repeater {
+                model: [5, 10, 15, 30, 60, 0]
+                delegate: Action {
+                  required property int modelData
+                  text: modelData > 0 ? root.tr("{} s", [modelData]) : root.tr("Off")
+                  accessibleLabel: modelData > 0 ? root.tr("Close inactive tiles after {} s", [modelData]) : root.tr("Tile auto-close is off")
+                  selected: root.p("tile-idle-seconds", 30) === modelData
+                  checkable: true
+                  horizontalPadding: Style.spacing.sm
+                  onClicked: root.fire("tile-idle-seconds-changed", [modelData])
+                }
+              }
+            }
             Action {
               id: lockButton
               text: root.deep ? (root.compact || root.p("open-tiles", 0) > 0 ? root.tr("AI off") : root.tr("Local AI unloaded"))

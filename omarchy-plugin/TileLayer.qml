@@ -49,7 +49,7 @@ PanelWindow {
   property bool idleInitialized: false
   property bool closing: false
   property double idleDeadline: 0
-  property int idleRemaining: 0
+  property real idleRemaining: 0
 
   function restartIdle() {
     if (!idleInitialized || closing) return
@@ -80,9 +80,9 @@ PanelWindow {
   }
   Timer {
     id: countdown
-    interval: 1000
+    interval: 100
     repeat: true
-    onTriggered: surface.idleRemaining = Math.max(0, Math.min(surface.idleSeconds, Math.ceil((surface.idleDeadline - Date.now()) / 1000)))
+    onTriggered: surface.idleRemaining = Math.max(0, Math.min(surface.idleSeconds, (surface.idleDeadline - Date.now()) / 1000))
   }
   Connections {
     target: surface.win

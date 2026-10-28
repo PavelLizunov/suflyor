@@ -2016,6 +2016,7 @@ struct OverlayBarWindowCallbacks {
     summary_clicked: Handler<dyn FnMut() -> ()>,
     sys_toggle_clicked: Handler<dyn FnMut() -> ()>,
     text_ask_clicked: Handler<dyn FnMut() -> ()>,
+    tile_idle_seconds_changed: Handler<dyn FnMut(i32) -> ()>,
     timer_toggle_clicked: Handler<dyn FnMut() -> ()>,
 }
 pub struct OverlayBarWindowInner {
@@ -2697,6 +2698,20 @@ impl OverlayBarWindow {
         self.0.base.send_invoke("text-ask-clicked", vec![]);
         Default::default()
     }
+    pub fn on_tile_idle_seconds_changed(&self, f: impl FnMut(i32) -> () + 'static) {
+        let f: Rc<RefCell<dyn FnMut(i32) -> ()>> = Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().tile_idle_seconds_changed = Handler(Some(f));
+    }
+    pub fn invoke_tile_idle_seconds_changed(&self, arg0: i32) -> () {
+        let handler = self.0.callbacks.borrow().tile_idle_seconds_changed.clone();
+        if handler.is_set() {
+            return handler.call(|f| f(arg0)).unwrap_or_default();
+        }
+        self.0
+            .base
+            .send_invoke("tile-idle-seconds-changed", vec![arg0.to_json()]);
+        Default::default()
+    }
     pub fn on_timer_toggle_clicked(&self, f: impl FnMut() -> () + 'static) {
         let f: Rc<RefCell<dyn FnMut() -> ()>> = Rc::new(RefCell::new(f));
         self.0.callbacks.borrow_mut().timer_toggle_clicked = Handler(Some(f));
@@ -3060,6 +3075,15 @@ impl RemoteObject for OverlayBarWindowInner {
                 let handler = self.callbacks.borrow().text_ask_clicked.clone();
                 Ok(handler
                     .call(|f| f())
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
+            "tile-idle-seconds-changed" => {
+                let (a0,) = (<i32>::from_json(args.get(0).unwrap_or(&Value::Null))
+                    .ok_or("bad argument 0")?,);
+                let handler = self.callbacks.borrow().tile_idle_seconds_changed.clone();
+                Ok(handler
+                    .call(|f| f(a0))
                     .map(|v| v.to_json())
                     .unwrap_or(Value::Null))
             }

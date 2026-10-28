@@ -52,13 +52,16 @@ both full and compact panels. On means more frequent speech-triggered answers;
 off retains questions and trigger words, not a blanket disable of auto-tiles.
 The detector enable and listening/deep-lock controls remain independent.
 
-Settings > Auto-tiles exposes the Omarchy-only inactivity timeout: 30 seconds by
-default, 10–600 seconds or 0 to disable. `omarchy_tile_idle_seconds` is persisted
+The main panel offers one-click inactivity presets: 5, 10, 15, 30, 60 seconds or
+Off, in both full and compact mode. Settings > Auto-tiles exposes the exact
+Omarchy-only timeout: 30 seconds by default, 1–600 seconds or 0 to disable. `omarchy_tile_idle_seconds` is persisted
 by the existing host configuration. Clicks, scrolling, selection, pointer movement,
 dragging and edits restart the deadline. Generation, term lookup, voice recording,
 read-aloud, open menus, held gestures and unsent question/memory edits suspend it;
 when that activity ends the full interval starts again. Each tile shows the
-remaining seconds in its footer, or an explicit paused state. The final five
+remaining seconds with one decimal place in its footer, updated every 100 ms
+only while the deadline is active, or an explicit paused state. Tabular digits
+keep the text stable. The one-shot close timer remains independent of display updates. The final five
 seconds use the theme urgency color. Hidden/concealed tiles do not expire. Expiry invokes the existing close callback, including its request
 cancellation, conversation cleanup and live-tile removal; it does not merely hide
 a QML card. Windows/macOS native tile lifetimes are unchanged.
