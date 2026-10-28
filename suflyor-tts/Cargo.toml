@@ -23,7 +23,7 @@ default = ["sherpa-onnx/static"]
 cuda = ["sherpa-onnx/shared"]
 
 [dependencies]
-sherpa-onnx = { version = "=1.13.5", default-features = false }
+sherpa-onnx = { version = "=2.0.0", default-features = false }
 anyhow = "1"
 base64 = "0.23"
 dirs = "7"
