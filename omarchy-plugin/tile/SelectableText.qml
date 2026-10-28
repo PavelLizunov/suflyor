@@ -64,6 +64,15 @@ Controls.TextArea {
     palette.highlight: Commons.Color.menu.selectedBackground
     palette.highlightedText: Commons.Color.menu.selectedText
     background: Rectangle {
+      // Keep the themed menu as wide as its visible localized items.
+      implicitWidth: {
+        var width = Commons.Style.space(200)
+        for (var i = 0; i < menu.count; i++) {
+          var item = menu.itemAt(i)
+          if (item && item.visible) width = Math.max(width, item.implicitWidth + menu.leftPadding + menu.rightPadding)
+        }
+        return width
+      }
       color: Commons.Color.menu.background
       border.color: Commons.Color.menu.border
       radius: Commons.Style.cornerRadius

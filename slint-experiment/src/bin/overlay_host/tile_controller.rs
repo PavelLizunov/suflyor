@@ -714,6 +714,12 @@ impl OverlayBarBridge {
         if !SlintUiBridge::tile_request_open(self, &label) {
             return;
         }
+        let text = if let Some(name) = payload.get("tool").and_then(|v| v.as_str()) {
+            let detail = payload.get("detail").and_then(|v| v.as_str()).unwrap_or_default();
+            tool_status_body("", &text, name, detail, self.cfg.read().ui_is_ru())
+        } else {
+            text
+        };
         let requests = self.auto_requests.clone();
         let _ = slint::invoke_from_event_loop(move || {
             if !requests

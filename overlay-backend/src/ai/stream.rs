@@ -38,8 +38,8 @@ pub fn stream_chat_endpoint(
     stream_chat_endpoint_with(endpoint, messages, max_tokens, true, false)
 }
 
-/// Fast live answers use one streamed request, not an agent lookup loop.
-/// The normal path retains the user's tool and reasoning preferences.
+/// Fast live answers skip tools unless the user enabled web lookup.
+/// Web-enabled fast answers keep the short format and use the bounded agent path.
 pub fn stream_live_chat_endpoint(
     endpoint: AiEndpoint,
     messages: Vec<ChatMessage>,
@@ -54,13 +54,13 @@ pub fn stream_live_chat_endpoint(
         } else {
             max_tokens
         },
-        !fast,
+        !fast || super::tools::web_enabled(),
         fast,
     )
 }
 
 /// Same stream without the local model's tools: one request, answer only.
-/// Auto-tiles use it — they never ran tools and must start answering at once.
+/// Auto-tiles use it while web lookup is off; definitions always stay on this path.
 /// `no_think` turns a local model's reasoning off for this request whatever
 /// the reasoning setting says (fast answers on a call).
 pub fn stream_chat_endpoint_plain(
@@ -233,6 +233,7 @@ pub(crate) async fn stream_inner(
             endpoint,
             messages,
             max_tokens,
+            no_think,
             tx,
             request_id,
             request_started_at,

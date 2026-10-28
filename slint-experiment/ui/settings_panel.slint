@@ -3184,7 +3184,7 @@ export component SettingsWindow inherits Window {
                                         padding-left: Metrics.space-sm;
                                         DarkCheck { text: @tr("Also search the web (DuckDuckGo)"); checked <=> root.ai-web-search; enabled: root.ai-agent-tools; toggled(v) => { root.ai-web-search-changed(v); } }
                                     }
-                                    Text { text: @tr("The model looks things up when it needs to. Web queries go to DuckDuckGo."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                    Text { text: @tr("Fast answers can search the web and read public pages when enabled: at most two lookups with a 15-second lookup budget. The model decides when to look up; web queries go to DuckDuckGo. A server without tool support answers without web lookup."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                                     if root.ai-local-vision-available : DarkCheck { text: @tr("Local model supports images (vision)"); checked <=> root.ai-local-vision; toggled(v) => { root.ai-local-vision-changed(v); } }
                                     if root.llama-installed && root.managed-local-server && !root.ai-local-vision-available : WrapBlock {
                                         Text {

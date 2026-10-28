@@ -3,7 +3,7 @@
 //! No tool writes anything or runs a program.
 //!
 //! Web search uses DuckDuckGo's lite page: it needs no key. Its full HTML
-//! page answers scripted requests with a captcha, the lite page does not.
+//! page often challenges automated clients; the lite page may do so too.
 
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -23,7 +23,7 @@ pub(crate) fn agent_enabled() -> bool {
     AGENT_TOOLS.load(Ordering::Relaxed)
 }
 
-pub(crate) fn web_enabled() -> bool {
+pub fn web_enabled() -> bool {
     WEB_TOOLS.load(Ordering::Relaxed)
 }
 
@@ -88,7 +88,7 @@ pub(crate) fn definitions(web: bool, today: &str) -> Value {
             "type": "function",
             "function": {
                 "name": OPEN_URL,
-                "description": "Open a web page (a link from web_search) and return its text, up to about 4000 characters.",
+                "description": "Fetch a public web page from web_search or an explicit user URL and return its readable text, up to about 4000 characters. No browser or JavaScript is started.",
                 "parameters": {
                     "type": "object",
                     "properties": { "url": { "type": "string", "description": "An http or https link" } },
@@ -244,11 +244,19 @@ async fn web_search(query: &str) -> anyhow::Result<String> {
         "https://lite.duckduckgo.com/lite/",
         &[("q", cap_chars(query, 200))],
     )?;
-    let resp = web_client().get(url).send().await?;
+    let mut resp = web_client().get(url).send().await?;
     if !resp.status().is_success() {
         anyhow::bail!("HTTP {}", resp.status().as_u16());
     }
-    let html = resp.text().await?;
+    let mut bytes = Vec::new();
+    while let Some(chunk) = resp.chunk().await? {
+        let remaining = PAGE_BYTES.saturating_sub(bytes.len());
+        bytes.extend_from_slice(&chunk[..chunk.len().min(remaining)]);
+        if bytes.len() >= PAGE_BYTES {
+            break;
+        }
+    }
+    let html = String::from_utf8_lossy(&bytes);
     let hits = parse_ddg_lite(&html);
     if hits.is_empty() {
         if html.contains("bots use DuckDuckGo") {

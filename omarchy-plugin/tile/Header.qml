@@ -96,6 +96,15 @@ RowLayout {
         palette.highlight: Commons.Color.menu.selectedBackground
         palette.highlightedText: Commons.Color.menu.selectedText
         background: Rectangle {
+          // Basic.Menu relies on its background for intrinsic width; ListView has none.
+          implicitWidth: {
+            var width = Commons.Style.space(200)
+            for (var i = 0; i < actions.count; i++) {
+              var item = actions.itemAt(i)
+              if (item && item.visible) width = Math.max(width, item.implicitWidth + actions.leftPadding + actions.rightPadding)
+            }
+            return width
+          }
           color: Commons.Color.menu.background
           border.color: Commons.Color.menu.border
           radius: Commons.Style.cornerRadius

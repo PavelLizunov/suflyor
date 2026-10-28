@@ -137,12 +137,21 @@ async fn stream_auto_tile_answer(
         {
             return Ok((String::new(), "cancelled".into()));
         }
-        let mut rx = ai::stream_chat_endpoint_plain(
-            endpoint.clone(),
-            ask.messages.clone(),
-            ask.max_tokens,
-            ask.no_think,
-        );
+        let mut rx = if ai::tools::web_enabled() {
+            ai::stream_live_chat_endpoint(
+                endpoint.clone(),
+                ask.messages.clone(),
+                ask.max_tokens,
+                ask.no_think,
+            )
+        } else {
+            ai::stream_chat_endpoint_plain(
+                endpoint.clone(),
+                ask.messages.clone(),
+                ask.max_tokens,
+                ask.no_think,
+            )
+        };
         let mut answer = String::new();
         let mut last_push: Option<Instant> = None;
         let outcome = loop {
@@ -174,6 +183,14 @@ async fn stream_auto_tile_answer(
                             serde_json::json!({ "label": label, "text": answer }),
                         );
                         last_push = Some(Instant::now());
+                    }
+                }
+                Some(ai::AiEvent::Tool { name, detail }) => {
+                    if let Some(label) = label {
+                        events.emit(
+                            AUTO_TILE_STREAM_CHANNEL,
+                            serde_json::json!({ "label": label, "text": answer, "tool": name, "detail": detail }),
+                        );
                     }
                 }
                 // A newer question replaced this one before it started.
@@ -1335,7 +1352,10 @@ async fn maybe_spawn_auto_tile(
         "m={model};l={response_language};p={is_mlx};f={fast};h={prompt_hash:x};k={kw_hash:x};q={}",
         normalized_full.chars().take(200).collect::<String>(),
     );
-    let cache_hit: Option<String> = {
+    // Current web facts must not reuse a ten-minute answer cached without a lookup.
+    let cache_hit: Option<String> = if is_local && ai::tools::web_enabled() {
+        None
+    } else {
         let mut s = lock(&rt);
         let now = Instant::now();
         let ttl = Duration::from_secs(QA_CACHE_TTL_SECS);

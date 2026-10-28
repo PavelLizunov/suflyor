@@ -58,6 +58,25 @@ unavailable; Settings > Diagnostics reports conflicts. The two Super chords are
 separate from bare F9 and require both press and release bindings. Registration
 is not evidence of a completed recording/transcription/answer.
 
+## Web lookup
+
+The local model uses the existing read-only `web_search` (DuckDuckGo Lite) and
+`open_url` page-text fetcher when both agent tools and web search are enabled.
+Fast mode no longer overrides this opt-in: manual/PTT/follow-up and automatic
+answers may use at most two web calls within a 15-second lookup budget, then
+produce the same short streamed answer without reasoning. Model generation is
+not included in that lookup budget. With web off, fast answers still use one
+plain request. Definitions retain their tool-free path.
+
+The model chooses whether a lookup is needed; ordinary knowledge questions are
+not forcibly sent to search. Explicit search/URL requests are described in its
+system guidance. The existing public-address, redirect and DNS restrictions
+remain in place. Page fetches do not start a browser or JavaScript. Search and
+page text are bounded; a captcha, timeout or server without tool support is
+not a successful web lookup. Automatic answers with web enabled bypass the
+ten-minute answer cache, and lookup progress reaches the tile. No live search,
+model tool-call quality or latency acceptance is implied by installation.
+
 ## Model speed
 
 Settings > AI providers > Model speed measures the already loaded local model.

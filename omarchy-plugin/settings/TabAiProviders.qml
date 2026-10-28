@@ -630,7 +630,7 @@ Column {
           enabled: root.p("ai-agent-tools", false)
           onToggled: function(checked) { root.choose("ai-web-search", checked, "ai-web-search-changed") }
         }
-        C.SettingsCaption { text: root.tr("The model looks things up when it needs to. Web queries go to DuckDuckGo.") }
+        C.SettingsCaption { text: root.tr("Fast answers can search the web and read public pages when enabled: at most two lookups with a 15-second lookup budget. The model decides when to look up; web queries go to DuckDuckGo. A server without tool support answers without web lookup.") }
         C.DarkCheck {
           visible: root.p("ai-local-vision-available", true)
           text: root.tr("Local model supports images (vision)")
