@@ -23,6 +23,15 @@ removes its bar entry, so a later enable uses the manifest's default position.
 The plugin service is deliberately not `keepLoaded`: Omarchy's plugin reload
 must replace its QML, not retain old code.
 
+## Quit and start again
+
+Confirming Quit stops the daemon and suspends the plugin's automatic recovery.
+The muted bar mark stays in its saved position; click it to start Suflyor again.
+This intentional-stop state survives plugin reloads for the current desktop login
+in `$XDG_RUNTIME_DIR/suflyor-omarchy-stopped`. A fresh login may autostart normally.
+Unexpected disconnects still use the existing bounded recovery. The installer's
+private `--command quit` remains a restart request, not a user-facing Quit.
+
 ## Capture hiding
 
 Stealth applies a named Hyprland rule to Suflyor card-sized surfaces and a

@@ -6,8 +6,8 @@ import Quickshell.Io
 import qs.Commons as Commons
 
 // Headless owner of suflyord and of the window mirror every Suflyor view reads.
-// Starts the daemon like the telebar service starts omagramd: with a cleared
-// environment, restarted after an exit, never twice.
+// Reconnects after a shell reload and recovers unexpected daemon exits.
+// An explicit Quit stays stopped until the user starts Suflyor again.
 Item {
   id: root
 
@@ -16,6 +16,7 @@ Item {
     target: "io.github.pavellizunov.suflyor.status"
     function status(): string {
       return JSON.stringify({uiSource: String(Qt.resolvedUrl(".")), running: root.running,
+        stopped: root.daemonStopped,
         stealthRequested: root.stealthRequested, stealthRuleApplied: root.stealthRuleApplied,
         windows: remoteClient.windowList.map(function(w) { return {id: w.winId, type: w.type, visible: w.visible, geometry: w.geometry} })})
     }
@@ -52,6 +53,42 @@ Item {
   }
   // Three starts without a connection: the binary is missing or broken.
   property bool daemonFailed: false
+  property bool daemonStopped: false
+  property bool stopStateLoaded: false
+  readonly property string stopStatePath: remoteClient.runtimeDir.charAt(0) === "/"
+    ? remoteClient.runtimeDir + "/suflyor-omarchy-stopped" : ""
+
+  function stopDaemon() {
+    root.daemonStopped = true
+    if (root.stopStatePath) stopState.setText("stopped\n")
+  }
+
+  function startDaemon() {
+    root.daemonStopped = false
+    root.daemonFailed = false
+    root.startAttempts = 0
+    root.lastStart = 0
+    if (root.stopStatePath) stopState.setText("running\n")
+    root.ensureDaemon()
+  }
+
+  // Runtime state survives plugin reloads, but a fresh desktop session can autostart.
+  FileView {
+    id: stopState
+    path: root.stopStatePath
+    printErrors: false
+    blockWrites: true
+    atomicWrites: true
+    onLoaded: {
+      root.daemonStopped = text().trim() === "stopped"
+      root.stopStateLoaded = true
+    }
+    onLoadFailed: function(error) {
+      root.stopStateLoaded = true
+      if (error !== FileViewError.FileNotFound) root.daemonFailed = true
+    }
+    onSaveFailed: root.daemonFailed = true
+  }
   property int startAttempts: 0
   property double lastStart: 0
 
@@ -69,7 +106,7 @@ Item {
   // suflyord runs detached, so a shell restart does not end a session; its singleton
   // lock makes a second start exit at once. Started only while nobody answers.
   function ensureDaemon() {
-    if (remoteClient.connected || root.daemonFailed) return
+    if (!root.stopStateLoaded || root.daemonStopped || remoteClient.connected || root.daemonFailed) return
     var now = Date.now()
     if (now - root.lastStart < 10000) return
     if (root.startAttempts >= 3) {
@@ -95,6 +132,7 @@ Item {
     id: remoteClient
     locale: root.shellLocale
     onConnectedChanged: if (connected) root.startAttempts = 0
+    onQuitRequested: root.stopDaemon()
   }
 
   // One layer per tile; Variants keeps a tile's surface while others open and close.
@@ -120,7 +158,7 @@ Item {
   Timer {
     interval: 2000
     repeat: true
-    running: !remoteClient.connected && !root.daemonFailed
+    running: root.stopStateLoaded && !root.daemonStopped && !remoteClient.connected && !root.daemonFailed
     onTriggered: root.ensureDaemon()
   }
 

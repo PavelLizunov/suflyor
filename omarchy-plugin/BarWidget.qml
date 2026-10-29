@@ -27,7 +27,8 @@ Ui.BarWidget {
   function p(name, fallback) { return root.barWin ? root.barWin.prop(name, fallback) : fallback }
   function tr(msgid, args) { return root.effectiveService ? root.effectiveService.tr(msgid, args) : msgid }
 
-  readonly property bool stealthRequested: !effectiveService || !effectiveService.running || effectiveService.stealthRequested
+  readonly property bool stealthRequested: !!effectiveService && !effectiveService.daemonStopped
+    && (!effectiveService.running || effectiveService.stealthRequested)
   readonly property var hostWindow: root.QsWindow.window
   readonly property point markPosition: {
     markWatcher.transform
@@ -70,6 +71,7 @@ Ui.BarWidget {
 
   readonly property string tooltip: {
     if (!effectiveService) return "Suflyor"
+    if (effectiveService.daemonStopped) return root.tr("Suflyor is stopped. Click to start.")
     if (effectiveService.daemonFailed) return root.tr("Suflyor could not start. Reinstall the plugin, then restart the shell.")
     if (!running) return root.tr("Suflyor is starting…")
     var lines = [sessionActive && p("session-name", "") ? p("session-name", "") : "Suflyor"]
@@ -111,6 +113,10 @@ Ui.BarWidget {
   }
 
   function toggle() {
+    if (root.effectiveService && root.effectiveService.daemonStopped) {
+      root.effectiveService.startDaemon()
+      return
+    }
     if (opened) close()
     else open()
   }

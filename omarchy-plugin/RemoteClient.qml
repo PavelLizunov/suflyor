@@ -35,6 +35,7 @@ Item {
   }
 
   signal invoked(var win, string name, var args)
+  signal quitRequested()
   signal moveRequested(string winId, real dx, real dy)
 
   function byType(type) {
@@ -60,6 +61,7 @@ Item {
 
   // Fires a callback in suflyord. `done(value, error)` runs when the callback returns.
   function call(win, name, args, done) {
+    if (name === "quit-confirm") client.quitRequested()
     var w = client.windows[win]
     if (w && w.type === "TileWindow") w.interacted()
     var message = { t: "call", win: win, name: name, args: args || [] }
