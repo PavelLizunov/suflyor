@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-099 Provider checkpoint fails a stale local-activation source guard   Severity: P2   Status: Open
+Evidence: exact c2e30ef166f547f9d75e7b6592a18c5cbc05d994 CI run 40912175958 fails `windows_can_download_local_assets_without_selecting_local_answers` on both Windows and macOS at `macos_settings_guard.rs:177`. The test searches for removed `activate_answers` syntax. The explicit activation callback now selects local after readiness, while download-only completion remains separate and provider-neutral. This source-guard failure is not a demonstrated application startup failure. Linux's earlier selected tests did not include this target.
+Fix: anchor the guard to the explicit activation callback and its ready branch, retain cloud/fallback readiness assertions, and strengthen the download-only block's prohibition on selecting a provider. Target-worker startup remains unverified because management access is unavailable.
+Closed by:
+
 ### D-098 Omarchy restarts Suflyor after an explicit Quit   Severity: P1   Status: Open
 Evidence: v0.39.0 `Service.qml::ensureDaemon` restarts whenever the shell socket disconnects. `quit-confirm` calls the host's normal event-loop shutdown, but the plugin has no intentional-stop state. Its two-second retry timer therefore launches another daemon after Quit. The installed daemon is not owned by a restarting systemd service. The current user reports the repeated launch.
 Fix: latch explicit Quit before sending the callback, persist that latch in the desktop runtime directory across plugin reloads, and resume only on an explicit widget click. Keep ordinary crash recovery and installer restart distinct. For immediate relief, the plugin was disabled through `disabledPlugins` without deleting its saved bar entry and the existing private Quit command was sent. No crash/restart replay or runtime acceptance has been performed.

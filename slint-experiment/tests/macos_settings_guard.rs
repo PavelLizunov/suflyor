@@ -173,14 +173,24 @@ fn windows_can_download_local_assets_without_selecting_local_answers() {
     assert!(!card.contains("root.ai-provider-changed(1)"));
     assert!(card.contains("root.builtin-model-use(root.fallback-model-present ? 1 : root.legacy-model-present ? 0 : 2)"));
     let activation = local
-        .split_once("let activate_answers = requested_choice.is_some()")
-        .unwrap()
+        .split_once("win.on_local_engine_activate(move |index| {")
+        .expect("explicit engine activation callback")
         .1;
-    assert!(activation.contains("if activate_answers {"));
-    assert!(activation.contains("c.ai_provider = \"local\".to_string()"));
-    assert!(activation.contains("switch_commits_choice(outcome)"));
-    assert!(activation.contains("ModelSwitch::FallbackStarted"));
-    assert!(activation.contains("ManagedModel::Fallback12B"));
+    let (readiness, commit) = activation
+        .split_once("let ready = overlay_backend::local_ai::switch_has_ready_server(outcome)")
+        .expect("activation requires a ready server")
+        .1
+        .split_once("if ready {")
+        .expect("only ready activation commits the choice");
+    assert!(readiness.contains("cfg_t.read().ai_provider == \"local\""));
+    assert!(readiness.contains("switch_commits_choice(outcome)"));
+    let commit = commit
+        .split_once("started = children;")
+        .expect("successful activation adopts its server")
+        .0;
+    assert!(commit.contains("c.ai_provider = \"local\".to_string()"));
+    assert!(commit.contains("ModelSwitch::FallbackStarted"));
+    assert!(commit.contains("ManagedModel::Fallback12B"));
     assert!(card.contains(
         "root.legacy-model-present || root.fallback-model-present || root.quality-model-present"
     ));
@@ -206,6 +216,10 @@ fn windows_can_download_local_assets_without_selecting_local_answers() {
         .0
         .contains("return;"));
     for forbidden in [
+        "c.ai_provider =",
+        "select_local_provider",
+        "apply_strata_choice",
+        "invoke_local_engine_activate",
         "local_ai_servers",
         "set_ai_provider_index",
         "set_stt_provider_index",
