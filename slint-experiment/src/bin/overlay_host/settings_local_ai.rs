@@ -680,6 +680,9 @@ pub(crate) fn wire_local_ai(
                 && w.get_ai_local_model_profile_index() == want_model.index()
                 && !w.get_ai_local_custom_active()
             {
+                if cfg_c.read().ai_provider != "local" {
+                    w.invoke_builtin_model_use(index);
+                }
                 return;
             }
             if !w.get_managed_local_server() {
@@ -848,6 +851,8 @@ pub(crate) fn wire_local_ai(
                 if switched {
                     let mut c = cfg_t.write();
                     overlay_backend::local_ai::apply_llama_choice(&mut c, &root, &target);
+                    c.ai_provider = "local".into();
+                    overlay_backend::ai::set_local_no_think(!c.ai_local_thinking);
                     if let Err(e) = overlay_backend::config::save(&c) {
                         eprintln!("[overlay-host] quality switch save failed: {e:#}");
                     }
@@ -916,6 +921,7 @@ pub(crate) fn wire_local_ai(
                             .to_string()
                         };
                         w.set_quality_status(SharedString::from(status));
+                        w.set_ai_local_model_input(cfg_done.read().ai_local_model.clone().into());
                         let (local_vision, vision_provider, base_url, model) = {
                             let c = cfg_done.read();
                             refresh_local_context_controls(&w, &c);
@@ -2450,6 +2456,10 @@ pub(crate) fn refresh_local_engine_state(
     cfg: &overlay_backend::config::Config,
 ) {
     super::settings_model_speed::refresh(win, cfg);
+    win.set_ai_provider_index(super::settings_controller::ai_provider_index(
+        &cfg.ai_provider,
+        cfg!(target_os = "macos"),
+    ));
     let root = overlay_backend::local_ai::default_root();
     win.set_llama_installed(overlay_backend::local_ai::llama_engine_installed(&root));
     win.set_strata_installed(overlay_backend::local_ai::own_strata_installed(&root));
@@ -2663,17 +2673,20 @@ pub(crate) fn wire_strata(
                 w.invoke_local_engine_activate(3);
                 return;
             }
-            let leaving_builtin = {
-                let mut c = cfg_c.write();
-                let leaving =
-                    overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url);
-                c.ai_local_model = server.pick_model(&c.ai_local_model);
-                leaving
+            let (leaving_builtin, model) = {
+                let c = cfg_c.read();
+                (
+                    overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url),
+                    server.pick_model(&c.ai_local_model),
+                )
             };
-            // The URL save stores both, stops a running Strata, and reloads
-            // the model list.
+            w.set_ai_local_base_url_input(server.base_url.clone().into());
+            w.set_ai_local_model_input(model.into());
+            w.invoke_ai_local_connect();
+            if cfg_c.read().ai_local_base_url != server.base_url {
+                return;
+            }
             w.set_local_engine_index(2);
-            w.invoke_ai_local_base_url_save(SharedString::from(server.base_url.clone()));
             // The built-in engine holds the GPU and RAM the other server needs.
             // Under the lifecycle lock (a running summary or a switch keeps
             // it), and only while the choice still stands.
@@ -2699,8 +2712,6 @@ pub(crate) fn wire_strata(
                     let _ = overlay_backend::local_ai::free_llama_port(&root);
                 });
             }
-            // A real request, not a claim: the test line shows the answer.
-            w.invoke_ai_local_test_clicked();
         });
     }
 
@@ -2964,6 +2975,7 @@ pub(crate) fn wire_strata(
                             .unwrap_or_else(|| "strata".to_string());
                         let mut c = cfg_t.write();
                         overlay_backend::local_ai::apply_strata_choice(&mut c, &model);
+                        overlay_backend::ai::set_local_no_think(!c.ai_local_thinking);
                         if let Err(e) = overlay_backend::config::save(&c) {
                             eprintln!("[overlay-host] Strata choice save failed: {e:#}");
                         }
@@ -3015,7 +3027,6 @@ pub(crate) fn wire_strata(
                     }
                 } else {
                     overlay_backend::local_ai::stop_strata();
-                    let activate_answers = requested_choice.is_some();
                     let choice = requested_choice.unwrap_or_else(|| {
                         let mut target = cfg_t.read().clone();
                         target.ai_local_base_url = overlay_backend::local_ai::LLAMA_BASE_URL.to_string();
@@ -3045,10 +3056,8 @@ pub(crate) fn wire_strata(
                         let mut c = cfg_t.write();
                         overlay_backend::local_ai::apply_llama_choice(&mut c, &root, &choice);
                         overlay_backend::local_ai::repair_managed_model_state_after_verification(&mut c, &root);
-                        if activate_answers {
-                            c.ai_provider = "local".to_string();
-                            overlay_backend::ai::set_local_no_think(!c.ai_local_thinking);
-                        }
+                        c.ai_provider = "local".to_string();
+                        overlay_backend::ai::set_local_no_think(!c.ai_local_thinking);
                         if let Err(e) = overlay_backend::config::save(&c) {
                             eprintln!("[overlay-host] built-in engine save failed: {e:#}");
                         }

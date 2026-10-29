@@ -38,6 +38,7 @@ pub mod diar_install;
 pub mod diarize;
 pub(crate) mod download;
 pub mod events;
+pub mod external_connections;
 pub mod health;
 pub mod hermes_install;
 pub(crate) mod http_log;

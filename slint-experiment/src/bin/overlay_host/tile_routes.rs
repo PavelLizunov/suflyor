@@ -151,6 +151,27 @@ mod tests {
     }
 
     #[test]
+    fn text_route_tracks_local_selection_but_explicit_escalation_stays_cloud() {
+        let mut config = overlay_backend::config::Config {
+            ai_provider: "local".into(),
+            ai_local_model: "local-one".into(),
+            ai_local_base_url: "http://localhost:9191/v1".into(),
+            ai_model: "cloud-live".into(),
+            prep_model: "cloud-prep".into(),
+            ai_bearer: "synthetic".into(),
+            ..Default::default()
+        };
+        let route = super::live_route(AskRoute::Text);
+        assert_eq!(route.get().endpoint(&config).model, "local-one");
+        config.ai_local_model = "local-two".into();
+        assert_eq!(route.get().endpoint(&config).model, "local-two");
+        route.set(AskRoute::Cloud);
+        assert_eq!(route.get().endpoint(&config).model, "cloud-prep");
+        assert!(!route.get().endpoint(&config).is_local);
+        assert_eq!(config.ai_provider, "local");
+    }
+
+    #[test]
     fn missing_vision_route_never_falls_back_to_the_text_model() {
         let mut config = overlay_backend::config::Config::defaults();
         config.ai_provider = "codex".into();

@@ -604,6 +604,75 @@ fn header<'a>(captured: &'a CapturedRequest, name: &str) -> Option<&'a str> {
 }
 
 #[tokio::test]
+async fn selected_local_endpoint_reaches_only_local_model_for_completion_and_stream() {
+    let _stream_guard = STREAM_TEST_LOCK.lock().await;
+    for streaming in [false, true] {
+        let (url, captured) = serve_one_capture(
+            if streaming {
+                "data: {\"choices\":[{\"delta\":{\"content\":\"synthetic\"},\"finish_reason\":\"stop\"}]}\n\n"
+            } else {
+                r#"{"choices":[{"message":{"content":"synthetic"},"finish_reason":"stop"}]}"#
+            },
+            if streaming {
+                "text/event-stream"
+            } else {
+                "application/json"
+            },
+        );
+        let config = crate::config::Config {
+            ai_provider: "local".into(),
+            ai_local_base_url: url,
+            ai_local_model: "intended-local".into(),
+            ai_local_bearer: "local-fixture".into(),
+            ai_base_url: "http://127.0.0.1:1/unused-cloud".into(),
+            ai_model: "wrong-cloud".into(),
+            ai_bearer: "cloud-fixture".into(),
+            ..Default::default()
+        };
+        let endpoint = config.ai_endpoint(false);
+        let messages = vec![ChatMessage {
+            role: "user".into(),
+            content: MessageContent::Text("synthetic route check".into()),
+        }];
+        if streaming {
+            let mut events = stream_chat_endpoint(endpoint, messages, 8);
+            let mut text = String::new();
+            while let Some(event) =
+                tokio::time::timeout(std::time::Duration::from_secs(5), events.recv())
+                    .await
+                    .unwrap()
+            {
+                match event {
+                    AiEvent::Delta { text: delta } => text.push_str(&delta),
+                    AiEvent::Error { message } => panic!("route fixture failed: {message}"),
+                    _ => {}
+                }
+            }
+            assert_eq!(text, "synthetic");
+        } else {
+            assert_eq!(
+                complete_with_usage_endpoint(&endpoint, messages, 8)
+                    .await
+                    .unwrap()
+                    .0,
+                "synthetic"
+            );
+        }
+        let request = captured
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+        assert_eq!(request.path, "/chat/completions");
+        assert_eq!(
+            header(&request, "authorization"),
+            Some("Bearer local-fixture")
+        );
+        let body: Value = serde_json::from_str(&request.body).unwrap();
+        assert_eq!(body["model"], "intended-local");
+        assert!(!request.body.contains("wrong-cloud"));
+    }
+}
+
+#[tokio::test]
 async fn direct_openai_uses_responses_contract() {
     let (url, captured) = serve_one_capture(
         r#"{"status":"completed","output":[{"content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":4,"output_tokens":1}}"#,

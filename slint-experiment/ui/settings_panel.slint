@@ -233,6 +233,13 @@ export component SettingsWindow inherits Window {
     callback hermes-prepare-profile(string);
 
     // Phase E10.1 — cloud model dropdown from GET {ai_base_url}/models.
+    in-out property <string> ai-model-input: "";
+    in-out property <[string]> external-connections: [];
+    in-out property <int> external-connection-index: 0;
+    in-out property <bool> external-connections-busy: false;
+    in-out property <string> external-connections-status: "";
+    callback external-connections-find();
+    callback external-connection-use(int);
     in-out property <[string]> ai-models: [];
     in-out property <int> ai-model-index: 0;
     // E9 — experimental prompt-caching toggle (default off).
@@ -335,6 +342,7 @@ export component SettingsWindow inherits Window {
     in-out property <string> ai-local-base-url-input: "";
     // Phase E10.1 — model dropdown populated from GET {base_url}/models so the
     // user picks a loaded model instead of typing its id.
+    in-out property <string> ai-local-model-input: "";
     in-out property <[string]> ai-local-models: [];
     in-out property <int> ai-local-model-index: 0;
     in-out property <bool> managed-local-server: false;
@@ -568,6 +576,7 @@ export component SettingsWindow inherits Window {
     callback download-vision12b-clicked();
     callback update-engine-clicked();
     callback ai-local-test-clicked();
+    callback ai-local-connect();
     // Phase E6 v27 — connection test buttons (AI bridge + STT).
     in-out property <string> ai-bridge-test-result: "";
     in-out property <string> stt-test-result: "";
@@ -2393,6 +2402,16 @@ export component SettingsWindow inherits Window {
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                         }
+                        WrapBlock {
+                            Text { text: @tr("Reuse a connection from OpenCode or Pi"); font-size: Metrics.font-label; color: Theme.text-primary; wrap: word-wrap; }
+                            Text { text: @tr("Imports compatible API profiles from global client settings. Does not run an agent or reuse subscription OAuth. Applying copies the selected API credential into Suflyor's server settings."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                            Button { text: @tr("Find connections"); enabled: !root.external-connections-busy; clicked => { root.external-connections-find(); } }
+                            if root.external-connections.length > 0 : WrapBlock {
+                                SettingsComboBox { model: root.external-connections; current-index <=> root.external-connection-index; }
+                                Button { text: @tr("Use connection"); enabled: !root.external-connections-busy && !root.builtin-busy && !root.strata-busy; clicked => { root.external-connection-use(root.external-connection-index); } }
+                            }
+                            if root.external-connections-status != "" : Text { text: root.external-connections-status; font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                        }
                         // ===== TYPE selector — gates everything below =====
                         SettingsComboBox {
                             model: Platform.is-macos ? [
@@ -2538,7 +2557,7 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: @tr("Base URL (Claude bridge endpoint):");
+                                text: @tr("API base URL (OpenAI-compatible):");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
@@ -2558,7 +2577,7 @@ export component SettingsWindow inherits Window {
                                 }
                             }
                             Text {
-                                text: @tr("AI model (Claude full ID):");
+                                text: @tr("Model ID:");
                                 font-size: Metrics.font-label;
                                 color: Theme.text-secondary;
                                 wrap: word-wrap;
@@ -2581,6 +2600,12 @@ export component SettingsWindow inherits Window {
                                     }
                                 }
                             }
+                            HorizontalLayout {
+                                spacing: Metrics.space-sm;
+                                SettingsLineEdit { text <=> root.ai-model-input; placeholder-text: @tr("Model ID (manual entry is supported)"); horizontal-stretch: 1; }
+                                Button { text: @tr("Save model"); clicked => { root.ai-model-selected(root.ai-model-input); } }
+                            }
+                            Text { text: @tr("Model discovery is optional. Enter the exact model ID if the server does not list models."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                             if root.ai-models.length == 0 : Text {
                                 text: @tr("No models found — check the bridge URL/token, then press refresh.");
                                 font-size: Metrics.font-caption;
@@ -3150,6 +3175,8 @@ export component SettingsWindow inherits Window {
                                     }
                                     if root.found-models-searching : Text { text: @tr("Looking for models on this PC…"); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                                     if root.local-connect-open : WrapBlock {
+                                        SettingsLineEdit { text <=> root.ai-local-model-input; placeholder-text: @tr("Model ID (manual entry is supported)"); }
+                                        Text { text: @tr("Model discovery is optional. Enter the exact model ID if the server does not list models."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                                         SettingsLineEdit { placeholder-text: @tr("local URL — http://127.0.0.1:11434/v1 (Ollama)"); text <=> root.ai-local-base-url-input; }
                                         SettingsLineEdit { placeholder-text: @tr("local server bearer token (optional)"); text <=> root.ai-local-bearer-input; input-type: password; }
                                         Text {
@@ -3169,9 +3196,7 @@ export component SettingsWindow inherits Window {
                                                 text: @tr("Connect");
                                                 enabled: !root.builtin-busy && !root.strata-busy;
                                                 clicked => {
-                                                    if root.ai-local-bearer-input != "" { root.ai-local-bearer-save(root.ai-local-bearer-input); root.ai-local-bearer-input = ""; }
-                                                    root.ai-local-base-url-save(root.ai-local-base-url-input);
-                                                    root.ai-local-test-clicked();
+                                                    root.ai-local-connect();
                                                 }
                                             }
                                         }
@@ -3353,6 +3378,11 @@ export component SettingsWindow inherits Window {
                                             root.ai-local-models-refresh();
                                         }
                                     }
+                                }
+                                HorizontalLayout {
+                                    spacing: Metrics.space-sm;
+                                    SettingsLineEdit { text <=> root.ai-local-model-input; placeholder-text: @tr("Model ID (manual entry is supported)"); horizontal-stretch: 1; }
+                                    Button { text: @tr("Connect"); clicked => { root.ai-local-connect(); } }
                                 }
                                 if root.ai-local-models.length == 0 : Text {
                                     text: @tr("No models found — start the local server, then press refresh.");

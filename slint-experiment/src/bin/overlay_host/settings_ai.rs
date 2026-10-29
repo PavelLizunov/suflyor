@@ -453,6 +453,37 @@ pub(crate) enum ModelTarget {
     Local,
 }
 
+fn model_snapshot_matches(
+    c: &overlay_backend::config::Config,
+    target: ModelTarget,
+    url: &str,
+    bearer: &str,
+    model: &str,
+) -> bool {
+    let current = match target {
+        ModelTarget::Cloud => (
+            c.ai_base_url.as_str(),
+            c.ai_bearer.as_str(),
+            c.ai_model.as_str(),
+        ),
+        ModelTarget::Local => (
+            c.ai_local_base_url.as_str(),
+            c.ai_local_bearer.as_str(),
+            c.ai_local_model.as_str(),
+        ),
+    };
+    current == (url, bearer, model)
+}
+
+fn model_catalog(mut models: Vec<String>, saved: &str) -> (Vec<String>, i32) {
+    models.retain(|model| !model.trim().is_empty());
+    if !models.iter().any(|model| model == saved) {
+        models.insert(0, saved.to_string());
+    }
+    let index = models.iter().position(|model| model == saved).unwrap_or(0) as i32;
+    (models, index)
+}
+
 /// Fetch a server's model list (`GET {base_url}/models`) off-thread and populate
 /// the matching Settings dropdown (cloud bridge or local), pre-selecting the
 /// saved model (kept in the list even if the server is down so it's never lost).
@@ -497,11 +528,11 @@ pub(crate) fn fetch_models(
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            let mut list = models;
-            if !saved.is_empty() && !list.iter().any(|m| m == &saved) {
-                list.insert(0, saved.clone());
+            let c = cfg.read();
+            if !model_snapshot_matches(&c, target, &base_url, &bearer, &saved) {
+                return;
             }
-            let idx = list.iter().position(|m| m == &saved).unwrap_or(0) as i32;
+            let (list, idx) = model_catalog(models, &saved);
             let shared: Vec<SharedString> = list.into_iter().map(SharedString::from).collect();
             let model = ModelRc::new(VecModel::from(shared));
             match target {
@@ -544,6 +575,57 @@ pub(crate) fn refresh_local_model_resource_warning(
     });
 }
 
+fn refresh_local_connection(win: &SettingsWindow, c: &overlay_backend::config::Config) {
+    let root = overlay_backend::local_ai::default_root();
+    win.set_managed_local_server(overlay_backend::local_ai::is_managed_llama_endpoint(
+        &c.ai_local_base_url,
+    ));
+    win.set_ai_local_quality(c.ai_local_quality);
+    win.set_ai_local_model_profile_index(
+        overlay_backend::local_ai::ManagedModel::from_config(&c.ai_local_model, c.ai_local_quality)
+            .index(),
+    );
+    win.set_ai_local_base_url_input(c.ai_local_base_url.clone().into());
+    win.set_ai_local_model_input(c.ai_local_model.clone().into());
+    win.set_ai_local_vision(c.ai_local_vision);
+    win.set_vision_same_available(c.ai_local_vision);
+    win.set_ai_local_vision_available(overlay_backend::local_ai::local_vision_available(c, &root));
+    win.set_vision_provider_index(super::settings_vision::vision_provider_index_from_id(
+        &c.vision_provider,
+    ));
+    refresh_local_model_resource_warning(
+        win,
+        root,
+        c.ai_local_base_url.clone(),
+        c.ai_local_model.clone(),
+    );
+    refresh_local_engine_state(win, c);
+}
+
+fn select_catalog_model(win: &SettingsWindow, target: ModelTarget, saved: &str) {
+    let current = match target {
+        ModelTarget::Cloud => win.get_ai_models(),
+        ModelTarget::Local => win.get_ai_local_models(),
+    };
+    let (models, index) = model_catalog(current.iter().map(|v| v.to_string()).collect(), saved);
+    let models = ModelRc::new(VecModel::from(
+        models
+            .into_iter()
+            .map(SharedString::from)
+            .collect::<Vec<_>>(),
+    ));
+    match target {
+        ModelTarget::Cloud => {
+            win.set_ai_models(models);
+            win.set_ai_model_index(index);
+        }
+        ModelTarget::Local => {
+            win.set_ai_local_models(models);
+            win.set_ai_local_model_index(index);
+        }
+    }
+}
+
 /// Wire the AI-tab Settings callbacks onto the Settings window — both the cloud
 /// bridge and the local server. Moved VERBATIM out of `open_settings` (P1 domain
 /// split) — same captures, same behavior. Needs only `win` (for the closures +
@@ -556,6 +638,167 @@ pub(crate) fn wire_ai_settings(
     cfg: &overlay_backend::config::SharedConfig,
     overlay_weak: &slint::Weak<OverlayBarWindow>,
 ) {
+    {
+        let cfg_c = cfg.clone();
+        let weak = win.as_weak();
+        let overlay = overlay_weak.clone();
+        win.on_ai_local_connect(move || {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            let url = overlay_backend::ai::normalize_compatible_base_url(
+                &w.get_ai_local_base_url_input(),
+            );
+            let model = w.get_ai_local_model_input().trim().to_string();
+            let mut current = cfg_c.write();
+            let Ok(url) = url else {
+                w.set_ai_local_test_result(SharedString::from(if current.ui_is_ru() {
+                    "Нужен корректный HTTP(S) адрес API."
+                } else {
+                    "Enter a valid HTTP(S) API URL."
+                }));
+                return;
+            };
+            if model.is_empty() {
+                w.set_ai_local_test_result(SharedString::from(if current.ui_is_ru() {
+                    "Укажите ID модели или выберите её из списка."
+                } else {
+                    "Enter a model ID or select one from the list."
+                }));
+                return;
+            }
+            if current.ai_provider == "mlx"
+                && current.vision_provider != "mlx"
+                && !overlay_backend::mlx_runtime::stop_if_idle()
+            {
+                return;
+            }
+            let mut next = current.clone();
+            next.ai_provider = "local".into();
+            if next.ai_local_base_url != url || next.ai_local_model != model {
+                next.ai_local_prep_model.clear();
+            }
+            next.ai_local_base_url = url;
+            next.ai_local_model = model;
+            let token = w.get_ai_local_bearer_input();
+            if !token.trim().is_empty() {
+                next.ai_local_bearer = token.trim().to_string();
+            }
+            if overlay_backend::config::save(&next).is_err() {
+                w.set_ai_local_test_result(SharedString::from(if current.ui_is_ru() {
+                    "Не удалось сохранить подключение."
+                } else {
+                    "Could not save the connection."
+                }));
+                return;
+            }
+            *current = next;
+            overlay_backend::ai::set_local_no_think(!current.ai_local_thinking);
+            let saved = current.clone();
+            drop(current);
+            if !overlay_backend::local_ai::is_managed_strata_endpoint(&saved.ai_local_base_url)
+                && overlay_backend::local_ai::strata_running()
+            {
+                overlay_backend::local_ai::abort_strata_start();
+                std::thread::spawn(overlay_backend::local_ai::stop_strata);
+            }
+            w.set_ai_local_bearer_input(SharedString::default());
+            w.set_ai_provider_index(1);
+            refresh_local_connection(&w, &saved);
+            select_catalog_model(&w, ModelTarget::Local, &saved.ai_local_model);
+            fetch_models(weak.clone(), cfg_c.clone(), ModelTarget::Local);
+            if let Some(o) = overlay.upgrade() {
+                refresh_lock_chip(&o, &cfg_c);
+                o.set_active_stack(active_stack_label(&cfg_c.read()).into());
+            }
+            w.invoke_ai_local_test_clicked();
+        });
+    }
+    let connections = std::sync::Arc::new(std::sync::Mutex::new(Vec::<
+        overlay_backend::external_connections::Connection,
+    >::new()));
+    {
+        let connections = connections.clone();
+        let weak = win.as_weak();
+        let cfg = cfg.clone();
+        win.on_external_connections_find(move || {
+            let Some(w) = weak.upgrade() else { return; };
+            if w.get_external_connections_busy() { return; }
+            let ru = cfg.read().ui_is_ru();
+            w.set_external_connections_busy(true);
+            w.set_external_connections_status(SharedString::from(if ru { "Читаю настройки клиентов…" } else { "Reading client settings…" }));
+            let weak = weak.clone();
+            let connections = connections.clone();
+            std::thread::spawn(move || {
+                let result = overlay_backend::external_connections::discover();
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(w) = weak.upgrade() else { return; };
+                    w.set_external_connections_busy(false);
+                    let (found, message) = match result {
+                        Ok(found) if found.is_empty() => (found, if ru { "Совместимых подключений нет. Поддерживаются Chat Completions с API-ключом; OAuth и команды получения ключей не импортируются." } else { "No compatible connections. Chat Completions API-key profiles are supported; OAuth and key commands are not imported." }),
+                        Ok(found) => (found, if ru { "Выберите подключение и нажмите «Использовать подключение»." } else { "Select a connection, then click Use connection." }),
+                        Err(_) => (Vec::new(), if ru { "Не удалось прочитать настройки клиентов." } else { "Could not read client settings." }),
+                    };
+                    let labels = found.iter().map(|c| SharedString::from(c.label.clone())).collect::<Vec<_>>();
+                    *connections.lock().unwrap_or_else(|p| p.into_inner()) = found;
+                    w.set_external_connections(ModelRc::new(VecModel::from(labels)));
+                    w.set_external_connection_index(0);
+                    w.set_external_connections_status(message.into());
+                });
+            });
+        });
+    }
+    {
+        let cfg = cfg.clone();
+        let weak = win.as_weak();
+        let overlay = overlay_weak.clone();
+        win.on_external_connection_use(move |index| {
+            let Some(w) = weak.upgrade() else {
+                return;
+            };
+            let Ok(index) = usize::try_from(index) else {
+                return;
+            };
+            let connections = connections.lock().unwrap_or_else(|p| p.into_inner());
+            let Some(connection) = connections.get(index) else {
+                return;
+            };
+            let mut current = cfg.write();
+            let ru = current.ui_is_ru();
+            let next = overlay_backend::external_connections::apply(connection, &current);
+            if current.ai_provider == "mlx"
+                && current.vision_provider != "mlx"
+                && !overlay_backend::mlx_runtime::stop_if_idle()
+            {
+                return;
+            }
+            if overlay_backend::config::save(&next).is_err() {
+                w.set_external_connections_status(SharedString::from(if ru {
+                    "Не удалось сохранить подключение."
+                } else {
+                    "Could not save the connection."
+                }));
+                return;
+            }
+            *current = next;
+            overlay_backend::ai::set_local_no_think(
+                current.ai_provider == "local" && !current.ai_local_thinking,
+            );
+            overlay_backend::ai::set_reasoning_efforts(current.reasoning_efforts());
+            drop(current);
+            drop(connections);
+            populate_token_status(&w, &cfg);
+            if let Some(o) = overlay.upgrade() {
+                refresh_lock_chip(&o, &cfg);
+                o.set_active_stack(active_stack_label(&cfg.read()).into());
+            }
+            w.set_external_connections_status(SharedString::from(if ru {
+                "Подключение сохранено. Проверка запроса ещё не выполнялась."
+            } else {
+                "Connection saved. A request has not been tested yet."
+            }));
+        });
+    }
     // Phase E6 — token + AI bridge config save wires.
     {
         let cfg_c = cfg.clone();
@@ -655,7 +898,16 @@ pub(crate) fn wire_ai_settings(
         let cfg_c = cfg.clone();
         let weak = win.as_weak();
         win.on_ai_base_url_save(move |new_value| {
-            let trimmed = new_value.trim().to_string();
+            let Ok(trimmed) = overlay_backend::ai::normalize_compatible_base_url(&new_value) else {
+                if let Some(w) = weak.upgrade() {
+                    w.set_ai_bridge_test_result(SharedString::from(if cfg_c.read().ui_is_ru() {
+                        "Укажите HTTP(S) адрес API без параметров и пароля."
+                    } else {
+                        "Enter an HTTP(S) API URL without query parameters or a password."
+                    }));
+                }
+                return;
+            };
             {
                 let mut c = cfg_c.write();
                 c.ai_base_url = trimmed.clone();
@@ -670,6 +922,9 @@ pub(crate) fn wire_ai_settings(
             // Log presence only — ai_base_url often embeds the user's LAN
             // IP / proxy port (network-topology leak). See ai.rs no-log note.
             eprintln!("[overlay-host] ai_base_url saved ({} chars)", trimmed.len());
+            if let Some(w) = weak.upgrade() {
+                w.set_ai_base_url_input(trimmed.into());
+            }
             // #E10.1 — re-query the cloud model list against the new URL.
             fetch_models(weak.clone(), cfg_c.clone(), ModelTarget::Cloud);
         });
@@ -743,6 +998,7 @@ pub(crate) fn wire_ai_settings(
     }
     {
         let cfg_c = cfg.clone();
+        let weak = win.as_weak();
         win.on_ai_model_selected(move |new_value| {
             let trimmed = new_value.trim().to_string();
             if trimmed.is_empty() {
@@ -756,7 +1012,11 @@ pub(crate) fn wire_ai_settings(
                     return;
                 }
             }
-            eprintln!("[overlay-host] ai_model selected: {trimmed}");
+            if let Some(w) = weak.upgrade() {
+                select_catalog_model(&w, ModelTarget::Cloud, &trimmed);
+                w.set_ai_model_input(trimmed.into());
+                w.set_ai_bridge_test_result(SharedString::default());
+            }
         });
     }
     {
@@ -1223,7 +1483,16 @@ pub(crate) fn wire_ai_settings(
         let weak = win.as_weak();
         let overlay = overlay_weak.clone();
         win.on_ai_local_base_url_save(move |v| {
-            let base_url = v.trim().to_string();
+            let Ok(base_url) = overlay_backend::ai::normalize_compatible_base_url(&v) else {
+                if let Some(w) = weak.upgrade() {
+                    w.set_ai_local_test_result(SharedString::from(if cfg_c.read().ui_is_ru() {
+                        "Укажите HTTP(S) адрес API без параметров и пароля."
+                    } else {
+                        "Enter an HTTP(S) API URL without query parameters or a password."
+                    }));
+                }
+                return;
+            };
             let root = overlay_backend::local_ai::default_root();
             // Strata pins tens of GB of RAM; leaving it for another server stops it.
             if !overlay_backend::local_ai::is_managed_strata_endpoint(&base_url)
@@ -1232,16 +1501,9 @@ pub(crate) fn wire_ai_settings(
                 overlay_backend::local_ai::abort_strata_start();
                 std::thread::spawn(overlay_backend::local_ai::stop_strata);
             }
-            let (
-                managed,
-                quality,
-                model,
-                saved_base_url,
-                local_vision,
-                vision_provider,
-                vision_available,
-            ) = {
-                let mut c = cfg_c.write();
+            let saved = {
+                let mut current = cfg_c.write();
+                let mut c = current.clone();
                 c.ai_local_base_url = base_url.clone();
                 let managed = overlay_backend::local_ai::is_managed_llama_endpoint(&base_url);
                 if managed {
@@ -1254,34 +1516,14 @@ pub(crate) fn wire_ai_settings(
                     eprintln!("[overlay-host] ai_local_base_url save failed: {e:#}");
                     return;
                 }
-                (
-                    managed,
-                    c.ai_local_quality,
-                    c.ai_local_model.clone(),
-                    c.ai_local_base_url.clone(),
-                    c.ai_local_vision,
-                    c.vision_provider.clone(),
-                    overlay_backend::local_ai::local_vision_available(&c, &root),
-                )
+                *current = c.clone();
+                c
             };
             if let Some(o) = overlay.upgrade() {
                 refresh_lock_chip(&o, &cfg_c);
             }
             if let Some(w) = weak.upgrade() {
-                w.set_managed_local_server(managed);
-                w.set_ai_local_quality(quality);
-                w.set_ai_local_model_profile_index(
-                    overlay_backend::local_ai::ManagedModel::from_config(&model, quality).index(),
-                );
-                w.set_ai_local_base_url_input(SharedString::from(saved_base_url.clone()));
-                w.set_ai_local_vision(local_vision);
-                w.set_vision_same_available(local_vision);
-                w.set_ai_local_vision_available(vision_available);
-                w.set_vision_provider_index(super::settings_vision::vision_provider_index_from_id(
-                    &vision_provider,
-                ));
-                refresh_local_model_resource_warning(&w, root, saved_base_url, model);
-                refresh_local_engine_state(&w, &cfg_c.read());
+                refresh_local_connection(&w, &saved);
             }
             // #E10.1 — re-query models against the new URL.
             fetch_models(weak.clone(), cfg_c.clone(), ModelTarget::Local);
@@ -1315,6 +1557,8 @@ pub(crate) fn wire_ai_settings(
                 c.ai_local_base_url.clone()
             };
             if let Some(w) = weak.upgrade() {
+                w.set_ai_local_model_input(SharedString::from(m.clone()));
+                select_catalog_model(&w, ModelTarget::Local, &m);
                 refresh_local_engine_state(&w, &cfg_c.read());
                 refresh_local_model_resource_warning(
                     &w,
@@ -1395,7 +1639,7 @@ pub(crate) fn wire_ai_settings(
             let Some(w) = weak.upgrade() else {
                 return;
             };
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "linux"))]
             let generation = super::settings_local_ai::begin_now_check(&w);
             w.set_ai_local_test_result(SharedString::from(if cfg_c.read().ui_is_ru() { "Проверка…" } else { "Checking…" }));
             let (base_url, bearer, model, ui_is_ru) = {
@@ -1408,6 +1652,7 @@ pub(crate) fn wire_ai_settings(
                 )
             };
             let weak_res = w.as_weak();
+            let cfg_done = cfg_c.clone();
             std::thread::spawn(move || {
                 let mut working = false;
                 let msg = match tokio::runtime::Builder::new_current_thread()
@@ -1416,7 +1661,7 @@ pub(crate) fn wire_ai_settings(
                 {
                     Ok(rt) => {
                         match rt.block_on(overlay_backend::ai::test_connection(
-                            base_url, bearer, model,
+                            base_url.clone(), bearer.clone(), model.clone(),
                         )) {
                             Ok(_) => {
                                 working = true;
@@ -1451,7 +1696,11 @@ pub(crate) fn wire_ai_settings(
                     Err(_) => if ui_is_ru { "Не удалось проверить подключение." } else { "Could not check the connection." }.to_string(),
                 };
                 let _ = slint::invoke_from_event_loop(move || {
-                    #[cfg(windows)]
+                    let c = cfg_done.read();
+                    if (&c.ai_local_base_url, &c.ai_local_bearer, &c.ai_local_model)
+                        != (&base_url, &bearer, &model) { return; }
+                    drop(c);
+                    #[cfg(any(windows, target_os = "linux"))]
                     if !super::settings_local_ai::now_check_is_current(generation) {
                         return;
                     }
@@ -1474,12 +1723,68 @@ pub(crate) fn wire_ai_settings(
         win.on_ai_bridge_test_clicked(move || {
             let ru = cfg_c.read().ui_is_ru();
             let Some(w) = weak.upgrade() else { return };
+            {
+                let mut current = cfg_c.write();
+                if current.ai_provider == "cloud" {
+                    let url = overlay_backend::ai::normalize_compatible_base_url(
+                        &w.get_ai_base_url_input(),
+                    );
+                    let model = w.get_ai_model_input().trim().to_string();
+                    let Ok(url) = url else {
+                        w.set_ai_bridge_test_result(
+                            if ru {
+                                "Нужен корректный HTTP(S) адрес API."
+                            } else {
+                                "Enter a valid HTTP(S) API URL."
+                            }
+                            .into(),
+                        );
+                        return;
+                    };
+                    if model.is_empty() {
+                        w.set_ai_bridge_test_result(
+                            if ru {
+                                "Укажите ID модели или выберите её из списка."
+                            } else {
+                                "Enter a model ID or select one from the list."
+                            }
+                            .into(),
+                        );
+                        return;
+                    }
+                    let mut next = current.clone();
+                    next.ai_base_url = url;
+                    next.ai_model = model;
+                    let token = w.get_ai_bearer_input();
+                    if !token.trim().is_empty() {
+                        next.ai_bearer = token.trim().into();
+                    }
+                    if overlay_backend::config::save(&next).is_err() {
+                        w.set_ai_bridge_test_result(
+                            if ru {
+                                "Не удалось сохранить подключение."
+                            } else {
+                                "Could not save the connection."
+                            }
+                            .into(),
+                        );
+                        return;
+                    }
+                    *current = next;
+                    overlay_backend::ai::set_reasoning_efforts(current.reasoning_efforts());
+                    w.set_ai_base_url_input(current.ai_base_url.clone().into());
+                    w.set_ai_model_input(current.ai_model.clone().into());
+                    w.set_ai_bearer_input(SharedString::default());
+                    select_catalog_model(&w, ModelTarget::Cloud, &current.ai_model);
+                }
+            }
             w.set_ai_bridge_test_result(SharedString::from(if ru {
                 "Проверка…"
             } else {
                 "Checking…"
             }));
             let endpoint = cfg_c.read().ai_endpoint(false);
+            let cfg_done = cfg_c.clone();
             let weak_res = w.as_weak();
             std::thread::spawn(move || {
                 let msg = match tokio::runtime::Builder::new_current_thread()
@@ -1487,7 +1792,9 @@ pub(crate) fn wire_ai_settings(
                     .build()
                 {
                     Ok(rt) => {
-                        match rt.block_on(overlay_backend::ai::test_connection_endpoint(endpoint)) {
+                        match rt.block_on(overlay_backend::ai::test_connection_endpoint(
+                            endpoint.clone(),
+                        )) {
                             Ok(_) => if ru {
                                 "Подключение работает"
                             } else {
@@ -1500,6 +1807,14 @@ pub(crate) fn wire_ai_settings(
                     Err(e) => super::status_copy::check_not_started(ru, &e),
                 };
                 let _ = slint::invoke_from_event_loop(move || {
+                    let current = cfg_done.read().ai_endpoint(false);
+                    if current.protocol != endpoint.protocol
+                        || current.base_url != endpoint.base_url
+                        || current.model != endpoint.model
+                        || current.bearer != endpoint.bearer
+                    {
+                        return;
+                    }
                     if let Some(w) = weak_res.upgrade() {
                         w.set_ai_bridge_test_result(SharedString::from(msg));
                     }
@@ -1514,6 +1829,67 @@ mod tests {
     #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
     use super::*;
+
+    #[test]
+    fn old_catalog_snapshot_is_rejected_after_any_connection_field_changes() {
+        let mut c = overlay_backend::config::Config {
+            ai_local_base_url: "http://localhost:9191/v1".into(),
+            ai_local_bearer: "synthetic".into(),
+            ai_local_model: "chosen".into(),
+            ..Default::default()
+        };
+        let url = c.ai_local_base_url.clone();
+        assert!(model_snapshot_matches(
+            &c,
+            ModelTarget::Local,
+            &url,
+            "synthetic",
+            "chosen"
+        ));
+        assert!(!model_snapshot_matches(
+            &c,
+            ModelTarget::Cloud,
+            &url,
+            "synthetic",
+            "chosen"
+        ));
+        c.ai_local_model = "new-model".into();
+        assert!(!model_snapshot_matches(
+            &c,
+            ModelTarget::Local,
+            &url,
+            "synthetic",
+            "chosen"
+        ));
+        c.ai_local_model = "chosen".into();
+        c.ai_local_bearer = "new-token".into();
+        assert!(!model_snapshot_matches(
+            &c,
+            ModelTarget::Local,
+            &url,
+            "synthetic",
+            "chosen"
+        ));
+        c.ai_local_bearer = "synthetic".into();
+        c.ai_local_base_url = "http://localhost:9292/v1".into();
+        assert!(!model_snapshot_matches(
+            &c,
+            ModelTarget::Local,
+            &url,
+            "synthetic",
+            "chosen"
+        ));
+    }
+
+    #[test]
+    fn catalog_keeps_the_actual_saved_model_including_an_empty_choice() {
+        let (models, index) = model_catalog(vec!["server-default".into()], "");
+        assert_eq!(models[index as usize], "");
+        let (models, index) = model_catalog(vec!["server-default".into()], "manual-model");
+        assert_eq!(models[index as usize], "manual-model");
+        let (models, index) = model_catalog(vec!["first".into(), "selected".into()], "selected");
+        assert_eq!(models[index as usize], "selected");
+    }
 
     #[test]
     fn reasoning_levels_round_trip_and_unknown_reads_default() {

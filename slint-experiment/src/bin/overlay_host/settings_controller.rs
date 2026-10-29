@@ -2172,6 +2172,10 @@ pub(crate) fn populate_token_status(
     // switch (Rust-built labels don't auto-refresh like @tr bindings do).
     populate_tile_monitors(win, &c);
     win.set_ai_base_url_input(SharedString::from(c.ai_base_url.clone()));
+    win.set_ai_model_input(SharedString::from(c.ai_model.clone()));
+    if !win.get_external_connections_busy() {
+        win.set_external_connections_status(SharedString::default());
+    }
     win.set_openai_base_url_input(SharedString::from(c.openai_base_url.clone()));
     win.set_openai_model_input(SharedString::from(c.openai_model.clone()));
     win.set_ai_reasoning_index(super::settings_ai::reasoning_level_index(
@@ -2293,6 +2297,7 @@ pub(crate) fn populate_token_status(
     win.set_ai_prompt_cache(c.ai_prompt_cache);
     win.set_ai_provider_index(ai_provider_index(&c.ai_provider, cfg!(target_os = "macos")));
     win.set_ai_local_base_url_input(SharedString::from(c.ai_local_base_url.clone()));
+    win.set_ai_local_model_input(SharedString::from(c.ai_local_model.clone()));
     win.set_strata_directory_input(SharedString::from(c.ai_strata_dir.clone()));
     let managed_local_server =
         overlay_backend::local_ai::is_managed_llama_endpoint(&c.ai_local_base_url);

@@ -1120,6 +1120,7 @@ pub fn use_running_strata(root: &Path) -> StrataStart {
 
 /// Point the local provider at Strata after a confirmed start.
 pub fn apply_strata_choice(cfg: &mut crate::config::Config, model_id: &str) {
+    cfg.ai_provider = "local".to_string();
     cfg.ai_local_base_url = STRATA_BASE_URL.to_string();
     cfg.ai_local_model = model_id.to_string();
     cfg.ai_local_prep_model.clear();
@@ -1297,6 +1298,14 @@ mod tests {
         apply_strata_choice(&mut cfg, "qwen3.8-flash-next-iq2_xs");
         assert_eq!(cfg.ai_local_base_url, STRATA_BASE_URL);
         assert_eq!(cfg.ai_local_model, "qwen3.8-flash-next-iq2_xs");
+        assert_eq!(cfg.ai_provider, "local");
+        for prep in [false, true] {
+            let endpoint = cfg.ai_endpoint(prep);
+            assert_eq!(endpoint.base_url, STRATA_BASE_URL);
+            assert_eq!(endpoint.model, "qwen3.8-flash-next-iq2_xs");
+            assert!(endpoint.is_local);
+        }
+        assert_eq!(cfg.ai_endpoint_cloud().base_url, cfg.ai_base_url);
         assert!(!cfg.ai_local_vision);
         assert!(!cfg.ai_local_quality);
         assert!(cfg.ai_local_prep_model.is_empty());

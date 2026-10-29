@@ -2317,5 +2317,29 @@ msgstr "Проверить обновления движка"
 msgid "Update Strata engine"
 msgstr "Обновить движок Strata"
 
+msgid "Reuse a connection from OpenCode or Pi"
+msgstr "Подключение из OpenCode или Pi"
+
+msgid "Imports compatible API profiles from global client settings. Does not run an agent or reuse subscription OAuth. Applying copies the selected API credential into Suflyor's server settings."
+msgstr "Импорт совместимых API-подключений из общих настроек клиента. Агент не запускается, вход по подписке OAuth не переносится. При применении выбранный API-ключ копируется в серверные настройки Суфлёра."
+
+msgid "Find connections"
+msgstr "Найти подключения"
+
+msgid "Use connection"
+msgstr "Использовать подключение"
+
+msgid "API base URL (OpenAI-compatible):"
+msgstr "Базовый адрес API (совместимого с OpenAI):"
+
+msgid "Model ID:"
+msgstr "ID модели:"
+
+msgid "Model ID (manual entry is supported)"
+msgstr "ID модели (можно ввести вручную)"
+
+msgid "Model discovery is optional. Enter the exact model ID if the server does not list models."
+msgstr "Список моделей не обязателен. Если сервер его не отдаёт, введите точный ID модели."
+
 msgid "Strata release and engine versions differ. Checks use the latest official feed; updates replace only the engine. Model weights are kept. A running server restarts."
 msgstr "У релиза Strata и движка разные номера версий. Проверка использует последний официальный канал; обновляется только движок. Веса модели сохраняются. Работающий сервер перезапускается."

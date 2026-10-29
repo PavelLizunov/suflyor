@@ -7,6 +7,68 @@ use super::types::{AiEndpoint, AiProtocol, ChatMessage, ContentPart, MessageCont
 use anyhow::{anyhow, Context, Result};
 use serde_json::Value;
 
+/// Accept a base URL or a pasted Chat Completions URL without duplicating its suffix.
+/// Preserve the configured API prefix, including a deliberately root-mounted API.
+pub fn normalize_compatible_base_url(value: &str) -> Result<String> {
+    let mut url = reqwest::Url::parse(value.trim()).map_err(|_| anyhow!("invalid endpoint URL"))?;
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(anyhow!("invalid endpoint URL"));
+    }
+    let path = url.path().trim_end_matches('/');
+    let path = path
+        .strip_suffix("/chat/completions")
+        .unwrap_or(path)
+        .to_string();
+    url.set_path(&path);
+    Ok(url.as_str().trim_end_matches('/').to_string())
+}
+
+#[cfg(test)]
+mod endpoint_input_tests {
+    use super::*;
+    #[test]
+    fn compatible_urls_keep_custom_prefixes_and_strip_only_request_suffix() {
+        for (input, expected) in [
+            (" http://localhost:8000/ ", "http://localhost:8000"),
+            (
+                "https://example.invalid/proxy/v1/chat/completions/",
+                "https://example.invalid/proxy/v1",
+            ),
+            (
+                "https://example.invalid/custom",
+                "https://example.invalid/custom",
+            ),
+            (
+                "https://example.invalid/chat/completions",
+                "https://example.invalid",
+            ),
+        ] {
+            assert_eq!(
+                normalize_compatible_base_url(input).ok().as_deref(),
+                Some(expected)
+            );
+            assert_eq!(
+                normalize_compatible_base_url(expected).ok().as_deref(),
+                Some(expected)
+            );
+        }
+        for input in [
+            "localhost:8000",
+            "file:///tmp/config",
+            "https://user:secret@example.invalid/v1",
+            "https://example.invalid/v1?token=secret",
+        ] {
+            assert!(normalize_compatible_base_url(input).is_err());
+        }
+    }
+}
+
 pub async fn test_connection(base_url: String, bearer: String, model: String) -> Result<String> {
     test_connection_endpoint(AiEndpoint {
         protocol: AiProtocol::OpenAiCompatible,

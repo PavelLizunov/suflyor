@@ -2123,6 +2123,12 @@
             "prim": "void"
           }
         },
+        "ai-local-connect": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
         "ai-local-context-changed": {
           "args": [
             {
@@ -2643,6 +2649,25 @@
           }
         },
         "export-server-settings-clicked": {
+          "args": [],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "external-connection-use": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "int"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "void"
+          }
+        },
+        "external-connections-find": {
           "args": [],
           "ret": {
             "prim": "void"
@@ -3894,6 +3919,13 @@
             "prim": "int"
           }
         },
+        "ai-local-model-input": {
+          "default": "",
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
+          }
+        },
         "ai-local-model-profile-index": {
           "default": 1.0,
           "dir": "in-out",
@@ -3950,6 +3982,13 @@
           "dir": "in-out",
           "type": {
             "prim": "int"
+          }
+        },
+        "ai-model-input": {
+          "default": "",
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
           }
         },
         "ai-models": {
@@ -4447,6 +4486,36 @@
           "dir": "in-out",
           "type": {
             "prim": "bool"
+          }
+        },
+        "external-connection-index": {
+          "default": 0.0,
+          "dir": "in-out",
+          "type": {
+            "prim": "int"
+          }
+        },
+        "external-connections": {
+          "default": [],
+          "dir": "in-out",
+          "type": {
+            "array": {
+              "prim": "string"
+            }
+          }
+        },
+        "external-connections-busy": {
+          "default": false,
+          "dir": "in-out",
+          "type": {
+            "prim": "bool"
+          }
+        },
+        "external-connections-status": {
+          "default": "",
+          "dir": "in-out",
+          "type": {
+            "prim": "string"
           }
         },
         "fallback-model-present": {

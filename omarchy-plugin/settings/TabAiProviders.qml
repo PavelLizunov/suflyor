@@ -200,6 +200,17 @@ Column {
   C.SettingsCard {
     width: Math.max(0, root.width - root.padding * 2)
     C.SettingsCaption { text: root.tr("Where answers come from"); font.pixelSize: Style.font.bodySmall }
+    C.WrapBlock {
+      C.SectionTitle { text: root.tr("Reuse a connection from OpenCode or Pi") }
+      C.SettingsCaption { text: root.tr("Imports compatible API profiles from global client settings. Does not run an agent or reuse subscription OAuth. Applying copies the selected API credential into Suflyor's server settings.") }
+      C.SettingsButton { text: root.tr("Find connections"); enabled: !root.p("external-connections-busy", false); onClicked: root.call("external-connections-find") }
+      C.WrapBlock {
+        visible: root.p("external-connections", []).length > 0
+        C.SettingsComboBox { model: root.p("external-connections", []); currentIndex: root.p("external-connection-index", 0); onSelected: function(index) { root.set("external-connection-index", index) } }
+        C.SettingsButton { text: root.tr("Use connection"); enabled: root.idle && !root.p("external-connections-busy", false); onClicked: root.call("external-connection-use", [root.p("external-connection-index", 0)]) }
+      }
+      C.StatusLine { text: root.p("external-connections-status", "") }
+    }
     C.SettingsComboBox {
       model: [root.tr("Your server or bridge (OpenAI-compatible)"), root.tr("Model on this PC"), root.tr("OpenAI API (Responses)"), root.tr("Anthropic API (Messages)"), root.tr("ChatGPT via Codex (experimental)")]
       currentIndex: root.provider
@@ -218,13 +229,13 @@ Column {
         secret: true
         clearAfterSave: true
       }
-      C.SettingsCaption { text: root.tr("Base URL (Claude bridge endpoint):"); font.pixelSize: Style.font.bodySmall }
+      C.SettingsCaption { text: root.tr("API base URL (OpenAI-compatible):"); font.pixelSize: Style.font.bodySmall }
       SavedField {
         propertyName: "ai-base-url-input"
         callbackName: "ai-base-url-save"
         placeholder: root.tr("http://your.bridge.host:PORT/v1")
       }
-      C.SettingsCaption { text: root.tr("AI model (Claude full ID):"); font.pixelSize: Style.font.bodySmall }
+      C.SettingsCaption { text: root.tr("Model ID:"); font.pixelSize: Style.font.bodySmall }
       C.SettingsFieldRow {
         C.SettingsComboBox {
           Layout.fillWidth: true
@@ -244,6 +255,8 @@ Column {
         visible: root.p("ai-models", []).length === 0
         text: root.tr("No models found — check the bridge URL/token, then press refresh.")
       }
+      SavedField { propertyName: "ai-model-input"; callbackName: "ai-model-selected"; placeholder: root.tr("Model ID (manual entry is supported)"); buttonText: root.tr("Save model") }
+      C.SettingsCaption { text: root.tr("Model discovery is optional. Enter the exact model ID if the server does not list models.") }
       Reasoning { propertyName: "ai-reasoning-index"; callbackName: "ai-reasoning-changed" }
       C.SettingsButton { iconName: "diag"; text: root.tr("Test AI bridge connection"); onClicked: root.call("ai-bridge-test-clicked") }
       C.StatusLine { text: root.p("ai-bridge-test-result", ""); tone: "accent" }
@@ -575,6 +588,8 @@ Column {
         C.SettingsCaption { visible: root.p("found-models-searching", false); text: root.tr("Looking for models on this PC…") }
         C.WrapBlock {
           visible: root.p("local-connect-open", false)
+          C.SettingsLineEdit { text: root.p("ai-local-model-input", ""); placeholderText: root.tr("Model ID (manual entry is supported)"); onTextEdited: root.set("ai-local-model-input", text) }
+          C.SettingsCaption { text: root.tr("Model discovery is optional. Enter the exact model ID if the server does not list models.") }
           C.SettingsLineEdit {
             text: root.p("ai-local-base-url-input", "")
             placeholderText: root.tr("local URL — http://127.0.0.1:11434/v1 (Ollama)")
@@ -598,12 +613,7 @@ Column {
           C.SettingsButton {
             text: root.tr("Connect")
             enabled: root.idle
-            onClicked: {
-              var token = root.p("ai-local-bearer-input", "")
-              if (token !== "") { root.call("ai-local-bearer-save", [token]); root.set("ai-local-bearer-input", "") }
-              root.call("ai-local-base-url-save", [root.p("ai-local-base-url-input", "")])
-              root.call("ai-local-test-clicked")
-            }
+            onClicked: root.call("ai-local-connect")
           }
         }
         C.StatusLine { text: root.p("local-choice-status", ""); tone: "accent" }

@@ -3672,6 +3672,7 @@ struct SettingsWindowProps {
     ai_local_custom_model_name: slint::SharedString,
     ai_local_hardware_profile_index: i32,
     ai_local_model_index: i32,
+    ai_local_model_input: slint::SharedString,
     ai_local_model_profile_index: i32,
     ai_local_models: slint::ModelRc<slint::SharedString>,
     ai_local_quality: bool,
@@ -3680,6 +3681,7 @@ struct SettingsWindowProps {
     ai_local_vision: bool,
     ai_local_vision_available: bool,
     ai_model_index: i32,
+    ai_model_input: slint::SharedString,
     ai_models: slint::ModelRc<slint::SharedString>,
     ai_prompt_cache: bool,
     ai_provider_index: i32,
@@ -3749,6 +3751,10 @@ struct SettingsWindowProps {
     engine_build: slint::SharedString,
     engine_update_status: slint::SharedString,
     engine_updating: bool,
+    external_connection_index: i32,
+    external_connections: slint::ModelRc<slint::SharedString>,
+    external_connections_busy: bool,
+    external_connections_status: slint::SharedString,
     fallback_model_present: bool,
     fast_answers: bool,
     found_models: slint::ModelRc<FoundModel>,
@@ -3977,6 +3983,8 @@ impl Default for SettingsWindowProps {
             ai_local_hardware_profile_index: <i32>::from_json(&serde_json::json!(0.0))
                 .unwrap_or_default(),
             ai_local_model_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            ai_local_model_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
             ai_local_model_profile_index: <i32>::from_json(&serde_json::json!(1.0))
                 .unwrap_or_default(),
             ai_local_models: <slint::ModelRc<slint::SharedString>>::from_json(&serde_json::json!(
@@ -3991,6 +3999,8 @@ impl Default for SettingsWindowProps {
             ai_local_vision_available: <bool>::from_json(&serde_json::json!(true))
                 .unwrap_or_default(),
             ai_model_index: <i32>::from_json(&serde_json::json!(0.0)).unwrap_or_default(),
+            ai_model_input: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
             ai_models: <slint::ModelRc<slint::SharedString>>::from_json(&serde_json::json!([]))
                 .unwrap_or_default(),
             ai_prompt_cache: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
@@ -4108,6 +4118,16 @@ impl Default for SettingsWindowProps {
             engine_update_status: <slint::SharedString>::from_json(&serde_json::json!(""))
                 .unwrap_or_default(),
             engine_updating: <bool>::from_json(&serde_json::json!(false)).unwrap_or_default(),
+            external_connection_index: <i32>::from_json(&serde_json::json!(0.0))
+                .unwrap_or_default(),
+            external_connections: <slint::ModelRc<slint::SharedString>>::from_json(
+                &serde_json::json!([]),
+            )
+            .unwrap_or_default(),
+            external_connections_busy: <bool>::from_json(&serde_json::json!(false))
+                .unwrap_or_default(),
+            external_connections_status: <slint::SharedString>::from_json(&serde_json::json!(""))
+                .unwrap_or_default(),
             fallback_model_present: <bool>::from_json(&serde_json::json!(false))
                 .unwrap_or_default(),
             fast_answers: <bool>::from_json(&serde_json::json!(true)).unwrap_or_default(),
@@ -4400,6 +4420,7 @@ struct SettingsWindowCallbacks {
     ai_bridge_test_clicked: Handler<dyn FnMut() -> ()>,
     ai_local_base_url_save: Handler<dyn FnMut(slint::SharedString) -> ()>,
     ai_local_bearer_save: Handler<dyn FnMut(slint::SharedString) -> ()>,
+    ai_local_connect: Handler<dyn FnMut() -> ()>,
     ai_local_context_changed: Handler<dyn FnMut(i32) -> ()>,
     ai_local_context_preview_changed: Handler<dyn FnMut(f32) -> ()>,
     ai_local_model_selected: Handler<dyn FnMut(slint::SharedString) -> ()>,
@@ -4456,6 +4477,8 @@ struct SettingsWindowCallbacks {
     drag_start_requested: Handler<dyn FnMut() -> ()>,
     export_profile_clicked: Handler<dyn FnMut() -> ()>,
     export_server_settings_clicked: Handler<dyn FnMut() -> ()>,
+    external_connection_use: Handler<dyn FnMut(i32) -> ()>,
+    external_connections_find: Handler<dyn FnMut() -> ()>,
     fast_answers_changed: Handler<dyn FnMut(bool) -> ()>,
     found_model_use: Handler<dyn FnMut(i32) -> ()>,
     found_models_search: Handler<dyn FnMut() -> ()>,
@@ -4749,6 +4772,15 @@ impl SettingsWindow {
     pub fn get_ai_local_model_index(&self) -> i32 {
         self.0.props.borrow().ai_local_model_index.clone()
     }
+    pub fn set_ai_local_model_input(&self, value: slint::SharedString) {
+        self.0
+            .base
+            .send_prop("ai-local-model-input", value.to_json());
+        self.0.props.borrow_mut().ai_local_model_input = value;
+    }
+    pub fn get_ai_local_model_input(&self) -> slint::SharedString {
+        self.0.props.borrow().ai_local_model_input.clone()
+    }
     pub fn set_ai_local_model_profile_index(&self, value: i32) {
         self.0
             .base
@@ -4810,6 +4842,13 @@ impl SettingsWindow {
     }
     pub fn get_ai_model_index(&self) -> i32 {
         self.0.props.borrow().ai_model_index.clone()
+    }
+    pub fn set_ai_model_input(&self, value: slint::SharedString) {
+        self.0.base.send_prop("ai-model-input", value.to_json());
+        self.0.props.borrow_mut().ai_model_input = value;
+    }
+    pub fn get_ai_model_input(&self) -> slint::SharedString {
+        self.0.props.borrow().ai_model_input.clone()
     }
     pub fn set_ai_models(&self, value: slint::ModelRc<slint::SharedString>) {
         self.0.base.send_prop("ai-models", value.to_json());
@@ -5341,6 +5380,42 @@ impl SettingsWindow {
     }
     pub fn get_engine_updating(&self) -> bool {
         self.0.props.borrow().engine_updating.clone()
+    }
+    pub fn set_external_connection_index(&self, value: i32) {
+        self.0
+            .base
+            .send_prop("external-connection-index", value.to_json());
+        self.0.props.borrow_mut().external_connection_index = value;
+    }
+    pub fn get_external_connection_index(&self) -> i32 {
+        self.0.props.borrow().external_connection_index.clone()
+    }
+    pub fn set_external_connections(&self, value: slint::ModelRc<slint::SharedString>) {
+        self.0
+            .base
+            .send_prop("external-connections", value.to_json());
+        self.0.props.borrow_mut().external_connections = value;
+    }
+    pub fn get_external_connections(&self) -> slint::ModelRc<slint::SharedString> {
+        self.0.props.borrow().external_connections.clone()
+    }
+    pub fn set_external_connections_busy(&self, value: bool) {
+        self.0
+            .base
+            .send_prop("external-connections-busy", value.to_json());
+        self.0.props.borrow_mut().external_connections_busy = value;
+    }
+    pub fn get_external_connections_busy(&self) -> bool {
+        self.0.props.borrow().external_connections_busy.clone()
+    }
+    pub fn set_external_connections_status(&self, value: slint::SharedString) {
+        self.0
+            .base
+            .send_prop("external-connections-status", value.to_json());
+        self.0.props.borrow_mut().external_connections_status = value;
+    }
+    pub fn get_external_connections_status(&self) -> slint::SharedString {
+        self.0.props.borrow().external_connections_status.clone()
     }
     pub fn set_fallback_model_present(&self, value: bool) {
         self.0
@@ -6931,6 +7006,18 @@ impl SettingsWindow {
             .send_invoke("ai-local-bearer-save", vec![arg0.to_json()]);
         Default::default()
     }
+    pub fn on_ai_local_connect(&self, f: impl FnMut() -> () + 'static) {
+        let f: Rc<RefCell<dyn FnMut() -> ()>> = Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().ai_local_connect = Handler(Some(f));
+    }
+    pub fn invoke_ai_local_connect(&self) -> () {
+        let handler = self.0.callbacks.borrow().ai_local_connect.clone();
+        if handler.is_set() {
+            return handler.call(|f| f()).unwrap_or_default();
+        }
+        self.0.base.send_invoke("ai-local-connect", vec![]);
+        Default::default()
+    }
     pub fn on_ai_local_context_changed(&self, f: impl FnMut(i32) -> () + 'static) {
         let f: Rc<RefCell<dyn FnMut(i32) -> ()>> = Rc::new(RefCell::new(f));
         self.0.callbacks.borrow_mut().ai_local_context_changed = Handler(Some(f));
@@ -7725,6 +7812,32 @@ impl SettingsWindow {
         self.0
             .base
             .send_invoke("export-server-settings-clicked", vec![]);
+        Default::default()
+    }
+    pub fn on_external_connection_use(&self, f: impl FnMut(i32) -> () + 'static) {
+        let f: Rc<RefCell<dyn FnMut(i32) -> ()>> = Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().external_connection_use = Handler(Some(f));
+    }
+    pub fn invoke_external_connection_use(&self, arg0: i32) -> () {
+        let handler = self.0.callbacks.borrow().external_connection_use.clone();
+        if handler.is_set() {
+            return handler.call(|f| f(arg0)).unwrap_or_default();
+        }
+        self.0
+            .base
+            .send_invoke("external-connection-use", vec![arg0.to_json()]);
+        Default::default()
+    }
+    pub fn on_external_connections_find(&self, f: impl FnMut() -> () + 'static) {
+        let f: Rc<RefCell<dyn FnMut() -> ()>> = Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().external_connections_find = Handler(Some(f));
+    }
+    pub fn invoke_external_connections_find(&self) -> () {
+        let handler = self.0.callbacks.borrow().external_connections_find.clone();
+        if handler.is_set() {
+            return handler.call(|f| f()).unwrap_or_default();
+        }
+        self.0.base.send_invoke("external-connections-find", vec![]);
         Default::default()
     }
     pub fn on_fast_answers_changed(&self, f: impl FnMut(bool) -> () + 'static) {
@@ -9235,6 +9348,10 @@ impl RemoteObject for SettingsWindowInner {
             p.ai_local_model_index.to_json(),
         );
         m.insert(
+            "ai-local-model-input".into(),
+            p.ai_local_model_input.to_json(),
+        );
+        m.insert(
             "ai-local-model-profile-index".into(),
             p.ai_local_model_profile_index.to_json(),
         );
@@ -9251,6 +9368,7 @@ impl RemoteObject for SettingsWindowInner {
             p.ai_local_vision_available.to_json(),
         );
         m.insert("ai-model-index".into(), p.ai_model_index.to_json());
+        m.insert("ai-model-input".into(), p.ai_model_input.to_json());
         m.insert("ai-models".into(), p.ai_models.to_json());
         m.insert("ai-prompt-cache".into(), p.ai_prompt_cache.to_json());
         m.insert("ai-provider-index".into(), p.ai_provider_index.to_json());
@@ -9392,6 +9510,22 @@ impl RemoteObject for SettingsWindowInner {
             p.engine_update_status.to_json(),
         );
         m.insert("engine-updating".into(), p.engine_updating.to_json());
+        m.insert(
+            "external-connection-index".into(),
+            p.external_connection_index.to_json(),
+        );
+        m.insert(
+            "external-connections".into(),
+            p.external_connections.to_json(),
+        );
+        m.insert(
+            "external-connections-busy".into(),
+            p.external_connections_busy.to_json(),
+        );
+        m.insert(
+            "external-connections-status".into(),
+            p.external_connections_status.to_json(),
+        );
         m.insert(
             "fallback-model-present".into(),
             p.fallback_model_present.to_json(),
@@ -9883,6 +10017,10 @@ impl RemoteObject for SettingsWindowInner {
             "ai-local-model-index" => {
                 p.ai_local_model_index = <i32>::from_json(value).ok_or("bad value")?
             }
+            "ai-local-model-input" => {
+                p.ai_local_model_input =
+                    <slint::SharedString>::from_json(value).ok_or("bad value")?
+            }
             "ai-local-model-profile-index" => {
                 p.ai_local_model_profile_index = <i32>::from_json(value).ok_or("bad value")?
             }
@@ -9905,6 +10043,9 @@ impl RemoteObject for SettingsWindowInner {
                 p.ai_local_vision_available = <bool>::from_json(value).ok_or("bad value")?
             }
             "ai-model-index" => p.ai_model_index = <i32>::from_json(value).ok_or("bad value")?,
+            "ai-model-input" => {
+                p.ai_model_input = <slint::SharedString>::from_json(value).ok_or("bad value")?
+            }
             "ai-models" => {
                 p.ai_models =
                     <slint::ModelRc<slint::SharedString>>::from_json(value).ok_or("bad value")?
@@ -10108,6 +10249,20 @@ impl RemoteObject for SettingsWindowInner {
                     <slint::SharedString>::from_json(value).ok_or("bad value")?
             }
             "engine-updating" => p.engine_updating = <bool>::from_json(value).ok_or("bad value")?,
+            "external-connection-index" => {
+                p.external_connection_index = <i32>::from_json(value).ok_or("bad value")?
+            }
+            "external-connections" => {
+                p.external_connections =
+                    <slint::ModelRc<slint::SharedString>>::from_json(value).ok_or("bad value")?
+            }
+            "external-connections-busy" => {
+                p.external_connections_busy = <bool>::from_json(value).ok_or("bad value")?
+            }
+            "external-connections-status" => {
+                p.external_connections_status =
+                    <slint::SharedString>::from_json(value).ok_or("bad value")?
+            }
             "fallback-model-present" => {
                 p.fallback_model_present = <bool>::from_json(value).ok_or("bad value")?
             }
@@ -10740,6 +10895,13 @@ impl RemoteObject for SettingsWindowInner {
                     .map(|v| v.to_json())
                     .unwrap_or(Value::Null))
             }
+            "ai-local-connect" => {
+                let handler = self.callbacks.borrow().ai_local_connect.clone();
+                Ok(handler
+                    .call(|f| f())
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
             "ai-local-context-changed" => {
                 let (a0,) = (<i32>::from_json(args.get(0).unwrap_or(&Value::Null))
                     .ok_or("bad argument 0")?,);
@@ -11223,6 +11385,22 @@ impl RemoteObject for SettingsWindowInner {
                     .borrow()
                     .export_server_settings_clicked
                     .clone();
+                Ok(handler
+                    .call(|f| f())
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
+            "external-connection-use" => {
+                let (a0,) = (<i32>::from_json(args.get(0).unwrap_or(&Value::Null))
+                    .ok_or("bad argument 0")?,);
+                let handler = self.callbacks.borrow().external_connection_use.clone();
+                Ok(handler
+                    .call(|f| f(a0))
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
+            "external-connections-find" => {
+                let handler = self.callbacks.borrow().external_connections_find.clone();
                 Ok(handler
                     .call(|f| f())
                     .map(|v| v.to_json())
@@ -12200,6 +12378,8 @@ impl RemoteObject for SettingsWindowInner {
         );
         self.base
             .poll_model("component-rows", p.component_rows.to_json());
+        self.base
+            .poll_model("external-connections", p.external_connections.to_json());
         self.base
             .poll_model("found-models", p.found_models.to_json());
         self.base
