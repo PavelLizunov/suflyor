@@ -58,27 +58,30 @@ fn provider_cards_contain_wrapped_content_in_both_languages() {
             "Быстрые ответы тоже могут искать в интернете и читать публичные страницы, если поиск включён: до двух обращений с общим бюджетом поиска 15 секунд. Модель решает, когда искать; запросы отправляются в DuckDuckGo. Сервер без поддержки инструментов отвечает без веб-поиска.",
         ),
     ] {
-        if !language.is_empty() {
-            slint::select_bundled_translation(language).expect("select interface language");
-        }
         let win = ui::SettingsWindow::new().expect("create Settings");
+        slint::select_bundled_translation(language).expect("select interface language");
         win.set_active_tab(11);
         win.show().expect("show Settings");
         for width in [720.0, 600.0, 480.0] {
             win.window().set_size(LogicalSize::new(width, 600.0));
             win.set_ai_provider_index(2);
+            win.window().dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+                position: LogicalPosition::new(width - 40.0, 300.0), delta_x: 0.0, delta_y: 100_000.0,
+            });
+            slint::platform::update_timers_and_animations();
+            let card = card_for(&win, models);
             scroll_to_end(&win, width);
             let connections = if language == "ru" { "Подключения" } else { "Connections" };
-            labelled(&win, connections).invoke_accessible_default_action();
+            let disclosure = labelled(&win, connections);
+            disclosure.invoke_accessible_default_action();
             scroll_to_end(&win, width);
             let button = labelled(&win, test);
-            let card = card_for(&win, models);
             let card_bottom = card.absolute_position().y + card.size().height;
             assert!(
                 button.absolute_position().y >= card_bottom + 8.0 - 0.5,
                 "{language} {width}px: model catalogue overlaps the connection form"
             );
-            labelled(&win, connections).invoke_accessible_default_action();
+            disclosure.invoke_accessible_default_action();
 
             win.set_ai_provider_index(1);
             scroll_to_end(&win, width);
