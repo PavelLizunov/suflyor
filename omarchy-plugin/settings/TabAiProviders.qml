@@ -194,7 +194,7 @@ Column {
   C.SettingsCard {
           width: Math.max(0, root.width - root.padding * 2)
           title: root.tr("Choose a model")
-          C.SettingsCaption { text: root.p("local-hardware-line", "") }
+          C.SettingsCaption { text: root.p("local-hardware-line", ""); visible: text !== "" }
           C.SettingsCaption { text: root.tr("Download models ahead of time. Your current answer provider stays selected until you choose to use a local model.") }
           C.SettingsFieldRow {
             C.SettingsLineEdit { Layout.fillWidth: true; Layout.minimumWidth: 0; text: root.modelSearch; placeholderText: root.tr("Search models…"); onTextEdited: root.modelSearch = text }
@@ -262,7 +262,7 @@ Column {
               }
             }
           }
-          EngineInstall { visible: !root.llamaInstalled || root.installing }
+          EngineInstall { visible: root.installing || (!root.llamaInstalled && !root.installedOnly && root.modelSearch.trim() === "") }
           C.StatusLine { visible: !root.installing; text: root.installStatus }
           C.SettingsButton { text: root.tr("Model tools"); iconName: "gear"; onClicked: root.toolsOpen = !root.toolsOpen }
           C.WrapBlock {
@@ -732,7 +732,7 @@ Column {
     width: Math.max(0, root.width - root.padding * 2)
     C.SettingsButton { text: root.tr("Model storage"); iconName: "gear"; onClicked: root.storageOpen = !root.storageOpen }
     C.WrapBlock {
-      visible: root.storageOpen || false
+      visible: root.storageOpen
       C.SettingsCaption {
         text: root.tr("Choose the Suflyor model folder on any mounted disk. AI, speech models and voices use it after restarting Suflyor. Existing files are not moved.")
       }

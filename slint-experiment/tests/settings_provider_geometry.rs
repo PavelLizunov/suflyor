@@ -67,6 +67,7 @@ fn provider_cards_contain_wrapped_content_in_both_languages() {
         for width in [720.0, 600.0, 480.0] {
             win.window().set_size(LogicalSize::new(width, 600.0));
             win.set_ai_provider_index(2);
+            scroll_to_end(&win, width);
             let connections = if language == "ru" { "Подключения" } else { "Connections" };
             labelled(&win, connections).invoke_accessible_default_action();
             scroll_to_end(&win, width);

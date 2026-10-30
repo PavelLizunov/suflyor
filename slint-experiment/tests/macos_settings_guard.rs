@@ -119,7 +119,7 @@ fn local_model_cards_keep_jobs_actions_and_async_checks_reachable() {
     let controls = read("ui/settings_controls.slint");
     let local = read("src/bin/overlay_host/settings_local_ai.rs");
     let ai = read("src/bin/overlay_host/settings_ai.rs");
-    assert!(ui.contains("(!root.llama-installed || root.local-ai-installing)"));
+    assert!(ui.contains("if root.local-ai-installing || (!root.llama-installed"));
     assert!(ui.contains("root.ai-local-bearer-save(\"\")"));
     assert!(ui.contains("root.local-connect-auto = false"));
     for profile in 0..=2 {
