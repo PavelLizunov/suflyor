@@ -91,6 +91,39 @@ fn provider_cards_contain_wrapped_content_in_both_languages() {
                 "{language} {width}px: capability caption clipped: caption bottom={caption_bottom}, card bottom={card_bottom}"
             );
         }
+        win.set_ai_provider_index(0);
+        win.window().set_size(LogicalSize::new(720.0, 600.0));
+        win.on_model_matches(|text, query| text.to_lowercase().contains(&query.trim().to_lowercase()));
+        win.on_model_found_matches(|models, query| {
+            use slint::Model;
+            models.iter().any(|model| format!("{} {}", model.title, model.detail).to_lowercase().contains(&query.trim().to_lowercase()))
+        });
+        win.window().dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+            position: LogicalPosition::new(680.0, 300.0), delta_x: 0.0, delta_y: 100_000.0,
+        });
+        slint::platform::update_timers_and_animations();
+        let search = ElementHandle::find_by_element_type_name(&win, "SettingsLineEdit")
+            .find(|field| field.accessible_placeholder_text().is_some_and(|text| text == if language == "ru" { "Поиск моделей…" } else { "Search models…" }))
+            .expect("model search field");
+        search.set_accessible_value("E4B");
+        slint::platform::update_timers_and_animations();
+        let requested = std::rc::Rc::new(std::cell::Cell::new(-1));
+        let result = requested.clone();
+        win.on_download_model_clicked(move |index| result.set(index));
+        labelled(&win, if language == "ru" { "Скачать" } else { "Download model" }).invoke_accessible_default_action();
+        assert_eq!(requested.get(), 0, "search result keeps its original download index");
+        assert_eq!(win.get_ai_provider_index(), 0, "browsing does not select local answers");
+        search.set_accessible_value("no-such-model");
+        slint::platform::update_timers_and_animations();
+        labelled(&win, if language == "ru" { "Нет моделей по этому фильтру." } else { "No models match this filter." });
+        win.set_quality_downloading(true);
+        win.set_local_download_profile(0);
+        slint::platform::update_timers_and_animations();
+        let cancelled = std::rc::Rc::new(std::cell::Cell::new(false));
+        let result = cancelled.clone();
+        win.on_cancel_local_ai_clicked(move || result.set(true));
+        labelled(&win, if language == "ru" { "Отмена" } else { "Cancel" }).invoke_accessible_default_action();
+        assert!(cancelled.get(), "filtering must not hide an active job's Cancel");
         win.hide().expect("hide Settings");
     }
 }
