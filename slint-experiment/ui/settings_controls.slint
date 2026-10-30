@@ -196,46 +196,32 @@ export component LocalModelRow inherits Rectangle {
                     color: Theme.text-muted;
                     wrap: word-wrap;
                 }
-            }
-            if root.chip != "" : Text {
-                width: 96px;
-                horizontal-stretch: 0;
-                text: root.chip;
-                font-size: Metrics.font-caption;
-                color: root.chip-tone == 1 ? Theme.success : root.chip-tone == 2 ? Theme.warning : Theme.text-muted;
-                wrap: word-wrap;
-                vertical-alignment: center;
-            }
-            Button {
-                width: 132px;
-                height: 30px;
-                y: (parent.height - self.height) / 2;
-                text: root.action;
-                enabled: root.action-enabled;
-                clicked => { root.action-clicked(); }
-            }
-        }
-        if root.busy : HorizontalLayout {
-            spacing: Metrics.space-sm;
-            if root.progress-visible : Rectangle {
-                horizontal-stretch: 1;
-                height: 6px;
-                y: (parent.height - self.height) / 2;
-                border-radius: Metrics.radius-field;
-                background: Theme.border;
-                Rectangle {
-                    height: parent.height;
-                    width: parent.width * clamp(root.progress, 0, 1);
-                    border-radius: Metrics.radius-field;
-                    background: Theme.accent;
+                if root.chip != "" : Text {
+                    text: root.chip;
+                    font-size: Metrics.font-caption;
+                    color: root.chip-tone == 1 ? Theme.success : root.chip-tone == 2 ? Theme.warning : Theme.text-muted;
+                    wrap: word-wrap;
                 }
             }
-            if !root.progress-visible : Rectangle { horizontal-stretch: 1; }
             Button {
                 width: 132px;
                 height: 30px;
-                text: @tr("Cancel");
-                clicked => { root.cancel-clicked(); }
+                y: (parent.height - self.height) / 2;
+                text: root.busy ? @tr("Cancel") : root.action;
+                enabled: root.busy || root.action-enabled;
+                clicked => { if root.busy { root.cancel-clicked(); } else { root.action-clicked(); } }
+            }
+        }
+        if root.busy && root.progress-visible : Rectangle {
+            horizontal-stretch: 1;
+            height: 6px;
+            border-radius: Metrics.radius-field;
+            background: Theme.border;
+            Rectangle {
+                height: parent.height;
+                width: parent.width * clamp(root.progress, 0, 1);
+                border-radius: Metrics.radius-field;
+                background: Theme.accent;
             }
         }
     }

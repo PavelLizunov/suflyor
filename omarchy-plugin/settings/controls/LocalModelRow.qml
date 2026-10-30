@@ -1,11 +1,10 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Layouts
 import qs.Commons
 import qs.Commons as Commons
 
-// Properties: title, detail, chip, chipTone (0 neutral/1 good/2 warning), action,
-// active, actionEnabled, busy, progressVisible, progress, service (for Cancel).
-// Signals: actionClicked(), cancelClicked(). Actions fill width, including Cancel.
+// Compact model list row; actions stack only at narrow widths.
 Rectangle {
   id: root
   property string title: ""
@@ -22,51 +21,59 @@ Rectangle {
   signal actionClicked()
   signal cancelClicked()
   width: parent ? parent.width : implicitWidth
-  implicitHeight: content.implicitHeight + Style.space(8)
+  implicitHeight: content.implicitHeight + Style.space(16)
   height: implicitHeight
   radius: Style.cornerRadius
   color: active ? Qt.alpha(Commons.Color.accent, 0.12) : "transparent"
 
-  Column {
+  ColumnLayout {
     id: content
-    x: Style.space(4)
-    y: Style.space(4)
-    width: Math.max(0, root.width - Style.space(8))
-    spacing: Style.space(4)
-    SettingsCaption {
-      text: root.title
-      color: Commons.Color.foreground
-      font.pixelSize: Style.font.body
-      font.bold: root.active
-    }
-    SettingsCaption { text: root.detail; visible: text !== "" }
-    StatusLine {
-      text: root.chip
-      tone: root.chipTone === 1 ? "good" : root.chipTone === 2 ? "warning" : "muted"
-    }
-    SettingsButton {
-      text: root.action
-      enabled: root.actionEnabled
-      onClicked: root.actionClicked()
-    }
-    WrapBlock {
-      visible: root.busy
-      Rectangle {
-        visible: root.progressVisible
-        width: parent.width
-        height: Style.space(6)
-        radius: height / 2
-        color: Qt.alpha(Commons.Color.foreground, 0.15)
-        Rectangle {
-          width: parent.width * Math.max(0, Math.min(1, root.progress))
-          height: parent.height
-          radius: parent.radius
-          color: Commons.Color.accent
+    x: Style.space(8)
+    y: Style.space(8)
+    width: Math.max(0, root.width - Style.space(16))
+    spacing: Style.space(6)
+    GridLayout {
+      Layout.fillWidth: true
+      columns: root.width < Style.space(380) ? 1 : 2
+      columnSpacing: Style.space(12)
+      rowSpacing: Style.space(6)
+      Column {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        spacing: Style.space(2)
+        SettingsCaption {
+          text: root.title
+          color: Commons.Color.foreground
+          font.pixelSize: Style.font.body
+          font.bold: root.active
+        }
+        SettingsCaption { text: root.detail; visible: text !== "" }
+        StatusLine {
+          text: root.chip
+          tone: root.chipTone === 1 ? "good" : root.chipTone === 2 ? "warning" : "muted"
         }
       }
       SettingsButton {
-        text: root.service ? root.service.tr("Cancel", []) : ""
-        onClicked: root.cancelClicked()
+        compact: true
+        Layout.preferredWidth: Math.min(content.width, Style.space(150))
+        Layout.fillHeight: false
+        wrapLabel: true
+        text: root.busy ? (root.service ? root.service.tr("Cancel", []) : "") : root.action
+        enabled: root.busy || root.actionEnabled
+        onClicked: root.busy ? root.cancelClicked() : root.actionClicked()
+      }
+    }
+    Rectangle {
+      visible: root.busy && root.progressVisible
+      Layout.fillWidth: true
+      implicitHeight: Style.space(6)
+      radius: height / 2
+      color: Qt.alpha(Commons.Color.foreground, 0.15)
+      Rectangle {
+        width: parent.width * Math.max(0, Math.min(1, root.progress))
+        height: parent.height
+        radius: parent.radius
+        color: Commons.Color.accent
       }
     }
   }

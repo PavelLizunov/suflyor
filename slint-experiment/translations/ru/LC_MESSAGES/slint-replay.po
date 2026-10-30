@@ -2343,3 +2343,30 @@ msgstr "Список моделей не обязателен. Если серв
 
 msgid "Strata release and engine versions differ. Checks use the latest official feed; updates replace only the engine. Model weights are kept. A running server restarts."
 msgstr "У релиза Strata и движка разные номера версий. Проверка использует последний официальный канал; обновляется только движок. Веса модели сохраняются. Работающий сервер перезапускается."
+
+msgid "Search models…"
+msgstr "Поиск моделей…"
+
+msgid "Installed only"
+msgstr "Только установленные"
+
+msgid "No models match this filter."
+msgstr "Нет моделей по этому фильтру."
+
+msgid "Clear filters"
+msgstr "Сбросить фильтры"
+
+msgid "Connections"
+msgstr "Подключения"
+
+msgid "Model tools"
+msgstr "Другие способы и обслуживание"
+
+msgid "Complete setup"
+msgstr "Завершить установку"
+
+msgid "Downloading…"
+msgstr "Скачивание…"
+
+msgid "Strata engine"
+msgstr "Движок Strata"

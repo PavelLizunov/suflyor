@@ -171,6 +171,18 @@ pub(crate) fn open_settings(
             return;
         }
     };
+    win.on_model_matches(|text, query| {
+        text.to_lowercase().contains(&query.trim().to_lowercase())
+    });
+    win.on_model_found_matches(|models, query| {
+        use slint::Model;
+        let query = query.trim().to_lowercase();
+        models.iter().any(|model| {
+            format!("{} {}", model.title, model.detail)
+                .to_lowercase()
+                .contains(&query)
+        })
+    });
     win.global::<ui::Platform>()
         .set_is_macos(cfg!(target_os = "macos"));
     win.global::<ui::Platform>()

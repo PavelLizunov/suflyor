@@ -422,6 +422,32 @@ export component SettingsWindow inherits Window {
     in-out property <int> local-strata-job: -1;
     in-out property <string> local-choice-status: "";
     callback builtin-model-use(int);
+    // View-only properties (not in-out) for model chooser (Windows/Linux)
+    property <string> model-search: "";
+    property <bool> models-installed-only: false;
+    property <bool> model-connections-open: false;
+    property <bool> model-storage-open: false;
+    property <bool> model-speed-open: false;
+    property <bool> model-tools-open: false;
+    pure callback model-matches(string, string) -> bool;
+
+    property <bool> row-4b-visible: ((!root.models-installed-only || root.legacy-model-present)
+        && (root.model-search == "" || root.model-matches(@tr("Fast (4B)"), root.model-search) || root.model-matches(@tr("Gemma 4 E4B · 4.6 GB"), root.model-search)))
+        || (root.quality-downloading && root.local-download-profile == 0);
+    property <bool> row-12b-visible: ((!root.models-installed-only || root.fallback-model-present)
+        && (root.model-search == "" || root.model-matches(@tr("Balanced (12B QAT)"), root.model-search) || root.model-matches(@tr("Gemma 4 12B · 6.3 GB"), root.model-search)))
+        || (root.quality-downloading && root.local-download-profile == 1);
+    property <bool> row-26b-visible: ((!root.models-installed-only || root.quality-model-present)
+        && (root.model-search == "" || root.model-matches(@tr("Maximum (26B-A4B)"), root.model-search) || root.model-matches(@tr("Gemma 4 26B-A4B · 9.8 GB"), root.model-search)))
+        || (root.quality-downloading && root.local-download-profile == 2);
+    property <bool> row-custom-visible: root.ai-local-custom-active
+        && (root.model-search == "" || root.model-matches(@tr("Your GGUF file"), root.model-search) || root.model-matches(root.ai-local-custom-model-name, root.model-search));
+    property <bool> row-strata-visible: (!root.strata-external && (!root.models-installed-only || root.strata-installed)
+        && (root.model-search == "" || root.model-matches(@tr("Qwen3.8-Flash-Next IQ2_XS"), root.model-search) || root.model-matches(@tr("Strata engine"), root.model-search)))
+        || (root.strata-busy && root.local-strata-job == 0);
+    pure callback model-found-matches([FoundModel], string) -> bool;
+    property <bool> has-matching-models: root.row-4b-visible || root.row-12b-visible || root.row-26b-visible || root.row-custom-visible || root.row-strata-visible || root.model-found-matches(root.found-models, root.model-search);
+
     // Which groups of the model list have rows (an empty group shows no header).
     property <bool> local-has-on-pc: (root.llama-installed && (root.legacy-model-present || root.fallback-model-present || root.quality-model-present))
         || root.ai-local-custom-active || root.strata-installed || root.found-models.length > 0;
@@ -2382,8 +2408,7 @@ export component SettingsWindow inherits Window {
                         }
                     }
                     if root.active-tab == 11 : VerticalLayout {
-                        spacing: 10px;
-                        SettingsCard {
+                        if Platform.is-macos : SettingsCard {
                             title: @tr("Model storage");
                             Text { text: @tr("Choose the Suflyor model folder on any mounted disk. AI, speech models and voices use it after restarting Suflyor. Existing files are not moved."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                             SettingsLineEdit { text <=> root.models-directory; placeholder-text: @tr("Absolute model folder path; empty uses the default locations"); }
@@ -2396,24 +2421,199 @@ export component SettingsWindow inherits Window {
                             if root.models-directory-status != "" : Text { text: root.models-directory-status == "Could not save the model folder. Choose an existing writable folder." ? @tr("Could not save the model folder. Choose an existing writable folder.") : @tr("Restart Suflyor to use the selected model folder. Existing files are not moved."); font-size: Metrics.font-caption; color: Theme.text-secondary; wrap: word-wrap; }
                             Text { text: @tr("For existing Strata weights, select the parent of Strata-data here. The Strata folder below is for an installed engine, not weights alone."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
                         }
+                        if !Platform.is-macos : SettingsCard {
+                                    title: @tr("Choose a model");
+                                    Text { text: root.local-hardware-line; font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                    Text { text: @tr("Download models ahead of time. Your current answer provider stays selected until you choose to use a local model."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                    SettingsLineEdit { text <=> root.model-search; placeholder-text: @tr("Search models…"); }
+                                    HorizontalLayout {
+                                        DarkCheck { text: @tr("Installed only"); checked <=> root.models-installed-only; }
+                                        Button { text: @tr("Clear filters"); enabled: root.model-search != "" || root.models-installed-only; clicked => { root.model-search = ""; root.models-installed-only = false; } }
+                                    }
+                                    if !root.has-matching-models : Text { text: @tr("No models match this filter."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                    for group in [0, 1] : WrapBlock {
+                                        if root.model-search == "" && !root.models-installed-only && (group == 0 ? root.local-has-on-pc : root.local-has-download) : Text { text: (group == 0 ? @tr("On this PC") : @tr("Available to download")).to-uppercase(); font-size: Metrics.font-label; font-weight: 700; color: Theme.text-secondary; }
+                                        
+                                        if root.row-4b-visible && (group == 0 ? root.legacy-model-present : !root.legacy-model-present) : LocalModelRow {
+                                            title: @tr("Fast (4B)");
+                                            detail: root.quality-downloading && root.local-download-profile == 0 ? root.quality-status : @tr("Gemma 4 E4B · 4.6 GB");
+                                            chip: "";
+                                            chip-tone: 0;
+                                            active: root.ai-provider-index == 1 && root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 0 && root.legacy-model-present;
+                                            action: self.busy ? @tr("Downloading…") : self.active ? @tr("In use") : !root.legacy-model-present ? @tr("Download model") : root.llama-installed ? @tr("Use") : @tr("Complete setup");
+                                            action-enabled: !self.active && !root.builtin-busy && !root.strata-busy;
+                                            busy: root.quality-downloading && root.local-download-profile == 0;
+                                            progress-visible: true;
+                                            progress: root.quality-progress;
+                                            action-clicked => {
+                                                if !root.legacy-model-present { root.download-model-clicked(0); }
+                                                else if !root.llama-installed { root.install-local-ai-clicked(); }
+                                                else { root.builtin-model-use(0); }
+                                            }
+                                            cancel-clicked => { root.cancel-local-ai-clicked(); }
+                                        }
+                                        if root.row-12b-visible && (group == 0 ? root.fallback-model-present : !root.fallback-model-present) : LocalModelRow {
+                                            title: @tr("Balanced (12B QAT)");
+                                            detail: root.quality-downloading && root.local-download-profile == 1 ? root.quality-status : @tr("Gemma 4 12B · 6.3 GB");
+                                            chip: @tr("recommended");
+                                            chip-tone: 1;
+                                            active: root.ai-provider-index == 1 && root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 1 && root.fallback-model-present;
+                                            action: self.busy ? @tr("Downloading…") : self.active ? @tr("In use") : !root.fallback-model-present ? @tr("Download model") : root.llama-installed ? @tr("Use") : @tr("Complete setup");
+                                            action-enabled: !self.active && !root.builtin-busy && !root.strata-busy;
+                                            busy: root.quality-downloading && root.local-download-profile == 1;
+                                            progress-visible: true;
+                                            progress: root.quality-progress;
+                                            action-clicked => {
+                                                if !root.fallback-model-present { root.download-model-clicked(1); }
+                                                else if !root.llama-installed { root.install-local-ai-clicked(); }
+                                                else { root.builtin-model-use(1); }
+                                            }
+                                            cancel-clicked => { root.cancel-local-ai-clicked(); }
+                                        }
+                                        if root.row-26b-visible && (group == 0 ? root.quality-model-present : !root.quality-model-present) : LocalModelRow {
+                                            title: @tr("Maximum (26B-A4B)");
+                                            detail: root.quality-downloading && root.local-download-profile == 2 ? root.quality-status : @tr("Gemma 4 26B-A4B · 9.8 GB");
+                                            chip: !root.quality-selection-allowed ? @tr("heavy for this PC") : "";
+                                            chip-tone: 2;
+                                            active: root.ai-provider-index == 1 && root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 2 && root.quality-model-present;
+                                            action: self.busy ? @tr("Downloading…") : self.active ? @tr("In use") : !root.quality-model-present ? @tr("Download model") : root.llama-installed ? @tr("Use") : @tr("Complete setup");
+                                            action-enabled: !self.active && !root.builtin-busy && !root.strata-busy;
+                                            busy: root.quality-downloading && root.local-download-profile == 2;
+                                            progress-visible: true;
+                                            progress: root.quality-progress;
+                                            action-clicked => {
+                                                if !root.quality-model-present { root.download-model-clicked(2); }
+                                                else if !root.llama-installed { root.install-local-ai-clicked(); }
+                                                else { root.builtin-model-use(2); }
+                                            }
+                                            cancel-clicked => { root.cancel-local-ai-clicked(); }
+                                        }
+                                        if group == 0 && root.row-custom-visible : LocalModelRow {
+                                            title: @tr("Your GGUF file");
+                                            detail: root.ai-local-custom-model-name;
+                                            active: root.ai-provider-index == 1 && root.managed-local-server;
+                                            action: @tr("Choose GGUF…");
+                                            action-enabled: !root.builtin-busy && !root.strata-busy;
+                                            action-clicked => { root.choose-custom-gguf-clicked(); }
+                                        }
+                                        if root.row-strata-visible && (group == 0 ? root.strata-installed : !root.strata-installed) : LocalModelRow {
+                                            title: @tr("Qwen3.8-Flash-Next IQ2_XS");
+                                            detail: root.strata-busy && root.local-strata-job == 0 ? root.strata-status : root.strata-installed ? @tr("Strata engine · installed") : @tr("Strata engine · ~72 GB download");
+                                            chip: !root.strata-hardware-fits ? @tr("needs 48 GB RAM") : "";
+                                            chip-tone: 2;
+                                            active: root.ai-provider-index == 1 && root.strata-active && !root.strata-adopted && !root.strata-external && root.strata-installed;
+                                            action: root.strata-busy ? @tr("Working…") : self.active && root.strata-running ? @tr("In use") : self.active ? @tr("Start") : root.strata-installed ? @tr("Use") : @tr("Download model");
+                                            action-enabled: !(self.active && root.strata-running) && !root.strata-busy && !root.builtin-busy;
+                                            busy: root.strata-busy && root.local-strata-job == 0;
+                                            action-clicked => { if root.strata-installed { root.strata-choose(true); } else { root.strata-install-clicked(); } }
+                                            cancel-clicked => { root.cancel-local-ai-clicked(); }
+                                        }
+                                        if group == 0 : WrapBlock {
+                                            for m[i] in root.found-models : WrapBlock {
+    if root.model-search == "" || root.model-matches(m.title + " " + m.detail, root.model-search) || (m.kind == 1 && root.strata-busy && root.local-strata-job == 1) : LocalModelRow {
+                                                title: m.title;
+                                                detail: m.kind == 1 && root.strata-busy && root.local-strata-job == 1 ? root.strata-status : m.detail;
+                                                active: root.ai-provider-index == 1 && (m.kind == 1 ? root.strata-active && root.strata-adopted : m.active);
+                                                action: m.kind == 1 ? (root.strata-busy ? @tr("Working…") : self.active && root.strata-running ? @tr("In use") : self.active ? @tr("Start") : @tr("Use")) : (self.active ? @tr("In use") : @tr("Connect"));
+                                                action-enabled: !(m.kind == 1 && self.active && root.strata-running) && !(m.kind == 0 && self.active) && !root.strata-busy && !root.builtin-busy;
+                                                busy: m.kind == 1 && root.strata-busy && root.local-strata-job == 1;
+                                                action-clicked => { root.found-model-use(i); }
+                                                cancel-clicked => { root.cancel-local-ai-clicked(); }
+                                            }
+}
+                                        }
+                                    }
+if (!root.llama-installed || root.local-ai-installing) : LocalModelRow {
+                                            title: @tr("Built-in engine + Gemma 4 12B");
+                                            detail: root.local-ai-installing ? root.local-ai-status : @tr("llama.cpp · about 7 GB with speech components");
+                                            action: root.local-ai-installing ? @tr("Installing…") : @tr("Install");
+                                            action-enabled: !root.builtin-busy && !root.strata-busy;
+                                            busy: root.local-ai-installing;
+                                            progress-visible: true;
+                                            progress: root.local-ai-progress;
+                                            action-clicked => { root.install-local-ai-clicked(); }
+                                            cancel-clicked => { root.cancel-local-ai-clicked(); }
+                                        }
+                                    if root.local-ai-status != "" && !root.local-ai-installing : Text { text: root.local-ai-status; font-size: Metrics.font-caption; color: Theme.text-secondary; wrap: word-wrap; }
+                                    Button { text: @tr("Model tools"); clicked => { root.model-tools-open = !root.model-tools-open; } }
+                                    if root.model-tools-open || root.strata-update-job != 0 || root.vision12b-downloading : WrapBlock {
+                                    HorizontalLayout {
+                                        spacing: Metrics.space-sm;
+                                        alignment: start;
+                                        Text { text: @tr("Strata folder…"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { enabled: !root.builtin-busy && !root.strata-busy; mouse-cursor: pointer; clicked => { root.strata-find-folder-clicked(); } } }
+                                        if root.llama-installed : Text { text: @tr(".gguf file…"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { enabled: !root.builtin-busy && !root.strata-busy; mouse-cursor: pointer; clicked => { root.choose-custom-gguf-clicked(); } } }
+                                        Text { text: @tr("Connect by address…"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { enabled: !root.builtin-busy && !root.strata-busy; mouse-cursor: pointer; clicked => { root.local-connect-auto = false; root.local-connect-open = !root.local-connect-open; } } }
+                                        if !root.found-models-searching : Text { text: @tr("Search again"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { enabled: !root.builtin-busy && !root.strata-busy; mouse-cursor: pointer; clicked => { root.found-models-search(); } } }
+                                    }
+                                    HorizontalLayout {
+                                        spacing: Metrics.space-sm;
+                                        SettingsLineEdit { horizontal-stretch: 1; text <=> root.strata-directory-input; placeholder-text: @tr("Absolute Strata folder path"); }
+                                        Button { text: @tr("Use folder"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.strata-folder-selected(root.strata-directory-input); } }
+                                    }
+                                    if root.strata-update-supported : WrapBlock {
+                                        Text { text: @tr("Installed Strata engine: {}", root.strata-engine-version); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                        Text { text: @tr("Strata release and engine versions differ. Checks use the latest official feed; updates replace only the engine. Model weights are kept. A running server restarts."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                        HorizontalLayout {
+                                            alignment: start;
+                                            spacing: Metrics.space-sm;
+                                            Button { text: @tr("Check engine updates"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.strata-engine-check(); } }
+                                            Button { text: @tr("Update Strata engine"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.strata-engine-update(); } }
+                                            if root.strata-update-job != 0 : Button { text: @tr("Cancel"); clicked => { root.cancel-local-ai-clicked(); } }
+                                        }
+                                        if root.strata-update-status != "" : Text { text: root.strata-update-status; font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                    }
+                                    if root.found-models-searching : Text { text: @tr("Looking for models on this PC…"); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                    if root.local-connect-open : WrapBlock {
+                                        SettingsLineEdit { text <=> root.ai-local-model-input; placeholder-text: @tr("Model ID (manual entry is supported)"); }
+                                        Text { text: @tr("Model discovery is optional. Enter the exact model ID if the server does not list models."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                        SettingsLineEdit { placeholder-text: @tr("local URL — http://127.0.0.1:11434/v1 (Ollama)"); text <=> root.ai-local-base-url-input; }
+                                        SettingsLineEdit { placeholder-text: @tr("local server bearer token (optional)"); text <=> root.ai-local-bearer-input; input-type: password; }
+                                        Text {
+                                            text: @tr("Clear saved token");
+                                            font-size: Metrics.font-caption;
+                                            color: Theme.accent;
+                                            TouchArea { mouse-cursor: pointer; clicked => { root.ai-local-bearer-save(""); root.ai-local-bearer-input = ""; } }
+                                        }
+                                        SettingsComboBox {
+                                            model: root.ai-local-models;
+                                            current-index: root.ai-local-model-index;
+                                            selected => { root.ai-local-model-index = self.current-index; root.ai-local-model-selected(self.current-value); }
+                                        }
+                                        HorizontalLayout {
+                                            alignment: start;
+                                            Button {
+                                                text: @tr("Connect");
+                                                enabled: !root.builtin-busy && !root.strata-busy;
+                                                clicked => {
+                                                    root.ai-local-connect();
+                                                }
+                                            }
+                                        }
+                                    }
+if root.llama-installed && root.quality-model-present : LocalModelRow {
+                                title: @tr("Install Vision for 26B (~1.1 GiB)");
+                                detail: root.vision12b-status;
+                                action: root.vision12b-downloading ? @tr("Installing Vision…") : root.quality-vision-present ? @tr("Installed") : @tr("Download model");
+                                action-enabled: !root.quality-vision-present && !root.builtin-busy && !root.strata-busy;
+                                busy: root.vision12b-downloading;
+                                progress-visible: true;
+                                progress: root.quality-progress;
+                                action-clicked => { root.download-vision12b-clicked(); }
+                                cancel-clicked => { root.cancel-local-ai-clicked(); }
+                            }
+                                    }
+                                    if root.local-choice-status != "" : Text { text: root.local-choice-status; font-size: Metrics.font-label; color: Theme.accent; wrap: word-wrap; }
+                                    Text { text: @tr("Model licence: Qwen. Open the model page"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { mouse-cursor: pointer; clicked => { root.strata-license-clicked(); } } }
+                                }
+                        spacing: 10px;
+                        
                         SettingsCard {
                         Text {
                             text: @tr("Where answers come from");
                             font-size: Metrics.font-label;
                             color: Theme.text-muted;
                         }
-                        WrapBlock {
-                            Text { text: @tr("Reuse a connection from OpenCode or Pi"); font-size: Metrics.font-label; color: Theme.text-primary; wrap: word-wrap; }
-                            Text { text: @tr("Imports compatible API profiles from global client settings. Does not run an agent or reuse subscription OAuth. Applying copies the selected API credential into Suflyor's server settings."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
-                            Button { text: @tr("Find connections"); enabled: !root.external-connections-busy; clicked => { root.external-connections-find(); } }
-                            if root.external-connections.length > 0 : WrapBlock {
-                                SettingsComboBox { model: root.external-connections; current-index <=> root.external-connection-index; }
-                                Button { text: @tr("Use connection"); enabled: !root.external-connections-busy && !root.builtin-busy && !root.strata-busy; clicked => { root.external-connection-use(root.external-connection-index); } }
-                            }
-                            if root.external-connections-status != "" : Text { text: root.external-connections-status; font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
-                        }
-                        // ===== TYPE selector — gates everything below =====
-                        SettingsComboBox {
+SettingsComboBox {
                             model: Platform.is-macos ? [
                                 @tr("Your server or bridge (OpenAI-compatible)"),
                                 @tr("Model on this PC"),
@@ -2433,6 +2633,20 @@ export component SettingsWindow inherits Window {
                                 root.ai-provider-changed(self.current-index);
                             }
                         }
+Button { visible: !Platform.is-macos; text: @tr("Connections"); clicked => { root.model-connections-open = !root.model-connections-open; } }
+if Platform.is-macos || root.model-connections-open || root.codex-auth-busy : WrapBlock {
+                        WrapBlock {
+                            Text { text: @tr("Reuse a connection from OpenCode or Pi"); font-size: Metrics.font-label; color: Theme.text-primary; wrap: word-wrap; }
+                            Text { text: @tr("Imports compatible API profiles from global client settings. Does not run an agent or reuse subscription OAuth. Applying copies the selected API credential into Suflyor's server settings."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                            Button { text: @tr("Find connections"); enabled: !root.external-connections-busy; clicked => { root.external-connections-find(); } }
+                            if root.external-connections.length > 0 : WrapBlock {
+                                SettingsComboBox { model: root.external-connections; current-index <=> root.external-connection-index; }
+                                Button { text: @tr("Use connection"); enabled: !root.external-connections-busy && !root.builtin-busy && !root.strata-busy; clicked => { root.external-connection-use(root.external-connection-index); } }
+                            }
+                            if root.external-connections-status != "" : Text { text: root.external-connections-status; font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                        }
+                        // ===== TYPE selector — gates everything below =====
+                        
                         if Platform.is-macos && root.ai-provider-index < 0 : Text {
                             text: @tr("The saved Codex provider is unavailable on macOS. Choose a supported provider.");
                             font-size: Metrics.font-caption;
@@ -2880,110 +3094,11 @@ export component SettingsWindow inherits Window {
                         }
 
                         // Downloading assets is independent of the current answer provider.
-                        if !Platform.is-macos && root.ai-provider-index != 1 : SettingsCard {
-                            title: @tr("Models on this PC");
-                            Text {
-                                text: @tr("Download models ahead of time. Your current answer provider stays selected until you choose to use a local model.");
-                                font-size: Metrics.font-caption;
-                                color: Theme.text-muted;
-                                wrap: word-wrap;
-                            }
-                            if !root.llama-installed || root.local-ai-installing : LocalModelRow {
-                                title: @tr("Built-in engine + Gemma 4 12B");
-                                detail: root.local-ai-installing ? root.local-ai-status : @tr("llama.cpp · about 7 GB with speech components");
-                                action: root.local-ai-installing ? @tr("Installing…") : @tr("Install");
-                                action-enabled: !root.builtin-busy && !root.strata-busy;
-                                busy: root.local-ai-installing;
-                                progress-visible: true;
-                                progress: root.local-ai-progress;
-                                action-clicked => { root.install-local-ai-clicked(); }
-                                cancel-clicked => { root.cancel-local-ai-clicked(); }
-                            }
-                            if root.llama-installed : LocalModelRow {
-                                title: @tr("Fast (4B)");
-                                detail: root.quality-downloading && root.local-download-profile == 0 ? root.quality-status : @tr("Gemma 4 E4B · 4.6 GB");
-                                chip: "";
-                                chip-tone: 0;
-                                active: root.ai-provider-index == 1 && root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 0 && root.legacy-model-present;
-                                action: self.active ? @tr("In use") : root.legacy-model-present ? @tr("Use") : @tr("Download model");
-                                action-enabled: !self.active && !root.builtin-busy && !root.strata-busy;
-                                busy: root.quality-downloading && root.local-download-profile == 0;
-                                progress-visible: true;
-                                progress: root.quality-progress;
-                                action-clicked => {
-                                    if !root.legacy-model-present { root.download-model-clicked(0); }
-                                    else { root.builtin-model-use(0); }
-                                }
-                                cancel-clicked => { root.cancel-local-ai-clicked(); }
-                            }
-                            if root.llama-installed : LocalModelRow {
-                                title: @tr("Balanced (12B QAT)");
-                                detail: root.quality-downloading && root.local-download-profile == 1 ? root.quality-status : @tr("Gemma 4 12B · 6.3 GB");
-                                chip: @tr("recommended");
-                                chip-tone: 1;
-                                active: root.ai-provider-index == 1 && root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 1 && root.fallback-model-present;
-                                action: self.active ? @tr("In use") : root.fallback-model-present ? @tr("Use") : @tr("Download model");
-                                action-enabled: !self.active && !root.builtin-busy && !root.strata-busy;
-                                busy: root.quality-downloading && root.local-download-profile == 1;
-                                progress-visible: true;
-                                progress: root.quality-progress;
-                                action-clicked => {
-                                    if !root.fallback-model-present { root.download-model-clicked(1); }
-                                    else { root.builtin-model-use(1); }
-                                }
-                                cancel-clicked => { root.cancel-local-ai-clicked(); }
-                            }
-                            if root.llama-installed : LocalModelRow {
-                                title: @tr("Maximum (26B-A4B)");
-                                detail: root.quality-downloading && root.local-download-profile == 2 ? root.quality-status : @tr("Gemma 4 26B-A4B · 9.8 GB");
-                                chip: !root.quality-selection-allowed ? @tr("heavy for this PC") : "";
-                                chip-tone: 2;
-                                active: root.ai-provider-index == 1 && root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 2 && root.quality-model-present;
-                                action: self.active ? @tr("In use") : root.quality-model-present ? @tr("Use") : @tr("Download model");
-                                action-enabled: !self.active && !root.builtin-busy && !root.strata-busy;
-                                busy: root.quality-downloading && root.local-download-profile == 2;
-                                progress-visible: true;
-                                progress: root.quality-progress;
-                                action-clicked => {
-                                    if !root.quality-model-present { root.download-model-clicked(2); }
-                                    else { root.builtin-model-use(2); }
-                                }
-                                cancel-clicked => { root.cancel-local-ai-clicked(); }
-                            }
-                            if root.local-ai-status != "" && !root.local-ai-installing : Text {
-                                text: root.local-ai-status;
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                                wrap: word-wrap;
-                            }
-                            if root.quality-status != "" : Text {
-                                text: root.quality-status;
-                                font-size: Metrics.font-label;
-                                color: Theme.text-secondary;
-                                wrap: word-wrap;
-                            }
-                            if root.llama-installed && root.quality-model-present : LocalModelRow {
-                                title: @tr("Install Vision for 26B (~1.1 GiB)");
-                                detail: root.vision12b-status;
-                                action: root.vision12b-downloading ? @tr("Installing Vision…") : root.quality-vision-present ? @tr("Installed") : @tr("Download model");
-                                action-enabled: !root.quality-vision-present && !root.builtin-busy && !root.strata-busy;
-                                busy: root.vision12b-downloading;
-                                progress-visible: true;
-                                progress: root.quality-progress;
-                                action-clicked => { root.download-vision12b-clicked(); }
-                                cancel-clicked => { root.cancel-local-ai-clicked(); }
-                            }
-                            // Full card width, like the other Settings buttons.
-                            Button {
-                                text: @tr("Use for answers");
-                                enabled: root.llama-installed && (root.legacy-model-present || root.fallback-model-present || root.quality-model-present) && !root.builtin-busy && !root.strata-busy;
-                                clicked => {
-                                    root.builtin-model-use(root.fallback-model-present ? 1 : root.legacy-model-present ? 0 : 2);
-                                }
-                            }
+                        
+
                         }
 
-                        // ============================ LOCAL ============================
+// ============================ LOCAL ============================
                         if root.ai-provider-index == 1 : VerticalLayout {
                             spacing: Metrics.space-sm;
                             vertical-stretch: 0;
@@ -3027,183 +3142,8 @@ export component SettingsWindow inherits Window {
                                     if root.ai-local-test-result != "" : Text { text: root.ai-local-test-result; font-size: Metrics.font-label; color: Theme.text-secondary; wrap: word-wrap; }
                                     if root.now-notice != "" : Text { text: root.now-notice; font-size: Metrics.font-caption; color: Theme.warning; wrap: word-wrap; }
                                 }
-                                SettingsCard {
-                                    title: @tr("Model speed");
-                                    Text { text: @tr("Prefill reads the input; decode generates the answer. A synthetic sample uses the selected model and server timings. No server is started or reconfigured. Up to 128 output tokens; allow up to 3 minutes."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
-                                    SettingsComboBox {
-                                        model: [@tr("Short input"), @tr("Medium input"), @tr("Long input")];
-                                        current-index <=> root.model-speed-size;
-                                        enabled: !root.model-speed-running;
-                                    }
-                                    HorizontalLayout {
-                                        alignment: start;
-                                        spacing: Metrics.space-sm;
-                                        Button { text: @tr("Measure model speed"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.measure-model-speed(); } }
-                                        if root.model-speed-running : Button { text: @tr("Cancel"); clicked => { root.cancel-model-speed(); } }
-                                    }
-                                    if root.model-speed-status != "" : Text { text: root.model-speed-status; font-size: Metrics.font-caption; color: Theme.text-secondary; wrap: word-wrap; }
-                                    if root.model-speed-result != "" : Text { text: root.model-speed-result; font-size: Metrics.font-label; color: Theme.text-primary; wrap: word-wrap; }
-                                    Text { text: @tr("Last measurement, not a guarantee: input length, cache, GPU load and engine settings change the speed. Missing server timings are shown as unavailable. First-token and total time may include waiting and model loading."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
-                                }
-                                SettingsCard {
-                                    title: @tr("Choose a model");
-                                    Text { text: root.local-hardware-line; font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
-                                    for group in [0, 1] : WrapBlock {
-                                        if group == 0 ? root.local-has-on-pc : root.local-has-download : Text { text: (group == 0 ? @tr("On this PC") : @tr("Available to download")).to-uppercase(); font-size: Metrics.font-label; font-weight: 700; color: Theme.text-secondary; }
-                                        if group == 1 && (!root.llama-installed || root.local-ai-installing) : LocalModelRow {
-                                            title: @tr("Built-in engine + Gemma 4 12B");
-                                            detail: root.local-ai-installing ? root.local-ai-status : @tr("llama.cpp · about 7 GB with speech components");
-                                            action: root.local-ai-installing ? @tr("Installing…") : @tr("Install");
-                                            action-enabled: !root.builtin-busy && !root.strata-busy;
-                                            busy: root.local-ai-installing;
-                                            progress-visible: true;
-                                            progress: root.local-ai-progress;
-                                            action-clicked => { root.install-local-ai-clicked(); }
-                                            cancel-clicked => { root.cancel-local-ai-clicked(); }
-                                        }
-                                        if root.llama-installed && (group == 0 ? root.legacy-model-present : !root.legacy-model-present) : LocalModelRow {
-                                            title: @tr("Fast (4B)");
-                                            detail: root.quality-downloading && root.local-download-profile == 0 ? root.quality-status : @tr("Gemma 4 E4B · 4.6 GB");
-                                            chip: "";
-                                            chip-tone: 0;
-                                            active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 0 && root.legacy-model-present;
-                                            action: self.active ? @tr("In use") : root.legacy-model-present ? @tr("Use") : @tr("Download model");
-                                            action-enabled: !self.active && !root.builtin-busy && !root.strata-busy;
-                                            busy: root.quality-downloading && root.local-download-profile == 0;
-                                            progress-visible: true;
-                                            progress: root.quality-progress;
-                                            action-clicked => {
-                                                if !root.legacy-model-present { root.download-model-clicked(0); }
-                                                else if root.managed-local-server { root.model-profile-changed(0); }
-                                                else { root.builtin-model-use(0); }
-                                            }
-                                            cancel-clicked => { root.cancel-local-ai-clicked(); }
-                                        }
-                                        if root.llama-installed && (group == 0 ? root.fallback-model-present : !root.fallback-model-present) : LocalModelRow {
-                                            title: @tr("Balanced (12B QAT)");
-                                            detail: root.quality-downloading && root.local-download-profile == 1 ? root.quality-status : @tr("Gemma 4 12B · 6.3 GB");
-                                            chip: @tr("recommended");
-                                            chip-tone: 1;
-                                            active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 1 && root.fallback-model-present;
-                                            action: self.active ? @tr("In use") : root.fallback-model-present ? @tr("Use") : @tr("Download model");
-                                            action-enabled: !self.active && !root.builtin-busy && !root.strata-busy;
-                                            busy: root.quality-downloading && root.local-download-profile == 1;
-                                            progress-visible: true;
-                                            progress: root.quality-progress;
-                                            action-clicked => {
-                                                if !root.fallback-model-present { root.download-model-clicked(1); }
-                                                else if root.managed-local-server { root.model-profile-changed(1); }
-                                                else { root.builtin-model-use(1); }
-                                            }
-                                            cancel-clicked => { root.cancel-local-ai-clicked(); }
-                                        }
-                                        if root.llama-installed && (group == 0 ? root.quality-model-present : !root.quality-model-present) : LocalModelRow {
-                                            title: @tr("Maximum (26B-A4B)");
-                                            detail: root.quality-downloading && root.local-download-profile == 2 ? root.quality-status : @tr("Gemma 4 26B-A4B · 9.8 GB");
-                                            chip: !root.quality-selection-allowed ? @tr("heavy for this PC") : "";
-                                            chip-tone: 2;
-                                            active: root.managed-local-server && !root.ai-local-custom-active && root.ai-local-model-profile-index == 2 && root.quality-model-present;
-                                            action: self.active ? @tr("In use") : root.quality-model-present ? @tr("Use") : @tr("Download model");
-                                            action-enabled: !self.active && !root.builtin-busy && !root.strata-busy;
-                                            busy: root.quality-downloading && root.local-download-profile == 2;
-                                            progress-visible: true;
-                                            progress: root.quality-progress;
-                                            action-clicked => {
-                                                if !root.quality-model-present { root.download-model-clicked(2); }
-                                                else if root.managed-local-server { root.model-profile-changed(2); }
-                                                else { root.builtin-model-use(2); }
-                                            }
-                                            cancel-clicked => { root.cancel-local-ai-clicked(); }
-                                        }
-                                        if group == 0 && root.ai-local-custom-active : LocalModelRow {
-                                            title: @tr("Your GGUF file");
-                                            detail: root.ai-local-custom-model-name;
-                                            active: root.managed-local-server;
-                                            action: @tr("Choose GGUF…");
-                                            action-enabled: !root.builtin-busy && !root.strata-busy;
-                                            action-clicked => { root.choose-custom-gguf-clicked(); }
-                                        }
-                                        if (group == 0 ? root.strata-installed : !root.strata-installed) : LocalModelRow {
-                                            title: @tr("Qwen3.8-Flash-Next IQ2_XS");
-                                            detail: root.strata-busy && root.local-strata-job == 0 ? root.strata-status : root.strata-installed ? @tr("Strata engine · installed") : @tr("Strata engine · ~72 GB download");
-                                            chip: !root.strata-hardware-fits ? @tr("needs 48 GB RAM") : "";
-                                            chip-tone: 2;
-                                            active: root.strata-active && !root.strata-adopted && !root.strata-external && root.strata-installed;
-                                            action: root.strata-busy ? @tr("Working…") : self.active && root.strata-running ? @tr("In use") : self.active ? @tr("Start") : root.strata-installed ? @tr("Use") : @tr("Download model");
-                                            action-enabled: !(self.active && root.strata-running) && !root.strata-busy && !root.builtin-busy;
-                                            busy: root.strata-busy && root.local-strata-job == 0;
-                                            action-clicked => { if root.strata-installed { root.strata-choose(true); } else { root.strata-install-clicked(); } }
-                                            cancel-clicked => { root.cancel-local-ai-clicked(); }
-                                        }
-                                        if group == 0 : WrapBlock {
-                                            for m[i] in root.found-models : LocalModelRow {
-                                                title: m.title;
-                                                detail: m.kind == 1 && root.strata-busy && root.local-strata-job == 1 ? root.strata-status : m.detail;
-                                                active: m.kind == 1 ? root.strata-active && root.strata-adopted : m.active;
-                                                action: m.kind == 1 ? (root.strata-busy ? @tr("Working…") : self.active && root.strata-running ? @tr("In use") : self.active ? @tr("Start") : @tr("Use")) : (self.active ? @tr("In use") : @tr("Connect"));
-                                                action-enabled: !(m.kind == 1 && self.active && root.strata-running) && !(m.kind == 0 && self.active) && !root.strata-busy && !root.builtin-busy;
-                                                busy: m.kind == 1 && root.strata-busy && root.local-strata-job == 1;
-                                                action-clicked => { root.found-model-use(i); }
-                                                cancel-clicked => { root.cancel-local-ai-clicked(); }
-                                            }
-                                        }
-                                    }
-                                    HorizontalLayout {
-                                        spacing: Metrics.space-sm;
-                                        alignment: start;
-                                        Text { text: @tr("Strata folder…"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { enabled: !root.builtin-busy && !root.strata-busy; mouse-cursor: pointer; clicked => { root.strata-find-folder-clicked(); } } }
-                                        if root.llama-installed : Text { text: @tr(".gguf file…"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { enabled: !root.builtin-busy && !root.strata-busy; mouse-cursor: pointer; clicked => { root.choose-custom-gguf-clicked(); } } }
-                                        Text { text: @tr("Connect by address…"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { enabled: !root.builtin-busy && !root.strata-busy; mouse-cursor: pointer; clicked => { root.local-connect-auto = false; root.local-connect-open = !root.local-connect-open; } } }
-                                        if !root.found-models-searching : Text { text: @tr("Search again"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { enabled: !root.builtin-busy && !root.strata-busy; mouse-cursor: pointer; clicked => { root.found-models-search(); } } }
-                                    }
-                                    HorizontalLayout {
-                                        spacing: Metrics.space-sm;
-                                        SettingsLineEdit { horizontal-stretch: 1; text <=> root.strata-directory-input; placeholder-text: @tr("Absolute Strata folder path"); }
-                                        Button { text: @tr("Use folder"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.strata-folder-selected(root.strata-directory-input); } }
-                                    }
-                                    if root.strata-update-supported : WrapBlock {
-                                        Text { text: @tr("Installed Strata engine: {}", root.strata-engine-version); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
-                                        Text { text: @tr("Strata release and engine versions differ. Checks use the latest official feed; updates replace only the engine. Model weights are kept. A running server restarts."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
-                                        HorizontalLayout {
-                                            alignment: start;
-                                            spacing: Metrics.space-sm;
-                                            Button { text: @tr("Check engine updates"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.strata-engine-check(); } }
-                                            Button { text: @tr("Update Strata engine"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.strata-engine-update(); } }
-                                            if root.strata-update-job != 0 : Button { text: @tr("Cancel"); clicked => { root.cancel-local-ai-clicked(); } }
-                                        }
-                                        if root.strata-update-status != "" : Text { text: root.strata-update-status; font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
-                                    }
-                                    if root.found-models-searching : Text { text: @tr("Looking for models on this PC…"); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
-                                    if root.local-connect-open : WrapBlock {
-                                        SettingsLineEdit { text <=> root.ai-local-model-input; placeholder-text: @tr("Model ID (manual entry is supported)"); }
-                                        Text { text: @tr("Model discovery is optional. Enter the exact model ID if the server does not list models."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
-                                        SettingsLineEdit { placeholder-text: @tr("local URL — http://127.0.0.1:11434/v1 (Ollama)"); text <=> root.ai-local-base-url-input; }
-                                        SettingsLineEdit { placeholder-text: @tr("local server bearer token (optional)"); text <=> root.ai-local-bearer-input; input-type: password; }
-                                        Text {
-                                            text: @tr("Clear saved token");
-                                            font-size: Metrics.font-caption;
-                                            color: Theme.accent;
-                                            TouchArea { mouse-cursor: pointer; clicked => { root.ai-local-bearer-save(""); root.ai-local-bearer-input = ""; } }
-                                        }
-                                        SettingsComboBox {
-                                            model: root.ai-local-models;
-                                            current-index: root.ai-local-model-index;
-                                            selected => { root.ai-local-model-index = self.current-index; root.ai-local-model-selected(self.current-value); }
-                                        }
-                                        HorizontalLayout {
-                                            alignment: start;
-                                            Button {
-                                                text: @tr("Connect");
-                                                enabled: !root.builtin-busy && !root.strata-busy;
-                                                clicked => {
-                                                    root.ai-local-connect();
-                                                }
-                                            }
-                                        }
-                                    }
-                                    if root.local-choice-status != "" : Text { text: root.local-choice-status; font-size: Metrics.font-label; color: Theme.accent; wrap: word-wrap; }
-                                    Text { text: @tr("Model licence: Qwen. Open the model page"); font-size: Metrics.font-caption; color: Theme.accent; wrap: word-wrap; TouchArea { mouse-cursor: pointer; clicked => { root.strata-license-clicked(); } } }
-                                }
+                                
+                                
                                 SettingsCard {
                                     title: @tr("What the model can do");
                                     DarkCheck { text: @tr("Local model reasoning/thinking (slower, off = faster)"); checked <=> root.ai-local-thinking; toggled(v) => { root.ai-local-thinking-changed(v); } }
@@ -3465,7 +3405,45 @@ export component SettingsWindow inherits Window {
                         }
 
                         }
-                    }
+                    
+                        if !Platform.is-macos : WrapBlock {
+Button { text: @tr("Model storage"); clicked => { root.model-storage-open = !root.model-storage-open; } }
+if Platform.is-macos || root.model-storage-open || false : SettingsCard {
+                            title: @tr("Model storage");
+                            Text { text: @tr("Choose the Suflyor model folder on any mounted disk. AI, speech models and voices use it after restarting Suflyor. Existing files are not moved."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                            SettingsLineEdit { text <=> root.models-directory; placeholder-text: @tr("Absolute model folder path; empty uses the default locations"); }
+                            HorizontalLayout {
+                                alignment: start;
+                                spacing: Metrics.space-sm;
+                                Button { text: @tr("Save"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.models-directory-save(root.models-directory); } }
+                                Button { text: @tr("Choose folder…"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.models-directory-browse(); } }
+                            }
+                            if root.models-directory-status != "" : Text { text: root.models-directory-status == "Could not save the model folder. Choose an existing writable folder." ? @tr("Could not save the model folder. Choose an existing writable folder.") : @tr("Restart Suflyor to use the selected model folder. Existing files are not moved."); font-size: Metrics.font-caption; color: Theme.text-secondary; wrap: word-wrap; }
+                            Text { text: @tr("For existing Strata weights, select the parent of Strata-data here. The Strata folder below is for an installed engine, not weights alone."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                        }
+                            if root.ai-provider-index == 1 : WrapBlock {
+Button { text: @tr("Model speed"); clicked => { root.model-speed-open = !root.model-speed-open; } }
+if Platform.is-macos || root.model-speed-open || root.model-speed-running : SettingsCard {
+                                    title: @tr("Model speed");
+                                    Text { text: @tr("Prefill reads the input; decode generates the answer. A synthetic sample uses the selected model and server timings. No server is started or reconfigured. Up to 128 output tokens; allow up to 3 minutes."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                    SettingsComboBox {
+                                        model: [@tr("Short input"), @tr("Medium input"), @tr("Long input")];
+                                        current-index <=> root.model-speed-size;
+                                        enabled: !root.model-speed-running;
+                                    }
+                                    HorizontalLayout {
+                                        alignment: start;
+                                        spacing: Metrics.space-sm;
+                                        Button { text: @tr("Measure model speed"); enabled: !root.builtin-busy && !root.strata-busy; clicked => { root.measure-model-speed(); } }
+                                        if root.model-speed-running : Button { text: @tr("Cancel"); clicked => { root.cancel-model-speed(); } }
+                                    }
+                                    if root.model-speed-status != "" : Text { text: root.model-speed-status; font-size: Metrics.font-caption; color: Theme.text-secondary; wrap: word-wrap; }
+                                    if root.model-speed-result != "" : Text { text: root.model-speed-result; font-size: Metrics.font-label; color: Theme.text-primary; wrap: word-wrap; }
+                                    Text { text: @tr("Last measurement, not a guarantee: input length, cache, GPU load and engine settings change the speed. Missing server timings are shown as unavailable. First-token and total time may include waiting and model loading."); font-size: Metrics.font-caption; color: Theme.text-muted; wrap: word-wrap; }
+                                }
+                            }
+                        }
+}
                     if root.active-tab == 17 : VerticalLayout {
                         spacing: 10px;
                         SettingsCard {

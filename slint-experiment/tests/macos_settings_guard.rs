@@ -66,7 +66,6 @@ fn macos_settings_hide_windows_only_setup_and_managed_local_actions() {
     assert!(windows.contains("if !Platform.is-macos : WrapBlock {"));
     for title in [
         "Now answering",
-        "Choose a model",
         "What the model can do",
         "Show fine tuning",
     ] {
@@ -127,7 +126,7 @@ fn local_model_cards_keep_jobs_actions_and_async_checks_reachable() {
         assert!(ui.contains(&format!("root.local-download-profile == {profile}")));
         assert!(ui.contains(&format!("root.builtin-model-use({profile})")));
     }
-    for width in ["width: 96px", "width: 132px", "height: 30px", "height: 6px"] {
+    for width in ["width: 132px", "height: 30px", "height: 6px"] {
         assert!(controls.contains(width));
     }
     assert!(local.contains("std::time::Duration::from_secs(3)"));
@@ -146,13 +145,13 @@ fn windows_can_download_local_assets_without_selecting_local_answers() {
     let backend = read("../overlay-backend/src/local_ai.rs");
     let controller = read("src/bin/overlay_host/settings_controller.rs");
     let card = ui
-        .split_once("if !Platform.is-macos && root.ai-provider-index != 1 : SettingsCard {")
-        .expect("download card is visible with any non-local Windows provider")
+        .split_once("if !Platform.is-macos : SettingsCard {\n                                    title: @tr(\"Choose a model\")")
+        .expect("one model catalogue is visible regardless of answer provider")
         .1
-        .split_once("// ============================ LOCAL")
+        .split_once("text: @tr(\"Where answers come from\")")
         .unwrap()
         .0;
-    assert!(card.contains("title: @tr(\"Models on this PC\")"));
+    assert_eq!(ui.matches("title: @tr(\"Choose a model\")").count(), 1);
     for callback in [
         "root.install-local-ai-clicked()",
         "root.cancel-local-ai-clicked()",
@@ -169,9 +168,11 @@ fn windows_can_download_local_assets_without_selecting_local_answers() {
             "missing shared callback: {callback}"
         );
     }
-    assert!(card.contains("text: @tr(\"Use for answers\")"));
     assert!(!card.contains("root.ai-provider-changed(1)"));
-    assert!(card.contains("root.builtin-model-use(root.fallback-model-present ? 1 : root.legacy-model-present ? 0 : 2)"));
+    for profile in 0..=2 {
+        assert!(card.contains(&format!("root.builtin-model-use({profile})")));
+    }
+    assert!(card.contains("else if !root.llama-installed { root.install-local-ai-clicked(); }"));
     let activation = local
         .split_once("win.on_local_engine_activate(move |index| {")
         .expect("explicit engine activation callback")
@@ -191,9 +192,9 @@ fn windows_can_download_local_assets_without_selecting_local_answers() {
     assert!(commit.contains("c.ai_provider = \"local\".to_string()"));
     assert!(commit.contains("ModelSwitch::FallbackStarted"));
     assert!(commit.contains("ManagedModel::Fallback12B"));
-    assert!(card.contains(
-        "root.legacy-model-present || root.fallback-model-present || root.quality-model-present"
-    ));
+    for row in ["row-4b-visible", "row-12b-visible", "row-26b-visible"] {
+        assert!(card.contains(row), "catalogue must expose {row} before engine install");
+    }
     let download = local
         .split_once("Ok(res) if download_only => {")
         .unwrap()

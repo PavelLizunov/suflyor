@@ -3098,6 +3098,46 @@
             "prim": "void"
           }
         },
+        "model-found-matches": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "array": {
+                  "ref": "FoundModel"
+                }
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "bool"
+          }
+        },
+        "model-matches": {
+          "args": [
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            },
+            {
+              "name": "",
+              "type": {
+                "prim": "string"
+              }
+            }
+          ],
+          "ret": {
+            "prim": "bool"
+          }
+        },
         "model-profile-changed": {
           "args": [
             {

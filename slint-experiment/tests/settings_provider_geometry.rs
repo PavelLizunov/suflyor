@@ -46,14 +46,14 @@ fn provider_cards_contain_wrapped_content_in_both_languages() {
         (
             "",
             "Test OpenAI connection",
-            "Models on this PC",
+            "Choose a model",
             "What the model can do",
             "Fast answers can search the web and read public pages when enabled: at most two lookups with a 15-second lookup budget. The model decides when to look up; web queries go to DuckDuckGo. A server without tool support answers without web lookup.",
         ),
         (
             "ru",
             "Проверить подключение OpenAI",
-            "Модели на этом ПК",
+            "Выберите модель",
             "Возможности модели",
             "Быстрые ответы тоже могут искать в интернете и читать публичные страницы, если поиск включён: до двух обращений с общим бюджетом поиска 15 секунд. Модель решает, когда искать; запросы отправляются в DuckDuckGo. Сервер без поддержки инструментов отвечает без веб-поиска.",
         ),
@@ -67,15 +67,17 @@ fn provider_cards_contain_wrapped_content_in_both_languages() {
         for width in [720.0, 600.0, 480.0] {
             win.window().set_size(LogicalSize::new(width, 600.0));
             win.set_ai_provider_index(2);
+            let connections = if language == "ru" { "Подключения" } else { "Connections" };
+            labelled(&win, connections).invoke_accessible_default_action();
             scroll_to_end(&win, width);
             let button = labelled(&win, test);
             let card = card_for(&win, models);
-            let button_bottom = button.absolute_position().y + button.size().height;
+            let card_bottom = card.absolute_position().y + card.size().height;
             assert!(
-                card.absolute_position().y >= button_bottom + 8.0 - 0.5,
-                "{language} {width}px: download card overlaps OpenAI test: button bottom={button_bottom}, card top={}",
-                card.absolute_position().y
+                button.absolute_position().y >= card_bottom + 8.0 - 0.5,
+                "{language} {width}px: model catalogue overlaps the connection form"
             );
+            labelled(&win, connections).invoke_accessible_default_action();
 
             win.set_ai_provider_index(1);
             scroll_to_end(&win, width);

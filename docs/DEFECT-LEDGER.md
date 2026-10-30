@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-100 Model selection is buried behind connection and maintenance forms   Severity: P2   Status: Open
+Evidence: exact67e93146 VM107 native Settings capture at1920x1080 (960x680 settings, Russian) shows storage and external-connection import occupying the first viewport; no model is visible. Source places a synthetic benchmark before the local chooser and hides individual built-in choices until the engine is installed. Cloud and local modes duplicate separate model lists; Omarchy rows stack a full-width action below every model. The user reports that choosing models is difficult and asks for a Handy-like list.
+Fix: present one provider-independent local catalogue first, with search and installed-only filtering, truthful selected/download/busy state and compact row actions. Keep storage, import, manual connections and benchmark available as explicit disclosures. Reuse current download/activation/cancellation callbacks; downloading alone must not switch the answer provider. Verify native interaction and empty/search/busy states in both interfaces.
+Closed by:
+
 ### D-099 Provider checkpoint fails a stale local-activation source guard   Severity: P2   Status: Open
 Evidence: exact c2e30ef166f547f9d75e7b6592a18c5cbc05d994 CI run 40912175958 fails `windows_can_download_local_assets_without_selecting_local_answers` on both Windows and macOS at `macos_settings_guard.rs:177`. The test searches for removed `activate_answers` syntax. The explicit activation callback now selects local after readiness, while download-only completion remains separate and provider-neutral. This source-guard failure is not a demonstrated application startup failure. Linux's earlier selected tests did not include this target.
 Fix: anchor the guard to the explicit activation callback and its ready branch, retain cloud/fallback readiness assertions, and strengthen the download-only block's prohibition on selecting a provider. Target-worker startup remains unverified because management access is unavailable.
@@ -15,7 +20,7 @@ Closed by:
 
 ### D-098 Omarchy restarts Suflyor after an explicit Quit   Severity: P1   Status: Open
 Evidence: v0.39.0 `Service.qml::ensureDaemon` restarts whenever the shell socket disconnects. `quit-confirm` calls the host's normal event-loop shutdown, but the plugin has no intentional-stop state. Its two-second retry timer therefore launches another daemon after Quit. The installed daemon is not owned by a restarting systemd service. The current user reports the repeated launch.
-Fix: latch explicit Quit before sending the callback, persist that latch in the desktop runtime directory across plugin reloads, and resume only on an explicit widget click. Keep ordinary crash recovery and installer restart distinct. For immediate relief, the plugin was disabled through `disabledPlugins` without deleting its saved bar entry and the existing private Quit command was sent. No crash/restart replay or runtime acceptance has been performed.
+Fix: latch explicit Quit before sending the callback, persist that latch in the desktop runtime directory across plugin reloads, and resume only on an explicit widget click. Keep ordinary crash recovery and installer restart distinct. For immediate relief, the plugin was disabled through `disabledPlugins` without deleting its saved bar entry and the existing private Quit command was sent. Exact67e93146 VM107 native GUI Quit/Yes on2026-10-30 left no daemon at3/15/35seconds, service stopped=true and runtime marker stopped. An explicit bar click restarted the matching installed host and reached ready within2seconds; shell configuration hash was unchanged. This is bounded intentional-stop/start acceptance, not crash-recovery or model-inference coverage.
 Closed by:
 
 ### D-095 Successful Strata activation leaves the previous answer provider selected   Severity: P1   Status: Open

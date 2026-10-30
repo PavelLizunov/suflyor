@@ -4521,6 +4521,9 @@ struct SettingsWindowCallbacks {
     mlx_vision_download: Handler<dyn FnMut() -> ()>,
     mlx_vision_enable: Handler<dyn FnMut() -> ()>,
     mlx_vision_model_changed: Handler<dyn FnMut(i32) -> ()>,
+    model_found_matches:
+        Handler<dyn FnMut(slint::ModelRc<FoundModel>, slint::SharedString) -> bool>,
+    model_matches: Handler<dyn FnMut(slint::SharedString, slint::SharedString) -> bool>,
     model_profile_changed: Handler<dyn FnMut(i32) -> ()>,
     models_directory_browse: Handler<dyn FnMut() -> ()>,
     models_directory_save: Handler<dyn FnMut(slint::SharedString) -> ()>,
@@ -8406,6 +8409,50 @@ impl SettingsWindow {
             .send_invoke("mlx-vision-model-changed", vec![arg0.to_json()]);
         Default::default()
     }
+    pub fn on_model_found_matches(
+        &self,
+        f: impl FnMut(slint::ModelRc<FoundModel>, slint::SharedString) -> bool + 'static,
+    ) {
+        let f: Rc<RefCell<dyn FnMut(slint::ModelRc<FoundModel>, slint::SharedString) -> bool>> =
+            Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().model_found_matches = Handler(Some(f));
+    }
+    pub fn invoke_model_found_matches(
+        &self,
+        arg0: slint::ModelRc<FoundModel>,
+        arg1: slint::SharedString,
+    ) -> bool {
+        let handler = self.0.callbacks.borrow().model_found_matches.clone();
+        if handler.is_set() {
+            return handler.call(|f| f(arg0, arg1)).unwrap_or_default();
+        }
+        self.0
+            .base
+            .send_invoke("model-found-matches", vec![arg0.to_json(), arg1.to_json()]);
+        Default::default()
+    }
+    pub fn on_model_matches(
+        &self,
+        f: impl FnMut(slint::SharedString, slint::SharedString) -> bool + 'static,
+    ) {
+        let f: Rc<RefCell<dyn FnMut(slint::SharedString, slint::SharedString) -> bool>> =
+            Rc::new(RefCell::new(f));
+        self.0.callbacks.borrow_mut().model_matches = Handler(Some(f));
+    }
+    pub fn invoke_model_matches(
+        &self,
+        arg0: slint::SharedString,
+        arg1: slint::SharedString,
+    ) -> bool {
+        let handler = self.0.callbacks.borrow().model_matches.clone();
+        if handler.is_set() {
+            return handler.call(|f| f(arg0, arg1)).unwrap_or_default();
+        }
+        self.0
+            .base
+            .send_invoke("model-matches", vec![arg0.to_json(), arg1.to_json()]);
+        Default::default()
+    }
     pub fn on_model_profile_changed(&self, f: impl FnMut(i32) -> () + 'static) {
         let f: Rc<RefCell<dyn FnMut(i32) -> ()>> = Rc::new(RefCell::new(f));
         self.0.callbacks.borrow_mut().model_profile_changed = Handler(Some(f));
@@ -11773,6 +11820,32 @@ impl RemoteObject for SettingsWindowInner {
                 let handler = self.callbacks.borrow().mlx_vision_model_changed.clone();
                 Ok(handler
                     .call(|f| f(a0))
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
+            "model-found-matches" => {
+                let (a0, a1) = (
+                    <slint::ModelRc<FoundModel>>::from_json(args.get(0).unwrap_or(&Value::Null))
+                        .ok_or("bad argument 0")?,
+                    <slint::SharedString>::from_json(args.get(1).unwrap_or(&Value::Null))
+                        .ok_or("bad argument 1")?,
+                );
+                let handler = self.callbacks.borrow().model_found_matches.clone();
+                Ok(handler
+                    .call(|f| f(a0, a1))
+                    .map(|v| v.to_json())
+                    .unwrap_or(Value::Null))
+            }
+            "model-matches" => {
+                let (a0, a1) = (
+                    <slint::SharedString>::from_json(args.get(0).unwrap_or(&Value::Null))
+                        .ok_or("bad argument 0")?,
+                    <slint::SharedString>::from_json(args.get(1).unwrap_or(&Value::Null))
+                        .ok_or("bad argument 1")?,
+                );
+                let handler = self.callbacks.borrow().model_matches.clone();
+                Ok(handler
+                    .call(|f| f(a0, a1))
                     .map(|v| v.to_json())
                     .unwrap_or(Value::Null))
             }
