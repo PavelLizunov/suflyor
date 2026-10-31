@@ -23,10 +23,19 @@ removes its bar entry, so a later enable uses the manifest's default position.
 The plugin service is deliberately not `keepLoaded`: Omarchy's plugin reload
 must replace its QML, not retain old code.
 
-## Quit and start again
+## Turn off and start again
 
-Confirming Quit stops the daemon and suspends the plugin's automatic recovery.
-The muted bar mark stays in its saved position; click it to start Suflyor again.
+Right-click the bar mark to turn Suflyor off without opening settings. The
+**Turn off Suflyor** button at the top of the panel does the same in full and
+compact modes. Both use normal Quit directly: the host removes its Hyprland
+shortcuts, stops the current session and exits; automatic recovery stays suspended.
+No activation shortcut is reserved while off. Stopping only the session is not
+application Off and does not release shortcuts.
+
+The muted bar mark stays in its saved position. Left- or right-click it to start
+Suflyor again. While running, left-click opens the panel and middle-click asks a
+question. Repeated clicks during shutdown do not request another start. The
+existing Quit/confirmation action remains available below the session controls.
 This intentional-stop state survives plugin reloads for the current desktop login
 in `$XDG_RUNTIME_DIR/suflyor-omarchy-stopped`. A fresh login may autostart normally.
 Unexpected disconnects still use the existing bounded recovery. The installer's

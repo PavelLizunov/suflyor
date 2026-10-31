@@ -81,7 +81,7 @@ Item {
         Repeater {
           model: [
             { description: root.tr("Click: open the Suflyor panel") },
-            { description: root.tr("Right click: start or stop the session") },
+            { description: root.tr("Right click: turn Suflyor on or off") },
             { description: root.tr("Middle click: write a question") },
           ]
           delegate: Small.ReferenceRow {

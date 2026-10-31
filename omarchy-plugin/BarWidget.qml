@@ -8,7 +8,7 @@ import qs.Ui as Ui
 import "icons" as Icons
 
 // Suflyor in the Omarchy bar: the session state of suflyord's OverlayBarWindow.
-// Left click opens the panel, right click starts or stops the session, middle click asks.
+// Left click opens the panel or starts the app; right click toggles app power; middle click asks.
 Ui.BarWidget {
   id: root
 
@@ -71,6 +71,7 @@ Ui.BarWidget {
 
   readonly property string tooltip: {
     if (!effectiveService) return "Suflyor"
+    if (effectiveService.daemonStopped && effectiveService.client.connected) return root.tr("Suflyor is stopping…")
     if (effectiveService.daemonStopped) return root.tr("Suflyor is stopped. Click to start.")
     if (effectiveService.daemonFailed) return root.tr("Suflyor could not start. Reinstall the plugin, then restart the shell.")
     if (!running) return root.tr("Suflyor is starting…")
@@ -78,6 +79,7 @@ Ui.BarWidget {
     if (sessionActive) lines.push(root.tr("Stop session") + " · " + p("timer-label", ""))
     var status = p("stealth-fault", false) ? root.tr("[!] stealth unavailable") : localizedStatus(p("status-text", ""))
     if (status) lines.push(status)
+    lines.push(root.tr("Right click: turn Suflyor on or off"))
     return lines.join("\n")
   }
 
@@ -112,9 +114,20 @@ Ui.BarWidget {
     if (root.panelItem) root.panelItem.close()
   }
 
+  function togglePower() {
+    if (!root.effectiveService) return
+    if (root.effectiveService.daemonStopped) {
+      // Wait for normal Quit to disconnect before accepting another Start.
+      if (!root.effectiveService.client.connected) root.effectiveService.startDaemon()
+    } else if (root.running) {
+      root.close()
+      root.fire("quit-confirm")
+    }
+  }
+
   function toggle() {
     if (root.effectiveService && root.effectiveService.daemonStopped) {
-      root.effectiveService.startDaemon()
+      root.togglePower()
       return
     }
     if (opened) close()
@@ -125,6 +138,7 @@ Ui.BarWidget {
     if (root.panelItem) root.panelItem.closeForPopoutSwitch()
   }
 
+  onRunningChanged: if (!running) root.close()
   onBarChanged: syncPanel()
   onSettingsChanged: syncPanel()
   onEffectiveServiceChanged: syncPanel()
@@ -157,7 +171,7 @@ Ui.BarWidget {
     Accessible.onPressAction: root.toggle()
 
     onPressed: function (buttonCode) {
-      if (buttonCode === Qt.RightButton) { if (root.running) root.fire("timer-toggle-clicked") }
+      if (buttonCode === Qt.RightButton) root.togglePower()
       else if (buttonCode === Qt.MiddleButton) { if (root.running) root.fire("text-ask-clicked") }
       else root.toggle()
     }

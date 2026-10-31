@@ -238,6 +238,14 @@ Ui.Panel {
               }
             }
           }
+          Action {
+            objectName: "bar-power-off"
+            text: root.tr("Turn off Suflyor")
+            accessibleLabel: root.tr("Turn off Suflyor and release its hotkeys")
+            iconText: "\u{f0425}"
+            enabled: root.ready && !root.service.daemonStopped
+            onClicked: { root.close(); root.fire("quit-confirm") }
+          }
           // Bootstrap is deliberately exclusive: never expose dead audio/AI controls.
           Column {
             width: parent.width
