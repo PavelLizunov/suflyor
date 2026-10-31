@@ -57,7 +57,8 @@ pub fn diagnose_and_repair_at(path: &Path, backups: &Path) -> Result<DbHealth> {
     }
 
     // (2) BACKUP FIRST — before ANY write to the live DB.
-    std::fs::create_dir_all(backups).context("create backups dir")?;
+    // SECURITY: enforce 0o700 owner-only permissions on backups directory on POSIX.
+    crate::paths::ensure_private_dir(backups).context("create backups dir")?;
     let backup_path = backup_before_repair(path, backups);
     prune_backups(backups, 5);
 
@@ -255,7 +256,11 @@ fn backup_before_repair(path: &Path, backups: &Path) -> Option<String> {
         Ok(conn) => {
             let sql = format!("VACUUM INTO {}", quote_string(&backup.to_string_lossy()));
             match conn.execute_batch(&sql) {
-                Ok(()) => return Some(backup.to_string_lossy().into_owned()),
+                Ok(()) => {
+                    // SECURITY: restrict backup database to owner (0o600) on POSIX.
+                    let _ = crate::paths::restrict_to_owner(&backup);
+                    return Some(backup.to_string_lossy().into_owned());
+                }
                 Err(e) => log::warn!("maintenance: VACUUM INTO backup failed ({e}); raw-copying"),
             }
         }
@@ -266,12 +271,15 @@ fn backup_before_repair(path: &Path, backups: &Path) -> Option<String> {
     // is a complete WAL set even from a DB we couldn't open cleanly).
     match std::fs::copy(path, &backup) {
         Ok(_) => {
+            let _ = crate::paths::restrict_to_owner(&backup);
             for ext in ["sqlite-wal", "sqlite-shm"] {
                 let sib = path.with_extension(ext);
                 if sib.exists() {
                     let dst = backup.with_extension(ext);
                     if let Err(e) = std::fs::copy(&sib, &dst) {
                         log::warn!("maintenance: copy of {} failed: {e}", sib.display());
+                    } else {
+                        let _ = crate::paths::restrict_to_owner(&dst);
                     }
                 }
             }
@@ -406,7 +414,8 @@ fn clear_table_at(path: &Path, backups: &Path, table: &str) -> Result<ClearResul
     }
 
     // (2) BACKUP FIRST — before the DELETE. STRICT: no backup ⇒ no delete.
-    std::fs::create_dir_all(backups).context("create backups dir")?;
+    // SECURITY: enforce 0o700 owner-only permissions on backups directory on POSIX.
+    crate::paths::ensure_private_dir(backups).context("create backups dir")?;
     let backup_path = match backup_before_repair(path, backups) {
         Some(bp) => bp,
         None => bail!("резервная копия не создана — очистка отменена"),
@@ -669,5 +678,26 @@ mod tests {
         assert!(!is_backup_file(Path::new("catalog-.sqlite"))); // empty stamp
         assert!(!is_backup_file(Path::new("catalog-abc.sqlite"))); // non-digit
         assert!(!is_backup_file(Path::new("catalog-123.bak"))); // wrong ext
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn repair_backup_and_dir_are_owner_only_on_unix() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let db = tmp.path().join("catalog.sqlite");
+        let backups = tmp.path().join("backups");
+        seed_db(&db);
+
+        let health = diagnose_and_repair_at(&db, &backups).unwrap();
+        assert!(health.healthy);
+
+        let dir_mode = std::fs::metadata(&backups).unwrap().permissions().mode() & 0o777;
+        assert_eq!(dir_mode, 0o700, "backups dir must be mode 0700");
+
+        let bp = health.backup_path.expect("backup path recorded");
+        let file_mode = std::fs::metadata(&bp).unwrap().permissions().mode() & 0o777;
+        assert_eq!(file_mode, 0o600, "backup file must be mode 0600");
     }
 }
