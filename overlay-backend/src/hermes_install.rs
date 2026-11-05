@@ -145,7 +145,9 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<PluginInstalled, 
     let outcome = enable_in_config_text(cfg_old.as_deref().unwrap_or(""));
     match outcome {
         EnableEdit::Updated(new_text) => {
-            std::fs::write(&cfg_path, new_text).map_err(io_at(&cfg_path))?;
+            // SECURITY: config.yaml may contain sensitive API keys/passwords; write owner-only (0600 on POSIX).
+            crate::paths::write_private(&cfg_path, new_text.as_bytes())
+                .map_err(io_at(&cfg_path))?;
             Ok(PluginInstalled::Enabled)
         }
         EnableEdit::AlreadyEnabled => Ok(PluginInstalled::Updated),
@@ -168,7 +170,8 @@ pub fn ensure_api_server() -> Result<(String, bool), HermesError> {
     match ensure_api_server_text(&old, crate::bridge::generate_token) {
         ApiEdit::Ready(key) => Ok((key, false)),
         ApiEdit::Updated(text, key) => {
-            std::fs::write(&cfg_path, text).map_err(io_at(&cfg_path))?;
+            // SECURITY: config.yaml holds the generated api_server auth key; enforce owner-only permissions (0600 on POSIX).
+            crate::paths::write_private(&cfg_path, text.as_bytes()).map_err(io_at(&cfg_path))?;
             Ok((key, true))
         }
         ApiEdit::Unsupported => Err(HermesError::UnsupportedConfig),
@@ -667,6 +670,39 @@ mod tests {
         assert_eq!(unix_mode(&wide), 0o600, "an unchanged .env is tightened");
         // Nothing to restrict when the file does not exist and nothing is to be written.
         sync_env(&temp.path().join("absent.env"), "", "").unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn config_file_written_is_owner_only_on_unix() {
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("hermes_home");
+        std::fs::create_dir_all(&home).unwrap();
+        let cfg_path = home.join("config.yaml");
+
+        // Write an initial config that gets updated by ensure_api_server_text logic
+        let outcome = ensure_api_server_text("", genkey);
+        let ApiEdit::Updated(text, _) = outcome else {
+            panic!("expected Updated");
+        };
+        crate::paths::write_private(&cfg_path, text.as_bytes()).unwrap();
+        assert_eq!(
+            unix_mode(&cfg_path),
+            0o600,
+            "new config.yaml must be owner-only"
+        );
+
+        // When updated again with wide starting permissions, write_private replaces with 0600
+        let outcome2 = enable_in_config_text(&text);
+        let EnableEdit::Updated(new_text) = outcome2 else {
+            panic!("expected Updated");
+        };
+        crate::paths::write_private(&cfg_path, new_text.as_bytes()).unwrap();
+        assert_eq!(
+            unix_mode(&cfg_path),
+            0o600,
+            "updated config.yaml must remain owner-only"
+        );
     }
 
     #[test]
