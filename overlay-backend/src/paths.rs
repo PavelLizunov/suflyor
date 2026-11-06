@@ -113,12 +113,21 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 }
 
 /// Atomically replace a small machine-local file, including an existing Windows target.
+/// On Unix, restricts permissions to owner-only (`0o600`) before persisting so secrets
+/// or sensitive system paths are not exposed with default umask permissions.
 pub fn replace_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     let parent = path.parent().ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::InvalidInput, "file parent unavailable")
     })?;
     let mut file = tempfile::NamedTempFile::new_in(parent)?;
+    #[cfg(unix)]
+    {
+        // Enforce owner-only (0o600) permissions on POSIX before moving into destination.
+        use std::os::unix::fs::PermissionsExt;
+        file.as_file()
+            .set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    }
     file.write_all(bytes)?;
     file.persist(path).map_err(|error| error.error)?;
     Ok(())
@@ -232,6 +241,21 @@ mod tests {
         write_private(&path, b"new").unwrap();
 
         assert_eq!(std::fs::read(&path).unwrap(), b"new");
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn replace_private_enforces_mode_0600_on_unix() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("models-dir");
+
+        replace_private(&path, b"/custom/path").unwrap();
+
+        assert_eq!(std::fs::read(&path).unwrap(), b"/custom/path");
         let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600);
     }

@@ -1,3 +1,8 @@
+## 2026-10-30 - World-Readable File Creation in replace_private on POSIX
+**Vulnerability:** `replace_private` in `overlay-backend/src/paths.rs` created temporary files using `tempfile::NamedTempFile::new_in` and persisted them without setting explicit permissions. On POSIX systems, `NamedTempFile::new_in` creates files subject to the default process umask (such as `0644`), leaving replaced configuration files (`models-dir`, Strata Vision config) world-readable to other local users.
+**Learning:** `NamedTempFile::new` creates files with `0600` permissions by default, but `NamedTempFile::new_in` does not guarantee `0600` permissions across all platforms/configurations when creating files in an arbitrary parent directory.
+**Prevention:** Always explicitly call `file.as_file().set_permissions(std::fs::Permissions::from_mode(0o600))` on `NamedTempFile` instances before persisting them to ensure owner-only (`0o600`) permissions on POSIX systems.
+
 ## 2026-09-08 - Plaintext URL / Credential Leak in reqwest Error Log Formatting
 **Vulnerability:** Logging raw `reqwest::Error` instances via `{e:#}` in STT error handlers printed the full request URL into `overlay-host.log`. For HTTP endpoints with embedded credentials (`http://user:secret@host/v1`) or private LAN hostnames, transport failures leaked secrets into the shareable log file.
 **Learning:** `reqwest::Error`'s `Display` / `Debug` representation (`{e:#}`) embeds the target URL. Formatting `reqwest::Error` directly in log calls bypasses URL/credential redaction rules.
