@@ -1569,17 +1569,20 @@ fn sidecar_paths_use_the_platform_executable_suffix() {
 /// Capture a sidecar's stderr (voice-load + synth + first-audio-latency
 /// diagnostics) to its own log under `%APPDATA%\suflyor\`, falling back to
 /// null. Logs never contain spoken text — the sidecars only print counts/ids.
+fn sidecar_stderr_file(path: &Path) -> std::io::Result<std::fs::File> {
+    // Security: Use `open_private_append` to ensure sidecar diagnostic log files
+    // are created with owner-only permissions (0600 on Unix) rather than relying
+    // on default umask, preventing local unprivileged disclosure of runtime logs.
+    crate::paths::open_private_append(path)
+}
+
 fn sidecar_stderr(kind: EngineKind) -> Stdio {
     let name = match kind {
         EngineKind::Piper => "suflyor-tts.log",
         EngineKind::Tera => "suflyor-teratts.log",
     };
     if let Some(p) = crate::paths::data_root().map(|d| d.join(name)) {
-        if let Ok(f) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&p)
-        {
+        if let Ok(f) = sidecar_stderr_file(&p) {
             return Stdio::from(f);
         }
     }
@@ -2215,5 +2218,24 @@ mod tests {
         assert!(!sidecar.crashed_out());
         sidecar.crashes = TERA_CRASH_LIMIT;
         assert!(sidecar.crashed_out());
+    }
+
+    #[test]
+    fn sidecar_stderr_file_is_owner_only_on_unix() {
+        let tmp = tempfile::tempdir().unwrap();
+        let log_file = tmp.path().join("suflyor-tts.log");
+        let _f = sidecar_stderr_file(&log_file).unwrap();
+        assert!(log_file.is_file());
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&log_file).unwrap().permissions().mode();
+            assert_eq!(
+                mode & 0o777,
+                0o600,
+                "TTS sidecar stderr log must be owner-only (0600) on Unix"
+            );
+        }
     }
 }

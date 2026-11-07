@@ -37,3 +37,8 @@
 **Vulnerability:** `init()` in `logging.rs`, `collect_redacted_log()` in `diagnostics.rs`, and `try_acquire()` in `lifecycle.rs` created `overlay-host.log`, `suflyor-log.txt`, and `suflyor-overlay-singleton.lock` via default `std::fs::OpenOptions` and `std::fs::write`, leaving diagnostic log files and singleton lock files subject to default umask permissions (`0644`/`0664`) on Unix/POSIX targets.
 **Learning:** While `sessions/` journals and `config.json` enforced owner-restricted file permissions (`0o600`), application diagnostic logs and exported log summaries in `slint-experiment` relied on standard `std::fs` options, exposing log contents and lock files to other local system users.
 **Prevention:** Always use `overlay_backend::paths::open_private_append` and `overlay_backend::paths::write_private` when creating or writing log files, exports, or lock files on POSIX targets.
+
+## 2026-11-02 - World-Readable TTS Sidecar Log Permissions on POSIX
+**Vulnerability:** `sidecar_stderr` in `overlay-backend/src/tts.rs` created `suflyor-tts.log` and `suflyor-teratts.log` via standard `std::fs::OpenOptions::new().create(true).append(true)`, creating sidecar log files with default umask permissions (`0644`/`0664`) on Unix/POSIX targets.
+**Learning:** Even though sidecars intend to log diagnostic stderr without spoken text, unprivileged local system users could inspect sidecar runtime logs and operational metadata when logs are created without explicit owner-only mode flags.
+**Prevention:** Always use `crate::paths::open_private_append` when capturing or appending process stderr/stdout log files to enforce `0o600` permissions on POSIX systems.
