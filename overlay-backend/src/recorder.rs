@@ -36,7 +36,7 @@
 
 use crate::audio::{AudioChunk, AudioSource};
 use anyhow::{Context, Result};
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -123,6 +123,8 @@ impl SessionRecorder {
         max_total_mb: u32,
     ) -> Result<Self> {
         let root = recordings_dir()?;
+        // Audio recordings contain private meeting audio; enforce owner-only directory permissions (0o700).
+        let _ = crate::paths::ensure_private_dir(&root);
         // Best-effort: a fixup failure must not block opening the recorder. The
         // 30s grace skips a prior session still finalising after a rapid restart.
         if let Err(e) = repair_unfinalized_in(&root, std::time::Duration::from_secs(30)) {
@@ -164,7 +166,8 @@ impl SessionRecorder {
 
     /// Open a recorder writing into an explicit directory (test seam).
     pub fn start_in(dir: PathBuf) -> Result<Self> {
-        std::fs::create_dir_all(&dir)
+        // Enforce owner-only directory permissions on POSIX (0o700) to protect private meeting recordings.
+        crate::paths::ensure_private_dir(&dir)
             .with_context(|| format!("create recordings dir {}", dir.display()))?;
         let (tx, rx) = sync_channel::<RecMsg>(WRITER_QUEUE);
         let dropped = Arc::new(AtomicU64::new(0));
@@ -294,8 +297,13 @@ impl ChannelWriter {
             return None; // dead channel — never re-create (would truncate prior audio)
         }
         if self.writer.is_none() {
-            match hound::WavWriter::create(dir.join(name), spec) {
-                Ok(w) => self.writer = Some(w),
+            let wav_path = dir.join(name);
+            match hound::WavWriter::create(&wav_path, spec) {
+                Ok(w) => {
+                    // Audio recordings contain sensitive ambient speech; restrict WAV files to owner on POSIX (0o600).
+                    let _ = crate::paths::restrict_to_owner(&wav_path);
+                    self.writer = Some(w);
+                }
                 Err(e) => {
                     log::warn!("recorder: cannot create {name}: {e}");
                     self.failed = true;
@@ -408,11 +416,8 @@ fn writer_loop(rx: &Receiver<RecMsg>, dir: &Path) {
                             AudioSource::System => "system",
                         };
                         if mask.is_none() {
-                            match OpenOptions::new()
-                                .create(true)
-                                .append(true)
-                                .open(dir.join(TTS_MASK_FILE))
-                            {
+                            // TTS mask metadata is restricted to owner on POSIX (0o600).
+                            match crate::paths::open_private_append(&dir.join(TTS_MASK_FILE)) {
                                 Ok(file) => mask = Some(BufWriter::new(file)),
                                 Err(error) => {
                                     log::warn!("recorder: cannot create TTS mask: {error}");
@@ -1349,5 +1354,37 @@ mod tests {
                 end_sample: 960,
             }]
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn recordings_dir_and_files_are_owner_only_on_unix() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("sess_priv");
+        {
+            let rec = SessionRecorder::start_in(dir.clone()).unwrap();
+            rec.feed_with_tts_mask(&chunk_ts(AudioSource::System, &[10, 20, 30], 20), true);
+            rec.feed(&chunk_ts(AudioSource::Mic, &[100, 200], 20));
+        }
+
+        let dir_mode = std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(
+            dir_mode, 0o700,
+            "recording session dir must be 0o700 on Unix"
+        );
+
+        let sys_wav = dir.join("system.wav");
+        let sys_mode = std::fs::metadata(&sys_wav).unwrap().permissions().mode() & 0o777;
+        assert_eq!(sys_mode, 0o600, "system.wav must be 0o600 on Unix");
+
+        let mic_wav = dir.join("mic.wav");
+        let mic_mode = std::fs::metadata(&mic_wav).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mic_mode, 0o600, "mic.wav must be 0o600 on Unix");
+
+        let mask_file = dir.join(TTS_MASK_FILE);
+        let mask_mode = std::fs::metadata(&mask_file).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mask_mode, 0o600, "tts mask file must be 0o600 on Unix");
     }
 }
