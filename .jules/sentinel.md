@@ -37,3 +37,8 @@
 **Vulnerability:** `init()` in `logging.rs`, `collect_redacted_log()` in `diagnostics.rs`, and `try_acquire()` in `lifecycle.rs` created `overlay-host.log`, `suflyor-log.txt`, and `suflyor-overlay-singleton.lock` via default `std::fs::OpenOptions` and `std::fs::write`, leaving diagnostic log files and singleton lock files subject to default umask permissions (`0644`/`0664`) on Unix/POSIX targets.
 **Learning:** While `sessions/` journals and `config.json` enforced owner-restricted file permissions (`0o600`), application diagnostic logs and exported log summaries in `slint-experiment` relied on standard `std::fs` options, exposing log contents and lock files to other local system users.
 **Prevention:** Always use `overlay_backend::paths::open_private_append` and `overlay_backend::paths::write_private` when creating or writing log files, exports, or lock files on POSIX targets.
+
+## 2026-11-02 - World-Readable Hermes Config Permissions on POSIX
+**Vulnerability:** `install_plugin()` and `ensure_api_server()` in `hermes_install.rs` rewrote Hermes `config.yaml` using standard `std::fs::write`, leaving the configuration file containing the generated/configured Hermes API server key (`platforms.api_server.extra.key`) subject to default umask permissions (`0644`/`0664`) on Unix/POSIX targets.
+**Learning:** While `.env` in Hermes was managed with `write_private` via `sync_env()`, `config.yaml` can also contain sensitive platform API server keys and bridge access configurations, but was previously written using standard `std::fs::write`.
+**Prevention:** Always use `crate::paths::write_private` when writing or updating Hermes `config.yaml` on POSIX systems to enforce owner-only (`0o600`) permissions.
