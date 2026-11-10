@@ -20,6 +20,8 @@ ignore = [
     "RUSTSEC-2026-0371", # zbus_names — unmaintained; same Linux-only zbus path as 0370.
     "RUSTSEC-2026-0372", # zvariant_derive — unmaintained; same Linux-only zbus path as 0370.
     "RUSTSEC-2026-0206", # rustybuzz — unmaintained (via Slint/resvg); no safe upgrade exists. Not a vulnerability; replace when Slint moves to harfrust.
+    "RUSTSEC-2026-0441", # pin-utils — unmaintained (transitive build-dep via Slint/spin_on); no safe upgrade exists. Not a vulnerability.
+    "RUSTSEC-2026-0459", # libsqlite3-sys — CVE-2026-119375 uninitialized page-cache memory on crafted local -wal mismatch. No safe upgrade for rusqlite 0.40.
 ]
 
 [bans]
