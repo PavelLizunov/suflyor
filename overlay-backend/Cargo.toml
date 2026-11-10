@@ -74,7 +74,7 @@ getrandom = "0.2"
 # unsupported audio seam (`audio_unavailable.rs`) — no silent fallback.
 [target.'cfg(windows)'.dependencies]
 # Audio capture (audio.rs)
-wasapi = "0.26"
+wasapi = "0.27"
 
 # Local STT — GigaAM-v3 in-process via ONNX (Russian-specialised). The `ort`
 # crate statically links the onnxruntime binary at build time. We enable
