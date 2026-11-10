@@ -145,7 +145,10 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<PluginInstalled, 
     let outcome = enable_in_config_text(cfg_old.as_deref().unwrap_or(""));
     match outcome {
         EnableEdit::Updated(new_text) => {
-            std::fs::write(&cfg_path, new_text).map_err(io_at(&cfg_path))?;
+            // SECURITY: config.yaml may contain sensitive API server keys and platform
+            // credentials; restrict to owner-only permissions (0o600) on POSIX.
+            crate::paths::write_private(&cfg_path, new_text.as_bytes())
+                .map_err(io_at(&cfg_path))?;
             Ok(PluginInstalled::Enabled)
         }
         EnableEdit::AlreadyEnabled => Ok(PluginInstalled::Updated),
@@ -168,7 +171,9 @@ pub fn ensure_api_server() -> Result<(String, bool), HermesError> {
     match ensure_api_server_text(&old, crate::bridge::generate_token) {
         ApiEdit::Ready(key) => Ok((key, false)),
         ApiEdit::Updated(text, key) => {
-            std::fs::write(&cfg_path, text).map_err(io_at(&cfg_path))?;
+            // SECURITY: config.yaml contains the API server key (platforms.api_server.extra.key);
+            // enforce owner-only permissions (0o600) on POSIX to prevent local credential theft.
+            crate::paths::write_private(&cfg_path, text.as_bytes()).map_err(io_at(&cfg_path))?;
             Ok((key, true))
         }
         ApiEdit::Unsupported => Err(HermesError::UnsupportedConfig),
@@ -924,6 +929,23 @@ mod tests {
         assert_eq!(
             bridge_url_for_env("100.64.0.5", 9000),
             "http://100.64.0.5:9000"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn config_yaml_is_owner_only_on_unix() {
+        let temp = tempfile::tempdir().unwrap();
+        let cfg_path = temp.path().join("config.yaml");
+
+        // Simulating writing updated Hermes config.yaml (e.g. from ensure_api_server or install_plugin)
+        let text =
+            "platforms:\n  api_server:\n    extra:\n      key: \"secret\"\n    enabled: true\n";
+        crate::paths::write_private(&cfg_path, text.as_bytes()).unwrap();
+        assert_eq!(
+            unix_mode(&cfg_path),
+            0o600,
+            "Hermes config.yaml must be owner-only on POSIX"
         );
     }
 }
