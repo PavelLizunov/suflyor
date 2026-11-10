@@ -32,7 +32,7 @@ suflyor-wsola = { path = "../suflyor-wsola" }
 # Windows-only dep — WASAPI output (playback) only applies on Windows;
 # target-gating keeps it out of the macOS dependency graph.
 [target.'cfg(windows)'.dependencies]
-wasapi = "0.26"
+wasapi = "0.27"
 
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 cpal = "0.15"
