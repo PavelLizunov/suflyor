@@ -1472,7 +1472,16 @@ fn preserve_corrupt_config(path: &std::path::Path) {
         .unwrap_or(0);
     let backup = path.with_extension(format!("json.broken-{ts}"));
     match std::fs::rename(path, &backup) {
-        Ok(()) => log::warn!("preserved corrupt config as {}", backup.display()),
+        Ok(()) => {
+            // SECURITY: config.json contains live credentials and sensitive AI/STT keys.
+            // On Unix/POSIX platforms, an existing or hand-edited corrupt file may carry
+            // broad permissions (e.g. 0644/0664). Restrict the backup to owner-only (0600)
+            // so local system users cannot read secrets preserved in the backup.
+            if let Err(e) = crate::paths::restrict_to_owner(&backup) {
+                log::warn!("could not restrict {} to owner: {e}", backup.display());
+            }
+            log::warn!("preserved corrupt config as {}", backup.display());
+        }
         Err(e) => log::warn!("could not preserve corrupt config ({e})"),
     }
 }
