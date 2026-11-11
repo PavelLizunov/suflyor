@@ -527,6 +527,39 @@ fn preserve_corrupt_config_renames_aside_keeping_bytes() {
     );
     let backup = dir.path().join(broken.remove(0));
     assert_eq!(std::fs::read(&backup).unwrap(), garbage);
+    #[cfg(unix)]
+    assert_eq!(
+        unix_mode(&backup),
+        0o600,
+        "corrupt config backup must be restricted to owner-only (0600) permissions"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn preserve_corrupt_config_restricts_wide_permissions_on_unix() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.json");
+    std::fs::write(&path, b"{ unparseable").unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+    preserve_corrupt_config(&path);
+
+    let mut broken: Vec<_> = std::fs::read_dir(dir.path())
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n.starts_with("config.json.broken-"))
+        .collect();
+    assert_eq!(broken.len(), 1);
+    let backup = dir.path().join(broken.remove(0));
+    assert_eq!(
+        unix_mode(&backup),
+        0o600,
+        "corrupt config backup with wide source mode must be tightened to 0600"
+    );
 }
 
 #[test]
