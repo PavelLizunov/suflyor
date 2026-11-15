@@ -43,6 +43,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Match the verified Windows worker. ort-sys rc.12 and native DLL staging
+# rely on Cargo's pre-1.100 build layout. Upgrade the toolchain together with
+# compatible ORT/staging support; retain every existing test/security gate.
 jobs:
   changes:
     runs-on: ubuntu-latest
@@ -90,8 +93,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust (stable + rustfmt + clippy)
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust (1.97.1 + rustfmt + clippy)
+        uses: dtolnay/rust-toolchain@766a42937d994bd78bb4591385445c188ccb3f09 # 1.97.1
         with:
           components: rustfmt, clippy
 
@@ -171,8 +174,8 @@ jobs:
           xcodebuild -version
           swift package --version
 
-      - name: Install Rust (stable + rustfmt + clippy)
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust (1.97.1 + rustfmt + clippy)
+        uses: dtolnay/rust-toolchain@766a42937d994bd78bb4591385445c188ccb3f09 # 1.97.1
         with:
           components: rustfmt, clippy
 
@@ -213,8 +216,8 @@ jobs:
             > ~/.config/fontconfig/fonts.conf
           fc-match "Segoe UI"
 
-      - name: Install Rust (stable)
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust (1.97.1)
+        uses: dtolnay/rust-toolchain@766a42937d994bd78bb4591385445c188ccb3f09 # 1.97.1
         with:
           components: rustfmt
 
