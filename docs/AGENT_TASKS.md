@@ -12,6 +12,27 @@ Status legend: [ ] open · [~] claimed (write your agent/branch) · [x] done.
 
 ---
 
+## [~] T7 — deliver bot dependency security remediation
+
+**Claimed:** Codex, branch `codex/sqlite-security-20261115`; owner requested
+completion through verified merge on 2026-11-15.
+**Problem:** the application lockfile carries affected bundled SQLite and
+Markdown releases, a yanked executor, and an archived pinning build dependency.
+**Scope:** adopt rusqlite 0.41.1 / bundled SQLite 3.54.1, pulldown-cmark 0.13.6
+and async-executor 1.14.1; regenerate the consumer lockfile. Preserve the
+published spin_on 0.1.1 executor and its no_std API as a small vendored build
+helper, replacing pin-utils::pin_mut! with core::pin::pin! and removing that
+dependency. Preserve upstream licenses and record archive provenance.
+**Invariants:** no security-policy weakening; no schema, UI, audio or executor
+polling changes; preserve unrelated work. Never use old-SHA check evidence.
+**Accept:** a !Unpin pending future retains its address through repeated polls;
+existing helper tests pass; cargo-deny advisories/bans/sources/licenses pass
+unchanged; exact-SHA native Windows/macOS targeted checks and independent Codex
+review pass; required GitHub checks pass before expected-head merge, followed
+by main-branch CI verification.
+**Unknowns:** Windows worker admission is queued behind another owner; native
+checks must establish build/toolchain compatibility and current security graph.
+
 ## [~] T5 — finish common mathematical notation rendering
 
 **Claimed:** Claude Code, branch `claude/t5-math-notation`. Parser tests are in the

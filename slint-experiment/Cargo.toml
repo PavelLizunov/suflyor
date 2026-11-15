@@ -202,3 +202,7 @@ panic = "deny"
 lto = "thin"
 codegen-units = 1
 strip = "symbols"
+
+# Remove the archived pin-utils dependency from Slint build helpers.
+[patch.crates-io]
+spin_on = { path = "../vendor/spin_on" }
