@@ -103,6 +103,14 @@ jobs:
             overlay-backend
             slint-experiment
 
+      # ort-sys stages DLLs into debug/examples/deps without creating them.
+      # A fresh or partially cached Windows target must provide those parents.
+      - name: Prepare ONNX Runtime DLL staging directories
+        shell: pwsh
+        run: |
+          & ./.github/scripts/test-ort-staging.ps1
+          & ./.github/scripts/prepare-ort-staging.ps1
+
       # ---- overlay-backend (shared logic) ----
       - name: backend fmt --check
         run: cargo fmt --manifest-path overlay-backend/Cargo.toml --all -- --check

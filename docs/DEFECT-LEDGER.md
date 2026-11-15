@@ -8,6 +8,11 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
+### D-096 Windows CI can stage ONNX DLLs into absent target directories   Severity: P2   Status: Open
+Evidence: CI run 43705402376 on ac0eb5a607145c6f6d481335286c1c05a7f48b7a fails in ort-sys 2.0.0-rc.12 build/dynamic_link.rs:42 with Windows error 3 (path not found) during DLL copy. The published stager iterates debug, debug/examples and debug/deps without creating their parent directories. The native worker's existing target tree passed, while the fresh GitHub runner did not. Directory preparation must work for both fresh and partially cached target trees; no download/checksum, test or native gate may be bypassed.
+Fix: prepare the two consumers' DLL destination directories before the Windows Cargo steps; exercise copying into each destination and preservation of already-cached files in an isolated fixture.
+Closed by:
+
 ### D-095 Locked dependency graph fails current security acceptance   Severity: P2   Status: Open
 Evidence: base ba45f0ef313dd87580f4c972e3ece53c6702b350 locks libsqlite3-sys 0.38.1, pulldown-cmark 0.13.5 and yanked async-executor 1.14.0. RustSec RUSTSEC-2026-0459 marks bundled SQLite before libsqlite3-sys 0.39.0 affected by crafted database/WAL memory exposure; RUSTSEC-2026-0433 fixes Markdown wikilink exhaustion in 0.13.6 (the application does not enable that wikilink option). After those dependency updates, native cargo-deny on exact 99a73e4979dc5a2bf15f6bfcccd05c54c7c572cb still exits 1 for unmaintained pin-utils (RUSTSEC-2026-0441) through Slint's spin_on build helper. The latter is an archival advisory, not a claimed exploitable vulnerability. No exploit against private user data was attempted.
 Fix: pin compatible patched releases, regenerate the application lockfile, and retain the published spin_on executor as a licensed local patch using core::pin::pin! instead of the archived pin-utils macro. Keep deny.toml unchanged and verify native exact-SHA tests, supply-chain checks, independent review and required CI before merge.

@@ -30,8 +30,12 @@ existing helper tests pass; cargo-deny advisories/bans/sources/licenses pass
 unchanged; exact-SHA native Windows/macOS targeted checks and independent Codex
 review pass; required GitHub checks pass before expected-head merge, followed
 by main-branch CI verification.
-**Unknowns:** Windows worker admission is queued behind another owner; native
-checks must establish build/toolchain compatibility and current security graph.
+**CI follow-up:** GitHub's fresh Windows runner fails in ort-sys 2.0.0-rc.12
+DLL staging (D-096). Prepare debug/examples/deps directories for both consumers
+before building; a filesystem regression covers fresh and cached target trees
+and preservation of existing DLLs. Keep every build/test/security check enabled.
+**Verification:** rerun affected workflow shell guards, the Windows staging
+regression, exact-SHA native gates and independent review before merge.
 
 ## [~] T5 — finish common mathematical notation rendering
 
