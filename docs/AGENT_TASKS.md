@@ -30,12 +30,12 @@ existing helper tests pass; cargo-deny advisories/bans/sources/licenses pass
 unchanged; exact-SHA native Windows/macOS targeted checks and independent Codex
 review pass; required GitHub checks pass before expected-head merge, followed
 by main-branch CI verification.
-**CI follow-up:** GitHub's fresh Windows runner fails in ort-sys 2.0.0-rc.12
-DLL staging (D-096). Prepare debug/examples/deps directories for both consumers
-before building; a filesystem regression covers fresh and cached target trees
-and preservation of existing DLLs. Keep every build/test/security check enabled.
-**Verification:** rerun affected workflow shell guards, the Windows staging
-regression, exact-SHA native gates and independent review before merge.
+**CI follow-up:** Rust/Cargo 1.100 changed its internal build layout and breaks
+ort-sys rc.12 DLL staging (D-096). Pin CI's toolchain action to the verified
+native Windows Rust 1.97.1 release. Keep all tests/security gates and restore a
+newer toolchain only with a compatible ORT/native-staging migration.
+**Verification:** affected workflow shell guards, exact-SHA native gates,
+independent review and required GitHub CI must pass before merge.
 
 ## [~] T5 — finish common mathematical notation rendering
 

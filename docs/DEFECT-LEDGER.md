@@ -8,9 +8,9 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
-### D-096 Windows CI can stage ONNX DLLs into absent target directories   Severity: P2   Status: Open
-Evidence: CI run 43705402376 on ac0eb5a607145c6f6d481335286c1c05a7f48b7a fails in ort-sys 2.0.0-rc.12 build/dynamic_link.rs:42 with Windows error 3 (path not found) during DLL copy. The published stager iterates debug, debug/examples and debug/deps without creating their parent directories. The native worker's existing target tree passed, while the fresh GitHub runner did not. Directory preparation must work for both fresh and partially cached target trees; no download/checksum, test or native gate may be bypassed.
-Fix: prepare the two consumers' DLL destination directories before the Windows Cargo steps; exercise copying into each destination and preservation of already-cached files in an isolated fixture.
+### D-096 Floating CI toolchain breaks legacy ONNX DLL staging   Severity: P2   Status: Open
+Evidence: CI run 43705402376 on ac0eb5a6 and run 43706833575 on dd6e25e4 use Rust/Cargo 1.100 and fail in ort-sys 2.0.0-rc.12 build/dynamic_link.rs:42 with Windows error 3. The second run passes the directory-preparation step but still fails: creating target/debug/examples alone does not address the changed layout. Cargo 1.100 places build output under build/<package>/<hash>/out; the published ORT stager derives its destination using a fixed three-ancestor lookup. The official Cargo build-cache reference documents the 1.100 layout change. Native Windows Rust 1.97.1 passes the same product candidate with the old supported layout.
+Fix: pin the CI toolchain action to the verified native Windows Rust 1.97.1 release, retaining all tests/security gates. A future toolchain update needs compatible ORT and native artifact-staging support, verified together; remove the unsuccessful directory-preparation workaround.
 Closed by:
 
 ### D-095 Locked dependency graph fails current security acceptance   Severity: P2   Status: Open
