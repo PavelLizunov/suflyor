@@ -527,6 +527,12 @@ fn preserve_corrupt_config_renames_aside_keeping_bytes() {
     );
     let backup = dir.path().join(broken.remove(0));
     assert_eq!(std::fs::read(&backup).unwrap(), garbage);
+    #[cfg(unix)]
+    assert_eq!(
+        unix_mode(&backup),
+        0o600,
+        "preserved corrupt config must be restricted to owner"
+    );
 }
 
 #[test]

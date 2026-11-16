@@ -1430,7 +1430,9 @@ fn default_trigger_keywords() -> String {
 
 pub fn config_path() -> Result<PathBuf> {
     let dir = crate::paths::data_root().context("no config dir")?;
-    std::fs::create_dir_all(&dir)
+    // SECURITY: enforce 0o700 directory permissions on POSIX so config.json and
+    // its backups are not accessible to other local users.
+    crate::paths::ensure_private_dir(&dir)
         .with_context(|| format!("create config dir {}", dir.display()))?;
     Ok(dir.join("config.json"))
 }
@@ -1472,7 +1474,12 @@ fn preserve_corrupt_config(path: &std::path::Path) {
         .unwrap_or(0);
     let backup = path.with_extension(format!("json.broken-{ts}"));
     match std::fs::rename(path, &backup) {
-        Ok(()) => log::warn!("preserved corrupt config as {}", backup.display()),
+        Ok(()) => {
+            // SECURITY: corrupt config.json may contain live secrets and tokens;
+            // restrict the preserved backup to mode 0o600 on Unix.
+            let _ = crate::paths::restrict_to_owner(&backup);
+            log::warn!("preserved corrupt config as {}", backup.display());
+        }
         Err(e) => log::warn!("could not preserve corrupt config ({e})"),
     }
 }
