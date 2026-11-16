@@ -2233,8 +2233,7 @@ mod tests {
             for old_mode in [0o644, 0o664] {
                 let path = tmp.path().join(name);
                 std::fs::write(&path, b"previous diagnostic\n").unwrap();
-                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(old_mode))
-                    .unwrap();
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(old_mode)).unwrap();
 
                 let mut file = sidecar_stderr_file(&path).unwrap();
                 assert_eq!(file.metadata().unwrap().permissions().mode() & 0o777, 0o600);
