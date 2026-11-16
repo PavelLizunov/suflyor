@@ -12,8 +12,29 @@ Status legend: [ ] open · [~] claimed (write your agent/branch) · [x] done.
 
 ---
 
-## [~] T7 — deliver bot dependency security remediation
+## [~] T8 — restrict both new and existing TTS sidecar logs
 
+**Claimed:** Codex, branch `codex/private-tts-logs-20261116`; authorized by
+scheduled bot maintenance on 2026-11-16.
+**Problem:** `sidecar_stderr` opens both engine logs using ordinary append mode.
+PR #335 fixes new-file creation but leaves pre-existing 0644/0664 logs readable.
+**Scope:** use the existing private append helper and restrict the opened file
+handle to 0600 on Unix before passing it to a child process. Keep log contents,
+append semantics, Windows behavior and the existing null-stderr error fallback.
+No UI, dependency, advisory-policy or unrelated bot-journal edits.
+**Accept:** synthetic tests cover both log names, new files and existing wide
+files; check permissions before appending and preserve previous bytes. Permission
+errors must propagate before the handle can reach a sidecar. Exact-SHA native
+Windows targeted gate and physical macOS backend tests pass, followed by
+independent Codex review, required CI, expected-head merge and master checks.
+**Unknowns:** worker availability and native tests determine platform behavior;
+no live user log or configuration is inspected.
+
+## [x] T7 — deliver bot dependency security remediation
+
+**Delivered:** PR #341, master `25b9f15f4f45dfb2ce9e3d24dd669593e64de3dd`.
+Post-merge CI run 43711534558 (including macOS) and security run 43711534664
+completed successfully; verified on 2026-11-16.
 **Claimed:** Codex, branch `codex/sqlite-security-20261115`; owner requested
 completion through verified merge on 2026-11-15.
 **Problem:** the application lockfile carries affected bundled SQLite and

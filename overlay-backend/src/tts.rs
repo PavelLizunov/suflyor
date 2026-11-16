@@ -1566,6 +1566,19 @@ fn sidecar_paths_use_the_platform_executable_suffix() {
     );
 }
 
+fn sidecar_stderr_file(path: &Path) -> std::io::Result<std::fs::File> {
+    let file = crate::paths::open_private_append(path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        // Creation mode alone does not repair logs from older installations.
+        // Restrict the opened handle before a child can append any diagnostics.
+        file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(file)
+}
+
 /// Capture a sidecar's stderr (voice-load + synth + first-audio-latency
 /// diagnostics) to its own log under `%APPDATA%\suflyor\`, falling back to
 /// null. Logs never contain spoken text — the sidecars only print counts/ids.
@@ -1575,11 +1588,7 @@ fn sidecar_stderr(kind: EngineKind) -> Stdio {
         EngineKind::Tera => "suflyor-teratts.log",
     };
     if let Some(p) = crate::paths::data_root().map(|d| d.join(name)) {
-        if let Ok(f) = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&p)
-        {
+        if let Ok(f) = sidecar_stderr_file(&p) {
             return Stdio::from(f);
         }
     }
@@ -2195,6 +2204,49 @@ mod tests {
         let tts = Tts::spawn(EngineKind::Piper, None, 0, "ru");
         tts.stop();
         assert!(!is_speaking());
+    }
+
+    #[test]
+    fn sidecar_logs_create_private_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        for name in ["suflyor-tts.log", "suflyor-teratts.log"] {
+            let path = tmp.path().join(name);
+            let mut file = sidecar_stderr_file(&path).unwrap();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                assert_eq!(file.metadata().unwrap().permissions().mode() & 0o777, 0o600);
+            }
+            file.write_all(b"synthetic diagnostic\n").unwrap();
+            drop(file);
+            assert_eq!(std::fs::read(&path).unwrap(), b"synthetic diagnostic\n");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn sidecar_logs_restrict_existing_files_before_appending() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        for name in ["suflyor-tts.log", "suflyor-teratts.log"] {
+            for old_mode in [0o644, 0o664] {
+                let path = tmp.path().join(name);
+                std::fs::write(&path, b"previous diagnostic\n").unwrap();
+                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(old_mode))
+                    .unwrap();
+
+                let mut file = sidecar_stderr_file(&path).unwrap();
+                assert_eq!(file.metadata().unwrap().permissions().mode() & 0o777, 0o600);
+                assert_eq!(std::fs::read(&path).unwrap(), b"previous diagnostic\n");
+                file.write_all(b"next diagnostic\n").unwrap();
+                drop(file);
+                assert_eq!(
+                    std::fs::read(&path).unwrap(),
+                    b"previous diagnostic\nnext diagnostic\n"
+                );
+            }
+        }
     }
 
     #[test]
