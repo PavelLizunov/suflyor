@@ -11,7 +11,7 @@ yanked = "deny"
 # The webpki-roots 0.26.11 compatibility crate only re-exports v1's trust anchors.
 # The bans below allow only that shim or >=1.0.10, including after a downgrade.
 ignore = [
-    { id = "RUSTSEC-2026-0381", reason = "0.26.11 is a re-export-only v1 shim; bans below reject every other affected version, including v1 <1.0.10." },
+    { crate = "clipboard-win@5.4.1", reason = "yanked upstream dependency via copypasta/slint" },
     "RUSTSEC-2024-0436", # paste — no longer maintained (via slint/winit)
     "RUSTSEC-2026-0192", # ttf-parser — unmaintained (via slint font rendering)
     "RUSTSEC-2026-0194", # quick-xml — quadratic duplicate-attr-name check (DoS). Transitive via slint (bundled-SVG parsing) / atspi (Linux-only a11y, not built on Windows). We parse only our OWN compiled-in SVG/.slint, never untrusted XML → not reachable.
