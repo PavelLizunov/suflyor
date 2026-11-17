@@ -164,7 +164,12 @@ impl SessionRecorder {
 
     /// Open a recorder writing into an explicit directory (test seam).
     pub fn start_in(dir: PathBuf) -> Result<Self> {
-        std::fs::create_dir_all(&dir)
+        // Enforce owner-only (0o700) mode on Unix to prevent local unprivileged
+        // users from accessing meeting audio recordings or TTS masks.
+        if let Some(parent) = dir.parent() {
+            let _ = crate::paths::ensure_private_dir(parent);
+        }
+        crate::paths::ensure_private_dir(&dir)
             .with_context(|| format!("create recordings dir {}", dir.display()))?;
         let (tx, rx) = sync_channel::<RecMsg>(WRITER_QUEUE);
         let dropped = Arc::new(AtomicU64::new(0));
@@ -1348,6 +1353,37 @@ mod tests {
                 start_sample: 640,
                 end_sample: 960,
             }]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_start_in_enforces_mode_0700_on_session_dir() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let session_dir = tmp.path().join("recordings").join("session_123");
+        let recorder = SessionRecorder::start_in(session_dir.clone()).unwrap();
+        drop(recorder);
+
+        let parent_mode = std::fs::metadata(session_dir.parent().unwrap())
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(
+            parent_mode, 0o700,
+            "recordings parent dir must be mode 0700"
+        );
+
+        let session_mode = std::fs::metadata(&session_dir)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(
+            session_mode, 0o700,
+            "session recordings dir must be mode 0700"
         );
     }
 }

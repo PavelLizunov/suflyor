@@ -37,3 +37,8 @@
 **Vulnerability:** `init()` in `logging.rs`, `collect_redacted_log()` in `diagnostics.rs`, and `try_acquire()` in `lifecycle.rs` created `overlay-host.log`, `suflyor-log.txt`, and `suflyor-overlay-singleton.lock` via default `std::fs::OpenOptions` and `std::fs::write`, leaving diagnostic log files and singleton lock files subject to default umask permissions (`0644`/`0664`) on Unix/POSIX targets.
 **Learning:** While `sessions/` journals and `config.json` enforced owner-restricted file permissions (`0o600`), application diagnostic logs and exported log summaries in `slint-experiment` relied on standard `std::fs` options, exposing log contents and lock files to other local system users.
 **Prevention:** Always use `overlay_backend::paths::open_private_append` and `overlay_backend::paths::write_private` when creating or writing log files, exports, or lock files on POSIX targets.
+
+## 2026-11-01 - World-Readable Session Audio Recording Directories on POSIX
+**Vulnerability:** `start_in()` in `recorder.rs` created `recordings/<session_id>/` via default `std::fs::create_dir_all`, leaving raw meeting audio recordings (`mic.wav`, `system.wav`) and TTS suppression masks subject to default umask permissions (`0755`/`0775`) on Unix/POSIX targets.
+**Learning:** While `sessions/` journals enforced owner-restricted directory permissions (`0o700`), raw audio recordings were created via standard `std::fs::create_dir_all`, leaving confidential voice recordings accessible to other local users on shared systems.
+**Prevention:** Always use `crate::paths::ensure_private_dir` when initializing directory hierarchies under the data root that store sensitive audio or transcripts.
