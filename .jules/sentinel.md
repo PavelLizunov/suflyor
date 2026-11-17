@@ -33,6 +33,11 @@
 **Learning:** While `sessions/` journals and `config.json` enforced owner-restricted file permissions (`0o600`/`0o700`), sidecar files holding meeting transcripts and AI summaries relied on standard `std::fs` calls, exposing sensitive meeting content to other local system users.
 **Prevention:** Always use `crate::paths::ensure_private_dir` and `crate::paths::write_private` when creating directories or writing files under the data root to enforce owner-only (`0o600`/`0o700`) permissions on POSIX targets.
 
+## 2026-10-25 - World-Readable Update Installer Permissions in System Temp Directory on POSIX
+**Vulnerability:** `download_installer()` in `update.rs` downloaded installer binaries into `%TEMP%/suflyor-update/suflyor-slint-setup.exe` using standard `std::fs::create_dir_all` and `std::fs::write`. On shared multi-user Unix/POSIX systems, system temp directories (`/tmp`) allow other unprivileged local system users to read, copy, or potentially tamper with staged update binaries if permissions permit default umask access (`0644`/0755).
+**Learning:** Staging files in shared system temp directories (`std::env::temp_dir()`) without explicit permission restrictions exposes binaries and temporary runtime artifacts to local system users.
+**Prevention:** Always use `crate::paths::ensure_private_dir` and `crate::paths::write_private` when creating directories or writing temporary files in shared system directories on POSIX targets to enforce owner-only (`0o700`/`0o600`) permissions.
+
 ## 2026-10-15 - World-Readable Log and Lock File Permissions on POSIX
 **Vulnerability:** `init()` in `logging.rs`, `collect_redacted_log()` in `diagnostics.rs`, and `try_acquire()` in `lifecycle.rs` created `overlay-host.log`, `suflyor-log.txt`, and `suflyor-overlay-singleton.lock` via default `std::fs::OpenOptions` and `std::fs::write`, leaving diagnostic log files and singleton lock files subject to default umask permissions (`0644`/`0664`) on Unix/POSIX targets.
 **Learning:** While `sessions/` journals and `config.json` enforced owner-restricted file permissions (`0o600`), application diagnostic logs and exported log summaries in `slint-experiment` relied on standard `std::fs` options, exposing log contents and lock files to other local system users.
