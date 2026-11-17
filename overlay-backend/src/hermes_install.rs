@@ -145,7 +145,10 @@ pub fn install_plugin(bridge_url: &str, token: &str) -> Result<PluginInstalled, 
     let outcome = enable_in_config_text(cfg_old.as_deref().unwrap_or(""));
     match outcome {
         EnableEdit::Updated(new_text) => {
-            std::fs::write(&cfg_path, new_text).map_err(io_at(&cfg_path))?;
+            // SECURITY: Hermes config.yaml may store sensitive platform tokens and keys.
+            // Enforce owner-only permissions (0o600) on Unix/POSIX targets.
+            crate::paths::write_private(&cfg_path, new_text.as_bytes())
+                .map_err(io_at(&cfg_path))?;
             Ok(PluginInstalled::Enabled)
         }
         EnableEdit::AlreadyEnabled => Ok(PluginInstalled::Updated),
@@ -168,7 +171,8 @@ pub fn ensure_api_server() -> Result<(String, bool), HermesError> {
     match ensure_api_server_text(&old, crate::bridge::generate_token) {
         ApiEdit::Ready(key) => Ok((key, false)),
         ApiEdit::Updated(text, key) => {
-            std::fs::write(&cfg_path, text).map_err(io_at(&cfg_path))?;
+            // SECURITY: config.yaml contains api_server.extra.key; enforce owner-only (0o600) on POSIX.
+            crate::paths::write_private(&cfg_path, text.as_bytes()).map_err(io_at(&cfg_path))?;
             Ok((key, true))
         }
         ApiEdit::Unsupported => Err(HermesError::UnsupportedConfig),
@@ -667,6 +671,37 @@ mod tests {
         assert_eq!(unix_mode(&wide), 0o600, "an unchanged .env is tightened");
         // Nothing to restrict when the file does not exist and nothing is to be written.
         sync_env(&temp.path().join("absent.env"), "", "").unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn config_yaml_is_owner_only_on_unix() {
+        let temp = tempfile::tempdir().unwrap();
+        let old_hermes_home = std::env::var("HERMES_HOME").ok();
+        std::env::set_var("HERMES_HOME", temp.path());
+
+        let res = install_plugin("http://127.0.0.1:8654", "test_tok");
+        assert_eq!(res.unwrap(), PluginInstalled::Enabled);
+        let cfg_path = temp.path().join("config.yaml");
+        assert_eq!(
+            unix_mode(&cfg_path),
+            0o600,
+            "install_plugin must create config.yaml as 0o600"
+        );
+
+        let (key, changed) = ensure_api_server().unwrap();
+        assert!(changed);
+        assert!(!key.is_empty());
+        assert_eq!(
+            unix_mode(&cfg_path),
+            0o600,
+            "ensure_api_server must maintain config.yaml as 0o600"
+        );
+
+        match old_hermes_home {
+            Some(val) => std::env::set_var("HERMES_HOME", val),
+            None => std::env::remove_var("HERMES_HOME"),
+        }
     }
 
     #[test]
