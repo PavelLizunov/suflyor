@@ -73,8 +73,10 @@ $affectedCrates = @($crateOrder | Where-Object {
     @($changed | Where-Object { $_.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
 })
 
+# The knowledge files are compiled into the backend (kb.rs include_str!), so
+# a change there is code, as in .github/scripts/is-docs-only.sh.
 $docsOnly = @($changed | Where-Object {
-    $_ -notmatch '(^|/)[^/]+\.(md|html|txt)$'
+    $_ -notmatch '(^|/)[^/]+\.(md|html|txt)$' -or $_ -like 'overlay-backend/knowledge/*'
 }).Count -eq 0
 
 $tier = 'targeted'
@@ -121,7 +123,9 @@ Run 'git diff --check' {
 Check-PowerShellSyntax
 
 if ($Stage -eq 'commit') {
-    foreach ($crate in $affectedCrates) {
+    # A docs-only commit (e.g. a crate's AGENTS.md) needs no Cargo work.
+    $fmtCrates = if ($tier -eq 'docs') { @() } else { $affectedCrates }
+    foreach ($crate in $fmtCrates) {
         $manifest = Join-Path $root "$crate\Cargo.toml"
         Run "$crate fmt --check" {
             & $cargo fmt --manifest-path $manifest --all -- --check
