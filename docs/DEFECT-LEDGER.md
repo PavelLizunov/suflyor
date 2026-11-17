@@ -8,10 +8,15 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
-### D-097 TTS sidecar logs allow broad POSIX read permissions   Severity: P2   Status: Open
+### D-098 Corrupt configuration backup retains broad source permissions   Severity: P2   Status: Open
+Evidence: master 6f4287b0 `config.rs::preserve_corrupt_config` renames the source without restricting its mode. A pre-existing externally edited 0644/0664 malformed config therefore retains broad mode as a backup; its bytes can include private settings. Source PR #340 at 91f6738b restricts only after publishing the backup and tolerates restriction failure. No real user configuration or secret was inspected.
+Fix: restrict the source with the existing permission helper before rename. On restriction failure, retain the original untouched and do not create a wide-mode backup; keep existing nonfatal recovery behavior and generic logging. Cover both broad modes, verbatim preservation and deterministic injected failure with synthetic fixtures. Do not change policy or dependencies.
+Closed by:
+
+### D-097 TTS sidecar logs allow broad POSIX read permissions   Severity: P2   Status: Closed
 Evidence: master 25b9f15f `overlay-backend/src/tts.rs::sidecar_stderr` opens both engine stderr logs with ordinary create/append options and no explicit mode. PR #335 at d916763d uses `paths::open_private_append`, but that helper only sets the creation mode and does not restrict an existing 0644/0664 file. Source confirms the missing privacy boundary; no private log or credential was read. The bot's fresh-file test does not cover upgrading existing installations.
 Fix: open with the existing private append helper, restrict the opened handle on Unix before returning it, propagate permission errors to the existing null-stderr fallback, and cover both log names with synthetic new-file and wide-file append-preservation tests. Preserve dependency locks, deny.toml and Windows behavior.
-Closed by:
+Closed by: #343 (master 6f4287b0; complete post-merge CI passed, verified 2026-11-17).
 
 ### D-096 Floating CI toolchain breaks legacy ONNX DLL staging   Severity: P2   Status: Closed
 Evidence: CI run 43705402376 on ac0eb5a6 and run 43706833575 on dd6e25e4 use Rust/Cargo 1.100 and fail in ort-sys 2.0.0-rc.12 build/dynamic_link.rs:42 with Windows error 3. The second run passes the directory-preparation step but still fails: creating target/debug/examples alone does not address the changed layout. Cargo 1.100 places build output under build/<package>/<hash>/out; the published ORT stager derives its destination using a fixed three-ancestor lookup. The official Cargo build-cache reference documents the 1.100 layout change. Native Windows Rust 1.97.1 passes the same product candidate with the old supported layout.

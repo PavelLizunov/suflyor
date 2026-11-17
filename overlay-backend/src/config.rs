@@ -1466,6 +1466,19 @@ fn parse_config_bytes(raw: &[u8]) -> Result<Config> {
 /// then continue with defaults. All failures are logged and swallowed — load()
 /// must still return so the app can start.
 fn preserve_corrupt_config(path: &std::path::Path) {
+    preserve_corrupt_config_with_restriction(path, crate::paths::restrict_to_owner);
+}
+
+fn preserve_corrupt_config_with_restriction(
+    path: &std::path::Path,
+    restrict: impl FnOnce(&std::path::Path) -> std::io::Result<()>,
+) {
+    // Rename preserves mode: tighten the original before publishing a backup.
+    // If this fails, leave its name and bytes intact rather than a public backup.
+    if let Err(e) = restrict(path) {
+        log::warn!("could not restrict corrupt config before preservation ({e})");
+        return;
+    }
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -1496,7 +1509,7 @@ pub fn load() -> Config {
                 // preserve_corrupt_config) as the only breadcrumb, so no config
                 // byte can ever reach the log on this secrets-bearing file.
                 preserve_corrupt_config(&path);
-                log::warn!("config parse failed; preserved a copy, using defaults");
+                log::warn!("config parse failed; using defaults");
                 Config::defaults()
             }
         },

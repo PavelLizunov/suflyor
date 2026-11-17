@@ -527,6 +527,57 @@ fn preserve_corrupt_config_renames_aside_keeping_bytes() {
     );
     let backup = dir.path().join(broken.remove(0));
     assert_eq!(std::fs::read(&backup).unwrap(), garbage);
+    #[cfg(unix)]
+    assert_eq!(unix_mode(&backup), 0o600);
+}
+
+#[cfg(unix)]
+#[test]
+fn preserve_corrupt_config_restricts_wide_sources_and_keeps_bytes() {
+    use std::os::unix::fs::PermissionsExt;
+
+    for mode in [0o644, 0o664] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        let bytes = b"{ malformed synthetic settings @@@";
+        std::fs::write(&path, bytes).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+
+        preserve_corrupt_config(&path);
+
+        assert!(!path.exists());
+        let backups: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        assert_eq!(backups.len(), 1);
+        assert!(backups[0]
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("config.json.broken-"));
+        assert_eq!(unix_mode(&backups[0]), 0o600);
+        assert_eq!(std::fs::read(&backups[0]).unwrap(), bytes);
+    }
+}
+
+#[test]
+fn preserve_corrupt_config_keeps_original_if_restriction_fails() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.json");
+    let bytes = b"{ malformed synthetic settings @@@";
+    std::fs::write(&path, bytes).unwrap();
+
+    preserve_corrupt_config_with_restriction(&path, |source| {
+        assert_eq!(source, path);
+        Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "synthetic restriction failure",
+        ))
+    });
+
+    assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
 }
 
 #[test]

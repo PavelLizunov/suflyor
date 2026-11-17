@@ -12,8 +12,29 @@ Status legend: [ ] open · [~] claimed (write your agent/branch) · [x] done.
 
 ---
 
-## [~] T8 — restrict both new and existing TTS sidecar logs
+## [~] T9 — preserve corrupt configuration with private permissions
 
+**Claimed:** Codex, branch `codex/private-config-backup-20261117`; scheduled
+bot maintenance authorizes delivery through merge.
+**Problem:** a renamed malformed config retains its original POSIX mode. PR
+#340 tightens it only after rename and tolerates a permission failure.
+**Scope:** use the existing permission helper before rename; if restriction
+fails, keep the original intact without creating a permissive backup. Preserve
+exact bytes, timestamp naming, Windows behavior and default-load recovery.
+Use a narrow injected restriction seam for deterministic failure coverage.
+**Accept:** production-entrypoint tests cover fresh/existing 0644 and 0664
+fixtures and verbatim backup bytes; a synthetic restriction failure leaves the
+original bytes/name intact and creates no backup. Exact-SHA Windows targeted
+gate, physical macOS backend tests/security checks, independent Codex review,
+required PR checks and post-merge main checks pass. No real config, secret,
+dependency, UI, production or release changes.
+**Unknowns:** platform verification and worker admission remain to be checked.
+
+## [x] T8 — restrict both new and existing TTS sidecar logs
+
+**Delivered:** PR #343, master `6f4287b07c0da4bbbe14632d99464c86c11345df`.
+Complete post-merge CI run 43840996679 passed, including macOS; verified on
+2026-11-17. Source #335 was closed as superseded.
 **Claimed:** Codex, branch `codex/private-tts-logs-20261116`; authorized by
 scheduled bot maintenance on 2026-11-16.
 **Problem:** `sidecar_stderr` opens both engine logs using ordinary append mode.
