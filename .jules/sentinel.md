@@ -37,3 +37,8 @@
 **Vulnerability:** `init()` in `logging.rs`, `collect_redacted_log()` in `diagnostics.rs`, and `try_acquire()` in `lifecycle.rs` created `overlay-host.log`, `suflyor-log.txt`, and `suflyor-overlay-singleton.lock` via default `std::fs::OpenOptions` and `std::fs::write`, leaving diagnostic log files and singleton lock files subject to default umask permissions (`0644`/`0664`) on Unix/POSIX targets.
 **Learning:** While `sessions/` journals and `config.json` enforced owner-restricted file permissions (`0o600`), application diagnostic logs and exported log summaries in `slint-experiment` relied on standard `std::fs` options, exposing log contents and lock files to other local system users.
 **Prevention:** Always use `overlay_backend::paths::open_private_append` and `overlay_backend::paths::write_private` when creating or writing log files, exports, or lock files on POSIX targets.
+
+## 2026-10-20 - World-Readable Catalog Database and Backup Permissions on POSIX
+**Vulnerability:** `Store::open()` in `sqlite_store.rs` created `catalog.sqlite` via SQLite `Connection::open` and its pre-migration backup `catalog.sqlite.bak` via `std::fs::copy` using default umask file permissions (`0644`/`0664`) on Unix/POSIX targets. Because `catalog.sqlite` stores meeting transcripts, AI turns, and curated memory items, other local system users could read sensitive meeting data.
+**Learning:** SQLite's `Connection::open()` and standard `std::fs::copy()` create files using default umask permissions unless explicitly restricted after creation on POSIX platforms.
+**Prevention:** Always invoke `crate::paths::ensure_private_dir` on parent directories and `crate::paths::restrict_to_owner` after opening SQLite databases or copying backups on POSIX targets.

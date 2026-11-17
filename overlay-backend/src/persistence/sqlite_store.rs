@@ -35,10 +35,13 @@ impl Store {
     /// pending, then migrate to [`migrations::LATEST_VERSION`].
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).context("create catalog dir")?;
+            // SECURITY: Enforce restricted 0o700 permissions on catalog directory on POSIX/Unix.
+            crate::paths::ensure_private_dir(parent).context("create catalog dir")?;
         }
         let preexisting = path.exists();
         let mut conn = Connection::open(path).context("open catalog")?;
+        // SECURITY: Enforce owner-only 0o600 permissions on SQLite catalog database on POSIX/Unix.
+        let _ = crate::paths::restrict_to_owner(path);
         // WAL keeps reads non-blocking while the indexer writes; foreign keys
         // power the ON DELETE CASCADE that makes re-indexing clean.
         // busy_timeout (v0.17.2): the stop-session indexer thread and the
@@ -61,6 +64,9 @@ impl Store {
                 let bak = path.with_extension("sqlite.bak");
                 if let Err(e) = std::fs::copy(path, &bak) {
                     log::warn!("catalog pre-migration backup failed: {e}");
+                } else {
+                    // SECURITY: Enforce owner-only 0o600 permissions on pre-migration backup.
+                    let _ = crate::paths::restrict_to_owner(&bak);
                 }
             }
         }
@@ -817,6 +823,24 @@ mod tests {
         assert!(store.session_utterances(&s.id).unwrap().is_empty());
         // Idempotent: deleting an absent session is a no-op.
         store.delete_session(&s.id).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn posix_catalog_and_backup_files_have_mode_0600_and_0700() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let cat_dir = tmp.path().join("sub");
+        let cat_path = cat_dir.join("catalog.sqlite");
+
+        let _store = Store::open(&cat_path).unwrap();
+
+        let dir_mode = std::fs::metadata(&cat_dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(dir_mode, 0o700, "catalog parent dir must have mode 0o700");
+
+        let file_mode = std::fs::metadata(&cat_path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(file_mode, 0o600, "catalog file must have mode 0o600");
     }
 
     #[test]
