@@ -35,10 +35,13 @@ impl Store {
     /// pending, then migrate to [`migrations::LATEST_VERSION`].
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).context("create catalog dir")?;
+            // SECURITY: protect catalog directory with 0o700 permissions on POSIX.
+            crate::paths::ensure_private_dir(parent).context("create catalog dir")?;
         }
         let preexisting = path.exists();
         let mut conn = Connection::open(path).context("open catalog")?;
+        // SECURITY: enforce 0o600 owner-only permissions on SQLite catalog on POSIX.
+        let _ = crate::paths::restrict_to_owner(path);
         // WAL keeps reads non-blocking while the indexer writes; foreign keys
         // power the ON DELETE CASCADE that makes re-indexing clean.
         // busy_timeout (v0.17.2): the stop-session indexer thread and the
@@ -61,6 +64,8 @@ impl Store {
                 let bak = path.with_extension("sqlite.bak");
                 if let Err(e) = std::fs::copy(path, &bak) {
                     log::warn!("catalog pre-migration backup failed: {e}");
+                } else {
+                    let _ = crate::paths::restrict_to_owner(&bak);
                 }
             }
         }
@@ -761,8 +766,26 @@ fn row_to_item(row: &Row) -> rusqlite::Result<MemoryItem> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn store_open_sets_owner_only_permissions_on_unix() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let db_dir = tmp.path().join("db_dir");
+        let db_path = db_dir.join("test_catalog.sqlite");
+
+        let _store = Store::open(&db_path).unwrap();
+
+        let dir_mode = std::fs::metadata(&db_dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(dir_mode, 0o700, "catalog directory must be mode 0700");
+
+        let file_mode = std::fs::metadata(&db_path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(file_mode, 0o600, "catalog file must be mode 0600");
+    }
 
     fn sample_session(id: &str) -> Session {
         Session {
