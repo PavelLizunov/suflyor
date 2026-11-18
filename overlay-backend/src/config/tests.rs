@@ -500,6 +500,45 @@ fn config_pre_versioning_json_reads_as_zero() {
 }
 
 #[test]
+fn config_path_in_creates_private_directory_without_writing_config() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("config-data");
+
+    let path = config_path_in(&dir).unwrap();
+
+    assert_eq!(path, dir.join("config.json"));
+    assert!(dir.is_dir());
+    assert!(!path.exists());
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
+    #[cfg(unix)]
+    assert_eq!(unix_mode(&dir), 0o700);
+}
+
+#[cfg(unix)]
+#[test]
+fn config_path_in_restricts_existing_directory_without_changing_files() {
+    use std::os::unix::fs::PermissionsExt;
+
+    for mode in [0o755, 0o777] {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("config-data");
+        std::fs::create_dir(&dir).unwrap();
+        let config = dir.join("config.json");
+        let backup = dir.join("config.json.broken-fixture");
+        std::fs::write(&config, b"synthetic config bytes").unwrap();
+        std::fs::write(&backup, b"synthetic backup bytes").unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(mode)).unwrap();
+
+        assert_eq!(config_path_in(&dir).unwrap(), config);
+
+        assert_eq!(unix_mode(&dir), 0o700);
+        assert_eq!(std::fs::read(&config).unwrap(), b"synthetic config bytes");
+        assert_eq!(std::fs::read(&backup).unwrap(), b"synthetic backup bytes");
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 2);
+    }
+}
+
+#[test]
 fn preserve_corrupt_config_renames_aside_keeping_bytes() {
     // P1.4: an unparseable config.json must be moved to a recoverable
     // `*.broken-<ts>` sibling — never silently dropped — so a corruption

@@ -156,7 +156,7 @@ pub(crate) fn ensure_private_dir(dir: &Path) -> std::io::Result<()> {
     {
         use std::os::unix::fs::PermissionsExt;
         if let Err(e) = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)) {
-            log::warn!("could not restrict {} to its owner: {e}", dir.display());
+            log::warn!("could not restrict directory to its owner: {e}");
         }
     }
     Ok(())

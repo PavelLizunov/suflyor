@@ -1430,7 +1430,11 @@ fn default_trigger_keywords() -> String {
 
 pub fn config_path() -> Result<PathBuf> {
     let dir = crate::paths::data_root().context("no config dir")?;
-    std::fs::create_dir_all(&dir)
+    config_path_in(&dir)
+}
+
+fn config_path_in(dir: &std::path::Path) -> Result<PathBuf> {
+    crate::paths::ensure_private_dir(dir)
         .with_context(|| format!("create config dir {}", dir.display()))?;
     Ok(dir.join("config.json"))
 }

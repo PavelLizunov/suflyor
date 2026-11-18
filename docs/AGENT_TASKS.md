@@ -12,8 +12,29 @@ Status legend: [ ] open · [~] claimed (write your agent/branch) · [x] done.
 
 ---
 
-## [~] T9 — preserve corrupt configuration with private permissions
+## [~] T10 — make the configuration directory owner-only
 
+**Claimed:** Codex, branch `codex/private-config-directory-20261118`;
+scheduled bot maintenance authorizes delivery through merge.
+**Problem:** `config_path` uses ordinary directory creation. PR #328's backup
+portion is delivered by #344; its config-directory boundary remains missing.
+**Scope:** wire the existing `ensure_private_dir` into a path-injected config
+entrypoint; preserve path resolution, file bytes, Windows behavior and the
+helper's existing nonfatal chmod policy. Keep its warning free of local paths.
+Human #313 changes helper visibility/tests but does not wire this config caller;
+no human branch is changed or duplicated. No dependency or advisory edits.
+**Accept:** synthetic production-seam tests cover fresh directories and existing
+0755/0777 directories, mode 0700 on Unix, unchanged config/backup bytes and no
+creation of config contents. Exact-SHA Windows targeted gate, physical macOS
+backend/security checks, independent Codex review and required CI pass before
+expected-head merge; verify main CI afterwards. No live config/secrets are read.
+**Unknowns:** worker admission and platform verification remain to be checked.
+
+## [x] T9 — preserve corrupt configuration with private permissions
+
+**Delivered:** PR #344, master `1e675d339001287d99d6595220494b21e4079aa8`.
+Complete post-merge CI run 44055970606 passed, including macOS; verified on
+2026-11-18. Source #340 was closed as superseded.
 **Claimed:** Codex, branch `codex/private-config-backup-20261117`; scheduled
 bot maintenance authorizes delivery through merge.
 **Problem:** a renamed malformed config retains its original POSIX mode. PR

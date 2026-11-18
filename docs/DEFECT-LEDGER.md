@@ -8,10 +8,15 @@ Severity: P0 data loss, security exposure or total failure; P1 wrong behaviour i
 
 ## Entries
 
-### D-098 Corrupt configuration backup retains broad source permissions   Severity: P2   Status: Open
+### D-099 Configuration directory retains broad POSIX traversal permissions   Severity: P2   Status: Open
+Evidence: master 1e675d33 `config.rs::config_path` calls create_dir_all, which does not tighten an existing 0755/0777 directory. The owner-only directory helper already exists but is not used here. PR #328 at 2e5495da proposes this caller change without a directory regression; its backup portion is already delivered by #344. No real configuration or secret was inspected. Human #313's paths.rs changes do not include the config caller.
+Fix: use the existing private-directory helper through a path-injected config seam; test new and pre-existing broad directories without touching global user paths or file contents. Preserve its best-effort policy and remove local paths from its warning. No dependency or security-policy changes.
+Closed by:
+
+### D-098 Corrupt configuration backup retains broad source permissions   Severity: P2   Status: Closed
 Evidence: master 6f4287b0 `config.rs::preserve_corrupt_config` renames the source without restricting its mode. A pre-existing externally edited 0644/0664 malformed config therefore retains broad mode as a backup; its bytes can include private settings. Source PR #340 at 91f6738b restricts only after publishing the backup and tolerates restriction failure. No real user configuration or secret was inspected.
 Fix: restrict the source with the existing permission helper before rename. On restriction failure, retain the original untouched and do not create a wide-mode backup; keep existing nonfatal recovery behavior and generic logging. Cover both broad modes, verbatim preservation and deterministic injected failure with synthetic fixtures. Do not change policy or dependencies.
-Closed by:
+Closed by: #344 (master 1e675d33; complete post-merge CI passed, verified 2026-11-18).
 
 ### D-097 TTS sidecar logs allow broad POSIX read permissions   Severity: P2   Status: Closed
 Evidence: master 25b9f15f `overlay-backend/src/tts.rs::sidecar_stderr` opens both engine stderr logs with ordinary create/append options and no explicit mode. PR #335 at d916763d uses `paths::open_private_append`, but that helper only sets the creation mode and does not restrict an existing 0644/0664 file. Source confirms the missing privacy boundary; no private log or credential was read. The bot's fresh-file test does not cover upgrading existing installations.
