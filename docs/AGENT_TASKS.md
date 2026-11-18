@@ -28,7 +28,16 @@ no human branch is changed or duplicated. No dependency or advisory edits.
 creation of config contents. Exact-SHA Windows targeted gate, physical macOS
 backend/security checks, independent Codex review and required CI pass before
 expected-head merge; verify main CI afterwards. No live config/secrets are read.
-**Unknowns:** worker admission and platform verification remain to be checked.
+**Blocked (D-100):** backend/host cargo-deny rejects newly issued unmaintained
+humantime and chrono advisories (RUSTSEC-2026-0542/0543), both without patched
+versions. TTS audit passes. env_logger is unused by the STT library itself and
+could become a development dependency, but Slint's non-optional chrono edge
+remains even in published i-slint-core 1.19.0. Removing it requires a separate
+GUI date/calendar migration and native/live UI qualification; no drop-in version
+or feature-only correction was found. No policy changes or dependency patches
+were made. Preserve the directory candidate and keep source #328 open.
+**Investigation verdict:** Extend — Slint/STT integration — separate compatible
+graph remediation is required, rather than an unverified package bump.
 
 ## [x] T9 — preserve corrupt configuration with private permissions
 
